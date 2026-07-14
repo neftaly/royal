@@ -6,9 +6,11 @@ import { performance } from 'node:perf_hooks';
 import { createGzip } from 'node:zlib';
 
 import {
+  captureBrowserDiagnostics,
   connectCdpPage,
   evaluate,
   spawnLogged,
+  startPerformanceTrace,
   startVitePreview,
   stopProcess,
   waitForHttp,
@@ -28,7 +30,21 @@ const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
 const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'hardware-headless';
 const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
-const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
+const invocationRoot = path.resolve(process.env.INIT_CWD?.trim() || process.cwd());
+const resolveInvocationPath = (value) => value === '' ? '' : path.resolve(invocationRoot, value);
+const outputPath = resolveInvocationPath(process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '');
+const traceEnabled = process.env.EXAMPLES_BENCH_TRACE === '1';
+const replaceJsonSuffix = (filePath, suffix) => filePath.endsWith('.json')
+  ? `${filePath.slice(0, -5)}${suffix}.json`
+  : `${filePath}${suffix}.json`;
+const artifactBasePath = outputPath === ''
+  ? path.join(tmpdir(), `royal-examples-benchmark-${Date.now()}.json`)
+  : outputPath;
+const failureOutputPath = replaceJsonSuffix(artifactBasePath, '.failure');
+const configuredTraceOutputPath = process.env.EXAMPLES_BENCH_TRACE_OUTPUT?.trim() ?? '';
+const traceOutputPath = configuredTraceOutputPath === ''
+  ? replaceJsonSuffix(artifactBasePath, '.trace')
+  : resolveInvocationPath(configuredTraceOutputPath);
 const gltfLabManifest = JSON.parse(readFileSync(
   new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
   'utf8',
@@ -81,10 +97,15 @@ const cdpCommandTimeoutMs = envInteger(
 const clearCachePerRoute = process.env.EXAMPLES_BENCH_CLEAR_CACHE !== '0';
 const managePreview = process.env.EXAMPLES_BENCH_PREVIEW !== '0';
 const fakeXrEnabled = process.env.EXAMPLES_BENCH_FAKE_XR === '1';
+const realXrEnabled = process.env.EXAMPLES_BENCH_REAL_XR === '1';
 const fakeXrHz = envInteger('EXAMPLES_BENCH_XR_HZ', 72);
 const fakeXrPrepareTimeoutMs = envInteger('EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS', 5_000);
 const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
+
+if (fakeXrEnabled && realXrEnabled) {
+  throw new Error('EXAMPLES_BENCH_FAKE_XR and EXAMPLES_BENCH_REAL_XR cannot both be enabled');
+}
 
 if (!new Set(['chromium', 'cdp']).has(browserMode)) {
   throw new Error(`EXAMPLES_BENCH_BROWSER must be "chromium" or "cdp", received ${JSON.stringify(browserMode)}`);
@@ -554,9 +575,19 @@ const installBenchmarkHooks = async (session) => {
   const statsFromTimes = (times) =>
     statsFromDeltas(times.slice(1).map((time, index) => time - times[index]));
   const failedFrameStats = (reason, details = {}) => ({
+    averageMs: 0,
     failed: true,
+    jitterP95MinusP50Ms: 0,
+    maxMs: 0,
+    minMs: 0,
+    p50Ms: 0,
+    p95Ms: 0,
+    p99Ms: 0,
     reason,
+    requestedSampleCount: 0,
     sampleCount: 0,
+    samplesMissing: 0,
+    timedOut: false,
     timeoutMs: 0,
     ...details,
   });
@@ -580,6 +611,29 @@ const installBenchmarkHooks = async (session) => {
     }
     resolveXrWaiters();
   };
+  const xrSessionPrototype = globalThis.XRSession?.prototype;
+  const originalXrRequestAnimationFrame = xrSessionPrototype?.requestAnimationFrame;
+  if (
+    typeof originalXrRequestAnimationFrame === 'function' &&
+    originalXrRequestAnimationFrame.__royalBenchPatched !== true
+  ) {
+    const wrappedXrRequestAnimationFrame = function (callback) {
+      if (xr.activeSession !== this) {
+        xr.activeSession = this;
+        xr.sessions += 1;
+        this.addEventListener('end', () => {
+          if (xr.activeSession === this) xr.activeSession = null;
+          failXrWaiters('session-ended');
+        }, { once: true });
+      }
+      return originalXrRequestAnimationFrame.call(this, (time, frame) => {
+        recordXrFrame(time);
+        callback(time, frame);
+      });
+    };
+    Object.defineProperty(wrappedXrRequestAnimationFrame, '__royalBenchPatched', { value: true });
+    xrSessionPrototype.requestAnimationFrame = wrappedXrRequestAnimationFrame;
+  }
   const recordDraw = () => {
     const now = performance.now();
     while (pendingDrawPulses.length > 0) {
@@ -976,10 +1030,33 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
 `);
 
 const collectPageMetrics = async (session, frames, options = {}) => {
-  const { sampleXr = true } = options;
+  const { sampleXr = true, xrOnly = false } = options;
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
   const setupRenderer = await evaluate(session, rendererSnapshotExpression);
-  const warmupComplete = await evaluate(session, `
+  const xrStats = (value, requestedSampleCount, reason) => value ?? {
+    averageMs: 0,
+    failed: true,
+    jitterP95MinusP50Ms: 0,
+    maxMs: 0,
+    minMs: 0,
+    p50Ms: 0,
+    p95Ms: 0,
+    p99Ms: 0,
+    reason,
+    requestedSampleCount,
+    sampleCount: 0,
+    samplesMissing: requestedSampleCount,
+    timedOut: false,
+    timeoutMs: fakeXrSampleTimeoutMs,
+  };
+  const xrWarmupStats = xrOnly
+    ? xrStats(await evaluate(session, `
+(async () => globalThis.__royalBench?.sampleXrFrames?.(${frameWarmupCount}, ${fakeXrSampleTimeoutMs}) ?? null)()
+`), frameWarmupCount, 'missing-active-xr-session')
+    : undefined;
+  const warmupComplete = xrOnly
+    ? xrWarmupStats.failed !== true && xrWarmupStats.sampleCount >= frameWarmupCount
+    : await evaluate(session, `
 (async () => {
   const rafOrTimeout = (deadline) => new Promise((resolve) => {
     let settled = false;
@@ -1005,7 +1082,11 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const afterGc = await session.call('Runtime.getHeapUsage');
   const rendererBeforeFrames = await evaluate(session, rendererSnapshotExpression);
   await evaluate(session, 'globalThis.__royalBench?.reset?.()');
-  const frameStats = await evaluate(session, `
+  const frameStats = xrOnly
+    ? xrStats(await evaluate(session, `
+(async () => globalThis.__royalBench?.sampleXrFrames?.(${frames}, ${fakeXrSampleTimeoutMs}) ?? null)()
+`), frames, 'missing-active-xr-session')
+    : await evaluate(session, `
 (async () => {
   const frames = ${frames};
   const timeoutMs = ${frameSampleTimeoutMs};
@@ -1047,6 +1128,8 @@ const collectPageMetrics = async (session, frames, options = {}) => {
       reason: 'raf-timeout',
       requestedSampleCount: frames,
       sampleCount: 0,
+      samplesMissing: frames,
+      timedOut: true,
       timeoutMs,
     };
   }
@@ -1091,11 +1174,13 @@ const collectPageMetrics = async (session, frames, options = {}) => {
             };
       })()
     : undefined;
-  const xrFrameStats = sampleXr
-    ? await evaluate(session, `
+  const xrFrameStats = xrOnly
+    ? frameStats
+    : sampleXr
+      ? await evaluate(session, `
 (async () => globalThis.__royalBench?.sampleXrFrames?.(${frames}, ${fakeXrSampleTimeoutMs}) ?? null)()
 `)
-    : null;
+      : null;
   const latency = await evaluate(session, `
 (async () => globalThis.__royalBench?.latencyPulse?.() ?? null)()
 `);
@@ -1205,9 +1290,78 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   };
 };
 
+const waitForXrActivation = (session, clicked) => evaluate(session, `
+(async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const deadline = performance.now() + ${fakeXrPrepareTimeoutMs};
+  while (performance.now() < deadline) {
+    const control = document.querySelector('[data-royal-xr-active]');
+    const button = [...document.querySelectorAll('button')]
+      .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
+    const instrumented = globalThis.__royalBench?.xrSnapshot?.().active === true;
+    if (
+      instrumented &&
+      (control?.getAttribute('data-royal-xr-active') === 'true' || button?.textContent?.includes('Exit XR'))
+    ) {
+      return {
+        active: true,
+        clicked: ${clicked ? 'true' : 'false'},
+        status: control?.getAttribute('data-royal-xr-status') ?? 'immersive',
+      };
+    }
+    await sleep(25);
+  }
+  const control = document.querySelector('[data-royal-xr-active]');
+  return {
+    active: false,
+    clicked: ${clicked ? 'true' : 'false'},
+    reason: 'timeout',
+    status: control?.getAttribute('data-royal-xr-status') ?? document.body.innerText.slice(0, 300),
+    timedOut: true,
+    timeoutMs: ${fakeXrPrepareTimeoutMs},
+  };
+})()
+`);
+
 const prepareRouteForBenchmark = async (session, route) => {
-  if (!fakeXrEnabled || route.id !== 'webxr-vr') return undefined;
+  if ((!fakeXrEnabled && !realXrEnabled) || route.id !== 'webxr-vr') return undefined;
   try {
+    if (realXrEnabled) {
+      const target = await evaluate(session, `
+(async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const deadline = performance.now() + ${fakeXrPrepareTimeoutMs};
+  while (performance.now() < deadline) {
+    const button = [...document.querySelectorAll('button')]
+      .find((entry) => entry.textContent?.includes('Enter XR'));
+    if (button !== undefined && !button.disabled) {
+      const rect = button.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    await sleep(25);
+  }
+  return null;
+})()
+`);
+      if (target === null) {
+        return { active: false, clicked: false, reason: 'enter-button-unavailable' };
+      }
+      await session.call('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: target.x,
+        y: target.y,
+        button: 'left',
+        clickCount: 1,
+      });
+      await session.call('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: target.x,
+        y: target.y,
+        button: 'left',
+        clickCount: 1,
+      });
+      return await waitForXrActivation(session, true);
+    }
     return await evaluate(session, `
 (async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1270,6 +1424,7 @@ const benchmarkRoute = async (session, route) => {
   const prepared = await prepareRouteForBenchmark(session, route);
   const measured = await collectPageMetrics(session, frameSampleCount, {
     sampleXr: prepared?.active !== false,
+    xrOnly: realXrEnabled && prepared?.active === true,
   });
   const activationFailure = prepared?.active === false
     ? {
@@ -1283,7 +1438,10 @@ const benchmarkRoute = async (session, route) => {
   return {
     ...route,
     ...(prepared === undefined ? {} : { prepared }),
-    ...(activationFailure === undefined ? {} : { fakeXrActivationFailure: activationFailure }),
+    ...(activationFailure === undefined ? {} : { xrActivationFailure: activationFailure }),
+    ...(activationFailure === undefined || !fakeXrEnabled
+      ? {}
+      : { fakeXrActivationFailure: activationFailure }),
     ready,
     wallNavigationAndReadyMs: performance.now() - start,
     ...measured,
@@ -1614,12 +1772,18 @@ const main = async () => {
     : undefined;
 
   let session;
+  let browserDiagnostics;
+  let currentRoute;
+  let performanceTrace;
+  let traceReport;
   try {
     const size = await deploymentSize();
     await waitForHttp(baseUrl, 15_000);
     session = await connectPage();
+    browserDiagnostics = captureBrowserDiagnostics(session);
     await session.call('Page.enable');
     await session.call('Runtime.enable');
+    await session.call('Log.enable');
     await session.call('HeapProfiler.enable');
     await session.call('Network.enable');
     await session.call('Performance.enable');
@@ -1627,9 +1791,11 @@ const main = async () => {
     const gpu = await readWebGlGpu(session);
     assertRequestedGpu(gpu);
     console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
+    if (traceEnabled) performanceTrace = await startPerformanceTrace(session);
 
     const results = [];
     for (const route of selectedRoutes()) {
+      currentRoute = route;
       const result = await benchmarkRoute(session, route);
       results.push(result);
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
@@ -1712,6 +1878,14 @@ const main = async () => {
         `heap=${retainedKb.toFixed(1)}KiB`,
       ].join(' '));
     }
+    currentRoute = undefined;
+
+    if (performanceTrace !== undefined) {
+      traceReport = await performanceTrace.stop();
+      await mkdir(path.dirname(traceOutputPath), { recursive: true });
+      await writeFile(traceOutputPath, `${JSON.stringify(traceReport)}\n`);
+      console.log(`wrote ${traceOutputPath}`);
+    }
 
     const analysis = analyzeResults(results);
 
@@ -1739,6 +1913,7 @@ const main = async () => {
         fakeXrPrepareTimeoutMs,
         fakeXrSampleTimeoutMs,
         fakeXrViews,
+        realXrEnabled,
         benchmarkMode,
         instancingFuzzEnabled,
         instancingFuzzCases,
@@ -1749,6 +1924,7 @@ const main = async () => {
       analysis,
       deployment: size,
       gpu,
+      browserDiagnostics: browserDiagnostics.snapshot(),
       routes: results,
     };
 
@@ -1782,6 +1958,60 @@ const main = async () => {
       await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
       console.log(`wrote ${outputPath}`);
     }
+  } catch (error) {
+    let traceFailure;
+    if (performanceTrace !== undefined && traceReport === undefined) {
+      try {
+        traceReport = await performanceTrace.stop();
+        await mkdir(path.dirname(traceOutputPath), { recursive: true });
+        await writeFile(traceOutputPath, `${JSON.stringify(traceReport)}\n`);
+        console.log(`wrote ${traceOutputPath}`);
+      } catch (traceError) {
+        traceFailure = traceError instanceof Error ? traceError.stack ?? traceError.message : String(traceError);
+      }
+    }
+
+    let page;
+    if (session !== undefined) {
+      try {
+        page = await evaluate(session, `
+(() => {
+  const canvas = document.querySelector('canvas');
+  return {
+    bodyText: document.body?.innerText?.slice(0, 4000) ?? '',
+    canvas: canvas === null ? null : {
+      clientHeight: canvas.clientHeight,
+      clientWidth: canvas.clientWidth,
+      height: canvas.height,
+      width: canvas.width,
+    },
+    readyState: document.readyState,
+    renderer: ${rendererSnapshotExpression},
+    title: document.title,
+    url: location.href,
+  };
+})()
+`);
+      } catch (pageError) {
+        page = {
+          captureError: pageError instanceof Error ? pageError.message : String(pageError),
+        };
+      }
+    }
+
+    const failure = {
+      generatedAt: new Date().toISOString(),
+      browserDiagnostics: browserDiagnostics?.snapshot() ?? { droppedEntries: 0, entries: [] },
+      error: error instanceof Error ? error.stack ?? error.message : String(error),
+      page,
+      route: currentRoute,
+      ...(traceFailure === undefined ? {} : { traceFailure }),
+      ...(traceReport === undefined ? {} : { traceOutputPath }),
+    };
+    await mkdir(path.dirname(failureOutputPath), { recursive: true });
+    await writeFile(failureOutputPath, `${JSON.stringify(failure, null, 2)}\n`);
+    console.error(`wrote ${failureOutputPath}`);
+    throw error;
   } finally {
     session?.close();
     await stopProcess(browser);

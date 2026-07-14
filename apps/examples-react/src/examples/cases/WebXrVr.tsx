@@ -24,6 +24,7 @@ import {
   type XrSessionStatus,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
@@ -485,6 +486,7 @@ export const WebXrVr = (): ReactNode =>
       rendererOptions={exampleCanvasRendererOptions}
       scene={renderScene}
     >
+      <BenchmarkRendererSnapshot />
       <XrSessionControl />
     </Canvas>,
   );

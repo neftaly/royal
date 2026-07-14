@@ -60,3 +60,17 @@ is true and `warnings` is empty or understood.
   Forwarded Safari console output identified the terminal failure as
   `SecurityError: The operation is insecure` at the virtual-texture atlas
   `texSubImage2D` upload; React then unmounted `Canvas`.
+
+2026-07-14 Quest 2 Browser pass:
+
+- `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at
+  `11.2ms` p95 on the physical Adreno 650, with camera-drag draw latency also at
+  `11.2ms` p95 and one draw per moved frame.
+- `quest2-gltf-instancing-2026-07-14.json` keeps 4,096 animated instances near
+  `35ms` p95. Camera-driven static grid redraws are about `33ms` p95 at grid 16,
+  while grid 8 camera redraws are about `11ms` p95; constrained-device
+  instancing remains the clearest renderer optimization target.
+- The SVG and real-WebXR routes were rejected after the headset display slept:
+  both produced zero RAF samples. The SVG diagnostic trace is useful for harness
+  validation but is not a performance baseline. Repeat both routes with the
+  headset worn before treating either as device evidence.

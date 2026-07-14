@@ -158,6 +158,126 @@ export const evaluate = async (session, expression, options = {}) => {
   return result.result.value;
 };
 
+const remoteObjectText = (value) => {
+  if (value.value !== undefined) {
+    if (typeof value.value === 'string') return value.value;
+    try {
+      return JSON.stringify(value.value);
+    } catch {
+      return String(value.value);
+    }
+  }
+  return value.unserializableValue ?? value.description ?? value.type;
+};
+
+const stackFrames = (stackTrace) => stackTrace?.callFrames?.map((frame) => ({
+  columnNumber: frame.columnNumber,
+  functionName: frame.functionName,
+  lineNumber: frame.lineNumber,
+  url: frame.url,
+})) ?? [];
+
+/**
+ * Retains bounded, structured browser diagnostics for both successful reports
+ * and failure artifacts. Register this before Runtime/Log are enabled so the
+ * first application message is not lost.
+ */
+export const captureBrowserDiagnostics = (session, { maxEntries = 500 } = {}) => {
+  const entries = [];
+  let droppedEntries = 0;
+
+  const append = (entry) => {
+    if (entries.length >= maxEntries) {
+      entries.shift();
+      droppedEntries += 1;
+    }
+    entries.push(entry);
+  };
+
+  session.on('Runtime.consoleAPICalled', (event) => {
+    append({
+      kind: 'console',
+      level: event.type,
+      text: event.args.map(remoteObjectText).join(' '),
+      timestamp: event.timestamp,
+      stack: stackFrames(event.stackTrace),
+    });
+  });
+  session.on('Runtime.exceptionThrown', (event) => {
+    const details = event.exceptionDetails ?? {};
+    append({
+      kind: 'exception',
+      level: 'error',
+      text: details.exception?.description ?? details.text ?? 'Runtime exception',
+      timestamp: event.timestamp,
+      url: details.url,
+      lineNumber: details.lineNumber,
+      columnNumber: details.columnNumber,
+      stack: stackFrames(details.stackTrace),
+    });
+  });
+  session.on('Log.entryAdded', ({ entry }) => {
+    append({
+      kind: 'browser-log',
+      level: entry.level,
+      source: entry.source,
+      text: entry.text,
+      timestamp: entry.timestamp,
+      url: entry.url,
+      lineNumber: entry.lineNumber,
+      stack: stackFrames(entry.stackTrace),
+    });
+  });
+
+  return {
+    snapshot: () => ({ droppedEntries, entries: [...entries] }),
+  };
+};
+
+const defaultTraceCategories = [
+  'blink.user_timing',
+  'cc',
+  'devtools.timeline',
+  'disabled-by-default-devtools.timeline',
+  'gpu',
+  'loading',
+  'toplevel',
+  'v8',
+];
+
+/**
+ * Starts an opt-in DevTools trace. The returned trace can be opened directly
+ * in Chrome DevTools or Perfetto to inspect main-thread and GPU flame graphs.
+ */
+export const startPerformanceTrace = async (session, options = {}) => {
+  const events = [];
+  const categories = options.categories ?? defaultTraceCategories;
+  let stopped = false;
+  let report;
+  session.on('Tracing.dataCollected', ({ value }) => {
+    events.push(...(value ?? []));
+  });
+  await session.call('Tracing.start', {
+    categories: categories.join(','),
+    transferMode: 'ReportEvents',
+  });
+
+  return {
+    stop: async () => {
+      if (stopped) return report;
+      stopped = true;
+      const complete = session.once('Tracing.tracingComplete');
+      await session.call('Tracing.end');
+      await complete;
+      report = {
+        metadata: { categories },
+        traceEvents: events,
+      };
+      return report;
+    },
+  };
+};
+
 export const spawnLogged = (command, args, options) => {
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
   child.stdout.on('data', (chunk) => process.stdout.write(chunk));

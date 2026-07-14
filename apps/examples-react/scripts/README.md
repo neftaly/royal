@@ -12,7 +12,10 @@ low-overhead GL state counters (`useProgram`, `bindTexture`, `bindBuffer`,
 `bindVertexArray`, and uniform calls), renderer glTF instancing deltas exposed
 by the examples-only benchmark bridge, and instancing-focused summaries for
 `/gltf-instancing` grid, seed, animation, local-model upload, and root-transform
-upload cases.
+upload cases. Every run also retains bounded, structured page-console, runtime
+exception, and browser security/network diagnostics. Successful runs embed them
+as `browserDiagnostics`; aborted runs write an adjacent `*.failure.json` with
+the active route, page state, canvas dimensions, renderer snapshot, and diagnostics.
 
 Quick host check:
 
@@ -51,6 +54,14 @@ pnpm --filter @royal/examples-react bench:examples:check research/examples-bench
 When run through `pnpm --filter`, relative report paths resolve from the
 directory where `pnpm` was invoked, so repo-root paths work as shown above.
 
+For a focused flame-graph-compatible Chrome/Quest trace, add
+`EXAMPLES_BENCH_TRACE=1`. The harness writes an adjacent `*.trace.json` that can
+be opened in Chrome DevTools or Perfetto. Tracing is opt-in because it adds
+measurement overhead: keep the untraced report as the performance baseline and
+use the traced run to explain it. `EXAMPLES_BENCH_TRACE_OUTPUT` can override the
+derived trace path. Raw traces are ignored by Git because they are large local
+diagnostic artifacts; summarize durable findings beside the accepted report.
+
 Quest 2 report through forwarded DevTools:
 
 ```sh
@@ -59,6 +70,7 @@ QUEST_DEVTOOLS_PORT=9222 pnpm quest:browser forward
 EXAMPLES_BENCH_BROWSER=cdp \
 EXAMPLES_BENCH_DEBUG_PORT=9222 \
 EXAMPLES_BENCH_FAKE_XR=0 \
+EXAMPLES_BENCH_REAL_XR=1 \
 EXAMPLES_BENCH_MODE=full \
 EXAMPLES_BENCH_INSTANCING_SWEEP=full \
 EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-quest2.json \
@@ -79,6 +91,10 @@ pnpm quest:browser tabs
 reports success for a missing or inactive socket. Logcat is useful for Browser
 process/crash diagnosis, but page `console` output and benchmark control travel
 over CDP or the in-page benchmark bridge rather than Android logcat.
+`EXAMPLES_BENCH_REAL_XR=1` uses a trusted CDP input event to press the example's
+Enter XR control and samples the physical `XRSession` frame loop. Keep the
+headset worn and the Browser foregrounded; a sleeping display is recorded as an
+activation/RAF failure rather than mistaken for a zero-millisecond result.
 
 The default mode is `quick`: product routes, short frame windows, no instancing
 fuzz rows, one manifest-selected glTF lab case, and no XR lab route. Use
@@ -129,6 +145,11 @@ inside the real route so WebGL hooks install before the canvas initializes; it i
 not a user-facing benchmark UI. Reports are rejected unless route readiness,
 warmup, frame sampling, the final WebGL device summary, and the final renderer
 snapshot are all present; a transient canvas is not accepted as device evidence.
+The iPad collector also embeds WebKit console/runtime diagnostics and rejects
+browser errors. Aborted or incomplete runs write a timestamped `*.failure.json`
+beside the accepted reports, including the last page state and partial report.
+For Safari flame charts, use a Safari Web Inspector recording; WebKit's inspector
+transport does not expose Chrome's `Tracing` domain used by the Quest harness.
 
 Browser instancing fuzz rows are opt-in with
 `EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural

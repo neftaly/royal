@@ -233,6 +233,25 @@ const checkSummaryRows = (rows, label, requiredCounters) => {
   });
 };
 
+const checkBrowserDiagnostics = (value, label) => {
+  if (value === undefined) return;
+  if (!requireObject(value, label)) return;
+  requireNonNegativeNumber(value.droppedEntries, `${label}.droppedEntries`);
+  if (!requireArray(value.entries, `${label}.entries`)) return;
+  value.entries.forEach((entry, index) => {
+    const entryLabel = `${label}.entries[${index}]`;
+    if (!requireObject(entry, entryLabel)) return;
+    requireString(entry.kind, `${entryLabel}.kind`);
+    requireString(entry.level, `${entryLabel}.level`);
+    if (typeof entry.text !== 'string') errors.push(`${entryLabel}.text must be a string`);
+    if (entry.kind === 'exception' || entry.level === 'error') {
+      errors.push(`${entryLabel} contains a browser error: ${entry.text}`);
+    } else if (entry.level === 'warning') {
+      warnings.push(`${entryLabel} contains a browser warning: ${entry.text}`);
+    }
+  });
+};
+
 const checkGltfSampleEvidence = (gltfInstancing, frameStats, label, { animated }) => {
   if (!requireObject(gltfInstancing, label)) return;
   requireBoolean(gltfInstancing.available, `${label}.available`);
@@ -583,6 +602,7 @@ if (requireObject(report, 'report')) {
   if (isGltfLoadReport(report)) {
     checkGltfLoadReport(report);
   } else {
+    checkBrowserDiagnostics(report.browserDiagnostics, 'report.browserDiagnostics');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
       report.routes.forEach((route, index) => {

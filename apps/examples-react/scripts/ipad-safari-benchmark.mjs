@@ -57,6 +57,7 @@ const websocketConnect = (wsUrl) => {
   let buffer = Buffer.alloc(0);
   const waiters = [];
   const events = [];
+  const listeners = new Set();
   let opened = false;
 
   const sendFrame = (text) => {
@@ -80,6 +81,7 @@ const websocketConnect = (wsUrl) => {
   };
 
   const resolveWaiters = (message) => {
+    for (const listener of listeners) listener(message);
     for (let index = 0; index < waiters.length; index += 1) {
       const waiter = waiters[index];
       if (!waiter.match(message)) continue;
@@ -184,9 +186,65 @@ const websocketConnect = (wsUrl) => {
 
   return {
     close: () => socket.end(),
+    onMessage: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     opened: openedPromise,
     send: (message) => sendFrame(JSON.stringify(message)),
     waitFor,
+  };
+};
+
+const captureWebKitDiagnostics = (client, targetId, { maxEntries = 500 } = {}) => {
+  const entries = [];
+  let droppedEntries = 0;
+  const append = (entry) => {
+    if (entries.length >= maxEntries) {
+      entries.shift();
+      droppedEntries += 1;
+    }
+    entries.push(entry);
+  };
+  const unsubscribe = client.onMessage((event) => {
+    if (
+      event.method !== 'Target.dispatchMessageFromTarget' &&
+      event.method !== 'Target.receivedMessageFromTarget'
+    ) return;
+    if (event.params?.targetId !== targetId || typeof event.params?.message !== 'string') return;
+    const message = JSON.parse(event.params.message);
+    if (message.method === 'Console.messageAdded') {
+      const value = message.params?.message ?? {};
+      append({
+        kind: 'console',
+        level: value.level ?? 'log',
+        text: value.text ?? '',
+        timestamp: value.timestamp,
+        url: value.url,
+        lineNumber: value.line,
+        columnNumber: value.column,
+      });
+    }
+    if (message.method === 'Runtime.exceptionThrown') {
+      const details = message.params?.exceptionDetails ?? {};
+      append({
+        kind: 'exception',
+        level: 'error',
+        text: details.exception?.description ?? details.text ?? 'Runtime exception',
+        timestamp: message.params?.timestamp,
+        url: details.url,
+        lineNumber: details.lineNumber,
+        columnNumber: details.columnNumber,
+      });
+    }
+  });
+  return {
+    close: unsubscribe,
+    reset: () => {
+      droppedEntries = 0;
+      entries.length = 0;
+    },
+    snapshot: () => ({ droppedEntries, entries: [...entries] }),
   };
 };
 
@@ -318,41 +376,102 @@ const run = async () => {
   const targetEvent = await client.waitFor((event) => event.method === 'Target.targetCreated');
   const targetId = targetEvent.params?.targetInfo?.targetId;
   if (typeof targetId !== 'string') throw new Error('WebKit target id was missing');
+  const browserDiagnostics = captureWebKitDiagnostics(client, targetId);
+  let report;
 
-  const url = benchmarkUrl();
-  console.log(`Navigating iPad Safari to ${url}`);
-  await evaluate(
-    client,
-    targetId,
-    'delete globalThis.__royalBrowserBenchmarkError; delete globalThis.__royalBrowserBenchmarkReport; "cleared";',
-    5_000,
-  );
-  await targetCommand(client, targetId, 'Page.navigate', { url });
-  const report = await waitForReport(client, targetId);
-  const evidenceFailures = incompleteRendererEvidence(report);
-  if (evidenceFailures.length > 0) {
-    const pageState = await evaluate(
+  try {
+    await targetCommand(client, targetId, 'Console.enable');
+    await targetCommand(client, targetId, 'Runtime.enable');
+    const url = benchmarkUrl();
+    console.log(`Navigating iPad Safari to ${url}`);
+    await evaluate(
       client,
       targetId,
-      `JSON.stringify({
-        benchmarkError: globalThis.__royalBrowserBenchmarkError ?? null,
-        bodyText: document.body?.innerText?.slice(0, 1200) ?? null,
-        loadError: document.querySelector('.example-load-error')?.textContent ?? null
-      })`,
+      'delete globalThis.__royalBrowserBenchmarkError; delete globalThis.__royalBrowserBenchmarkReport; "cleared";',
       5_000,
     );
-    throw new Error(
-      `iPad benchmark evidence incomplete: ${evidenceFailures.join('; ')}; page=${String(pageState)}`,
+    browserDiagnostics.reset();
+    await targetCommand(client, targetId, 'Page.navigate', { url });
+    report = await waitForReport(client, targetId);
+    const evidenceFailures = incompleteRendererEvidence(report);
+    if (evidenceFailures.length > 0) {
+      const pageState = await evaluate(
+        client,
+        targetId,
+        `JSON.stringify({
+          benchmarkError: globalThis.__royalBrowserBenchmarkError ?? null,
+          bodyText: document.body?.innerText?.slice(0, 1200) ?? null,
+          loadError: document.querySelector('.example-load-error')?.textContent ?? null
+        })`,
+        5_000,
+      );
+      throw new Error(
+        `iPad benchmark evidence incomplete: ${evidenceFailures.join('; ')}; page=${String(pageState)}`,
+      );
+    }
+    const diagnosticSnapshot = browserDiagnostics.snapshot();
+    const browserErrors = diagnosticSnapshot.entries.filter((entry) =>
+      entry.kind === 'exception' || entry.level === 'error'
     );
+    if (browserErrors.length > 0) {
+      throw new Error(
+        `iPad benchmark browser errors: ${browserErrors.map((entry) => entry.text).join('; ')}`,
+      );
+    }
+    const generatedAt = typeof report.generatedAt === 'string' ? report.generatedAt : new Date().toISOString();
+    const filename = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(report.example?.id)}.json`;
+    await mkdir(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, filename);
+    await writeFile(outputPath, `${JSON.stringify({
+      browserDiagnostics: diagnosticSnapshot,
+      receivedAt: new Date().toISOString(),
+      report,
+    }, null, 2)}\n`);
+    console.log(`Wrote ${outputPath}`);
+    console.log(`p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
+  } catch (error) {
+    let page;
+    try {
+      page = await evaluate(
+        client,
+        targetId,
+        `JSON.stringify({
+          benchmarkError: globalThis.__royalBrowserBenchmarkError ?? null,
+          bodyText: document.body?.innerText?.slice(0, 4000) ?? null,
+          loadError: document.querySelector('.example-load-error')?.textContent ?? null,
+          url: location.href
+        })`,
+        5_000,
+      );
+    } catch (pageError) {
+      page = JSON.stringify({
+        captureError: pageError instanceof Error ? pageError.message : String(pageError),
+      });
+    }
+    const generatedAt = new Date().toISOString();
+    const filename = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(route)}.failure.json`;
+    await mkdir(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, filename);
+    let parsedPage;
+    try {
+      parsedPage = typeof page === 'string' ? JSON.parse(page) : page;
+    } catch {
+      parsedPage = { raw: page };
+    }
+    await writeFile(outputPath, `${JSON.stringify({
+      browserDiagnostics: browserDiagnostics.snapshot(),
+      error: error instanceof Error ? error.stack ?? error.message : String(error),
+      generatedAt,
+      page: parsedPage,
+      report,
+      route,
+    }, null, 2)}\n`);
+    console.error(`Wrote ${outputPath}`);
+    throw error;
+  } finally {
+    browserDiagnostics.close();
+    client.close();
   }
-  const generatedAt = typeof report.generatedAt === 'string' ? report.generatedAt : new Date().toISOString();
-  const filename = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(report.example?.id)}.json`;
-  await mkdir(outputDir, { recursive: true });
-  const outputPath = path.join(outputDir, filename);
-  await writeFile(outputPath, `${JSON.stringify({ receivedAt: new Date().toISOString(), report }, null, 2)}\n`);
-  console.log(`Wrote ${outputPath}`);
-  console.log(`p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
-  client.close();
 };
 
 run().catch((error) => {
