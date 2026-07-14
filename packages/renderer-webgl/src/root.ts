@@ -146,6 +146,7 @@ import {
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
 import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
 import { GltfAssetPreparationOwner } from "./gltf/asset-preparation-owner";
+import { gltfLoadDiagnosticsSnapshot } from "./gltf/load-diagnostics";
 import {
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
@@ -250,8 +251,6 @@ import type {
   WebGlContextLifecycle,
   WebGlContextSnapshot,
   WebGlGltfInstancingSnapshot,
-  WebGlGltfLoadDiagnosticsAssetSnapshot,
-  WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,
   WebGlRoot,
   WebGlRootOptions,
@@ -394,9 +393,6 @@ const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
     ? node.kind
     : "unknown";
-
-const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
-  start === undefined || end === undefined ? undefined : Math.max(0, end - start);
 
 /**
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
@@ -2199,48 +2195,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {
-    const assets = [...this.#preparedGltf.states.values()].map((state): WebGlGltfLoadDiagnosticsAssetSnapshot => {
-      const load = state.load;
-      const phaseMs: Partial<Record<WebGlGltfLoadDiagnosticsPhaseKey, number>> = {};
-      const addPhase = (
-        key: WebGlGltfLoadDiagnosticsPhaseKey,
-        start: number | undefined,
-        end: number | undefined,
-      ): void => {
-        const duration = elapsedMs(start, end);
-        if (duration !== undefined) phaseMs[key] = duration;
-      };
-      addPhase("buffers", load.documentLoadedAt, load.buffersLoadedAt);
-      addPhase("document", load.startedAt, load.documentLoadedAt);
-      addPhase("draco", load.meshoptDecodedAt, load.dracoDecodedAt);
-      addPhase("firstImageComplete", load.imageLoadStartedAt, load.firstImageSettledAt);
-      addPhase("imagesComplete", load.imageLoadStartedAt, load.imagesSettledAt);
-      addPhase("meshopt", load.buffersLoadedAt, load.meshoptDecodedAt);
-      addPhase("scene", load.dracoDecodedAt, load.sceneReadAt);
-      addPhase("toSceneReady", load.startedAt, load.readyAt);
-
-      return {
+    return gltfLoadDiagnosticsSnapshot(
+      [...this.#preparedGltf.states.values()].map((state) => ({
         ...(state.error === undefined ? {} : { error: state.error }),
-        imageFailures: load.imageFailures,
-        imageLoaded: load.imageLoaded,
-        imageRequests: load.imageRequests,
         lightCount: state.lights.length,
+        load: state.load,
         nodeCount: state.nodeCount,
-        phaseMs,
         primitiveCount: state.primitives.length,
         sourceUri: state.sourceUri,
         ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
-        status: state.status === "ready" ? "sceneReady" : state.status,
+        status: state.status,
         variantCount: state.variants.length,
-      };
-    });
-
-    return {
-      assets,
-      errorAssets: assets.filter((asset) => asset.status === "error").length,
-      loadingAssets: assets.filter((asset) => asset.status === "loading").length,
-      sceneReadyAssets: assets.filter((asset) => asset.status === "sceneReady").length,
-    };
+      })),
+    );
   }
 
   #textureResidencySnapshot(): WebGlTextureResidencySnapshot {

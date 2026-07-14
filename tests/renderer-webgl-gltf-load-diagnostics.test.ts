@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import {
+  gltfLoadDiagnosticsSnapshot,
+  type GltfLoadDiagnosticsState,
+} from "../packages/renderer-webgl/src/gltf/load-diagnostics";
+
+const state = (
+  sourceUri: string,
+  status: GltfLoadDiagnosticsState["status"],
+  overrides: Partial<GltfLoadDiagnosticsState> = {},
+): GltfLoadDiagnosticsState => ({
+  lightCount: 0,
+  load: {
+    buffersLoadedAt: 30,
+    documentLoadedAt: 20,
+    dracoDecodedAt: 45,
+    firstImageSettledAt: 80,
+    imageFailures: 1,
+    imageLoaded: 2,
+    imageLoadStartedAt: 60,
+    imageRequests: 3,
+    imagesSettledAt: 100,
+    meshoptDecodedAt: 40,
+    readyAt: 55,
+    sceneReadAt: 50,
+    startedAt: 10,
+  },
+  nodeCount: 4,
+  primitiveCount: 5,
+  sourceUri,
+  status,
+  variantCount: 6,
+  ...overrides,
+});
+
+describe("glTF load diagnostics core", () => {
+  it("projects phase durations and public ready status without mutating input", () => {
+    const input = state("model.glb", "ready", { sourceVersion: "revision-a" });
+
+    expect(gltfLoadDiagnosticsSnapshot([input])).toEqual({
+      assets: [{
+        imageFailures: 1,
+        imageLoaded: 2,
+        imageRequests: 3,
+        lightCount: 0,
+        nodeCount: 4,
+        phaseMs: {
+          buffers: 10,
+          document: 10,
+          draco: 5,
+          firstImageComplete: 20,
+          imagesComplete: 40,
+          meshopt: 10,
+          scene: 5,
+          toSceneReady: 45,
+        },
+        primitiveCount: 5,
+        sourceUri: "model.glb",
+        sourceVersion: "revision-a",
+        status: "sceneReady",
+        variantCount: 6,
+      }],
+      errorAssets: 0,
+      loadingAssets: 0,
+      sceneReadyAssets: 1,
+    });
+    expect(input.status).toBe("ready");
+  });
+
+  it("counts each status and omits unavailable phases", () => {
+    const loading = state("loading.glb", "loading", {
+      load: { imageFailures: 0, imageLoaded: 0, imageRequests: 0, startedAt: 20 },
+    });
+    const error = state("broken.glb", "error", {
+      error: "decode failed",
+      load: {
+        documentLoadedAt: 10,
+        imageFailures: 0,
+        imageLoaded: 0,
+        imageRequests: 0,
+        startedAt: 20,
+      },
+    });
+
+    const snapshot = gltfLoadDiagnosticsSnapshot([loading, error]);
+
+    expect(snapshot).toMatchObject({ errorAssets: 1, loadingAssets: 1, sceneReadyAssets: 0 });
+    expect(snapshot.assets[0]?.phaseMs).toEqual({});
+    expect(snapshot.assets[1]).toMatchObject({
+      error: "decode failed",
+      phaseMs: { document: 0 },
+      status: "error",
+    });
+  });
+});

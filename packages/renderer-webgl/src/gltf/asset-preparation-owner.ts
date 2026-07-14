@@ -7,10 +7,9 @@ import { createGltfImageSourceRecipes } from "./image-source-recipe";
 import { estimateGltfPreparationCpu } from "./preparation-admission";
 import type {
   GltfLoadMetrics,
-  LoadedGltfMaterial,
-  LoadedGltfPrimitive,
   PreparedGltfAsset,
 } from "./prepared-asset";
+import { preparedGltfPrimitiveMaterials } from "./prepared-asset-materials";
 import {
   PreparedGltfRuntime,
   type PreparedGltfCpuAdmission,
@@ -50,21 +49,6 @@ const importCodecs = (document: GltfDocument): GltfCodecImports => {
       ? { meshopt: startCodecImport(() => import("./codecs/meshopt")) }
       : {}),
   };
-};
-
-const preparedPrimitiveMaterials = (
-  primitives: readonly LoadedGltfPrimitive[],
-): readonly LoadedGltfMaterial[] => {
-  const materials = new Set<LoadedGltfMaterial>();
-  for (const primitive of primitives) {
-    materials.add(primitive.material);
-    for (const material of primitive.materialLod?.levels ?? []) materials.add(material);
-    for (const variant of primitive.materialVariants ?? []) {
-      materials.add(variant.material);
-      for (const material of variant.materialLod?.levels ?? []) materials.add(material);
-    }
-  }
-  return [...materials];
 };
 
 const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
@@ -158,7 +142,7 @@ export class GltfAssetPreparationOwner {
       });
       load.sceneReadAt = nowMs();
       load.readyAt = nowMs();
-      const materials = preparedPrimitiveMaterials(scene.primitives);
+      const materials = preparedGltfPrimitiveMaterials(scene.primitives);
       const imageRecipes = createGltfImageSourceRecipes(
         assetKey,
         src,

@@ -8,6 +8,10 @@ import type { WebGlContextLifecycle } from "./root-types";
 import type { VirtualTextureRuntimeState } from "./virtual-texture-runtime";
 import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
 import {
+  maximumVirtualTexturePageTableUploadBytes,
+  selectColdVirtualTextureAllocation,
+} from "./virtual-texture-allocation-policy";
+import {
   virtualTextureDecodedPageBytes,
   type VirtualTextureManifestModel,
 } from "./virtual-texturing";
@@ -22,8 +26,6 @@ import {
   virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
 } from "./webgl/virtual-texture-gpu-arena";
-
-const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 type CapturedFailure = { readonly value: unknown };
 
@@ -40,25 +42,6 @@ const captureFirstFailure = (
   firstFailure: CapturedFailure | undefined,
   action: () => void,
 ): CapturedFailure | undefined => firstFailure ?? captureFailure(action);
-
-const maxVirtualTexturePageTableUploadBytes = (
-  manifest: VirtualTextureManifestModel,
-  generated: boolean,
-): number => {
-  const width = Math.ceil(manifest.width / manifest.pageSize);
-  const height = Math.ceil(manifest.height / manifest.pageSize);
-  if (generated || manifest.uriTemplate !== undefined) return width * height * 4;
-  let maximum = 0;
-  for (const page of manifest.pages) {
-    const coverage = 2 ** page.mip;
-    const x = page.x * coverage;
-    const y = page.y * coverage;
-    const updateWidth = Math.max(0, Math.min(width, x + coverage) - x);
-    const updateHeight = Math.max(0, Math.min(height, y + coverage) - y);
-    maximum = Math.max(maximum, updateWidth * updateHeight * 4);
-  }
-  return maximum;
-};
 
 type VirtualTextureGpuAdmissionOwnerOptions = {
   readonly capabilities: () => WebGlContextCapabilities;
@@ -208,7 +191,10 @@ export class VirtualTextureGpuAdmissionOwner {
         }
         const largestUploadBytes = Math.max(
           virtualTextureDecodedPageBytes(manifest),
-          maxVirtualTexturePageTableUploadBytes(manifest, state.activeSource.kind === "generated"),
+          maximumVirtualTexturePageTableUploadBytes(
+            manifest,
+            state.activeSource.kind === "generated",
+          ),
         );
         if (largestUploadBytes > this.#options.maximumUploadBytes) {
           state.stats.gpuAdmissionFailures += 1;
@@ -303,30 +289,17 @@ export class VirtualTextureGpuAdmissionOwner {
   #oldestColdAllocation(
     demandedStates: ReadonlySet<VirtualTextureRuntimeState>,
   ): { readonly graceBlocked: boolean; readonly state?: VirtualTextureRuntimeState } {
-    let graceBlocked = false;
-    let oldest: VirtualTextureRuntimeState | undefined;
-    for (const candidate of this.#options.runtime.resources.values()) {
-      if (demandedStates.has(candidate)) continue;
+    const candidates = [...this.#options.runtime.resources.values()].map((candidate) => {
       const resource = virtualTextureGpuResource(this.#options.gpu, candidate.key);
-      if (resource === undefined || !virtualTextureGpuResourceSnapshot(resource).allocated) continue;
-      const demandAge = this.#options.frame() - candidate.lastDemandFrame;
-      if (
-        candidate.lastDemandFrame !== Number.NEGATIVE_INFINITY
-        && demandAge <= VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES
-      ) {
-        graceBlocked = true;
-        continue;
-      }
-      if (
-        oldest === undefined
-        || candidate.lastDemandFrame < oldest.lastDemandFrame
-        || (
-          candidate.lastDemandFrame === oldest.lastDemandFrame
-          && candidate.admissionTicket < oldest.admissionTicket
-        )
-      ) oldest = candidate;
-    }
-    return oldest === undefined ? { graceBlocked } : { graceBlocked, state: oldest };
+      return {
+        admissionTicket: candidate.admissionTicket,
+        allocated: resource !== undefined && virtualTextureGpuResourceSnapshot(resource).allocated,
+        demanded: demandedStates.has(candidate),
+        lastDemandFrame: candidate.lastDemandFrame,
+        state: candidate,
+      };
+    });
+    return selectColdVirtualTextureAllocation(candidates, this.#options.frame());
   }
 
   #scheduleAllocationRetry(): void {

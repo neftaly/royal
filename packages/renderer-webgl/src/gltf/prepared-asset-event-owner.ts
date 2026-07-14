@@ -1,47 +1,20 @@
 import type { TextureContentKey } from "@royal/renderer-core";
-import type { CountedTextureDeclaration, FramePlan } from "../frame-plan";
-import {
-  geometryDeclarationBucketKey,
-  gltfGeometryDeclaration,
-} from "../geometry-recipes";
+import type { FramePlan } from "../frame-plan";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
 import {
   applyPreparedAssetEvents,
   resourceArenaHasPendingAssetEvents,
   type PreparedAssetArenaEvent,
-  type PreparedAssetDependencyManifest,
   type ResourceArena,
   type ResourceArenaChanges,
 } from "../resource-arena";
 import { gltfImageSourceRecipeBytes } from "./image-source-recipe";
 import type { GltfImageRecipeLease } from "./image-demand-coordinator";
 import type { GltfPacketOccurrence } from "../gltf-packet-topology";
-import { gltfMaterialTextureRefs } from "./material-preparation-arena";
-import type {
-  LoadedGltfMaterial,
-  LoadedGltfPrimitive,
-  PreparedGltfAsset,
-} from "./prepared-asset";
+import type { PreparedGltfAsset } from "./prepared-asset";
+import { planPreparedAssetDependencies } from "./prepared-asset-dependencies";
+import { preparedAssetMaterials } from "./prepared-asset-materials";
 import { PreparedGltfRuntime } from "./prepared-runtime";
-import { textureCacheKey, type TextureAssetUploadRef } from "../webgl/materials";
-
-const preparedPrimitiveMaterials = (
-  primitives: readonly LoadedGltfPrimitive[],
-): readonly LoadedGltfMaterial[] => {
-  const materials = new Set<LoadedGltfMaterial>();
-  for (const primitive of primitives) {
-    materials.add(primitive.material);
-    for (const material of primitive.materialLod?.levels ?? []) materials.add(material);
-    for (const variant of primitive.materialVariants ?? []) {
-      materials.add(variant.material);
-      for (const material of variant.materialLod?.levels ?? []) materials.add(material);
-    }
-  }
-  return [...materials];
-};
-
-const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMaterial[] =>
-  preparedPrimitiveMaterials(asset.primitives);
 
 type PreparedAssetEventOwnerOptions = {
   readonly applyResourceChanges: (changes: ResourceArenaChanges) => void;
@@ -92,56 +65,15 @@ export class PreparedAssetEventOwner {
     asset: PreparedGltfAsset,
     contentKeys: ReadonlyMap<string, TextureContentKey>,
     assetKey: string,
-  ): PreparedAssetDependencyManifest {
-    const geometries = asset.primitives.map((primitive, index) => {
-      const declaration = gltfGeometryDeclaration({
-        ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
-        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-        mode: primitive.mode,
-        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-        positions: primitive.positions,
-        ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
-        ...(primitive.texCoords0 === undefined ? {} : { texCoords0: primitive.texCoords0 }),
-        ...(primitive.texCoords1 === undefined ? {} : { texCoords1: primitive.texCoords1 }),
-      });
-      const key = JSON.stringify([
-        "gltf-geometry-owner-v1",
-        assetKey,
-        primitive.key,
-        index,
-        geometryDeclarationBucketKey(declaration),
-      ]);
-      this.#options.geometryRecipes.associateGltfPrimitiveKey(primitive, key);
-      return { count: 1, declaration, key };
-    });
-    return {
-      ...this.#materialDependencyManifest(preparedAssetMaterials(asset), contentKeys),
-      geometries,
-      iblKeys: asset.imageBasedLight?.specular === undefined
-        ? []
-        : [{ count: 1, key: asset.imageBasedLight.specular.key }],
-      wantsHdr: asset.lights.length !== 0 || asset.imageBasedLight !== undefined,
-    };
-  }
-
-  #materialDependencyManifest(
-    materials: readonly LoadedGltfMaterial[],
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
-  ): PreparedAssetDependencyManifest {
-    const byKey = new Map<string, CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }>();
-    const ordinaryTextures: Array<CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }> = [];
-    for (const material of materials) {
-      for (const texture of gltfMaterialTextureRefs(material, contentKeys)) {
-        const key = textureCacheKey(texture);
-        const existing = byKey.get(key);
-        if (existing === undefined) {
-          const entry = { count: 1, key, texture };
-          byKey.set(key, entry);
-          ordinaryTextures.push(entry);
-        } else existing.count += 1;
-      }
+  ) {
+    const dependencyPlan = planPreparedAssetDependencies(asset, contentKeys, assetKey);
+    for (const association of dependencyPlan.geometryAssociations) {
+      this.#options.geometryRecipes.associateGltfPrimitiveKey(
+        association.primitive,
+        association.key,
+      );
     }
-    return { geometries: [], iblKeys: [], ordinaryTextures, virtualTextures: [], wantsHdr: false };
+    return dependencyPlan.manifest;
   }
 
   #apply(event: PreparedAssetArenaEvent): void {

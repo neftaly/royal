@@ -1,0 +1,75 @@
+import type {
+  WebGlGltfLoadDiagnosticsAssetSnapshot,
+  WebGlGltfLoadDiagnosticsPhaseKey,
+  WebGlGltfLoadDiagnosticsSnapshot,
+} from "../root-types";
+import type { GltfLoadMetrics } from "./prepared-asset";
+
+export type GltfLoadDiagnosticsState = {
+  readonly error?: string;
+  readonly lightCount: number;
+  readonly load: GltfLoadMetrics;
+  readonly nodeCount: number;
+  readonly primitiveCount: number;
+  readonly sourceUri: string;
+  readonly sourceVersion?: number | string;
+  readonly status: "error" | "loading" | "ready";
+  readonly variantCount: number;
+};
+
+const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
+  start === undefined || end === undefined ? undefined : Math.max(0, end - start);
+
+const assetSnapshot = (
+  state: GltfLoadDiagnosticsState,
+): WebGlGltfLoadDiagnosticsAssetSnapshot => {
+  const load = state.load;
+  const phaseMs: Partial<Record<WebGlGltfLoadDiagnosticsPhaseKey, number>> = {};
+  const addPhase = (
+    key: WebGlGltfLoadDiagnosticsPhaseKey,
+    start: number | undefined,
+    end: number | undefined,
+  ): void => {
+    const duration = elapsedMs(start, end);
+    if (duration !== undefined) phaseMs[key] = duration;
+  };
+  addPhase("buffers", load.documentLoadedAt, load.buffersLoadedAt);
+  addPhase("document", load.startedAt, load.documentLoadedAt);
+  addPhase("draco", load.meshoptDecodedAt, load.dracoDecodedAt);
+  addPhase("firstImageComplete", load.imageLoadStartedAt, load.firstImageSettledAt);
+  addPhase("imagesComplete", load.imageLoadStartedAt, load.imagesSettledAt);
+  addPhase("meshopt", load.buffersLoadedAt, load.meshoptDecodedAt);
+  addPhase("scene", load.dracoDecodedAt, load.sceneReadAt);
+  addPhase("toSceneReady", load.startedAt, load.readyAt);
+
+  return {
+    ...(state.error === undefined ? {} : { error: state.error }),
+    imageFailures: load.imageFailures,
+    imageLoaded: load.imageLoaded,
+    imageRequests: load.imageRequests,
+    lightCount: state.lightCount,
+    nodeCount: state.nodeCount,
+    phaseMs,
+    primitiveCount: state.primitiveCount,
+    sourceUri: state.sourceUri,
+    ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
+    status: state.status === "ready" ? "sceneReady" : state.status,
+    variantCount: state.variantCount,
+  };
+};
+
+/** Pure public diagnostics projection from detached prepared-asset facts. */
+export const gltfLoadDiagnosticsSnapshot = (
+  states: Iterable<GltfLoadDiagnosticsState>,
+): WebGlGltfLoadDiagnosticsSnapshot => {
+  const assets = [...states].map(assetSnapshot);
+  let errorAssets = 0;
+  let loadingAssets = 0;
+  let sceneReadyAssets = 0;
+  for (const asset of assets) {
+    if (asset.status === "error") errorAssets += 1;
+    else if (asset.status === "loading") loadingAssets += 1;
+    else sceneReadyAssets += 1;
+  }
+  return { assets, errorAssets, loadingAssets, sceneReadyAssets };
+};
