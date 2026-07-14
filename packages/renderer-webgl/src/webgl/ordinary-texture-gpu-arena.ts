@@ -96,6 +96,7 @@ type State = {
   readonly gl: WebGL2RenderingContext;
   readonly handles: TextureHandleArena;
   readonly outcomes: OrdinaryTextureGpuOutcome[];
+  readonly orphanedLeases: OrdinaryTextureGpuLease[];
   readonly pendingUploads: Array<MutableResource | undefined>;
   pendingUploadHead: number;
   quarantinedBytes: number;
@@ -116,6 +117,7 @@ export const createOrdinaryTextureGpuArena = (
   gl,
   handles,
   outcomes: [],
+  orphanedLeases: [],
   pendingUploadHead: 0,
   pendingUploads: [],
   quarantinedBytes: 0,
@@ -477,11 +479,12 @@ export const dropOrdinaryTextureGpuContext = (
   arena: OrdinaryTextureGpuArena,
 ): void => {
   const state = stateOf(arena);
+  const leases = state.orphanedLeases.splice(0);
   for (const resource of state.resources.values()) {
     const pending = resource.pendingUpload;
     if (pending !== undefined) publishOutcome(state, "retained", resource, pending);
     delete resource.pendingUpload;
-    resource.lease?.release();
+    if (resource.lease !== undefined) leases.push(resource.lease);
     delete resource.lease;
   }
   state.resources.clear();
@@ -491,6 +494,18 @@ export const dropOrdinaryTextureGpuContext = (
   state.uploadFrame = -1;
   state.uploadsThisFrame = 0;
   state.wakeRequested = false;
+  let firstFailure: unknown;
+  let failed = false;
+  for (const lease of leases) {
+    try {
+      lease.release();
+    } catch (error) {
+      state.orphanedLeases.push(lease);
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  }
+  if (failed) throw firstFailure;
 };
 
 export const ordinaryTextureGpuResourceCount = (

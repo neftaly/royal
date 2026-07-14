@@ -538,4 +538,42 @@ describe("ordinary texture GPU arena", () => {
     expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
     expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
   });
+
+  it("continues context-loss lease cleanup and retries only failures", () => {
+    const { arena, gl } = setup();
+    const leases: Array<{ fail: boolean; released: boolean }> = [];
+    const admission = {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => {
+          const state = { fail: false, released: false };
+          leases.push(state);
+          return {
+            release: () => {
+              if (state.fail) throw new Error("ordinary texture lease release failed");
+              state.released = true;
+            },
+          };
+        },
+      }),
+    };
+    const first = ensureOrdinaryTextureGpuResource(arena, "first", 1);
+    queueOrdinaryTextureUpload(arena, first, { source: source(1), texture });
+    processOrdinaryTextureUploads(arena, 1, 1, admission);
+    const second = ensureOrdinaryTextureGpuResource(arena, "second", 1);
+    queueOrdinaryTextureUpload(arena, second, { source: source(2), texture });
+    processOrdinaryTextureUploads(arena, 2, 1, admission);
+    expect(leases).toHaveLength(2);
+    leases[0]!.fail = true;
+
+    expect(() => dropOrdinaryTextureGpuContext(arena))
+      .toThrow("ordinary texture lease release failed");
+    expect(leases[1]!.released).toBe(true);
+    expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+    expect(gl.deleted).toEqual([]);
+
+    leases[0]!.fail = false;
+    dropOrdinaryTextureGpuContext(arena);
+    expect(leases[0]!.released).toBe(true);
+  });
 });
