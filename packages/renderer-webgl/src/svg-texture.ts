@@ -1,10 +1,13 @@
 import type { LoadedTextureSource } from "./texture-sources";
 import { loadHtmlImage } from "./browser-image-loader";
-import { rasterizeGeneratedVirtualTexturePageImageData } from "./virtual-texture-page-rasterizer";
 import { dataUriMediaType } from "./gltf/io";
 import { abortError } from "./resource-io";
+import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
+import { validateVirtualTexturePageImage } from "./virtual-texture-page-image";
 import {
   generatedVirtualTextureManifest,
+  virtualTexturePageKey,
+  virtualTextureStoredPageSize,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
@@ -24,6 +27,7 @@ export type SvgVirtualTextureSource = {
   readonly height: number;
   readonly image: HTMLImageElement;
   readonly label: string;
+  readonly text: string;
   readonly width: number;
 };
 
@@ -308,6 +312,7 @@ const loadSvgTextImage = async (
       height: viewport.height,
       image,
       label,
+      text: normalizedText,
       width: viewport.width,
     });
   }
@@ -337,6 +342,72 @@ export const automaticSvgVirtualTextureManifest = (
   });
 };
 
+const svgTextWithRasterViewport = (
+  svgText: string,
+  width: number,
+  height: number,
+  fallbackViewBox: Pick<SvgTextureViewport, "height" | "width">,
+): string => {
+  const svgRoot = svgRootPattern.exec(svgText);
+  if (svgRoot === null) throw new Error("SVG virtual texture source is missing its root element");
+  let attributes = svgRoot[1] ?? "";
+  attributes = setSvgAttribute(attributes, "width", svgNumberAttribute(width));
+  attributes = setSvgAttribute(attributes, "height", svgNumberAttribute(height));
+  if (svgAttributeValue(attributes, "viewBox") === undefined) {
+    attributes = setSvgAttribute(
+      attributes,
+      "viewBox",
+      `0 0 ${svgNumberAttribute(fallbackViewBox.width)} ${svgNumberAttribute(fallbackViewBox.height)}`,
+    );
+  }
+  return `${svgText.slice(0, svgRoot.index)}<svg${attributes}>${svgText.slice(svgRoot.index + svgRoot[0].length)}`;
+};
+
+/** @internal Builds one independently rasterizable vector page at its exact mip resolution. */
+export const automaticSvgVirtualTexturePageText = (
+  source: SvgVirtualTextureSource,
+  manifest: VirtualTextureManifestModel,
+  page: VirtualTexturePageId,
+): string => {
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  const mipScale = 2 ** page.mip;
+  const sourceX = (page.x * manifest.pageSize - manifest.borderTexels) * mipScale;
+  const sourceY = (page.y * manifest.pageSize - manifest.borderTexels) * mipScale;
+  const sourceExtent = storedPageSize * mipScale;
+  const nestedSource = svgTextWithRasterViewport(
+    source.text,
+    manifest.width,
+    manifest.height,
+    source,
+  );
+  const sourceRoot = svgRootPattern.exec(nestedSource);
+  if (sourceRoot === null) throw new Error("SVG virtual texture source is missing its root element");
+  const sourceElement = nestedSource.slice(sourceRoot.index);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${storedPageSize}" height="${storedPageSize}" viewBox="${svgNumberAttribute(sourceX)} ${svgNumberAttribute(sourceY)} ${svgNumberAttribute(sourceExtent)} ${svgNumberAttribute(sourceExtent)}">${sourceElement}</svg>`;
+};
+
+const rasterizeAutomaticSvgVirtualTexturePage = (
+  image: HTMLImageElement,
+  manifest: VirtualTextureManifestModel,
+  label: string,
+): ImageData => {
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  const canvas = createVirtualTextureCanvas(storedPageSize, storedPageSize, label);
+  const context = virtualTextureCanvasContext(canvas, label);
+  context.drawImage(image, 0, 0, storedPageSize, storedPageSize);
+  let pixels: ImageData;
+  try {
+    pixels = context.getImageData(0, 0, storedPageSize, storedPageSize);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${label} could not produce origin-clean pixels: ${detail}`);
+  }
+  if (validateVirtualTexturePageImage(manifest, pixels).kind !== "valid") {
+    throw new Error(`${label} has an invalid stored extent`);
+  }
+  return pixels;
+};
+
 export const loadAutomaticSvgVirtualTexturePageImage = async (
   source: SvgVirtualTextureSource,
   manifest: VirtualTextureManifestModel,
@@ -344,9 +415,11 @@ export const loadAutomaticSvgVirtualTexturePageImage = async (
   signal: AbortSignal,
 ): Promise<TexImageSource> => {
   if (signal.aborted) throw abortError();
-  const image = rasterizeGeneratedVirtualTexturePageImageData(source, manifest, page);
+  const label = `${source.label} virtual texture page ${virtualTexturePageKey(page)}`;
+  const pageText = automaticSvgVirtualTexturePageText(source, manifest, page);
+  const pageImage = await loadImageFromBlob(new Blob([pageText], { type: "image/svg+xml" }), label, signal);
   if (signal.aborted) throw abortError();
-  return image;
+  return rasterizeAutomaticSvgVirtualTexturePage(pageImage, manifest, label);
 };
 
 export const loadSvgTextureFromUri = async (url: string, signal?: AbortSignal): Promise<LoadedSvgTexture> => {

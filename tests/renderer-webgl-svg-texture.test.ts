@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GltfPreparationScheduler } from "../packages/renderer-webgl/src/gltf/preparation-scheduler";
 import {
   automaticSvgVirtualTextureManifest,
+  automaticSvgVirtualTexturePageText,
   isLoadedSvgTextureSource,
   loadSvgTextureFromUri,
   prepareSvgTextForImage,
@@ -153,6 +154,23 @@ describe("SVG texture reference lifecycle", () => {
 });
 
 describe("SVG texture viewport normalization", () => {
+  it("builds each automatic VT page as a vector document at the requested mip extent", () => {
+    const text = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900"><text x="0" y="20">sharp</text></svg>';
+    const source = {
+      height: 1_024,
+      image: {} as HTMLImageElement,
+      label: "vector page fixture",
+      text,
+      width: 1_024,
+    };
+    const manifest = automaticSvgVirtualTextureManifest(source);
+    const page = automaticSvgVirtualTexturePageText(source, manifest, { mip: 2, x: 3, y: 4 });
+
+    expect(page).toContain('<svg xmlns="http://www.w3.org/2000/svg" width="258" height="258" viewBox="3068 4092 1032 1032">');
+    expect(page).toContain('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" width="16384" height="16384">');
+    expect(page).toContain("sharp");
+  });
+
   it("reads only exact root width and height attribute names", async () => {
     const adversarial = [
       "<svg",

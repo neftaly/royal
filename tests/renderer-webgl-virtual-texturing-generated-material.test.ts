@@ -144,11 +144,20 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/plain.svg"]);
 
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      for (const image of ControlledImage.instances.slice(1)) {
+        if (!image.complete) image.settleLoad();
+      }
       await flushMicrotasks();
       root.render(renderScene(material));
       await flushMicrotasks();
     }
     expect(contexts.length).toBeGreaterThan(0);
+
+    expect(objectUrlBlobs.length).toBeGreaterThan(1);
+    const pageSvgText = await objectUrlBlobs[1]!.text();
+    expect(pageSvgText).toContain('width="258" height="258"');
+    expect(pageSvgText).toContain('width="16384" height="16384"');
+    const pageObjectUrlCount = objectUrlBlobs.length;
 
     canvas.dispatchContextEvent("webglcontextlost");
     await flushMicrotasks();
@@ -156,9 +165,9 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(renderScene(material));
 
-    expect(objectUrlBlobs).toHaveLength(1);
-    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
-      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
+    expect(objectUrlBlobs.length).toBeGreaterThanOrEqual(pageObjectUrlCount);
+    expect(contexts.every((context) => context.drawImage.mock.calls.some((call) => (
+      ControlledImage.instances.slice(1).includes(call[0] as ControlledImage)
     )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       automaticManifestUses: 1,
@@ -201,11 +210,14 @@ describe("WebGL renderer generated and material virtual texturing", () => {
 
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
       root.render(renderScene(material));
+      for (const image of ControlledImage.instances.slice(1)) {
+        if (!image.complete) image.settleLoad();
+      }
       await flushMicrotasks();
     }
 
     expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
-    expect(objectUrlBlobs).toHaveLength(1);
+    expect(objectUrlBlobs.length).toBeGreaterThan(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       automaticManifestUses: 1,
       automaticPagesTarget: 5_461,
