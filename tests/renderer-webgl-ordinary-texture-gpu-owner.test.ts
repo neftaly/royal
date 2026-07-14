@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { OrdinaryTextureGpuOwner } from "../packages/renderer-webgl/src/ordinary-texture-gpu-owner";
 
 describe("ordinary texture GPU owner", () => {
-  it("settles every suppression and synchronizes observations after preserving the first failure", () => {
+  it("settles every suppression after preserving the first failure", () => {
     const firstFailure = new Error("first suppression failed");
     const suppressed: string[] = [];
     const settled: string[] = [];
     const releaseWakeSuppression = vi.fn();
-    const synchronizeGovernorObservations = vi.fn();
     const wakePersistentGpuCapacity = vi.fn();
     const owner = new OrdinaryTextureGpuOwner({
       capacityWakes: {
@@ -17,7 +16,6 @@ describe("ordinary texture GPU owner", () => {
       residencyIntent: {
         finishFrame: () => ["first", "second"],
       },
-      synchronizeGovernorObservations,
       textures: {
         settleGpuReport: (report: { readonly key: string }) => {
           settled.push(report.key);
@@ -37,7 +35,6 @@ describe("ordinary texture GPU owner", () => {
     expect(() => owner.finalizeResidencyIntent(true)).toThrow(firstFailure);
     expect(suppressed).toEqual(["first", "second"]);
     expect(settled).toEqual(["first", "second"]);
-    expect(synchronizeGovernorObservations).toHaveBeenCalledOnce();
     expect(wakePersistentGpuCapacity).toHaveBeenCalledOnce();
     expect(releaseWakeSuppression).toHaveBeenCalledOnce();
   });

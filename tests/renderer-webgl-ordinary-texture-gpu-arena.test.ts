@@ -429,13 +429,14 @@ describe("ordinary texture GPU arena", () => {
     expect(releaseOrdinaryTextureGpuResource(arena, "a").releaseError).toBe(releaseFault);
     expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
     expect(ordinaryTextureGpuOutcomeCount(arena)).toBe(0);
-    expect(releases).toBe(1);
+    expect(releases).toBe(0);
     expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(4);
     if (!resource.uploaded) throw new Error("Expected admitted texture upload");
     expect(ownsTexture(handles, resource.texture)).toBe(true);
-    releaseOwnedTexture(handles, resource.texture);
     dropOrdinaryTextureGpuContext(arena);
+    expect(releases).toBe(1);
     expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
+    releaseOwnedTexture(handles, resource.texture);
   });
   it("removes uploaded residency once and releases its durable lease", () => {
     const { arena, gl } = setup();
@@ -484,6 +485,8 @@ describe("ordinary texture GPU arena", () => {
     });
     expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(4);
     expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+    expect(releases).toBe(0);
+    dropOrdinaryTextureGpuContext(arena);
     expect(releases).toBe(1);
   });
   it("still deletes the texture when durable lease release throws opaquely", () => {

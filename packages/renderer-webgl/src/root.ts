@@ -713,7 +713,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         policy: this.#resourceGovernorPolicy,
         residencyIntent: this.#textureResidencyIntent,
         resourceGovernor: this.#resourceGovernor,
-        synchronizeGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
         textures: this.#ordinaryTextures,
       });
       this.#readyGltfImages = new GltfReadyImagePublicationOwner({
@@ -1927,15 +1926,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #synchronizeResourceGovernorObservations(): void {
     const gpuArena = virtualTextureGpuArenaSnapshot(this.#virtualTextureGpu);
-    setResourceGovernorObservedDurableUsage(this.#resourceGovernor, "ordinary-texture", {
-      // Decoded sources now own pre-publication leases. Keep this argument for
-      // residency diagnostics without charging the same bytes observationally.
-      cpuDecodedBytes: 0,
-      // Migrated live allocations are represented by arena-owned durable
-      // leases. Failed driver deletions remain charged observationally until
-      // context loss proves that the backing storage is gone.
-      persistentGpuBytes: this.#ordinaryTextures.snapshot().quarantinedBytes,
-    });
     setResourceGovernorObservedDurableUsage(this.#resourceGovernor, "virtual-texture", {
       // Migrated allocations are represented by durable governor leases. Only
       // failed GL deletions remain observationally charged until context loss.

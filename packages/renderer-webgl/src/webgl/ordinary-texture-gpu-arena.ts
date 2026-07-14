@@ -302,16 +302,21 @@ export const processOrdinaryTextureUploads = (
         reservation?.cancel();
       } else {
         // Once allocation/upload begins, conservatively spend this frame's
-        // upload budget. The durable lease exists only while cleanup owns the
-        // failed allocation; deletion failure then transfers those bytes to
-        // observational quarantine before the lease is released.
+        // upload budget. A failed deletion retains the durable lease until
+        // context loss proves that the driver allocation is gone.
         const failedLease = reservation?.commit();
         try {
           releaseOwnedTexture(state.handles, texture);
         } catch {
           state.quarantinedBytes += cost.persistentGpuBytes;
+          if (failedLease !== undefined) state.orphanedLeases.push(failedLease);
+          throw error;
         }
-        failedLease?.release();
+        try {
+          failedLease?.release();
+        } catch {
+          if (failedLease !== undefined) state.orphanedLeases.push(failedLease);
+        }
       }
       throw error;
     }
@@ -452,26 +457,35 @@ export const releaseOrdinaryTextureGpuResource = (
   }
   let releaseError: unknown;
   let releaseErrorPresent = false;
-  try {
-    resource.lease?.release();
-  } catch (error) {
-    releaseError = error;
-    releaseErrorPresent = true;
-  }
+  const lease = resource.lease;
   delete resource.lease;
+  const releaseLease = (): void => {
+    if (lease === undefined) return;
+    try {
+      lease.release();
+    } catch (error) {
+      state.orphanedLeases.push(lease);
+      releaseError = error;
+      releaseErrorPresent = true;
+    }
+  };
   const texture = resource.texture;
   if (texture === undefined) {
+    releaseLease();
     return { releaseError, releaseErrorPresent, released: true };
   }
   try {
     releaseOwnedTexture(state.handles, texture);
   } catch (error) {
     state.quarantinedBytes += resource.gpuBytes;
+    if (lease !== undefined) state.orphanedLeases.push(lease);
     if (!releaseErrorPresent) {
       releaseError = error;
       releaseErrorPresent = true;
     }
+    return { releaseError, releaseErrorPresent, released: true };
   }
+  releaseLease();
   return { releaseError, releaseErrorPresent, released: true };
 };
 

@@ -302,12 +302,14 @@ describe("ordinary texture residency controller", () => {
       quarantinedBytes: 4,
       resources: 0,
     });
-    expect(leaseReleases).toBe(1);
+    expect(leaseReleases).toBe(0);
     expect(controller.settleGpuReport(report)).toBeUndefined();
     expect(controller.settleGpuReport(report)?.error).toEqual(
       new Error("Ordinary texture GPU report was already settled"),
     );
 
+    expect(settle(controller, controller.dropContext())).toBeUndefined();
+    expect(leaseReleases).toBe(1);
     controller.restoreContext(1);
     expect(controller.snapshot().resources).toBe(0);
     controller.request(texture);

@@ -35,7 +35,6 @@ type OrdinaryTextureGpuOwnerOptions = {
   readonly policy: ResourceGovernorPolicy;
   readonly residencyIntent: FrameTextureResidencyIntent;
   readonly resourceGovernor: ResourceGovernor;
-  readonly synchronizeGovernorObservations: () => void;
   readonly textures: OrdinaryTextureResidencyController;
 };
 
@@ -67,10 +66,6 @@ export class OrdinaryTextureGpuOwner {
           if (settlement !== undefined) throw settlement.error;
         });
       }
-      firstFailure = captureFirstFailure(
-        firstFailure,
-        this.#options.synchronizeGovernorObservations,
-      );
     } finally {
       releaseWakeSuppression();
     }
@@ -125,10 +120,6 @@ export class OrdinaryTextureGpuOwner {
       processFailure = report.operationFailure === undefined
         ? undefined
         : { value: report.operationFailure.error };
-      processFailure = captureFirstFailure(
-        processFailure,
-        this.#options.synchronizeGovernorObservations,
-      );
     } finally {
       releaseWakeSuppression();
     }
