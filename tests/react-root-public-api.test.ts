@@ -29,6 +29,26 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("rejects malformed observer callbacks and glTF asset identities eagerly", () => {
+    const root = createRendererRoot(fakeCanvas());
+    const invalidCallback = null as unknown as () => void;
+
+    expect(() => root.observeLifecycle(invalidCallback)).toThrow("observeLifecycle callback must be a function");
+    expect(() => root.observeFrame(invalidCallback)).toThrow("observeFrame callback must be a function");
+    expect(() => root.observeRenderFailures(invalidCallback)).toThrow("observeRenderFailures callback must be a function");
+    expect(() => root.gltfAssetSnapshot(null as unknown as { uri: string })).toThrow(/gltfAssetSnapshot asset must be a GltfAssetRef object/i);
+    expect(() => root.observeGltfAsset(
+      { uri: "/helmet.gltf", version: Number.NaN },
+      () => undefined,
+    )).toThrow(/observeGltfAsset asset version must be a non-empty string or finite number/i);
+    expect(() => root.observeGltfAsset(
+      { uri: "/helmet.gltf" },
+      invalidCallback,
+    )).toThrow("observeGltfAsset callback must be a function");
+
+    root.dispose();
+  });
+
   it("observes completed frames without diagnostics polling", () => {
     const root = createRendererRoot(fakeCanvas());
     const frames: number[] = [];

@@ -9,6 +9,7 @@ import {
   registerRoyalRendererCapabilities,
   royalRendererCapabilitiesFor,
 } from "./renderer-capabilities";
+import { validateGltfAssetRef } from "./gltf-asset-identity";
 
 /** Immutable renderer creation options shared by `<Canvas>` and `createRendererRoot`. */
 export interface RendererOptions {
@@ -157,6 +158,10 @@ const royalLifecycleSnapshot = (
 
 const NO_GLTF_VARIANTS: readonly string[] = Object.freeze([]);
 
+const validateObserver = (callback: unknown, label: string): void => {
+  if (typeof callback !== "function") throw new TypeError(`${label} must be a function`);
+};
+
 const royalGltfAssetSnapshot = (
   snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined,
 ): RoyalGltfAssetSnapshot => {
@@ -241,18 +246,34 @@ export const createRendererRoot = (
     flushInvalidated: () => {
       root.flushInvalidated();
     },
-    gltfAssetSnapshot: (asset) => royalGltfAssetSnapshot(root.gltfAssetSnapshot(asset)),
+    gltfAssetSnapshot: (asset) => {
+      validateGltfAssetRef(asset, "RoyalRendererRoot gltfAssetSnapshot asset");
+      return royalGltfAssetSnapshot(root.gltfAssetSnapshot(asset));
+    },
     invalidate: () => {
       root.invalidate();
     },
-    observeLifecycle: (callback) => root.observeContextLifecycle((snapshot) => {
-      callback(royalLifecycleSnapshot(snapshot));
-    }),
-    observeFrame: (callback) => root.observeFrame(callback),
-    observeGltfAsset: (asset, callback) => root.observeGltfAsset(asset, (snapshot) => {
-      callback(royalGltfAssetSnapshot(snapshot));
-    }),
-    observeRenderFailures: (callback) => root.observeRenderFailures(callback),
+    observeLifecycle: (callback) => {
+      validateObserver(callback, "RoyalRendererRoot observeLifecycle callback");
+      return root.observeContextLifecycle((snapshot) => {
+        callback(royalLifecycleSnapshot(snapshot));
+      });
+    },
+    observeFrame: (callback) => {
+      validateObserver(callback, "RoyalRendererRoot observeFrame callback");
+      return root.observeFrame(callback);
+    },
+    observeGltfAsset: (asset, callback) => {
+      validateGltfAssetRef(asset, "RoyalRendererRoot observeGltfAsset asset");
+      validateObserver(callback, "RoyalRendererRoot observeGltfAsset callback");
+      return root.observeGltfAsset(asset, (snapshot) => {
+        callback(royalGltfAssetSnapshot(snapshot));
+      });
+    },
+    observeRenderFailures: (callback) => {
+      validateObserver(callback, "RoyalRendererRoot observeRenderFailures callback");
+      return root.observeRenderFailures(callback);
+    },
     pick: (input: PickInput) => root.pick(input),
     render: (scene: RenderRoot) => {
       root.render(scene);

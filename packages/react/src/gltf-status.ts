@@ -1,8 +1,11 @@
 import type { GltfAssetRef } from "@royal/renderer-core";
 import { useMemo, useSyncExternalStore } from "react";
 import { useCanvasRoot } from "./canvas";
+import { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 import { createObservedExternalStore } from "./observed-external-store";
 import type { RoyalGltfAssetSnapshot } from "./root";
+
+export { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 
 /** A discriminated glTF readiness snapshot; failures always include a message. */
 export type GltfAssetStatus =
@@ -22,28 +25,6 @@ const sameStatus = (left: GltfAssetStatus, right: GltfAssetStatus): boolean =>
 
 const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((name, index) => name === right[index]);
-
-/** @internal Validates hook inputs before Canvas availability can affect behavior. */
-export const validateGltfAssetStatusInput = (input: unknown): void => {
-  if (typeof input === "string") {
-    if (input.length === 0) throw new TypeError("glTF asset status source must be a non-empty string");
-    return;
-  }
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new TypeError("glTF asset status input must be a source string or GltfAssetRef object");
-  }
-  const { uri, version } = input as Partial<GltfAssetRef>;
-  if (typeof uri !== "string" || uri.length === 0) {
-    throw new TypeError("glTF asset status input uri must be a non-empty string");
-  }
-  if (version !== undefined && (
-    (typeof version !== "string" && typeof version !== "number")
-    || (typeof version === "string" && version.length === 0)
-    || (typeof version === "number" && !Number.isFinite(version))
-  )) {
-    throw new TypeError("glTF asset status input version must be a non-empty string or finite number");
-  }
-};
 
 const statusFromAssetSnapshot = (snapshot: RoyalGltfAssetSnapshot): GltfAssetStatus =>
   snapshot.state === "idle"
