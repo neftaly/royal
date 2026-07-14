@@ -1,11 +1,12 @@
 import type { TextureColorSpace } from "@royal/renderer-core";
+import type { VirtualTexturePagePayload } from "../virtual-texture-runtime";
 import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,
   generatedVirtualTexturePageCount,
   parentVirtualTexturePage,
   VirtualTextureAtlasPageTable,
-  virtualTextureDecodedPageBytes,
+  virtualTextureStoredPageBytes,
   virtualTexturePageKey,
   virtualTextureMipDimension,
   virtualTextureStoredPageSize,
@@ -32,6 +33,8 @@ const TARGET_MAX_ATLAS_UPLOAD_BYTES_PER_FRAME = 1024 * 1024;
 const PAGE_TABLE_UPLOAD_SCRATCH_BYTES = 64 * 1024;
 const WEBGL_LINEAR = 0x2601;
 const WEBGL_NEAREST = 0x2600;
+const WEBGL_COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
+const WEBGL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
 const MAX_ENCODED_PHYSICAL_SLOTS = 65_535;
 
 declare const authority: unique symbol;
@@ -78,7 +81,7 @@ export interface VirtualTextureGpuResourceOptions {
 }
 
 export interface VirtualTextureGpuPendingUpload {
-  readonly image: TexImageSource;
+  readonly payload: VirtualTexturePagePayload;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
   readonly sourceGeneration: number;
@@ -352,8 +355,11 @@ export const virtualTextureGpuAdmission = (
   let bytesPerSlotCell: number;
   try {
     atlasCellSize = virtualTextureStoredPageSize(manifest);
-    bytesPerSlotCell = virtualTextureDecodedPageBytes(manifest);
+    bytesPerSlotCell = virtualTextureStoredPageBytes(manifest);
   } catch {
+    return { kind: "unsupported", reason: "invalid-dimensions" };
+  }
+  if (manifest.pageEncoding === "ktx2-basis" && atlasCellSize % 4 !== 0) {
     return { kind: "unsupported", reason: "invalid-dimensions" };
   }
   const atlasCellsPerAxis = Math.floor(maxTextureSize / atlasCellSize);
@@ -475,17 +481,29 @@ const allocate = (
     pageTableTexture = createOwnedTexture(state.handles);
     prepareTextureUpload(gl);
     gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      textureUploadInternalFormat(gl, resource.options.colorSpace),
-      admission.atlasWidth,
-      admission.atlasHeight,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null,
-    );
+    if (resource.options.manifest.pageEncoding === "ktx2-basis") {
+      gl.texStorage2D(
+        gl.TEXTURE_2D,
+        1,
+        resource.options.colorSpace === "srgb"
+          ? WEBGL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
+          : WEBGL_COMPRESSED_RGBA8_ETC2_EAC,
+        admission.atlasWidth,
+        admission.atlasHeight,
+      );
+    } else {
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        textureUploadInternalFormat(gl, resource.options.colorSpace),
+        admission.atlasWidth,
+        admission.atlasHeight,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        null,
+      );
+    }
     setSampler(
       gl,
       resource.options.atlasMagFilter === "nearest" ? WEBGL_NEAREST : WEBGL_LINEAR,
@@ -651,6 +669,20 @@ const validVirtualTexturePage = (
   return page.x < mipWidth && page.y < mipHeight;
 };
 
+const validVirtualTextureGpuPayload = (
+  manifest: VirtualTextureManifestModel,
+  payload: VirtualTexturePagePayload,
+): boolean => {
+  if (manifest.pageEncoding === "image") return payload.kind === "image";
+  if (payload.kind !== "compressed") return false;
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  return payload.format === WEBGL_COMPRESSED_RGBA8_ETC2_EAC
+    && payload.srgbFormat === WEBGL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
+    && payload.width === storedPageSize
+    && payload.height === storedPageSize
+    && payload.data.byteLength === virtualTextureStoredPageBytes(manifest);
+};
+
 export const queueVirtualTextureGpuUpload = (
   arena: VirtualTextureGpuArena,
   resource: VirtualTextureGpuResource,
@@ -660,11 +692,12 @@ export const queueVirtualTextureGpuUpload = (
   const mutable = mutableResource(resource);
   if (state.resources.get(mutable.key) !== mutable) return false;
   const allocation = mutable.allocation;
-  // False leaves image ownership with the caller; only an indexed outcome transfers it back.
+  // False leaves payload ownership with the caller; only an indexed outcome transfers it back.
   if (
     upload.sourceGeneration !== mutable.options.sourceGeneration
     || (mutable.desiredPageKeysPublished && !mutable.desiredPageKeys.has(upload.pageKey))
     || !validVirtualTexturePage(mutable.options.manifest, upload.page)
+    || !validVirtualTextureGpuPayload(mutable.options.manifest, upload.payload)
     || upload.pageKey !== virtualTexturePageKey(upload.page)
     || allocation?.pageTable.residentSlot(upload.page) !== undefined
   ) return false;
@@ -679,7 +712,7 @@ export const queueVirtualTextureGpuUpload = (
 
 /**
  * Publishes the resource's latest desired working set and returns ownership of
- * obsolete queued images through ordinary discarded outcomes. An upload whose
+ * obsolete queued payloads through ordinary discarded outcomes. An upload whose
  * atlas/page-table transaction has started remains owned until it completes or
  * the resource is released.
  */
@@ -899,9 +932,9 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   if (allocation !== undefined) synchronizeVisibleAssignments(resource, allocation);
   resource.pendingHead += 1;
   publish(state, resource, "completed", upload, assignment.evicted?.pageKey);
-  resource.uploadedPageBytes += virtualTextureDecodedPageBytes(resource.options.manifest);
+  resource.uploadedPageBytes += virtualTextureStoredPageBytes(resource.options.manifest);
   resource.uploadedPages += 1;
-  const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+  const uploadBytes = virtualTextureStoredPageBytes(resource.options.manifest);
   resource.atlasUploadChunkSamples += 1;
   resource.atlasUploadBytesPerChunkMax = Math.max(resource.atlasUploadBytesPerChunkMax, uploadBytes);
   resource.atlasUploadBytesPerChunkMin = resource.atlasUploadBytesPerChunkMin === 0
@@ -949,16 +982,31 @@ const resumeInFlightUpload = (
     const atlasCellSize = virtualTextureStoredPageSize(resource.options.manifest);
     prepareTextureUpload(gl);
     gl.bindTexture(gl.TEXTURE_2D, allocation.atlasTexture);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      (assignment.slot % allocation.atlasGridColumns) * atlasCellSize,
-      Math.floor(assignment.slot / allocation.atlasGridColumns) * atlasCellSize,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      upload.image,
-    );
-    state.atlasUploadBytesThisFrame += virtualTextureDecodedPageBytes(resource.options.manifest);
+    const x = (assignment.slot % allocation.atlasGridColumns) * atlasCellSize;
+    const y = Math.floor(assignment.slot / allocation.atlasGridColumns) * atlasCellSize;
+    if (upload.payload.kind === "compressed") {
+      gl.compressedTexSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        x,
+        y,
+        upload.payload.width,
+        upload.payload.height,
+        resource.options.colorSpace === "srgb" ? upload.payload.srgbFormat : upload.payload.format,
+        upload.payload.data,
+      );
+    } else {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        x,
+        y,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        upload.payload.image,
+      );
+    }
+    state.atlasUploadBytesThisFrame += virtualTextureStoredPageBytes(resource.options.manifest);
     inFlight.phase = "publish-page-table";
   }
   if (inFlight.phase === "publish-page-table") {
@@ -1035,7 +1083,7 @@ export const processVirtualTextureGpuUploads = (
     if (resource.inFlightUpload !== undefined) {
       const phaseBefore = resource.inFlightUpload.phase;
       const requiresAtlasUpload = resource.inFlightUpload.phase !== "publish-page-table";
-      const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+      const uploadBytes = virtualTextureStoredPageBytes(resource.options.manifest);
       if (requiresAtlasUpload && !canSpendAtlasUploadBytes(state, uploadBytes)) continue;
       const reservation = requiresAtlasUpload
         ? admission?.reserve(uploadBytes)
@@ -1062,7 +1110,7 @@ export const processVirtualTextureGpuUploads = (
     }
     const upload = resource.pendingUploads[resource.pendingHead];
     if (upload !== undefined && resource.inFlightUpload === undefined) {
-      const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+      const uploadBytes = virtualTextureStoredPageBytes(resource.options.manifest);
       if (!canSpendAtlasUploadBytes(state, uploadBytes)) continue;
       const reservation = admission?.reserve(uploadBytes);
       if (admission !== undefined && reservation === undefined) continue;
@@ -1381,7 +1429,7 @@ export const releaseVirtualTextureGpuResource = (
   return releaseVirtualTextureAllocation(state, resource);
 };
 
-/** Drops context-generation state without deleting GL handles or surrendering queued images. */
+/** Drops context-generation state without deleting GL handles or surrendering queued payloads. */
 export const dropVirtualTextureGpuContext = (arena: VirtualTextureGpuArena): void => {
   const state = stateOf(arena);
   for (const resource of state.resources.values()) {

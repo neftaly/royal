@@ -65,6 +65,7 @@ describe("virtual-texture page-table upload sizing", () => {
     borderTexels: 0,
     height: 513,
     pageAddressing: "complete",
+    pageEncoding: "image",
     pageSize: 256,
     pages: [],
     width: 1025,

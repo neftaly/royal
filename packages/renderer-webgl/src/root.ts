@@ -1829,7 +1829,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#virtualTextureRuntime.requests.settleGpuPage(state, outcome.upload.pageKey);
       }
       firstFailure = captureFirstFailure(firstFailure, () => {
-        this.#decodedTextureSources.closeVirtualTexture(outcome.upload.image);
+        this.#decodedTextureSources.closeVirtualTexture(
+          outcome.upload.payload.kind === "image"
+            ? outcome.upload.payload.image
+            : outcome.upload.payload.data,
+        );
       });
     }
     clearVirtualTextureGpuOutcomes(this.#virtualTextureGpu);

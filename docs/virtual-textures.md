@@ -30,6 +30,7 @@ page URIs are recommended.
   "virtualSize": [4096, 2048],
   "pageSize": 256,
   "borderTexels": 1,
+  "pageEncoding": "image",
   "mipCount": 5,
   "colorSpace": "srgb",
   "physicalSlots": 32,
@@ -59,6 +60,15 @@ gutter texels: each stored image is the periodic crop of the complete mip over
 the logical page plus its border. This also defines the unused tail and gutter
 of partial edge pages. Royal validates the decoded stored dimensions and does
 not synthesize missing gutters from an isolated authored page.
+
+`pageEncoding` defaults to `image`, whose page URIs may use any browser image
+format accepted by Royal's image loader. Set it to `ktx2-basis` when every page
+URI is an independently decodable KTX2/Basis file. Royal transcodes each
+requested page directly to ETC2/EAC and keeps the physical atlas compressed;
+the stored extent must be a multiple of the ETC2 four-texel block size. Gutters
+and partial-edge padding must be authored before compression. Only the base
+level of each page file is used because virtual mip levels are separate page
+addresses.
 
 The canonical key is `{mip}/{x}/{y}`. A `pages.uriTemplate` may contain
 `{mip}`, `{x}`, `{y}`, `{key}`, or `{page}`; `{page}` expands to
@@ -101,10 +111,12 @@ while preserving geometry, ordinary-texture, and render-target floors.
 
 Manifest `physicalByteBudget` and `physicalSlots` remain per-resource quality
 and footprint ceilings; they cannot expand the governor's effective VT
-capacity. Each RGBA8 physical page consumes
-`(pageSize + 2 * borderTexels)^2 * 4` texel bytes before atlas-grid padding;
-page tables and atlas padding also count toward allocation. Residency is
-demand-driven and eviction may return a sample to a resident parent mip.
+capacity. Each image physical page consumes
+`(pageSize + 2 * borderTexels)^2 * 4` RGBA8 bytes before atlas-grid padding.
+Each `ktx2-basis` page consumes one 16-byte ETC2/EAC block per four-by-four
+stored texels. Page tables and atlas padding also count toward allocation.
+Residency is demand-driven and eviction may return a sample to a resident
+parent mip.
 
 In `diagnostics().virtualTexturing`, `activePages`/`activePagesByMip` count the
 page-table mappings currently visible to shaders. `cachedPages` and

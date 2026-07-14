@@ -19,7 +19,7 @@ import {
   virtualTextureNow,
   type GeneratedVirtualTextureSource,
   type VirtualTextureGeneratedPageSource,
-  type VirtualTextureImagePage,
+  type VirtualTexturePagePayload,
   type VirtualTexturePageLoad,
   type VirtualTexturePageSource,
   type VirtualTextureRef,
@@ -39,7 +39,7 @@ import {
   virtualTexturePageUri,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
-import { resolveResourceUri } from "./gltf/io";
+import { resolveResourceUri, throwIfAborted } from "./gltf/io";
 import { isLoadedSvgTextureSource } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
@@ -88,6 +88,7 @@ export class VirtualTextureRuntimeShell {
   readonly #resources = new Map<string, VirtualTextureRuntimeState>();
   readonly #gpuLeases = new Map<string, ResourceGovernorLease>();
   readonly requests: VirtualTextureRequestCoordinator;
+  #basisuCodec: Promise<typeof import("./gltf/codecs/basisu")> | undefined;
   #nextAdmissionTicket = 1;
   #retryTicket = 1;
   #viewIndex = 0;
@@ -508,7 +509,7 @@ export class VirtualTextureRuntimeShell {
     }
     const started = virtualTextureNow();
     state.stats.generatedPageRequests += 1;
-    const recordResult = (result: VirtualTextureImagePage): VirtualTextureImagePage => {
+    const recordResult = (result: VirtualTexturePagePayload): VirtualTexturePagePayload => {
       const elapsed = Math.max(0, virtualTextureNow() - started);
       state.stats.generatedPageRasterizeMs += elapsed;
       state.stats.generatedPageRasterizeMaxMs = Math.max(state.stats.generatedPageRasterizeMaxMs, elapsed);
@@ -518,7 +519,7 @@ export class VirtualTextureRuntimeShell {
       const loaded = state.activeSource.loadPage(manifest, page, signal);
       if (loaded.kind === "absent") return loaded;
       return {
-        kind: "image",
+        kind: "page",
         promise: loaded.promise.then(recordResult, (error: unknown) => {
           if (!signal.aborted) state.stats.generatedPageFailures += 1;
           throw error;
@@ -526,7 +527,7 @@ export class VirtualTextureRuntimeShell {
       };
     } catch (error) {
       if (!signal.aborted) state.stats.generatedPageFailures += 1;
-      return { kind: "image", promise: Promise.reject(error) };
+      return { kind: "page", promise: Promise.reject(error) };
     }
   }
 
@@ -561,15 +562,38 @@ export class VirtualTextureRuntimeShell {
       },
       loadPage: (manifest, page, signal) => {
         const uri = virtualTexturePageUri(manifest, page, pageUrisByKey);
-        return uri === undefined
-          ? { kind: "absent" }
+        if (uri === undefined) return { kind: "absent" };
+        const resolvedUri = resolveResourceUri(manifestUri, uri);
+        return manifest.pageEncoding === "ktx2-basis"
+          ? { kind: "page", promise: this.#compressedPage(resolvedUri, signal) }
           : {
-              kind: "image",
-              promise: this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal)
-                .then((image) => ({ image })),
+              kind: "page",
+              promise: this.#options.loadImageSource(resolvedUri, signal)
+                .then((image) => ({ image, kind: "image" })),
             };
       },
       manifestUri,
+    };
+  }
+
+  async #compressedPage(
+    uri: string,
+    signal: AbortSignal,
+  ): Promise<Extract<VirtualTexturePagePayload, { readonly kind: "compressed" }>> {
+    this.#basisuCodec ??= import("./gltf/codecs/basisu");
+    const [response, codec] = await Promise.all([fetch(uri, { signal }), this.#basisuCodec]);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const bytes = await response.arrayBuffer();
+    throwIfAborted(signal);
+    const decoded = await codec.decodeGltfBasisuEtc2Texture(bytes, uri);
+    throwIfAborted(signal);
+    return {
+      data: decoded.data,
+      format: decoded.format,
+      height: decoded.height,
+      kind: "compressed",
+      srgbFormat: decoded.srgbFormat,
+      width: decoded.width,
     };
   }
 

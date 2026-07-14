@@ -132,11 +132,7 @@ export const decodeGltfBasisuTexture = async (
   label: string,
 ): Promise<DecodedGltfBasisuTexture> => {
   try {
-    const parsed = await parse(bytes, BasisLoader, {
-      basis: { containerFormat: "auto", format: "etc2" },
-      worker: false,
-    });
-    const compressed = decodedGltfBasisuEtc2(parsed, label);
+    const compressed = await decodeGltfBasisuEtc2Texture(bytes, label);
     if (completeMipChain(compressed.levels)) return compressed;
   } catch {
     // The universally safe RGBA path below also provides the actionable error.
@@ -146,6 +142,18 @@ export const decodeGltfBasisuTexture = async (
     worker: false,
   });
   return decodedGltfBasisuRgba(parsed, label);
+};
+
+/** Transcodes a page-addressable KTX2/Basis payload to WebGL2-core ETC2. */
+export const decodeGltfBasisuEtc2Texture = async (
+  bytes: ArrayBuffer,
+  label: string,
+): Promise<DecodedGltfBasisuCompressedTexture> => {
+  const parsed = await parse(bytes, BasisLoader, {
+    basis: { containerFormat: "auto", format: "etc2" },
+    worker: false,
+  });
+  return decodedGltfBasisuEtc2(parsed, label);
 };
 
 /*

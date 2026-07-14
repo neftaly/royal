@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   virtualTextureDecodedPageBytes,
+  virtualTextureStoredPageBytes,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "../packages/renderer-webgl/src/virtual-texturing";
@@ -75,6 +76,20 @@ class FakeGl {
   readonly activeUnits: number[] = [];
   readonly deleted: number[] = [];
   readonly imageAllocations: unknown[] = [];
+  readonly storageAllocations: Array<{
+    readonly format: unknown;
+    readonly height: unknown;
+    readonly width: unknown;
+  }> = [];
+  readonly compressedSubUploads: Array<{
+    readonly data: unknown;
+    readonly format: unknown;
+    readonly height: unknown;
+    readonly serial: number;
+    readonly width: unknown;
+    readonly x: unknown;
+    readonly y: unknown;
+  }> = [];
   readonly subUploads: Array<{
     readonly serial: number;
     readonly source: unknown;
@@ -118,6 +133,22 @@ class FakeGl {
     this.#operation();
     this.imageAllocations.push(args.at(-1));
   };
+  texStorage2D = (...args: readonly unknown[]): void => {
+    this.#operation();
+    this.storageAllocations.push({ format: args[2], height: args[4], width: args[3] });
+  };
+  compressedTexSubImage2D = (...args: readonly unknown[]): void => {
+    this.#operation();
+    this.compressedSubUploads.push({
+      data: args[7],
+      format: args[6],
+      height: args[5],
+      serial: this.#bound,
+      width: args[4],
+      x: args[2],
+      y: args[3],
+    });
+  };
   texParameteri = (): void => { this.#operation(); };
   texSubImage2D = (...args: readonly unknown[]): void => {
     this.#operation();
@@ -150,6 +181,7 @@ const manifest: VirtualTextureManifestModel = {
   height: 8,
   mipCount: 4,
   pageAddressing: "sparse",
+  pageEncoding: "image",
   pageSize: 2,
   pages: [],
   width: 8,
@@ -171,7 +203,7 @@ const upload = (
   page: VirtualTexturePageId,
   serial: number,
 ): VirtualTextureGpuPendingUpload => ({
-  image: image(serial),
+  payload: { image: image(serial), kind: "image" },
   page,
   pageKey: `${page.mip}/${page.x}/${page.y}`,
   sourceGeneration: 1,
@@ -206,6 +238,62 @@ const admitTestVirtualTextureGpuResource = (
 };
 
 describe("virtual texture GPU arena", () => {
+  it("allocates and uploads independently compressed ETC2 page cells", () => {
+    const { arena, gl } = setup();
+    const compressedManifest: VirtualTextureManifestModel = {
+      ...manifest,
+      pageEncoding: "ktx2-basis",
+    };
+    const resource = admitTestVirtualTextureGpuResource(arena, "compressed", 1, options({
+      colorSpace: "srgb",
+      manifest: compressedManifest,
+      physicalSlots: 1,
+    }));
+    const data = new Uint8Array(virtualTextureStoredPageBytes(compressedManifest));
+    const pending: VirtualTextureGpuPendingUpload = {
+      page: { mip: 0, x: 0, y: 0 },
+      pageKey: "0/0/0",
+      payload: {
+        data,
+        format: 0x9278,
+        height: 4,
+        kind: "compressed",
+        srgbFormat: 0x9279,
+        width: 4,
+      },
+      sourceGeneration: 1,
+    };
+
+    expect(gl.storageAllocations).toEqual([{ format: 0x9279, height: 4, width: 4 }]);
+    expect(gl.imageAllocations).toEqual([null]);
+    expect(queueVirtualTextureGpuUpload(arena, resource, pending)).toBe(true);
+    processVirtualTextureGpuUploads(arena, 1);
+    expect(gl.compressedSubUploads).toEqual([{
+      data,
+      format: 0x9279,
+      height: 4,
+      serial: 1,
+      width: 4,
+      x: 0,
+      y: 0,
+    }]);
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      uploadedPageBytes: 16,
+      uploadedPages: 1,
+    });
+  });
+
+  it("rejects compressed page cells that cannot map exactly to ETC2 blocks", () => {
+    const compressedManifest: VirtualTextureManifestModel = {
+      ...manifest,
+      borderTexels: 1,
+      pageEncoding: "ktx2-basis",
+      pageSize: 3,
+    };
+    expect(virtualTextureGpuAdmission(options({ manifest: compressedManifest }), 16_384, 1_000_000, 8))
+      .toEqual({ kind: "unsupported", reason: "invalid-dimensions" });
+  });
+
   it("allocates idempotently and rolls back every allocation stage", () => {
     const successful = setup();
     const first = admitTestVirtualTextureGpuResource(successful.arena, "a", 1, options());
@@ -580,7 +668,7 @@ describe("virtual texture GPU arena", () => {
       1, // Only then may the atlas slot be overwritten.
       2, // Finally publish the replacement mapping.
     ]);
-    expect(resumed[1]?.source).toBe(replacement.image);
+    expect(resumed[1]?.source).toBe(replacement.payload.kind === "image" ? replacement.payload.image : undefined);
     expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
   });
 
@@ -871,7 +959,9 @@ describe("virtual texture GPU arena", () => {
       1, // The slot is now safe to overwrite in the atlas.
       2, // Publish the replacement page-table mapping.
     ]);
-    expect(replacementUploads[1]?.source).toBe(replacement.image);
+    expect(replacementUploads[1]?.source).toBe(
+      replacement.payload.kind === "image" ? replacement.payload.image : undefined,
+    );
     expect(virtualTextureGpuExactResidency(arena, "a", evicted.page)).toBeUndefined();
     expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
     expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
@@ -908,7 +998,9 @@ describe("virtual texture GPU arena", () => {
     expect(gl.subUploads.slice(replacementStart).map(({ serial }) => serial)).toEqual([2, 1, 2]);
     expect(gl.subUploads
       .slice(replacementStart)
-      .filter(({ serial, source }) => serial === 1 && source === replacement.image)).toHaveLength(1);
+      .filter(({ serial, source }) => serial === 1
+        && source === (replacement.payload.kind === "image" ? replacement.payload.image : undefined)))
+      .toHaveLength(1);
     expect(virtualTextureGpuExactResidency(arena, "a", evicted.page)).toBeUndefined();
     expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
     expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(0);
@@ -996,6 +1088,7 @@ describe("virtual texture GPU arena", () => {
       borderTexels: manifest.borderTexels,
       height: manifest.height,
       pageAddressing: manifest.pageAddressing,
+      pageEncoding: manifest.pageEncoding,
       pageSize: manifest.pageSize,
       pages: manifest.pages,
       width: manifest.width,
@@ -1024,6 +1117,7 @@ describe("virtual texture GPU arena", () => {
       borderTexels: 1,
       height: 10,
       pageAddressing: "sparse",
+      pageEncoding: "image",
       pageSize: 2,
       pages: [],
       width: 6,
@@ -1202,7 +1296,7 @@ describe("virtual texture GPU arena", () => {
     expect(restored).toBe(first);
     expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
     processVirtualTextureGpuUploads(arena, 1);
-    expect(virtualTextureGpuOutcome(arena, 0)?.upload.image).toBe(pending.image);
+    expect(virtualTextureGpuOutcome(arena, 0)?.upload.payload).toBe(pending.payload);
   });
 
   it("retries an unacknowledged upload after context loss", () => {

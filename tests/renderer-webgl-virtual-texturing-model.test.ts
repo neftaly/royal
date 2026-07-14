@@ -12,6 +12,7 @@ import {
   virtualTextureDecodedPageBytes,
   virtualTexturePageKey,
   virtualTexturePageUri,
+  virtualTextureStoredPageBytes,
   virtualTextureStoredPageSize,
 } from "../packages/renderer-webgl/src/virtual-texturing";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
@@ -191,6 +192,7 @@ describe("WebGL virtual texturing runtime model", () => {
   it("rejects malformed recognized optional fields and explicit page entries", () => {
     for (const [field, value, code] of [
       ["colorSpace", "display-p3", "vt.manifest.colorSpace"],
+      ["pageEncoding", "jpeg", "vt.manifest.pageEncoding"],
       ["physicalSlots", 0, "vt.manifest.physicalSlots"],
       ["physicalByteBudget", 1.5, "vt.manifest.physicalByteBudget"],
     ] as const) {
@@ -221,6 +223,39 @@ describe("WebGL virtual texturing runtime model", () => {
       expect(result.manifest).toBeUndefined();
       expect(result.diagnostics.some(({ severity }) => severity === "error")).toBe(true);
     }
+  });
+
+  it("normalizes block-aligned KTX2/Basis page transport and its retained byte cost", () => {
+    const result = parseVirtualTextureManifest({
+      borderTexels: 2,
+      contractVersion: 2,
+      pageEncoding: "ktx2-basis",
+      pageSize: 64,
+      pages: { uriTemplate: "pages/{mip}/{x}-{y}.ktx2" },
+      virtualSize: [256, 128],
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.manifest).toEqual(expect.objectContaining({
+      pageEncoding: "ktx2-basis",
+      pageSize: 64,
+    }));
+    expect(result.manifest === undefined ? undefined : virtualTextureStoredPageBytes(result.manifest))
+      .toBe((68 / 4) ** 2 * 16);
+
+    const misaligned = parseVirtualTextureManifest({
+      borderTexels: 1,
+      contractVersion: 2,
+      pageEncoding: "ktx2-basis",
+      pageSize: 64,
+      pages: { uriTemplate: "pages/{mip}/{x}-{y}.ktx2" },
+      virtualSize: [256, 128],
+    });
+    expect(misaligned.manifest).toBeUndefined();
+    expect(misaligned.diagnostics).toContainEqual(expect.objectContaining({
+      code: "vt.manifest.pageEncoding",
+      severity: "error",
+    }));
   });
 
   it("preserves deliberately sparse valid explicit manifests", () => {
@@ -292,6 +327,7 @@ describe("WebGL virtual texturing runtime model", () => {
       borderTexels: 1,
       height: 1,
       pageAddressing: "sparse",
+      pageEncoding: "image",
       pageSize: 1_000_000_000,
       pages: [],
       width: 1,

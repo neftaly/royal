@@ -70,7 +70,7 @@ Status meanings:
 | Nearest/linear/mipmap sampler filters | ingestion/product | WebGL/glTF consequence with low incremental cost. Keep. |
 | Clamp, repeat and mirrored-repeat wrapping | ingestion/product | Required for glTF and VT sampling parity. Keep. |
 | Public `flipY` | deleted | Ordinary, glTF, and virtual textures share an upper-left authored origin. Upload and ingestion normalize once; orientation is not a shader or VT policy. |
-| Authored VT manifest | candidate | Useful for pre-tiled assets, but its version-2 JSON contract should be reconsidered with VT v2 rather than preserved automatically. |
+| Authored VT manifest | candidate | Useful for pre-tiled assets. Version 2 now has one page-source boundary and supports independently addressable image or KTX2/Basis pages; continue judging the public JSON shape as VT v2 settles. |
 | Automatic raster-image VT | candidate | Product intent is keep, implementation is v1 and will be replaced. Small images should remain ordinary. |
 | Generated SVG VT v1 | deleted | Removed. Reintroduce SVG only as a generic VT v2 page producer. |
 | Ordinary SVG raster fallback | fallback | Retain for correctness isolation, startup and devices where vector paging is unavailable. |
@@ -121,7 +121,7 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| `KHR_texture_basisu` / KTX2 Basis | ingestion/product | Complete mip chains retain ETC2/EAC GPU block compression; incomplete chains safely fall back to RGBA8. Keep. |
+| `KHR_texture_basisu` / KTX2 Basis | ingestion/product | Complete ordinary-texture mip chains retain ETC2/EAC GPU block compression; incomplete chains safely fall back to RGBA8. Authored VT pages can independently retain ETC2/EAC compression. Keep. |
 | `EXT_texture_webp` | ingestion | Cheap browser-supported source preference with core fallback. Keep unless KTX2 becomes the only compressed delivery format. |
 | `KHR_draco_mesh_compression` | ingestion | Widely used compatibility. Keep the isolated `minidraco` dependency; do not build a Royal decoder. |
 | `EXT_meshopt_compression` | ingestion | Efficient geometry delivery and aligned with LOD/offline preparation. Keep. |

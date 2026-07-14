@@ -10,6 +10,7 @@ import {
   VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS,
   type VirtualTextureRuntimeState,
   type VirtualTexturePageLoad,
+  type VirtualTexturePagePayload,
 } from "./virtual-texture-runtime";
 import {
   createVirtualTextureRequestPlanningWorkspace,
@@ -34,7 +35,8 @@ import {
   type VirtualTexturePageLifecycleTransition,
 } from "./virtual-texture-page-lifecycle";
 import {
-  virtualTextureDecodedPageBytes,
+  virtualTextureStoredPageBytes,
+  virtualTextureStoredPageSize,
   virtualTexturePageKey,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
@@ -96,6 +98,32 @@ const emptyResourceSnapshot = (): MutableResourceSnapshot => ({
   pages: [],
   pendingUploads: 0,
 });
+
+const virtualTexturePayloadSource = (payload: VirtualTexturePagePayload): object =>
+  payload.kind === "image" ? payload.image : payload.data;
+
+const validVirtualTexturePayload = (
+  manifest: NonNullable<VirtualTextureRuntimeState["manifest"]>,
+  payload: VirtualTexturePagePayload,
+): { readonly actual: string; readonly valid: boolean } => {
+  if (payload.kind === "image") {
+    const validation = validateVirtualTexturePageImage(manifest, payload.image);
+    return {
+      actual: `${String(validation.width)}x${String(validation.height)} pixels`,
+      valid: manifest.pageEncoding === "image" && validation.kind === "valid",
+    };
+  }
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  return {
+    actual: `${payload.width}x${payload.height} compressed texels and ${payload.data.byteLength} bytes`,
+    valid: manifest.pageEncoding === "ktx2-basis"
+      && payload.format === 0x9278
+      && payload.srgbFormat === 0x9279
+      && payload.width === storedPageSize
+      && payload.height === storedPageSize
+      && payload.data.byteLength === virtualTextureStoredPageBytes(manifest),
+  };
+};
 
 /** Owns VT page eligibility, request fairness, retries, and asynchronous load identity. */
 export class VirtualTextureRequestCoordinator {
@@ -360,9 +388,9 @@ export class VirtualTextureRequestCoordinator {
       return false;
     }
 
-    let decodedBytes: number;
+    let retainedBytes: number;
     try {
-      decodedBytes = virtualTextureDecodedPageBytes(manifest);
+      retainedBytes = virtualTextureStoredPageBytes(manifest);
     } catch {
       this.#transition(requestState, pageKey, { kind: "capacity-denied", permanent: true });
       job.release();
@@ -370,14 +398,14 @@ export class VirtualTextureRequestCoordinator {
       return false;
     }
     const decodedReservation = reserveResourceGovernor(this.#options.resourceGovernor, "virtual-texture", {
-      cpuDecodedBytes: decodedBytes,
+      cpuDecodedBytes: retainedBytes,
     });
     if (typeof decodedReservation === "string") {
-      const permanent = decodedBytes > this.#options.maximumDecodedCpuBytes;
+      const permanent = retainedBytes > this.#options.maximumDecodedCpuBytes;
       this.#transition(requestState, pageKey, { kind: "capacity-denied", permanent });
       if (permanent && state.diagnosticsEnabled) {
         this.#diagnostic(
-          `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} requires ${decodedBytes} decoded CPU bytes, exceeding the virtual-texture maximum ${this.#options.maximumDecodedCpuBytes}`,
+          `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} requires ${retainedBytes} retained CPU bytes, exceeding the virtual-texture maximum ${this.#options.maximumDecodedCpuBytes}`,
           `virtual-texture-page-cpu-limit:${state.activeSource.manifestUri}:${pageKey}`,
         );
       }
@@ -424,7 +452,10 @@ export class VirtualTextureRequestCoordinator {
       job.release();
       void pageImage.then((result) => {
         try {
-          this.#options.decodedSources.closeVirtualTextureAsync(result.image, result.close);
+          this.#options.decodedSources.closeVirtualTextureAsync(
+            virtualTexturePayloadSource(result),
+            result.kind === "image" ? result.close : undefined,
+          );
         } catch {
           // The lifetime retains failed closes and wakes its ordinary retry path.
         }
@@ -434,12 +465,13 @@ export class VirtualTextureRequestCoordinator {
 
     this.#transition(requestState, pageKey, { kind: "grant" });
     void pageImage.then((result) => {
-      const { image } = result;
+      const ownedSource = virtualTexturePayloadSource(result);
+      const close = result.kind === "image" ? result.close : undefined;
       let queued = false;
       try {
         const decodedLease = decodedReservation.commit();
         try {
-          this.#options.decodedSources.retainVirtualTexture(image, decodedLease, result.close);
+          this.#options.decodedSources.retainVirtualTexture(ownedSource, decodedLease, close);
         } catch (error) {
           decodedLease.release();
           throw error;
@@ -451,39 +483,39 @@ export class VirtualTextureRequestCoordinator {
           if (current && ownsPageLoad) {
             this.#transition(requestState, pageKey, { disposition: "discarded", kind: "decoded" });
           }
-          this.#options.decodedSources.closeVirtualTextureAsync(image);
+          this.#options.decodedSources.closeVirtualTextureAsync(ownedSource);
           return;
         }
         if (!state.desiredPageKeys.has(pageKey)) {
           this.#transition(requestState, pageKey, { disposition: "discarded", kind: "decoded" });
-          this.#options.decodedSources.closeVirtualTextureAsync(image);
+          this.#options.decodedSources.closeVirtualTextureAsync(ownedSource);
           this.schedule();
           return;
         }
-        const validation = validateVirtualTexturePageImage(manifest, image);
-        if (validation.kind === "invalid") {
+        const validation = validVirtualTexturePayload(manifest, result);
+        if (!validation.valid) {
           this.#transition(requestState, pageKey, { disposition: "invalid", kind: "decoded" });
           state.stats.pageLoadFailures += 1;
           if (state.diagnosticsEnabled) {
             this.#diagnostic(
-              `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} has ${String(validation.width)}x${String(validation.height)} pixels; expected ${validation.storedPageSize}x${validation.storedPageSize}`,
+              `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} has ${validation.actual}; expected ${virtualTextureStoredPageSize(manifest)}x${virtualTextureStoredPageSize(manifest)} ${manifest.pageEncoding}`,
               `virtual-texture-page-size:${state.activeSource.manifestUri}:${pageKey}`,
             );
           }
           this.schedule();
-          this.#options.decodedSources.closeVirtualTextureAsync(image);
+          this.#options.decodedSources.closeVirtualTextureAsync(ownedSource);
           return;
         }
         const resource = virtualTextureGpuResource(this.#options.gpu, state.key);
         if (resource === undefined || !queueVirtualTextureGpuUpload(this.#options.gpu, resource, {
-          image,
+          payload: result,
           page,
           pageKey,
           sourceGeneration,
         })) {
           this.#transition(requestState, pageKey, { disposition: "discarded", kind: "decoded" });
           this.schedule();
-          this.#options.decodedSources.closeVirtualTextureAsync(image);
+          this.#options.decodedSources.closeVirtualTextureAsync(ownedSource);
           return;
         }
         queued = true;
@@ -507,7 +539,7 @@ export class VirtualTextureRequestCoordinator {
         }
         if (!queued) {
           try {
-            this.#options.decodedSources.closeVirtualTextureAsync(image);
+            this.#options.decodedSources.closeVirtualTextureAsync(ownedSource);
           } catch {
             // The lifetime retains failed closes and wakes its ordinary retry path.
           }

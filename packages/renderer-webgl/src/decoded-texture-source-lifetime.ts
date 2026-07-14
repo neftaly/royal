@@ -25,7 +25,7 @@ const lane = <Source extends object>(close: (source: Source) => void): Lane<Sour
 
 export type DecodedTextureSourceLifetimeOptions = {
   readonly closeOrdinary?: (source: LoadedTextureSource) => void;
-  readonly closeVirtualTexture?: (source: TexImageSource) => void;
+  readonly closeVirtualTexture?: (source: object) => void;
   readonly ordinaryReferenceCount: (source: LoadedTextureSource) => number;
   readonly reserveOrdinaryDecodedBytes: (decodedBytes: number) => ResourceGovernorLease;
   readonly scheduleRetry: () => void;
@@ -41,7 +41,7 @@ export class DecodedTextureSourceLifetime {
   readonly #ordinaryReferenceCount: (source: LoadedTextureSource) => number;
   readonly #reserveOrdinary: (bytes: number) => ResourceGovernorLease;
   readonly #scheduleRetry: () => void;
-  readonly #virtualTexture: Lane<TexImageSource>;
+  readonly #virtualTexture: Lane<object>;
 
   constructor(options: DecodedTextureSourceLifetimeOptions) {
     this.#ordinary = lane(options.closeOrdinary ?? closeDecodedTextureSource);
@@ -56,7 +56,7 @@ export class DecodedTextureSourceLifetime {
     this.#retain(this.#ordinary, source, this.#reserveOrdinary(decodedTextureSourceBytes(source)));
   }
 
-  retainVirtualTexture(source: TexImageSource, lease: ResourceGovernorLease, close?: () => void): void {
+  retainVirtualTexture(source: object, lease: ResourceGovernorLease, close?: () => void): void {
     this.#retain(this.#virtualTexture, source, lease, close);
   }
 
@@ -68,11 +68,11 @@ export class DecodedTextureSourceLifetime {
     this.#close(this.#ordinary, source);
   }
 
-  closeVirtualTexture(source: TexImageSource, close?: () => void): void {
+  closeVirtualTexture(source: object, close?: () => void): void {
     this.#close(this.#virtualTexture, source, close);
   }
 
-  closeVirtualTextureAsync(source: TexImageSource, close?: () => void): void {
+  closeVirtualTextureAsync(source: object, close?: () => void): void {
     try {
       this.closeVirtualTexture(source, close);
     } catch {

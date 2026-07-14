@@ -18,6 +18,8 @@ export interface VirtualTextureManifestModel {
   readonly mipCount?: number;
   /** Whether every in-bounds logical page can be loaded, or only authored entries exist. */
   readonly pageAddressing: "complete" | "sparse";
+  /** Transport/upload representation shared by every physical page. */
+  readonly pageEncoding: "image" | "ktx2-basis";
   /** Logical square page interior; decoded page images additionally include both gutters. */
   readonly pageSize: number;
   readonly pages: readonly VirtualTexturePageEntry[];
@@ -201,6 +203,7 @@ export const generatedVirtualTextureManifest = (
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     height,
     pageAddressing: "complete",
+    pageEncoding: "image",
     pageSize,
     pages: [],
     physicalSlots,
@@ -223,6 +226,17 @@ export const virtualTextureDecodedPageBytes = (manifest: VirtualTextureManifestM
   const bytes = storedPageSize * storedPageSize * 4;
   if (!isPositiveInteger(bytes)) {
     throw new RangeError("Virtual texture decoded page byte size exceeds safe integer capacity");
+  }
+  return bytes;
+};
+
+/** Retained CPU payload and atlas storage bytes for one physical page cell. */
+export const virtualTextureStoredPageBytes = (manifest: VirtualTextureManifestModel): number => {
+  if (manifest.pageEncoding === "image") return virtualTextureDecodedPageBytes(manifest);
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  const bytes = Math.ceil(storedPageSize / 4) ** 2 * 16;
+  if (!isPositiveInteger(bytes)) {
+    throw new RangeError("Virtual texture compressed page byte size exceeds safe integer capacity");
   }
   return bytes;
 };
@@ -352,6 +366,9 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
   const [width, height] = dimensions;
   const derivedMipCount = derivedVirtualTextureMipCount(width, height, pageSize);
   const colorSpace = readColorSpace(root.colorSpace);
+  const pageEncoding = root.pageEncoding === undefined || root.pageEncoding === "image"
+    ? "image"
+    : root.pageEncoding === "ktx2-basis" ? "ktx2-basis" : undefined;
   const explicitMipCount = root.mipCount;
   const mipCount = isPositiveInteger(explicitMipCount) && explicitMipCount <= derivedMipCount
     ? explicitMipCount
@@ -370,6 +387,20 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     diagnostics.push({
       code: "vt.manifest.colorSpace",
       message: "Virtual texture manifest colorSpace must be linear or srgb when present.",
+      severity: "error",
+    });
+  }
+  if (pageEncoding === undefined) {
+    diagnostics.push({
+      code: "vt.manifest.pageEncoding",
+      message: "Virtual texture manifest pageEncoding must be image or ktx2-basis when present.",
+      severity: "error",
+    });
+  }
+  if (pageEncoding === "ktx2-basis" && storedPageSize % 4 !== 0) {
+    diagnostics.push({
+      code: "vt.manifest.pageEncoding",
+      message: "Virtual texture ktx2-basis stored page size must be a multiple of four texels.",
       severity: "error",
     });
   }
@@ -427,7 +458,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       pageKeys.add(key);
     }
   }
-  if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+  if (pageEncoding === undefined || diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return { diagnostics };
   }
 
@@ -439,6 +470,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       height,
       ...(mipCount === undefined ? {} : { mipCount }),
       pageAddressing: uriTemplate === undefined ? "sparse" : "complete",
+      pageEncoding,
       pageSize,
       pages: entries,
       ...(physicalByteBudget === undefined ? {} : { physicalByteBudget }),

@@ -9,6 +9,7 @@ const manifest: VirtualTextureManifestModel = {
   borderTexels: 2,
   height: 128,
   pageAddressing: "sparse",
+  pageEncoding: "image",
   pageSize: 64,
   pages: [],
   width: 128,

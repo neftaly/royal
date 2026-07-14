@@ -12,7 +12,7 @@ import {
   selectColdVirtualTextureAllocation,
 } from "./virtual-texture-allocation-policy";
 import {
-  virtualTextureDecodedPageBytes,
+  virtualTextureStoredPageBytes,
   type VirtualTextureManifestModel,
 } from "./virtual-texturing";
 import {
@@ -190,7 +190,7 @@ export class VirtualTextureGpuAdmissionOwner {
           return "terminal";
         }
         const largestUploadBytes = Math.max(
-          virtualTextureDecodedPageBytes(manifest),
+          virtualTextureStoredPageBytes(manifest),
           maximumVirtualTexturePageTableUploadBytes(
             manifest,
           ),

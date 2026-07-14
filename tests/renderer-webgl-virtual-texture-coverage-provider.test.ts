@@ -62,6 +62,7 @@ const manifest: VirtualTextureManifestModel = {
   height: 4_096,
   mipCount: 5,
   pageAddressing: "complete",
+  pageEncoding: "image",
   pageSize: 256,
   pages: [],
   uriTemplate: "m{mip}-{x}-{y}.png",
