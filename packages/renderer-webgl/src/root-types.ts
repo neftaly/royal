@@ -6,8 +6,9 @@ import type {
 } from "@royal/renderer-core";
 import type {
   ResourceGovernorPolicyInput,
-  ResourceGovernorSnapshot,
 } from "./resource-governor";
+import type { WebGlResourcePressureSnapshot } from "./resource-pressure";
+export type { WebGlResourcePressureSnapshot } from "./resource-pressure";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -35,9 +36,6 @@ export interface InternalWebGlRootOptions extends WebGlRootOptions {
 }
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
-
-/** Observable root-wide resource usage, pressure, and admission outcomes. */
-export type WebGlResourcePressureSnapshot = ResourceGovernorSnapshot;
 
 export interface WebGlContextSnapshot {
   readonly generation: number;

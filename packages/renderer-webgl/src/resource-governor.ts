@@ -3,6 +3,12 @@
  * dependencies: producers describe costs, then perform side effects only after
  * receiving a reservation.
  */
+import type {
+  WebGlResourceClass,
+  WebGlResourceDenialReason,
+  WebGlResourcePressureSnapshot,
+  WebGlResourceUsage,
+} from "./resource-pressure";
 
 export const RESOURCE_GOVERNOR_CLASSES = [
   "geometry",
@@ -12,7 +18,7 @@ export const RESOURCE_GOVERNOR_CLASSES = [
   "asset-decode",
 ] as const;
 
-export type ResourceGovernorClass = (typeof RESOURCE_GOVERNOR_CLASSES)[number];
+export type ResourceGovernorClass = WebGlResourceClass;
 
 export interface ResourceGovernorCost {
   /** Durable decoded CPU memory, in bytes. */
@@ -27,18 +33,7 @@ export interface ResourceGovernorCost {
   readonly uploadBytes?: number;
 }
 
-export interface ResourceGovernorUsage {
-  /** Durable decoded CPU memory, in bytes. */
-  readonly cpuDecodedBytes: number;
-  /** Concurrent asynchronous jobs. */
-  readonly jobs: number;
-  /** Durable GPU allocation, in bytes. */
-  readonly persistentGpuBytes: number;
-  /** Temporary concurrent working-set peak, in bytes. */
-  readonly transientPeakBytes: number;
-  /** GPU upload traffic spent in the current renderer frame, in bytes. */
-  readonly uploadBytes: number;
-}
+export type ResourceGovernorUsage = WebGlResourceUsage;
 
 export interface ResourceGovernorDurableBudget {
   /** Byte capacity protected from borrowing while this class is below its floor. */
@@ -77,16 +72,7 @@ export interface ResourceGovernorPolicyInput {
   readonly limits?: Readonly<Partial<ResourceGovernorUsage>>;
 }
 
-export type ResourceGovernorDenialReason =
-  | "cpu-decoded-capacity"
-  | "cpu-decoded-hard-limit"
-  | "cpu-decoded-mandatory-floor"
-  | "job-capacity"
-  | "persistent-gpu-capacity"
-  | "persistent-gpu-hard-limit"
-  | "persistent-gpu-mandatory-floor"
-  | "transient-peak-capacity"
-  | "upload-capacity";
+export type ResourceGovernorDenialReason = WebGlResourceDenialReason;
 
 export interface ResourceGovernorAdmission {
   readonly admitted: boolean;
@@ -294,22 +280,7 @@ export const defineResourceGovernorPolicy = (
   });
 };
 
-export interface ResourceGovernorSnapshot {
-  readonly admissions: number;
-  readonly byClass: Readonly<Record<ResourceGovernorClass, ResourceGovernorUsage>>;
-  readonly denials: number;
-  readonly denialsByReason: Readonly<Record<ResourceGovernorDenialReason, number>>;
-  readonly frame: number;
-  readonly highWater: ResourceGovernorUsage;
-  readonly lastDenial?: {
-    readonly reason: ResourceGovernorDenialReason;
-    readonly resourceClass: ResourceGovernorClass;
-  };
-  readonly limits: ResourceGovernorUsage;
-  readonly outstandingLeases: number;
-  readonly outstandingReservations: number;
-  readonly total: ResourceGovernorUsage;
-}
+export type ResourceGovernorSnapshot = WebGlResourcePressureSnapshot;
 
 interface MutableUsage {
   cpuDecodedBytes: number;

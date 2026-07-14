@@ -21,3 +21,8 @@ export type {
   WebGlTextureResidencySnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
+export type {
+  WebGlResourceClass,
+  WebGlResourceDenialReason,
+  WebGlResourceUsage,
+} from "./resource-pressure";
