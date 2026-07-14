@@ -30,7 +30,7 @@ export type GltfImageSourceRecipe = Readonly<{
     | { readonly codec: Promise<GltfBasisuCodecModule>; readonly kind: "basisu-uri"; readonly uri: string }
     | ({ readonly kind: "bitmap-bytes" } & BytesRecipe)
     | { readonly kind: "html-image"; readonly uri: string }
-    | ({ readonly baseUrl: string; readonly kind: "svg-bytes"; readonly label: string } & BytesRecipe)
+    | ({ readonly kind: "svg-bytes"; readonly label: string } & BytesRecipe)
     | { readonly kind: "svg-uri"; readonly uri: string };
 }>;
 
@@ -94,7 +94,6 @@ const recipeSource = (
   if (kind === "svg") {
     if (bytes !== undefined) {
       return {
-        baseUrl: src,
         bytes,
         contentKey: byteContentKey(bytes, "image/svg+xml;source"),
         kind: "svg-bytes",
@@ -266,7 +265,7 @@ export const loadGltfImageSourceRecipe = async (
       };
     }
     case "svg-bytes": {
-      const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, source.baseUrl, signal);
+      const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, signal);
       return {
         contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),
         image: loaded.image,

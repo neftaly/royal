@@ -68,11 +68,10 @@ only; they do not change coordinates or orientation.
 
 ## Orientation, sampling, and fallback
 
-Ordinary `imageTexture`/`textureAsset` and `virtualTexture` refs all accept
-`flipY`. The default is `true`, preserving Royal's image-compatible UV
-orientation; set `flipY: false` when authored UVs and page rows already use the
-same top-to-bottom convention. Sampler wrap and filtering are supplied on the
-texture ref.
+Ordinary `imageTexture`/`textureAsset`, glTF, and `virtualTexture` all use one
+authored origin: `(0, 0)` is the upper-left. Source adapters normalize at
+ingestion; there is no public orientation switch. Sampler wrap and filtering
+are supplied on the texture ref.
 
 The convenience `imageTexture` constructor defaults to sRGB. The lower-level
 `textureAsset` constructor is color-space neutral unless `colorSpace` is

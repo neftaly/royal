@@ -244,7 +244,6 @@ export class VirtualTextureRuntimeShell {
         kind: "virtual-asset",
         ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
         ...(texture.contentKey === undefined ? {} : { contentKey: texture.contentKey }),
-        flipY: texture.flipY ?? true,
         manifestUri: source.manifestUri,
         ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
         ...(texture.version === undefined ? {} : { version: texture.version }),

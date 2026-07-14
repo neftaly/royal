@@ -119,7 +119,6 @@ const textureSlotRef = (
   return {
     colorSpace,
     ...textureContentKeyProps(slot.textureUri, slot.contentKey, contentKeys),
-    flipY: false,
     kind: "asset",
     preparedOnly: true,
     ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),

@@ -47,7 +47,6 @@ export class GltfReadyImagePublicationOwner {
           if (binding.contentKey !== undefined || outcome.contentKey === undefined) continue;
           const previousTexture: TextureAssetUploadRef = {
             colorSpace: binding.colorSpace,
-            flipY: false,
             kind: "asset",
             ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
             uri: binding.textureUri,
@@ -95,7 +94,6 @@ export class GltfReadyImagePublicationOwner {
         const texture: TextureAssetUploadRef = {
           colorSpace: binding.colorSpace,
           ...(contentKey === undefined ? {} : { contentKey }),
-          flipY: false,
           kind: "asset",
           ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
           uri: binding.textureUri,

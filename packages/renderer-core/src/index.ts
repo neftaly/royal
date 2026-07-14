@@ -135,10 +135,6 @@ export type {
 } from './render-graph';
 export { scene } from './render-graph';
 export type {
-  Axis,
-  AxisDirection,
-  AxisSign,
-  CoordinateSystem,
   Direction3,
   EulerRads,
   Ms,
@@ -147,7 +143,7 @@ export type {
   LinearRgba,
   SrgbRgba,
   Scale3,
-  SceneSource,
+  RoyalCoordinateConvention,
   Transform,
   TransformOptions,
   Vec3,
@@ -156,11 +152,8 @@ export type {
   WorldSize3
 } from './primitives';
 export {
-  defineCoordinateSystem,
   linearRgbaFromSrgb,
   metresPerWorldUnit,
-  sceneSource,
-  yUpRightHanded,
-  zUpLeftHanded
+  royalCoordinateConvention
 } from './primitives';
 export type { RenderNode } from './render-node';

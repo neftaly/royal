@@ -41,7 +41,8 @@ Status meanings:
 | Clear colour and transparent canvas | product | Keep. |
 | Exposure in EV100 | product | Keep if physically coherent lighting remains a goal. |
 | Tone maps: linear clamp, ACES fitted, PBR Neutral | candidate | Multiple presentation choices are deliberate but visually overlapping. Compare oracles and consider reducing to PBR Neutral plus an explicit no-tonemap/debug mode. |
-| Y-up right-handed and Z-up left-handed coordinate descriptors | candidate | Adapters are useful, but a public coordinate-system mini-model may be more API than needed. Royal runtime remains metres and one canonical handedness. |
+| Royal coordinate convention descriptor | product | One typed constant documents right-handed, +Y-up, -Z view-forward, metres, and radians. Foreign-coordinate conversion belongs at ingestion boundaries. |
+| Generic Y-up/Z-up and left/right-handed descriptor mini-model | deleted | It had no runtime consumer and implied conversions Royal did not perform. |
 
 ## Scene content
 
@@ -53,7 +54,7 @@ Status meanings:
 | Box and plane geometry | product | Very small convenience surface. Plane is also a VT/ground stress primitive. |
 | Standard material | product | Public simple PBR material. Keep. |
 | Unlit material | product | Essential for authored artwork and diagnostic parity. Keep. |
-| Wireframe material | candidate | Contradicts the stated small PBR-centric public vocabulary; likely delete or make a private debug mode. |
+| Wireframe material | product | Useful authoring, inspection, selection, and diagnostic surface. Keep. |
 | Directional, point and spot lights | product | Standard compact light set. Keep unless environment-only lighting becomes an explicit product restriction. |
 | Studio environment preset | product | Currently the one scene environment authority. Keep; expand by data, not new environment classes. |
 | Render-object refs and imperative transform updates | product | Important high-frequency React DX. Keep. |
@@ -64,11 +65,11 @@ Status meanings:
 | --- | --- | --- |
 | Solid-colour texture | product | Cheap convenience/fallback. |
 | Ordinary image texture | product | Required baseline and fallback. |
-| Authored texture asset with content/version identity | product | Keep if external caches and mutable URLs are real workloads. |
+| Authored texture asset with content/version identity | product | `version` invalidates bytes behind one stable URI; `contentKey` deduplicates identical decoded content across different URIs. Keep the capability, but consider hiding `contentKey` from the friendly `imageTexture` helper. |
 | sRGB and linear texture colour spaces | product | Correctness requirement. |
 | Nearest/linear/mipmap sampler filters | ingestion/product | WebGL/glTF consequence with low incremental cost. Keep. |
 | Clamp, repeat and mirrored-repeat wrapping | ingestion/product | Required for glTF and VT sampling parity. Keep. |
-| `flipY` | fallback/product | Browser image orientation boundary. Keep explicit until all ingestion normalizes before the public texture API. |
+| Public `flipY` | deleted | Ordinary, glTF, and virtual textures share an upper-left authored origin. Upload and ingestion normalize once; orientation is not a shader or VT policy. |
 | Authored VT manifest | candidate | Useful for pre-tiled assets, but its version-2 JSON contract should be reconsidered with VT v2 rather than preserved automatically. |
 | Automatic raster-image VT | candidate | Product intent is keep, implementation is v1 and will be replaced. Small images should remain ordinary. |
 | Generated SVG VT v1 | deleted | Removed. Reintroduce SVG only as a generic VT v2 page producer. |
@@ -78,13 +79,12 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| Plain glTF `image/svg+xml` images | ingestion | Nonstandard but useful input. Retain while SVG is a product requirement. |
-| `GS_texture_svg` source selection with a core raster fallback | ingestion/candidate | Royal-owned extension. Keep only if Garbo/Probability assets need portable SVG preference; otherwise plain SVG ingestion may suffice. |
+| Plain glTF `image/svg+xml` images | ingestion/candidate | Nonconformant core glTF. Accept only as a lenient local-input convenience, not as Royal's recommended asset contract. |
+| `GS_texture_svg` source selection with a core raster fallback | ingestion | Garbo Succus vendor extension. Keep tiny and register the `GS` prefix if assets leave the private pipeline; it must lower to an ordinary image source. |
 | SVG viewport/viewBox normalization | ingestion | Required for deterministic raster dimensions. Keep. |
-| Script/event/unsafe-URL stripping | ingestion | Security requirement while SVG is supported. Keep. |
-| Nested SVG/image reference resolution | candidate | Enables Tiger and authored composition but is a substantial parser/IO surface. Decide explicitly whether SVG textures may reference external images/SVGs. |
-| Relative URL and `xml:base` handling | ingestion | A consequence of allowing external SVG resources. Delete if nested/external resources are prohibited. |
-| SVG cycle/depth detection and deduplication | fallback | A required consequence of nested SVG references, not an independent feature. |
+| Regex script/event/unsafe-URL stripping | deleted/target | It is not a trustworthy sanitizer and creates a false security promise. Browser image decoding is the execution boundary. |
+| Runtime nested/external SVG image resolution | deleted/target | Canvas only rasterizes after decode; resolving dependency graphs is separate parser/IO complexity. Flatten or embed dependencies offline. |
+| Relative URL, `xml:base`, SVG cycle/depth and dependency caches | deleted/target | Consequences of runtime external-resource support; delete with that support. |
 
 ## Geometry LOD and visibility
 
@@ -95,7 +95,7 @@ Status meanings:
 | LOD hysteresis | product | Required to prevent threshold flicker. |
 | Missing-level drawable fallback | fallback | Required for streaming and partial readiness. |
 | Automatic browser-side mesh simplification | candidate | Not currently implemented. Prefer offline/build generation; optional worker ingestion can be added for user uploads. |
-| `MSFT_lod` node/material declarations | ingestion | Keep only as an adapter to canonical `LodSet`; no MSFT-specific runtime policy. Material LOD itself is more questionable than geometry LOD. |
+| `MSFT_lod` node/material declarations | ingestion | Keep as an adapter to canonical `LodSet`; both forms are part of the real vendor extension and no MSFT-specific runtime policy survives lowering. |
 
 ## glTF core coverage
 
@@ -109,7 +109,7 @@ Status meanings:
 | POSITION, NORMAL, TANGENT, TEXCOORD_0/1 and COLOR_0 | ingestion | Current prepared vertex profile. Keep unless a narrower asset contract is chosen. |
 | Generated normals when missing | fallback | Convenience rather than strict glTF behavior. Review whether malformed/underspecified assets should instead fail or render unlit. |
 | Sparse accessors | ingestion | Core glTF compatibility with isolated implementation cost. Keep. |
-| Mesh/material variants | ingestion | Useful but application-specific. Review actual usage. |
+| Mesh/material variants | ingestion/product | Keep. Complete an intentional application selection API and demo rather than deleting latent renderer support. |
 | glTF punctual lights | ingestion | Low-cost lowering into Royal lights. Keep unless asset lights are unwanted by policy. |
 | glTF image-based lights | candidate | Redundant environment authority. Remove runtime ownership; optionally expose an ingestion suggestion later. |
 | glTF cameras | unsupported | Deliberately ignored; Royal scene owns the camera. |
@@ -123,16 +123,16 @@ Status meanings:
 | --- | --- | --- |
 | `KHR_texture_basisu` / KTX2 Basis | ingestion/product | Keep, but fix upload to retain GPU block compression. |
 | `EXT_texture_webp` | ingestion | Cheap browser-supported source preference with core fallback. Keep unless KTX2 becomes the only compressed delivery format. |
-| `KHR_draco_mesh_compression` | ingestion | Widely used compatibility. Keep if decode size/startup measurements justify its codec. |
+| `KHR_draco_mesh_compression` | ingestion | Widely used compatibility. Keep the isolated `minidraco` dependency; do not build a Royal decoder. |
 | `EXT_meshopt_compression` | ingestion | Efficient geometry delivery and aligned with LOD/offline preparation. Keep. |
-| `KHR_meshopt_compression` | candidate | Separate compatibility spelling/profile in current code. Verify real assets/spec status and delete if it is only speculative support. |
+| `KHR_meshopt_compression` | ingestion/experimental | Real draft successor with a newer codec/filter profile, but not ratified or widely deployed. Keep its small shared-decoder adapter; continue producing EXT by default. |
 | `KHR_mesh_quantization` | ingestion | Mostly accessor acceptance; useful and low runtime cost. Keep. |
 | `EXT_mesh_gpu_instancing` | ingestion | Correctly lowers into canonical instance transforms. Keep. |
 | `KHR_node_visibility` | ingestion/candidate | Small optional filtering extension. Delete if no production exporter uses it. |
-| `KHR_materials_variants` | ingestion/candidate | Useful for authored variants, but retain only with an intentional selection API/workload. |
-| `EXT_lights_image_based` | candidate | Delete as a second environment authority. |
+| `KHR_materials_variants` | ingestion/product | Keep and add an intentional selection API/workload. |
+| `EXT_lights_image_based` | ingestion/candidate | Real multi-vendor extension. Keep only as an explicit adapter into Royal's one environment type; remove automatic scene-global ownership. |
 | `MSFT_lod` | ingestion | Keep as declarations only; lower to canonical LOD. |
-| `GS_texture_svg` | ingestion/candidate | Royal-owned and coupled to the SVG product decision. |
+| `GS_texture_svg` | ingestion | Garbo Succus vendor extension with core raster fallback. Keep minimal and format-only. |
 
 ## glTF material profile
 
@@ -150,8 +150,8 @@ Status meanings:
 | Iridescence | ingestion/product | Keep pending visual oracle. |
 | Anisotropy | ingestion/product | Keep intent; texture form is currently incomplete. |
 | Emissive strength | ingestion/product | Small and useful. Keep. |
-| Dispersion | ingestion/candidate | Expensive/rare; keep only if the visual implementation is convincing on target hardware. |
-| Diffuse transmission | ingestion/candidate | Rare and currently incomplete for textures; explicit keep/delete decision. |
+| Dispersion | ingestion/product | Keep the cheap three-channel screen-space approximation behind its material shader variant; validate visual quality and Quest/iPad cost. |
+| Diffuse transmission | ingestion/product | Keep. It models thin scattering such as leaves and paper; complete the two texture inputs and visual oracle. |
 
 ## Interaction and XR
 

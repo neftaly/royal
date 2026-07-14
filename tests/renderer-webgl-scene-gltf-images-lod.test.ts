@@ -381,7 +381,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
   });
 
-  it("preserves URI SVG asset base while normalizing viewBox-only SVG textures", async () => {
+  it("does not parse, sanitize, or fetch dependencies inside SVG image content", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -395,12 +395,6 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       "<image href=\"ghostscript-tiger.svg\" x=\"10\" y=\"10\" width=\"190\" height=\"267\" preserveAspectRatio=\"xMidYMid meet\"/>",
       "</svg>",
     ].join("");
-    const nestedTigerSvg = [
-      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">",
-      "<path d=\"M1 1h8v8H1z\" fill=\"#f60\"/>",
-      "</svg>",
-    ].join("");
-
     root.render(renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       gltf({ src: triangleGltfSrc, version: "svg-texture-relative-image-reference" }),
@@ -426,25 +420,18 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
 
-    expect(loader.resolvePendingFetch(/ghostscript-tiger\.svg(?:$|[?#])/, (url) =>
-      responseWithText(url, nestedTigerSvg, "image/svg+xml"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
     expect(loader.objectUrlBlobs).toHaveLength(1);
     const normalizedSvg = await loader.objectUrlBlobs[0]?.text();
     expect(normalizedSvg).toContain("width=\"1024\"");
     expect(normalizedSvg).toContain("height=\"1024\"");
-    expect(normalizedSvg).toContain("xml:base=\"https://example.test/fixtures/staged-triangle.svg\"");
     expect(normalizedSvg).toContain("x=\"10\"");
     expect(normalizedSvg).toContain("width=\"190\"");
     expect(normalizedSvg).toContain("preserveAspectRatio=\"xMidYMid meet\"");
-    expect(normalizedSvg).toContain("href=\"data:image/svg+xml;base64,");
-    expect(normalizedSvg).not.toContain("<script");
-    expect(normalizedSvg).not.toContain("onload=");
-    expect(normalizedSvg).not.toContain("javascript:");
-    expect(normalizedSvg).not.toContain("d=\"M1 1h8v8H1z\"");
-    expect(normalizedSvg).not.toContain("href=\"ghostscript-tiger.svg\"");
+    expect(normalizedSvg).toContain("<script>");
+    expect(normalizedSvg).toContain("onload=");
+    expect(normalizedSvg).toContain("javascript:");
+    expect(normalizedSvg).toContain("href=\"ghostscript-tiger.svg\"");
+    expect(loader.fetchRequests.some((request) => request.url.includes("ghostscript-tiger.svg"))).toBe(false);
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
-  defineCoordinateSystem,
   imageTexture,
   linearRgbaFromSrgb,
   metresPerWorldUnit,
   mesh,
   orthographicCamera,
   perspectiveCamera,
+  royalCoordinateConvention,
   scene,
   standardMaterial,
   textureAsset,
@@ -45,21 +45,16 @@ describe("renderer-core public API", () => {
     expect(reactOrbitTarget).toEqual([1, 2, 3]);
   });
 
-  it("accepts only metre coordinate systems", () => {
-    expect(defineCoordinateSystem({
-      forward: { axis: "z", sign: -1 },
+  it("describes the one Royal coordinate convention", () => {
+    const convention: import("@royal/renderer-core").RoyalCoordinateConvention = royalCoordinateConvention;
+    expect(convention).toEqual({
+      angleUnit: "radian",
       handedness: "right",
-      unit: "meter",
-      up: { axis: "y", sign: 1 },
-    }).unit).toBe("meter");
-
-    expect(() => defineCoordinateSystem({
-      forward: { axis: "z", sign: -1 },
-      handedness: "right",
-      unit: "unit",
-      up: { axis: "y", sign: 1 },
-    } as unknown as import("@royal/renderer-core").CoordinateSystem))
-      .toThrow("Coordinate system unit must be meter");
+      linearUnit: "metre",
+      up: "+y",
+      viewForward: "-z",
+    });
+    expect(Object.isFrozen(convention)).toBe(true);
   });
 
   it("defaults orthographic camera pose and depth for flat UI scenes", () => {
@@ -145,14 +140,12 @@ describe("renderer-core public API", () => {
     });
   });
 
-  it("preserves public texture orientation and narrows virtual textures", () => {
-    expect(textureAsset({ flipY: false, src: "/mask.png" })).toMatchObject({ flipY: false });
-    expect(imageTexture({ flipY: false, src: "/albedo.png" })).toMatchObject({ flipY: false });
-    const virtual: VirtualTextureAssetRef = virtualTexture({
-      flipY: false,
-      manifestUri: "/terrain.vt.json",
-    });
-    expect(virtual).toMatchObject({ flipY: false, kind: "virtual-asset" });
+  it("uses one upper-left authored texture origin across image sources", () => {
+    expect(textureAsset({ src: "/mask.png" })).not.toHaveProperty("flipY");
+    expect(imageTexture({ src: "/albedo.png" })).not.toHaveProperty("flipY");
+    const virtual: VirtualTextureAssetRef = virtualTexture({ manifestUri: "/terrain.vt.json" });
+    expect(virtual).toMatchObject({ kind: "virtual-asset" });
+    expect(virtual).not.toHaveProperty("flipY");
   });
 
   it("keeps React as an adapter instead of a renderer-core barrel", () => {

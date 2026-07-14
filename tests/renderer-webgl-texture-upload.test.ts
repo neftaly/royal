@@ -98,7 +98,7 @@ describe("texture upload kernel", () => {
     expect(usesMipmaps(undefined)).toBe(false);
   });
 
-  it("uploads decoded sRGB bytes with default flip and sampler state", () => {
+  it("uploads decoded sRGB bytes with the canonical upper-left origin and sampler state", () => {
     const gl = new FakeGl();
     const source = decoded();
     uploadTexture(context(gl), handle, source, texture({ colorSpace: "srgb" }));
@@ -106,7 +106,7 @@ describe("texture upload kernel", () => {
     expect(gl.calls[0]).toEqual({ args: [gl.TEXTURE0], name: "activeTexture" });
     expect(gl.calls.filter(({ name }) => name === "pixelStorei")).toHaveLength(9);
     expect(gl.calls.find(({ name, args }) => name === "pixelStorei" && args[0] === gl.UNPACK_FLIP_Y_WEBGL))
-      .toEqual({ args: [gl.UNPACK_FLIP_Y_WEBGL, true], name: "pixelStorei" });
+      .toEqual({ args: [gl.UNPACK_FLIP_Y_WEBGL, false], name: "pixelStorei" });
     expect(gl.calls.find(({ name }) => name === "bindTexture")).toEqual({
       args: [gl.TEXTURE_2D, handle],
       name: "bindTexture",
@@ -127,7 +127,6 @@ describe("texture upload kernel", () => {
     const gl = new FakeGl();
     const source = { height: 8, width: 8 } as unknown as HTMLImageElement;
     uploadTexture(context(gl), handle, source, texture({
-      flipY: false,
       sampler: {
         magFilter: "nearest",
         minFilter: "linear-mipmap-nearest",

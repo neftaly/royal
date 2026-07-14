@@ -150,12 +150,6 @@ export const normalizeVirtualTextureDemandUvRange = (
   return [Math.max(0, min), Math.min(1, max)];
 };
 
-export const orientVirtualTextureDemandVRange = (
-  minV: number,
-  maxV: number,
-  flipY: boolean,
-): readonly [number, number] => flipY ? [1 - maxV, 1 - minV] : [minV, maxV];
-
 export const virtualTextureDemandPageDistance = (
   page: VirtualTexturePageId,
   centerX: number,

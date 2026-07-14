@@ -768,7 +768,6 @@ export class SurfaceExecutionArena {
     uniform1f(this.#programs, program, "u_vtBorderTexels", binding.borderTexels);
     uniform1f(this.#programs, program, "u_vtPageSize", manifest.pageSize);
     uniform2f(this.#programs, program, "u_vtVirtualSize", manifest.width, manifest.height);
-    uniform1i(this.#programs, program, "u_vtFlipY", (state.texture.flipY ?? true) ? 1 : 0);
     uniform1i(this.#programs, program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
     uniform1i(this.#programs, program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
     state.stats.shaderBinds += 1;

@@ -56,7 +56,6 @@ describe("glTF material preparation arena", () => {
       expect.objectContaining({
         colorSpace: "srgb",
         contentKey: baseContentKey,
-        flipY: false,
         kind: "asset",
         preparedOnly: true,
         uri: "texture:base",

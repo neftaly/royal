@@ -401,30 +401,9 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
-      u_vtFlipY: expect.arrayContaining([1]),
       u_vtWrapS: expect.arrayContaining([0]),
       u_vtWrapT: expect.arrayContaining([0]),
     }));
-  });
-
-  it("preserves explicit flipY false in virtual-texture shader orientation", async () => {
-    vi.stubGlobal("Image", ControlledImage);
-    const fetchRequests = installFetchQueue();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const material = unlitMaterial({
-      texture: virtualTexture({ flipY: false, manifestUri: "/vt/manifest.json" }),
-    });
-
-    root.render(renderScene(material));
-    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
-    root.render(renderScene(material));
-    await flushMicrotasks();
-    ControlledImage.instances.at(-1)!.settleLoad();
-    await flushMicrotasks();
-    root.render(renderScene(material));
-    expect(namedUniform1iValues(calls).u_vtFlipY).toContain(0);
   });
 
   it("ignores async VT page completions after dispose", async () => {

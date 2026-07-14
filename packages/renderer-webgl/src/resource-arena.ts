@@ -24,7 +24,6 @@ import { sameGeometryBytes } from "./webgl/geometry-identity";
 export interface PreparedTextureSource {
   readonly source: LoadedTextureSource;
   readonly texture: TextureAssetRef & {
-    readonly flipY?: boolean;
     readonly preparedOnly?: boolean;
   };
 }

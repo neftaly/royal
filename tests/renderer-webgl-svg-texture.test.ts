@@ -21,12 +21,6 @@ const textResponse = (url: string, text: string): Response => ({
   url,
 }) as unknown as Response;
 
-const requestUrl = (input: RequestInfo | URL): string => {
-  if (typeof input === "string") return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-};
-
 class AutoLoadingImage extends EventTarget {
   complete = false;
   crossOrigin: string | null = null;
@@ -55,52 +49,20 @@ describe("SVG texture reference lifecycle", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rejects seeded external-reference cycles before reusing a pending cache promise", async () => {
-    for (let length = 2; length <= 7; length += 1) {
-      const urls = Array.from({ length }, (_, index) => `https://assets.test/cycle-${length}-${index}.svg`);
-      const documents = new Map(urls.map((url, index) => [
-        url,
-        svg([urls[(index + 1) % urls.length]!]),
-      ]));
-      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-        const url = requestUrl(input);
-        return textResponse(url, documents.get(url) ?? "");
-      });
-      vi.stubGlobal("fetch", fetchMock);
+  it("leaves SVG content to secure browser image decoding without fetching or rewriting dependencies", async () => {
+    const source = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8">',
+      '<script>globalThis.__mustNotRun = true</script>',
+      '<rect width="8" height="8" onload="globalThis.__mustNotRun = true"/>',
+      '<image href="nested.svg"/>',
+      '</svg>',
+    ].join("");
 
-      const first = urls[0]!;
-      await expect(prepareSvgTextForImage(
-        svg([first]),
-        `seeded SVG cycle ${length}`,
-        "https://assets.test/root.svg",
-      )).rejects.toThrow(
-        `cyclic SVG image reference: ${[...urls, first].join(" -> ")}`,
-      );
-      expect(fetchMock).toHaveBeenCalledTimes(length);
-    }
-  });
-
-  it("coalesces legitimate duplicate nested image loads across sibling SVGs", async () => {
-    const rootUrl = "https://assets.test/root.svg";
-    const leftUrl = "https://assets.test/left.svg";
-    const rightUrl = "https://assets.test/right.svg";
-    const sharedUrl = "https://assets.test/shared.png";
-    const documents = new Map([
-      [leftUrl, svg([sharedUrl])],
-      [rightUrl, svg([sharedUrl])],
-    ]);
-    const fetched: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-      const url = requestUrl(input);
-      fetched.push(url);
-      return url === sharedUrl
-        ? textResponse(url, "shared-raster-bytes")
-        : textResponse(url, documents.get(url) ?? "");
-    }));
-
-    await expect(prepareSvgTextForImage(svg([leftUrl, rightUrl]), "duplicate references", rootUrl))
-      .resolves.toContain("data:image/svg+xml;base64");
-    expect(fetched.filter((url) => url === sharedUrl)).toHaveLength(1);
+    const prepared = await prepareSvgTextForImage(source, "opaque SVG image content");
+    expect(prepared).toContain("<script>");
+    expect(prepared).toContain("onload=");
+    expect(prepared).toContain('href="nested.svg"');
+    expect(prepared).not.toContain("data:image/svg+xml;base64");
   });
 
   it("aborts HTMLImage decode and releases an occupied scheduler lane", async () => {
@@ -183,7 +145,7 @@ describe("SVG texture viewport normalization", () => {
       width: 1_024,
     });
 
-    const normalized = await prepareSvgTextForImage(adversarial, "adversarial attributes", undefined);
+    const normalized = await prepareSvgTextForImage(adversarial, "adversarial attributes");
     expect(normalized).toContain('stroke-width="900"');
     expect(normalized).toContain('data-width="800"');
     expect(normalized).toContain('width="1024"');
@@ -255,7 +217,7 @@ describe("SVG texture viewport normalization", () => {
     });
     expect(Object.values(viewport ?? {}).every((value) =>
       typeof value !== "number" || (Number.isFinite(value) && value > 0))).toBe(true);
-    await expect(prepareSvgTextForImage(source, "extreme viewBox", undefined))
+    await expect(prepareSvgTextForImage(source, "extreme viewBox"))
       .resolves.toContain(`height="${String(Number.MIN_VALUE)}"`);
   });
 

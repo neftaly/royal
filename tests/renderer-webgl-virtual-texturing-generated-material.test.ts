@@ -97,7 +97,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it("keeps direct SVG textures ordinary while sanitizing their source", async () => {
+  it("keeps direct SVG textures ordinary and opaque to renderer rewriting", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
@@ -131,9 +131,9 @@ describe("WebGL renderer generated and material virtual texturing", () => {
 
     expect(objectUrlBlobs).toHaveLength(1);
     const normalizedSvgText = await objectUrlBlobs[0]!.text();
-    expect(normalizedSvgText).not.toContain("<script");
-    expect(normalizedSvgText).not.toContain("onload=");
-    expect(normalizedSvgText).not.toContain("javascript:");
+    expect(normalizedSvgText).toContain("<script");
+    expect(normalizedSvgText).toContain("onload=");
+    expect(normalizedSvgText).toContain("javascript:");
     expect(ControlledImage.instances[0]?.src).toBe("blob:royal-svg-texture-1");
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   generatedRasterVirtualTextureManifest,
-  orientVirtualTextureDemandVRange,
 } from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import {
   derivedVirtualTextureMipCount,
@@ -102,13 +101,6 @@ describe("WebGL virtual texturing runtime model", () => {
     ] as const) {
       expect(derivedVirtualTextureMipCount(pagesWide * 64, pagesHigh * 64, 64)).toBe(mipCount);
     }
-  });
-
-  it("orients partial V demand ranges before page selection", () => {
-    const oriented = orientVirtualTextureDemandVRange(0.7, 0.9, true);
-    expect(oriented[0]).toBeCloseTo(0.1);
-    expect(oriented[1]).toBeCloseTo(0.3);
-    expect(orientVirtualTextureDemandVRange(0.7, 0.9, false)).toEqual([0.7, 0.9]);
   });
 
   it("parses explicit page-entry manifests into a normalized resource model", () => {

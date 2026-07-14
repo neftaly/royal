@@ -13,7 +13,6 @@ import {
 import type { GltfTextureCoordinates } from "../gltf/texture-coordinates";
 
 export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
-  readonly flipY?: boolean;
   /** Internal dependency whose decoded source is supplied by the owning prepared asset. */
   readonly preparedOnly?: boolean;
 };
@@ -146,7 +145,6 @@ export const textureCacheKey = (texture: TextureRef): string => {
   }
   if (texture.kind === "asset") {
     const sampler = texture.sampler;
-    const upload = texture as TextureAssetUploadRef;
     return textureCacheTupleKey([
       "asset",
       textureSourceCacheKey(texture),
@@ -156,7 +154,6 @@ export const textureCacheKey = (texture: TextureRef): string => {
       sampler?.minFilter ?? null,
       sampler?.wrapS ?? null,
       sampler?.wrapT ?? null,
-      upload.flipY === false ? false : true,
     ]);
   }
 
@@ -170,7 +167,6 @@ export const textureCacheKey = (texture: TextureRef): string => {
     sampler?.minFilter ?? null,
     sampler?.wrapS ?? null,
     sampler?.wrapT ?? null,
-    texture.flipY ?? true,
   ]);
 };
 

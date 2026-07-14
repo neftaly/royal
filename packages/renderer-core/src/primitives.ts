@@ -1,25 +1,23 @@
-import { frozenTransform, nonEmptyString } from './descriptor-values';
+import { frozenTransform } from './descriptor-values';
 
-export type Axis = 'x' | 'y' | 'z';
-export type AxisSign = -1 | 1;
-
-export interface AxisDirection {
-  readonly axis: Axis;
-  readonly sign: AxisSign;
+/** The single coordinate convention used by every Royal public scene value. */
+export interface RoyalCoordinateConvention {
+  readonly angleUnit: 'radian';
+  readonly handedness: 'right';
+  /** Direction viewed by a camera whose rotation is `[0, 0, 0]`. */
+  readonly viewForward: '-z';
+  readonly linearUnit: 'metre';
+  readonly up: '+y';
 }
 
-export interface CoordinateSystem {
-  readonly forward: AxisDirection;
-  readonly handedness: 'left' | 'right';
-  /** Linear unit used by source coordinates. Royal world space is metric. */
-  readonly unit: 'meter';
-  readonly up: AxisDirection;
-}
-
-export interface SceneSource {
-  readonly coordinateSystem: CoordinateSystem;
-  readonly id: string;
-}
+/** Royal is right-handed, +Y-up, -Z view-forward, metric, and radian-based. */
+export const royalCoordinateConvention: RoyalCoordinateConvention = Object.freeze({
+  angleUnit: 'radian',
+  handedness: 'right',
+  linearUnit: 'metre',
+  up: '+y',
+  viewForward: '-z'
+});
 
 /** A scalar distance or length in Royal world space. One unit is one metre. */
 export type Metres = number;
@@ -85,40 +83,5 @@ export interface TransformOptions {
   /** Dimensionless multiplier. @defaultValue `[1, 1, 1]` */
   readonly scale?: Scale3;
 }
-
-export const defineCoordinateSystem = (system: CoordinateSystem): CoordinateSystem => {
-  if (system.up.axis === system.forward.axis) {
-    throw new Error('Coordinate system up and forward axes must differ');
-  }
-  if (system.unit !== 'meter') {
-    throw new Error('Coordinate system unit must be meter');
-  }
-
-  return Object.freeze({
-    forward: Object.freeze({ ...system.forward }),
-    handedness: system.handedness,
-    unit: system.unit,
-    up: Object.freeze({ ...system.up }),
-  });
-};
-
-export const zUpLeftHanded: CoordinateSystem = defineCoordinateSystem({
-  forward: { axis: 'y', sign: 1 },
-  handedness: 'left',
-  unit: 'meter',
-  up: { axis: 'z', sign: 1 }
-});
-
-export const yUpRightHanded: CoordinateSystem = defineCoordinateSystem({
-  forward: { axis: 'z', sign: -1 },
-  handedness: 'right',
-  unit: 'meter',
-  up: { axis: 'y', sign: 1 }
-});
-
-export const sceneSource = (source: SceneSource): SceneSource => Object.freeze({
-  coordinateSystem: defineCoordinateSystem(source.coordinateSystem),
-  id: nonEmptyString(source.id, 'scene source id')
-});
 
 export const resolveTransform = (options: TransformOptions): Transform => frozenTransform(options);

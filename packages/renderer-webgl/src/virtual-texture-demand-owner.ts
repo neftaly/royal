@@ -452,7 +452,7 @@ export class VirtualTextureDemandOwner {
 
     const demand = planVirtualTextureDrawDemand({
       ...(context === undefined ? {} : { context }),
-      flipY: state.texture.flipY ?? true,
+      flipY: false,
       generated: state.activeSource.kind === "generated",
       manifest,
       workspace: this.#planning,
