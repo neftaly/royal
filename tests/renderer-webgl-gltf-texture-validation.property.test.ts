@@ -194,6 +194,10 @@ const imageLooksSvg = (image: GltfImage): boolean => {
 };
 
 const gsSvgDocumentShouldPass = (document: GltfDocument): boolean => {
+  for (const texture of document.textures ?? []) {
+    const coreImage = texture.source === undefined ? undefined : document.images?.[texture.source];
+    if (coreImage !== undefined && imageLooksSvg(coreImage)) return false;
+  }
   if (!document.textures?.some((texture) => texture.extensions?.GS_texture_svg !== undefined)) return true;
   if (!document.extensionsUsed?.includes("GS_texture_svg")) return false;
   if (document.extensionsRequired?.includes("GS_texture_svg")) return false;
@@ -316,6 +320,27 @@ const gsSvgReplays: readonly FuzzReplay[] = [
   {
     label: "accepted core raster fallback",
     value: { document: acceptedGsSvgDocument, expectedPass: true } satisfies GsSvgReplay,
+  },
+  {
+    label: "plain core SVG texture",
+    value: {
+      document: {
+        images: [{ mimeType: "image/svg+xml", uri: "label.svg" }],
+        textures: [{ source: 0 }],
+      },
+      expectedMessage: /core texture 0 .*SVG image 0.*GS_texture_svg.*PNG or JPEG fallback/i,
+      expectedPass: false,
+    } satisfies GsSvgReplay,
+  },
+  {
+    label: "unused SVG image",
+    value: {
+      document: {
+        images: [{ uri: "unused.svg" }, { uri: "label.png" }],
+        textures: [{ source: 1 }],
+      },
+      expectedPass: true,
+    } satisfies GsSvgReplay,
   },
   {
     label: "missing core fallback",

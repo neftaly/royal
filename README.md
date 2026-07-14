@@ -124,10 +124,11 @@ until they are useful through the public renderer and React APIs.
 
 ## SVG textures (beta)
 
-Royal supports `.svg` texture images and the beta `GS_texture_svg` glTF
+Royal supports direct `.svg` texture images and the beta `GS_texture_svg` glTF
 extension. The WebGL renderer selects the SVG source when present, keeps a core
-raster fallback for non-supporting loaders, validates SVG dimensions, and
-resolves relative SVG image references before rasterization.
+raster fallback for non-supporting loaders, and validates finite root SVG
+dimensions. SVGs must be self-contained; Royal does not parse, sanitize, or
+resolve their nested resource graph.
 
 Spec: [docs/GS_texture_svg.md](docs/GS_texture_svg.md)
 

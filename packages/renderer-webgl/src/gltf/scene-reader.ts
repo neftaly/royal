@@ -42,7 +42,6 @@ import type {
   LoadedGltfPrimitive,
   LoadedGltfPrimitiveMaterial,
 } from "./prepared-asset";
-import { isSvgMimeType, isSvgUri } from "../svg-texture";
 import {
   DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
   type SurfaceMaterialAlphaMode,
@@ -251,15 +250,8 @@ const gltfTextureContentKey = (
 const gltfImageSourceUri = (src: string, image: GltfImage | undefined): string | undefined =>
   image?.uri === undefined ? undefined : resolveResourceUri(src, image.uri);
 
-const gltfImageLooksSvg = (image: GltfImage | undefined): boolean => {
-  if (image === undefined) return false;
-  if (isSvgMimeType(image.mimeType)) return true;
-  return image.uri !== undefined && isSvgUri(image.uri);
-};
-
 const gltfTextureImageSelection = (
   texture: GltfTexture | undefined,
-  images: readonly GltfImage[] | undefined,
 ): GltfTextureImageSelection | undefined => {
   const svgSource = texture?.extensions?.GS_texture_svg?.source;
   if (svgSource !== undefined) return { imageIndex: svgSource, kind: "svg" };
@@ -271,7 +263,7 @@ const gltfTextureImageSelection = (
     : texture?.source;
   return imageIndex === undefined
     ? undefined
-    : { imageIndex, kind: gltfImageLooksSvg(images?.[imageIndex]) ? "svg" : "image" };
+    : { imageIndex, kind: "image" };
 };
 
 const gltfMaterialTextureSlot = (
@@ -283,7 +275,7 @@ const gltfMaterialTextureSlot = (
   if (textureInfo === undefined) return undefined;
   const textureIndex = textureInfo.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-  const imageSelection = gltfTextureImageSelection(texture, document.images);
+  const imageSelection = gltfTextureImageSelection(texture);
   const imageIndex = imageSelection?.imageIndex;
   const imageKind = imageSelection?.kind ?? "image";
   const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];

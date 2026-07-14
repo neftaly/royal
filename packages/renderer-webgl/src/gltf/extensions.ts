@@ -61,6 +61,7 @@ export const assertSupportedRequiredGltfExtensions = (
   assertNoUnsupportedDeformation(src, document);
   assertRequiredTextureSourceExtensions(src, document);
   assertGsTextureSvgReferences(src, document);
+  assertNoCoreSvgTextureSources(src, document);
 };
 
 const assertNoUnsupportedDeformation = (src: string, document: GltfDocument): void => {
@@ -164,5 +165,17 @@ const assertGsTextureSvgReferences = (src: string, document: GltfDocument): void
     if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType === undefined && !isSvgUri(image.uri)) {
       throw new Error(`glTF GS_texture_svg texture ${textureIndex} in ${src} image URI should end in .svg or declare image/svg+xml`);
     }
+  }
+};
+
+const assertNoCoreSvgTextureSources = (src: string, document: GltfDocument): void => {
+  for (const [textureIndex, texture] of (document.textures ?? []).entries()) {
+    if (texture.source === undefined) continue;
+    const image = document.images?.[texture.source];
+    if (image === undefined || !imageLooksSvg(image)) continue;
+    throw new Error(
+      `glTF core texture ${textureIndex} in ${src} uses SVG image ${texture.source}; `
+      + "use optional GS_texture_svg with a core PNG or JPEG fallback",
+    );
   }
 };
