@@ -667,44 +667,6 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       .toBe(true);
   });
 
-  it("hides required KHR_node_visibility node hierarchies", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "node-visibility" }),
-    ]));
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        extensionsRequired: ["KHR_node_visibility"],
-        extensionsUsed: ["KHR_node_visibility"],
-        images: [],
-        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
-        nodes: [
-          {
-            children: [1],
-            extensions: { KHR_node_visibility: { visible: false } },
-          },
-          { mesh: 0 },
-        ],
-        samplers: [],
-        scenes: [{ nodes: [0] }],
-        textures: [],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(drawCalls(calls)).toHaveLength(0);
-  });
-
   it("renders glTF line primitives with line draw mode", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

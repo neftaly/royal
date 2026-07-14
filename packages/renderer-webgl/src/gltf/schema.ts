@@ -287,9 +287,6 @@ export type GltfSceneNode = {
     readonly KHR_lights_punctual?: {
       readonly light?: number;
     };
-    readonly KHR_node_visibility?: {
-      readonly visible?: boolean;
-    };
     readonly MSFT_lod?: GltfLodExtension;
   };
   readonly extras?: GltfLodExtras;

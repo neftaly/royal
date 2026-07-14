@@ -213,7 +213,6 @@ const estimateReachableGeometryBytes = (document: GltfDocument): number => {
     }
     const node = document.nodes?.[task.node];
     if (node === undefined) throw new Error(`glTF traversal reached missing node ${task.node}`);
-    if (node.extensions?.KHR_node_visibility?.visible === false) continue;
     const lodIds = task.applyOwnLod ? (node.extensions?.MSFT_lod?.ids ?? []) : [];
     if (lodIds.length > 0) {
       stack.push({ applyOwnLod: false, depth: task.depth + 1, node: task.node, nodeLod: true });

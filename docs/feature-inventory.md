@@ -129,7 +129,7 @@ Status meanings:
 | `KHR_meshopt_compression` | ingestion/experimental | Real draft successor with a newer codec/filter profile, but not ratified or widely deployed. Keep its small shared-decoder adapter; continue producing EXT by default. |
 | `KHR_mesh_quantization` | ingestion | Mostly accessor acceptance; useful and low runtime cost. Keep. |
 | `EXT_mesh_gpu_instancing` | ingestion | Correctly lowers into canonical instance transforms. Keep. |
-| `KHR_node_visibility` | ingestion/candidate | Small optional filtering extension. Delete if no production exporter uses it. |
+| `KHR_node_visibility` | deleted | Static filtering was not useful without animation-pointer support; required assets fail honestly instead of appearing partially supported. |
 | `KHR_materials_variants` | ingestion/product | Keep; canonical selection, React discovery API, LOD interaction tests, and an interactive workload are present. |
 | `EXT_lights_image_based` | ingestion | Real multi-vendor extension. Keep its existing adapter: imported IBL is asset-scoped fallback, scene environment wins, and no load-order authority exists. |
 | `MSFT_lod` | ingestion | Keep as declarations only; lower to canonical LOD. |

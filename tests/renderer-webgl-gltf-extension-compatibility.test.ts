@@ -168,7 +168,7 @@ const decodedBytes = async (
 };
 
 describe("renderer-webgl glTF extension compatibility", () => {
-  it("supports required KHR_meshopt_compression and rejects KHR_animation_pointer", () => {
+  it("supports required KHR_meshopt_compression and rejects dynamic node extensions", () => {
     expect(supportedGltfExtensions.has("KHR_meshopt_compression")).toBe(true);
     expect(unsupportedRequiredGltfExtensions({
       extensionsRequired: ["KHR_meshopt_compression"],
@@ -181,6 +181,11 @@ describe("renderer-webgl glTF extension compatibility", () => {
     expect(() => assertSupportedRequiredGltfExtensions("animated.gltf", {
       extensionsRequired: ["KHR_animation_pointer"],
     })).toThrow(/unsupported required glTF extension.*KHR_animation_pointer/i);
+
+    expect(supportedGltfExtensions.has("KHR_node_visibility")).toBe(false);
+    expect(() => assertSupportedRequiredGltfExtensions("visibility.gltf", {
+      extensionsRequired: ["KHR_node_visibility"],
+    })).toThrow(/unsupported required glTF extension.*KHR_node_visibility/i);
   });
 
   it("fails explicitly for skeletal and morph deformation assets", () => {

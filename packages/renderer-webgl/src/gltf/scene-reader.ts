@@ -688,7 +688,7 @@ const appendNodeTreePrimitives = (
   applyOwnLod = true,
 ): void => {
   const sceneNode = context.document.nodes?.[nodeIndex];
-  if (sceneNode === undefined || sceneNode.extensions?.KHR_node_visibility?.visible === false) return;
+  if (sceneNode === undefined) return;
   if (parentPath.includes(nodeIndex)) {
     context.diagnostics.recordDiagnostic(
       `glTF node tree cycle skipped at node ${nodeIndex}`,

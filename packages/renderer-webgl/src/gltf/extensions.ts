@@ -23,7 +23,6 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_materials_volume",
   "KHR_materials_variants",
   "KHR_mesh_quantization",
-  "KHR_node_visibility",
   "KHR_texture_transform",
   "MSFT_lod",
   "GS_texture_svg",
