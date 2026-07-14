@@ -22,7 +22,9 @@ and selected required extensions. Assets requiring skeletal or morph
 deformation fail explicitly until a prepared deformation runtime is added.
 That supported required-extension set includes meshopt-compressed bufferViews
 via `EXT_meshopt_compression` and KTX2/Basis base-color textures via
-`KHR_texture_basisu` through an RGBA8 transcode path.
+`KHR_texture_basisu`. Complete authored mip chains transcode to ETC2/EAC and
+stay GPU-compressed; incomplete chains use the RGBA8 fallback so Royal can
+generate required missing mips.
 Required `KHR_animation_pointer` assets fail explicitly.
 
 ```tsx

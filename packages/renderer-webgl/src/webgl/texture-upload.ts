@@ -1,6 +1,7 @@
 import {
-  decodedRgbaTextureHasCompleteMipChain,
-  decodedRgbaTextureLevels,
+  decodedTextureHasCompleteMipChain,
+  decodedTextureLevels,
+  isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   type LoadedTextureSource,
 } from "../texture-sources";
@@ -60,11 +61,29 @@ export const uploadTexture = (
   const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
   const mipmapped = usesMipmaps(texture.sampler?.minFilter);
   let uploadedCompleteMipChain = false;
-  if (isDecodedRgbaTexture(source)) {
-    uploadedCompleteMipChain = mipmapped && decodedRgbaTextureHasCompleteMipChain(source);
+  if (isDecodedCompressedTexture(source)) {
+    if (mipmapped && !decodedTextureHasCompleteMipChain(source)) {
+      throw new Error(`Compressed texture ${texture.uri} is missing required mip levels`);
+    }
+    uploadedCompleteMipChain = mipmapped;
+    const levels = mipmapped ? source.levels : source.levels.slice(0, 1);
+    const format = texture.colorSpace === "srgb" ? source.srgbFormat : source.format;
+    for (const [levelIndex, level] of levels.entries()) {
+      gl.compressedTexImage2D(
+        gl.TEXTURE_2D,
+        levelIndex,
+        format,
+        level.width,
+        level.height,
+        0,
+        level.data,
+      );
+    }
+  } else if (isDecodedRgbaTexture(source)) {
+    uploadedCompleteMipChain = mipmapped && decodedTextureHasCompleteMipChain(source);
     const levels = uploadedCompleteMipChain
-      ? decodedRgbaTextureLevels(source)
-      : decodedRgbaTextureLevels(source).slice(0, 1);
+      ? decodedTextureLevels(source)
+      : decodedTextureLevels(source).slice(0, 1);
     for (const [levelIndex, level] of levels.entries()) {
       gl.texImage2D(
         gl.TEXTURE_2D,

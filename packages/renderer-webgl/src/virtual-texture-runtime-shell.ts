@@ -25,7 +25,11 @@ import {
   type VirtualTextureRef,
   type VirtualTextureRuntimeState,
 } from "./virtual-texture-runtime";
-import { loadedTextureSourceSize, type LoadedTextureSource } from "./texture-sources";
+import {
+  isDecodedCompressedTexture,
+  loadedTextureSourceSize,
+  type LoadedTextureSource,
+} from "./texture-sources";
 import { decodedTextureSourceBytes } from "./decoded-texture-source-lifetime";
 import {
   generatedVirtualTexturePageCount,
@@ -259,7 +263,7 @@ export class VirtualTextureRuntimeShell {
     if (!this.#options.generatedImageVirtualTextures) return;
     // SVG paging is intentionally absent until VT v2 provides one generic
     // page-source contract. Keep Royal's ordinary SVG texture as the baseline.
-    if (isLoadedSvgTextureSource(source)) return;
+    if (isLoadedSvgTextureSource(source) || isDecodedCompressedTexture(source)) return;
     const textureKey = textureCacheKey(texture);
     const [width, height] = loadedTextureSourceSize(source);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;

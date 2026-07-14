@@ -277,7 +277,7 @@ export const loadGltfImageSourceRecipe = async (
       if (signal.aborted) throw abortError();
       return {
         contentKey: byteContentKey(bytes, "KHR_texture_basisu"),
-        image: decodedUnlessAborted(await codec.decodeGltfBasisuRgba(bytes, source.uri), signal),
+        image: decodedUnlessAborted(await codec.decodeGltfBasisuTexture(bytes, source.uri), signal),
       };
     }
     case "basisu-bytes": {
@@ -285,7 +285,7 @@ export const loadGltfImageSourceRecipe = async (
       if (signal.aborted) throw abortError();
       return {
         contentKey: source.contentKey,
-        image: decodedUnlessAborted(await codec.decodeGltfBasisuRgba(source.bytes, source.label), signal),
+        image: decodedUnlessAborted(await codec.decodeGltfBasisuTexture(source.bytes, source.label), signal),
       };
     }
   }

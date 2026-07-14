@@ -1,6 +1,7 @@
 import {
-  decodedRgbaTextureHasCompleteMipChain,
-  decodedRgbaTextureLevels,
+  decodedTextureHasCompleteMipChain,
+  decodedTextureLevels,
+  isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
   type LoadedTextureSource,
@@ -345,12 +346,23 @@ const checkedTextureDimension = (value: number, label: string): number => {
 export const ordinaryTextureUploadCost = (
   upload: OrdinaryTexturePendingUpload,
 ): { readonly persistentGpuBytes: number; readonly uploadBytes: number } => {
+  const mipmapped = usesMipmaps(upload.texture.sampler?.minFilter);
+  if (isDecodedCompressedTexture(upload.source)) {
+    if (mipmapped && !decodedTextureHasCompleteMipChain(upload.source)) {
+      throw new Error(`Compressed texture ${upload.texture.uri} is missing required mip levels`);
+    }
+    const levels = mipmapped ? upload.source.levels : upload.source.levels.slice(0, 1);
+    const bytes = levels.reduce((sum, level) => sum + level.data.byteLength, 0);
+    if (!Number.isSafeInteger(bytes)) {
+      throw new RangeError("ordinary compressed texture byte size exceeds safe integer range");
+    }
+    return { persistentGpuBytes: bytes, uploadBytes: bytes };
+  }
   const size = loadedTextureSourceSize(upload.source);
   let width = checkedTextureDimension(size[0], "ordinary texture width");
   let height = checkedTextureDimension(size[1], "ordinary texture height");
   let persistentGpuBytes = 0;
   let hasLevel = true;
-  const mipmapped = usesMipmaps(upload.texture.sampler?.minFilter);
   while (hasLevel) {
     const levelBytes = width * height * 4;
     if (!Number.isSafeInteger(levelBytes) || !Number.isSafeInteger(persistentGpuBytes + levelBytes)) {
@@ -364,10 +376,13 @@ export const ordinaryTextureUploadCost = (
     }
   }
   const [sourceWidth, sourceHeight] = size;
-  const uploadBytes = isDecodedRgbaTexture(upload.source)
+  const decoded = isDecodedRgbaTexture(upload.source) || isDecodedCompressedTexture(upload.source);
+  const uploadBytes = decoded
     && mipmapped
-    && decodedRgbaTextureHasCompleteMipChain(upload.source)
-      ? decodedRgbaTextureLevels(upload.source).reduce((sum, level) => sum + level.data.byteLength, 0)
+    && decodedTextureHasCompleteMipChain(upload.source)
+      ? decodedTextureLevels(upload.source).reduce((sum, level) => sum + level.data.byteLength, 0)
+      : decoded
+        ? upload.source.data.byteLength
       : checkedTextureDimension(sourceWidth, "ordinary texture width")
         * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
   if (!Number.isSafeInteger(uploadBytes)) {

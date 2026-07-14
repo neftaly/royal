@@ -7,7 +7,7 @@ const hoistedMocks = vi.hoisted(() => ({
 export const decodeBasisuMock = hoistedMocks.decodeBasisu;
 
 vi.mock("../packages/renderer-webgl/src/gltf/codecs/basisu", () => ({
-  decodeGltfBasisuRgba: decodeBasisuMock,
+  decodeGltfBasisuTexture: decodeBasisuMock,
 }));
 
 import {

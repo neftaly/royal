@@ -1,22 +1,33 @@
-import type { DecodedGltfBasisuTexture } from "./gltf/codecs/basisu";
+import type {
+  DecodedGltfBasisuCompressedTexture,
+  DecodedGltfBasisuRgbaTexture,
+  DecodedGltfBasisuTexture,
+} from "./gltf/codecs/basisu";
 
 export type LoadedTextureSource = HTMLImageElement | ImageBitmap | DecodedGltfBasisuTexture;
 
-export const isDecodedRgbaTexture = (source: LoadedTextureSource): source is DecodedGltfBasisuTexture =>
+export const isDecodedRgbaTexture = (source: LoadedTextureSource): source is DecodedGltfBasisuRgbaTexture =>
   typeof source === "object" && source !== null && "kind" in source && source.kind === "rgba-texture";
 
-export const decodedRgbaTextureLevels = (
+export const isDecodedCompressedTexture = (
+  source: LoadedTextureSource,
+): source is DecodedGltfBasisuCompressedTexture => typeof source === "object"
+  && source !== null
+  && "kind" in source
+  && source.kind === "compressed-texture";
+
+export const decodedTextureLevels = (
   source: DecodedGltfBasisuTexture,
-): NonNullable<DecodedGltfBasisuTexture["levels"]> => source.levels ?? [{
+): NonNullable<DecodedGltfBasisuRgbaTexture["levels"]> => source.levels ?? [{
   data: source.data,
   height: source.height,
   width: source.width,
 }];
 
-export const decodedRgbaTextureHasCompleteMipChain = (
+export const decodedTextureHasCompleteMipChain = (
   source: DecodedGltfBasisuTexture,
 ): boolean => {
-  const levels = decodedRgbaTextureLevels(source);
+  const levels = decodedTextureLevels(source);
   let width = source.width;
   let height = source.height;
   for (const level of levels) {
@@ -28,7 +39,7 @@ export const decodedRgbaTextureHasCompleteMipChain = (
 };
 
 export const loadedTextureSourceSize = (source: LoadedTextureSource): readonly [width: number, height: number] => {
-  if (isDecodedRgbaTexture(source)) return [source.width, source.height];
+  if (isDecodedRgbaTexture(source) || isDecodedCompressedTexture(source)) return [source.width, source.height];
   const candidate = source as HTMLImageElement | ImageBitmap;
   const width = "naturalWidth" in candidate && candidate.naturalWidth > 0 ? candidate.naturalWidth : candidate.width;
   const height = "naturalHeight" in candidate && candidate.naturalHeight > 0 ? candidate.naturalHeight : candidate.height;

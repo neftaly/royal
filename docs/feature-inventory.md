@@ -121,7 +121,7 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| `KHR_texture_basisu` / KTX2 Basis | ingestion/product | Keep, but fix upload to retain GPU block compression. |
+| `KHR_texture_basisu` / KTX2 Basis | ingestion/product | Complete mip chains retain ETC2/EAC GPU block compression; incomplete chains safely fall back to RGBA8. Keep. |
 | `EXT_texture_webp` | ingestion | Cheap browser-supported source preference with core fallback. Keep unless KTX2 becomes the only compressed delivery format. |
 | `KHR_draco_mesh_compression` | ingestion | Widely used compatibility. Keep the isolated `minidraco` dependency; do not build a Royal decoder. |
 | `EXT_meshopt_compression` | ingestion | Efficient geometry delivery and aligned with LOD/offline preparation. Keep. |

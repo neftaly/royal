@@ -22,7 +22,10 @@ export const virtualTextureCanvasContext = (
   canvas: HTMLCanvasElement | OffscreenCanvas,
   label: string,
 ): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D => {
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d") as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null;
   if (context === null) throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";

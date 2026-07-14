@@ -1,5 +1,6 @@
 import type { TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
 import {
+  isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   type LoadedTextureSource,
 } from "./texture-sources";
@@ -250,6 +251,9 @@ const rasterVirtualTextureCanvasSource = (
   source: RasterVirtualTextureSource,
 ): CanvasImageSource => {
   if (source.canvasSource !== undefined) return source.canvasSource;
+  if (isDecodedCompressedTexture(source.source)) {
+    throw new Error(`Compressed source ${source.label} cannot be cropped through Canvas 2D`);
+  }
   if (!isDecodedRgbaTexture(source.source)) {
     source.canvasSource = source.source;
     return source.canvasSource;

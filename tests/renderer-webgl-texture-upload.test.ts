@@ -47,6 +47,7 @@ class FakeGl {
 
   activeTexture = (...args: readonly unknown[]): void => this.#record("activeTexture", ...args);
   bindTexture = (...args: readonly unknown[]): void => this.#record("bindTexture", ...args);
+  compressedTexImage2D = (...args: readonly unknown[]): void => this.#record("compressedTexImage2D", ...args);
   generateMipmap = (...args: readonly unknown[]): void => this.#record("generateMipmap", ...args);
   pixelStorei = (...args: readonly unknown[]): void => this.#record("pixelStorei", ...args);
   texImage2D = (...args: readonly unknown[]): void => {
@@ -141,6 +142,33 @@ describe("texture upload kernel", () => {
       [gl.TEXTURE_2D, 0, gl.RGBA, 4, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data],
       [gl.TEXTURE_2D, 1, gl.RGBA, 2, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, mip1],
       [gl.TEXTURE_2D, 2, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, mip2],
+    ]);
+    expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
+  });
+
+  it("uploads a complete ETC2 chain with the sRGB format and compressed byte payloads", () => {
+    const gl = new FakeGl();
+    const levels = [
+      { data: new Uint8Array(16).fill(1), height: 4, width: 4 },
+      { data: new Uint8Array(16).fill(2), height: 2, width: 2 },
+      { data: new Uint8Array(16).fill(3), height: 1, width: 1 },
+    ];
+    uploadTexture(context(gl), handle, {
+      ...levels[0]!,
+      format: 0x9278,
+      kind: "compressed-texture",
+      levels,
+      srgbFormat: 0x9279,
+    }, texture({
+      colorSpace: "srgb",
+      sampler: { minFilter: "linear-mipmap-linear" },
+      uri: "compressed.ktx2",
+    }));
+
+    expect(gl.calls.filter(({ name }) => name === "compressedTexImage2D").map(({ args }) => args)).toEqual([
+      [gl.TEXTURE_2D, 0, 0x9279, 4, 4, 0, levels[0]!.data],
+      [gl.TEXTURE_2D, 1, 0x9279, 2, 2, 0, levels[1]!.data],
+      [gl.TEXTURE_2D, 2, 0x9279, 1, 1, 0, levels[2]!.data],
     ]);
     expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
   });

@@ -14,6 +14,7 @@ import {
   ordinaryTextureGpuPendingUpload,
   ordinaryTextureGpuQuarantinedBytes,
   ordinaryTextureGpuResourceCount,
+  ordinaryTextureUploadCost,
   processOrdinaryTextureUploads,
   queueOrdinaryTextureUpload,
   releaseOrdinaryTextureGpuResource,
@@ -170,6 +171,28 @@ const runOperationTrace = (trace: readonly Operation[], label: string): void => 
   }
 };
 describe("ordinary texture GPU arena", () => {
+  it("accounts compressed mip storage and upload bytes without RGBA inflation", () => {
+    const levels = [
+      { data: new Uint8Array(16), height: 4, width: 4 },
+      { data: new Uint8Array(16), height: 2, width: 2 },
+      { data: new Uint8Array(16), height: 1, width: 1 },
+    ];
+    expect(ordinaryTextureUploadCost({
+      source: {
+        ...levels[0]!,
+        format: 0x9278,
+        kind: "compressed-texture",
+        levels,
+        srgbFormat: 0x9279,
+      },
+      texture: {
+        kind: "asset",
+        sampler: { minFilter: "linear-mipmap-linear" },
+        uri: "compressed.ktx2",
+      },
+    })).toEqual({ persistentGpuBytes: 48, uploadBytes: 48 });
+  });
+
   it("keeps lifecycle accounting conserved across replayable operation traces", async () => {
     await runFuzzTraces<Operation>({
       cases: 12,

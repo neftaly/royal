@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { decodedGltfBasisuRgba } from "../packages/renderer-webgl/src/gltf/codecs/basisu";
+import {
+  decodedGltfBasisuEtc2,
+  decodedGltfBasisuRgba,
+} from "../packages/renderer-webgl/src/gltf/codecs/basisu";
 
 const level = (width: number, height: number, fill: number) => ({
   compressed: false,
@@ -10,6 +13,33 @@ const level = (width: number, height: number, fill: number) => ({
 });
 
 describe("glTF BasisU RGBA normalization", () => {
+  it("owns a complete ETC2 chain with linear and sRGB upload formats", () => {
+    const compressedLevel = (width: number, height: number, fill: number) => ({
+      compressed: true,
+      data: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16).fill(fill),
+      format: 0x9278,
+      height,
+      textureFormat: "etc2-rgba8unorm",
+      width,
+    });
+    const base = compressedLevel(4, 4, 1);
+    const decoded = decodedGltfBasisuEtc2([[
+      base,
+      compressedLevel(2, 2, 2),
+      compressedLevel(1, 1, 3),
+    ]], "compressed.ktx2");
+
+    expect(decoded).toMatchObject({
+      format: 0x9278,
+      height: 4,
+      kind: "compressed-texture",
+      srgbFormat: 0x9279,
+      width: 4,
+    });
+    expect(decoded.levels.map((entry) => entry.data[0])).toEqual([1, 2, 3]);
+    expect(decoded.data).not.toBe(base.data);
+  });
+
   it("copies and preserves a complete authored mip chain", () => {
     const base = level(4, 2, 1);
     const mip1 = level(2, 1, 2);

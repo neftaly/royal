@@ -1,4 +1,5 @@
 import {
+  isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
   type LoadedTextureSource,
@@ -304,6 +305,9 @@ const uploadGltfSpecularIfReady = (
     const mipKeys = specular.imageLoadKeys[mipIndex]!;
     for (let faceIndex = 0; faceIndex < mipKeys.length; faceIndex += 1) {
       const source = sources.get(mipKeys[faceIndex]!)!;
+      if (isDecodedCompressedTexture(source)) {
+        throw new Error(`glTF IBL cubemap ${specular.key} does not accept KHR_texture_basisu payloads`);
+      }
       if (uploadOrdinal < resource.uploadCursor) {
         uploadOrdinal += 1;
         continue;
