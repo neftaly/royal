@@ -11,6 +11,14 @@ import { sameGeometryBytes } from "../packages/renderer-webgl/src/webgl/geometry
 import { forEachFuzzCase } from "./fuzz";
 
 describe("WebGL geometry recipes", () => {
+  it("maps procedural faces from Royal's upper-left authored texture origin", () => {
+    const plane = normalizeGeometryDeclaration(directGeometryDeclaration(planeGeometry([2, 1]), "surface"));
+    const box = normalizeGeometryDeclaration(directGeometryDeclaration(boxGeometry([1, 2, 3]), "surface"));
+
+    expect([...plane.texCoords0 ?? []]).toEqual([0, 1, 1, 1, 1, 0, 0, 0]);
+    expect([...box.texCoords0?.slice(0, 8) ?? []]).toEqual([0, 1, 1, 1, 1, 0, 0, 0]);
+  });
+
   it("normalizes equal direct declarations to equal deterministic recipes", () => {
     forEachFuzzCase({ cases: 48, seed: 0x6e0_4ec1 }, ({ label, random }) => {
       const dimensions = [

@@ -149,7 +149,7 @@ const planeGeometry = (geometry: PlaneGeometry, topology: DirectGeometryTopology
       indices: new Uint16Array([0, 1, 1, 2, 2, 3, 3, 0]),
       mode: "lines",
       positions: new Float32Array([-x, -y, 0, x, -y, 0, x, y, 0, -x, y, 0]),
-      texCoords0: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+      texCoords0: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
     };
   }
   return {
@@ -158,7 +158,7 @@ const planeGeometry = (geometry: PlaneGeometry, topology: DirectGeometryTopology
     mode: "triangles",
     normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
     positions: new Float32Array([-x, -y, 0, x, -y, 0, x, y, 0, -x, y, 0]),
-    texCoords0: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+    texCoords0: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
   };
 };
 
@@ -182,7 +182,9 @@ const boxGeometry = (geometry: BoxGeometry, topology: DirectGeometryTopology): C
       ]),
     };
   }
-  const faceUvs = [0, 0, 1, 0, 1, 1, 0, 1];
+  // Royal and glTF texture coordinates use an upper-left authored origin.
+  // Each face's first two vertices form its lower edge, so their V is 1.
+  const faceUvs = [0, 1, 1, 1, 1, 0, 0, 0];
   return {
     bucketKey: `direct:surface:box:${width},${height},${depth}`,
     indices: new Uint16Array([
