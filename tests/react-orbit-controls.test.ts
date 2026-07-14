@@ -107,18 +107,31 @@ describe("OrbitControls", () => {
   it("rejects malformed behavior options before attaching interactions", () => {
     const canvas = fakeCanvas();
     expect(() => createOrbitControls(canvas, {
-      defaultView,
+      initialView: defaultView,
       enabled: "yes" as unknown as boolean,
     })).toThrow("OrbitControls enabled must be a boolean");
     expect(() => createOrbitControls(canvas, {
-      defaultView,
+      initialView: defaultView,
       zoomSpeed: Number.NaN,
     })).toThrow("OrbitControls zoomSpeed must be a finite number");
 
-    const controls = createOrbitControls(canvas, { defaultView });
+    expect(() => createOrbitControls(canvas, {
+      defaultView,
+    } as unknown as Parameters<typeof createOrbitControls>[1])).toThrow(/unsupported option.*defaultView/i);
+
+    const controls = createOrbitControls(canvas, { initialView: defaultView });
     expect(() => controls.setOptions({
       onChange: 42 as unknown as (view: OrbitCameraView) => void,
     })).toThrow("OrbitControls onChange must be a function");
+    expect(() => controls.setOptions({
+      enableRotation: true,
+    } as unknown as Parameters<typeof controls.setOptions>[0])).toThrow(/unsupported option.*enableRotation/i);
+    expect(() => controls.setView(defaultView, {
+      notify: false,
+    } as unknown as Parameters<typeof controls.setView>[1])).toThrow(/unsupported option.*notify/i);
+    expect(() => controls.setView(defaultView, {
+      emitChange: "no",
+    } as unknown as Parameters<typeof controls.setView>[1])).toThrow("OrbitControls setView emitChange must be a boolean");
     controls.dispose();
   });
 
@@ -143,11 +156,11 @@ describe("OrbitControls", () => {
     const canvas = fakeCanvas();
     const changes: OrbitCameraView[] = [];
     const controls = createOrbitControls(canvas, {
-      defaultView,
+      initialView: defaultView,
       onChange: (view) => changes.push(view),
     });
 
-    controls.setView(defaultView, { notify: false });
+    controls.setView(defaultView, { emitChange: false });
     const zoomIn = wheelEvent(-120);
     const zoomOut = wheelEvent(120);
 
@@ -167,7 +180,7 @@ describe("OrbitControls", () => {
     const canvas = fakeCanvas();
     const changes: OrbitCameraView[] = [];
     const controls = createOrbitControls(canvas, {
-      defaultView,
+      initialView: defaultView,
       onChange: (view) => changes.push(view),
     });
 
@@ -188,7 +201,7 @@ describe("OrbitControls", () => {
 
   it("preserves single-pointer orbit rotation", () => {
     const canvas = fakeCanvas();
-    const controls = createOrbitControls(canvas, { defaultView });
+    const controls = createOrbitControls(canvas, { initialView: defaultView });
 
     canvas.dispatchFakeEvent("pointerdown", pointerEvent(1, 10, 20));
     canvas.dispatchFakeEvent("pointermove", pointerEvent(1, 20, 15));
@@ -206,7 +219,7 @@ describe("OrbitControls", () => {
   it("does not compete with pointer and wheel events consumed by scene handlers", () => {
     const canvas = fakeCanvas();
     const onChange = vi.fn();
-    const controls = createOrbitControls(canvas, { defaultView, onChange });
+    const controls = createOrbitControls(canvas, { initialView: defaultView, onChange });
     const consumedDown = pointerEvent(1, 10, 20);
     const consumedWheel = wheelEvent(-120);
     consumedDown.preventDefault();
@@ -227,7 +240,7 @@ describe("OrbitControls", () => {
     const canvas = fakeCanvas();
     const onChange = vi.fn();
     const controls = createOrbitControls(canvas, {
-      defaultView: { ...defaultView, distance: 1 },
+      initialView: { ...defaultView, distance: 1 },
       minDistance: 3,
       onChange,
     });
@@ -241,7 +254,7 @@ describe("OrbitControls", () => {
 
   it("cancels an active gesture when controls are disabled", () => {
     const canvas = fakeCanvas();
-    const controls = createOrbitControls(canvas, { defaultView });
+    const controls = createOrbitControls(canvas, { initialView: defaultView });
 
     canvas.dispatchFakeEvent("pointerdown", pointerEvent(1, 10, 20));
     expect(canvas.capturedPointerIds.has(1)).toBe(true);

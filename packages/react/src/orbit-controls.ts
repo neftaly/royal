@@ -34,6 +34,7 @@ export type {
   OrbitControlsBehaviorOptions,
   OrbitControlsHandle,
   OrbitControlsOptions,
+  OrbitControlsSetViewOptions,
 } from "./orbit-controls-runtime";
 
 export type OrbitControlsProps = OrbitControlsBehaviorOptions & {
@@ -81,7 +82,7 @@ export const OrbitControls = ({
   useEffect(() => {
     if (canvas === null) return undefined;
     const controls = createOrbitControls(canvas, {
-      defaultView: orbit.getView(),
+      initialView: orbit.getView(),
       ...behaviorOptionsRef.current,
     });
     controlsRef.current = controls;
@@ -110,9 +111,9 @@ export const OrbitControls = ({
   ]);
 
   useEffect(() => {
-    controlsRef.current?.setView(orbit.getView(), { clamp: false, notify: false });
+    controlsRef.current?.setView(orbit.getView(), { clamp: false, emitChange: false });
     return orbit.subscribeView(() => {
-      controlsRef.current?.setView(orbit.getView(), { clamp: false, notify: false });
+      controlsRef.current?.setView(orbit.getView(), { clamp: false, emitChange: false });
     });
   }, [orbit]);
 

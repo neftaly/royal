@@ -368,7 +368,7 @@ describe("React Canvas picking optimization", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
     const controls = createOrbitControls(canvas, {
-      defaultView: { distance: 5, pitch: 0, target: [0, 0, 0], yaw: 0 },
+      initialView: { distance: 5, pitch: 0, target: [0, 0, 0], yaw: 0 },
     });
     const onPointerDown = vi.fn((event: RoyalPointerEvent) => {
       event.preventDefault();

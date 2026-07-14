@@ -47,18 +47,20 @@ export type OrbitControlsHandle = {
   setOptions(options: OrbitControlsBehaviorOptions): void;
   setView(
     view: OrbitCameraViewOptions,
-    options?: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined }
+    options?: OrbitControlsSetViewOptions,
   ): void;
 };
 
-export type OrbitControlsOptions = {
-  readonly defaultView?: OrbitCameraViewOptions;
-  readonly value?: OrbitCameraViewOptions;
-} & OrbitControlsBehaviorOptions;
+export type OrbitControlsSetViewOptions = {
+  /** Applies the configured distance and pitch constraints. @defaultValue `true` */
+  readonly clamp?: boolean | undefined;
+  /** Calls the configured `onChange` handler when the view changes. @defaultValue `true` */
+  readonly emitChange?: boolean | undefined;
+};
 
-type OrbitControlsViewInputs = {
-  readonly defaultView?: OrbitCameraViewOptions | undefined;
-  readonly value?: OrbitCameraViewOptions | undefined;
+export type OrbitControlsOptions = OrbitControlsBehaviorOptions & {
+  /** View used to initialize this imperative controls instance. */
+  readonly initialView: OrbitCameraViewOptions;
 };
 
 type DragMode = "orbit" | "pan";
@@ -91,6 +93,41 @@ const defaultPanSpeed = 0.0016;
 const defaultRotateSpeed = 0.006;
 const defaultZoomSpeed = 0.0018;
 
+const behaviorOptionNames = new Set<string>([
+  "enabled",
+  "enablePan",
+  "enableRotate",
+  "enableZoom",
+  "maxDistance",
+  "maxPitch",
+  "minDistance",
+  "minPitch",
+  "onChange",
+  "panSpeed",
+  "rotateSpeed",
+  "zoomSpeed",
+]);
+const creationOptionNames = new Set<string>([...behaviorOptionNames, "initialView"]);
+
+const optionObject = (value: unknown, label: string): Record<string, unknown> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+};
+
+const validateOptionNames = (
+  options: Record<string, unknown>,
+  names: ReadonlySet<string>,
+  label: string,
+): void => {
+  for (const name of Object.keys(options)) {
+    if (!names.has(name)) {
+      throw new TypeError(`${label} contain unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+};
+
 const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new TypeError(`${label} must be a boolean`);
@@ -114,42 +151,54 @@ const optionalChangeHandler = (
   return value as OrbitControlsBehaviorOptions["onChange"];
 };
 
-const resolveStartingView = (options: OrbitControlsViewInputs): OrbitCameraView => {
-  const view = options.value ?? options.defaultView;
-  if (view === undefined) {
-    throw new Error("OrbitControls expects value or defaultView");
-  }
-
-  return resolveOrbitCameraView(view);
+export const orbitControlsBehaviorOptionsFrom = (
+  options: OrbitControlsBehaviorOptions,
+): OrbitControlsBehaviorOptions => {
+  const {
+    enabled,
+    enablePan,
+    enableRotate,
+    enableZoom,
+    maxDistance,
+    maxPitch,
+    minDistance,
+    minPitch,
+    onChange,
+    panSpeed,
+    rotateSpeed,
+    zoomSpeed,
+  } = optionObject(options, "OrbitControls options") as OrbitControlsBehaviorOptions;
+  return {
+    enabled: optionalBoolean(enabled, "OrbitControls enabled"),
+    enablePan: optionalBoolean(enablePan, "OrbitControls enablePan"),
+    enableRotate: optionalBoolean(enableRotate, "OrbitControls enableRotate"),
+    enableZoom: optionalBoolean(enableZoom, "OrbitControls enableZoom"),
+    maxDistance,
+    maxPitch,
+    minDistance,
+    minPitch,
+    onChange: optionalChangeHandler(onChange),
+    panSpeed: optionalFiniteNumber(panSpeed, "OrbitControls panSpeed"),
+    rotateSpeed: optionalFiniteNumber(rotateSpeed, "OrbitControls rotateSpeed"),
+    zoomSpeed: optionalFiniteNumber(zoomSpeed, "OrbitControls zoomSpeed"),
+  };
 };
 
-export const orbitControlsBehaviorOptionsFrom = ({
-  enabled,
-  enablePan,
-  enableRotate,
-  enableZoom,
-  maxDistance,
-  maxPitch,
-  minDistance,
-  minPitch,
-  onChange,
-  panSpeed,
-  rotateSpeed,
-  zoomSpeed,
-}: OrbitControlsBehaviorOptions): OrbitControlsBehaviorOptions => ({
-  enabled: optionalBoolean(enabled, "OrbitControls enabled"),
-  enablePan: optionalBoolean(enablePan, "OrbitControls enablePan"),
-  enableRotate: optionalBoolean(enableRotate, "OrbitControls enableRotate"),
-  enableZoom: optionalBoolean(enableZoom, "OrbitControls enableZoom"),
-  maxDistance,
-  maxPitch,
-  minDistance,
-  minPitch,
-  onChange: optionalChangeHandler(onChange),
-  panSpeed: optionalFiniteNumber(panSpeed, "OrbitControls panSpeed"),
-  rotateSpeed: optionalFiniteNumber(rotateSpeed, "OrbitControls rotateSpeed"),
-  zoomSpeed: optionalFiniteNumber(zoomSpeed, "OrbitControls zoomSpeed"),
-});
+const setViewOptionsFrom = (
+  options: OrbitControlsSetViewOptions | undefined,
+): Required<OrbitControlsSetViewOptions> => {
+  if (options === undefined) return { clamp: true, emitChange: true };
+  const value = optionObject(options, "OrbitControls setView options");
+  for (const key of Object.keys(value)) {
+    if (key !== "clamp" && key !== "emitChange") {
+      throw new TypeError(`OrbitControls setView options contain unsupported option ${JSON.stringify(key)}`);
+    }
+  }
+  return {
+    clamp: optionalBoolean(value.clamp, "OrbitControls setView clamp") ?? true,
+    emitChange: optionalBoolean(value.emitChange, "OrbitControls setView emitChange") ?? true,
+  };
+};
 
 const wheelDeltaPixels = (event: WheelEvent): number => {
   if (event.deltaMode === 1) return event.deltaY * 16;
@@ -181,11 +230,19 @@ export const createOrbitControls = (
   canvas: HTMLCanvasElement,
   options: OrbitControlsOptions,
 ): OrbitControlsHandle => {
+  const creationOptions = optionObject(options, "OrbitControls options");
+  validateOptionNames(creationOptions, creationOptionNames, "OrbitControls options");
+  if (options.initialView === undefined) {
+    throw new TypeError("OrbitControls initialView is required");
+  }
   let behaviorOptions = orbitControlsBehaviorOptionsFrom(options);
   const currentPanSpeed = (): number => behaviorOptions.panSpeed ?? defaultPanSpeed;
   const currentRotateSpeed = (): number => behaviorOptions.rotateSpeed ?? defaultRotateSpeed;
   const currentZoomSpeed = (): number => behaviorOptions.zoomSpeed ?? defaultZoomSpeed;
-  let view: OrbitCameraView = clampOrbitCameraView(resolveStartingView(options), behaviorOptions);
+  let view: OrbitCameraView = clampOrbitCameraView(
+    resolveOrbitCameraView(options.initialView),
+    behaviorOptions,
+  );
   let interaction: InteractionState | undefined;
   const activePointers = new Map<number, PointerContact>();
 
@@ -200,15 +257,15 @@ export const createOrbitControls = (
     nextView: OrbitCameraViewOptions,
     {
       clamp: shouldClamp = true,
-      notify = true,
-    }: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined } = {},
+      emitChange = true,
+    }: Required<OrbitControlsSetViewOptions> = { clamp: true, emitChange: true },
   ): void => {
     const resolvedView = resolveOrbitCameraView(nextView);
     const nextResolvedView = shouldClamp ? clampView(resolvedView) : resolvedView;
     if (sameOrbitCameraView(view, nextResolvedView)) return;
 
     view = nextResolvedView;
-    if (notify) {
+    if (emitChange) {
       behaviorOptions.onChange?.(view);
     }
   };
@@ -385,6 +442,11 @@ export const createOrbitControls = (
     },
     getView: () => view,
     setOptions: (nextOptions) => {
+      validateOptionNames(
+        optionObject(nextOptions, "OrbitControls setOptions options"),
+        behaviorOptionNames,
+        "OrbitControls setOptions options",
+      );
       behaviorOptions = orbitControlsBehaviorOptionsFrom({
         ...behaviorOptions,
         ...nextOptions,
@@ -402,10 +464,7 @@ export const createOrbitControls = (
       applyView(view);
     },
     setView: (nextView, setViewOptions) => {
-      applyView(nextView, {
-        clamp: setViewOptions?.clamp,
-        notify: setViewOptions?.notify,
-      });
+      applyView(nextView, setViewOptionsFrom(setViewOptions));
     },
   };
 };
