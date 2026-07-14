@@ -659,11 +659,15 @@ export class VirtualTextureAtlasPageTable {
   }
 
   activeResidentPages(): readonly VirtualTextureResidentPage[] {
-    return [...this.#recordsByPage.values()].filter((record) => this.isActivePageKey(record.pageKey));
+    return [...this.residentPageValues()].filter((record) => this.isActivePageKey(record.pageKey));
   }
 
   residentPages(): readonly VirtualTextureResidentPage[] {
-    return [...this.#recordsByPage.values()];
+    return [...this.residentPageValues()];
+  }
+
+  residentPageValues(): IterableIterator<VirtualTextureResidentPage> {
+    return this.#recordsByPage.values();
   }
 
   ensureResident(

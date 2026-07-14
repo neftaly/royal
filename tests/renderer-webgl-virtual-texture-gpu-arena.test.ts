@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  VirtualTextureAtlasPageTable,
   virtualTextureDecodedPageBytes,
   virtualTextureStoredPageBytes,
   type VirtualTextureManifestModel,
@@ -238,6 +239,27 @@ const admitTestVirtualTextureGpuResource = (
 };
 
 describe("virtual texture GPU arena", () => {
+  it("rebuilds visible residency only after page-table changes", () => {
+    const residentPageValues = vi.spyOn(
+      VirtualTextureAtlasPageTable.prototype,
+      "residentPageValues",
+    );
+    const { arena } = setup();
+    const resource = admitTestVirtualTextureGpuResource(arena, "idle", 1, options({
+      physicalSlots: 2,
+    }));
+    const firstPage = { mip: 0, x: 0, y: 0 };
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set(["0/0/0"]));
+    queueVirtualTextureGpuUpload(arena, resource, upload(firstPage, 1));
+
+    processVirtualTextureGpuUploads(arena, 1);
+    expect(residentPageValues).toHaveBeenCalledTimes(1);
+    processVirtualTextureGpuUploads(arena, 2);
+    expect(residentPageValues).toHaveBeenCalledTimes(1);
+
+    residentPageValues.mockRestore();
+  });
+
   it("allocates and uploads independently compressed ETC2 page cells", () => {
     const { arena, gl } = setup();
     const compressedManifest: VirtualTextureManifestModel = {

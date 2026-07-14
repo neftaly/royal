@@ -773,7 +773,8 @@ const synchronizeVisibleAssignments = (
   allocation: PhysicalAllocation,
 ): void => {
   resource.visibleAssignments.clear();
-  for (const record of allocation.pageTable.activeResidentPages()) {
+  for (const record of allocation.pageTable.residentPageValues()) {
+    if (!allocation.pageTable.isActivePageKey(record.pageKey)) continue;
     resource.visibleAssignments.set(record.pageKey, record);
   }
 };
@@ -882,13 +883,15 @@ const flushPageTable = (
   allocation: PhysicalAllocation,
   admission?: VirtualTextureGpuUploadAdmission,
 ): boolean => {
+  let changed = false;
   for (;;) {
     const result = flushNextPageTableUpdate(state, resource, allocation, admission);
     if (result === "blocked") return false;
     if (result === "empty") {
-      synchronizeVisibleAssignments(resource, allocation);
+      if (changed) synchronizeVisibleAssignments(resource, allocation);
       return true;
     }
+    changed = true;
     // Drain complete page-table updates; a thrown GL call leaves the current
     // update uncommitted so the owning upload phase can retry it idempotently.
   }
@@ -937,8 +940,6 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   const inFlight = resource.inFlightUpload;
   if (inFlight === undefined) return;
   const { assignment, upload } = inFlight;
-  const allocation = resource.allocation;
-  if (allocation !== undefined) synchronizeVisibleAssignments(resource, allocation);
   resource.pendingHead += 1;
   publish(state, resource, "completed", upload, assignment.evicted?.pageKey);
   resource.uploadedPageBytes += virtualTextureStoredPageBytes(resource.options.manifest);
@@ -1360,7 +1361,7 @@ export const accumulateVirtualTextureGpuCachedPagesByMip = (
   const stagedPageKey = inFlight?.phase === "publish-page-table"
     ? undefined
     : inFlight?.assignment.pageKey;
-  for (const record of allocation.pageTable.residentPages()) {
+  for (const record of allocation.pageTable.residentPageValues()) {
     if (record.pageKey === stagedPageKey) continue;
     while (target.length <= record.page.mip) target.push(0);
     target[record.page.mip] = target[record.page.mip]! + 1;
