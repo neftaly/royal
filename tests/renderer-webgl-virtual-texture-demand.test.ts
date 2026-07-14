@@ -242,6 +242,156 @@ describe("virtual texture pure demand planning", () => {
     expect(Math.min(...demand.demandCandidates.map((page) => page.mip))).toBe(0);
   });
 
+  it("keeps demand bounded while a large plane crosses the perspective near and eye planes", () => {
+    const projection = projectionMat4(perspectiveCamera({
+      far: 100,
+      fovY: Math.PI / 2,
+      near: 0.1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+    }), 1_600, 1_600);
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const demandAtNearEdge = (nearEdgeZ: number) => planVirtualTextureDrawDemand({
+      context: context(
+        new Float32Array([
+          -4, -4, nearEdgeZ,
+          4, -4, nearEdgeZ,
+          4, 4, -2,
+          -4, 4, -2,
+        ]),
+        projection,
+        {
+          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+          texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+        },
+      ),
+      flipY: false,
+      generated: true,
+      limit: 16,
+      manifest: source,
+    });
+
+    for (const nearEdgeZ of [-0.2, -0.1, -0.05, 0, 0.2]) {
+      const first = demandAtNearEdge(nearEdgeZ);
+      const repeated = demandAtNearEdge(nearEdgeZ);
+      expect(repeated, `stable at near edge z=${nearEdgeZ}`).toEqual(first);
+      expect(first.coverageCandidates?.length ?? 0).toBeLessThanOrEqual(16);
+      expect(first.demandCandidates.length).toBeGreaterThan(0);
+      expect(first.demandCandidates.length).toBeLessThanOrEqual(16);
+      expect(first.demandCandidates.every((page) => (
+        Number.isInteger(page.mip) && Number.isInteger(page.x) && Number.isInteger(page.y)
+      ))).toBe(true);
+    }
+  });
+
+  it("bounds a huge repeated ground address range without losing close demand", () => {
+    const camera = perspectiveCamera({
+      far: 10_000,
+      fovY: Math.PI / 2,
+      near: 0.01,
+      position: [0, 0.15, 0],
+      rotation: [-0.25, 0, 0],
+    });
+    const repeatedGround: VirtualTextureDrawDemandContext = {
+      ...context(
+        new Float32Array([
+          -5_000, 0, -5_000,
+          5_000, 0, -5_000,
+          5_000, 0, 5_000,
+          -5_000, 0, 5_000,
+        ]),
+        projectionMat4(camera, 2_048, 2_048),
+        {
+          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+          texCoords: new Float32Array([0, 0, 10_000, 0, 10_000, 10_000, 0, 10_000]),
+        },
+      ),
+      view: viewMat4(camera),
+      viewportSize: [2_048, 2_048],
+      wrapS: "repeat",
+      wrapT: "repeat",
+    };
+    const input = {
+      context: repeatedGround,
+      flipY: false,
+      generated: true,
+      limit: 16,
+      manifest: manifest({
+        height: 16_384,
+        mipCount: 7,
+        pageSize: 256,
+        uriTemplate: "m{mip}-{x}-{y}.png",
+        width: 16_384,
+      }),
+    } as const;
+
+    const first = planVirtualTextureDrawDemand(input);
+    expect(planVirtualTextureDrawDemand(input)).toEqual(first);
+    expect(first.retentionOverflowed).toBe(true);
+    expect(first.coverageCandidates?.length ?? 0).toBeLessThanOrEqual(16);
+    expect(first.demandCandidates.length).toBeGreaterThan(0);
+    expect(first.demandCandidates.length).toBeLessThanOrEqual(16);
+  });
+
+  it("reuses fixed planning memory through rapid viewport and near-field churn", () => {
+    const workspace = createVirtualTextureDemandPlanningWorkspace();
+    const allocatedBytes = virtualTextureDemandPlanningWorkspaceSnapshot(workspace).allocatedBytes;
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const baseContext = context(
+      new Float32Array([-4, -4, -0.11, 4, -4, -0.11, 4, 4, -4, -4, 4, -4]),
+      projectionMat4(perspectiveCamera({
+        far: 100,
+        fovY: Math.PI / 2,
+        near: 0.1,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+      }), 1_800, 1_800),
+      {
+        indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+        texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+      },
+    );
+    const sizes = [[1_800, 1_800], [320, 2_400], [4_096, 256], [1, 1], [0, 0]] as const;
+    const outputs = sizes.map((viewportSize) => planVirtualTextureDrawDemand({
+      context: { ...baseContext, viewportSize },
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+      workspace,
+    }));
+
+    expect(outputs.slice(0, -1).every((demand) => (
+      demand.demandCandidates.length > 0 && demand.demandCandidates.length <= 8
+    ))).toBe(true);
+    expect(virtualTextureDemandPlanningWorkspaceSnapshot(workspace)).toMatchObject({
+      allocatedBytes,
+      overflowed: false,
+      retainedBytes: 0,
+      retainedPolygons: 0,
+    });
+    expect(planVirtualTextureDrawDemand({
+      context: { ...baseContext, viewportSize: sizes[0] },
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+      workspace,
+    })).toEqual(outputs[0]);
+  });
+
   it("maps close repeated and mirrored UV tiles into the shader-visible demand address space", () => {
     const source = manifest({
       height: 16_384,
