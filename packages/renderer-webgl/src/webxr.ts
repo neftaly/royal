@@ -1,4 +1,5 @@
 import type { RenderRoot } from "@royal/renderer-core";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import type {
   WebGlContextLifecycle,
   WebGlRoot,
@@ -244,23 +245,12 @@ export const createWebXrSessionRenderer = async (
     const dispose = (): void => {
       if (disposed) return;
       disposed = true;
-      let firstFailure: unknown;
-      let failed = false;
-      try {
+      let failure: CapturedFailure | undefined;
+      failure = captureFirstFailure(failure, () => {
         session.removeEventListener("end", onSessionEnd);
-      } catch (error) {
-        failed = true;
-        firstFailure = error;
-      }
-      try {
-        renderClock.release();
-      } catch (error) {
-        if (!failed) {
-          failed = true;
-          firstFailure = error;
-        }
-      }
-      if (failed) throw firstFailure;
+      });
+      failure = captureFirstFailure(failure, () => renderClock.release());
+      if (failure !== undefined) throw failure.value;
     };
     disposeEndedSession = dispose;
 

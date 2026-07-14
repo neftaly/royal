@@ -1,4 +1,5 @@
 import type { Transform } from "@royal/renderer-core";
+import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   beginGltfInstanceBufferArenaFrame,
   bindGltfInstanceBuffer,
@@ -245,21 +246,15 @@ export class GltfFrameBatchArena {
   dispose(): void {
     this.#batches.length = 0;
     this.#liveBatchCount = 0;
-    let failed = false;
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     const clear = (action: () => void): void => {
-      try {
-        action();
-      } catch (error) {
-        if (!failed) firstFailure = error;
-        failed = true;
-      }
+      failure = captureFirstFailure(failure, action);
     };
     clear(() => clearGltfInstanceBufferArena(this.#instanceBuffers));
     clear(() => clearGltfPacketBatchSegmentGroups(this.#groups));
     clear(() => clearGltfPacketBatchRegistry(this.#registry));
     clear(() => clearGltfPacketSubmissionWorkspace(this.workspace));
-    if (failed) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   #prepareBatches(

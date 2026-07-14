@@ -1,5 +1,6 @@
 import type { GltfInstancesNode, GltfNode } from "@royal/renderer-core";
 import type { PreparedAssetArenaEvent } from "../resource-arena";
+import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   maximumResourceGovernorClassDurableBytes,
   replaceResourceGovernorLease,
@@ -81,22 +82,18 @@ type PreparedGltfCpuLeases = {
 };
 
 const releasePreparedGltfCpuLeases = (leases: PreparedGltfCpuLeases): void => {
-  let firstFailure: unknown;
-  let failed = false;
+  let failure: CapturedFailure | undefined;
   const release = (key: keyof PreparedGltfCpuLeases): void => {
     const lease = leases[key];
     if (lease === undefined) return;
-    try {
+    failure = captureFirstFailure(failure, () => {
       lease.release();
       leases[key] = undefined;
-    } catch (error) {
-      if (!failed) firstFailure = error;
-      failed = true;
-    }
+    });
   };
   release("assetDecode");
   release("geometry");
-  if (failed) throw firstFailure;
+  if (failure !== undefined) throw failure.value;
 };
 
 export type PreparedGltfStateObserver = (state: PreparedGltfState | undefined) => void;
@@ -194,18 +191,12 @@ export class PreparedGltfRuntime {
     const state = this.#states.get(key);
     const observers = this.#stateObservers.get(key);
     if (observers === undefined) return;
-    let firstFailure: unknown;
-    let failed = false;
+    let failure: CapturedFailure | undefined;
     for (const observer of Array.from(observers)) {
       if (!observers.has(observer)) continue;
-      try {
-        observer(state);
-      } catch (error) {
-        if (!failed) firstFailure = error;
-        failed = true;
-      }
+      failure = captureFirstFailure(failure, () => observer(state));
     }
-    if (failed) this.#reportObserverFailure(firstFailure);
+    if (failure !== undefined) this.#reportObserverFailure(failure.value);
   }
 
   stateForNode(node: AnyGltfNode): PreparedGltfState {
@@ -353,22 +344,15 @@ export class PreparedGltfRuntime {
   }
 
   dispose(): void {
-    let firstFailure: unknown;
-    let failed = false;
-    const cleanup = (action: () => void): void => {
-      try {
-        action();
-      } catch (error) {
-        if (!failed) firstFailure = error;
-        failed = true;
-      }
-    };
-    cleanup(() => this.scheduler.dispose());
-    cleanup(() => this.disposeImages());
-    for (const key of Array.from(this.#cpuLeases.keys())) cleanup(() => this.releaseCpuLeases(key));
-    cleanup(() => this.clear());
+    let failure: CapturedFailure | undefined;
+    failure = captureFirstFailure(failure, () => this.scheduler.dispose());
+    failure = captureFirstFailure(failure, () => this.disposeImages());
+    for (const key of Array.from(this.#cpuLeases.keys())) {
+      failure = captureFirstFailure(failure, () => this.releaseCpuLeases(key));
+    }
+    failure = captureFirstFailure(failure, () => this.clear());
     this.#stateObservers.clear();
-    if (failed) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   reserveCpuAdmission(assetKey: string, estimate: GltfPreparationCpuEstimate): PreparedGltfCpuAdmission {
@@ -496,26 +480,17 @@ export class PreparedGltfRuntime {
   discardCpuAdmission(admission: PreparedGltfCpuAdmission): void {
     const previouslySuppressed = this.#cpuCapacityWakeSuppressed;
     this.#cpuCapacityWakeSuppressed = true;
-    let firstFailure: unknown;
-    let failed = false;
-    const cleanup = (action: () => void): void => {
-      try {
-        action();
-      } catch (error) {
-        if (!failed) firstFailure = error;
-        failed = true;
-      }
-    };
+    let failure: CapturedFailure | undefined;
     try {
-      if (admission.transient !== undefined) cleanup(() => {
+      if (admission.transient !== undefined) failure = captureFirstFailure(failure, () => {
         admission.transient!.cancel();
         admission.transient = undefined;
       });
-      cleanup(() => releasePreparedGltfCpuLeases(admission));
+      failure = captureFirstFailure(failure, () => releasePreparedGltfCpuLeases(admission));
     } finally {
       this.#cpuCapacityWakeSuppressed = previouslySuppressed;
     }
-    if (failed) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   releaseCpuLeases(assetKey: string): void {

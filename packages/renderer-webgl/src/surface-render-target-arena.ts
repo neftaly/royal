@@ -1,3 +1,5 @@
+import { captureFailure, type CapturedFailure } from "./captured-failure";
+
 export interface HdrRenderTarget {
   readonly color: WebGLTexture;
   readonly depth: WebGLRenderbuffer;
@@ -297,17 +299,14 @@ export const dropSurfaceRenderTargetArenaContext = (
   contextStorageGone = true,
 ): void => {
   const state = arena as unknown as State;
-  let firstFailure: unknown;
-  let failed = false;
+  let failure: CapturedFailure | undefined;
   const release = (lease: SurfaceRenderTargetGpuLease): void => {
-    try {
+    const releaseFailure = captureFailure(() => {
       lease.release();
       state.quarantinedLeases.delete(lease);
-    } catch (error) {
-      state.quarantinedLeases.add(lease);
-      if (!failed) firstFailure = error;
-      failed = true;
-    }
+    });
+    if (releaseFailure !== undefined) state.quarantinedLeases.add(lease);
+    failure ??= releaseFailure;
   };
   const previouslyQuarantined = [...state.quarantinedLeases];
   for (const lease of [state.hdr?.gpuLease, state.transmission?.gpuLease]) {
@@ -320,5 +319,5 @@ export const dropSurfaceRenderTargetArenaContext = (
   }
   state.framebuffers.clear(); state.renderbuffers.clear(); state.textures.clear();
   delete state.hdr; delete state.transmission;
-  if (failed) throw firstFailure;
+  if (failure !== undefined) throw failure.value;
 };

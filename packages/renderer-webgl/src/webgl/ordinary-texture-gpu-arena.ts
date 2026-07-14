@@ -14,6 +14,7 @@ import {
   type TextureHandleArena,
 } from "./texture-handle-arena";
 import { uploadTexture, usesMipmaps } from "./texture-upload";
+import { captureFailure, type CapturedFailure } from "../captured-failure";
 
 const MAX_UPLOADS_PER_FRAME = 1;
 
@@ -508,18 +509,18 @@ export const dropOrdinaryTextureGpuContext = (
   state.uploadFrame = -1;
   state.uploadsThisFrame = 0;
   state.wakeRequested = false;
-  let firstFailure: unknown;
-  let failed = false;
+  let failure: CapturedFailure | undefined;
   for (const lease of leases) {
-    try {
+    const releaseFailure = captureFailure(() => {
       lease.release();
-    } catch (error) {
+    });
+    if (releaseFailure !== undefined) {
+      // A failed lease remains the arena's responsibility for the next drop.
       state.orphanedLeases.push(lease);
-      if (!failed) firstFailure = error;
-      failed = true;
     }
+    failure ??= releaseFailure;
   }
-  if (failed) throw firstFailure;
+  if (failure !== undefined) throw failure.value;
 };
 
 export const ordinaryTextureGpuResourceCount = (

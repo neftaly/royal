@@ -5,6 +5,7 @@ import {
   type LoadedTextureSource,
 } from "../texture-sources";
 import { identityMat4 } from "../math/mat4";
+import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import { IBL_BRDF_LUT_BYTES, uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
 import { prepareTextureUpload } from "./imperative-state";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./lights";
@@ -574,19 +575,15 @@ export const releaseIblTextureContextHandles = (arena: IblTextureArena): void =>
 export const dropIblTextureContext = (arena: IblTextureArena): void => {
   const state = arena as unknown as State;
   clearPublished(state, false);
-  let firstFailure: unknown;
-  let failed = false;
+  let failure: CapturedFailure | undefined;
   for (const [texture, lease] of state.textureLeases) {
-    try {
+    failure = captureFirstFailure(failure, () => {
       lease.release();
       state.textureLeases.delete(texture);
-    } catch (error) {
-      if (!failed) firstFailure = error;
-      failed = true;
-    }
+    });
   }
   state.ownedTextures.clear();
-  if (failed) throw firstFailure;
+  if (failure !== undefined) throw failure.value;
 };
 
 export const iblTextureArenaSnapshot = (arena: IblTextureArena): IblTextureArenaSnapshot => {

@@ -1,4 +1,5 @@
 import type { TextureAssetRef, TextureContentKey, VirtualTextureAssetRef } from "@royal/renderer-core";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import type {
   CountedDirectGeometryDeclaration,
   CountedGltfRequest,
@@ -1204,15 +1205,9 @@ export const rekeyPreparedAssetOrdinaryTextures = (
 export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposalResult => {
   const state = arena as unknown as ResourceArenaState;
   const result = changes();
-  let firstFailure: unknown;
-  let failed = false;
+  let failure: CapturedFailure | undefined;
   const finish = (operation: () => void): void => {
-    try {
-      operation();
-    } catch (error) {
-      if (!failed) firstFailure = error;
-      failed = true;
-    }
+    failure = captureFirstFailure(failure, operation);
   };
   for (const declaration of state.gltfRequests.values()) {
     state.counters.sceneLeaseReleases += declaration.count;
@@ -1263,10 +1258,10 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
   state.pendingAssetKeySet.clear();
   finish(() => state.preparedAssets.dispose());
   const arenaChanges = result as ResourceArenaChanges;
-  if (!failed) return { changes: arenaChanges, kind: "disposed" };
+  if (failure === undefined) return { changes: arenaChanges, kind: "disposed" };
   return {
     changes: arenaChanges,
-    error: firstFailure instanceof Error ? firstFailure : new Error(String(firstFailure)),
+    error: failure.value instanceof Error ? failure.value : new Error(String(failure.value)),
     kind: "failed",
   };
 };
