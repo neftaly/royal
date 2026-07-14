@@ -364,8 +364,19 @@ const reserveGpu = (
 };
 
 const releaseGpuLeases = (leases: VertexInputGpuLease[]): void => {
-  for (const lease of leases) lease.release();
-  leases.length = 0;
+  let failure: Failure = NO_FAILURE;
+  let retained = 0;
+  for (const lease of leases) {
+    try {
+      lease.release();
+    } catch (error) {
+      failure = firstFailure(failure, { value: error });
+      leases[retained] = lease;
+      retained += 1;
+    }
+  }
+  leases.length = retained;
+  throwFailure(failure);
 };
 
 const settleFailedAcquisitionReservation = (
@@ -520,9 +531,23 @@ const uploadStaticGeometry = (
 };
 
 const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): void => {
-  for (const geometry of state.staticGeometries) geometry.gpuLease?.release();
-  for (const resource of state.ownedInstances.values()) releaseGpuLeases(resource.gpuLeases);
-  releaseGpuLeases(state.pendingGpuLeases);
+  let failure: Failure = NO_FAILURE;
+  const previouslyPendingLeases = state.pendingGpuLeases.splice(0);
+  for (const geometry of state.staticGeometries) {
+    const lease = geometry.gpuLease;
+    if (lease === undefined) continue;
+    try {
+      lease.release();
+    } catch (error) {
+      state.pendingGpuLeases.push(lease);
+      failure = firstFailure(failure, { value: error });
+    }
+  }
+  for (const resource of state.ownedInstances.values()) {
+    failure = captureFirstFailure(failure, () => releaseGpuLeases(resource.gpuLeases));
+  }
+  failure = captureFirstFailure(failure, () => releaseGpuLeases(previouslyPendingLeases));
+  state.pendingGpuLeases.push(...previouslyPendingLeases);
   for (const semantic of state.semantics.values()) {
     semantic.instanceKeys.clear();
     delete semantic.staticGeometry;
@@ -545,6 +570,7 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.staticGeometries.clear();
   delete state.contextGeneration;
   state.contextDropped = dropped;
+  throwFailure(failure);
 };
 
 const accountAbandonedContextHandles = (state: VertexInputArenaState): void => {

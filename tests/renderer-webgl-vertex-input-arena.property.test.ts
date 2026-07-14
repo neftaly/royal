@@ -789,6 +789,44 @@ describe("vertex-input arena", () => {
     expect(vertexInputArenaSnapshot(arena).abandonedVertexArrayCount).toBe(2);
   });
 
+  it("continues dropped-context lease cleanup and retains failures for retry", () => {
+    const leases: Array<{ fail: boolean; released: boolean }> = [];
+    const arena = createVertexInputArena({
+      reserve: () => ({
+        cancel: () => true,
+        commit: () => {
+          const state = { fail: false, released: false };
+          leases.push(state);
+          return {
+            release: () => {
+              if (state.fail) throw new Error("vertex lease release failed");
+              if (state.released) return false;
+              state.released = true;
+              return true;
+            },
+          };
+        },
+      }),
+    });
+    const gl = new FakeGl();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("drop-lease-failure", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    vertexInputGeometry(arena, glContext(gl), 1, 1);
+    const allocation = createVertexInputInstanceAllocation(arena);
+    prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 1);
+    const retained = leases.filter(({ released }) => !released);
+    expect(retained).toHaveLength(2);
+    retained[0]!.fail = true;
+
+    expect(() => dropVertexInputArenaContext(arena)).toThrow("vertex lease release failed");
+    expect(retained[1]!.released).toBe(true);
+    retained[0]!.fail = false;
+    dropVertexInputArenaContext(arena);
+    expect(retained[0]!.released).toBe(true);
+  });
+
   it("reserves exact static geometry bytes before GL effects and releases the durable lease", () => {
     const denied = recordingGovernor(true);
     const deniedGl = new FakeGl();
