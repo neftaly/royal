@@ -12,6 +12,7 @@ import {
   waitForHttp,
 } from './browser-harness.mjs';
 import {
+  exampleContract,
   renderNowExpression,
   rendererSnapshotExpression,
   requireExampleRoute,
@@ -33,6 +34,7 @@ const envNumber = (name, fallback) => {
 };
 const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
+const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
 
 const gltfLabManifest = JSON.parse(readFileSync(
   new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
@@ -1196,6 +1198,123 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
 })()
 `);
 
+const runReactLifecycleSmoke = async (session) => {
+  const snapshotKey = JSON.stringify(exampleContract.benchmark.bridge.rendererSnapshotGlobal);
+  const renderNowKey = JSON.stringify(exampleContract.benchmark.bridge.renderNowGlobal);
+  await session.call('Network.enable');
+  const loaded = session.once('Page.loadEventFired');
+  await session.call('Page.navigate', {
+    url: `${baseUrl}/?__royalReactLifecycleProbe=1`,
+  });
+  await Promise.race([loaded, sleep(5_000)]);
+  await session.call('Network.setCacheDisabled', { cacheDisabled: true });
+  await session.call('Network.emulateNetworkConditions', {
+    downloadThroughput: -1,
+    latency: 250,
+    offline: false,
+    uploadThroughput: -1,
+  });
+  try {
+    return await evaluate(session, `
+(async () => {
+  const snapshotKey = ${snapshotKey};
+  const renderNowKey = ${renderNowKey};
+  const waitFor = async (predicate, timeoutMs = 10_000) => {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      const value = predicate();
+      if (value !== undefined) return value;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return undefined;
+  };
+  const safeSnapshot = (reader) => {
+    try {
+      return typeof reader === 'function' ? reader() : null;
+    } catch (error) {
+      return { thrown: String(error?.stack ?? error) };
+    }
+  };
+  const action = (name) => {
+    const button = document.querySelector('[data-probe-action="' + name + '"]');
+    if (!(button instanceof HTMLButtonElement)) throw new Error('missing lifecycle action ' + name);
+    button.click();
+  };
+  const initialReader = await waitFor(() => {
+    const reader = globalThis[snapshotKey];
+    return safeSnapshot(reader)?.lifecycle?.state === 'available' ? reader : undefined;
+  });
+  if (typeof initialReader !== 'function') return { error: 'initial renderer root did not become available' };
+
+  action('toggle-antialias');
+  const replacementReader = await waitFor(() => {
+    const reader = globalThis[snapshotKey];
+    return reader !== initialReader && safeSnapshot(reader)?.lifecycle?.state === 'available'
+      ? reader
+      : undefined;
+  });
+  if (typeof replacementReader !== 'function') return { error: 'option change did not replace the renderer root' };
+
+  action('animate');
+  const animationStart = safeSnapshot(replacementReader)?.frame;
+  if (!Number.isFinite(animationStart)) return { error: 'active useFrame loop had no initial renderer frame' };
+  const animationEnd = await waitFor(() => {
+    const frame = safeSnapshot(replacementReader)?.frame;
+    return Number.isFinite(frame) && frame >= animationStart + 3 ? frame : undefined;
+  });
+  if (!Number.isFinite(animationEnd)) return { error: 'active useFrame loop did not advance the renderer' };
+
+  action('virtual-texture');
+  const manifestRequestsBefore = safeSnapshot(replacementReader)?.virtualTexturing?.manifestRequests ?? 0;
+  const manifestRequestsAtUnmount = await waitFor(() => {
+    const requests = safeSnapshot(replacementReader)?.virtualTexturing?.manifestRequests;
+    return Number.isFinite(requests) && requests > manifestRequestsBefore ? requests : undefined;
+  });
+  if (!Number.isFinite(manifestRequestsAtUnmount)) return { error: 'VT manifest request did not begin before unmount' };
+
+  action('toggle-mount');
+  const unmounted = await waitFor(() => (
+    document.querySelector('canvas') === null && globalThis[snapshotKey] === undefined ? true : undefined
+  ));
+  if (unmounted !== true) return { error: 'Canvas bridge survived unmount' };
+  const disposedFrame = safeSnapshot(replacementReader)?.frame;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const disposedAfterFrames = safeSnapshot(replacementReader);
+
+  action('toggle-mount');
+  const remountedReader = await waitFor(() => {
+    const reader = globalThis[snapshotKey];
+    return reader !== replacementReader && safeSnapshot(reader)?.lifecycle?.state === 'available'
+      ? reader
+      : undefined;
+  });
+  if (typeof remountedReader !== 'function') return { error: 'Canvas did not create a fresh root after remount' };
+  await globalThis[renderNowKey]?.();
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+  return {
+    animationEnd,
+    animationStart,
+    disposedAfterFrames,
+    disposedFrame,
+    initialAfterReplacement: safeSnapshot(initialReader),
+    manifestRequestsAtUnmount,
+    remounted: safeSnapshot(remountedReader),
+    replacementAfterUnmount: safeSnapshot(replacementReader),
+  };
+})()
+    `);
+  } finally {
+    await session.call('Network.setCacheDisabled', { cacheDisabled: false });
+    await session.call('Network.emulateNetworkConditions', {
+      downloadThroughput: -1,
+      latency: 0,
+      offline: false,
+      uploadThroughput: -1,
+    });
+  }
+};
+
 const main = async () => {
   const profileDir = await mkdtemp(path.join(tmpdir(), 'royal-examples-smoke-'));
   const preview = startVitePreview({ appRoot, host, port: previewPort });
@@ -1366,6 +1485,24 @@ const main = async () => {
 
     if (contextLossSmoke && !contextLossChecked) {
       throw new Error('Context-loss smoke did not run on a selected route');
+    }
+
+    if ((routeFilter === '' || reactLifecycleSmoke) && !contextLossSmoke) {
+      const lifecycle = await runReactLifecycleSmoke(session);
+      if (
+        lifecycle?.error !== undefined
+        || lifecycle?.initialAfterReplacement?.lifecycle?.state !== 'disposed'
+        || lifecycle?.replacementAfterUnmount?.lifecycle?.state !== 'disposed'
+        || lifecycle?.disposedAfterFrames?.lifecycle?.state !== 'disposed'
+        || lifecycle?.disposedAfterFrames?.frame !== lifecycle?.disposedFrame
+        || lifecycle?.remounted?.lifecycle?.state !== 'available'
+        || !(lifecycle?.remounted?.frame > 0)
+        || !(lifecycle?.animationEnd >= lifecycle?.animationStart + 3)
+        || !(lifecycle?.manifestRequestsAtUnmount > 0)
+      ) {
+        throw new Error(`React Canvas lifecycle smoke failed: ${JSON.stringify(lifecycle)}`);
+      }
+      console.log(`ok react-canvas-lifecycle frames=${lifecycle.animationStart}->${lifecycle.animationEnd} manifestRequests=${lifecycle.manifestRequestsAtUnmount}`);
     }
 
     if (exceptions.length > 0) {

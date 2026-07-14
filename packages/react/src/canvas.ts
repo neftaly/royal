@@ -12,7 +12,10 @@ import {
   type Ref,
   type ReactNode,
 } from "react";
-import { useRendererRootRuntime } from "./canvas-renderer-runtime";
+import {
+  canvasContextOptionsSemanticKey,
+  useRendererRootRuntime,
+} from "./canvas-renderer-runtime";
 import {
   createCanvasPointerInteractionState,
 } from "./canvas-pointer-interaction";
@@ -61,7 +64,9 @@ export interface CanvasProps
   readonly ref?: Ref<HTMLCanvasElement>;
   /**
    * Renderer creation options. Changing a value disposes and recreates the
-   * renderer root.
+   * renderer root. Changing `alpha` or `antialias` also replaces the canvas
+   * element because browsers fix those attributes on its first WebGL context;
+   * callback and object refs receive `null` before the replacement element.
    */
   readonly rendererOptions?: RendererOptions;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
@@ -138,6 +143,7 @@ export const Canvas = ({
     [scenePickingIndex, scenePointerEvents],
   );
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const contextOptionsKey = canvasContextOptionsSemanticKey(rendererOptions);
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
@@ -146,6 +152,7 @@ export const Canvas = ({
 
   const canvasElementNode = createElement("canvas", {
     ...canvasProps,
+    key: contextOptionsKey,
     ref: setCanvasRef,
   });
 

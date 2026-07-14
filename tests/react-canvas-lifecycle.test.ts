@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
 import type { RendererOptions } from "@royal/react";
 import {
+  canvasContextOptionsSemanticKey,
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
 } from "../packages/react/src/canvas-renderer-runtime";
@@ -12,6 +13,15 @@ describe("Canvas renderer root cleanup", () => {
   it("normalizes omitted and empty renderer options to the same effect identity", () => {
     expect(normalizeCanvasRendererOptions(undefined)).toBeUndefined();
     expect(normalizeCanvasRendererOptions({})).toBeUndefined();
+  });
+
+  it("replaces the DOM canvas only for immutable WebGL context attributes", () => {
+    const defaults = canvasContextOptionsSemanticKey(undefined);
+    expect(canvasContextOptionsSemanticKey({})).toBe(defaults);
+    expect(canvasContextOptionsSemanticKey({ alpha: true, antialias: true })).toBe(defaults);
+    expect(canvasContextOptionsSemanticKey({ generatedImageVirtualTextures: true })).toBe(defaults);
+    expect(canvasContextOptionsSemanticKey({ alpha: false })).not.toBe(defaults);
+    expect(canvasContextOptionsSemanticKey({ antialias: false })).not.toBe(defaults);
   });
 
   it("retains normalized scalar changes that recreate the renderer root", () => {

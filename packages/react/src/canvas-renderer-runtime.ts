@@ -96,6 +96,11 @@ export const normalizeCanvasRendererOptions = (
   return rendererOptions;
 };
 
+/** @internal Identity for options browsers fix on a canvas's first WebGL context. */
+export const canvasContextOptionsSemanticKey = (
+  rendererOptions: RendererOptions | undefined,
+): string => `${rendererOptions?.alpha ?? true}:${rendererOptions?.antialias ?? true}`;
+
 /** Owns the renderer root and retained frame-loop lifetime for one React Canvas. */
 export const useRendererRootRuntime = (
   canvasRef: CanvasElementRef,

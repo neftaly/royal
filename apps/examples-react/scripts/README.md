@@ -230,6 +230,20 @@ EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
 pnpm --filter @royal/examples-react test:browser
 ```
 
+The unfiltered browser smoke also opens the query-only React lifecycle probe.
+It verifies StrictMode cleanup plus semantic renderer-option replacement, an
+active `useFrame` clock stopping on unmount, disposal during a delayed VT
+manifest request, and creation of a fresh usable root on remount. The probe is
+code-split from the ordinary app path and is not an example route or package
+export.
+
+For a focused rerun without visiting every example first:
+
+```sh
+EXAMPLES_SMOKE_REACT_LIFECYCLE=1 EXAMPLES_SMOKE_ROUTE=cube \
+pnpm --filter @royal/examples-react test:browser
+```
+
 ## glTF Load Probe
 
 `benchmark-gltf-load.mjs` is a narrow browser probe for textured glTF load
