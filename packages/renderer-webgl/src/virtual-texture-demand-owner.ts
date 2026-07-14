@@ -124,6 +124,8 @@ export class VirtualTextureDemandOwner {
       ...(baseColorCoordinates === undefined ? {} : { textureCoordinates: baseColorCoordinates }),
       view,
       viewportSize,
+      ...(texture.sampler?.wrapS === undefined ? {} : { wrapS: texture.sampler.wrapS }),
+      ...(texture.sampler?.wrapT === undefined ? {} : { wrapT: texture.sampler.wrapT }),
     };
   }
 

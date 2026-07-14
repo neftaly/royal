@@ -1,4 +1,4 @@
-import type { TextureRef } from "@royal/renderer-core";
+import type { TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
 import {
   isDecodedRgbaTexture,
   type LoadedTextureSource,
@@ -118,6 +118,10 @@ export type VirtualTextureDrawDemandContext = {
   readonly textureCoordinates?: GltfTextureCoordinates;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
+  /** Sampler addressing used by both demand projection and the VT shader. */
+  readonly wrapS?: TextureSamplerWrap;
+  /** Sampler addressing used by both demand projection and the VT shader. */
+  readonly wrapT?: TextureSamplerWrap;
 };
 
 export type VirtualTextureScreenFootprint = {

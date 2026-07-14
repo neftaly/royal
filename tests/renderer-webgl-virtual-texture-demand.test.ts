@@ -242,6 +242,77 @@ describe("virtual texture pure demand planning", () => {
     expect(Math.min(...demand.demandCandidates.map((page) => page.mip))).toBe(0);
   });
 
+  it("maps close repeated and mirrored UV tiles into the shader-visible demand address space", () => {
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const tiledContext = (
+      tile: number,
+      wrap: "mirrored-repeat" | "repeat",
+    ): VirtualTextureDrawDemandContext => ({
+      ...context(
+        new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0]),
+        identityMat4(),
+        {
+          texCoords: new Float32Array([
+            tile + 0.4, tile + 0.4,
+            tile + 0.41, tile + 0.4,
+            tile + 0.4, tile + 0.41,
+          ]),
+        },
+      ),
+      wrapS: wrap,
+      wrapT: wrap,
+    });
+    const demand = (tile: number, wrap: "mirrored-repeat" | "repeat") => planVirtualTextureDrawDemand({
+      context: tiledContext(tile, wrap),
+      flipY: false,
+      generated: true,
+      limit: 32,
+      manifest: source,
+    });
+
+    const repeated = demand(50, "repeat");
+    const mirrored = demand(49, "mirrored-repeat");
+    expect(Math.min(...repeated.demandCandidates.map((page) => page.mip))).toBe(0);
+    expect(Math.min(...mirrored.demandCandidates.map((page) => page.mip))).toBe(0);
+    expect(repeated.demandCandidates.some((page) => page.mip === 0 && page.x === 25 && page.y === 25)).toBe(true);
+    expect(mirrored.demandCandidates.some((page) => page.mip === 0 && page.x === 38 && page.y === 38)).toBe(true);
+  });
+
+  it("keeps sampler discontinuity demand conservative and bounded", () => {
+    const crossing = {
+      ...context(
+        new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0]),
+        identityMat4(),
+        { texCoords: new Float32Array([0.995, 0.4, 1.005, 0.4, 0.995, 0.41]) },
+      ),
+      wrapS: "repeat" as const,
+    };
+    const demand = planVirtualTextureDrawDemand({
+      context: crossing,
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: manifest({
+        height: 16_384,
+        mipCount: 7,
+        pageSize: 256,
+        uriTemplate: "m{mip}-{x}-{y}.png",
+        width: 16_384,
+      }),
+    });
+
+    expect(demand.retentionOverflowed).toBe(true);
+    expect(demand.coverageCandidates?.length).toBeLessThanOrEqual(8);
+    expect(demand.demandCandidates).not.toEqual([]);
+    expect(demand.demandCandidates.length).toBeLessThanOrEqual(8);
+  });
+
   it("clips indexed off-center triangles so invisible UVs do not demand opposite pages", () => {
     const clipped = context(
       new Float32Array([

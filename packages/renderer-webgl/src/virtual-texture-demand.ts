@@ -1,4 +1,5 @@
 import { multiplyMat4 } from "./math/mat4";
+import type { TextureSamplerWrap } from "@royal/renderer-core";
 import {
   createVirtualTextureCoverageProvider,
   queryVirtualTextureCoverage,
@@ -7,8 +8,6 @@ import {
 } from "./virtual-texture-coverage-provider";
 import {
   VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
-  normalizeVirtualTextureDemandUvRange,
-  orientVirtualTextureDemandVRange,
   virtualTextureDemandPageDistance,
   type VirtualTextureDrawDemand,
   type VirtualTextureDrawDemandContext,
@@ -71,6 +70,7 @@ const RETAINED_POLYGON_CAPACITY = 4_096;
 export type VirtualTextureDemandPlanningWorkspace = {
   readonly clippedPolygonA: Float64Array;
   readonly clippedPolygonB: Float64Array;
+  readonly wrappedPolygon: Float64Array;
   readonly finestRegionComponents: Float64Array;
   finestRegionCount: number;
   readonly finestRegionMips: Uint32Array;
@@ -84,6 +84,7 @@ export type VirtualTextureDemandPlanningWorkspace = {
 export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDemandPlanningWorkspace => ({
   clippedPolygonA: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
   clippedPolygonB: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
+  wrappedPolygon: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
   finestRegionComponents: new Float64Array(FINEST_REGION_CAPACITY * FINEST_REGION_COMPONENTS),
   finestRegionCount: 0,
   finestRegionMips: new Uint32Array(FINEST_REGION_CAPACITY),
@@ -115,6 +116,7 @@ export const virtualTextureDemandPlanningWorkspaceSnapshot = (
 } => ({
   allocatedBytes: workspace.clippedPolygonA.byteLength
     + workspace.clippedPolygonB.byteLength
+    + workspace.wrappedPolygon.byteLength
     + workspace.finestRegionComponents.byteLength
     + workspace.finestRegionMips.byteLength
     + workspace.visiblePolygonComponents.byteLength
@@ -273,6 +275,110 @@ const retainVisiblePolygon = (
   workspace.visiblePolygonComponentCount += componentCount;
   workspace.visiblePolygonCount += 1;
   workspace.visiblePolygonOffsets[workspace.visiblePolygonCount] = workspace.visiblePolygonComponentCount;
+};
+
+type WrappedInterval = {
+  readonly maximum: number;
+  readonly minimum: number;
+  readonly safe: boolean;
+};
+
+const wrapVirtualTextureDemandCoordinate = (
+  value: number,
+  mode: TextureSamplerWrap,
+): number => {
+  switch (mode) {
+    case "clamp-to-edge":
+      return Math.max(0, Math.min(1, value));
+    case "repeat":
+      return value - Math.floor(value);
+    case "mirrored-repeat": {
+      const period = value - Math.floor(value / 2) * 2;
+      return period <= 1 ? period : 2 - period;
+    }
+  }
+};
+
+const wrappedVirtualTextureDemandInterval = (
+  minimum: number,
+  maximum: number,
+  mode: TextureSamplerWrap,
+): WrappedInterval => {
+  let safe = false;
+  switch (mode) {
+    case "clamp-to-edge":
+      safe = maximum <= 0 || minimum >= 1 || (minimum >= 0 && maximum <= 1);
+      break;
+    case "repeat":
+    case "mirrored-repeat":
+      safe = Math.floor(minimum) === Math.floor(maximum);
+      break;
+  }
+  if (!safe) return { maximum: 1, minimum: 0, safe: false };
+  const first = wrapVirtualTextureDemandCoordinate(minimum, mode);
+  const last = wrapVirtualTextureDemandCoordinate(maximum, mode);
+  return {
+    maximum: Math.max(first, last),
+    minimum: Math.min(first, last),
+    safe: true,
+  };
+};
+
+const retainWrappedVisiblePolygon = (
+  workspace: VirtualTextureDemandPlanningWorkspace,
+  polygon: Float64Array,
+  vertexCount: number,
+  query: VirtualTextureCoverageQuery,
+): { readonly maxU: number; readonly maxV: number; readonly minU: number; readonly minV: number } => {
+  let rawMinU = Number.POSITIVE_INFINITY;
+  let rawMaxU = Number.NEGATIVE_INFINITY;
+  let orientedMinV = Number.POSITIVE_INFINITY;
+  let orientedMaxV = Number.NEGATIVE_INFINITY;
+  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+    const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
+    const u = polygon[offset + 4]!;
+    const sourceV = polygon[offset + 5]!;
+    const v = query.flipY ? 1 - sourceV : sourceV;
+    rawMinU = Math.min(rawMinU, u);
+    rawMaxU = Math.max(rawMaxU, u);
+    orientedMinV = Math.min(orientedMinV, v);
+    orientedMaxV = Math.max(orientedMaxV, v);
+  }
+  const wrapS = query.wrapS ?? "clamp-to-edge";
+  const wrapT = query.wrapT ?? "clamp-to-edge";
+  const wrappedU = wrappedVirtualTextureDemandInterval(rawMinU, rawMaxU, wrapS);
+  const wrappedV = wrappedVirtualTextureDemandInterval(orientedMinV, orientedMaxV, wrapT);
+  if (!wrappedU.safe || !wrappedV.safe) {
+    workspace.overflowed = true;
+    return {
+      maxU: wrappedU.maximum,
+      maxV: wrappedV.maximum,
+      minU: wrappedU.minimum,
+      minV: wrappedV.minimum,
+    };
+  }
+
+  const componentCount = vertexCount * CLIPPED_VERTEX_COMPONENTS;
+  workspace.wrappedPolygon.set(polygon.subarray(0, componentCount), 0);
+  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+    const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
+    workspace.wrappedPolygon[offset + 4] = wrapVirtualTextureDemandCoordinate(
+      polygon[offset + 4]!,
+      wrapS,
+    );
+    const sourceV = polygon[offset + 5]!;
+    workspace.wrappedPolygon[offset + 5] = wrapVirtualTextureDemandCoordinate(
+      query.flipY ? 1 - sourceV : sourceV,
+      wrapT,
+    );
+  }
+  retainVisiblePolygon(workspace, workspace.wrappedPolygon, vertexCount);
+  return {
+    maxU: wrappedU.maximum,
+    maxV: wrappedV.maximum,
+    minU: wrappedU.minimum,
+    minV: wrappedV.minimum,
+  };
 };
 
 const clipPlaneDistance = (plane: number, polygon: Float64Array, offset: number): number => {
@@ -454,10 +560,6 @@ const projectExactVirtualTextureCoverage = (
       let polygonMaxNdcX = Number.NEGATIVE_INFINITY;
       let polygonMinNdcY = Number.POSITIVE_INFINITY;
       let polygonMaxNdcY = Number.NEGATIVE_INFINITY;
-      let polygonMinU = Number.POSITIVE_INFINITY;
-      let polygonMaxU = Number.NEGATIVE_INFINITY;
-      let polygonMinV = Number.POSITIVE_INFINITY;
-      let polygonMaxV = Number.NEGATIVE_INFINITY;
       let twiceProjectedArea = 0;
       for (let vertex = 0; vertex < polygonCount; vertex += 1) {
         const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
@@ -480,45 +582,28 @@ const projectExactVirtualTextureCoverage = (
         polygonMaxNdcX = Math.max(polygonMaxNdcX, ndcX);
         polygonMinNdcY = Math.min(polygonMinNdcY, ndcY);
         polygonMaxNdcY = Math.max(polygonMaxNdcY, ndcY);
-        polygonMinU = Math.min(polygonMinU, input[offset + 4]!);
-        polygonMaxU = Math.max(polygonMaxU, input[offset + 4]!);
-        polygonMinV = Math.min(polygonMinV, input[offset + 5]!);
-        polygonMaxV = Math.max(polygonMaxV, input[offset + 5]!);
       }
       if (invalidGeometry) break;
       // A triangle with no projected fragment area cannot contribute texture
       // samples. Excluding it also prevents edge-on degenerates from inflating
       // the retained-polygon workspace.
       if (polygonCount > 0 && Math.abs(twiceProjectedArea) <= Number.EPSILON) continue;
-      if (polygonCount > 0) retainVisiblePolygon(workspace, input, polygonCount);
+      if (polygonCount === 0) continue;
+      const wrapped = retainWrappedVisiblePolygon(workspace, input, polygonCount, context);
       minNdcX = Math.min(minNdcX, polygonMinNdcX);
       maxNdcX = Math.max(maxNdcX, polygonMaxNdcX);
       minNdcY = Math.min(minNdcY, polygonMinNdcY);
       maxNdcY = Math.max(maxNdcY, polygonMaxNdcY);
-      minU = Math.min(minU, polygonMinU);
-      maxU = Math.max(maxU, polygonMaxU);
-      minV = Math.min(minV, polygonMinV);
-      maxV = Math.max(maxV, polygonMaxV);
+      minU = Math.min(minU, wrapped.minU);
+      maxU = Math.max(maxU, wrapped.maxU);
+      minV = Math.min(minV, wrapped.minV);
+      maxV = Math.max(maxV, wrapped.maxV);
       clippedVertexCount += polygonCount;
       if (manifest !== undefined && polygonCount > 0) {
-        // Match normalizeVirtualTextureDemandUvRange's conservative full-range
-        // fallback without allocating its tuple in this per-polygon hot path.
-        const fullU = !Number.isFinite(polygonMinU)
-          || !Number.isFinite(polygonMaxU)
-          || polygonMaxU - polygonMinU >= 1
-          || polygonMinU < 0
-          || polygonMaxU > 1;
-        const fullV = !Number.isFinite(polygonMinV)
-          || !Number.isFinite(polygonMaxV)
-          || polygonMaxV - polygonMinV >= 1
-          || polygonMinV < 0
-          || polygonMaxV > 1;
-        const observedMinU = fullU ? 0 : Math.max(0, polygonMinU);
-        const observedMaxU = fullU ? 1 : Math.min(1, polygonMaxU);
-        const normalizedMinV = fullV ? 0 : Math.max(0, polygonMinV);
-        const normalizedMaxV = fullV ? 1 : Math.min(1, polygonMaxV);
-        const observedMinV = context.flipY ? 1 - normalizedMaxV : normalizedMinV;
-        const observedMaxV = context.flipY ? 1 - normalizedMinV : normalizedMaxV;
+        const observedMinU = wrapped.minU;
+        const observedMaxU = wrapped.maxU;
+        const observedMinV = wrapped.minV;
+        const observedMaxV = wrapped.maxV;
         const observedScreenHeight = Math.max(
           1,
           (polygonMaxNdcY - polygonMinNdcY) * 0.5 * viewportHeight,
@@ -560,17 +645,12 @@ const projectExactVirtualTextureCoverage = (
   const maxScreenX = Math.min(viewportWidth, (Math.min(1, maxNdcX) * 0.5 + 0.5) * viewportWidth);
   const minScreenY = Math.max(0, (Math.max(-1, minNdcY) * 0.5 + 0.5) * viewportHeight);
   const maxScreenY = Math.min(viewportHeight, (Math.min(1, maxNdcY) * 0.5 + 0.5) * viewportHeight);
-  const normalizedU = normalizeVirtualTextureDemandUvRange(minU, maxU);
-  const normalizedV = orientVirtualTextureDemandVRange(
-    ...normalizeVirtualTextureDemandUvRange(minV, maxV),
-    context.flipY,
-  );
   return {
     footprint: {
-      maxU: normalizedU[1],
-      maxV: normalizedV[1],
-      minU: normalizedU[0],
-      minV: normalizedV[0],
+      maxU,
+      maxV,
+      minU,
+      minV,
       screenHeight: Math.max(1, maxScreenY - minScreenY),
       screenWidth: Math.max(1, maxScreenX - minScreenX),
     },
@@ -598,6 +678,8 @@ export const projectVirtualTextureScreenFootprint = (
       ...(context.textureCoordinates === undefined ? {} : { textureCoordinates: context.textureCoordinates }),
       view: context.view,
       viewportSize: context.viewportSize,
+      ...(context.wrapS === undefined ? {} : { wrapS: context.wrapS }),
+      ...(context.wrapT === undefined ? {} : { wrapT: context.wrapT }),
     },
     workspace,
     manifest,
@@ -606,7 +688,6 @@ export const projectVirtualTextureScreenFootprint = (
 
 const virtualTexturePageScreenError = (
   workspace: VirtualTextureDemandPlanningWorkspace,
-  flipY: boolean,
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
   viewportSize: ViewportSize,
@@ -636,12 +717,6 @@ const virtualTexturePageScreenError = (
         workspace.visiblePolygonComponents.subarray(componentOffset, componentOffset + componentCount),
         0,
       );
-      if (flipY) {
-        for (let vertex = 0; vertex < polygonCount; vertex += 1) {
-          const vOffset = vertex * CLIPPED_VERTEX_COMPONENTS + 5;
-          clippedPolygonA[vOffset] = 1 - clippedPolygonA[vOffset]!;
-        }
-      }
       let input = clippedPolygonA;
       let output = clippedPolygonB;
       const uvBoundaries = [minPageU, maxPageU, minPageV, maxPageV] as const;
@@ -1007,7 +1082,6 @@ const virtualTexturePageSpatialOrder = (page: VirtualTexturePageId): number => {
 const planVirtualTextureHierarchicalDemand = (
   source: VirtualTextureDemandSource,
   context: VirtualTextureDrawDemandContext,
-  flipY: boolean,
   footprint: VirtualTextureScreenFootprint,
   workspace: VirtualTextureDemandPlanningWorkspace,
   limit = VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
@@ -1042,7 +1116,7 @@ const planVirtualTextureHierarchicalDemand = (
         const key = virtualTexturePageKey(page);
         if (queuedKeys.has(key)) continue;
         queuedKeys.add(key);
-        const score = virtualTexturePageScreenError(workspace, flipY, source.manifest, page, context.viewportSize);
+        const score = virtualTexturePageScreenError(workspace, source.manifest, page, context.viewportSize);
         if (score <= 0) continue;
         queue.push({ page, score, spatialOrder: virtualTexturePageSpatialOrder(page) });
       }
@@ -1051,7 +1125,6 @@ const planVirtualTextureHierarchicalDemand = (
   for (const root of geometricRoots) {
     enqueueChildren(root, virtualTexturePageScreenError(
       workspace,
-      flipY,
       source.manifest,
       root,
       context.viewportSize,
@@ -1153,7 +1226,6 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
   const hierarchical = planVirtualTextureHierarchicalDemand(
     input,
     input.context,
-    input.flipY,
     projection.footprint,
     workspace,
     limit,

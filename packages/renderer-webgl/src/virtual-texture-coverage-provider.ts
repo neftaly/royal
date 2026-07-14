@@ -1,4 +1,5 @@
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
+import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { Mat4 } from "./math/mat4";
 import type {
   VirtualTextureDrawDemandModelSource,
@@ -20,6 +21,8 @@ export type VirtualTextureCoverageQuery = {
   readonly textureCoordinates?: GltfTextureCoordinates;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
+  readonly wrapS?: TextureSamplerWrap;
+  readonly wrapT?: TextureSamplerWrap;
 };
 
 type ExactCoverageEvaluator = (
