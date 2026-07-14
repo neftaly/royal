@@ -33,7 +33,7 @@ export const createSurfaceMaterial = (): UnlitMaterial =>
       colorSpace: 'srgb',
       assetId: surfaceVirtualTextureProbe.id,
       sampler: surfaceSampler,
-      src: surfaceVirtualTextureProbe.manifestUri,
+      manifestUri: surfaceVirtualTextureProbe.manifestUri,
       version: surfaceVirtualTextureProbe.revision,
     }),
   });

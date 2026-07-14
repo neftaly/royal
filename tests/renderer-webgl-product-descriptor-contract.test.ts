@@ -935,7 +935,7 @@ describe("WebGL renderer product descriptor contracts", () => {
           geometry: planeGeometry(1),
           material: standardMaterial({
             texture: virtualTexture({
-              src: manifestUrl,
+              manifestUri: manifestUrl,
               version: "contract-v1",
             }),
           }),
@@ -967,7 +967,7 @@ describe("WebGL renderer product descriptor contracts", () => {
           geometry: planeGeometry(1),
           material: {
             baseColor: virtualTexture({
-              src: manifestUrl,
+              manifestUri: manifestUrl,
               version: "contract-v1",
             }),
             kind: "wireframe",

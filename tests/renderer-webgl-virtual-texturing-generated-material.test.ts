@@ -327,7 +327,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const material = standardMaterial({
-      texture: virtualTexture({ src: "/vt/manifest.json" }),
+      texture: virtualTexture({ manifestUri: "/vt/manifest.json" }),
     });
     const graph = renderScene(material, { exposureEv100: 1.75, toneMapping: "aces-fitted" });
 
@@ -389,7 +389,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
           wrapS: "repeat",
           wrapT: "mirrored-repeat",
         },
-        src: "/vt/manifest.json",
+        manifestUri: "/vt/manifest.json",
       }),
     })));
     fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
@@ -423,7 +423,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     root.render(renderScene(unlitMaterial({
       texture: virtualTexture({
         sampler: { minFilter: "nearest-mipmap-linear" },
-        src: "/vt/manifest.json",
+        manifestUri: "/vt/manifest.json",
       }),
     })));
     fetchRequests[0]!.resolve(responseJson(vtManifest(1)));

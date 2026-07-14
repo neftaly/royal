@@ -13,15 +13,16 @@ import type {
   ResourceGovernorPolicy,
   ResourceGovernorPolicyInput,
   RendererOptions,
+  RoyalPointerEventHandlers,
   RoyalRendererRootLifecycleSnapshot,
 } from '@royal/react';
 import type {
   TextureAssetRef,
+  TextureAssetOptions,
   TextureColorSpace,
   TextureSampler,
-  VirtualTextureAssetManifestOptions,
+  VirtualTextureAssetOptions,
   VirtualTextureAssetRef,
-  VirtualTextureAssetSrcOptions,
   VirtualTextureInput,
 } from '@royal/react/scene';
 import {
@@ -109,16 +110,28 @@ describe('Canvas public scene boundary', () => {
       manifestUri: '/map.vt.json',
       sampler,
     };
-    const virtualSrc = { src: '/map.vt.json' } satisfies VirtualTextureAssetSrcOptions;
     const virtualManifest = {
       manifestUri: '/map.vt.json',
-    } satisfies VirtualTextureAssetManifestOptions;
+    } satisfies VirtualTextureAssetOptions;
     const virtualInput: VirtualTextureInput = virtualManifest;
     expect([ordinary.kind, virtual.kind]).toEqual(['asset', 'virtual-asset']);
-    expect([virtualSrc.src, virtualInput.manifestUri]).toEqual([
-      '/map.vt.json',
-      '/map.vt.json',
-    ]);
+    expect(virtualInput.manifestUri).toBe('/map.vt.json');
+
+    if (false) {
+      // @ts-expect-error Image object options use only the canonical src field.
+      const legacyImage = { uri: '/map.png' } satisfies TextureAssetOptions;
+      // @ts-expect-error VT object options name the manifest explicitly.
+      const legacyVirtual = { src: '/map.vt.json' } satisfies VirtualTextureAssetOptions;
+      expect([legacyImage, legacyVirtual]).toHaveLength(2);
+    }
+  });
+
+  it('exports the scene pointer handler-map shape users pass to Canvas', () => {
+    const handlers = {
+      onClick: (event) => event.preventDefault(),
+    } satisfies RoyalPointerEventHandlers;
+
+    expect(handlers.onClick).toBeTypeOf('function');
   });
 
   it('re-exports the types used by React picking APIs', () => {

@@ -124,7 +124,7 @@ describe("renderer-core descriptor properties", () => {
       const virtual = virtualTexture({
         contentKey: virtualContentKey,
         sampler: virtualSampler,
-        src: `/textures/${seed.toString(16)}.vt.json`,
+        manifestUri: `/textures/${seed.toString(16)}.vt.json`,
         version: `vt-${seed.toString(16)}`,
       });
       const virtualMaterial = random.boolean()
@@ -143,7 +143,7 @@ describe("renderer-core descriptor properties", () => {
 
       expect(textureAsset({
         contentKey: `sha256:asset-${seed.toString(16)}`,
-        uri: `/textures/${seed.toString(16)}.ktx2`,
+        src: `/textures/${seed.toString(16)}.ktx2`,
         version: seed,
       }), `${label} texture asset identity`).toEqual({
         contentKey: `sha256:asset-${seed.toString(16)}`,

@@ -2,9 +2,9 @@ import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   webGlRootOptionsSemanticKey,
+  type ResourceGovernorPolicy,
+  type ResourceGovernorPolicyInput,
   type WebGlContextSnapshot,
-  type WebGlRoot,
-  type WebGlRootOptions,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 import {
@@ -12,14 +12,40 @@ import {
   royalRendererCapabilitiesFor,
 } from "./renderer-capabilities";
 
-/** Immutable renderer creation options accepted by `createRendererRoot`. */
-export type RendererOptions = WebGlRootOptions;
+/** Immutable renderer creation options shared by `<Canvas>` and `createRendererRoot`. */
+export interface RendererOptions {
+  /** Request an alpha channel from the rendering context. @defaultValue `true` */
+  readonly alpha?: boolean;
+  /** Request browser context antialiasing. @defaultValue `true` */
+  readonly antialias?: boolean;
+  /**
+   * Generate demand-driven VTs for eligible ordinary base-color images. The
+   * ordinary texture remains active until generated coverage is ready.
+   * @defaultValue `false`
+   */
+  readonly generatedImageVirtualTextures?: boolean;
+  /**
+   * Long-edge mip-0 resolution for generated SVG VTs, from 256 through 16384
+   * logical texels. Only used when generated image VTs are enabled.
+   * @defaultValue `16384`
+   */
+  readonly generatedSvgVirtualTextureMaxDimension?: number;
+  /** Immutable root-wide CPU, GPU, job, and upload budget overrides. */
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
+}
 
 /** @internal Backend-owned semantic identity used by the React Canvas lifetime. */
-export const rendererRootOptionsSemanticKey = webGlRootOptionsSemanticKey;
+export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string =>
+  webGlRootOptionsSemanticKey(options);
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
-export type ResolvedRendererOptions = WebGlRoot["options"];
+export interface ResolvedRendererOptions {
+  readonly alpha: boolean;
+  readonly antialias: boolean;
+  readonly generatedImageVirtualTextures: boolean;
+  readonly generatedSvgVirtualTextureMaxDimension: number;
+  readonly resourceGovernorPolicy: ResourceGovernorPolicy;
+}
 
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
@@ -54,13 +80,21 @@ export interface RoyalRendererDiagnosticsSnapshot {
   readonly messages: WebGlRootSnapshot["diagnostics"];
   /** Capacity and occurrence counts for the bounded diagnostic message log. */
   readonly messageStats: WebGlRootSnapshot["diagnosticStats"];
+  /** Retained glTF asset readiness and bounded load timing. */
   readonly gltfLoads: WebGlRootSnapshot["gltfLoadDiagnostics"];
+  /** Instanced glTF planning, drawing, and upload counters. */
   readonly gltfInstancing: WebGlRootSnapshot["gltfInstancing"];
+  /** Scene-plan compilation counters. */
   readonly planning: WebGlRootSnapshot["planning"];
+  /** Renderer resource acquisition and queue high-water counters. */
   readonly resourceLifetime: WebGlRootSnapshot["resourceLifetime"];
+  /** Current resource budgets, usage, admissions, and denials. */
   readonly resourceGovernor: WebGlRootSnapshot["resourceGovernor"];
+  /** Counters from the most recent picking query. */
   readonly picking: WebGlRootSnapshot["picking"];
+  /** Current ordinary-texture lease and prepared-source counts. */
   readonly textureResidency: WebGlRootSnapshot["textureResidency"];
+  /** Current VT residency plus cumulative request, upload, and failure counters. */
   readonly virtualTexturing: WebGlRootSnapshot["virtualTexturing"];
 }
 

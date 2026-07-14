@@ -31,18 +31,26 @@ export type {
 } from "@royal/renderer-core";
 
 export type OrbitControlsBehaviorOptions = {
+  /** Enables all configured camera gestures. @defaultValue `true` */
   readonly enabled?: boolean | undefined;
+  /** Enables modified/middle/right-button drag panning. @defaultValue `true` */
   readonly enablePan?: boolean | undefined;
+  /** Enables primary-button drag orbiting. @defaultValue `true` */
   readonly enableRotate?: boolean | undefined;
+  /** Enables wheel and two-pointer pinch zoom. @defaultValue `true` */
   readonly enableZoom?: boolean | undefined;
   /** Maximum orbit distance in metres. */
   readonly maxDistance?: Metres | undefined;
   /** Maximum pitch in radians. */
   readonly maxPitch?: Rads | undefined;
-  /** Minimum orbit distance in metres. */
+  /**
+   * Minimum camera-to-target distance in metres. Keep the camera's `near`
+   * clipping distance smaller when the target lies on the viewed surface.
+   */
   readonly minDistance?: Metres | undefined;
   /** Minimum pitch in radians. */
   readonly minPitch?: Rads | undefined;
+  /** Called after a gesture commits a changed, clamped view. */
   readonly onChange?: ((view: OrbitCameraView) => void) | undefined;
   /** Target displacement ratio per CSS pixel, scaled by orbit distance. */
   readonly panSpeed?: number | undefined;
@@ -170,25 +178,31 @@ const sameOrbitCameraView = (
   left.target[2] === right.target[2];
 
 export interface OrbitCameraController {
+  /** Stable scene camera resource; include it in `scene({ camera })`. */
   readonly cameraResource: PerspectiveCameraViewResource;
+  /** Reads the latest committed orbit view without subscribing React. */
   readonly getView: () => OrbitCameraView;
+  /** Updates clipping and field-of-view values on the stable camera resource. */
   readonly setProjection: (projection: { readonly far: Metres; readonly fovY: Rads; readonly near: Metres }) => void;
+  /** Commits a complete orbit view to every renderer using `cameraResource`. */
   readonly setView: (view: OrbitCameraViewOptions) => void;
+  /** Subscribes to committed view changes. */
   readonly subscribeView: (listener: () => void) => () => void;
 }
 
 export interface UseOrbitCameraOptions {
-  /** Initial target and distance in metres; angles are radians. */
+  /** Initial-only target and distance in metres; angles are radians. */
   readonly initial: OrbitCameraViewOptions;
   /** Far clipping distance in metres. */
   readonly far?: Metres;
   /** Vertical field of view in radians. */
   readonly fovY?: Rads;
-  /** Near clipping distance in metres. */
+  /**
+   * Near clipping distance in metres. Keep this below the closest intended
+   * camera-to-surface distance; for example, use `0.01` when orbiting to `0.1`.
+   */
   readonly near?: Metres;
 }
-
-export type OrbitCameraHookResult = OrbitCameraController;
 
 const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
   const view = resolveOrbitCameraView(input);
@@ -245,7 +259,7 @@ export const useOrbitCamera = ({
   far = 100,
   fovY = Math.PI / 4,
   near = 0.1,
-}: UseOrbitCameraOptions): OrbitCameraHookResult => {
+}: UseOrbitCameraOptions): OrbitCameraController => {
   const controllerRef = useRef<OrbitCameraController | undefined>(undefined);
   if (controllerRef.current === undefined) {
     controllerRef.current = createOrbitCameraController(initial, { far, fovY, near });

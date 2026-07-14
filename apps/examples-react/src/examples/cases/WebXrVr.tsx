@@ -47,7 +47,7 @@ const virtualGroundMaterial = unlitMaterial({
       wrapS: 'clamp-to-edge',
       wrapT: 'clamp-to-edge',
     },
-    src: `${virtualTextureFixtureRoot}map.vt.json`,
+    manifestUri: `${virtualTextureFixtureRoot}map.vt.json`,
   }),
 });
 const generatedSvgMaterial = unlitMaterial({

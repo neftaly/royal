@@ -12,6 +12,12 @@ longest dimension is at least 257 px. The ordinary texture remains active until
 generated coverage is ready. Authored `virtualTexture(...)` resources are
 unaffected.
 
+The authored object form is
+`virtualTexture({ manifestUri: '/terrain.vt.json', ...options })`. Image object
+forms use `src`; authored VT objects use `manifestUri` so autocomplete states
+that the URI must resolve to a manifest. Pre-release aliases are intentionally
+not retained.
+
 Generated SVG image VTs use that same path. Their close-zoom
 detail is controlled by `generatedSvgVirtualTextureMaxDimension`, the logical
 mip-0 resolution of the SVG's longest edge. It defaults to `16384`, accepts

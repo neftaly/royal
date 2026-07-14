@@ -300,7 +300,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       }),
     });
 
-    const sparseTexture = virtualTexture({ flipY: false, src: "/vt/sparse.json" });
+    const sparseTexture = virtualTexture({ flipY: false, manifestUri: "/vt/sparse.json" });
     const sparseMaterial: SurfaceMaterial = {
       ...unlitMaterial({ texture: sparseTexture }),
       textureCoordinates: {

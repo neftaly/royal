@@ -351,7 +351,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
           wrapS: "repeat",
           wrapT: "mirrored-repeat",
         },
-        src: "/vt/manifest.json",
+        manifestUri: "/vt/manifest.json",
       }),
     })));
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
@@ -362,7 +362,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
           wrapS: "repeat",
           wrapT: "mirrored-repeat",
         },
-        src: "/vt/manifest.json",
+        manifestUri: "/vt/manifest.json",
       }),
     })));
     await flushMicrotasks();
@@ -375,7 +375,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
           wrapS: "repeat",
           wrapT: "mirrored-repeat",
         },
-        src: "/vt/manifest.json",
+        manifestUri: "/vt/manifest.json",
       }),
     })));
 
@@ -413,7 +413,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const material = unlitMaterial({
-      texture: virtualTexture({ flipY: false, src: "/vt/manifest.json" }),
+      texture: virtualTexture({ flipY: false, manifestUri: "/vt/manifest.json" }),
     });
 
     root.render(renderScene(material));

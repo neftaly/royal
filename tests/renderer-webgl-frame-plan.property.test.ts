@@ -37,7 +37,7 @@ const geometry = boxGeometry(1);
 const ordinaryTextures = Array.from({ length: 4 }, (_value, index) =>
   imageTexture({ contentKey: `image-${index}`, src: `/image-${index}.png`, version: index }));
 const virtualTextures = Array.from({ length: 3 }, (_value, index) =>
-  virtualTexture({ contentKey: `virtual-${index}`, src: `/virtual-${index}.json`, version: index }));
+  virtualTexture({ contentKey: `virtual-${index}`, manifestUri: `/virtual-${index}.json`, version: index }));
 const refs: readonly RenderObjectRef[] = Array.from({ length: 4 }, () => ({ current: null }));
 const bulkSources = Array.from({ length: 4 }, (_value, index) =>
   createGltfInstanceTransforms({ count: index + 1 }));

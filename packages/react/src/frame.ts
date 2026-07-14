@@ -257,7 +257,7 @@ export const FrameLoopContext = createContext<FrameLoop | null>(null);
 const useCanvasFrameLoop = (): FrameLoop => {
   const frameLoop = useContext(FrameLoopContext);
   if (frameLoop === null) {
-    throw new Error("Royal frame hooks must be used inside Canvas");
+    throw new Error("useFrame must be used inside <Canvas>");
   }
 
   return frameLoop;

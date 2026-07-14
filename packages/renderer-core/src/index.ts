@@ -90,12 +90,8 @@ export type {
   TextureSampler,
   TextureSamplerFilter,
   TextureSamplerWrap,
-  TextureAssetSrcOptions,
-  TextureAssetUriOptions,
   VirtualTextureAssetOptions,
   VirtualTextureAssetRef,
-  VirtualTextureAssetManifestOptions,
-  VirtualTextureAssetSrcOptions,
   VirtualTextureInput
 } from './texture';
 export {

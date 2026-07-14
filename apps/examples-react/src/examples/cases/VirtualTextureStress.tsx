@@ -20,7 +20,7 @@ const mapGeometry = planeGeometry([8, 8]);
 const mapMaterial = unlitMaterial({
   texture: virtualTexture({
     sampler: { magFilter: 'nearest', minFilter: 'nearest', wrapS: 'clamp-to-edge', wrapT: 'clamp-to-edge' },
-    src: `${fixtureRoot}map.vt.json`,
+    manifestUri: `${fixtureRoot}map.vt.json`,
   }),
 });
 
@@ -35,7 +35,7 @@ const views = {
 type ViewName = keyof typeof views;
 
 export const VirtualTextureStress = (): ReactNode => {
-  const orbit = useOrbitCamera({ initial: views.Both, far: 80 });
+  const orbit = useOrbitCamera({ initial: views.Both, far: 80, near: 0.01 });
   const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,

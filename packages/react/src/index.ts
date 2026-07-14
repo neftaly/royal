@@ -43,7 +43,6 @@ export {
 } from './orbit-controls';
 export type {
   OrbitCameraController,
-  OrbitCameraHookResult,
   OrbitCameraView,
   OrbitCameraViewOptions,
   OrbitControlsBehaviorOptions,
@@ -55,7 +54,7 @@ export type {
 export type {
   RoyalPointerEvent,
   RoyalPointerEventHandler,
-  RoyalPointerEventProps,
+  RoyalPointerEventHandlers,
   RoyalPointerEventType,
 } from './picking-events';
 

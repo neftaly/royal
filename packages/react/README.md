@@ -180,8 +180,18 @@ The imperative root separates its two observational models:
 
 Use `virtualTexture('/terrain.vt.json')` from `@royal/react/scene` for an
 authored manifest. The string and the object form
-`virtualTexture({ manifestUri: '/terrain.vt.json' })` are equivalent. See the
+`virtualTexture({ manifestUri: '/terrain.vt.json' })` are equivalent. Object
+forms deliberately have one source field: image constructors use `src`, while
+the authored-VT constructor uses `manifestUri`. There are no `uri`/`src`
+compatibility aliases to guess between. See the
 [manifest, orientation, and fallback contract](../../docs/virtual-textures.md).
+
+For very close inspection, keep the perspective near plane below the closest
+camera-to-surface distance. For example,
+`useOrbitCamera({ initial: { distance: 1 }, near: 0.01 })` pairs safely with
+`<OrbitControls orbit={orbit} minDistance={0.1} />`. This is geometric camera
+clipping and applies equally to ordinary textures, authored VTs, generated SVG
+VTs, and untextured meshes.
 
 The main `@royal/react` JSX runtime is ordinary React. Royal does not create a
 second React root, so outer Context, ErrorBoundary, and Suspense semantics stay

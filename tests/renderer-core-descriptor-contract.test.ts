@@ -113,35 +113,32 @@ describe("renderer-core descriptor contract", () => {
     expect(textureFromInput({ manifestUri: "/textures/terrain.vt.json" })).toEqual(stringTexture);
 
     expect(() => virtualTexture({} as VirtualTextureAssetOptions)).toThrow(
-      'virtual texture requires exactly one of "src" or "manifestUri"',
-    );
-    expect(() => virtualTexture({ src: "" })).toThrow(
-      'virtual texture "src" must not be empty',
+      'virtual texture "manifestUri" must be a non-empty string',
     );
     expect(() => virtualTexture({ manifestUri: "" })).toThrow(
-      'virtual texture "manifestUri" must not be empty',
+      'virtual texture "manifestUri" must be a non-empty string',
     );
 
     if (false) {
       // @ts-expect-error preview is not a public render fallback for virtual textures.
       virtualTexture({
+        manifestUri: "/textures/terrain.vt.json",
         preview: imageTexture("/textures/terrain-preview.png"),
-        src: "/textures/terrain.vt.json",
       });
 
       // @ts-expect-error fallbackColor is not a public render fallback for image textures.
       imageTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/albedo.png" });
 
       // @ts-expect-error fallback is not a public render fallback for texture assets.
-      textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, uri: "/textures/mask.ktx2" });
+      textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, src: "/textures/mask.ktx2" });
 
       // @ts-expect-error fallbackColor is not a public render fallback for virtual textures.
-      virtualTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/terrain.vt.json" });
+      virtualTexture({ fallbackColor: [1, 0, 1, 1], manifestUri: "/textures/terrain.vt.json" });
 
-      // @ts-expect-error virtual textures require exactly one public source field.
+      // @ts-expect-error virtual textures require the explicit manifest URI field.
       virtualTexture({});
 
-      // @ts-expect-error src and manifestUri are mutually exclusive.
+      // @ts-expect-error src is not an object-form alias for manifestUri.
       virtualTexture({
         manifestUri: "/textures/terrain-manifest.vt.json",
         src: "/textures/terrain.vt.json",
@@ -175,7 +172,7 @@ describe("renderer-core descriptor contract", () => {
 
     expect(virtualTexture({
       contentKey: "sha256:albedo-vt",
-      src: "/textures/albedo-a.vt.json",
+      manifestUri: "/textures/albedo-a.vt.json",
     })).toEqual({
       contentKey: "sha256:albedo-vt",
       kind: "virtual-asset",
@@ -184,7 +181,7 @@ describe("renderer-core descriptor contract", () => {
 
     expect(textureAsset({
       contentKey: "sha256:mask",
-      uri: "/textures/mask-a.ktx2",
+      src: "/textures/mask-a.ktx2",
     })).toEqual({
       contentKey: "sha256:mask",
       kind: "asset",

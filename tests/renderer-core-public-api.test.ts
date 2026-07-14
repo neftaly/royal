@@ -150,7 +150,7 @@ describe("renderer-core public API", () => {
     expect(imageTexture({ flipY: false, src: "/albedo.png" })).toMatchObject({ flipY: false });
     const virtual: VirtualTextureAssetRef = virtualTexture({
       flipY: false,
-      src: "/terrain.vt.json",
+      manifestUri: "/terrain.vt.json",
     });
     expect(virtual).toMatchObject({ flipY: false, kind: "virtual-asset" });
   });

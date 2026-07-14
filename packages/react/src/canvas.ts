@@ -71,7 +71,7 @@ export interface CanvasProps
 export const useCanvasElement = (): HTMLCanvasElement | null => {
   const canvas = useContext(CanvasElementContext);
   if (canvas === undefined) {
-    throw new Error("Royal canvas hooks must be used inside Canvas");
+    throw new Error("useCanvasElement must be used inside <Canvas>");
   }
 
   return canvas;
@@ -80,7 +80,7 @@ export const useCanvasElement = (): HTMLCanvasElement | null => {
 export const useCanvasRoot = (): RoyalRendererRoot | null => {
   const root = useContext(CanvasRootContext);
   if (root === undefined) {
-    throw new Error("Royal canvas hooks must be used inside Canvas");
+    throw new Error("useCanvasRoot must be used inside <Canvas>");
   }
 
   return root;
@@ -95,6 +95,7 @@ export const useInvalidate = (): (() => void) => {
   }, [root]);
 };
 
+/** Returns a stable picker that accepts DOM client coordinates for this Canvas. */
 export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
   const root = useCanvasRoot();
 
