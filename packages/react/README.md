@@ -127,7 +127,7 @@ viewport data.
 const store = createXrSessionStore<XrSession>({ available: true });
 const runtime = await createXrSessionRuntime(root, store, session, {
   mode: "immersive-vr",
-  renderer: { referenceSpacePreference: ["local-floor", "local"] },
+  rendererOptions: { referenceSpacePreference: ["local-floor", "local"] },
 });
 
 await runtime.end();

@@ -108,7 +108,7 @@ describe("React XR session runtime", () => {
       root,
       store,
       session,
-      { mode: "immersive-vr", renderer: { referenceSpacePreference: ["local"] } },
+      { mode: "immersive-vr", rendererOptions: { referenceSpacePreference: ["local"] } },
       createRenderer,
     );
 

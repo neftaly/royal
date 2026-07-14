@@ -11,6 +11,7 @@ export type {
   XrSessionRenderer,
   XrSessionRendererFrameSnapshot,
   XrSessionRendererOptions,
+  XrWebGlLayerOptions,
   XrView,
   XrViewerPose,
 } from "./xr-renderer";

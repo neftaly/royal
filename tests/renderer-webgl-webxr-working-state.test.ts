@@ -27,6 +27,22 @@ afterEach(() => {
 });
 
 describe("WebGL root WebXR working state contracts", () => {
+  it("rejects invalid public WebXR options before renderer setup", async () => {
+    const root = {} as Parameters<typeof createWebXrSessionRenderer>[0];
+    const session = {} as WebGlXrSession;
+
+    await expect(createWebXrSessionRenderer(root, session, {
+      referenceSpacePreference: [],
+    })).rejects.toThrow("must contain at least one reference space type");
+    await expect(createWebXrSessionRenderer(root, session, {
+      webGlLayer: { framebufferScaleFactor: 0 },
+    })).rejects.toThrow("framebufferScaleFactor must be positive and finite");
+    await expect(createWebXrSessionRenderer(root, session, {
+      // @ts-expect-error Runtime validation protects JavaScript callers.
+      referenceSpacePreference: ["stage"],
+    })).rejects.toThrow("entries must be one of");
+  });
+
   it("renders caller-owned views with supplied matrices and scissored viewports", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -124,6 +140,7 @@ describe("WebGL root WebXR working state contracts", () => {
       updateRenderState: vi.fn(),
     };
     let layerContext: WebGL2RenderingContext | undefined;
+    let layerOptions: unknown;
     const xrWebGLLayerConstructor: WebGlXrLayerConstructor = class {
       readonly framebuffer = framebuffer;
       constructor(
@@ -132,6 +149,7 @@ describe("WebGL root WebXR working state contracts", () => {
         readonly options?: unknown,
       ) {
         layerContext = context;
+        layerOptions = options;
       }
       getViewport(view: WebGlXrView) {
         return (view as WebGlXrView & {
@@ -168,9 +186,11 @@ describe("WebGL root WebXR working state contracts", () => {
       advanced: { xrWebGLLayerConstructor },
       onFrameSnapshot,
       referenceSpacePreference: ["local"],
+      webGlLayer: { antialias: true, framebufferScaleFactor: 0.85 },
     });
     expect(canvas.getContext).toHaveBeenCalledTimes(contextAcquisitionsBeforeXr);
     expect(layerContext).toBe(gl);
+    expect(layerOptions).toEqual({ antialias: true, framebufferScaleFactor: 0.85 });
     cameraResource.position[0] = 10_000;
     cameraResource.commit();
     const callsBeforeXrFrame = calls.length;

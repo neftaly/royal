@@ -10,7 +10,7 @@ import type { XrSessionMode, XrSessionStore } from "./xr-store";
 
 export type XrSessionRuntimeOptions = {
   readonly mode: XrSessionMode;
-  readonly renderer?: XrSessionRendererOptions;
+  readonly rendererOptions?: XrSessionRendererOptions;
 };
 
 /** Owns one session's renderer, events, frame loop, and terminal cleanup. */
@@ -59,7 +59,7 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
 
   let renderer: XrSessionRenderer;
   try {
-    renderer = await createRenderer(root, session, options.renderer);
+    renderer = await createRenderer(root, session, options.rendererOptions);
   } catch (error) {
     if (store.getState().session === session) {
       store.getState().failSession(error);

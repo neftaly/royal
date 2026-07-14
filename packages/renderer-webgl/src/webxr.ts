@@ -108,8 +108,10 @@ export interface WebGlXrSessionRendererAdvancedOptions {
 
 export interface WebGlXrSessionRendererOptions {
   readonly advanced?: WebGlXrSessionRendererAdvancedOptions;
-  readonly layerOptions?: WebGlXrLayerOptions;
+  readonly webGlLayer?: WebGlXrLayerOptions;
+  /** Opt-in frame telemetry. Supplying this callback allocates a viewport snapshot per rendered frame. */
   readonly onFrameSnapshot?: WebGlXrFrameSnapshotCallback;
+  /** Ordered, non-empty fallback list. Defaults to `local-floor`, then `local`. */
   readonly referenceSpacePreference?: readonly WebXrReferenceSpaceType[];
 }
 
@@ -126,6 +128,35 @@ type WebGl2XrCompatibleContext = WebGL2RenderingContext & {
 };
 
 const DEFAULT_REFERENCE_SPACE_TYPES = ["local-floor", "local"] as const;
+const REFERENCE_SPACE_TYPES: readonly WebXrReferenceSpaceType[] = [
+  "viewer",
+  "local",
+  "local-floor",
+  "bounded-floor",
+  "unbounded",
+];
+
+const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
+  const layer = options.webGlLayer;
+  if (layer?.antialias !== undefined && typeof layer.antialias !== "boolean") {
+    throw new TypeError("Royal WebXR webGlLayer.antialias must be a boolean");
+  }
+  if (
+    layer?.framebufferScaleFactor !== undefined
+    && (!Number.isFinite(layer.framebufferScaleFactor) || layer.framebufferScaleFactor <= 0)
+  ) {
+    throw new RangeError("Royal WebXR webGlLayer.framebufferScaleFactor must be positive and finite");
+  }
+  const preference = options.referenceSpacePreference;
+  if (preference !== undefined && preference.length === 0) {
+    throw new RangeError("Royal WebXR referenceSpacePreference must contain at least one reference space type");
+  }
+  if (preference?.some((type) => !REFERENCE_SPACE_TYPES.includes(type)) === true) {
+    throw new TypeError(
+      `Royal WebXR referenceSpacePreference entries must be one of ${REFERENCE_SPACE_TYPES.join(", ")}`,
+    );
+  }
+};
 
 const xrLayerConstructor = (): WebGlXrLayerConstructor | undefined =>
   (globalThis as { readonly XRWebGLLayer?: WebGlXrLayerConstructor }).XRWebGLLayer;
@@ -191,6 +222,7 @@ export const createWebXrSessionRenderer = async (
   session: WebGlXrSession,
   options: WebGlXrSessionRendererOptions = {},
 ): Promise<WebGlXrSessionRenderer> => {
+  validateOptions(options);
   if (
     !(rendererOwnedWebGl2Context in publicRoot)
     || !(rendererFrameViews in publicRoot)
@@ -230,7 +262,7 @@ export const createWebXrSessionRenderer = async (
       throw new Error("Royal WebXR rendering requires XRWebGLLayer");
     }
 
-    const layer = new Layer(session, gl, options.layerOptions);
+    const layer = new Layer(session, gl, options.webGlLayer);
     await session.updateRenderState({ baseLayer: layer });
     assertSessionActive();
     const referenceSpace = await firstReferenceSpace(

@@ -58,14 +58,20 @@ export type XrSessionRendererFrameSnapshot = {
   readonly viewports: readonly XrViewport[];
 };
 
+/** Options forwarded to the browser's `XRWebGLLayer` constructor. */
+export type XrWebGlLayerOptions = {
+  readonly antialias?: boolean;
+  /** Positive scale applied to the browser-recommended XR framebuffer size. */
+  readonly framebufferScaleFactor?: number;
+};
+
 export type XrSessionRendererOptions = {
-  readonly layerOptions?: {
-    readonly antialias?: boolean;
-    readonly framebufferScaleFactor?: number;
-  };
+  readonly webGlLayer?: XrWebGlLayerOptions;
+  /** Opt-in frame telemetry. Supplying this callback allocates a viewport snapshot per rendered frame. */
   readonly onFrameSnapshot?: (
     snapshot: XrSessionRendererFrameSnapshot,
   ) => void;
+  /** Ordered, non-empty fallback list. Defaults to `local-floor`, then `local`. */
   readonly referenceSpacePreference?: readonly XrReferenceSpaceType[];
 };
 

@@ -208,8 +208,8 @@ const XrSessionControl = (): ReactNode => {
 
     const runtime = await createXrSessionRuntime(root, store, session, {
       mode,
-      renderer: {
-        layerOptions: {
+      rendererOptions: {
+        webGlLayer: {
           antialias: true,
           framebufferScaleFactor: 0.85,
         },
