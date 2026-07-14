@@ -398,6 +398,21 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled) => {
   }
 };
 
+const checkRealXrRoute = (route, routeLabel) => {
+  if (route.id !== 'webxr-vr') return;
+  if (!requireObject(route.prepared, `${routeLabel}.prepared`)) return;
+  requireBoolean(route.prepared.active, `${routeLabel}.prepared.active`);
+  if (route.prepared.active !== true) errors.push(`${routeLabel}.prepared.active must be true`);
+  if (route.xrActivationFailure !== undefined) {
+    errors.push(`${routeLabel}.xrActivationFailure must be absent`);
+  }
+  if (!requireObject(route.xr, `${routeLabel}.xr`)) return;
+  requireBoolean(route.xr.active, `${routeLabel}.xr.active`);
+  if (route.xr.active !== true) errors.push(`${routeLabel}.xr.active must be true`);
+  requirePositiveNumber(route.xr.sessions, `${routeLabel}.xr.sessions`);
+  checkFrameStats(route.xr.frameStats, `${routeLabel}.xr.frameStats`);
+};
+
 const isGltfLoadReport = (value) =>
   isObject(value?.metrics) &&
   isObject(value?.route) &&
@@ -604,6 +619,7 @@ if (requireObject(report, 'report')) {
   } else {
     checkBrowserDiagnostics(report.browserDiagnostics, 'report.browserDiagnostics');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
+    const realXrEnabled = report.options?.realXrEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
       report.routes.forEach((route, index) => {
         const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
@@ -615,6 +631,7 @@ if (requireObject(report, 'report')) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
         }
         checkCameraDrag(route, routeLabel, cameraDragEnabled);
+        if (realXrEnabled) checkRealXrRoute(route, routeLabel);
         if (route.profile?.kind === 'gltf-instancing') {
           checkInstancingRoute(route, routeLabel);
         }

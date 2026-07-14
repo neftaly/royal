@@ -35,6 +35,37 @@ export const replaceWebSocketAuthority = (webSocketUrl, host, port) => {
   return url.href;
 };
 
+export const selectCdpPage = async ({
+  closeExtraPages = false,
+  debugHost,
+  debugPort,
+  fetchImpl = fetch,
+}) => {
+  const pages = await waitForJson(
+    `http://${debugHost}:${debugPort}/json/list`,
+    10_000,
+    fetchImpl,
+  );
+  const pageTargets = pages.filter((entry) => entry.type === 'page');
+  const page = pageTargets[0];
+  if (page?.webSocketDebuggerUrl === undefined) {
+    throw new Error('Chromium did not expose a debuggable page target');
+  }
+
+  if (closeExtraPages) {
+    await Promise.all(pageTargets.slice(1).map(async (entry) => {
+      if (entry.id === undefined) return;
+      const url = `http://${debugHost}:${debugPort}/json/close/${encodeURIComponent(entry.id)}`;
+      const response = await fetchImpl(url);
+      if (!response.ok) {
+        throw new Error(`${url} returned ${response.status}`);
+      }
+    }));
+  }
+
+  return page;
+};
+
 export class CdpSession {
   #commandTimeoutMs;
   #handlers = new Map();
@@ -123,17 +154,14 @@ export class CdpSession {
 }
 
 export const connectCdpPage = async ({
+  closeExtraPages = false,
   commandTimeoutMs,
   debugHost,
   debugPort,
   rewriteWebSocketAuthority = false,
 }) => {
   await waitForJson(`http://${debugHost}:${debugPort}/json/version`, 10_000);
-  const pages = await waitForJson(`http://${debugHost}:${debugPort}/json/list`, 10_000);
-  const page = pages.find((entry) => entry.type === 'page');
-  if (page?.webSocketDebuggerUrl === undefined) {
-    throw new Error('Chromium did not expose a debuggable page target');
-  }
+  const page = await selectCdpPage({ closeExtraPages, debugHost, debugPort });
 
   const webSocketUrl = rewriteWebSocketAuthority
     ? replaceWebSocketAuthority(page.webSocketDebuggerUrl, debugHost, debugPort)
@@ -230,6 +258,10 @@ export const captureBrowserDiagnostics = (session, { maxEntries = 500 } = {}) =>
   });
 
   return {
+    reset: () => {
+      droppedEntries = 0;
+      entries.length = 0;
+    },
     snapshot: () => ({ droppedEntries, entries: [...entries] }),
   };
 };

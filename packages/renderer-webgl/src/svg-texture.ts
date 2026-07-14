@@ -1,5 +1,5 @@
 import type { LoadedTextureSource } from "./texture-sources";
-import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-rasterizer";
+import { rasterizeGeneratedVirtualTexturePageImageData } from "./virtual-texture-page-rasterizer";
 import {
   abortError,
   dataUriMediaType,
@@ -77,6 +77,16 @@ export const isSvgUri = (uri: string): boolean =>
   uri.startsWith("data:")
     ? isSvgMimeType(dataUriMediaType(uri))
     : /\.svg(?:$|[?#])/iu.test(uri);
+
+/**
+ * Apple WebKit accepts decoded SVG images as ordinary WebGL texture sources,
+ * but can mark Canvas 2D pages derived from them as origin-unclean. Generated
+ * VT therefore retains the ordinary SVG path on those browsers.
+ */
+export const supportsGeneratedSvgVirtualTexturePages = (
+  userAgent = globalThis.navigator?.userAgent ?? "",
+): boolean => !/AppleWebKit\//u.test(userAgent)
+  || /(?:Chrome|Chromium|Edg|OPR)\//u.test(userAgent);
 
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
@@ -460,7 +470,11 @@ export const prepareSvgTextForImage = async (
     : inlineSvgImageReferences(normalizedText, label, baseUrl, context);
 };
 
-const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+const loadImage = (
+  src: string,
+  signal?: AbortSignal,
+  applyCors = true,
+): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
   if (ImageConstructor === undefined) {
     reject(new Error(`Image loading is unavailable for texture ${src}`));
@@ -468,7 +482,7 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
   }
 
   const image = new ImageConstructor();
-  image.crossOrigin = "anonymous";
+  if (applyCors) image.crossOrigin = "anonymous";
   let settled = false;
 
   const cleanup = (): void => {
@@ -514,7 +528,11 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
   if (image.complete) onLoad();
 });
 
-const loadImageFromBlob = async (blob: Blob, label: string, signal?: AbortSignal): Promise<HTMLImageElement> => {
+const loadImageFromBlob = async (
+  blob: Blob,
+  label: string,
+  signal?: AbortSignal,
+): Promise<HTMLImageElement> => {
   if (
     typeof globalThis.URL?.createObjectURL !== "function"
     || typeof globalThis.URL.revokeObjectURL !== "function"
@@ -524,7 +542,9 @@ const loadImageFromBlob = async (blob: Blob, label: string, signal?: AbortSignal
 
   const url = globalThis.URL.createObjectURL(blob);
   try {
-    return await loadImage(url, signal);
+    // This URL is renderer-created and same-origin by construction, so CORS
+    // mode is unnecessary and would add another browser provenance variable.
+    return await loadImage(url, signal, false);
   } finally {
     globalThis.URL.revokeObjectURL(url);
   }
@@ -628,7 +648,7 @@ class GeneratedSvgVirtualTexturePageProducer implements SvgVirtualTexturePagePro
     signal?: AbortSignal,
   ): TexImageSource {
     if (signal?.aborted === true) throw abortError();
-    return rasterizeGeneratedVirtualTexturePage({
+    return rasterizeGeneratedVirtualTexturePageImageData({
       height: this.#viewport.height,
       image: this.#image,
       label: this.#label,

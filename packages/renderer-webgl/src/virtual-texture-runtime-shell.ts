@@ -39,6 +39,7 @@ import { resolveResourceUri, throwIfAborted } from "./gltf/io";
 import {
   generatedSvgVirtualTextureManifest,
   loadGeneratedSvgVirtualTexturePageImage,
+  supportsGeneratedSvgVirtualTexturePages,
   svgVirtualTextureSourceForImage,
 } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
@@ -269,6 +270,7 @@ export class VirtualTextureRuntimeShell {
     const svgSource = svgVirtualTextureSourceForImage(source);
     let pageSource: VirtualTextureGeneratedPageSource;
     if (svgSource !== undefined) {
+      if (!supportsGeneratedSvgVirtualTexturePages()) return;
       pageSource = { kind: "svg", source: svgSource };
     } else {
       const [width, height] = loadedTextureSourceSize(source);

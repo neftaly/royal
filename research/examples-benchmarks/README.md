@@ -55,11 +55,12 @@ is true and `warnings` is empty or understood.
   `61ms` p95 while drawing 98,304 sampled instances. That improves on the
   comparable 24-frame July 4 baseline (`126ms` p95), but remains well outside
   a 60fps frame budget and should stay a constrained-device optimization target.
-- The SVG route's frame collector completed, but did not attach a WebGL or
-  renderer snapshot, so it was rejected rather than saved as device evidence.
-  Forwarded Safari console output identified the terminal failure as
-  `SecurityError: The operation is insecure` at the virtual-texture atlas
-  `texSubImage2D` upload; React then unmounted `Canvas`.
+- `ipad-safari/2026-07-14T06-20-35-959Z-gltf-ghostscript-tiger-svg.json`
+  completed 24/24 frames at `18ms` p95 with no browser diagnostics and an
+  available renderer lifecycle. Apple WebKit keeps decoded SVG on the ordinary
+  texture path because repainting the same SVG through Canvas 2D produces
+  origin-unclean pixels there; the accepted run has zero generated-VT requests,
+  failures, or allocations.
 
 2026-07-14 Quest 2 Browser pass:
 
@@ -70,7 +71,19 @@ is true and `warnings` is empty or understood.
   `35ms` p95. Camera-driven static grid redraws are about `33ms` p95 at grid 16,
   while grid 8 camera redraws are about `11ms` p95; constrained-device
   instancing remains the clearest renderer optimization target.
-- The SVG and real-WebXR routes were rejected after the headset display slept:
-  both produced zero RAF samples. The SVG diagnostic trace is useful for harness
-  validation but is not a performance baseline. Repeat both routes with the
-  headset worn before treating either as device evidence.
+- `quest2-gltf-ghostscript-tiger-svg-2026-07-14.json` completed 24/24 frames at
+  `11.3ms` p95 with clean browser diagnostics. Camera-driven redraws completed
+  24/24 at `10.8ms` draw p95 and one draw per moved frame.
+- `quest2-webxr-vr-2026-07-14.json` activated one real immersive session and
+  completed 24/24 physical XR frames at `47.5ms` p95. Physical probing found
+  that automatically calling the optional `offerSession()` alongside an
+  explicit Enter XR control can occupy Quest's sole immersive-session slot; the
+  example now uses only the standard trusted `requestSession()` path. A
+  background XR session can independently retain that same slot while Browser
+  is foregrounded, and the harness reports that lifecycle state separately.
+  Quest
+  logged one `glFramebufferTexture2DMultisample` `GL_INVALID_OPERATION` warning
+  during XR framebuffer setup, so frame pacing and that browser/driver warning
+  remain an optimization/diagnostic target rather than a correctness gate.
+  Reports declaring real XR are rejected unless activation succeeds and
+  physical XR-session frames exist.

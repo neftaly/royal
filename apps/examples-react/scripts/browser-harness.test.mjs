@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   captureBrowserDiagnostics,
   replaceWebSocketAuthority,
+  selectCdpPage,
   startPerformanceTrace,
   waitForHttp,
   waitForJson,
@@ -69,6 +70,36 @@ describe('browser harness', () => {
       .rejects.toThrow('http://example.test/status returned 503');
   });
 
+  it('retains one CDP page and closes surplus page targets only', async () => {
+    const requestedUrls = [];
+    const fetchImpl = async (url) => {
+      requestedUrls.push(url);
+      if (url.endsWith('/json/list')) {
+        return {
+          json: async () => [
+            { id: 'kept', type: 'page', webSocketDebuggerUrl: 'ws://example.test/kept' },
+            { id: 'old tab/2', type: 'page', webSocketDebuggerUrl: 'ws://example.test/old' },
+            { id: 'browser-ui', type: 'other' },
+          ],
+          ok: true,
+          status: 200,
+        };
+      }
+      return { ok: true, status: 200 };
+    };
+
+    await expect(selectCdpPage({
+      closeExtraPages: true,
+      debugHost: 'example.test',
+      debugPort: 9222,
+      fetchImpl,
+    })).resolves.toMatchObject({ id: 'kept' });
+    expect(requestedUrls).toEqual([
+      'http://example.test:9222/json/list',
+      'http://example.test:9222/json/close/old%20tab%2F2',
+    ]);
+  });
+
   it('captures structured console, exception, and browser log diagnostics', () => {
     const session = fakeSession();
     const diagnostics = captureBrowserDiagnostics(session, { maxEntries: 3 });
@@ -98,6 +129,8 @@ describe('browser harness', () => {
         expect.objectContaining({ kind: 'console', text: 'last message' }),
       ],
     });
+    diagnostics.reset();
+    expect(diagnostics.snapshot()).toEqual({ droppedEntries: 0, entries: [] });
   });
 
   it('collects a DevTools trace until tracing completes', async () => {

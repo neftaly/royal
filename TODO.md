@@ -69,11 +69,11 @@ CI runs both the built-entrypoint and packed-consumer gates.
 ## Validation
 
 1. Complete the remaining physical iPad Safari and Quest 2 checks; they do not
-   block desktop work. The July 14 iPad pass covered VT convergence and animated
-   instancing. The SVG route currently leaves physical Safari blank and is now
-   rejected by the evidence gate: Safari throws `SecurityError: The operation
-   is insecure` from the virtual-texture atlas `texSubImage2D` upload before
-   React unmounts `Canvas`. Quest Browser 149 remains USB-visible but did not
-   publish a DevTools socket while its splash surface was active. Still cover
-   context loss, camera pan, SVG/raster parity, window resize/orientation, and
-   memory-pressure eviction once those device paths are interactive.
+   block desktop work. The July 14 pass now covers iPad VT convergence,
+   animated instancing, and the SVG ordinary-texture fallback, plus Quest VT,
+   instancing, SVG generated VT, camera drag, and real immersive WebXR. The XR
+   report gate requires successful activation and physical session frames rather
+   than accepting window RAFs; Quest XR currently measures `47.5ms` p95 and logs
+   one framebuffer-multisample `GL_INVALID_OPERATION` warning during setup.
+   Still cover context loss, camera pan, SVG/raster parity, window
+   resize/orientation, and memory-pressure eviction.

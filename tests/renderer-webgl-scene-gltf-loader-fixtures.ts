@@ -156,6 +156,7 @@ export const installCanvas2d = (): {
     readonly drawImage: ReturnType<typeof vi.fn>;
     readonly fillRect: ReturnType<typeof vi.fn>;
     fillStyle: unknown;
+    readonly getImageData: ReturnType<typeof vi.fn>;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     readonly putImageData: ReturnType<typeof vi.fn>;
@@ -167,6 +168,7 @@ export const installCanvas2d = (): {
     readonly drawImage: ReturnType<typeof vi.fn>;
     readonly fillRect: ReturnType<typeof vi.fn>;
     fillStyle: unknown;
+    readonly getImageData: ReturnType<typeof vi.fn>;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     readonly putImageData: ReturnType<typeof vi.fn>;
@@ -181,6 +183,11 @@ export const installCanvas2d = (): {
         drawImage: vi.fn(),
         fillRect: vi.fn(),
         fillStyle: "#000",
+        getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
+          data: new Uint8ClampedArray(width * height * 4),
+          height,
+          width,
+        }) as ImageData),
         imageSmoothingEnabled: false,
         imageSmoothingQuality: "low" as ImageSmoothingQuality,
         putImageData: vi.fn(),

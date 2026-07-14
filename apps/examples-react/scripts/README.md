@@ -95,14 +95,23 @@ over CDP or the in-page benchmark bridge rather than Android logcat.
 Enter XR control and samples the physical `XRSession` frame loop. Keep the
 headset worn and the Browser foregrounded; a sleeping display is recorded as an
 activation/RAF failure rather than mistaken for a zero-millisecond result.
+Physical activation waits up to 20 seconds for Quest's immersive transition;
+`EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS` overrides that window.
+A background immersive session can continue owning Quest's single XR slot while
+Browser is foregrounded. The harness classifies that state as
+`immersive-session-already-active` and rejects it as a new performance run;
+test background suspend/resume separately from foreground frame pacing.
 
 The default mode is `quick`: product routes, short frame windows, no instancing
 fuzz rows, one manifest-selected glTF lab case, and no XR lab route. Use
 `EXAMPLES_BENCH_MODE=full` for heavier product coverage, `labs` for explicit lab
 routes such as `webxr-vr`, or `all` when you really want every route. Use
 `EXAMPLES_BENCH_ROUTE=<id-or-prefix>` to narrow the run. For Quest runs, open or
-keep any Quest Browser tab available before starting the benchmark; the script
-navigates the first CDP page target through the selected routes.
+keep any Quest Browser tab available before starting the benchmark. The script
+retains the first page target, closes surplus page tabs (without touching
+Browser/system targets), resets the retained tab through `about:blank`, and
+navigates through uniquely tagged route URLs. This keeps old dev/HMR documents
+and their replayed console history out of production runs.
 `EXAMPLES_BENCH_FRAME_TIMEOUT_MS` bounds RAF warmup and sampling so a throttled
 headset tab records a timeout row instead of hanging the run.
 `EXAMPLES_BENCH_CDP_TIMEOUT_MS` bounds each DevTools command and defaults high

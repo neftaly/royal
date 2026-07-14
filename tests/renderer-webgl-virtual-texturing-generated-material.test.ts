@@ -174,6 +174,41 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
+  it("keeps Apple WebKit SVG sources on the ordinary texture path", async () => {
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
+    });
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    class TestURL extends URL {
+      static createObjectURL = vi.fn(() => "blob:royal-svg-webkit");
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("URL", TestURL);
+    const { contexts } = installCanvas2d();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const material = unlitMaterial({ texture: imageTexture("/textures/webkit.svg") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseText(
+      "/textures/webkit.svg",
+      '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512"/></svg>',
+    ));
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(material));
+
+    expect(contexts).toHaveLength(0);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 0,
+      generatedPageFailures: 0,
+      generatedPageRequests: 0,
+    }));
+    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+  });
+
   it("uses generated SVG VT for direct imageTexture SVG data URIs", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();

@@ -99,7 +99,10 @@ const managePreview = process.env.EXAMPLES_BENCH_PREVIEW !== '0';
 const fakeXrEnabled = process.env.EXAMPLES_BENCH_FAKE_XR === '1';
 const realXrEnabled = process.env.EXAMPLES_BENCH_REAL_XR === '1';
 const fakeXrHz = envInteger('EXAMPLES_BENCH_XR_HZ', 72);
-const fakeXrPrepareTimeoutMs = envInteger('EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS', 5_000);
+const fakeXrPrepareTimeoutMs = envInteger(
+  'EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS',
+  realXrEnabled ? 20_000 : 5_000,
+);
 const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
 
@@ -281,10 +284,26 @@ const selectedRoutes = () => {
 };
 
 const connectPage = () => connectCdpPage({
+  closeExtraPages: browserMode === 'cdp',
   commandTimeoutMs: cdpCommandTimeoutMs,
   debugHost,
   debugPort,
   rewriteWebSocketAuthority: true,
+});
+
+const mergeBrowserDiagnostics = (left, right) => ({
+  reset: () => {
+    left.reset();
+    right.reset();
+  },
+  snapshot: () => {
+    const leftSnapshot = left.snapshot();
+    const rightSnapshot = right.snapshot();
+    return {
+      droppedEntries: leftSnapshot.droppedEntries + rightSnapshot.droppedEntries,
+      entries: [...leftSnapshot.entries, ...rightSnapshot.entries],
+    };
+  },
 });
 
 const readWebGlGpu = async (session) => evaluate(session, `
@@ -814,12 +833,23 @@ const installBenchmarkHooks = async (session) => {
     const dispatchPointer = (type) => {
       canvas.dispatchEvent(new PointerEvent(type, eventOptions(type)));
     };
+    const nextRaf = (timeoutMs) => new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(value);
+      };
+      const timeout = setTimeout(() => finish(null), timeoutMs);
+      requestAnimationFrame((time) => finish(time));
+    });
     dispatchPointer('pointerdown');
     try {
       for (let index = 0; index < requestedSampleCount; index += 1) {
         clientX += step;
         const drawPromise = nextObservedDraw(250);
-        const rafPromise = new Promise((resolve) => requestAnimationFrame((time) => resolve(time)));
+        const rafPromise = nextRaf(250);
         const eventAt = performance.now();
         dispatchPointer('pointermove');
         handlerDeltas.push(performance.now() - eventAt);
@@ -997,7 +1027,7 @@ const installBenchmarkHooks = async (session) => {
   });
 };
 
-const waitForBenchmarkReady = (session) => evaluate(session, `
+const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(session, `
 (async () => {
   const deadline = performance.now() + ${routeReadyTimeoutMs};
   const rafOrTimeout = (timeoutMs) => new Promise((resolve) => {
@@ -1021,7 +1051,7 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
       stableSince = performance.now();
     }
     if (document.readyState === 'complete' && canvas !== null && performance.now() - stableSince > 350) {
-      return await rafOrTimeout(1000) && await rafOrTimeout(1000);
+      return ${requireWindowRaf ? 'await rafOrTimeout(1000) && await rafOrTimeout(1000)' : 'true'};
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -1299,6 +1329,7 @@ const waitForXrActivation = (session, clicked) => evaluate(session, `
     const button = [...document.querySelectorAll('button')]
       .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
     const instrumented = globalThis.__royalBench?.xrSnapshot?.().active === true;
+    const status = control?.getAttribute('data-royal-xr-status');
     if (
       instrumented &&
       (control?.getAttribute('data-royal-xr-active') === 'true' || button?.textContent?.includes('Exit XR'))
@@ -1307,6 +1338,25 @@ const waitForXrActivation = (session, clicked) => evaluate(session, `
         active: true,
         clicked: ${clicked ? 'true' : 'false'},
         status: control?.getAttribute('data-royal-xr-status') ?? 'immersive',
+      };
+    }
+    if (typeof status === 'string' && /already an active, immersive XRSession/iu.test(status)) {
+      return {
+        active: false,
+        clicked: ${clicked ? 'true' : 'false'},
+        reason: 'immersive-session-already-active',
+        status,
+      };
+    }
+    if (
+      typeof status === 'string'
+      && !['idle', 'ready', 'starting', 'ending', 'immersive', 'unavailable'].includes(status)
+    ) {
+      return {
+        active: false,
+        clicked: ${clicked ? 'true' : 'false'},
+        reason: 'xr-status-error',
+        status,
       };
     }
     await sleep(25);
@@ -1347,10 +1397,18 @@ const prepareRouteForBenchmark = async (session, route) => {
         return { active: false, clicked: false, reason: 'enter-button-unavailable' };
       }
       await session.call('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: target.x,
+        y: target.y,
+        button: 'none',
+        buttons: 0,
+      });
+      await session.call('Input.dispatchMouseEvent', {
         type: 'mousePressed',
         x: target.x,
         y: target.y,
         button: 'left',
+        buttons: 1,
         clickCount: 1,
       });
       await session.call('Input.dispatchMouseEvent', {
@@ -1358,6 +1416,7 @@ const prepareRouteForBenchmark = async (session, route) => {
         x: target.x,
         y: target.y,
         button: 'left',
+        buttons: 0,
         clickCount: 1,
       });
       return await waitForXrActivation(session, true);
@@ -1413,15 +1472,45 @@ const prepareRouteForBenchmark = async (session, route) => {
   }
 };
 
-const benchmarkRoute = async (session, route) => {
+const benchmarkRoute = async (session, route, onSessionChanged) => {
   await session.call('Page.bringToFront');
   if (clearCachePerRoute) await session.call('Network.clearBrowserCache');
   const loaded = session.once('Page.loadEventFired');
   const start = performance.now();
-  await session.call('Page.navigate', { url: baseUrl + route.path });
+  const routeUrl = new URL(baseUrl + route.path);
+  routeUrl.searchParams.set('__royalBenchRun', `${Date.now()}-${Math.random()}`);
+  await session.call('Page.navigate', { url: routeUrl.href });
   await Promise.race([loaded, sleep(10_000)]);
-  const ready = await waitForBenchmarkReady(session);
+  const ready = await waitForBenchmarkReady(
+    session,
+    !(realXrEnabled && route.id === 'webxr-vr'),
+  );
+  if (realXrEnabled && route.id === 'webxr-vr') {
+    // Quest can ignore trusted Input commands on the CDP attachment that
+    // performed Page.navigate. Transfer sole debugger ownership after load so
+    // activation and measurement share one fresh attachment.
+    const closed = new Promise((resolve) => {
+      session.socket.addEventListener('close', resolve, { once: true });
+    });
+    session.close();
+    await Promise.race([closed, sleep(1_000)]);
+    session = await connectPage();
+    const diagnostics = captureBrowserDiagnostics(session);
+    await session.call('Page.enable');
+    await session.call('Runtime.enable');
+    await session.call('Log.enable');
+    await session.call('HeapProfiler.enable');
+    await session.call('Network.enable');
+    await session.call('Performance.enable');
+    await session.call('Page.bringToFront');
+    onSessionChanged(session, diagnostics);
+  }
   const prepared = await prepareRouteForBenchmark(session, route);
+  if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
+    throw new Error(
+      `Real XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
+    );
+  }
   const measured = await collectPageMetrics(session, frameSampleCount, {
     sampleXr: prepared?.active !== false,
     xrOnly: realXrEnabled && prepared?.active === true,
@@ -1787,6 +1876,10 @@ const main = async () => {
     await session.call('HeapProfiler.enable');
     await session.call('Network.enable');
     await session.call('Performance.enable');
+    const blankLoaded = session.once('Page.loadEventFired');
+    await session.call('Page.navigate', { url: 'about:blank' });
+    await Promise.race([blankLoaded, sleep(10_000)]);
+    browserDiagnostics.reset();
     await installBenchmarkHooks(session);
     const gpu = await readWebGlGpu(session);
     assertRequestedGpu(gpu);
@@ -1796,7 +1889,11 @@ const main = async () => {
     const results = [];
     for (const route of selectedRoutes()) {
       currentRoute = route;
-      const result = await benchmarkRoute(session, route);
+      browserDiagnostics.reset();
+      const result = await benchmarkRoute(session, route, (nextSession, nextDiagnostics) => {
+        session = nextSession;
+        browserDiagnostics = mergeBrowserDiagnostics(browserDiagnostics, nextDiagnostics);
+      });
       results.push(result);
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
       const retainedKb = result.heap.retainedGrowthBytes / 1024;

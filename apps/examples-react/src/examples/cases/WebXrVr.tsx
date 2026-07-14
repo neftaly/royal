@@ -79,31 +79,13 @@ type BrowserXrSessionInit = {
 
 type BrowserXrSessionMode = 'immersive-ar' | 'immersive-vr';
 
-type BrowserXrSessionOfferResult = BrowserXrSession | null | undefined;
-
 type BrowserXrSystem = {
   isSessionSupported(mode: BrowserXrSessionMode): Promise<boolean>;
-  offerSession?(
-    mode: BrowserXrSessionMode,
-    options?: BrowserXrSessionInit,
-  ): BrowserXrSessionOfferResult | Promise<BrowserXrSessionOfferResult>;
   requestSession(mode: BrowserXrSessionMode, options?: BrowserXrSessionInit): Promise<BrowserXrSession>;
 };
 
 type XrNavigator = Navigator & {
   readonly xr?: BrowserXrSystem;
-};
-
-type BrowserXrSessionOfferGlobal = typeof globalThis & {
-  __royalBrowserXrSessionOfferCache?: WeakMap<
-    object,
-    Promise<BrowserXrSessionOffer>
-  >;
-};
-
-type BrowserXrSessionOffer = {
-  readonly mode: BrowserXrSessionMode | null;
-  readonly session: BrowserXrSessionOfferResult;
 };
 
 const browserXrSessionOfferModes: readonly BrowserXrSessionMode[] = [
@@ -120,23 +102,6 @@ const xrStatusLabel = (status: XrSessionStatus, error: string | null): string =>
   if (status === 'active') return 'immersive';
   if (status === 'error') return error ?? 'error';
   return status;
-};
-
-const errorMessageFromUnknown = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-const isUnsupportedXrOfferError = (error: unknown): boolean =>
-  error instanceof DOMException &&
-  (error.name === 'NotSupportedError' || error.name === 'SecurityError');
-
-const getBrowserXrSessionOfferCache = (): WeakMap<
-  object,
-  Promise<BrowserXrSessionOffer>
-> => {
-  const globalScope = globalThis as BrowserXrSessionOfferGlobal;
-  globalScope.__royalBrowserXrSessionOfferCache ??= new WeakMap();
-
-  return globalScope.__royalBrowserXrSessionOfferCache;
 };
 
 const isBrowserXrSessionModeSupported = async (
@@ -160,29 +125,6 @@ const getPreferredBrowserXrSessionMode = async (
   return null;
 };
 
-const getBrowserXrSessionOffer = (
-  xr: BrowserXrSystem & Required<Pick<BrowserXrSystem, 'offerSession'>>,
-): Promise<BrowserXrSessionOffer> => {
-  const cache = getBrowserXrSessionOfferCache();
-  const cachedOffer = cache.get(xr);
-  if (cachedOffer !== undefined) return cachedOffer;
-
-  let offer: Promise<BrowserXrSessionOffer>;
-  try {
-    offer = getPreferredBrowserXrSessionMode(xr).then(async (mode) => {
-      if (mode === null) return { mode, session: null };
-
-      const session = await xr.offerSession(mode, immersiveSessionOptions);
-      return { mode, session };
-    });
-  } catch (error) {
-    offer = Promise.reject(error);
-  }
-  cache.set(xr, offer);
-
-  return offer;
-};
-
 const XrSessionControl = (): ReactNode => {
   const canvas = useCanvasElement();
   const root = useCanvasRoot();
@@ -197,8 +139,6 @@ const XrSessionControl = (): ReactNode => {
   const active = useXrSessionSelector(store, (state) => state.active);
   const available = useXrSessionSelector(store, (state) => state.available);
   const error = useXrSessionSelector(store, (state) => state.error);
-  const offerStatus = useXrSessionSelector(store, (state) => state.offerStatus);
-  const setOfferStatus = useXrSessionSelector(store, (state) => state.setOfferStatus);
   const status = useXrSessionSelector(store, (state) => state.status);
   const activateSession = useXrSessionSelector(store, (state) => state.activateSession);
   const beginSession = useXrSessionSelector(store, (state) => state.beginSession);
@@ -361,64 +301,6 @@ const XrSessionControl = (): ReactNode => {
     };
   }, [root, stopActiveSession]);
 
-  useEffect(() => {
-    const xr = (navigator as XrNavigator).xr;
-    if (!globalThis.isSecureContext || xr === undefined) {
-      setOfferStatus('unsupported');
-      return;
-    }
-    if (canvas === null || root === null) return;
-
-    const { offerStatus: currentOfferStatus } = store.getState();
-    if (currentOfferStatus !== 'idle') return;
-    if (typeof xr.offerSession !== 'function') {
-      setOfferStatus('unsupported');
-      return;
-    }
-
-    let cancelled = false;
-    setOfferStatus('pending');
-
-    void getBrowserXrSessionOffer(
-      xr as BrowserXrSystem & Required<Pick<BrowserXrSystem, 'offerSession'>>,
-    )
-      .then(async ({ mode, session }) => {
-        if (cancelled) return;
-        setAvailability(mode !== null, { mode });
-        if (mode === null) {
-          setOfferStatus('unsupported');
-          return;
-        }
-        if (session === null || session === undefined) {
-          setOfferStatus('offered');
-          return;
-        }
-
-        setOfferStatus('accepted');
-        beginSession();
-        try {
-          await startXrSession(session, mode);
-        } catch (error) {
-          if (cancelled) return;
-          setOfferStatus('error', errorMessageFromUnknown(error));
-          failSession(error);
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        if (isUnsupportedXrOfferError(error)) {
-          setOfferStatus('unsupported');
-          return;
-        }
-
-        setOfferStatus('error', errorMessageFromUnknown(error));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [beginSession, canvas, failSession, root, setAvailability, setOfferStatus, startXrSession, store]);
-
   const enterXr = useCallback(async () => {
     const xr = (navigator as XrNavigator).xr;
     if (xr === undefined || canvas === null || root === null) return;
@@ -455,7 +337,6 @@ const XrSessionControl = (): ReactNode => {
     {
       className: 'xr-session-control',
       'data-royal-xr-active': active ? 'true' : 'false',
-      'data-royal-xr-offer-status': offerStatus,
       'data-royal-xr-status': visibleStatus,
     },
     createElement(

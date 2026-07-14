@@ -6,6 +6,7 @@ import {
   loadGeneratedSvgVirtualTexturePageImage,
   loadSvgTextureFromUri,
   prepareSvgTextForImage,
+  supportsGeneratedSvgVirtualTexturePages,
   svgTextureViewport,
   svgVirtualTextureSourceForImage,
 } from "../packages/renderer-webgl/src/svg-texture";
@@ -176,9 +177,11 @@ describe("SVG texture reference lifecycle", () => {
       createPattern: ReturnType<typeof vi.fn>;
       fillRect: ReturnType<typeof vi.fn>;
       fillStyle: unknown;
+      getImageData: ReturnType<typeof vi.fn>;
       imageSmoothingEnabled: boolean;
       imageSmoothingQuality: ImageSmoothingQuality;
     }> = [];
+    const pageImages: TexImageSource[] = [];
     vi.stubGlobal("Image", AutoLoadingImage);
     vi.stubGlobal("URL", TestUrl);
     vi.stubGlobal("document", {
@@ -191,6 +194,11 @@ describe("SVG texture reference lifecycle", () => {
           }),
           fillRect: vi.fn(),
           fillStyle: "#000",
+          getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
+            data: new Uint8ClampedArray(0),
+            height,
+            width,
+          }) as ImageData),
           imageSmoothingEnabled: false,
           imageSmoothingQuality: "low" as ImageSmoothingQuality,
         };
@@ -212,6 +220,7 @@ describe("SVG texture reference lifecycle", () => {
     const loaded = await loadSvgTextureFromUri("https://assets.test/large.svg");
     const source = svgVirtualTextureSourceForImage(loaded.image);
     expect(source).toBeDefined();
+    expect((loaded.image as unknown as AutoLoadingImage).crossOrigin).toBeNull();
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(TestUrl.revokeObjectURL).toHaveBeenCalledWith("blob:royal-svg-1");
 
@@ -230,13 +239,14 @@ describe("SVG texture reference lifecycle", () => {
         y: (seed >>> 16) % pagesHigh,
       };
       requestedPages.push(page);
-      await loadGeneratedSvgVirtualTexturePageImage(source!, manifest, page);
+      pageImages.push(await loadGeneratedSvgVirtualTexturePageImage(source!, manifest, page));
     }
 
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(objectUrlBlobs).toHaveLength(1);
     expect(contexts).toHaveLength(32);
     expect(patterns).toHaveLength(32);
+    expect(pageImages).toHaveLength(32);
     const storedPageSize = virtualTextureStoredPageSize(manifest);
     for (const [index, pattern] of patterns.entries()) {
       expect(pattern).toEqual(expect.objectContaining({
@@ -259,6 +269,16 @@ describe("SVG texture reference lifecycle", () => {
         storedPageSize,
         storedPageSize,
       );
+      expect(contexts[index]?.getImageData).toHaveBeenCalledWith(
+        0,
+        0,
+        storedPageSize,
+        storedPageSize,
+      );
+      expect(pageImages[index]).toEqual(expect.objectContaining({
+        height: storedPageSize,
+        width: storedPageSize,
+      }));
       expect(contexts[index]?.fillStyle).toBe(pattern);
       expect(canvases[index]).toEqual(expect.objectContaining({
         height: storedPageSize,
@@ -267,6 +287,50 @@ describe("SVG texture reference lifecycle", () => {
     }
     expect(contexts.every((context) => context.imageSmoothingEnabled)).toBe(true);
     expect(contexts.every((context) => context.imageSmoothingQuality === "high")).toBe(true);
+  });
+
+  it("rejects origin-unclean SVG pages before they reach the WebGL upload queue", async () => {
+    class TestUrl extends URL {
+      static createObjectURL = vi.fn(() => "blob:royal-svg-security");
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("Image", AutoLoadingImage);
+    vi.stubGlobal("URL", TestUrl);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => {
+        const pattern = { setTransform: vi.fn() };
+        return {
+          getContext: vi.fn(() => ({
+            createPattern: vi.fn(() => pattern),
+            fillRect: vi.fn(),
+            fillStyle: "#000",
+            getImageData: vi.fn(() => {
+              const error = new Error("The operation is insecure");
+              error.name = "SecurityError";
+              throw error;
+            }),
+            imageSmoothingEnabled: false,
+            imageSmoothingQuality: "low",
+          })),
+          height: 0,
+          width: 0,
+        };
+      }),
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => textResponse(
+      "https://assets.test/security.svg",
+      '<svg width="512" height="512"/>',
+    )));
+
+    const loaded = await loadSvgTextureFromUri("https://assets.test/security.svg");
+    const source = svgVirtualTextureSourceForImage(loaded.image)!;
+    const manifest = generatedSvgVirtualTextureManifest(source);
+
+    await expect(loadGeneratedSvgVirtualTexturePageImage(
+      source,
+      manifest,
+      { mip: 0, x: 0, y: 0 },
+    )).rejects.toThrow(/could not produce origin-clean pixels: The operation is insecure/u);
   });
 
   it("does not allocate a page canvas when source generation is aborted before its microtask", async () => {
@@ -296,6 +360,23 @@ describe("SVG texture reference lifecycle", () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(createElement).not.toHaveBeenCalled();
+  });
+});
+
+describe("generated SVG browser capability", () => {
+  it("keeps Apple WebKit on its origin-clean ordinary SVG upload path", () => {
+    expect(supportsGeneratedSvgVirtualTexturePages(
+      "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
+    )).toBe(false);
+    expect(supportsGeneratedSvgVirtualTexturePages(
+      "Mozilla/5.0 AppleWebKit/605.1.15 CriOS/126.0 Mobile/15E148 Safari/604.1",
+    )).toBe(false);
+    expect(supportsGeneratedSvgVirtualTexturePages(
+      "Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
+    )).toBe(true);
+    expect(supportsGeneratedSvgVirtualTexturePages(
+      "Mozilla/5.0 Gecko/20100101 Firefox/128.0",
+    )).toBe(true);
   });
 });
 

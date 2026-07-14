@@ -1,0 +1,876 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "receivedAt": "2026-07-14T06:20:35.970Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 500.5,
+        "cssWidth": 726,
+        "height": 1001,
+        "width": 1452
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-ghostscript-tiger-svg",
+      "path": "/gltf-ghostscript-tiger-svg",
+      "sourceFile": "examples/cases/GltfGhostscriptTigerSvg.tsx",
+      "title": "glTF Ghostscript Tiger SVG"
+    },
+    "frameStats": {
+      "averageMs": 16.458333333333325,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 1,
+      "maxMs": 21,
+      "minMs": 11.999999999999773,
+      "p50Ms": 17,
+      "p95Ms": 18,
+      "p99Ms": 18,
+      "requestedSampleCount": 24,
+      "sampleCount": 24,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 45000
+    },
+    "generatedAt": "2026-07-14T06:20:35.959Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 0,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 0,
+        "drawElements": 0,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "nonInstancedDrawCalls": 0,
+        "stateChanges": 0,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 0,
+        "uniformMatrixCalls": 0,
+        "useProgram": 0
+      },
+      "setup": {
+        "bindBuffer": 24,
+        "bindTexture": 2,
+        "bindVertexArray": 12,
+        "bufferDataBytes": 2420,
+        "bufferDataCalls": 4,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 2,
+        "drawElements": 2,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "nonInstancedDrawCalls": 2,
+        "stateChanges": 40,
+        "texImage2D": 1,
+        "texSubImage2D": 0,
+        "uniformCalls": 67,
+        "uniformMatrixCalls": 8,
+        "useProgram": 2
+      }
+    },
+    "options": {
+      "autorun": true,
+      "frames": 24,
+      "timeoutMs": 45000,
+      "warmupFrames": 8
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 258,
+        "duration": 258,
+        "loadEventEnd": 258,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 13,
+        "totalDecodedBodySize": 815736,
+        "totalEncodedBodySize": 245388,
+        "totalTransferSize": 249288
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 6,
+        "gltfInstancing": {
+          "batchInstancesTotal": 4,
+          "batchPlansBuilt": 2,
+          "drawCalls": 0,
+          "instancesDrawn": 0,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 0,
+          "rootPoseUploadCalls": 0,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageFailures": 0,
+              "imageLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "buffers": 22,
+                "document": 52,
+                "draco": 0,
+                "firstImageComplete": 99,
+                "imagesComplete": 99,
+                "meshopt": 0,
+                "scene": 7,
+                "toSceneReady": 81
+              },
+              "primitiveCount": 1,
+              "sourceUri": "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 1
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": {
+          "compileNodeVisits": 1,
+          "planCompiles": 1,
+          "planRevision": 1,
+          "sceneCommits": 1
+        },
+        "resourceGovernor": {
+          "admissions": 9,
+          "borrowAdmissions": 0,
+          "byClass": {
+            "geometry": {
+              "cpuDecodedBytes": 2420,
+              "jobs": 0,
+              "persistentGpuBytes": 2420,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 4194304,
+              "jobs": 0,
+              "persistentGpuBytes": 5592404,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            }
+          },
+          "denials": 0,
+          "denialsByReason": {
+            "cpu-decoded-capacity": 0,
+            "cpu-decoded-hard-limit": 0,
+            "cpu-decoded-mandatory-floor": 0,
+            "job-capacity": 0,
+            "persistent-gpu-capacity": 0,
+            "persistent-gpu-hard-limit": 0,
+            "persistent-gpu-mandatory-floor": 0,
+            "transient-peak-capacity": 0,
+            "upload-capacity": 0
+          },
+          "frame": 6,
+          "highWater": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 1,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 2792,
+            "uploadBytes": 4194304
+          },
+          "limits": {
+            "cpuDecodedBytes": 536870912,
+            "jobs": 8,
+            "persistentGpuBytes": 536870912,
+            "transientPeakBytes": 201326592,
+            "uploadBytes": 16777216
+          },
+          "maximumDurableBytesByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 444596224,
+              "persistentGpuBytes": 385875968
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 452984832,
+              "persistentGpuBytes": 385875968
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 419430400
+            },
+            "render-target": {
+              "cpuDecodedBytes": 427819008,
+              "persistentGpuBytes": 402653184
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 352321536
+            }
+          },
+          "outstandingLeases": 4,
+          "outstandingReservations": 0,
+          "softExcessByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            }
+          },
+          "total": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 0,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 0,
+            "uploadBytes": 0
+          }
+        },
+        "resourceLifetime": {
+          "assetPlanCompiles": 1,
+          "preparedAssetAcquires": 1,
+          "preparedAssetEvents": 1,
+          "preparedAssetReleases": 0,
+          "preparedAssetUpdates": 2,
+          "sceneLeaseAcquires": 1,
+          "sceneLeaseReleases": 0,
+          "gltfPreparationQueueHighWater": 0,
+          "imageQueueHighWater": 0,
+          "iblImageQueueHighWater": 0
+        },
+        "virtualTexturing": {
+          "activePages": 0,
+          "cachedPages": 0,
+          "atlasTextures": 0,
+          "demandAdmissions": 0,
+          "publishedDemandPages": 0,
+          "demandRetentionOverflows": 0,
+          "demandRetentions": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "gpuAdmissionFailures": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "pageLoadFailures": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pageLifecycleEntries": 0,
+          "pendingPages": 0,
+          "physicalAllocatedBytes": 0,
+          "physicalBudgetBytes": 419430400,
+          "physicalQuarantinedBytes": 0,
+          "preparedResidencyResolutions": 0,
+          "outstandingPageRequests": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0,
+          "textureUploadBytesPerChunkMax": 0,
+          "textureUploadBytesPerChunkMin": 0,
+          "textureUploadChunkSamples": 0,
+          "uploadQueueWaitAverageMs": 0,
+          "uploadQueueWaitMaxMs": 0,
+          "uploadQueueWaitSamples": 0
+        }
+      },
+      "beforeFrames": {
+        "frame": 6,
+        "gltfInstancing": {
+          "batchInstancesTotal": 4,
+          "batchPlansBuilt": 2,
+          "drawCalls": 0,
+          "instancesDrawn": 0,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 0,
+          "rootPoseUploadCalls": 0,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageFailures": 0,
+              "imageLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "buffers": 22,
+                "document": 52,
+                "draco": 0,
+                "firstImageComplete": 99,
+                "imagesComplete": 99,
+                "meshopt": 0,
+                "scene": 7,
+                "toSceneReady": 81
+              },
+              "primitiveCount": 1,
+              "sourceUri": "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 1
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": {
+          "compileNodeVisits": 1,
+          "planCompiles": 1,
+          "planRevision": 1,
+          "sceneCommits": 1
+        },
+        "resourceGovernor": {
+          "admissions": 9,
+          "borrowAdmissions": 0,
+          "byClass": {
+            "geometry": {
+              "cpuDecodedBytes": 2420,
+              "jobs": 0,
+              "persistentGpuBytes": 2420,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 4194304,
+              "jobs": 0,
+              "persistentGpuBytes": 5592404,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            }
+          },
+          "denials": 0,
+          "denialsByReason": {
+            "cpu-decoded-capacity": 0,
+            "cpu-decoded-hard-limit": 0,
+            "cpu-decoded-mandatory-floor": 0,
+            "job-capacity": 0,
+            "persistent-gpu-capacity": 0,
+            "persistent-gpu-hard-limit": 0,
+            "persistent-gpu-mandatory-floor": 0,
+            "transient-peak-capacity": 0,
+            "upload-capacity": 0
+          },
+          "frame": 6,
+          "highWater": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 1,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 2792,
+            "uploadBytes": 4194304
+          },
+          "limits": {
+            "cpuDecodedBytes": 536870912,
+            "jobs": 8,
+            "persistentGpuBytes": 536870912,
+            "transientPeakBytes": 201326592,
+            "uploadBytes": 16777216
+          },
+          "maximumDurableBytesByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 444596224,
+              "persistentGpuBytes": 385875968
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 452984832,
+              "persistentGpuBytes": 385875968
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 419430400
+            },
+            "render-target": {
+              "cpuDecodedBytes": 427819008,
+              "persistentGpuBytes": 402653184
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 352321536
+            }
+          },
+          "outstandingLeases": 4,
+          "outstandingReservations": 0,
+          "softExcessByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            }
+          },
+          "total": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 0,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 0,
+            "uploadBytes": 0
+          }
+        },
+        "resourceLifetime": {
+          "assetPlanCompiles": 1,
+          "preparedAssetAcquires": 1,
+          "preparedAssetEvents": 1,
+          "preparedAssetReleases": 0,
+          "preparedAssetUpdates": 2,
+          "sceneLeaseAcquires": 1,
+          "sceneLeaseReleases": 0,
+          "gltfPreparationQueueHighWater": 0,
+          "imageQueueHighWater": 0,
+          "iblImageQueueHighWater": 0
+        },
+        "virtualTexturing": {
+          "activePages": 0,
+          "cachedPages": 0,
+          "atlasTextures": 0,
+          "demandAdmissions": 0,
+          "publishedDemandPages": 0,
+          "demandRetentionOverflows": 0,
+          "demandRetentions": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "gpuAdmissionFailures": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "pageLoadFailures": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pageLifecycleEntries": 0,
+          "pendingPages": 0,
+          "physicalAllocatedBytes": 0,
+          "physicalBudgetBytes": 419430400,
+          "physicalQuarantinedBytes": 0,
+          "preparedResidencyResolutions": 0,
+          "outstandingPageRequests": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0,
+          "textureUploadBytesPerChunkMax": 0,
+          "textureUploadBytesPerChunkMin": 0,
+          "textureUploadChunkSamples": 0,
+          "uploadQueueWaitAverageMs": 0,
+          "uploadQueueWaitMaxMs": 0,
+          "uploadQueueWaitSamples": 0
+        }
+      },
+      "delta": {
+        "frame": 0,
+        "gltfInstancing": {
+          "batchInstancesTotal": 0,
+          "batchPlansBuilt": 0,
+          "drawCalls": 0,
+          "instancesDrawn": 0,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 0,
+          "rootPoseUploadCalls": 0,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "resourceGovernor": null,
+        "virtualTexturing": {
+          "activePages": 0,
+          "cachedPages": 0,
+          "atlasTextures": 0,
+          "demandAdmissions": 0,
+          "publishedDemandPages": 0,
+          "demandRetentionOverflows": 0,
+          "demandRetentions": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "gpuAdmissionFailures": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "pageLoadFailures": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pageLifecycleEntries": 0,
+          "pendingPages": 0,
+          "physicalAllocatedBytes": 0,
+          "physicalBudgetBytes": 0,
+          "physicalQuarantinedBytes": 0,
+          "preparedResidencyResolutions": 0,
+          "outstandingPageRequests": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0,
+          "textureUploadBytesPerChunkMax": 0,
+          "textureUploadBytesPerChunkMin": 0,
+          "textureUploadChunkSamples": 0,
+          "uploadQueueWaitAverageMs": 0,
+          "uploadQueueWaitMaxMs": 0,
+          "uploadQueueWaitSamples": 0
+        }
+      },
+      "setup": {
+        "frame": 6,
+        "gltfInstancing": {
+          "batchInstancesTotal": 4,
+          "batchPlansBuilt": 2,
+          "drawCalls": 0,
+          "instancesDrawn": 0,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 0,
+          "rootPoseUploadCalls": 0,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageFailures": 0,
+              "imageLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "buffers": 22,
+                "document": 52,
+                "draco": 0,
+                "firstImageComplete": 99,
+                "imagesComplete": 99,
+                "meshopt": 0,
+                "scene": 7,
+                "toSceneReady": 81
+              },
+              "primitiveCount": 1,
+              "sourceUri": "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 1
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": {
+          "compileNodeVisits": 1,
+          "planCompiles": 1,
+          "planRevision": 1,
+          "sceneCommits": 1
+        },
+        "resourceGovernor": {
+          "admissions": 9,
+          "borrowAdmissions": 0,
+          "byClass": {
+            "geometry": {
+              "cpuDecodedBytes": 2420,
+              "jobs": 0,
+              "persistentGpuBytes": 2420,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 4194304,
+              "jobs": 0,
+              "persistentGpuBytes": 5592404,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "jobs": 0,
+              "persistentGpuBytes": 0,
+              "transientPeakBytes": 0,
+              "uploadBytes": 0
+            }
+          },
+          "denials": 0,
+          "denialsByReason": {
+            "cpu-decoded-capacity": 0,
+            "cpu-decoded-hard-limit": 0,
+            "cpu-decoded-mandatory-floor": 0,
+            "job-capacity": 0,
+            "persistent-gpu-capacity": 0,
+            "persistent-gpu-hard-limit": 0,
+            "persistent-gpu-mandatory-floor": 0,
+            "transient-peak-capacity": 0,
+            "upload-capacity": 0
+          },
+          "frame": 6,
+          "highWater": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 1,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 2792,
+            "uploadBytes": 4194304
+          },
+          "limits": {
+            "cpuDecodedBytes": 536870912,
+            "jobs": 8,
+            "persistentGpuBytes": 536870912,
+            "transientPeakBytes": 201326592,
+            "uploadBytes": 16777216
+          },
+          "maximumDurableBytesByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 444596224,
+              "persistentGpuBytes": 385875968
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 452984832,
+              "persistentGpuBytes": 385875968
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 419430400
+            },
+            "render-target": {
+              "cpuDecodedBytes": 427819008,
+              "persistentGpuBytes": 402653184
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 461373440,
+              "persistentGpuBytes": 352321536
+            }
+          },
+          "outstandingLeases": 4,
+          "outstandingReservations": 0,
+          "softExcessByClass": {
+            "geometry": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "ordinary-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "virtual-texture": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "render-target": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            },
+            "asset-decode": {
+              "cpuDecodedBytes": 0,
+              "persistentGpuBytes": 0
+            }
+          },
+          "total": {
+            "cpuDecodedBytes": 4196724,
+            "jobs": 0,
+            "persistentGpuBytes": 5594824,
+            "transientPeakBytes": 0,
+            "uploadBytes": 0
+          }
+        },
+        "resourceLifetime": {
+          "assetPlanCompiles": 1,
+          "preparedAssetAcquires": 1,
+          "preparedAssetEvents": 1,
+          "preparedAssetReleases": 0,
+          "preparedAssetUpdates": 2,
+          "sceneLeaseAcquires": 1,
+          "sceneLeaseReleases": 0,
+          "gltfPreparationQueueHighWater": 0,
+          "imageQueueHighWater": 0,
+          "iblImageQueueHighWater": 0
+        },
+        "virtualTexturing": {
+          "activePages": 0,
+          "cachedPages": 0,
+          "atlasTextures": 0,
+          "demandAdmissions": 0,
+          "publishedDemandPages": 0,
+          "demandRetentionOverflows": 0,
+          "demandRetentions": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "gpuAdmissionFailures": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "pageLoadFailures": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pageLifecycleEntries": 0,
+          "pendingPages": 0,
+          "physicalAllocatedBytes": 0,
+          "physicalBudgetBytes": 419430400,
+          "physicalQuarantinedBytes": 0,
+          "preparedResidencyResolutions": 0,
+          "outstandingPageRequests": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0,
+          "textureUploadBytesPerChunkMax": 0,
+          "textureUploadBytesPerChunkMin": 0,
+          "textureUploadChunkSamples": 0,
+          "uploadQueueWaitAverageMs": 0,
+          "uploadQueueWaitMaxMs": 0,
+          "uploadQueueWaitSamples": 0
+        }
+      }
+    },
+    "url": "http://192.168.1.77:4673/gltf-ghostscript-tiger-svg?bench=auto&frames=24&warmup=8&timeoutMs=45000&run=1784010034244",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 1115
+  }
+}
