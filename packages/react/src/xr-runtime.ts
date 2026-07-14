@@ -29,8 +29,40 @@ type XrSessionRendererFactory<Session extends XrSession> = (
   options?: XrSessionRendererOptions,
 ) => Promise<XrSessionRenderer>;
 
-const sessionVisibilityState = (session: XrSession) =>
-  session.visibilityState ?? "visible";
+const XR_MODES: readonly XrSessionMode[] = ["immersive-ar", "immersive-vr", "inline"];
+const XR_VISIBILITY_STATES = ["hidden", "visible", "visible-blurred"] as const;
+
+const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError("XR session runtime options must be an object");
+  }
+  for (const name of Object.keys(options)) {
+    if (name !== "mode" && name !== "rendererOptions") {
+      throw new TypeError(`XR session runtime options contain unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+  if (!XR_MODES.includes(options.mode)) {
+    throw new TypeError("XR session runtime mode must be immersive-ar, immersive-vr, or inline");
+  }
+  if (
+    options.rendererOptions !== undefined
+    && (
+      typeof options.rendererOptions !== "object"
+      || options.rendererOptions === null
+      || Array.isArray(options.rendererOptions)
+    )
+  ) {
+    throw new TypeError("XR session runtime rendererOptions must be an object");
+  }
+};
+
+const sessionVisibilityState = (session: XrSession) => {
+  const visibilityState = session.visibilityState ?? "visible";
+  if (!XR_VISIBILITY_STATES.includes(visibilityState)) {
+    throw new TypeError("XR session visibilityState must be hidden, visible, or visible-blurred");
+  }
+  return visibilityState;
+};
 
 const rootLifecycleError = (
   snapshot: RoyalRendererRootLifecycleSnapshot,
@@ -48,6 +80,11 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
   options: XrSessionRuntimeOptions,
   createRenderer: XrSessionRendererFactory<Session>,
 ): Promise<XrSessionRuntime<Session>> => {
+  validateRuntimeOptions(options);
+  if (typeof createRenderer !== "function") {
+    throw new TypeError("XR session runtime createRenderer must be a function");
+  }
+  const initialVisibilityState = sessionVisibilityState(session);
   if (root.disposed) {
     throw new Error("Cannot start an XR session on a disposed Royal renderer root");
   }
@@ -177,7 +214,7 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
   session.addEventListener("visibilitychange", onVisibilityChange);
   store.getState().activateSession(session, {
     mode: options.mode,
-    visibilityState: sessionVisibilityState(session),
+    visibilityState: initialVisibilityState,
   });
   unobserveRoot = root.observeLifecycle(onRootLifecycle);
   if (disposed) unobserveRoot();

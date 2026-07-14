@@ -97,6 +97,39 @@ const createObservedRoot = () => {
 };
 
 describe("React XR session runtime", () => {
+  it("rejects malformed startup inputs before taking session ownership", async () => {
+    const { root } = createObservedRoot();
+    const session = createTestSession();
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+    const createRenderer = vi.fn(async () => createTestRenderer());
+
+    await expect(createXrSessionRuntimeWithRenderer(
+      root,
+      store,
+      session,
+      {} as never,
+      createRenderer,
+    )).rejects.toThrow("XR session runtime mode must be immersive-ar, immersive-vr, or inline");
+    await expect(createXrSessionRuntimeWithRenderer(
+      root,
+      store,
+      session,
+      { mode: "immersive-vr", renderOptions: {} } as never,
+      createRenderer,
+    )).rejects.toThrow(/unsupported option.*renderOptions/i);
+    await expect(createXrSessionRuntimeWithRenderer(
+      root,
+      store,
+      session,
+      { mode: "immersive-vr" },
+      null as never,
+    )).rejects.toThrow("XR session runtime createRenderer must be a function");
+
+    expect(createRenderer).not.toHaveBeenCalled();
+    expect(session.end).not.toHaveBeenCalled();
+    expect(store.getState()).toMatchObject({ session: null, status: "available" });
+  });
+
   it("owns frames, visibility, browser end, and exactly-once cleanup", async () => {
     const { root, unobserve } = createObservedRoot();
     const session = createTestSession();
