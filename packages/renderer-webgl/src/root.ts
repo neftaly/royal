@@ -16,11 +16,10 @@ import {
   type RenderNode,
   type RenderRoot,
 } from "@royal/renderer-core";
-import { abortError } from "./gltf/io";
+import { loadHtmlImage } from "./browser-image-loader";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
-  closeDecodedTextureSource,
   DecodedTextureSourceLifetime,
 } from "./decoded-texture-source-lifetime";
 import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
@@ -271,56 +270,6 @@ const sceneToneMappingState = (
     : 1 / (1.2 * 2 ** scene.exposureEv100),
   hdrOutput: false,
   toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
-});
-
-const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-  const ImageConstructor = globalThis.Image;
-  if (ImageConstructor === undefined) {
-    reject(new Error(`Image loading is unavailable for texture ${src}`));
-    return;
-  }
-
-  const image = new ImageConstructor();
-  image.crossOrigin = "anonymous";
-
-  const cleanup = (): void => {
-    image.removeEventListener("load", onLoad);
-    image.removeEventListener("error", onError);
-    signal?.removeEventListener("abort", onAbort);
-  };
-  const onAbort = (): void => {
-    cleanup();
-    image.src = "";
-    closeDecodedTextureSource(image);
-    reject(abortError());
-  };
-  const onLoad = (): void => {
-    image.decode().then(() => {
-      cleanup();
-      resolve(image);
-    }, (error: unknown) => {
-      cleanup();
-      reject(error);
-    });
-  };
-  const onError = (event: Event): void => {
-    cleanup();
-    const message = "message" in event && typeof event.message === "string"
-      ? event.message
-      : `Image load failed for ${src}`;
-    reject(new Error(message));
-  };
-
-  image.addEventListener("load", onLoad);
-  image.addEventListener("error", onError);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  if (signal?.aborted === true) {
-    onAbort();
-    return;
-  }
-  image.src = src;
-
-  if (image.complete) onLoad();
 });
 
 const getNodeKind = (node: RenderNode): string =>
@@ -673,7 +622,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }),
         loadSource: (request, signal) => isSvgUri(request.uri)
           ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
-          : loadImage(request.uri, signal),
+          : loadHtmlImage(request.uri, { signal }),
         registerAutoVirtualTextureDecodedSource: (texture, source) => {
           this.#virtualTextureRuntime.registerAutoDecodedSource(texture, source);
         },
@@ -736,7 +685,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         automaticVirtualTextures: this.#options.automaticVirtualTextures,
         gpu: this.#virtualTextureGpu,
         invalidate: () => this.invalidate(),
-        loadImageSource: (uri, signal) => loadImage(uri, signal),
+        loadImageSource: (uri, signal) => loadHtmlImage(uri, { signal }),
         maximumDecodedCpuBytes: this.#maximumResourceClassCpuBytes("virtual-texture"),
         resourceGovernor: this.#resourceGovernor,
       });

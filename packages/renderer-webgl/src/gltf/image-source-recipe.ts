@@ -1,4 +1,5 @@
 import type { TextureContentKey } from "@royal/renderer-core";
+import { loadHtmlImage } from "../browser-image-loader";
 import { closeDecodedTextureSource } from "../decoded-texture-source-lifetime";
 import {
   loadSvgTextureFromBytes,
@@ -175,53 +176,6 @@ export const gltfImageSourceRecipeBytes = (recipes: readonly GltfImageSourceReci
   return bytes;
 };
 
-const loadHtmlImage = (uri: string, signal: AbortSignal): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const ImageConstructor = globalThis.Image;
-    if (ImageConstructor === undefined) {
-      reject(new Error(`Image loading is unavailable for texture ${uri}`));
-      return;
-    }
-    const image = new ImageConstructor();
-    image.crossOrigin = "anonymous";
-    let settled = false;
-    const cleanup = (): void => {
-      image.removeEventListener("load", onLoad);
-      image.removeEventListener("error", onError);
-      signal.removeEventListener("abort", onAbort);
-    };
-    const settle = (action: () => void): void => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      action();
-    };
-    const onAbort = (): void => settle(() => {
-      image.src = "";
-      closeDecodedTextureSource(image);
-      reject(abortError());
-    });
-    const onLoad = (): void => {
-      image.decode().then(
-        () => settle(() => resolve(image)),
-        (error: unknown) => settle(() => reject(error)),
-      );
-    };
-    const onError = (event: Event): void => settle(() => reject(new Error(
-      "message" in event && typeof event.message === "string"
-        ? event.message
-        : `Image load failed for ${uri}`,
-    )));
-    image.addEventListener("load", onLoad);
-    image.addEventListener("error", onError);
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (signal.aborted) onAbort();
-    else {
-      image.src = uri;
-      if (image.complete) onLoad();
-    }
-  });
-
 const loadBitmap = (bytes: ArrayBuffer, mimeType: string | undefined, signal: AbortSignal): Promise<ImageBitmap> => {
   const createBitmap = globalThis.createImageBitmap;
   if (typeof createBitmap !== "function") {
@@ -252,7 +206,7 @@ export const loadGltfImageSourceRecipe = async (
 ): Promise<LoadedGltfImageSource> => {
   const source = recipe.source;
   switch (source.kind) {
-    case "html-image": return { image: await loadHtmlImage(source.uri, signal) };
+    case "html-image": return { image: await loadHtmlImage(source.uri, { signal }) };
     case "bitmap-bytes": return {
       contentKey: source.contentKey,
       image: await loadBitmap(source.bytes, source.mimeType, signal),

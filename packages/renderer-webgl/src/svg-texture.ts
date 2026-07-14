@@ -1,4 +1,5 @@
 import type { LoadedTextureSource } from "./texture-sources";
+import { loadHtmlImage } from "./browser-image-loader";
 import { rasterizeGeneratedVirtualTexturePageImageData } from "./virtual-texture-page-rasterizer";
 import {
   abortError,
@@ -274,64 +275,6 @@ export const prepareSvgTextForImage = async (
   label: string,
 ): Promise<string> => svgTextWithFiniteImageDimensions(svgText, label);
 
-const loadImage = (
-  src: string,
-  signal?: AbortSignal,
-  applyCors = true,
-): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-  const ImageConstructor = globalThis.Image;
-  if (ImageConstructor === undefined) {
-    reject(new Error(`Image loading is unavailable for texture ${src}`));
-    return;
-  }
-
-  const image = new ImageConstructor();
-  if (applyCors) image.crossOrigin = "anonymous";
-  let settled = false;
-
-  const cleanup = (): void => {
-    image.removeEventListener("load", onLoad);
-    image.removeEventListener("error", onError);
-    signal?.removeEventListener("abort", onAbort);
-  };
-  const settle = (complete: () => void): void => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    complete();
-  };
-  const onAbort = (): void => {
-    settle(() => {
-      image.src = "";
-      reject(abortError());
-    });
-  };
-  const onLoad = (): void => {
-    image.decode().then(() => {
-      settle(() => resolve(image));
-    }, (error: unknown) => {
-      settle(() => reject(error));
-    });
-  };
-  const onError = (event: Event): void => {
-    const message = "message" in event && typeof event.message === "string"
-      ? event.message
-      : `Image load failed for ${src}`;
-    settle(() => reject(new Error(message)));
-  };
-
-  image.addEventListener("load", onLoad);
-  image.addEventListener("error", onError);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  if (signal?.aborted === true) {
-    onAbort();
-    return;
-  }
-  image.src = src;
-
-  if (image.complete) onLoad();
-});
-
 const loadImageFromBlob = async (
   blob: Blob,
   label: string,
@@ -348,7 +291,7 @@ const loadImageFromBlob = async (
   try {
     // This URL is renderer-created and same-origin by construction, so CORS
     // mode is unnecessary and would add another browser provenance variable.
-    return await loadImage(url, signal, false);
+    return await loadHtmlImage(url, { applyCors: false, signal });
   } finally {
     globalThis.URL.revokeObjectURL(url);
   }
