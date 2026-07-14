@@ -9,6 +9,7 @@ import {
   type XrSessionBlockReason,
   type XrSessionEndOptions,
   type XrSessionFailureOptions,
+  type XrSessionMode,
   type XrSessionStoreInitialState,
   type XrSessionStatus,
   useXrSessionSnapshot,
@@ -57,6 +58,37 @@ describe("React XR session store", () => {
     expect(() => store.getState().setAvailability(true)).toThrow(failure);
     expect(healthy).toHaveBeenCalledOnce();
     expect(store.getState()).toMatchObject({ available: true, status: "available" });
+  });
+
+  it("rejects malformed semantic action payloads before committing state", () => {
+    const store = createXrSessionStore<TestXrSession>();
+    const initial = store.getState();
+
+    expect(() => store.getState().setAvailability(
+      "yes" as unknown as boolean,
+    )).toThrow("XR setAvailability available must be a boolean");
+    expect(() => store.getState().beginSession(
+      { id: "bad-options" },
+      { sessionMode: "immersive-vr" } as unknown as XrSessionBeginOptions,
+    )).toThrow(/beginSession options.*unsupported field.*sessionMode/i);
+    expect(() => store.getState().activateSession(
+      { id: "bad-mode" },
+      { mode: "immersive-xr" as unknown as XrSessionMode },
+    )).toThrow(/activateSession options mode must be/i);
+    expect(() => store.getState().blockSession(
+      "busy" as unknown as XrSessionBlockReason,
+    )).toThrow(/blockSession reason must be/i);
+    expect(() => store.getState().recordFrame({
+      frameIndex: -1,
+    })).toThrow("XR recordFrame frameIndex must be a non-negative safe integer");
+    expect(() => store.getState().recordFrame({
+      viewports: [{ height: -1, width: 10, x: 0, y: 0 }],
+    })).toThrow("XR recordFrame viewports[0].height must be a non-negative safe integer");
+    expect(() => store.getState().setSessionVisibility(
+      "foreground" as never,
+    )).toThrow(/setSessionVisibility visibilityState must be/i);
+
+    expect(store.getState()).toBe(initial);
   });
 
   it("derives a consistent acquisition status from initial availability", () => {
