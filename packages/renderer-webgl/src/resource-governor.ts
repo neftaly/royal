@@ -306,11 +306,6 @@ export interface ResourceGovernorSnapshot {
     readonly resourceClass: ResourceGovernorClass;
   };
   readonly limits: ResourceGovernorUsage;
-  /** Effective hard durable ceilings after root capacity and protected floors. */
-  readonly maximumDurableBytesByClass: Readonly<Record<ResourceGovernorClass, {
-    readonly cpuDecodedBytes: number;
-    readonly persistentGpuBytes: number;
-  }>>;
   readonly outstandingLeases: number;
   readonly outstandingReservations: number;
   readonly total: ResourceGovernorUsage;
@@ -715,21 +710,6 @@ export const resourceGovernorSnapshot = (governor: ResourceGovernor): ResourceGo
     highWater: { ...state.highWater },
     ...(state.lastDenial === undefined ? {} : { lastDenial: { ...state.lastDenial } }),
     limits: { ...state.policy.limits },
-    maximumDurableBytesByClass: Object.fromEntries(RESOURCE_GOVERNOR_CLASSES.map((resourceClass) => [
-      resourceClass,
-      {
-        cpuDecodedBytes: maximumResourceGovernorClassDurableBytes(
-          state.policy,
-          resourceClass,
-          "cpuDecodedBytes",
-        ),
-        persistentGpuBytes: maximumResourceGovernorClassDurableBytes(
-          state.policy,
-          resourceClass,
-          "persistentGpuBytes",
-        ),
-      },
-    ])) as unknown as ResourceGovernorSnapshot["maximumDurableBytesByClass"],
     outstandingLeases: state.outstandingLeases,
     outstandingReservations: state.reservations.size,
     total: { ...state.total },

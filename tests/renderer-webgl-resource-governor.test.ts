@@ -198,12 +198,6 @@ describe("root resource governor", () => {
       cpuDecodedBytes: 55,
       persistentGpuBytes: 60,
     })).commit();
-    expect(resourceGovernorSnapshot(governor)).toMatchObject({
-      maximumDurableBytesByClass: {
-        geometry: { persistentGpuBytes: 80 },
-        "virtual-texture": { cpuDecodedBytes: 55, persistentGpuBytes: 60 },
-      },
-    });
     expect(reserveResourceGovernor(governor, "virtual-texture", { persistentGpuBytes: 1 }))
       .toBe("persistent-gpu-hard-limit");
     expect(reserveResourceGovernor(governor, "virtual-texture", { cpuDecodedBytes: 1 }))
@@ -766,10 +760,18 @@ describe("root resource governor", () => {
         const snapshot = resourceGovernorSnapshot(governor);
         for (const resourceClass of RESOURCE_GOVERNOR_CLASSES) {
           expect(snapshot.byClass[resourceClass].cpuDecodedBytes).toBeLessThanOrEqual(
-            snapshot.maximumDurableBytesByClass[resourceClass].cpuDecodedBytes,
+            maximumResourceGovernorClassDurableBytes(
+              fuzzPolicy,
+              resourceClass,
+              "cpuDecodedBytes",
+            ),
           );
           expect(snapshot.byClass[resourceClass].persistentGpuBytes).toBeLessThanOrEqual(
-            snapshot.maximumDurableBytesByClass[resourceClass].persistentGpuBytes,
+            maximumResourceGovernorClassDurableBytes(
+              fuzzPolicy,
+              resourceClass,
+              "persistentGpuBytes",
+            ),
           );
         }
         for (const dimension of Object.keys(snapshot.total) as (keyof typeof snapshot.total)[]) {

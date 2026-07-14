@@ -26,7 +26,7 @@ Status meanings:
 | `useFrame` | product | Opts a settled renderer into time-driven work. Keep, but do not make it the default clock. |
 | Renderer lifecycle snapshot and recovery | product | Needed for context loss and UI state. Keep small. |
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
-| Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Reduce after local budgets replace the governor. |
+| Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Static policy-derived per-class ceiling tables are omitted; retain measured limits, usage, high-water, admissions and denials. |
 | Public resource-governor policy | deleted | Backend admission remains observable in diagnostics, but byte/job classes no longer leak into React or WebGL root options/exports. Constrained policies are injected only through an internal deterministic-test boundary while local caps replace the backend-wide policy. |
 
 ## Scene and camera

@@ -543,11 +543,6 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       automaticVirtualTextures: true,
     });
     expect(root.snapshot()).toMatchObject({
-      resourceGovernor: {
-        maximumDurableBytesByClass: {
-          "virtual-texture": { persistentGpuBytes: 123_456 },
-        },
-      },
       virtualTexturing: { physicalBudgetBytes: 123_456 },
     });
     root.dispose();
