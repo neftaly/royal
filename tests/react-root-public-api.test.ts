@@ -177,6 +177,14 @@ describe("React root public API", () => {
     expect(() => root.render(emptyScene())).toThrow("disposed Royal renderer root");
   });
 
+  it("rejects non-boolean renderer options before requesting a context", () => {
+    const canvas = fakeCanvas();
+    expect(() => createRendererRoot(canvas, {
+      alpha: "yes" as unknown as boolean,
+    })).toThrow(/WebGL root alpha must be a boolean/i);
+    expect(canvas.getContext).not.toHaveBeenCalled();
+  });
+
   it("exposes coalesced invalidation for imperative changes", () => {
     const frameCallbacks: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
