@@ -7,9 +7,6 @@ import {
   type ClusteredLightArena,
 } from "./webgl/clustered-light-arena";
 import {
-  type DirectionalLightNode,
-  type PointLightNode,
-  type SpotLightNode,
   type EnvironmentLight,
   type Material,
   type MeshNode,
@@ -79,14 +76,9 @@ import {
   type ResourceGovernorReservation,
 } from "./resource-governor";
 import {
-  compileFramePlan,
-  createResourceManifestDiffScratch,
-  diffResourceManifests,
   gltfRequestKey,
   type FramePlan,
-  type FramePlanResourceManifest,
   type CountedTextureDeclaration,
-  type ResourceManifestDelta,
 } from "./frame-plan";
 import {
   directGeometryDeclaration,
@@ -335,7 +327,6 @@ import {
   transformSurfaceLight,
   type SurfaceImageBasedLightSpecular,
   type SurfaceIblSpecular,
-  type SurfaceLight,
   type SurfaceLightSet,
 } from "./webgl/lights";
 import {
@@ -366,6 +357,7 @@ import { WebGlFramePublicationOwner } from "./frame-publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
+import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
@@ -550,14 +542,6 @@ const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
   hdrOutput: false,
   toneMapping: "linear-clamp",
 };
-const EMPTY_FRAME_PLAN_RESOURCE_MANIFEST: FramePlanResourceManifest = {
-  bulkInstances: [],
-  directGeometries: [],
-  gltfRequests: [],
-  ordinaryTextures: [],
-  renderObjectRefs: [],
-  virtualTextures: [],
-};
 const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
 const sceneToneMappingState = (
   scene: {
@@ -571,44 +555,6 @@ const sceneToneMappingState = (
   hdrOutput: false,
   toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
 });
-
-const compileSceneSurfaceLights = (
-  lights: readonly (DirectionalLightNode | PointLightNode | SpotLightNode)[],
-): readonly SurfaceLight[] => {
-  const scaleColor = (color: LinearRgba, intensity: number): LinearRgba => [
-    color[0] * intensity,
-    color[1] * intensity,
-    color[2] * intensity,
-    1,
-  ];
-  return lights.map((light) => {
-    switch (light.kind) {
-      case "directional-light":
-        return {
-          color: scaleColor(light.color, light.illuminanceLux),
-          direction: light.direction,
-          kind: "directional",
-        };
-      case "point-light":
-        return {
-          color: scaleColor(light.color, light.intensityCandela),
-          kind: "point",
-          position: light.position,
-          ...(light.range === undefined ? {} : { range: light.range }),
-        };
-      case "spot-light":
-        return {
-          color: scaleColor(light.color, light.intensityCandela),
-          direction: light.direction,
-          innerConeAngle: light.innerConeAngle,
-          kind: "spot",
-          outerConeAngle: light.outerConeAngle,
-          position: light.position,
-          ...(light.range === undefined ? {} : { range: light.range }),
-        };
-    }
-  });
-};
 
 type CapturedFailure = { readonly value: unknown };
 
@@ -860,26 +806,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
   });
   #hdrSupported = false;
   readonly #clusteredLights: ClusteredLightArena;
-  #framePlan: FramePlan | undefined;
-  readonly #framePlanDiffScratch = createResourceManifestDiffScratch();
-  #framePlanReconciliationInProgress = false;
-  #framePlanReconciliationPending = false;
-  #framePlanReconciliationPrevious: FramePlan | undefined;
-  #framePlanTopologyPending = false;
-  #framePlanSurfaceLights: readonly SurfaceLight[] = [];
-  #framePlanSurfaceLightSet: SurfaceLightSet | undefined;
-  #latestScene: RenderRoot | undefined;
+  readonly #scenePlan = new ScenePlanTransactionOwner({
+    rebuildTopology: (plan) => this.#rebuildGltfPacketTopology(plan),
+    reconcileBulkInstances: (changes) => this.#gltfInstanceTransforms.reconcile(changes),
+    reconcileRenderObjectRefs: (plan, changes) => this.#sceneBindings.reconcile(plan, changes),
+  });
   readonly #renderClock = new WebGlRenderClockOwner({
     contextGeneration: () => this.#context.generation,
-    hasScene: () => this.#latestScene !== undefined,
+    hasScene: () => this.#scenePlan.latestScene !== undefined,
     isContextActive: () => this.#context.lifecycle === "active",
     renderLatest: () => this.#renderLatestScene(),
     reportScheduledFailure: (failure) => this.#framePublication.reportRenderFailure(failure),
   });
-  #planRevision = 0;
-  #planCompiles = 0;
-  #compileNodeVisits = 0;
-  #sceneCommits = 0;
   #maxTextureImageUnits = 0;
   #maxTextureSize = 0;
   readonly #pickingController: PickingController;
@@ -1250,7 +1188,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   get latestScene(): RenderRoot | undefined {
-    return this.#latestScene;
+    return this.#scenePlan.latestScene;
   }
 
   get options(): NormalizedWebGlRootOptions {
@@ -1539,7 +1477,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot pick with a disposed Royal renderer root");
     }
     if (this.#context.lifecycle !== "active") return undefined;
-    const plan = this.#framePlan;
+    const plan = this.#scenePlan.plan;
     if (plan === undefined) return undefined;
 
     const { height, width } = this.#viewport.size();
@@ -1629,7 +1567,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     ) {
       throw new Error("Cannot dispose while Royal is applying resource events");
     }
-    if (this.#framePlanReconciliationInProgress) {
+    if (this.#scenePlan.reconciling) {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
     }
     if (this.#disposed) {
@@ -1730,14 +1668,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       frame: this.#framePublication.frame,
       gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
       gltfInstancing: this.#gltfInstancingSnapshot(),
-      latestScene: this.#latestScene,
+      latestScene: this.#scenePlan.latestScene,
       options: this.#options,
-      planning: {
-        compileNodeVisits: this.#compileNodeVisits,
-        planCompiles: this.#planCompiles,
-        planRevision: this.#planRevision,
-        sceneCommits: this.#sceneCommits,
-      },
+      planning: this.#scenePlan.planningSnapshot(),
       resourceLifetime: {
         ...resourceArenaCountersSnapshot(this.#resourceArena),
         gltfPreparationQueueHighWater: this.#preparedGltf.scheduler.snapshot().queueHighWater,
@@ -1752,43 +1685,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #commitScene(scene: RenderRoot): FramePlan {
-    if (this.#framePlanReconciliationInProgress) {
-      throw new Error("Cannot render while Royal is reconciling render-object refs");
-    }
     this.#resourceArenaSideEffects.drain();
-    const previous = this.#framePlan;
-    if (this.#framePlanReconciliationPending) this.#finishFramePlanReconciliation();
-    if (previous?.scene === scene) return previous;
-
-    const revision = this.#planRevision + 1;
-    const next = compileFramePlan(scene, revision);
-    const surfaceLights = compileSceneSurfaceLights(next.lightNodes);
-    const resourceDelta = diffResourceManifests(
-      previous?.manifest ?? EMPTY_FRAME_PLAN_RESOURCE_MANIFEST,
-      next.manifest,
-      this.#framePlanDiffScratch,
-    );
     // ResourceArena is the authoritative resource generation. Once its
     // validated delta commits, publish the matching frame plan before running
     // fallible GPU cleanup, source close hooks, or user ref callbacks. A
     // reported side-effect failure can then be retried without applying the
     // same semantic resource delta to an arena that is already on `next`.
-    const resourceChanges = applyResourceDelta(this.#resourceArena, resourceDelta);
-    this.#framePlan = next;
+    const commit = this.#scenePlan.commit(
+      scene,
+      (delta) => applyResourceDelta(this.#resourceArena, delta),
+    );
+    if (commit.kind === "retained") return commit.plan;
     this.#preparedGltf.sharedViewLods.resetPlan();
-    this.#framePlanSurfaceLights = surfaceLights;
-    this.#framePlanSurfaceLightSet = surfaceLights.length === 0 ? undefined : surfaceLightSet(surfaceLights);
-    this.#latestScene = scene;
-    this.#planRevision = revision;
-    this.#planCompiles += 1;
-    this.#compileNodeVisits += next.nodes.length;
-    this.#sceneCommits += 1;
-    this.#framePlanReconciliationPending = true;
-    this.#framePlanReconciliationPrevious = previous;
-    this.#framePlanTopologyPending = true;
-    const resourceFailure = captureFailure(() => this.#applyResourceArenaChanges(resourceChanges));
-    this.#finishFramePlanReconciliation(resourceDelta, resourceFailure);
-    return next;
+    const resourceFailure = captureFailure(
+      () => this.#applyResourceArenaChanges(commit.resourceChanges),
+    );
+    this.#scenePlan.finishReconciliation(resourceFailure);
+    return commit.plan;
   }
 
   #gltfPacketPreparedPrimitives(
@@ -1887,45 +1800,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       plan.gltfRequestRows.map((row) => row.requestKey),
       plan.gltfRequestRows.map((_, index) => this.#gltfPacketOccurrence(plan, index)),
     );
-  }
-
-  #finishFramePlanReconciliation(
-    initialDelta?: ResourceManifestDelta,
-    initialFailure?: CapturedFailure,
-  ): void {
-    if (this.#framePlanReconciliationInProgress) {
-      throw new Error("Render-object ref reconciliation is already in progress");
-    }
-    const next = this.#framePlan;
-    if (next === undefined) return;
-    const previous = this.#framePlanReconciliationPrevious;
-    const delta = initialDelta ?? diffResourceManifests(
-      previous?.manifest ?? EMPTY_FRAME_PLAN_RESOURCE_MANIFEST,
-      next.manifest,
-      this.#framePlanDiffScratch,
-    );
-    this.#framePlanReconciliationInProgress = true;
-    try {
-      let firstFailure = initialFailure;
-      if (this.#framePlanTopologyPending) {
-        const topologyFailure = captureFailure(() => this.#rebuildGltfPacketTopology(next));
-        if (topologyFailure === undefined) this.#framePlanTopologyPending = false;
-        else firstFailure ??= topologyFailure;
-      }
-      firstFailure = captureFirstFailure(
-        firstFailure,
-        () => this.#sceneBindings.reconcile(next, delta.renderObjectRefs),
-      );
-      firstFailure = captureFirstFailure(
-        firstFailure,
-        () => this.#gltfInstanceTransforms.reconcile(delta.bulkInstances),
-      );
-      if (firstFailure !== undefined) throw firstFailure.value;
-      this.#framePlanReconciliationPending = false;
-      this.#framePlanReconciliationPrevious = undefined;
-    } finally {
-      this.#framePlanReconciliationInProgress = false;
-    }
   }
 
   #preparedAssetDependencyManifest(
@@ -2079,7 +1953,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       state.error = snapshot.error;
       state.load.readyAt = nowMs();
       this.#recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
-      const plan = this.#framePlan;
+      const plan = this.#scenePlan.plan;
       if (plan !== undefined) this.#preparedGltf.publishPacketError(snapshot.key, plan.revision);
       return;
     }
@@ -2100,7 +1974,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state.primitives = asset.primitives;
     state.status = "ready";
     state.variants = asset.variants;
-    const plan = this.#framePlan;
+    const plan = this.#scenePlan.plan;
     try {
       this.#preparedGltf.publishReadyPackets(
         snapshot.key,
@@ -2468,7 +2342,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       }
       const materialBindingId = retainGltfPacketSubmissionMaterialBinding(
         this.#gltfFrameBatches.workspace,
-        this.#framePlan!.revision,
+        this.#scenePlan.plan!.revision,
         catalog,
         catalog.materialIds[packetIndex]!,
         prepared.materialBatchClassId,
@@ -2476,7 +2350,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       const rootBindingId = retainGltfPacketSubmissionRootBinding(
         this.#gltfFrameBatches.workspace,
-        this.#framePlan!.revision,
+        this.#scenePlan.plan!.revision,
         catalog,
         catalog.rootSourceIds[packetIndex]!,
         outerIndex,
@@ -2506,14 +2380,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
         ? NO_FRAME_PACKET_ID
         : retainGltfPacketSubmissionLightBinding(
             this.#gltfFrameBatches.workspace,
-            this.#framePlan!.revision,
+            this.#scenePlan.plan!.revision,
             catalog,
             lightScopeId,
             assetLights,
           );
       appendGltfPacketSubmission(
         this.#gltfFrameBatches.workspace,
-        this.#framePlan!.revision,
+        this.#scenePlan.plan!.revision,
         catalog,
         {
           geometryId,
@@ -2568,7 +2442,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     sourceY: number,
   ): void {
     if (this.#gltfFrameBatches.workspace.count === 0) return;
-    const plan = this.#framePlan!;
+    const plan = this.#scenePlan.plan!;
     const groups = this.#gltfFrameBatches.prepareSegment(
       plan.revision,
       sceneLights,
@@ -2664,11 +2538,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #sceneSurfaceLightSet(
     environment: EnvironmentLight | undefined,
   ): SurfaceLightSet | undefined {
-    if (environment === undefined) return this.#framePlanSurfaceLightSet;
+    if (environment === undefined) return this.#scenePlan.sceneSurfaceLightSet;
     const environmentLights = this.#environmentLightSet(environment);
 
     return surfaceLightSet(
-      this.#framePlanSurfaceLights,
+      this.#scenePlan.sceneSurfaceLights,
       environmentLights?.irradiance,
       environmentLights?.specular,
     );
@@ -4246,7 +4120,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
   #renderLatestScene(): void {
-    const plan = this.#framePlan;
+    const plan = this.#scenePlan.plan;
     if (plan === undefined) return;
 
     const { height, width } = this.#viewport.size();

@@ -41,6 +41,9 @@ Completed in the current worktree:
 - `ResourceArenaSideEffectDebtOwner` owns ordered acquire/release side effects,
   exact-step retries, re-entrant debt ordering, drain exclusion, and terminal
   acquisition cancellation after semantic arena disposal.
+- `ScenePlanTransactionOwner` owns authoritative plan generations, manifest
+  diffing, scene-light compilation, planning counters, and retryable topology,
+  render-object-ref, and bulk-instance reconciliation.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
