@@ -57,3 +57,6 @@ is true and `warnings` is empty or understood.
   a 60fps frame budget and should stay a constrained-device optimization target.
 - The SVG route's frame collector completed, but did not attach a WebGL or
   renderer snapshot, so it was rejected rather than saved as device evidence.
+  Forwarded Safari console output identified the terminal failure as
+  `SecurityError: The operation is insecure` at the virtual-texture atlas
+  `texSubImage2D` upload; React then unmounted `Canvas`.
