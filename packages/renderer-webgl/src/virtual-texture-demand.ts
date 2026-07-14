@@ -65,6 +65,7 @@ const RETAINED_POLYGON_COMPONENT_CAPACITY = 32_768;
 const RETAINED_POLYGON_CAPACITY = 4_096;
 
 export type VirtualTextureDemandPlanningWorkspace = {
+  conservativeAddressing: boolean;
   readonly clippedPolygonA: Float64Array;
   readonly clippedPolygonB: Float64Array;
   readonly wrappedPolygon: Float64Array;
@@ -79,6 +80,7 @@ export type VirtualTextureDemandPlanningWorkspace = {
 };
 
 export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDemandPlanningWorkspace => ({
+  conservativeAddressing: false,
   clippedPolygonA: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
   clippedPolygonB: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
   wrappedPolygon: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
@@ -98,6 +100,7 @@ const resetVirtualTextureCoverageWorkspace = (
   workspace.visiblePolygonCount = 0;
   workspace.visiblePolygonComponentCount = 0;
   workspace.finestRegionCount = 0;
+  workspace.conservativeAddressing = false;
   workspace.overflowed = false;
 };
 
@@ -105,6 +108,7 @@ export const virtualTextureDemandPlanningWorkspaceSnapshot = (
   workspace: VirtualTextureDemandPlanningWorkspace,
 ): {
   readonly allocatedBytes: number;
+  readonly conservativeAddressing: boolean;
   readonly finestObservedMip?: number;
   readonly finestRegionCount: number;
   readonly overflowed: boolean;
@@ -118,6 +122,7 @@ export const virtualTextureDemandPlanningWorkspaceSnapshot = (
     + workspace.finestRegionMips.byteLength
     + workspace.visiblePolygonComponents.byteLength
     + workspace.visiblePolygonOffsets.byteLength,
+  conservativeAddressing: workspace.conservativeAddressing,
   overflowed: workspace.overflowed,
   ...(workspace.finestRegionCount > 0
     ? { finestObservedMip: workspace.finestRegionMips[0] }
@@ -345,7 +350,7 @@ const retainWrappedVisiblePolygon = (
   const wrappedU = wrappedVirtualTextureDemandInterval(rawMinU, rawMaxU, wrapS);
   const wrappedV = wrappedVirtualTextureDemandInterval(orientedMinV, orientedMaxV, wrapT);
   if (!wrappedU.safe || !wrappedV.safe) {
-    workspace.overflowed = true;
+    workspace.conservativeAddressing = true;
     return {
       maxU: wrappedU.maximum,
       maxV: wrappedV.maximum,
@@ -1164,7 +1169,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     // fallback until projection produces a determinate footprint.
     return { coverageCandidates: [], demandCandidates: fallback };
   }
-  if (workspace.overflowed) {
+  if (workspace.overflowed || workspace.conservativeAddressing) {
     const coarsestMip = virtualTextureDemandMipCount(input.manifest) - 1;
     let coverageMip = virtualTextureTargetMip(input.manifest, projection.footprint);
     const completeAddressSpace = input.manifest.pageAddressing === "complete";
@@ -1193,7 +1198,8 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
           )
         : planBoundedExplicitOverflowDemand(input, coverageMip, projection.footprint, limit),
       ...(preferredCandidates.length === 0 ? {} : { preferredCandidates }),
-      retentionOverflowed: true,
+      ...(workspace.conservativeAddressing ? { addressingConservative: true } : {}),
+      ...(workspace.overflowed ? { retentionOverflowed: true } : {}),
     };
   }
   if (input.manifest.pageAddressing === "sparse") {

@@ -180,6 +180,8 @@ export type VirtualTextureScreenFootprint = {
 };
 
 export type VirtualTextureDrawDemand = {
+  /** Sampler addressing crossed a discontinuity; demand uses bounded conservative refinement. */
+  readonly addressingConservative?: true;
   readonly coverageCandidates?: readonly VirtualTexturePageId[];
   readonly demandCandidates: readonly VirtualTexturePageId[];
   readonly preferredCandidates?: readonly VirtualTexturePageId[];

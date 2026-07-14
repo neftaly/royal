@@ -317,7 +317,8 @@ describe("virtual texture pure demand planning", () => {
 
     const first = planVirtualTextureDrawDemand(input);
     expect(planVirtualTextureDrawDemand(input)).toEqual(first);
-    expect(first.retentionOverflowed).toBe(true);
+    expect(first.addressingConservative).toBe(true);
+    expect(first.retentionOverflowed).toBeUndefined();
     expect(first.coverageCandidates?.length ?? 0).toBeLessThanOrEqual(16);
     expect(first.demandCandidates.length).toBeGreaterThan(0);
     expect(first.demandCandidates.length).toBeLessThanOrEqual(16);
@@ -433,7 +434,8 @@ describe("virtual texture pure demand planning", () => {
       }),
     });
 
-    expect(demand.retentionOverflowed).toBe(true);
+    expect(demand.addressingConservative).toBe(true);
+    expect(demand.retentionOverflowed).toBeUndefined();
     expect(demand.coverageCandidates?.length).toBeLessThanOrEqual(8);
     expect(demand.demandCandidates).not.toEqual([]);
     expect(demand.demandCandidates.length).toBeLessThanOrEqual(8);
