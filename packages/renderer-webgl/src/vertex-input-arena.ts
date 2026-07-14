@@ -17,13 +17,25 @@ export interface VertexInputGpuReservation {
   cancel(): boolean;
   commit(): VertexInputGpuLease;
 }
+export interface VertexInputGpuDenial {
+  readonly reason: string;
+}
+
+/** Retryable frame-local backpressure, distinct from durable allocation failure. */
+export class VertexInputGpuUploadCapacityError extends Error {
+  constructor() {
+    super("Vertex-input GPU allocation deferred by root resource governor: upload-capacity");
+    this.name = "VertexInputGpuUploadCapacityError";
+  }
+}
+
 export interface VertexInputGpuGovernor {
   reserve(cost: {
     readonly persistentGpuBytes: number;
     readonly transientPeakBytes?: number;
     readonly uploadBytes: number;
   }):
-    VertexInputGpuReservation | undefined;
+    VertexInputGpuDenial | VertexInputGpuReservation | undefined;
 }
 
 interface VertexInputInstanceBuffers {
@@ -344,6 +356,10 @@ const reserveGpu = (
     uploadBytes,
   });
   if (reservation === undefined) throw new Error("Vertex-input GPU allocation denied by root resource governor");
+  if ("reason" in reservation) {
+    if (reservation.reason === "upload-capacity") throw new VertexInputGpuUploadCapacityError();
+    throw new Error(`Vertex-input GPU allocation denied by root resource governor: ${reservation.reason}`);
+  }
   return reservation;
 };
 

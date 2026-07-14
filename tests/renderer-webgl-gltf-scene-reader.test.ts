@@ -60,7 +60,7 @@ describe("glTF scene reader", () => {
       position: [0, 0, 0],
     }]);
     expect(scene.primitives).toHaveLength(1);
-    expect(scene.primitives[0]?.normals).toEqual(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]));
+    expect(scene.primitives[0]?.normals).toBeUndefined();
     expect(scene.primitives[0]?.material).toMatchObject({
       alphaCutoff: 0.5,
       alphaMode: "MASK",

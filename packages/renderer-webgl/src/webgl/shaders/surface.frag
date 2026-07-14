@@ -360,6 +360,21 @@ float materialFaceSign() {
   return gl_FrontFacing ? 1.0 : -1.0;
 }
 
+vec3 materialGeometricNormal() {
+  vec3 normal = v_normal;
+  if (dot(normal, normal) <= 0.00000001) {
+    // glTF primitives without NORMAL are flat shaded. Deriving the face normal
+    // here preserves shared indexed vertices instead of inventing smooth
+    // vertex normals and retaining another CPU/GPU float3 buffer.
+    normal = cross(dFdx(v_worldPosition), dFdy(v_worldPosition));
+  }
+  float lengthSquared = dot(normal, normal);
+  vec3 normalized = lengthSquared <= 0.00000001
+    ? vec3(0.0, 0.0, 1.0)
+    : normal * inversesqrt(lengthSquared);
+  return normalized * materialFaceSign();
+}
+
 vec3 materialGeometryTangent(vec3 normal) {
   float faceSign = materialFaceSign();
   vec3 tangent = v_tangent.w == 0.0 ? vec3(0.0) : v_tangent.xyz * faceSign;
@@ -829,8 +844,7 @@ void main() {
   // glTF double-sided surfaces keep their material response on the visible
   // side. Single-sided batches cull back faces, so this is branch-free in
   // effect for them and corrects dark back faces for double-sided materials.
-  float faceSign = materialFaceSign();
-  vec3 geometricNormal = normalize(v_normal) * faceSign;
+  vec3 geometricNormal = materialGeometricNormal();
   vec3 normal = materialNormal(geometricNormal);
   vec3 clearcoatNormal = materialClearcoatNormal(geometricNormal);
   vec3 viewVector = cameraWorldPosition() - v_worldPosition;

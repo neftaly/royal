@@ -18,6 +18,7 @@ import {
   vertexInputCompositeVertexArrayForInstance,
   vertexInputGeometry,
   uploadVertexInputInstanceLane,
+  VertexInputGpuUploadCapacityError,
   type VertexInputGpuGovernor,
 } from "../packages/renderer-webgl/src/vertex-input-arena";
 import { forEachFuzzCase } from "./fuzz";
@@ -809,6 +810,21 @@ describe("vertex-input arena", () => {
     expect(admitted.cancelled.value).toBe(0);
     releaseVertexInputGeometry(arena, glContext(gl), 1, 1);
     expect(admitted.released.value).toBe(1);
+  });
+
+  it("distinguishes retryable frame upload pressure from durable GPU denial", () => {
+    const gl = new FakeGl();
+    const arena = createVertexInputArena({
+      reserve: () => ({ reason: "upload-capacity" }),
+    });
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("deferred-static", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+
+    expect(() => vertexInputGeometry(arena, glContext(gl), 1, 1))
+      .toThrow(VertexInputGpuUploadCapacityError);
+    expect(gl.uploads).toHaveLength(0);
   });
 
   it("spends failed upload bandwidth and leases retained rollback handles until retry", () => {

@@ -71,6 +71,7 @@ import {
   releaseLostVertexInputGeometry,
   restoreVertexInputArenaContext,
   retainVertexInputGeometry,
+  VertexInputGpuUploadCapacityError,
   vertexInputGeometry,
   type VertexInputGeometry,
   type VertexInputArena,
@@ -401,7 +402,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #vertexInputs: VertexInputArena = createVertexInputArena({
     reserve: (cost) => {
       const reservation = reserveResourceGovernor(this.#resourceGovernor, "geometry", cost);
-      return typeof reservation === "string" ? undefined : reservation;
+      return typeof reservation === "string" ? { reason: reservation } : reservation;
     },
   });
   readonly #admitGltfPreparationJob = () => {
@@ -975,6 +976,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#preparedAssetEvents.applyPending();
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
+    let renderDeferred = false;
     this.#virtualTextureRuntime.beginFrame();
     this.#textureResidencyIntent.beginFrame();
     try {
@@ -1095,12 +1097,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }
       }
     } catch (value) {
-      renderFailure = { value };
+      if (value instanceof VertexInputGpuUploadCapacityError) {
+        renderDeferred = true;
+        this.invalidate();
+      } else renderFailure = { value };
     }
     renderFailure = captureFirstFailure(renderFailure, () => this.#consumeSurfaceExecutionSignals());
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined),
+      () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined && !renderDeferred),
     );
     renderFailure = captureFirstFailure(renderFailure, () => {
       this.#gltfPacketSubmissions.releaseUnused(this.#gl, this.#context.generation);
@@ -1111,14 +1116,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#virtualTextureDemand.finishFrame(renderFailure === undefined),
+      () => this.#virtualTextureDemand.finishFrame(renderFailure === undefined && !renderDeferred),
     );
-    if (renderFailure === undefined) {
+    if (renderFailure === undefined && !renderDeferred) {
       renderFailure = captureFirstFailure(renderFailure, () => this.#processVirtualTextureGpuUploads());
     }
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined),
+      () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined && !renderDeferred),
     );
     renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
     renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextureRuntime.requests.drain());
@@ -1150,6 +1155,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     if (renderFailure !== undefined) throw renderFailure.value;
     if (normalizationFailure !== undefined) throw normalizationFailure.value;
+    if (renderDeferred) return;
     this.#framePublication.publishFrame();
   }
 

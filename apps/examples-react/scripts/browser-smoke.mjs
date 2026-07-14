@@ -1084,23 +1084,37 @@ const runGltfVariantsInteractionSmoke = async (session) => evaluate(session, `
   }
   const variantNames = buttons.map((button) => button.textContent?.trim() ?? '');
   const currentRoot = () => document.querySelector('.gltf-variants');
-  const selections = [];
-  const pressed = [];
-  for (const [index, expected] of variantNames.entries()) {
-    const currentButton = () => document.querySelectorAll('.gltf-variants-actions button')[index];
-    const button = currentButton();
-    if (!(button instanceof HTMLButtonElement)) return { error: 'glTF variant button list changed during interaction' };
-    button.click();
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await globalThis.__royalExamplesRenderNow?.();
-      if (currentRoot()?.getAttribute('data-selected-variant') === expected
-        && currentButton()?.getAttribute('aria-pressed') === 'true') break;
+  const interactionErrors = [];
+  const recordError = (event) => interactionErrors.push(event.error?.message ?? event.message);
+  const recordRejection = (event) => interactionErrors.push(event.reason?.message ?? String(event.reason));
+  globalThis.addEventListener('error', recordError);
+  globalThis.addEventListener('unhandledrejection', recordRejection);
+  try {
+    const selections = [];
+    const pressed = [];
+    for (const [index, expected] of variantNames.entries()) {
+      const currentButton = () => document.querySelectorAll('.gltf-variants-actions button')[index];
+      const button = currentButton();
+      if (!(button instanceof HTMLButtonElement)) return {
+        error: 'glTF variant button list changed during interaction: '
+          + interactionErrors.join('; ')
+          + ' body=' + document.body.innerText.slice(0, 500),
+      };
+      button.click();
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await globalThis.__royalExamplesRenderNow?.();
+        if (currentRoot()?.getAttribute('data-selected-variant') === expected
+          && currentButton()?.getAttribute('aria-pressed') === 'true') break;
+      }
+      selections.push(currentRoot()?.getAttribute('data-selected-variant') ?? '');
+      pressed.push(currentButton()?.getAttribute('aria-pressed') === 'true' ? expected : '');
     }
-    selections.push(currentRoot()?.getAttribute('data-selected-variant') ?? '');
-    pressed.push(currentButton()?.getAttribute('aria-pressed') === 'true' ? expected : '');
+    return { pressed, selections };
+  } finally {
+    globalThis.removeEventListener('error', recordError);
+    globalThis.removeEventListener('unhandledrejection', recordRejection);
   }
-  return { pressed, selections };
 })()
 `);
 

@@ -1158,6 +1158,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
       && call.args[0] === gl.TEXTURE0 + 1)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_normalTexture;");
     expect(sources).toContain("dFdx(v_worldPosition)");
+    expect(sources).toContain("cross(dFdx(v_worldPosition), dFdy(v_worldPosition))");
     expect(sources).toContain("vec2 normalUv = materialTextureUv(u_normalUvSet");
     expect(sources).toContain("texture(u_normalTexture, normalUv)");
   });

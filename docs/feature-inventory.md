@@ -108,7 +108,7 @@ Status meanings:
 | Indexed and non-indexed primitives | ingestion | Core glTF. Keep. |
 | Triangle, strip, fan, line, line-strip, line-loop and point modes | ingestion/candidate | Full primitive-mode compatibility; rare non-triangle modes can be reviewed if their shader/executor cost is material. |
 | POSITION, NORMAL, TANGENT, TEXCOORD_0/1 and COLOR_0 | ingestion | Current prepared vertex profile. Keep unless a narrower asset contract is chosen. |
-| Generated normals when missing | fallback | Convenience rather than strict glTF behavior. Review whether malformed/underspecified assets should instead fail or render unlit. |
+| Flat normals when `NORMAL` is omitted | ingestion | glTF-compatible fragment-space face normals preserve hard edges without generating and retaining a smooth CPU/GPU normal buffer. |
 | Sparse accessors | ingestion | Core glTF compatibility with isolated implementation cost. Keep. |
 | Mesh/material variants | ingestion/product | Keep. Applications select by named type-safe descriptor value, discover ready names through `useGltfAssetVariants`, and can exercise the interactive demo. |
 | glTF punctual lights | ingestion | Low-cost lowering into Royal lights. Keep unless asset lights are unwanted by policy. |

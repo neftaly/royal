@@ -14,7 +14,6 @@ import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./ac
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
 import { readGltfSceneImageBasedLight } from "./image-based-light";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
-import { generateGltfPrimitiveNormals } from "./normals";
 import type {
   GltfContentExtras,
   GltfDocument,
@@ -741,7 +740,7 @@ const appendNodeTreePrimitives = (
     const texCoords1 = gltfPrimitiveTexCoords(context.document, context.buffers, primitive, 1, decodedAttributes);
     const indices = dracoPrimitive?.indices
       ?? (primitive.indices === undefined ? undefined : readGltfIndices(context.document, context.buffers, primitive.indices));
-    const normals = baseNormals ?? generateGltfPrimitiveNormals(positions, indices, mode);
+    const normals = baseNormals;
     const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material);
     const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material);
     const materialVariants = readGltfMaterialVariants(

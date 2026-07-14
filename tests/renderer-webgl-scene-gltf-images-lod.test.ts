@@ -164,11 +164,13 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
     expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
-    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+    expect(bufferDataPayloads(calls).map(roundVector)).not.toContainEqual([
       0, 0, 1,
       0, 0, 1,
       0, 0, 1,
     ]);
+    expect(shaderSources(calls).join("\n"))
+      .toContain("cross(dFdx(v_worldPosition), dFdy(v_worldPosition))");
   });
 
   it("loads required EXT_texture_webp base-color texture sources", async () => {

@@ -144,14 +144,7 @@ const primitiveGeometryBytes = (
   const positions = accessorFloatBytes(document, attributes?.POSITION, `${label} POSITION`);
   if (positions === 0) return 0;
   let bytes = positions;
-  // Missing normals are generated as one float triplet per position vertex.
-  bytes = checkedAdd(
-    bytes,
-    attributes?.NORMAL === undefined
-      ? positions
-      : accessorFloatBytes(document, attributes.NORMAL, `${label} NORMAL`),
-    `${label} geometry bytes`,
-  );
+  bytes = checkedAdd(bytes, accessorFloatBytes(document, attributes?.NORMAL, `${label} NORMAL`), `${label} geometry bytes`);
   bytes = checkedAdd(bytes, accessorFloatBytes(document, attributes?.TANGENT, `${label} TANGENT`), `${label} geometry bytes`);
   if (attributes?.COLOR_0 !== undefined) {
     const accessor = document.accessors?.[attributes.COLOR_0];

@@ -76,10 +76,10 @@ describe("glTF preparation admission", () => {
 
     expect(estimateGltfPreparationCpu(document)).toEqual({
       assetDecode: 100,
-      // 36 position + 36 generated normal + 12 widest retained indices.
-      geometry: 84,
+      // 36 position + 12 widest retained indices; flat normals are fragment-derived.
+      geometry: 48,
       // Geometry preparation plus two simultaneously-live meshopt copies.
-      transientPeak: 156,
+      transientPeak: 120,
     });
   });
 
@@ -96,8 +96,8 @@ describe("glTF preparation admission", () => {
       scene: 0,
       scenes: [{ nodes: [0] }],
     });
-    expect(hugeGeometry.geometry).toBe(1_200_000_000);
-    expect(hugeGeometry.transientPeak).toBe(1_200_000_000);
+    expect(hugeGeometry.geometry).toBe(600_000_000);
+    expect(hugeGeometry.transientPeak).toBe(600_000_000);
   });
 
   it("requires every external buffer to declare its admission size", () => {
