@@ -19,6 +19,7 @@ import {
   virtualTextureNow,
   type GeneratedVirtualTextureSource,
   type VirtualTextureGeneratedPageSource,
+  type VirtualTexturePageLoad,
   type VirtualTexturePageSource,
   type VirtualTextureRef,
   type VirtualTextureRuntimeState,
@@ -484,9 +485,9 @@ export class VirtualTextureRuntimeShell {
     state: VirtualTextureRuntimeState,
     page: VirtualTexturePageId,
     signal: AbortSignal,
-  ): Promise<TexImageSource> | undefined {
+  ): VirtualTexturePageLoad {
     const manifest = state.manifest;
-    if (manifest === undefined) return undefined;
+    if (manifest === undefined) return { kind: "absent" };
     const pageUrisByKey = state.pageUrisByKey ?? new Map<string, string>();
     if (state.activeSource.telemetryKind !== "generated-raster") {
       return state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
@@ -501,14 +502,17 @@ export class VirtualTextureRuntimeShell {
     };
     try {
       const loaded = state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
-      if (loaded === undefined) return undefined;
-      return loaded.then(recordResult, (error: unknown) => {
-        if (!signal.aborted) state.stats.generatedPageFailures += 1;
-        throw error;
-      });
+      if (loaded.kind === "absent") return loaded;
+      return {
+        kind: "image",
+        promise: loaded.promise.then(recordResult, (error: unknown) => {
+          if (!signal.aborted) state.stats.generatedPageFailures += 1;
+          throw error;
+        }),
+      };
     } catch (error) {
       if (!signal.aborted) state.stats.generatedPageFailures += 1;
-      return Promise.reject(error);
+      return { kind: "image", promise: Promise.reject(error) };
     }
   }
 
@@ -539,8 +543,11 @@ export class VirtualTextureRuntimeShell {
       loadPage: (manifest, page, pageUrisByKey, signal) => {
         const uri = virtualTexturePageUri(manifest, page, pageUrisByKey);
         return uri === undefined
-          ? undefined
-          : this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal);
+          ? { kind: "absent" }
+          : {
+              kind: "image",
+              promise: this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal),
+            };
       },
       manifestUri,
     };

@@ -9,6 +9,7 @@ import {
   VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
   VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS,
   type VirtualTextureRuntimeState,
+  type VirtualTexturePageLoad,
 } from "./virtual-texture-runtime";
 import {
   createVirtualTextureRequestPlanningWorkspace,
@@ -80,7 +81,7 @@ export type VirtualTextureRequestCoordinatorOptions = {
     state: VirtualTextureRuntimeState,
     page: VirtualTexturePageId,
     signal: AbortSignal,
-  ) => Promise<TexImageSource> | undefined;
+  ) => VirtualTexturePageLoad;
   readonly maximumDecodedCpuBytes: number;
   readonly resourceGovernor: ResourceGovernor;
   readonly resources: ReadonlyMap<string, VirtualTextureRuntimeState>;
@@ -388,9 +389,9 @@ export class VirtualTextureRequestCoordinator {
     const controller = new AbortController();
     requestState.abortControllers.set(pageKey, controller);
     const sourceGeneration = state.sourceGeneration;
-    let pageImage: Promise<TexImageSource> | undefined;
+    let pageLoad: VirtualTexturePageLoad;
     try {
-      pageImage = this.#options.loadPage(state, page, controller.signal);
+      pageLoad = this.#options.loadPage(state, page, controller.signal);
     } catch (error) {
       requestState.abortControllers.delete(pageKey);
       controller.abort();
@@ -398,7 +399,7 @@ export class VirtualTextureRequestCoordinator {
       job.release();
       throw error;
     }
-    if (pageImage === undefined) {
+    if (pageLoad.kind === "absent") {
       decodedReservation.cancel();
       job.release();
       requestState.abortControllers.delete(pageKey);
@@ -406,6 +407,7 @@ export class VirtualTextureRequestCoordinator {
       this.#options.invalidate();
       return false;
     }
+    const pageImage = pageLoad.promise;
 
     if (
       !this.#options.active()

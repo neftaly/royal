@@ -21,7 +21,7 @@ const event = (key: string): PreparedAssetArenaEvent => ({
 const virtualTextureState = (key: string, admissionTicket: number): VirtualTextureRuntimeState => ({
   activeSource: {
     loadManifest: async () => ({ diagnostics: [] }),
-    loadPage: () => undefined,
+    loadPage: () => ({ kind: "absent" }),
     manifestUri: `/${key}.json`,
   },
   admissionTicket,
