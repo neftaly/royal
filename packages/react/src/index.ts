@@ -26,16 +26,20 @@ export { useRendererLifecycle } from './renderer-lifecycle';
 
 export {
   OrbitControls,
+} from './orbit-controls';
+export {
   useOrbitCamera,
   useOrbitCameraView,
-} from './orbit-controls';
+} from './orbit-camera-controller';
 export type {
   OrbitCameraController,
+  UseOrbitCameraOptions,
+} from './orbit-camera-controller';
+export type {
   OrbitCameraView,
   OrbitCameraViewOptions,
   OrbitControlsBehaviorOptions,
   OrbitControlsProps,
-  UseOrbitCameraOptions,
   WorldPosition3,
 } from './orbit-controls';
 
