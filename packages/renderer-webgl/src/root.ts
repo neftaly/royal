@@ -364,6 +364,7 @@ import {
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import { WebGlFramePublicationOwner } from "./frame-publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
+import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
@@ -849,7 +850,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
   readonly #textureHandles: TextureHandleArena;
   readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
-  #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
   #gltfRenderOrdinal = 0;
@@ -890,19 +890,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #maxTextureImageUnits = 0;
   #maxTextureSize = 0;
   readonly #pickingController: PickingController;
-  #resizeObserver: ResizeObserver | undefined;
+  readonly #viewport: WebGlCanvasViewportOwner;
   readonly #geometryDrawArena: GeometryDrawArena;
   readonly #surfaceExecution: SurfaceExecutionArena;
   readonly #virtualTextureDemandPlanning = createVirtualTextureDemandPlanningWorkspace();
   readonly #virtualTextureDemandPublicationStates: VirtualTextureRuntimeState[] = [];
   #unsupportedVirtualTextureDraws = 0;
-  readonly #dprChangeListener = (): void => {
-    this.#watchDevicePixelRatio();
-    this.invalidate();
-  };
-  readonly #viewportInvalidationListener = (): void => {
-    this.invalidate();
-  };
   readonly #contextLostListener = (event: Event): void => {
     event.preventDefault();
     this.#context.lose(() => {
@@ -959,6 +952,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     };
     try {
       this.#canvas = canvas;
+      this.#viewport = new WebGlCanvasViewportOwner(canvas, () => this.invalidate());
       this.#pickingController = new PickingController(canvas, {
         gltfInstanceRootModels: (node) => this.#gltfInstanceTransforms.views(node.instances).rootModels,
         meshGeometry: (node) => this.#meshGeometry(node.geometry, node.material),
@@ -1157,9 +1151,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       contextListenersStarted = true;
       this.#canvas.addEventListener("webglcontextlost", this.#contextLostListener);
       this.#canvas.addEventListener("webglcontextrestored", this.#contextRestoredListener);
-      registerRollback(() => this.#resizeObserver?.disconnect());
-      registerRollback(() => this.#unwatchDevicePixelRatio());
-      this.#watchViewport();
+      registerRollback(() => this.#viewport.dispose());
+      this.#viewport.start();
     } catch (error) {
       rollbackConstruction();
       throw error;
@@ -1285,7 +1278,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       return;
     }
 
-    const { height, width } = this.#resize();
+    const { height, width } = this.#viewport.size();
     const camera = this.#sceneBindings.readCamera(plan.camera);
     resetFrameViews(this.#frameViews, null, false);
     appendFrameView(
@@ -1556,7 +1549,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const plan = this.#framePlan;
     if (plan === undefined) return undefined;
 
-    const { height, width } = this.#resize();
+    const { height, width } = this.#viewport.size();
     return this.#pickingController.pick({
       camera: this.#sceneBindings.readCamera(plan.camera),
       height,
@@ -1720,9 +1713,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfLightScopeIdCount = 0;
     teardown(() => this.#sceneBindings.dispose());
     teardown(() => this.#gltfInstanceTransforms.dispose());
-    teardown(() => this.#resizeObserver?.disconnect());
-    this.#resizeObserver = undefined;
-    teardown(() => this.#unwatchDevicePixelRatio());
+    teardown(() => this.#viewport.dispose());
     teardown(() => disposeVertexInputArena(this.#vertexInputs));
     teardown(() => this.#decodedTextureSources.retryPending());
     if (firstFailure !== undefined) throw firstFailure.value;
@@ -2344,47 +2335,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#gltfTextureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace, contentKeys)),
     ];
     return refs.filter((ref): ref is TextureAssetUploadRef => ref !== undefined);
-  }
-
-  #resize(): { readonly height: number; readonly width: number } {
-    const rect = this.#canvas.getBoundingClientRect();
-    const cssWidth = rect.width;
-    const cssHeight = rect.height;
-    const dpr = globalThis.devicePixelRatio ?? 1;
-    const width = Math.max(1, Math.round(cssWidth * dpr));
-    const height = Math.max(1, Math.round(cssHeight * dpr));
-    if (this.#canvas.width !== width) this.#canvas.width = width;
-    if (this.#canvas.height !== height) this.#canvas.height = height;
-
-    return { height, width };
-  }
-
-  #watchViewport(): void {
-    const ResizeObserverConstructor = globalThis.ResizeObserver;
-    if (typeof ResizeObserverConstructor === "function") {
-      this.#resizeObserver = new ResizeObserverConstructor(this.#viewportInvalidationListener);
-      this.#resizeObserver.observe(this.#canvas);
-    }
-
-    this.#watchDevicePixelRatio();
-  }
-
-  #unwatchDevicePixelRatio(): void {
-    const mediaQuery = this.#dprMediaQuery;
-    if (mediaQuery === undefined) return;
-
-    mediaQuery.removeEventListener("change", this.#dprChangeListener);
-    this.#dprMediaQuery = undefined;
-  }
-
-  #watchDevicePixelRatio(): void {
-    this.#unwatchDevicePixelRatio();
-    const matchMedia = globalThis.matchMedia;
-    if (typeof matchMedia !== "function") return;
-
-    const mediaQuery = matchMedia(`(resolution: ${globalThis.devicePixelRatio ?? 1}dppx)`);
-    this.#dprMediaQuery = mediaQuery;
-    mediaQuery.addEventListener("change", this.#dprChangeListener);
   }
 
   #drawNode(
@@ -4355,7 +4305,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const plan = this.#framePlan;
     if (plan === undefined) return;
 
-    const { height, width } = this.#resize();
+    const { height, width } = this.#viewport.size();
     const camera = this.#sceneBindings.readCamera(plan.camera);
     resetFrameViews(this.#frameViews, null, false);
     appendFrameView(

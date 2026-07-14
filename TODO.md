@@ -35,6 +35,9 @@ Completed in the current worktree:
   serialized frame publication, render-failure delivery, observer isolation,
   and disposal. The root still decides the exact frame-advance and publication
   points around fallible teardown.
+- `WebGlCanvasViewportOwner` owns backing-buffer sizing, ResizeObserver and DPR
+  media-query lifetime, listener rebinding, invalidation, construction rollback,
+  and disposal.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
