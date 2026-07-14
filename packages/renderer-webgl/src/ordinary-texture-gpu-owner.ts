@@ -21,7 +21,10 @@ const captureFailure = (action: () => void): CapturedFailure | undefined => {
 const captureFirstFailure = (
   firstFailure: CapturedFailure | undefined,
   action: () => void,
-): CapturedFailure | undefined => firstFailure ?? captureFailure(action);
+): CapturedFailure | undefined => {
+  const nextFailure = captureFailure(action);
+  return firstFailure ?? nextFailure;
+};
 
 type OrdinaryTextureGpuOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;
