@@ -91,6 +91,29 @@ const defaultPanSpeed = 0.0016;
 const defaultRotateSpeed = 0.006;
 const defaultZoomSpeed = 0.0018;
 
+const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new TypeError(`${label} must be a boolean`);
+  return value;
+};
+
+const optionalFiniteNumber = (value: unknown, label: string): number | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(`${label} must be a finite number`);
+  }
+  return value;
+};
+
+const optionalChangeHandler = (
+  value: unknown,
+): OrbitControlsBehaviorOptions["onChange"] => {
+  if (value !== undefined && typeof value !== "function") {
+    throw new TypeError("OrbitControls onChange must be a function");
+  }
+  return value as OrbitControlsBehaviorOptions["onChange"];
+};
+
 const resolveStartingView = (options: OrbitControlsViewInputs): OrbitCameraView => {
   const view = options.value ?? options.defaultView;
   if (view === undefined) {
@@ -114,18 +137,18 @@ export const orbitControlsBehaviorOptionsFrom = ({
   rotateSpeed,
   zoomSpeed,
 }: OrbitControlsBehaviorOptions): OrbitControlsBehaviorOptions => ({
-  enabled,
-  enablePan,
-  enableRotate,
-  enableZoom,
+  enabled: optionalBoolean(enabled, "OrbitControls enabled"),
+  enablePan: optionalBoolean(enablePan, "OrbitControls enablePan"),
+  enableRotate: optionalBoolean(enableRotate, "OrbitControls enableRotate"),
+  enableZoom: optionalBoolean(enableZoom, "OrbitControls enableZoom"),
   maxDistance,
   maxPitch,
   minDistance,
   minPitch,
-  onChange,
-  panSpeed,
-  rotateSpeed,
-  zoomSpeed,
+  onChange: optionalChangeHandler(onChange),
+  panSpeed: optionalFiniteNumber(panSpeed, "OrbitControls panSpeed"),
+  rotateSpeed: optionalFiniteNumber(rotateSpeed, "OrbitControls rotateSpeed"),
+  zoomSpeed: optionalFiniteNumber(zoomSpeed, "OrbitControls zoomSpeed"),
 });
 
 const wheelDeltaPixels = (event: WheelEvent): number => {
@@ -362,7 +385,10 @@ export const createOrbitControls = (
     },
     getView: () => view,
     setOptions: (nextOptions) => {
-      behaviorOptions = { ...behaviorOptions, ...nextOptions };
+      behaviorOptions = orbitControlsBehaviorOptionsFrom({
+        ...behaviorOptions,
+        ...nextOptions,
+      });
       updateTouchAction();
       const interactionDisabled = behaviorOptions.enabled === false ||
         (interaction?.kind === "pinch" && behaviorOptions.enableZoom === false) ||

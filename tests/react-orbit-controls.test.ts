@@ -104,6 +104,24 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
+  it("rejects malformed behavior options before attaching interactions", () => {
+    const canvas = fakeCanvas();
+    expect(() => createOrbitControls(canvas, {
+      defaultView,
+      enabled: "yes" as unknown as boolean,
+    })).toThrow("OrbitControls enabled must be a boolean");
+    expect(() => createOrbitControls(canvas, {
+      defaultView,
+      zoomSpeed: Number.NaN,
+    })).toThrow("OrbitControls zoomSpeed must be a finite number");
+
+    const controls = createOrbitControls(canvas, { defaultView });
+    expect(() => controls.setOptions({
+      onChange: 42 as unknown as (view: OrbitCameraView) => void,
+    })).toThrow("OrbitControls onChange must be a function");
+    controls.dispose();
+  });
+
   it("publishes explicit camera resource commits without a reactive view getter", () => {
     const orbit = createOrbitCameraController({ distance: 5 }, { far: 100, fovY: 1, near: 0.1 });
     const listener = vi.fn();
