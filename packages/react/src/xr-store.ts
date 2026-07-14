@@ -5,90 +5,41 @@ import {
   reduceXrSessionStoreData,
   type XrSessionTransition,
 } from "./xr-session-transitions";
+import {
+  isXrSessionBlockReason,
+  isXrSessionMode,
+  isXrSessionVisibilityState,
+  type XrSessionActivationOptions,
+  type XrSessionAvailabilityOptions,
+  type XrSessionBeginOptions,
+  type XrSessionBlockOptions,
+  type XrSessionBlockReason,
+  type XrSessionControlSnapshot,
+  type XrSessionEndOptions,
+  type XrSessionFailureOptions,
+  type XrSessionFrameRecord,
+  type XrSessionState,
+  type XrSessionStoreInitialState,
+  type XrSessionVisibilityState,
+} from "./xr-session-model";
 
-export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
-
-export type XrSessionStatus =
-  | "active"
-  | "available"
-  | "blocked"
-  | "checking"
-  | "ending"
-  | "error"
-  | "starting"
-  | "suspended"
-  | "unavailable";
-
-/** Why acquisition failed even though immersive XR remains supported. */
-export type XrSessionBlockReason =
-  | "immersive-session-already-active"
-  | "session-request-denied";
-
-/** The browser-owned visibility state of a live XR session. */
-export type XrSessionVisibilityState = "hidden" | "visible" | "visible-blurred";
-
-export type XrViewport = {
-  readonly height: number;
-  readonly width: number;
-  readonly x: number;
-  readonly y: number;
-};
-
-export type XrSessionState = {
-  readonly active: boolean;
-  readonly available: boolean;
-  readonly blockReason: XrSessionBlockReason | null;
-  readonly error: string | null;
-  readonly frameIndex: number;
-  readonly mode: XrSessionMode | null;
-  readonly status: XrSessionStatus;
-  readonly visibilityState: XrSessionVisibilityState | null;
-  readonly viewCount: number;
-  readonly viewports: readonly XrViewport[];
-};
-
-export type XrSessionControlSnapshot<Session extends object = object> = {
-  readonly session: Session | null;
-};
-
-/** Acquisition state accepted before any browser-owned session exists. */
-export type XrSessionStoreInitialState = {
-  readonly available?: boolean;
-  readonly mode?: XrSessionMode | null;
-};
-
-export type XrSessionAvailabilityOptions = {
-  readonly mode?: XrSessionMode | null;
-};
-
-export type XrSessionBeginOptions = {
-  readonly mode?: XrSessionMode | null;
-};
-
-export type XrSessionActivationOptions = {
-  readonly mode: XrSessionMode;
-  readonly visibilityState?: XrSessionVisibilityState;
-};
-
-export type XrSessionBlockOptions = {
-  readonly available?: boolean;
-  readonly mode?: XrSessionMode | null;
-};
-
-export type XrSessionEndOptions = {
-  readonly available?: boolean;
-};
-
-export type XrSessionFailureOptions = {
-  readonly available?: boolean;
-  readonly mode?: XrSessionMode | null;
-};
-
-export type XrSessionFrameRecord = {
-  readonly frameIndex?: number;
-  readonly viewCount?: number;
-  readonly viewports?: readonly XrViewport[];
-};
+export type {
+  XrSessionActivationOptions,
+  XrSessionAvailabilityOptions,
+  XrSessionBeginOptions,
+  XrSessionBlockOptions,
+  XrSessionBlockReason,
+  XrSessionControlSnapshot,
+  XrSessionEndOptions,
+  XrSessionFailureOptions,
+  XrSessionFrameRecord,
+  XrSessionMode,
+  XrSessionState,
+  XrSessionStoreInitialState,
+  XrSessionStatus,
+  XrSessionVisibilityState,
+  XrViewport,
+} from "./xr-session-model";
 
 export type XrSessionStoreActions<Session extends object = object> = {
   readonly activateSession: (
@@ -143,17 +94,6 @@ const AVAILABLE_MODE_OPTIONS = ["available", "mode"] as const;
 const ACTIVATION_OPTIONS = ["mode", "visibilityState"] as const;
 const FRAME_FIELDS = ["frameIndex", "viewCount", "viewports"] as const;
 const VIEWPORT_FIELDS = ["height", "width", "x", "y"] as const;
-const XR_MODES: readonly XrSessionMode[] = ["immersive-ar", "immersive-vr", "inline"];
-const XR_VISIBILITY_STATES: readonly XrSessionVisibilityState[] = [
-  "hidden",
-  "visible",
-  "visible-blurred",
-];
-const XR_BLOCK_REASONS: readonly XrSessionBlockReason[] = [
-  "immersive-session-already-active",
-  "session-request-denied",
-];
-
 const validateActionObject = (
   value: unknown,
   allowedNames: readonly string[],
@@ -178,7 +118,7 @@ const validateOptionalAvailability = (value: unknown, label: string): void => {
 
 const validateMode = (value: unknown, label: string, required: boolean): void => {
   if (value === undefined && !required) return;
-  if (value !== null && !XR_MODES.includes(value as XrSessionMode)) {
+  if (value !== null && !isXrSessionMode(value)) {
     throw new TypeError(`${label} mode must be immersive-ar, immersive-vr, inline, or null`);
   }
   if (required && value === null) {
@@ -313,7 +253,7 @@ export const createXrSessionStore = <Session extends object = object>(
       const visibilityState = options.visibilityState;
       if (
         visibilityState !== undefined
-        && !XR_VISIBILITY_STATES.includes(visibilityState)
+        && !isXrSessionVisibilityState(visibilityState)
       ) {
         throw new TypeError("XR activateSession visibilityState must be hidden, visible, or visible-blurred");
       }
@@ -326,7 +266,7 @@ export const createXrSessionStore = <Session extends object = object>(
     },
     beginSessionEnd: () => apply({ type: "begin-end" }),
     blockSession: (reason, error, options = {}) => {
-      if (!XR_BLOCK_REASONS.includes(reason)) {
+      if (!isXrSessionBlockReason(reason)) {
         throw new TypeError("XR blockSession reason must be immersive-session-already-active or session-request-denied");
       }
       validateModeOptions(options, AVAILABLE_MODE_OPTIONS, "XR blockSession options");
@@ -359,7 +299,7 @@ export const createXrSessionStore = <Session extends object = object>(
       apply({ available, options, type: "availability" });
     },
     setSessionVisibility: (visibilityState) => {
-      if (!XR_VISIBILITY_STATES.includes(visibilityState)) {
+      if (!isXrSessionVisibilityState(visibilityState)) {
         throw new TypeError("XR setSessionVisibility visibilityState must be hidden, visible, or visible-blurred");
       }
       apply({ type: "visibility", visibilityState });

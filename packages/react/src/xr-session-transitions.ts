@@ -13,7 +13,8 @@ import type {
   XrSessionStatus,
   XrSessionVisibilityState,
   XrViewport,
-} from "./xr-store";
+} from "./xr-session-model";
+import { isXrSessionMode } from "./xr-session-model";
 
 export type XrSessionStoreData<Session extends object> =
   XrSessionState & XrSessionControlSnapshot<Session>;
@@ -51,8 +52,6 @@ export const copyXrViewports = (
 const availabilityStatus = (available: boolean): XrSessionStatus =>
   available ? "available" : "unavailable";
 
-const xrSessionModes = new Set(["immersive-ar", "immersive-vr", "inline"]);
-
 const validateInitialState = (initialState: XrSessionStoreInitialState): void => {
   if (typeof initialState !== "object" || initialState === null || Array.isArray(initialState)) {
     throw new TypeError("XR session store initialState must be an object");
@@ -68,7 +67,7 @@ const validateInitialState = (initialState: XrSessionStoreInitialState): void =>
   if (
     initialState.mode !== undefined
     && initialState.mode !== null
-    && !xrSessionModes.has(initialState.mode)
+    && !isXrSessionMode(initialState.mode)
   ) {
     throw new TypeError("XR session store initialState mode must be immersive-ar, immersive-vr, inline, or null");
   }

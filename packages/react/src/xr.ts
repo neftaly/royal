@@ -34,6 +34,13 @@ export {
 } from "./xr-store";
 
 export type {
+  XrSessionSelectorEquality,
+  XrSessionStore,
+  XrSessionStoreActions,
+  XrSessionStoreState,
+} from "./xr-store";
+
+export type {
   XrSessionActivationOptions,
   XrSessionAvailabilityOptions,
   XrSessionBeginOptions,
@@ -44,13 +51,9 @@ export type {
   XrSessionFailureOptions,
   XrSessionFrameRecord,
   XrSessionMode,
-  XrSessionSelectorEquality,
   XrSessionState,
-  XrSessionStore,
-  XrSessionStoreActions,
   XrSessionStoreInitialState,
-  XrSessionStoreState,
   XrSessionStatus,
   XrSessionVisibilityState,
   XrViewport,
-} from "./xr-store";
+} from "./xr-session-model";

@@ -1,6 +1,6 @@
 import type { RoyalRendererRoot } from "./root";
 import { royalRendererCapabilitiesFor } from "./renderer-capabilities";
-import type { XrSessionVisibilityState, XrViewport } from "./xr-store";
+import type { XrSessionVisibilityState, XrViewport } from "./xr-session-model";
 
 export interface XrReferenceSpace {
   readonly __royalXrReferenceSpace?: never;

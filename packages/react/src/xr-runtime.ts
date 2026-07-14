@@ -6,7 +6,12 @@ import {
   type XrSessionRenderer,
   type XrSessionRendererOptions,
 } from "./xr-renderer";
-import type { XrSessionMode, XrSessionStore } from "./xr-store";
+import type { XrSessionStore } from "./xr-store";
+import {
+  isXrSessionMode,
+  isXrSessionVisibilityState,
+  type XrSessionMode,
+} from "./xr-session-model";
 
 export type XrSessionRuntimeOptions = {
   readonly mode: XrSessionMode;
@@ -29,9 +34,6 @@ type XrSessionRendererFactory<Session extends XrSession> = (
   options?: XrSessionRendererOptions,
 ) => Promise<XrSessionRenderer>;
 
-const XR_MODES: readonly XrSessionMode[] = ["immersive-ar", "immersive-vr", "inline"];
-const XR_VISIBILITY_STATES = ["hidden", "visible", "visible-blurred"] as const;
-
 const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw new TypeError("XR session runtime options must be an object");
@@ -41,7 +43,7 @@ const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
       throw new TypeError(`XR session runtime options contain unsupported option ${JSON.stringify(name)}`);
     }
   }
-  if (!XR_MODES.includes(options.mode)) {
+  if (!isXrSessionMode(options.mode)) {
     throw new TypeError("XR session runtime mode must be immersive-ar, immersive-vr, or inline");
   }
   if (
@@ -58,7 +60,7 @@ const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
 
 const sessionVisibilityState = (session: XrSession) => {
   const visibilityState = session.visibilityState ?? "visible";
-  if (!XR_VISIBILITY_STATES.includes(visibilityState)) {
+  if (!isXrSessionVisibilityState(visibilityState)) {
     throw new TypeError("XR session visibilityState must be hidden, visible, or visible-blurred");
   }
   return visibilityState;
