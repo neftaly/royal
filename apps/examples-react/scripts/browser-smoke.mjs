@@ -1245,6 +1245,30 @@ const runReactLifecycleSmoke = async (session) => {
     return safeSnapshot(reader)?.lifecycle?.state === 'available' ? reader : undefined;
   });
   if (typeof initialReader !== 'function') return { error: 'initial renderer root did not become available' };
+  const initialCanvas = document.querySelector('canvas');
+  if (!(initialCanvas instanceof HTMLCanvasElement)) return { error: 'initial Canvas element was missing' };
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  let queuedPointerMoveFrame;
+  let queuedPointerMoveCancelled = false;
+  globalThis.requestAnimationFrame = (callback) => {
+    const frame = originalRequestAnimationFrame(callback);
+    queuedPointerMoveFrame ??= frame;
+    return frame;
+  };
+  globalThis.cancelAnimationFrame = (frame) => {
+    if (frame === queuedPointerMoveFrame) queuedPointerMoveCancelled = true;
+    originalCancelAnimationFrame(frame);
+  };
+  initialCanvas.dispatchEvent(new PointerEvent('pointermove', {
+    bubbles: true,
+    buttons: 0,
+    clientX: 8,
+    clientY: 8,
+    pointerId: 91,
+    pointerType: 'mouse',
+  }));
+  globalThis.requestAnimationFrame = originalRequestAnimationFrame;
 
   action('toggle-antialias');
   const replacementReader = await waitFor(() => {
@@ -1254,6 +1278,20 @@ const runReactLifecycleSmoke = async (session) => {
       : undefined;
   });
   if (typeof replacementReader !== 'function') return { error: 'option change did not replace the renderer root' };
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+  const replacementCanvas = document.querySelector('canvas');
+  const refEventsAfterReplacement = document.querySelector('[data-react-lifecycle-probe]')
+    ?.getAttribute('data-canvas-ref-events')?.split(',') ?? [];
+  const lastNullRef = refEventsAfterReplacement.lastIndexOf('null');
+  const canvasReplacement = {
+    newCanvasConnected: replacementCanvas?.isConnected ?? false,
+    oldCanvasConnected: initialCanvas.isConnected,
+    queuedPointerMoveCancelled,
+    refDetachedBeforeAttach: lastNullRef >= 0 && lastNullRef < refEventsAfterReplacement.length - 1,
+    refEventsAfterReplacement,
+    replaced: replacementCanvas instanceof HTMLCanvasElement && replacementCanvas !== initialCanvas,
+  };
 
   action('animate');
   const animationStart = safeSnapshot(replacementReader)?.frame;
@@ -1337,6 +1375,7 @@ const runReactLifecycleSmoke = async (session) => {
     disposedAfterFrames,
     disposedFrame,
     boundaryError,
+    canvasReplacement,
     failedRoot,
     initialAfterReplacement: safeSnapshot(initialReader),
     manifestRequestsAtUnmount,
@@ -1564,6 +1603,11 @@ const main = async () => {
         || !(lifecycle?.animationEnd >= lifecycle?.animationStart + 3)
         || !(lifecycle?.manifestRequestsAtUnmount > 0)
         || lifecycle?.boundaryError !== 'React lifecycle probe frame failure'
+        || lifecycle?.canvasReplacement?.replaced !== true
+        || lifecycle?.canvasReplacement?.oldCanvasConnected !== false
+        || lifecycle?.canvasReplacement?.newCanvasConnected !== true
+        || lifecycle?.canvasReplacement?.queuedPointerMoveCancelled !== true
+        || lifecycle?.canvasReplacement?.refDetachedBeforeAttach !== true
         || lifecycle?.remountedObserverState?.lifecycle !== 'available'
         || lifecycle?.remountedObserverState?.asset !== 'idle'
         || lifecycle?.recovered?.lifecycle?.state !== 'available'

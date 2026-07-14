@@ -15,7 +15,7 @@ import {
   unlitMaterial,
   virtualTexture,
 } from '@royal/react/scene';
-import { Component, useState, type ReactNode } from 'react';
+import { Component, useCallback, useRef, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../examples/BenchmarkRendererSnapshot';
 
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
@@ -92,6 +92,16 @@ export const ReactLifecycleProbe = (): ReactNode => {
   const [failFrame, setFailFrame] = useState(false);
   const [mode, setMode] = useState<'animate' | 'ordinary' | 'virtual-texture'>('ordinary');
   const [mounted, setMounted] = useState(true);
+  const canvasRefEvents = useRef<string[]>([]);
+  const canvasSerial = useRef(0);
+  const observeCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
+    const event = canvas === null ? 'null' : `canvas-${canvasSerial.current += 1}`;
+    canvasRefEvents.current.push(event);
+    queueMicrotask(() => {
+      document.querySelector('[data-react-lifecycle-probe]')
+        ?.setAttribute('data-canvas-ref-events', canvasRefEvents.current.join(','));
+    });
+  }, []);
 
   return (
     <main
@@ -130,6 +140,7 @@ export const ReactLifecycleProbe = (): ReactNode => {
           <Canvas
             aria-label="React renderer lifecycle probe"
             height={320}
+            ref={observeCanvasRef}
             rendererOptions={{ antialias }}
             scene={mode === 'virtual-texture' ? virtualTextureScene : ordinaryScene}
             width={480}

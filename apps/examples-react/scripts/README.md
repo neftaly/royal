@@ -237,7 +237,10 @@ manifest request, and creation of a fresh usable root on remount. It also
 checks lifecycle/glTF-status observer resubscription and scheduled-frame
 failure delivery through an ErrorBoundary followed by a clean reset. Disposed
 checkpoints must have no live governor leases, GPU allocations, or VT work. The
-probe is code-split from the ordinary app path and is not an example route or
+context-option checkpoint also requires a distinct connected canvas, a detached
+old canvas, callback-ref `null` before reattachment, and no stale coalesced
+pointer move after replacement. The probe is code-split from the ordinary app
+path and is not an example route or
 package export.
 
 For a focused rerun without visiting every example first:
