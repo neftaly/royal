@@ -297,6 +297,20 @@ const safeSegment = (value) =>
     .replace(/^-+|-+$/gu, '')
     .slice(0, 80) || 'unknown';
 
+const incompleteRendererEvidence = (report) => {
+  const failures = [];
+  if (report.ready !== true) failures.push('route readiness did not complete');
+  if (report.warmupComplete !== true) failures.push('frame warmup did not complete');
+  if (report.frameStats?.complete !== true) failures.push('frame sampling did not complete');
+  if (report.device?.webgl === null || typeof report.device?.webgl !== 'object') {
+    failures.push('final WebGL device evidence is missing');
+  }
+  if (report.renderer?.after === null || typeof report.renderer?.after !== 'object') {
+    failures.push('final renderer snapshot is missing');
+  }
+  return failures;
+};
+
 const run = async () => {
   const page = await findPage();
   const client = websocketConnect(page.webSocketDebuggerUrl);
@@ -315,6 +329,22 @@ const run = async () => {
   );
   await targetCommand(client, targetId, 'Page.navigate', { url });
   const report = await waitForReport(client, targetId);
+  const evidenceFailures = incompleteRendererEvidence(report);
+  if (evidenceFailures.length > 0) {
+    const pageState = await evaluate(
+      client,
+      targetId,
+      `JSON.stringify({
+        benchmarkError: globalThis.__royalBrowserBenchmarkError ?? null,
+        bodyText: document.body?.innerText?.slice(0, 1200) ?? null,
+        loadError: document.querySelector('.example-load-error')?.textContent ?? null
+      })`,
+      5_000,
+    );
+    throw new Error(
+      `iPad benchmark evidence incomplete: ${evidenceFailures.join('; ')}; page=${String(pageState)}`,
+    );
+  }
   const generatedAt = typeof report.generatedAt === 'string' ? report.generatedAt : new Date().toISOString();
   const filename = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(report.example?.id)}.json`;
   await mkdir(outputDir, { recursive: true });

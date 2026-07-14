@@ -126,7 +126,9 @@ The script drives the existing Safari tab over the WebKit inspector protocol,
 navigates it to `?bench=auto`, waits for the in-page collector, and writes JSON
 reports under `research/examples-benchmarks/ipad-safari/`. The collector runs
 inside the real route so WebGL hooks install before the canvas initializes; it is
-not a user-facing benchmark UI.
+not a user-facing benchmark UI. Reports are rejected unless route readiness,
+warmup, frame sampling, the final WebGL device summary, and the final renderer
+snapshot are all present; a transient canvas is not accepted as device evidence.
 
 Browser instancing fuzz rows are opt-in with
 `EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural

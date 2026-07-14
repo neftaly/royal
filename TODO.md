@@ -68,7 +68,10 @@ CI runs both the built-entrypoint and packed-consumer gates.
 
 ## Validation
 
-1. Re-run physical iPad Safari and Quest 2 checks when those devices are next
-   available; they are explicitly deferred and do not block desktop work.
-   Cover context loss, camera pan, close/far VT convergence, SVG/raster parity,
-   window resize, and memory-pressure eviction.
+1. Complete the remaining physical iPad Safari and Quest 2 checks; they do not
+   block desktop work. The July 14 iPad pass covered VT convergence and animated
+   instancing. The SVG route currently leaves physical Safari blank and is now
+   rejected by the evidence gate. Quest Browser 149 remains USB-visible but did
+   not publish a DevTools socket while its splash surface was active. Still cover
+   context loss, camera pan, SVG/raster parity, window resize/orientation, and
+   memory-pressure eviction once those device paths are interactive.

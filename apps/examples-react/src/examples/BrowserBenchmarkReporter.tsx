@@ -465,19 +465,28 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
   };
 };
 
-const benchmarkWarnings = ({
+export const benchmarkWarnings = ({
+  canvasPresent,
   ready,
+  rendererPresent,
   stats,
   warmupComplete,
+  webglPresent,
 }: {
+  readonly canvasPresent: boolean;
   readonly ready: boolean;
+  readonly rendererPresent: boolean;
   readonly stats: ReturnType<typeof frameStats>;
   readonly warmupComplete: boolean;
+  readonly webglPresent: boolean;
 }): readonly string[] => {
   const warnings: string[] = [];
   if (!ready) warnings.push('Document/canvas readiness timed out before sampling');
   if (!warmupComplete) warnings.push('Warmup timed out before sampling');
   if (stats.timedOut) warnings.push(`Captured ${stats.sampleCount}/${stats.requestedSampleCount} requested frames`);
+  if (!canvasPresent) warnings.push('Canvas disappeared before benchmark finalization');
+  if (!webglPresent) warnings.push('WebGL context was unavailable at benchmark finalization');
+  if (!rendererPresent) warnings.push('Renderer snapshot was unavailable at benchmark finalization');
   return warnings;
 };
 
@@ -501,10 +510,18 @@ const runBrowserBenchmark = async (
     : frameStats([], options.frames, options.timeoutMs);
   const framesGl = bench.snapshot();
   const afterFrames = rendererSnapshot();
-  const warnings = benchmarkWarnings({ ready, stats, warmupComplete });
+  const device = deviceSummary();
+  const warnings = benchmarkWarnings({
+    canvasPresent: document.querySelector('canvas') !== null,
+    ready,
+    rendererPresent: afterFrames !== null,
+    stats,
+    warmupComplete,
+    webglPresent: device.webgl !== null,
+  });
 
   return {
-    device: deviceSummary(),
+    device,
     example: {
       id: example.id,
       path: example.path,
