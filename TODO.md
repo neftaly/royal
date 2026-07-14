@@ -54,6 +54,8 @@ Completed in the current worktree:
   validation, extension discovery, and immutable numeric capability snapshots.
 - `GeometryRecipeRegistry` owns retained CPU recipes, direct/glTF semantic
   identity, local-bounds caching, and transient packet reverse lookup.
+- `SurfaceLightResolver` owns scene/studio and glTF light-set resolution,
+  upload-readiness projection, transforms, and stable glTF light-scope identity.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup

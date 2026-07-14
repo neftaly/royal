@@ -7,7 +7,6 @@ import {
   type ClusteredLightArena,
 } from "./webgl/clustered-light-arena";
 import {
-  type EnvironmentLight,
   type Material,
   type MeshNode,
   type PickInput,
@@ -228,7 +227,6 @@ import {
 } from "./gltf/frame-batch-arena";
 import {
   identityMat4,
-  inverseMat4,
   multiplyMat4,
   multiplyMat4Into,
   projectionMat4Into,
@@ -316,11 +314,7 @@ import {
 } from "./webgl/program-arena";
 import { rendererOwnedWebGl2Context, type RendererOwnedWebGl2Context } from "./webgl/context-lane";
 import {
-  surfaceLightSet,
-  transformSurfaceIblIrradiance,
-  transformSurfaceLight,
   type SurfaceImageBasedLightSpecular,
-  type SurfaceIblSpecular,
   type SurfaceLightSet,
 } from "./webgl/lights";
 import {
@@ -343,9 +337,7 @@ import {
   SurfaceExecutionArena,
   type SurfaceToneMappingState,
 } from "./webgl/surface-execution-arena";
-import {
-  STUDIO_ENVIRONMENT_IRRADIANCE,
-} from "./webgl/studio-environment";
+import { SurfaceLightResolver } from "./surface-light-resolver";
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import {
   WebGlContextCapabilityOwner,
@@ -688,8 +680,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#preparedGltf.packetTopology.catalog,
   );
   readonly #gltfMaterials = new GltfMaterialPreparationArena();
-  readonly #gltfLightScopeIds = new Map<string, number>();
-  #gltfLightScopeIdCount = 0;
   readonly #gltfPacketBoundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
   readonly #projectedBoundsWorkspace = createProjectedBoundsWorkspace();
   readonly #gltfPacketLocalModelScratch: MutableMat4 = identityMat4();
@@ -706,6 +696,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #disposed = false;
   #gltfRenderOrdinal = 0;
   readonly #iblTextures: IblTextureArena;
+  readonly #lightResolver: SurfaceLightResolver;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena({
     replace: (lease, cost) => {
@@ -896,6 +887,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       registerRollback(() => dropIblTextureContext(this.#iblTextures));
       registerRollback(() => releaseIblTextureContextHandles(this.#iblTextures));
+      this.#lightResolver = new SurfaceLightResolver({
+        ensureGltfSpecular: (specular) => this.#ensureIblSpecularTexture(specular),
+        studioSpecular: () => this.#studioEnvironmentSpecularTexture(),
+      });
       this.#textureHandles = createTextureHandleArena(gl);
       registerRollback(() => dropTextureHandleContext(this.#textureHandles));
       registerRollback(() => releaseTextureHandleContextHandles(this.#textureHandles));
@@ -1141,7 +1136,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         throw new Error("Royal physical lighting requires EXT_color_buffer_float");
       }
       const useHdr = wantsHdr && this.#contextCapabilities.capabilities.hdrColorBuffer;
-      const surfaceLights = this.#sceneSurfaceLightSet(plan.environment);
+      const surfaceLights = this.#lightResolver.resolveScene(
+        plan.environment,
+        this.#scenePlan.sceneSurfaceLights,
+        this.#scenePlan.sceneSurfaceLightSet,
+      );
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
       this.#prepareSharedViewGltfLodSelections(plan, frameViews);
       this.#selectGltfFramePackets(plan, frameViews);
@@ -1497,8 +1496,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => this.#preparedGltf.dispose());
     teardown(() => this.#gltfFrameBatches.dispose());
     this.#gltfMaterials.clear();
-    this.#gltfLightScopeIds.clear();
-    this.#gltfLightScopeIdCount = 0;
+    this.#lightResolver.clear();
     teardown(() => this.#sceneBindings.dispose());
     teardown(() => this.#gltfInstanceTransforms.dispose());
     teardown(() => this.#viewport.dispose());
@@ -2100,10 +2098,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       : undefined;
     const ordinaryAssetLights = ordinaryRootModel === undefined
       ? undefined
-      : this.#gltfAssetLightSet(state, ordinaryRootModel);
+      : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
       ? 0
-      : this.#gltfLightScopeId(state.instanceKey, renderInstanceOrdinal, 0);
+      : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
     const instanceAssetLights = instanceViews === undefined
       ? undefined
       : new Map<number, { readonly lights: SurfaceLightSet | undefined; readonly scopeId: number }>();
@@ -2172,10 +2170,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
           assetLights = cachedLights.lights;
           lightScopeId = cachedLights.scopeId;
         } else {
-          assetLights = this.#gltfAssetLightSet(state, rootModel);
+          assetLights = this.#lightResolver.resolveGltfAsset(state, rootModel);
           lightScopeId = assetLights === undefined
             ? 0
-            : this.#gltfLightScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
+            : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
           instanceAssetLights.set(outerIndex, { lights: assetLights, scopeId: lightScopeId });
         }
       }
@@ -2246,18 +2244,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
 
     return cursor;
-  }
-
-  #gltfLightScopeId(stateKey: number, renderInstanceOrdinal: number, outerIndex: number): number {
-    const key = `${stateKey}:${renderInstanceOrdinal}:${outerIndex}`;
-    const existing = this.#gltfLightScopeIds.get(key);
-    if (existing !== undefined) return existing;
-    this.#gltfLightScopeIdCount += 1;
-    if (!Number.isSafeInteger(this.#gltfLightScopeIdCount)) {
-      throw new Error("Royal glTF light-scope ID space is exhausted");
-    }
-    this.#gltfLightScopeIds.set(key, this.#gltfLightScopeIdCount);
-    return this.#gltfLightScopeIdCount;
   }
 
   #drawGltfPacketSubmissions(
@@ -2361,86 +2347,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       view,
       viewportSize,
     });
-  }
-
-  #sceneSurfaceLightSet(
-    environment: EnvironmentLight | undefined,
-  ): SurfaceLightSet | undefined {
-    if (environment === undefined) return this.#scenePlan.sceneSurfaceLightSet;
-    const environmentLights = this.#environmentLightSet(environment);
-
-    return surfaceLightSet(
-      this.#scenePlan.sceneSurfaceLights,
-      environmentLights?.irradiance,
-      environmentLights?.specular,
-    );
-  }
-
-  #environmentLightSet(environment: EnvironmentLight): Pick<SurfaceLightSet, "irradiance" | "specular"> {
-    switch (environment.preset) {
-      case "studio":
-        return this.#studioEnvironmentLightSet(environment);
-    }
-  }
-
-  #studioEnvironmentLightSet(environment: EnvironmentLight): Pick<SurfaceLightSet, "irradiance" | "specular"> {
-    const worldFromIbl = transformMat4({
-      position: [0, 0, 0],
-      rotation: environment.rotation,
-      scale: [1, 1, 1],
-    });
-    const worldToIbl = inverseMat4(worldFromIbl) ?? identityMat4();
-    const specular = this.#studioEnvironmentSpecularTexture();
-
-    return {
-      irradiance: {
-        coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
-        intensity: environment.radianceScaleNits,
-        worldToIbl,
-      },
-      ...(specular === undefined ? {} : { specular: {
-        encoding: "linear",
-        intensity: environment.radianceScaleNits,
-        key: specular.key,
-        mipCount: specular.mipCount,
-        texture: specular.texture,
-        worldToIbl,
-      } }),
-    };
-  }
-
-  #gltfAssetLightSet(state: GltfState, rootModel: Mat4): SurfaceLightSet | undefined {
-    const imageBasedLight = state.imageBasedLight;
-    const irradiance = imageBasedLight === undefined
-      ? undefined
-      : transformSurfaceIblIrradiance(rootModel, imageBasedLight);
-    const specular = imageBasedLight?.specular === undefined || irradiance === undefined
-      ? undefined
-      : this.#gltfIblSpecularLight(imageBasedLight.specular, irradiance);
-    if (state.lights.length === 0 && irradiance === undefined && specular === undefined) return undefined;
-
-    return surfaceLightSet(
-      state.lights.map((light) => transformSurfaceLight(rootModel, light)),
-      irradiance,
-      specular,
-    );
-  }
-
-  #gltfIblSpecularLight(
-    specular: SurfaceImageBasedLightSpecular,
-    irradiance: ReturnType<typeof transformSurfaceIblIrradiance>,
-  ): SurfaceIblSpecular | undefined {
-    const resource = this.#ensureIblSpecularTexture(specular);
-    if (!resource.uploaded) return undefined;
-
-    return {
-      encoding: specular.encoding,
-      intensity: irradiance.intensity,
-      key: specular.key,
-      mipCount: resource.mipCount,
-      texture: resource.texture,
-      worldToIbl: irradiance.worldToIbl,
-    };
   }
 
   #prepareSharedViewGltfLodSelections(plan: FramePlan, frameViews: FrameViews): void {
