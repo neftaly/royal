@@ -425,6 +425,54 @@ const checkRealXrRoute = (route, routeLabel) => {
   checkFrameStats(route.xr.frameStats, `${routeLabel}.xr.frameStats`);
 };
 
+const checkVirtualTextureClose = (route, routeLabel, enabled) => {
+  if (!enabled && route.virtualTextureClose === undefined) return;
+  const close = route.virtualTextureClose;
+  if (!requireObject(close, `${routeLabel}.virtualTextureClose`)) return;
+  requirePositiveNumber(close.durationMs, `${routeLabel}.virtualTextureClose.durationMs`);
+  requirePositiveNumber(close.initialDistance, `${routeLabel}.virtualTextureClose.initialDistance`);
+  requirePositiveNumber(close.finalDistance, `${routeLabel}.virtualTextureClose.finalDistance`);
+  requirePositiveNumber(close.targetDistance, `${routeLabel}.virtualTextureClose.targetDistance`);
+  requirePositiveNumber(close.wheelEvents, `${routeLabel}.virtualTextureClose.wheelEvents`);
+  if (
+    isNumber(close.finalDistance)
+    && isNumber(close.targetDistance)
+    && close.finalDistance > close.targetDistance + 0.01
+  ) {
+    errors.push(`${routeLabel}.virtualTextureClose did not reach its requested distance`);
+  }
+  checkFrameStats(close.frameStats, `${routeLabel}.virtualTextureClose.frameStats`);
+  requireGlCounters(close.gl, `${routeLabel}.virtualTextureClose.gl`);
+  if (requireObject(close.screenshot, `${routeLabel}.virtualTextureClose.screenshot`)) {
+    requirePositiveNumber(close.screenshot.height, `${routeLabel}.virtualTextureClose.screenshot.height`);
+    requireString(close.screenshot.outputPath, `${routeLabel}.virtualTextureClose.screenshot.outputPath`);
+    requirePositiveNumber(close.screenshot.width, `${routeLabel}.virtualTextureClose.screenshot.width`);
+  }
+  const virtualTexturing = close.renderer?.virtualTexturing;
+  if (!requireObject(virtualTexturing, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing`)) return;
+  requireBoolean(virtualTexturing.available, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.available`);
+  if (virtualTexturing.available !== true) {
+    errors.push(`${routeLabel}.virtualTextureClose.renderer.virtualTexturing.available must be true`);
+  }
+  if (!requireObject(virtualTexturing.after, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after`)) return;
+  for (const counter of [
+    'demandRetentionOverflows',
+    'generatedPageFailures',
+    'gpuAdmissionFailures',
+    'manifestFailures',
+    'outstandingPageRequests',
+    'pageLoadFailures',
+    'pendingPages',
+    'physicalQuarantinedBytes',
+    'unsupportedDraws',
+  ]) {
+    requireZero(
+      virtualTexturing.after[counter],
+      `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.${counter}`,
+    );
+  }
+};
+
 const isGltfLoadReport = (value) =>
   isObject(value?.metrics) &&
   isObject(value?.route) &&
@@ -633,6 +681,7 @@ if (requireObject(report, 'report')) {
     checkTrace(report.trace, 'report.trace');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
     const realXrEnabled = report.options?.realXrEnabled === true;
+    const virtualTextureCloseEnabled = report.options?.virtualTextureCloseEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
       report.routes.forEach((route, index) => {
         const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
@@ -644,6 +693,7 @@ if (requireObject(report, 'report')) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
         }
         checkCameraDrag(route, routeLabel, cameraDragEnabled);
+        checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
         if (realXrEnabled) checkRealXrRoute(route, routeLabel);
         if (route.profile?.kind === 'gltf-instancing') {
           checkInstancingRoute(route, routeLabel);

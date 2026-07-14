@@ -1,12 +1,15 @@
 import {
   boxGeometry,
   directionalLight,
+  imageTexture,
   linearRgbaFromSrgb,
   mesh,
   perspectiveCamera,
   planeGeometry,
   scene,
   standardMaterial,
+  unlitMaterial,
+  virtualTexture,
 } from '@royal/react/scene';
 import {
   Canvas,
@@ -34,6 +37,22 @@ const camera = perspectiveCamera({
   position: [0, 1.55, 4.8],
   rotation: [-0.2, 0, 0],
 });
+const virtualTextureFixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
+const generatedSvgFixtureRoot = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/';
+const virtualGroundMaterial = unlitMaterial({
+  texture: virtualTexture({
+    sampler: {
+      magFilter: 'linear',
+      minFilter: 'linear-mipmap-linear',
+      wrapS: 'clamp-to-edge',
+      wrapT: 'clamp-to-edge',
+    },
+    src: `${virtualTextureFixtureRoot}map.vt.json`,
+  }),
+});
+const generatedSvgMaterial = unlitMaterial({
+  texture: imageTexture(`${generatedSvgFixtureRoot}ghostscript-tiger.svg`),
+});
 const renderScene = scene({
   camera,
   environment: showcaseEnvironment,
@@ -42,9 +61,14 @@ const renderScene = scene({
     directionalLight(showcaseKeyLight),
     directionalLight(showcaseFillLight),
     mesh({
-      geometry: planeGeometry([7.2, 7.2]),
-      material: standardMaterial({ color: linearRgbaFromSrgb([0.42, 0.39, 0.31, 1]) }),
-      transform: { position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] },
+      geometry: planeGeometry([20, 20]),
+      material: virtualGroundMaterial,
+      transform: { position: [0, -0.04, -4], rotation: [-Math.PI / 2, 0, 0] },
+    }),
+    mesh({
+      geometry: planeGeometry([2.8, 2.8]),
+      material: generatedSvgMaterial,
+      transform: { position: [0, 1.6, -3.8] },
     }),
     mesh({
       geometry: boxGeometry([0.82, 0.82, 0.82]),

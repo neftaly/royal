@@ -67,6 +67,15 @@ is true and `warnings` is empty or understood.
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at
   `11.2ms` p95 on the physical Adreno 650, with camera-drag draw latency also at
   `11.2ms` p95 and one draw per moved frame.
+- The close-view follow-up drove that same 8-by-8-metre plane from distance 11
+  to the orbit control's 0.1 minimum. The transition admitted and uploaded eight
+  additional mip-0/1 pages (13 resident total), completed with no pending
+  requests, browser errors, VT failures, overflow, or quarantined bytes, and
+  retained a canvas screenshot. The approach took about `800ms`; its 52-frame
+  sample was `33.3ms` p95 before returning to `11.4ms` p95 steady-state. The
+  trace attributes the long approach frames to renderer redraw/page-upload work,
+  so close-view transition pacing remains a concrete optimization slice even
+  though residency and rendering are correct.
 - `quest2-gltf-instancing-2026-07-14.json` keeps 4,096 animated instances near
   `35ms` p95. Camera-driven static grid redraws are about `33ms` p95 at grid 16,
   while grid 8 camera redraws are about `11ms` p95; constrained-device
@@ -81,9 +90,18 @@ is true and `warnings` is empty or understood.
   example now uses only the standard trusted `requestSession()` path. A
   background XR session can independently retain that same slot while Browser
   is foregrounded, and the harness reports that lifecycle state separately.
-  Quest
-  logged one `glFramebufferTexture2DMultisample` `GL_INVALID_OPERATION` warning
+  Quest logged one `glFramebufferTexture2DMultisample` `GL_INVALID_OPERATION` warning
   during XR framebuffer setup, so frame pacing and that browser/driver warning
   remain an optimization/diagnostic target rather than a correctness gate.
   Reports declaring real XR are rejected unless activation succeeds and
   physical XR-session frames exist.
+- `quest2-webxr-vr-vt-2026-07-14.json` reran the physical session after adding
+  a 20-by-20-metre explicit-VT ground plane and generated-VT SVG board. It
+  completed 24/24 stereo XR frames at `20.6ms` p95 with no renderer admission,
+  page, manifest, or generated-page failures. The renderer converged with 18
+  cached pages across both VT resources; the SVG path generated five demanded
+  pages rather than rasterizing its 5,461-page logical target eagerly. The
+  trace kept measured XR JavaScript callbacks below `7.5ms` apart from one
+  startup callback, so the remaining frame interval is outside the main
+  renderer callback. Quest still emits the known multisample framebuffer
+  `GL_INVALID_OPERATION` warning during XR setup.

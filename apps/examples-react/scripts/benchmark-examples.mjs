@@ -45,6 +45,9 @@ const configuredTraceOutputPath = process.env.EXAMPLES_BENCH_TRACE_OUTPUT?.trim(
 const traceOutputPath = configuredTraceOutputPath === ''
   ? replaceJsonSuffix(artifactBasePath, '.trace')
   : resolveInvocationPath(configuredTraceOutputPath);
+const virtualTextureCloseScreenshotPath = artifactBasePath.endsWith('.json')
+  ? `${artifactBasePath.slice(0, -5)}.vt-close.png`
+  : `${artifactBasePath}.vt-close.png`;
 const gltfLabManifest = JSON.parse(readFileSync(
   new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
   'utf8',
@@ -83,6 +86,18 @@ const cameraDragFrameCount = cameraDragEnabled
 const cameraDragStepPixels = cameraDragEnabled
   ? envInteger('EXAMPLES_BENCH_CAMERA_DRAG_STEP_PX', 7)
   : 7;
+const virtualTextureCloseEnabled = process.env.EXAMPLES_BENCH_VT_CLOSE === '1';
+const virtualTextureCloseTarget = (() => {
+  const raw = process.env.EXAMPLES_BENCH_VT_CLOSE_DISTANCE;
+  if (raw === undefined || raw === '') return 0.12;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(
+      `EXAMPLES_BENCH_VT_CLOSE_DISTANCE must be a positive finite number, received ${JSON.stringify(raw)}`,
+    );
+  }
+  return value;
+})();
 const instancingFuzzCases = envInteger('EXAMPLES_BENCH_INSTANCING_CASES', 4);
 const instancingSeed = envInteger('EXAMPLES_BENCH_INSTANCING_SEED', 0x1a57a11);
 const instancingFuzzEnabled = process.env.EXAMPLES_BENCH_INSTANCING_FUZZ === '1';
@@ -448,7 +463,7 @@ const rendererCounterMetrics = (after, before, field, keys) => {
   const afterCounters = rendererCounters(after, field, keys);
   const beforeCounters = rendererCounters(before, field, keys);
   return {
-    available: after?.[field] !== null || before?.[field] !== null,
+    available: after?.[field] != null || before?.[field] != null,
     delta: Object.fromEntries(keys.map((key) => [key, afterCounters[key] - beforeCounters[key]])),
   };
 };
@@ -457,6 +472,27 @@ const rendererCounterSetup = (snapshot, field, keys) => ({
   available: snapshot?.[field] !== undefined && snapshot?.[field] !== null,
   counters: rendererCounters(snapshot, field, keys),
 });
+
+const finiteNumberRecord = (value) => value === null || typeof value !== 'object'
+  ? {}
+  : Object.fromEntries(Object.entries(value).filter(([, counter]) =>
+      typeof counter === 'number' && Number.isFinite(counter)
+    ));
+
+const rendererRecordMetrics = (after, before, field) => {
+  const afterCounters = finiteNumberRecord(after?.[field]);
+  const beforeCounters = finiteNumberRecord(before?.[field]);
+  const keys = [...new Set([...Object.keys(beforeCounters), ...Object.keys(afterCounters)])].sort();
+  return {
+    after: afterCounters,
+    available: after?.[field] != null || before?.[field] != null,
+    before: beforeCounters,
+    delta: Object.fromEntries(keys.map((key) => [
+      key,
+      (afterCounters[key] ?? 0) - (beforeCounters[key] ?? 0),
+    ])),
+  };
+};
 
 const deploymentSize = async () => {
   const distRoot = path.join(appRoot, 'dist');
@@ -800,6 +836,25 @@ const installBenchmarkHooks = async (session) => {
       note: 'These are event-to-next-frame/draw timings, not true motion-to-photon latency.',
     };
   };
+  let frameRecorder = null;
+  const startFrameRecorder = () => {
+    if (frameRecorder !== null) frameRecorder.active = false;
+    const recorder = { active: true, times: [] };
+    frameRecorder = recorder;
+    const record = (time) => {
+      if (!recorder.active) return;
+      recorder.times.push(time);
+      requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  };
+  const stopFrameRecorder = () => {
+    const recorder = frameRecorder;
+    frameRecorder = null;
+    if (recorder === null) return null;
+    recorder.active = false;
+    return statsFromTimes(recorder.times);
+  };
   const cameraDragSample = async (frameDeltas, stepPixels) => {
     if (typeof PointerEvent !== 'function') return failedFrameStats('missing-pointer-event');
     const canvas = document.querySelector('canvas');
@@ -1009,9 +1064,11 @@ const installBenchmarkHooks = async (session) => {
       xr.frameTimes.length = 0;
     },
     sampleXrFrames,
+    startFrameRecorder,
     snapshot() {
       return { ...counters };
     },
+    stopFrameRecorder,
     xrSnapshot() {
       return {
         active: xr.activeSession !== null,
@@ -1295,11 +1352,21 @@ const collectPageMetrics = async (session, frames, options = {}) => {
         'resourceLifetime',
         resourceLifetimeCounterKeys,
       ),
+      snapshots: {
+        afterFrames: rendererAfterFrames,
+        beforeFrames: rendererBeforeFrames,
+        setup: setupRenderer,
+      },
       setup: {
         gltfInstancing: gltfInstancingSetupMetrics(setupRenderer),
         planning: rendererCounterSetup(setupRenderer, 'planning', planningCounterKeys),
         resourceLifetime: rendererCounterSetup(setupRenderer, 'resourceLifetime', resourceLifetimeCounterKeys),
       },
+      virtualTexturing: rendererRecordMetrics(
+        rendererAfterFrames,
+        rendererBeforeFrames,
+        'virtualTexturing',
+      ),
     },
     heap: {
       afterFinalGc,
@@ -1472,6 +1539,134 @@ const prepareRouteForBenchmark = async (session, route) => {
   }
 };
 
+const prepareVirtualTextureCloseView = async (session, route) => {
+  if (!virtualTextureCloseEnabled || route.id !== 'virtual-texture-stress') return undefined;
+  const initial = await evaluate(session, `
+(() => {
+  const canvas = document.querySelector('canvas[data-map-distance]');
+  if (canvas === null) return null;
+  const rect = canvas.getBoundingClientRect();
+  return {
+    distance: Number(canvas.getAttribute('data-map-distance')),
+    height: rect.height,
+    width: rect.width,
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+})()
+`);
+  if (
+    initial === null
+    || !Number.isFinite(initial.distance)
+    || !Number.isFinite(initial.x)
+    || !Number.isFinite(initial.y)
+  ) {
+    throw new Error('Virtual texture close-view preparation could not resolve the map canvas and distance');
+  }
+  await session.call('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: initial.x,
+    y: initial.y,
+    button: 'none',
+    buttons: 0,
+  });
+  const rendererBefore = await evaluate(session, rendererSnapshotExpression);
+  const glBefore = glCounterTotals(await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}'));
+  await evaluate(session, 'globalThis.__royalBench?.startFrameRecorder?.()');
+  const startedAt = performance.now();
+  let finalDistance = initial.distance;
+  let wheelEvents = 0;
+  let frameStats;
+  try {
+    while (finalDistance > virtualTextureCloseTarget && wheelEvents < 12) {
+      await session.call('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: initial.x,
+        y: initial.y,
+        deltaX: 0,
+        deltaY: -1_000,
+      });
+      wheelEvents += 1;
+      await sleep(50);
+      finalDistance = await evaluate(session, `
+Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-map-distance'))
+`);
+    }
+    await evaluate(session, `
+(async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const deadline = performance.now() + 10_000;
+  let stableSince = null;
+  let resourceCount = performance.getEntriesByType('resource').length;
+  while (performance.now() < deadline) {
+    const snapshot = ${rendererSnapshotExpression};
+    const nextResourceCount = performance.getEntriesByType('resource').length;
+    const pending = snapshot?.virtualTexturing?.pendingPages ?? 0;
+    const outstanding = snapshot?.virtualTexturing?.outstandingPageRequests ?? 0;
+    if (pending === 0 && outstanding === 0 && nextResourceCount === resourceCount) {
+      stableSince ??= performance.now();
+      if (performance.now() - stableSince >= 250) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        return;
+      }
+    } else {
+      stableSince = null;
+      resourceCount = nextResourceCount;
+    }
+    await sleep(25);
+  }
+  throw new Error('Virtual texture close-view resources did not settle within 10000ms');
+})()
+`);
+  } finally {
+    frameStats = await evaluate(session, 'globalThis.__royalBench?.stopFrameRecorder?.() ?? null');
+  }
+  if (!Number.isFinite(finalDistance) || finalDistance > virtualTextureCloseTarget + 0.01) {
+    throw new Error(
+      `Virtual texture close-view preparation stopped at ${finalDistance}; target was ${virtualTextureCloseTarget}`,
+    );
+  }
+  const rendererAfter = await evaluate(session, rendererSnapshotExpression);
+  const glAfter = glCounterTotals(await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}'));
+  const screenshot = await session.call('Page.captureScreenshot', {
+    captureBeyondViewport: false,
+    clip: {
+      height: initial.height,
+      scale: 1,
+      width: initial.width,
+      x: initial.x - initial.width / 2,
+      y: initial.y - initial.height / 2,
+    },
+    format: 'png',
+    fromSurface: false,
+  });
+  await mkdir(path.dirname(virtualTextureCloseScreenshotPath), { recursive: true });
+  await writeFile(virtualTextureCloseScreenshotPath, Buffer.from(screenshot.data, 'base64'));
+  const glDelta = Object.fromEntries([...new Set([
+    ...Object.keys(glBefore),
+    ...Object.keys(glAfter),
+  ])].sort().map((key) => [key, (glAfter[key] ?? 0) - (glBefore[key] ?? 0)]));
+  return {
+    durationMs: performance.now() - startedAt,
+    finalDistance,
+    frameStats,
+    gl: glDelta,
+    initialDistance: initial.distance,
+    renderer: {
+      after: rendererAfter,
+      before: rendererBefore,
+      virtualTexturing: rendererRecordMetrics(rendererAfter, rendererBefore, 'virtualTexturing'),
+    },
+    screenshot: {
+      height: initial.height,
+      outputPath: virtualTextureCloseScreenshotPath,
+      width: initial.width,
+    },
+    targetDistance: virtualTextureCloseTarget,
+    wheelEvents,
+  };
+};
+
 const benchmarkRoute = async (session, route, onSessionChanged) => {
   await session.call('Page.bringToFront');
   if (clearCachePerRoute) await session.call('Network.clearBrowserCache');
@@ -1506,6 +1701,7 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
     await onSessionChanged(session, diagnostics);
   }
   const prepared = await prepareRouteForBenchmark(session, route);
+  const virtualTextureClose = await prepareVirtualTextureCloseView(session, route);
   if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
     throw new Error(
       `Real XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
@@ -1527,6 +1723,7 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
   return {
     ...route,
     ...(prepared === undefined ? {} : { prepared }),
+    ...(virtualTextureClose === undefined ? {} : { virtualTextureClose }),
     ...(activationFailure === undefined ? {} : { xrActivationFailure: activationFailure }),
     ...(activationFailure === undefined || !fakeXrEnabled
       ? {}
@@ -1624,6 +1821,15 @@ const routeSummary = (route) => {
     copyTexSubImage2DPerFrame: round(copyTexSubImage2DPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
     uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / sampledFrameCount),
+    ...(route.virtualTextureClose === undefined
+      ? {}
+      : {
+        virtualTextureCloseDurationMs: round(route.virtualTextureClose.durationMs),
+        virtualTextureCloseFinalDistance: route.virtualTextureClose.finalDistance,
+        virtualTextureCloseP95Ms: round(route.virtualTextureClose.frameStats?.p95Ms),
+        virtualTextureCloseUploadedPages:
+          route.virtualTextureClose.renderer?.virtualTexturing?.delta?.uploadedPages ?? 0,
+      }),
     setupDrawCalls: route.gl.setup?.drawCalls ?? 0,
     setupInstancedDrawCalls,
     setupStateChanges: route.gl.setup?.stateChanges ?? 0,
@@ -2025,6 +2231,8 @@ const main = async () => {
         fakeXrSampleTimeoutMs,
         fakeXrViews,
         realXrEnabled,
+        virtualTextureCloseEnabled,
+        virtualTextureCloseTarget,
         benchmarkMode,
         instancingFuzzEnabled,
         instancingFuzzCases,

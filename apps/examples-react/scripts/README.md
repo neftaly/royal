@@ -38,6 +38,25 @@ enabled and reports pointermove-to-next-WebGL-draw latency as
 when you need renderer/glTF churn beside the same input metric. Do not add
 route-specific fast paths to improve these numbers.
 
+Focused virtual-texture near-plane stress:
+
+```sh
+EXAMPLES_BENCH_ROUTE=virtual-texture-stress \
+EXAMPLES_BENCH_VT_CLOSE=1 \
+EXAMPLES_BENCH_TRACE=1 \
+pnpm --filter @royal/examples-react bench:examples
+```
+
+The harness sends trusted wheel input until the map camera reaches 0.12 world
+units, measures approach-frame pacing and WebGL/renderer deltas, waits for VT
+requests to settle, captures the canvas, then records the normal steady-state
+frame, heap, WebGL, trace, and renderer diagnostics. Override the target with
+`EXAMPLES_BENCH_VT_CLOSE_DISTANCE`; the run fails instead of silently accepting
+a camera that did not reach the requested distance. Reports retain the setup,
+pre-frame, and post-frame renderer snapshots so newly added diagnostic fields
+cannot disappear from the artifact merely because the summary has not learned
+about them yet.
+
 Fuller host report:
 
 ```sh
