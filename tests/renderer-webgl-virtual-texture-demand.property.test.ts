@@ -25,6 +25,7 @@ import {
 } from "../packages/renderer-webgl/src/math/mat4";
 import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
+import { forEachFuzzCase } from "./fuzz";
 
 const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({
   height: 1_024,
@@ -1303,84 +1304,48 @@ describe("virtual texture pure demand planning", () => {
     ], 3)).toEqual([parent, left, right]);
   });
 
-  it("deduplicates overlapping submissions while round-robining distinct targets", () => {
-    const parent = { mip: 2, x: 0, y: 0 };
-    const shared = { mip: 0, x: 1, y: 1 };
-    const left = { mip: 0, x: 0, y: 1 };
-    const right = { mip: 0, x: 2, y: 1 };
-    expect(selectVirtualTextureFrameWorkingSet([
-      { candidates: [parent, shared, left], preferTargetMip: true },
-      { candidates: [parent, shared, right], preferTargetMip: true },
-    ], 4)).toEqual([parent, shared, right, left]);
-  });
+  it("keeps frame selection bounded, deterministic, deduplicated, and fair under fuzz", () => {
+    forEachFuzzCase({ cases: 128, seed: 0x5654_fa17 }, ({ label, random }) => {
+      const pagePool = Array.from({ length: random.int(1, 24) }, (_value, index) => ({
+        mip: random.int(0, 8),
+        x: index,
+        y: random.int(0, 16),
+      }));
+      const submissions = Array.from({ length: random.int(1, 9) }, () => ({
+        candidates: pagePool.filter(() => random.boolean(0.45)).slice(0, 15)
+          .sort((left, right) => right.mip - left.mip || left.x - right.x),
+        preferTargetMip: random.boolean(),
+      }));
+      const capacity = random.int(0, 24);
+      const start = random.int(0, submissions.length);
+      const selected = selectVirtualTextureFrameWorkingSet(submissions, capacity, start);
+      const selectedKeys = selected.map((page) => `${page.mip}/${page.x}/${page.y}`);
+      const availableKeys = new Set(submissions.flatMap((submission) =>
+        submission.candidates.map((page) => `${page.mip}/${page.x}/${page.y}`)));
+      expect(selectVirtualTextureFrameWorkingSet(submissions, capacity, start), label).toEqual(selected);
+      expect(selected.length, label).toBeLessThanOrEqual(capacity);
+      expect(new Set(selectedKeys).size, label).toBe(selected.length);
+      expect(selectedKeys.every((key) => availableKeys.has(key)), label).toBe(true);
 
-  it("matches the single-submission selector exactly", () => {
-    const candidates = [
-      { mip: 3, x: 0, y: 0 },
-      { mip: 0, x: 0, y: 0 },
-      { mip: 0, x: 1, y: 0 },
-      { mip: 0, x: 2, y: 0 },
-    ];
-    for (const capacity of [0, 1, 2, 4]) {
-      for (const preferTargetMip of [false, true]) {
-        expect(selectVirtualTextureFrameWorkingSet([
-          { candidates, preferTargetMip },
-        ], capacity)).toEqual(selectVirtualTextureWorkingSet(candidates, capacity, preferTargetMip));
-      }
-    }
-  });
+      const single = random.pick(submissions);
+      expect(selectVirtualTextureFrameWorkingSet([single], capacity, start), label)
+        .toEqual(selectVirtualTextureWorkingSet(single.candidates, capacity, single.preferTargetMip));
 
-  it("handles zero and one capacity deterministically", () => {
-    const parent = { mip: 2, x: 0, y: 0 };
-    const first = { mip: 0, x: 0, y: 0 };
-    const second = { mip: 0, x: 1, y: 0 };
-    const submissions = [
-      { candidates: [parent, first], preferTargetMip: true },
-      { candidates: [parent, second], preferTargetMip: true },
-    ];
-    expect(selectVirtualTextureFrameWorkingSet(submissions, 0)).toEqual([]);
-    expect(selectVirtualTextureFrameWorkingSet(submissions, 1)).toEqual([parent]);
-    expect(selectVirtualTextureFrameWorkingSet(submissions, 2)).toEqual([parent, first]);
-    expect(selectVirtualTextureFrameWorkingSet(submissions, 2)).toEqual([parent, first]);
-  });
-
-  it("rotates constrained frame capacity across views over successive frames", () => {
-    const parent = { mip: 2, x: 0, y: 0 };
-    const left = { mip: 0, x: 0, y: 0 };
-    const right = { mip: 0, x: 3, y: 0 };
-    const submissions = [
-      { candidates: [parent, left], preferTargetMip: true },
-      { candidates: [parent, right], preferTargetMip: true },
-    ];
-
-    const selectedByFrame = Array.from({ length: 4 }, (_value, frame) =>
-      selectVirtualTextureFrameWorkingSet(submissions, 2, frame % submissions.length));
-    expect(selectedByFrame).toEqual([
-      [parent, left],
-      [parent, right],
-      [parent, left],
-      [parent, right],
-    ]);
-  });
-
-  it("preserves original submission identity when constrained rotation crosses culled views", () => {
-    const parent = { mip: 2, x: 0, y: 0 };
-    const left = { mip: 0, x: 0, y: 0 };
-    const right = { mip: 0, x: 3, y: 0 };
-    const submissions = [
-      { candidates: [parent, left], preferTargetMip: true },
-      { candidates: [], preferTargetMip: true },
-      { candidates: [parent, right], preferTargetMip: true },
-      { candidates: [], preferTargetMip: true },
-    ];
-
-    const selectedByFrame = Array.from({ length: submissions.length }, (_value, frame) =>
-      selectVirtualTextureFrameWorkingSet(submissions, 2, frame));
-    expect(selectedByFrame).toEqual([
-      [parent, left],
-      [parent, right],
-      [parent, right],
-      [parent, left],
-    ]);
+      const parent = { mip: 8, x: 0, y: 0 };
+      const activeViews = Array.from({ length: random.int(1, 9) }, (_value, index) => ({
+        active: index === 0 || random.boolean(0.65),
+        page: { mip: 0, x: index, y: 0 },
+      }));
+      const rotating = activeViews.map(({ active, page }) => ({
+        candidates: active ? [parent, page] : [],
+        preferTargetMip: true,
+      }));
+      const rotatedTargets = new Set(rotating.flatMap((_submission, frame) =>
+        selectVirtualTextureFrameWorkingSet(rotating, 2, frame).slice(1)
+          .map((page) => `${page.mip}/${page.x}/${page.y}`)));
+      expect(rotatedTargets, label).toEqual(new Set(activeViews
+        .filter(({ active }) => active)
+        .map(({ page }) => `${page.mip}/${page.x}/${page.y}`)));
+    });
   });
 });

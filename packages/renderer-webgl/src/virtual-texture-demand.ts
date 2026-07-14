@@ -1335,6 +1335,7 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
 };
 
 export interface VirtualTextureDemandSubmission {
+  /** Unique candidates ordered from coarse fallback to finest target mip. */
   readonly candidates: readonly VirtualTexturePageId[];
   readonly preferTargetMip: boolean;
   readonly preferredCandidates?: readonly VirtualTexturePageId[];
