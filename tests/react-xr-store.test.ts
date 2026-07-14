@@ -20,6 +20,45 @@ type TestXrSession = {
 };
 
 describe("React XR session store", () => {
+  it("rejects malformed initial state, subscriptions, and selectors eagerly", () => {
+    expect(() => createXrSessionStore(
+      null as unknown as XrSessionStoreInitialState,
+    )).toThrow("XR session store initialState must be an object");
+    expect(() => createXrSessionStore({
+      available: "yes",
+    } as unknown as XrSessionStoreInitialState)).toThrow(/initialState available must be a boolean/i);
+    expect(() => createXrSessionStore({
+      sessionMode: "immersive-vr",
+    } as unknown as XrSessionStoreInitialState)).toThrow(/unsupported option.*sessionMode/i);
+
+    const store = createXrSessionStore<TestXrSession>();
+    expect(() => store.subscribe(null as unknown as () => void))
+      .toThrow("XR session store subscribe listener must be a function");
+    expect(() => createXrSessionSelectionReaders(
+      store,
+      null as unknown as (state: ReturnType<typeof store.getState>) => unknown,
+    )).toThrow("XR session selector must be a function");
+    expect(() => createXrSessionSelectionReaders(
+      store,
+      (state) => state.status,
+      null as unknown as (left: string, right: string) => boolean,
+    )).toThrow("XR session selector equality must be a function");
+  });
+
+  it("notifies later subscribers after an earlier subscriber throws", () => {
+    const store = createXrSessionStore<TestXrSession>();
+    const failure = new Error("subscriber failed");
+    const healthy = vi.fn();
+    store.subscribe(() => {
+      throw failure;
+    });
+    store.subscribe(healthy);
+
+    expect(() => store.getState().setAvailability(true)).toThrow(failure);
+    expect(healthy).toHaveBeenCalledOnce();
+    expect(store.getState()).toMatchObject({ available: true, status: "available" });
+  });
+
   it("derives a consistent acquisition status from initial availability", () => {
     expect(createXrSessionStore().getState()).toMatchObject({
       available: false,

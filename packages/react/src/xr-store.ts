@@ -170,7 +170,17 @@ export const createXrSessionStore = <Session extends object = object>(
     if (next === data) return;
     data = next;
     current = { ...data, ...actions };
-    for (const listener of listeners.values()) listener();
+    let firstFailure: unknown;
+    let failed = false;
+    for (const listener of listeners.values()) {
+      try {
+        listener();
+      } catch (error) {
+        if (!failed) firstFailure = error;
+        failed = true;
+      }
+    }
+    if (failed) throw firstFailure;
   };
   const actions: XrSessionStoreActions<Session> = {
     activateSession: (session, options) => apply({ options, session, type: "activate" }),
@@ -199,6 +209,9 @@ export const createXrSessionStore = <Session extends object = object>(
     getInitialState: () => initial,
     getState: () => current,
     subscribe: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("XR session store subscribe listener must be a function");
+      }
       const token = {};
       listeners.set(token, listener);
       return () => {
@@ -246,10 +259,18 @@ export const createXrSessionSelectionReaders = <Session extends object, State>(
   store: XrSessionStore<Session>,
   selector: (state: XrSessionStoreState<Session>) => State,
   isEqual: XrSessionSelectorEquality<State> = Object.is,
-): XrSessionSelectionReaders<State> => ({
-  getInitialSelection: createCachedSelectionReader(store.getInitialState, selector, isEqual),
-  getSelection: createCachedSelectionReader(store.getState, selector, isEqual),
-});
+): XrSessionSelectionReaders<State> => {
+  if (typeof selector !== "function") {
+    throw new TypeError("XR session selector must be a function");
+  }
+  if (typeof isEqual !== "function") {
+    throw new TypeError("XR session selector equality must be a function");
+  }
+  return {
+    getInitialSelection: createCachedSelectionReader(store.getInitialState, selector, isEqual),
+    getSelection: createCachedSelectionReader(store.getState, selector, isEqual),
+  };
+};
 
 /**
  * Subscribes to a derived XR value. Store updates whose selected value is equal

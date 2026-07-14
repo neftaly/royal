@@ -51,9 +51,33 @@ export const copyXrViewports = (
 const availabilityStatus = (available: boolean): XrSessionStatus =>
   available ? "available" : "unavailable";
 
+const xrSessionModes = new Set(["immersive-ar", "immersive-vr", "inline"]);
+
+const validateInitialState = (initialState: XrSessionStoreInitialState): void => {
+  if (typeof initialState !== "object" || initialState === null || Array.isArray(initialState)) {
+    throw new TypeError("XR session store initialState must be an object");
+  }
+  for (const name of Object.keys(initialState)) {
+    if (name !== "available" && name !== "mode") {
+      throw new TypeError(`XR session store initialState contains unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+  if (initialState.available !== undefined && typeof initialState.available !== "boolean") {
+    throw new TypeError("XR session store initialState available must be a boolean");
+  }
+  if (
+    initialState.mode !== undefined
+    && initialState.mode !== null
+    && !xrSessionModes.has(initialState.mode)
+  ) {
+    throw new TypeError("XR session store initialState mode must be immersive-ar, immersive-vr, inline, or null");
+  }
+};
+
 export const createInitialXrSessionStoreData = <Session extends object>(
   initialState: XrSessionStoreInitialState = {},
 ): XrSessionStoreData<Session> => {
+  validateInitialState(initialState);
   const available = initialState.available ?? false;
   return {
     active: false,
