@@ -217,7 +217,8 @@ focused snapshots; the hook neither waits for unrelated frames nor allocates
 the full renderer diagnostics payload. Pass the normalized `node.asset` instead
 of a string when using an explicit asset `version`. Imperative hosts can use
 `root.gltfAssetSnapshot(asset)` and `root.observeGltfAsset(asset, callback)` for
-the same exact asset identity.
+the same exact asset identity. Both React hooks validate source and version
+identity immediately, including before the Canvas root exists.
 
 Both asset and renderer lifecycle results are discriminated unions: `error` is
 required only when `state === 'error'` for an asset or `state === 'failed'` for

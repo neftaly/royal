@@ -23,6 +23,28 @@ const sameStatus = (left: GltfAssetStatus, right: GltfAssetStatus): boolean =>
 const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((name, index) => name === right[index]);
 
+/** @internal Validates hook inputs before Canvas availability can affect behavior. */
+export const validateGltfAssetStatusInput = (input: unknown): void => {
+  if (typeof input === "string") {
+    if (input.length === 0) throw new TypeError("glTF asset status source must be a non-empty string");
+    return;
+  }
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new TypeError("glTF asset status input must be a source string or GltfAssetRef object");
+  }
+  const { uri, version } = input as Partial<GltfAssetRef>;
+  if (typeof uri !== "string" || uri.length === 0) {
+    throw new TypeError("glTF asset status input uri must be a non-empty string");
+  }
+  if (version !== undefined && (
+    (typeof version !== "string" && typeof version !== "number")
+    || (typeof version === "string" && version.length === 0)
+    || (typeof version === "number" && !Number.isFinite(version))
+  )) {
+    throw new TypeError("glTF asset status input version must be a non-empty string or finite number");
+  }
+};
+
 const statusFromAssetSnapshot = (snapshot: RoyalGltfAssetSnapshot): GltfAssetStatus =>
   snapshot.state === "idle"
     ? IDLE
@@ -38,6 +60,7 @@ const statusFromAssetSnapshot = (snapshot: RoyalGltfAssetSnapshot): GltfAssetSta
  * when the scene uses an explicit `version`.
  */
 export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus => {
+  validateGltfAssetStatusInput(input);
   const root = useCanvasRoot();
   const sourceUri = typeof input === "string" ? input : input.uri;
   const sourceVersion = typeof input === "string" ? undefined : input.version;
@@ -65,6 +88,7 @@ export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus
  * The names can be passed directly to the scene descriptor's `variant` option.
  */
 export const useGltfAssetVariants = (input: GltfAssetStatusInput): readonly string[] => {
+  validateGltfAssetStatusInput(input);
   const root = useCanvasRoot();
   const sourceUri = typeof input === "string" ? input : input.uri;
   const sourceVersion = typeof input === "string" ? undefined : input.version;
