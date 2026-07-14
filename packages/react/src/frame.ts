@@ -27,6 +27,19 @@ export interface UseFrameOptions {
   readonly priority?: number;
 }
 
+/** @internal Validates the public hook boundary without allocating normalized options. */
+export const validateUseFrameOptions = (options: UseFrameOptions): void => {
+  if (typeof options !== "object" || options === null) {
+    throw new TypeError("useFrame options must be an object");
+  }
+  if (options.active !== undefined && typeof options.active !== "boolean") {
+    throw new TypeError("useFrame active must be a boolean");
+  }
+  if (options.priority !== undefined && !Number.isFinite(options.priority)) {
+    throw new TypeError("useFrame priority must be a finite number");
+  }
+};
+
 type FrameSubscriber = {
   active: boolean;
   readonly callback: FrameCallback;
@@ -298,5 +311,6 @@ const useFrameSubscription = (
  * snapshot object, so copy scalar fields that must outlive the callback.
  */
 export const useFrame = (callback: FrameCallback, options: UseFrameOptions = {}): void => {
+  validateUseFrameOptions(options);
   useFrameSubscription(callback, options);
 };

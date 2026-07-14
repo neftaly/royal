@@ -3,7 +3,11 @@ import {
   perspectiveCamera,
   scene,
 } from "@royal/renderer-core";
-import { createFrameLoop, type FrameSnapshot } from "../packages/react/src/frame";
+import {
+  createFrameLoop,
+  validateUseFrameOptions,
+  type FrameSnapshot,
+} from "../packages/react/src/frame";
 import {
   applyCanvasRendererFailure,
   applyCanvasRendererLifecycle,
@@ -27,6 +31,16 @@ describe("React frame loop", () => {
     near: 0.1,
     position: [0, 0, 2],
     rotation: [0, 0, 0],
+  });
+
+  it("rejects malformed public frame scheduling options", () => {
+    expect(() => validateUseFrameOptions({
+      active: "false" as unknown as boolean,
+    })).toThrow("useFrame active must be a boolean");
+    expect(() => validateUseFrameOptions({ priority: Number.NaN }))
+      .toThrow("useFrame priority must be a finite number");
+    expect(() => validateUseFrameOptions(-1 as unknown as object))
+      .toThrow("useFrame options must be an object");
   });
 
   it("normalizes opaque scheduled-render failures for ErrorBoundary delivery", () => {
