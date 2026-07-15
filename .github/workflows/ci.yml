@@ -71,6 +71,9 @@ jobs:
       - name: Check packed package consumer
         run: pnpm check:package-consumer
 
+      - name: Check consumer bundle size
+        run: pnpm check:bundle-size
+
       - name: Examples browser smoke
         run: |
           if ! command -v chromium >/dev/null 2>&1; then
