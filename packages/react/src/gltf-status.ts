@@ -3,7 +3,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { useCanvasRoot } from "./canvas";
 import { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 import { createObservedExternalStore } from "./observed-external-store";
-import type { RoyalGltfAssetSnapshot } from "./root";
+import type { RoyalRendererGltfAssetSnapshot } from "./root";
 
 export { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 
@@ -26,7 +26,7 @@ const sameStatus = (left: GltfAssetStatus, right: GltfAssetStatus): boolean =>
 const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((name, index) => name === right[index]);
 
-const statusFromAssetSnapshot = (snapshot: RoyalGltfAssetSnapshot): GltfAssetStatus =>
+const statusFromAssetSnapshot = (snapshot: RoyalRendererGltfAssetSnapshot): GltfAssetStatus =>
   snapshot.state === "idle"
     ? IDLE
     : snapshot.state === "loading"
@@ -81,7 +81,7 @@ export const useGltfAssetVariants = (input: GltfAssetStatusInput): readonly stri
       uri: sourceUri,
       ...(sourceVersion === undefined ? {} : { version: sourceVersion }),
     };
-    const variants = (snapshot: RoyalGltfAssetSnapshot): readonly string[] =>
+    const variants = (snapshot: RoyalRendererGltfAssetSnapshot): readonly string[] =>
       snapshot.state === "ready" ? snapshot.variantNames : NO_VARIANTS;
     return createObservedExternalStore(
       variants(root.gltfAssetSnapshot(asset)),

@@ -122,21 +122,21 @@ export interface RoyalRendererDiagnosticMessageStats {
 }
 
 /** Retained glTF asset readiness and bounded load timing. */
-export type RoyalRendererGltfLoadDiagnostics = WebGlGltfLoadDiagnosticsSnapshot;
+export type RoyalRendererGltfLoadDiagnosticsSnapshot = WebGlGltfLoadDiagnosticsSnapshot;
 /** Instanced glTF planning, drawing, and upload counters. */
-export type RoyalRendererGltfInstancingDiagnostics = WebGlGltfInstancingSnapshot;
+export type RoyalRendererGltfInstancingDiagnosticsSnapshot = WebGlGltfInstancingSnapshot;
 /** Scene-plan compilation counters. */
-export type RoyalRendererPlanningDiagnostics = WebGlFramePlanningSnapshot;
+export type RoyalRendererPlanningDiagnosticsSnapshot = WebGlFramePlanningSnapshot;
 /** Renderer resource acquisition and queue high-water counters. */
-export type RoyalRendererResourceLifetimeDiagnostics = WebGlResourceLifetimeSnapshot;
+export type RoyalRendererResourceLifetimeDiagnosticsSnapshot = WebGlResourceLifetimeSnapshot;
 /** Current resource budgets, usage, admissions, and denials. */
-export type RoyalRendererResourcePressureDiagnostics = WebGlResourcePressureSnapshot;
+export type RoyalRendererResourcePressureDiagnosticsSnapshot = WebGlResourcePressureSnapshot;
 /** Counters from the most recent picking query. */
-export type RoyalRendererPickingDiagnostics = WebGlPickingSnapshot;
+export type RoyalRendererPickingDiagnosticsSnapshot = WebGlPickingSnapshot;
 /** Current ordinary-texture lease and prepared-source counts. */
-export type RoyalRendererTextureResidencyDiagnostics = WebGlTextureResidencySnapshot;
+export type RoyalRendererTextureResidencyDiagnosticsSnapshot = WebGlTextureResidencySnapshot;
 /** Current VT residency plus cumulative request, upload, and failure counters. */
-export type RoyalRendererVirtualTexturingDiagnostics = WebGlVirtualTexturingSnapshot;
+export type RoyalRendererVirtualTexturingDiagnosticsSnapshot = WebGlVirtualTexturingSnapshot;
 
 /** Bounded operational diagnostics projected from the active renderer backend. */
 export interface RoyalRendererDiagnosticsSnapshot {
@@ -145,25 +145,25 @@ export interface RoyalRendererDiagnosticsSnapshot {
   /** Capacity and occurrence counts for the bounded diagnostic message log. */
   readonly messageStats: RoyalRendererDiagnosticMessageStats;
   /** Retained glTF asset readiness and bounded load timing. */
-  readonly gltfLoads: RoyalRendererGltfLoadDiagnostics;
+  readonly gltfLoads: RoyalRendererGltfLoadDiagnosticsSnapshot;
   /** Instanced glTF planning, drawing, and upload counters. */
-  readonly gltfInstancing: RoyalRendererGltfInstancingDiagnostics;
+  readonly gltfInstancing: RoyalRendererGltfInstancingDiagnosticsSnapshot;
   /** Scene-plan compilation counters. */
-  readonly planning: RoyalRendererPlanningDiagnostics;
+  readonly planning: RoyalRendererPlanningDiagnosticsSnapshot;
   /** Renderer resource acquisition and queue high-water counters. */
-  readonly resourceLifetime: RoyalRendererResourceLifetimeDiagnostics;
+  readonly resourceLifetime: RoyalRendererResourceLifetimeDiagnosticsSnapshot;
   /** Current resource budgets, usage, admissions, and denials. */
-  readonly resourcePressure: RoyalRendererResourcePressureDiagnostics;
+  readonly resourcePressure: RoyalRendererResourcePressureDiagnosticsSnapshot;
   /** Counters from the most recent picking query. */
-  readonly picking: RoyalRendererPickingDiagnostics;
+  readonly picking: RoyalRendererPickingDiagnosticsSnapshot;
   /** Current ordinary-texture lease and prepared-source counts. */
-  readonly textureResidency: RoyalRendererTextureResidencyDiagnostics;
+  readonly textureResidency: RoyalRendererTextureResidencyDiagnosticsSnapshot;
   /** Current VT residency plus cumulative request, upload, and failure counters. */
-  readonly virtualTexturing: RoyalRendererVirtualTexturingDiagnostics;
+  readonly virtualTexturing: RoyalRendererVirtualTexturingDiagnosticsSnapshot;
 }
 
 /** Focused state for one exact glTF asset identity retained by the renderer. */
-export type RoyalGltfAssetSnapshot =
+export type RoyalRendererGltfAssetSnapshot =
   | Readonly<{
     readonly error?: never;
     readonly state: "idle" | "loading" | "ready";
@@ -189,13 +189,16 @@ export interface RoyalRendererRoot {
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   /** Reads one retained glTF asset without allocating the full diagnostics payload. */
-  gltfAssetSnapshot(asset: GltfAssetRef): RoyalGltfAssetSnapshot;
+  gltfAssetSnapshot(asset: GltfAssetRef): RoyalRendererGltfAssetSnapshot;
   /** Observes renderer availability without polling. Calls back immediately. */
   observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
   /** Observes completed renderer frames. Calls back immediately with the current frame index. */
   observeFrame(callback: (frame: number) => void): () => void;
   /** Observes one exact glTF asset identity. Calls back immediately. */
-  observeGltfAsset(asset: GltfAssetRef, callback: (snapshot: RoyalGltfAssetSnapshot) => void): () => void;
+  observeGltfAsset(
+    asset: GltfAssetRef,
+    callback: (snapshot: RoyalRendererGltfAssetSnapshot) => void,
+  ): () => void;
   /** Observes failures from renderer-owned scheduled frames. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
   /** Returns the front-most render target under a DOM client coordinate. */
@@ -236,7 +239,7 @@ const validateObserver = (callback: unknown, label: string): void => {
 
 const royalGltfAssetSnapshot = (
   snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined,
-): RoyalGltfAssetSnapshot => {
+): RoyalRendererGltfAssetSnapshot => {
   if (snapshot === undefined) return Object.freeze({ state: "idle", variantNames: NO_GLTF_VARIANTS });
   if (snapshot.status === "loading") {
     return Object.freeze({ state: "loading", variantNames: NO_GLTF_VARIANTS });
