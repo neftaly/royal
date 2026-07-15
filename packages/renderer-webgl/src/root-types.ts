@@ -279,20 +279,28 @@ export interface WebGlVirtualTexturingSnapshot {
 }
 
 export interface WebGlRenderViewport {
+  /** Positive framebuffer-pixel height. */
   readonly height: number;
+  /** Positive framebuffer-pixel width. */
   readonly width: number;
+  /** Signed framebuffer-pixel horizontal origin. */
   readonly x: number;
+  /** Signed framebuffer-pixel vertical origin. */
   readonly y: number;
 }
 
 export interface WebGlRenderView {
+  /** Finite column-major 4x4 clip-space projection matrix. */
   readonly projectionMatrix: ArrayLike<number>;
+  /** Finite column-major 4x4 world-to-view matrix. */
   readonly viewMatrix: ArrayLike<number>;
   readonly viewport: WebGlRenderViewport;
 }
 
 export interface WebGlRenderViewsOptions {
+  /** Destination framebuffer; `null` or omitted selects the default framebuffer. */
   readonly framebuffer?: WebGLFramebuffer | null;
+  /** Ordered, non-empty views rendered in one frame transaction. */
   readonly views: readonly WebGlRenderView[];
 }
 
@@ -340,8 +348,12 @@ export interface WebGlRoot {
     texture: TextureAssetRef | VirtualTextureAssetRef,
     callback: (snapshot: WebGlTextureAssetSnapshot) => void,
   ): () => void;
+  /** Returns the front-most render target under a DOM client coordinate. */
   pick(input: PickInput): PickResult | undefined;
+  /** Renders one scene with its authored camera into the default framebuffer. */
   render(scene: RenderRoot): void;
+  /** Renders one scene into explicit ordered views after strict synchronous preflight. */
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;
+  /** Reads a detached cold diagnostics snapshot. */
   snapshot(): WebGlRootSnapshot;
 }

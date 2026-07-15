@@ -186,6 +186,7 @@ import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
 import { LazyImageBasedLightingFeature } from "./lazy-image-based-lighting-feature";
 import type { ImageBasedLightingRootFeature } from "./image-based-lighting-feature";
 import { normalizeWebGlRootOptions } from "./root-options";
+import { validateWebGlRenderViewsOptions } from "./render-views-options";
 import type {
   InternalWebGlRootOptions,
   ResolvedWebGlRootOptions,
@@ -847,6 +848,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#disposed) {
       throw new Error("Cannot render views with a disposed Royal renderer root");
     }
+    validateWebGlRenderViewsOptions(options);
     const plan = this.#commitScene(scene);
     if (this.#context.lifecycle !== "active") {
       this.#retainPlanWhileContextUnavailable();

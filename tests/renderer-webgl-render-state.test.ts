@@ -8,6 +8,7 @@ import {
   type RenderRoot,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import type { WebGlRenderViewsOptions } from "@royal/renderer-webgl";
 import {
   camera,
   countCalls,
@@ -23,6 +24,45 @@ afterEach(() => {
 });
 
 describe("WebGL root render state contracts", () => {
+  it("rejects malformed explicit views before committing scene state", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const retained = drawableScene([0, 0, 0, 0]);
+    const replacement = drawableScene([1, 0, 0, 1]);
+    const identity = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const validView = {
+      projectionMatrix: identity,
+      viewMatrix: identity,
+      viewport: { height: 64, width: 64, x: 0, y: 0 },
+    };
+    root.render(retained);
+    const before = root.snapshot();
+    const malformed: readonly unknown[] = [
+      null,
+      {},
+      { extra: true, views: [validView] },
+      { views: [] },
+      { views: [{ ...validView, projectionMatrix: identity.slice(1) }] },
+      { views: [{ ...validView, viewMatrix: [...identity.slice(0, 15), Number.NaN] }] },
+      { views: [{ ...validView, viewport: { ...validView.viewport, width: 0 } }] },
+      { framebuffer: [], views: [validView] },
+    ];
+
+    for (const options of malformed) {
+      expect(() => root.renderViews(replacement, options as WebGlRenderViewsOptions)).toThrow();
+    }
+    expect(root.latestScene).toBe(retained);
+    expect(root.snapshot()).toMatchObject({
+      frame: before.frame,
+      planning: before.planning,
+    });
+  });
+
   it("updates the canvas backing store and viewport from CSS size and DPR each frame", () => {
     vi.stubGlobal("devicePixelRatio", 2);
     const { calls, gl } = fakeGl();
