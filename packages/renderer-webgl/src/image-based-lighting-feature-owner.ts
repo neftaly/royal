@@ -3,7 +3,6 @@ import type {
   ImageBasedLightingFeature,
   ImageBasedLightingFeatureOptions,
 } from "./image-based-lighting-feature";
-import type { LoadedTextureSource } from "./texture-sources";
 import type { SurfaceExecutionSignals } from "./webgl/surface-execution-arena";
 import {
   bindSurfaceIbl,
@@ -22,7 +21,7 @@ import {
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
 
-/** Owns IBL source publication, GPU resources, surface binding, and lifecycle. */
+/** Owns IBL GPU resources, surface binding, and lifecycle over retained sources. */
 export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature {
   readonly #runtime: IblRuntimeOwner;
   readonly #textures: IblTextureArena;
@@ -31,7 +30,6 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
     this.#textures = createIblTextureArena(options.gl, options.governor);
     this.#runtime = new IblRuntimeOwner({
       contextLifecycle: options.contextLifecycle,
-      decodedTextureSources: options.decodedTextureSources,
       diagnostics: options.diagnostic,
       invalidate: options.invalidate,
       resourceArena: options.resourceArena,
@@ -86,12 +84,8 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
     releaseGltfIblSpecularTexture(this.#textures, key);
   }
 
-  settleSpecularImage(
-    specular: SurfaceImageBasedLightSpecular,
-    key: string,
-    image: LoadedTextureSource,
-  ): void {
-    this.#runtime.settleSpecularImage(specular, key, image);
+  refreshRetainedSpecular(specular: SurfaceImageBasedLightSpecular): void {
+    this.#runtime.refreshRetainedSpecular(specular);
   }
 
   studioSpecular(): StudioEnvironmentSpecularResource | undefined {

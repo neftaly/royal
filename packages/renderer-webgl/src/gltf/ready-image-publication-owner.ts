@@ -1,4 +1,4 @@
-import type { ImageBasedLightingFeature } from "../image-based-lighting-feature";
+import type { ImageBasedLightingRootFeature } from "../image-based-lighting-feature";
 import { OrdinaryTextureResidencyController } from "../ordinary-texture-residency-controller";
 import {
   publishResourceArenaContentKey,
@@ -13,7 +13,7 @@ import { PreparedGltfRuntime } from "./prepared-runtime";
 
 type GltfReadyImagePublicationOwnerOptions = {
   readonly applyResourceChanges: (changes: ResourceArenaChanges) => void;
-  readonly ibl: Pick<ImageBasedLightingFeature, "settleSpecularImage">;
+  readonly ibl: Pick<ImageBasedLightingRootFeature, "settleSpecularImage">;
   readonly materials: GltfMaterialPreparationArena;
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
   readonly resourceArena: ResourceArena;

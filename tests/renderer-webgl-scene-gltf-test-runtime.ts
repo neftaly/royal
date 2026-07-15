@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, vi } from "vitest";
 import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
+import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 
 const hoistedMocks = vi.hoisted(() => ({
   decodeBasisu: vi.fn(),
@@ -20,6 +21,7 @@ import {
 import type { WebGlGltfInstancingSnapshot, WebGlRoot } from "@royal/renderer-webgl";
 
 await preloadVirtualTextureFeature();
+await preloadImageBasedLightingFeature();
 
 export type CanvasSize = {
   readonly height: number;

@@ -185,8 +185,8 @@ import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
 import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
-import { ImageBasedLightingFeatureOwner } from "./image-based-lighting-feature-owner";
-import type { ImageBasedLightingFeature } from "./image-based-lighting-feature";
+import { LazyImageBasedLightingFeature } from "./lazy-image-based-lighting-feature";
+import type { ImageBasedLightingRootFeature } from "./image-based-lighting-feature";
 import { normalizeWebGlRootOptions } from "./root-options";
 import type {
   InternalWebGlRootOptions,
@@ -345,7 +345,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #textureHandles: TextureHandleArena;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  readonly #ibl: ImageBasedLightingFeature;
+  readonly #ibl: ImageBasedLightingRootFeature;
   readonly #lightResolver: SurfaceLightResolver;
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena({
     replace: (lease, cost) => {
@@ -511,10 +511,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       registerRollback(() => dropClusteredLightContext(this.#clusteredLights));
       registerRollback(() => releaseClusteredLightContextHandles(this.#clusteredLights));
-      this.#ibl = new ImageBasedLightingFeatureOwner({
+      this.#ibl = new LazyImageBasedLightingFeature({
+        active: () => !this.#disposed && this.#context.lifecycle === "active",
         contextLifecycle: () => this.#context.lifecycle,
         decodedTextureSources: this.#decodedTextureSources,
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        disposed: () => this.#disposed,
         gl,
         governor: {
           reserve: (cost) => {

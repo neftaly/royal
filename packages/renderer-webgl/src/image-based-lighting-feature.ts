@@ -13,7 +13,6 @@ import type { ProgramArena } from "./webgl/program-arena";
 
 export type ImageBasedLightingFeatureOptions = {
   readonly contextLifecycle: () => WebGlContextLifecycle;
-  readonly decodedTextureSources: DecodedTextureSourceLifetime;
   readonly diagnostic: (message: string, key: string) => void;
   readonly gl: WebGL2RenderingContext;
   readonly governor: IblTextureGpuGovernor;
@@ -35,11 +34,23 @@ export interface ImageBasedLightingFeature {
   prepareBrdfLut(): boolean;
   releaseContextHandles(): void;
   releaseSpecular(key: string): void;
+  /** Rebuilds a GPU resource after its source table was synchronously retained. */
+  refreshRetainedSpecular(specular: SurfaceImageBasedLightSpecular): void;
+  studioSpecular(): StudioEnvironmentSpecularResource | undefined;
+  wakeDurablePressure(): boolean;
+}
+
+export type LazyImageBasedLightingFeatureOptions = ImageBasedLightingFeatureOptions & {
+  readonly active: () => boolean;
+  readonly decodedTextureSources: DecodedTextureSourceLifetime;
+  readonly disposed: () => boolean;
+};
+
+/** Root-facing feature boundary, including synchronous decoded-source publication. */
+export interface ImageBasedLightingRootFeature extends ImageBasedLightingFeature {
   settleSpecularImage(
     specular: SurfaceImageBasedLightSpecular,
     key: string,
     image: LoadedTextureSource,
   ): void;
-  studioSpecular(): StudioEnvironmentSpecularResource | undefined;
-  wakeDurablePressure(): boolean;
 }

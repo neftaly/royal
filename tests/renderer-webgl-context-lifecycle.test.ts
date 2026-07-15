@@ -19,6 +19,7 @@ import {
   type ResourceGovernorPolicy,
 } from "../packages/renderer-webgl/src/resource-governor";
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
+import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { forEachFuzzCase } from "./fuzz";
 import {
   camera,
@@ -30,6 +31,8 @@ import {
   fakeCanvas,
   fakeGl,
 } from "./renderer-webgl-working-state-runtime";
+
+await preloadImageBasedLightingFeature();
 
 afterEach(() => {
   vi.restoreAllMocks();

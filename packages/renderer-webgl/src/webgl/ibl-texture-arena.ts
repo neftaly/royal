@@ -4,7 +4,6 @@ import {
   loadedTextureSourceSize,
   type LoadedTextureSource,
 } from "../texture-sources";
-import { identityMat4 } from "../math/mat4";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import { IBL_BRDF_LUT_BYTES, uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
 import { prepareTextureUpload } from "./imperative-state";
@@ -12,9 +11,9 @@ import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./lights";
 import {
   uniform1i,
   uniformColor,
-  uniformMatrix,
   type ProgramArena,
 } from "./program-arena";
+import { bindSurfaceIblIrradiance } from "./surface-ibl-uniforms";
 import {
   STUDIO_ENVIRONMENT_SPECULAR_KEY,
   STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
@@ -23,7 +22,6 @@ import {
   type StudioEnvironmentSpecularResource,
 } from "./studio-environment";
 
-const IBL_IRRADIANCE_COEFFICIENT_COUNT = 9;
 const MAX_WEBGL_GLSIZEI = 0x7fff_ffff;
 
 interface IblSpecularTextureResourceBase {
@@ -485,12 +483,7 @@ export const bindSurfaceIbl = (
   brdfLutTextureUnit: number | undefined,
 ): void => {
   const state = arena as unknown as State;
-  const irradiance = lightSet.irradiance;
-  uniform1i(programArena, program, "u_useIblIrradiance", irradiance === undefined ? 0 : 1);
-  uniformColor(programArena, program, "u_iblIrradianceSettings", [
-    irradiance === undefined ? 0 : 1, irradiance?.intensity ?? 1, 0, 0,
-  ]);
-  uniformMatrix(programArena, program, "u_iblWorldToIbl", irradiance?.worldToIbl ?? identityMat4());
+  bindSurfaceIblIrradiance(programArena, program, lightSet);
   const specular = lightSet.specular;
   const useSpecular = specular !== undefined && specularTextureUnit !== undefined;
   if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");
@@ -519,12 +512,6 @@ export const bindSurfaceIbl = (
     state.gl.activeTexture(state.gl.TEXTURE0 + brdfLutTextureUnit);
     state.gl.bindTexture(state.gl.TEXTURE_2D, brdfLut);
     uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
-  }
-  for (let index = 0; index < IBL_IRRADIANCE_COEFFICIENT_COUNT; index += 1) {
-    const coefficient = irradiance?.coefficients[index] ?? [0, 0, 0] as const;
-    uniformColor(programArena, program, `u_iblIrradianceCoefficients[${index}]`, [
-      coefficient[0], coefficient[1], coefficient[2], 0,
-    ]);
   }
 };
 

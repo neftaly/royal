@@ -1,8 +1,5 @@
-import type { DecodedTextureSourceLifetime } from "./decoded-texture-source-lifetime";
 import {
   resourceArenaIblSources,
-  resourceArenaSourceReferenceCount,
-  retainResourceArenaIblSource,
   type ResourceArena,
 } from "./resource-arena";
 import type { WebGlContextLifecycle } from "./root-types";
@@ -23,14 +20,13 @@ const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
 
 type IblRuntimeOwnerOptions = {
   readonly contextLifecycle: () => WebGlContextLifecycle;
-  readonly decodedTextureSources: DecodedTextureSourceLifetime;
   readonly diagnostics: (message: string, key: string) => void;
   readonly invalidate: () => void;
   readonly resourceArena: ResourceArena;
   readonly textures: IblTextureArena;
 };
 
-/** Owns IBL source publication, GPU realization, diagnostics, and frame wakes. */
+/** Owns IBL GPU realization, diagnostics, and frame wakes over retained sources. */
 export class IblRuntimeOwner {
   readonly #options: IblRuntimeOwnerOptions;
 
@@ -55,23 +51,8 @@ export class IblRuntimeOwner {
     }
   }
 
-  settleSpecularImage(
-    specular: SurfaceImageBasedLightSpecular,
-    key: string,
-    image: LoadedTextureSource,
-  ): void {
-    const previous = retainResourceArenaIblSource(
-      this.#options.resourceArena,
-      specular.key,
-      key,
-      image,
-    );
+  refreshRetainedSpecular(specular: SurfaceImageBasedLightSpecular): void {
     markGltfIblSpecularTextureDirty(this.#options.textures, specular.key);
-    if (
-      previous !== undefined
-      && previous !== image
-      && resourceArenaSourceReferenceCount(this.#options.resourceArena, previous) === 0
-    ) this.#options.decodedTextureSources.closeOrdinary(previous);
     if (this.#options.contextLifecycle() !== "active") return;
     try {
       const resource = ensureGltfIblSpecularTexture(

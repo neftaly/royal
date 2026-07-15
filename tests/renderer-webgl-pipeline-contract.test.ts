@@ -15,6 +15,7 @@ import {
   type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { vertexShaderSource } from "../packages/renderer-webgl/src/webgl/shaders";
 import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/webgl/vertex-attribute-abi";
 
@@ -907,10 +908,18 @@ describe("WebGL renderer pipeline contracts", () => {
       && call.args[4] === 1)).toBe(false);
   });
 
-  it("binds pass environment irradiance, specular cubemap, and BRDF LUT without glTF IBL", () => {
+  it("loads pass environment specular and its BRDF LUT after an eager diffuse frame", async () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
+    root.render(iblEnvironmentScene());
+
+    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toEqual([0]);
+    expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
+
+    await preloadImageBasedLightingFeature();
+    await Promise.resolve();
     root.render(iblEnvironmentScene());
 
     expect(uniform1iPayloadsByName(calls, "u_surfaceLightCount")).toContain(0);

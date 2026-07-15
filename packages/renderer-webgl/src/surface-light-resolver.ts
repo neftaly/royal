@@ -20,7 +20,7 @@ import {
   type SurfaceLight,
   type SurfaceLightSet,
 } from "./webgl/lights";
-import { STUDIO_ENVIRONMENT_IRRADIANCE } from "./webgl/studio-environment";
+import { STUDIO_ENVIRONMENT_IRRADIANCE } from "./webgl/studio-environment-irradiance";
 
 export interface SurfaceLightResolverOptions {
   readonly ensureGltfSpecular: (
