@@ -66,6 +66,9 @@ export type OrdinaryTextureResidencySnapshot = Readonly<{
   sources: OrdinaryTextureSourceStoreSnapshot;
   terminalRows: number;
 }>;
+export type OrdinaryTextureAssetSnapshot =
+  | Readonly<{ error?: never; state: "loading" | "ready" }>
+  | Readonly<{ error: string; state: "error" }>;
 export type OrdinaryTextureResidencyControllerOptions = Readonly<{
   admitSourceJob?: () => OrdinaryTextureSourceJobAdmission | undefined;
   decodedSources: DecodedTextureSourceLifetime;
@@ -80,6 +83,7 @@ export type OrdinaryTextureResidencyControllerOptions = Readonly<{
 }>;
 type Row = {
   acquisition: number;
+  error?: string;
   gpuSuppressed: boolean;
   /** `null` means acquire has entered but has not returned its subscription. */
   subscription?: OrdinaryTextureSourceSubscription | null;
@@ -137,6 +141,19 @@ export class OrdinaryTextureResidencyController {
     return resource;
   }
 
+  assetSnapshot(texture: TextureAssetUploadRef): OrdinaryTextureAssetSnapshot | undefined {
+    const key = textureCacheKey(texture);
+    const row = this.#rows.get(key);
+    const resource = ordinaryTextureGpuResource(this.#gpu, key);
+    if (row === undefined && resource === undefined) return undefined;
+    if (row?.error !== undefined) return { error: row.error, state: "error" };
+    if (resource?.uploaded === true || (row?.gpuSuppressed === true
+      && resourceArenaPreparedSource(this.#options.resourceArena, key) !== undefined)) {
+      return { state: "ready" };
+    }
+    return { state: "loading" };
+  }
+
   publishPrepared(texture: TextureAssetUploadRef | undefined, source: LoadedTextureSource): void {
     if (texture === undefined) return;
     const key = textureCacheKey(texture);
@@ -149,6 +166,7 @@ export class OrdinaryTextureResidencyController {
       if (failure !== undefined) throw failure.error;
     }
     const row = this.#row(key);
+    delete row.error;
     row.terminal = false;
     this.#releaseSubscription(row);
     this.#retain(key, { source, texture });
@@ -239,6 +257,7 @@ export class OrdinaryTextureResidencyController {
           this.#options.diagnostic(outcome.message, `ordinary-texture-upload-limit:${outcome.key}`);
         });
         const row = this.#row(outcome.key);
+        row.error = outcome.message;
         row.terminal = true;
         const prepared = resourceArenaPreparedSource(this.#options.resourceArena, outcome.key);
         if (prepared?.source === outcome.upload.source) {
@@ -302,7 +321,10 @@ export class OrdinaryTextureResidencyController {
           const current = ordinaryTextureGpuResource(this.#gpu, key);
           if (this.#options.lifecycle().disposed || current?.uploaded === true) return;
           const detail = result.error instanceof Error ? result.error.message : String(result.error);
+          row.error = detail;
+          row.terminal = true;
           this.#options.diagnostic(`Texture image load failed for ${texture.uri}: ${detail}`, `texture-image:${key}`);
+          this.#options.invalidate();
           return;
         }
         const lifecycle = this.#options.lifecycle();
@@ -327,6 +349,7 @@ export class OrdinaryTextureResidencyController {
           `texture-image-publication:${key}`,
         ));
         row.terminal = true;
+        row.error = detail;
         delete row.subscription;
         capture(() => delivery.terminate());
         capture(this.#options.invalidate);

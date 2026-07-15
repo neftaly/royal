@@ -72,6 +72,10 @@ export type VirtualTextureFramePublication = {
   readonly demanded: ReadonlySet<VirtualTextureRuntimeState>;
 };
 
+export type VirtualTextureAssetSnapshot =
+  | Readonly<{ error?: never; pendingPages: number; state: "loading" | "ready" }>
+  | Readonly<{ error: string; pendingPages: number; state: "error" | "unsupported" }>;
+
 /**
  * Owns the mutable browser-shell state shared by VT demand publication and
  * asynchronous page requests. Pure demand planning and GPU allocation remain
@@ -118,6 +122,21 @@ export class VirtualTextureRuntimeShell {
 
   get(key: string): VirtualTextureRuntimeState | undefined {
     return this.#resources.get(key);
+  }
+
+  assetSnapshot(texture: VirtualTextureRef): VirtualTextureAssetSnapshot | undefined {
+    const state = this.#resources.get(textureCacheKey(texture));
+    if (state === undefined) return undefined;
+    const requests = this.requests.snapshot(state);
+    const pendingPages = requests.loadingPages + requests.queuedPages;
+    if (state.status === "error" || state.status === "unsupported") {
+      return {
+        error: state.error ?? `Virtual texture ${state.status}`,
+        pendingPages,
+        state: state.status,
+      };
+    }
+    return { pendingPages, state: state.status };
   }
 
   hasGpuLease(key: string): boolean {
@@ -460,6 +479,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   markUnsupported(state: VirtualTextureRuntimeState, reason: string): void {
+    state.error = reason;
     state.status = "unsupported";
     const message = `Virtual texture ${state.activeSource.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
     if (state.diagnosticsEnabled) {
@@ -529,6 +549,7 @@ export class VirtualTextureRuntimeShell {
     const manifest = parsed.manifest;
     state.availablePageKeys = new Set(manifest.pages.map(virtualTexturePageKey));
     state.manifest = manifest;
+    delete state.error;
     state.status = "ready";
     this.#options.invalidate();
   }
@@ -610,6 +631,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   #fail(state: VirtualTextureRuntimeState, reason: string): void {
+    state.error = reason;
     state.status = "error";
     state.stats.manifestFailures += 1;
     if (state.diagnosticsEnabled) {
@@ -618,6 +640,7 @@ export class VirtualTextureRuntimeShell {
         `virtual-texture-failed:${state.activeSource.manifestUri}`,
       );
     }
+    this.#options.invalidate();
   }
 
   #hasGovernedAdmissionDemand(): boolean {

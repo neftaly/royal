@@ -134,7 +134,9 @@ pages alike. `automaticManifestUses`, `automaticPagesTarget`, and
 Manifest fetch and parse, page fetch/decode, GPU admission, and upload happen
 asynchronously. Rendering continues with available fallback data while work is
 pending, and invalidation schedules later progress. Failures are reported in
-renderer diagnostics and may leave the explicit VT unavailable; the React
-facade does not currently expose a typed per-asset loading/error hook. Hosts
-that need user-facing loading state should track their own manifest transport
-and treat renderer diagnostics as diagnostics, not application state.
+renderer diagnostics and may leave the explicit VT unavailable. The React
+facade exposes `useTextureAssetStatus(texture)` for exact ordinary and authored
+VT identities. An authored VT becomes `ready` when its manifest is accepted;
+`pendingPages` separately reports visible detail still loading or awaiting GPU
+publication. Imperative hosts use `textureAssetSnapshot` and
+`observeTextureAsset`, keeping aggregate diagnostics out of application state.

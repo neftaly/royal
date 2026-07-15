@@ -3,6 +3,8 @@ import type {
   PickInput,
   PickResult,
   RenderRoot,
+  TextureAssetRef,
+  VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type {
   ResourceGovernorPolicyInput,
@@ -115,6 +117,33 @@ export interface WebGlTextureResidencySnapshot {
   /** Ordinary WebGL texture resources, including resources awaiting upload. */
   readonly resources: number;
 }
+
+/** Focused readiness for one exact ordinary or authored virtual-texture identity. */
+export type WebGlTextureAssetSnapshot =
+  | Readonly<{
+    readonly error?: never;
+    readonly kind: "ordinary";
+    readonly state: "idle" | "loading" | "ready";
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly kind: "ordinary";
+    readonly state: "error";
+  }>
+  | Readonly<{
+    readonly error?: never;
+    readonly kind: "virtual";
+    /** Pages currently loading, decoding, or queued for GPU publication. */
+    readonly pendingPages: number;
+    /** `ready` means the manifest is accepted; visible detail may continue streaming. */
+    readonly state: "idle" | "loading" | "ready";
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly kind: "virtual";
+    readonly pendingPages: number;
+    readonly state: "error" | "unsupported";
+  }>;
 
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly error?: string;
@@ -287,6 +316,8 @@ export interface WebGlRoot {
   invalidate(): void;
   /** Reads focused diagnostics for one retained glTF asset. */
   gltfAssetSnapshot(asset: GltfAssetRef): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined;
+  /** Reads focused readiness for one retained texture asset. */
+  textureAssetSnapshot(texture: TextureAssetRef | VirtualTextureAssetRef): WebGlTextureAssetSnapshot;
   /** Observes immutable context lifecycle transitions. Calls back immediately with the current state. */
   observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void;
   /** Observes failures from renderer-owned scheduled frames. Explicit render calls still throw synchronously. */
@@ -297,6 +328,11 @@ export interface WebGlRoot {
   observeGltfAsset(
     asset: GltfAssetRef,
     callback: (snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined) => void,
+  ): () => void;
+  /** Observes one exact texture identity. Calls back immediately and after relevant frames. */
+  observeTextureAsset(
+    texture: TextureAssetRef | VirtualTextureAssetRef,
+    callback: (snapshot: WebGlTextureAssetSnapshot) => void,
   ): () => void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;

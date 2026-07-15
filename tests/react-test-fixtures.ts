@@ -51,6 +51,9 @@ export const fakeRendererRoot = ({
     dispose: vi.fn(),
     flushInvalidated: vi.fn(),
     gltfAssetSnapshot: vi.fn(() => ({ state: "idle" as const, variantNames: [] })),
+    textureAssetSnapshot: vi.fn((texture) => texture.kind === "asset"
+      ? { kind: "ordinary" as const, state: "idle" as const }
+      : { kind: "virtual" as const, pendingPages: 0, state: "idle" as const }),
     invalidate: vi.fn(),
     observeLifecycle: vi.fn((callback: Parameters<RoyalRendererRoot["observeLifecycle"]>[0]) => {
       callback({ generation: 1, interruptions: 0, recoveries: 0, state: "available" });
@@ -63,6 +66,10 @@ export const fakeRendererRoot = ({
     }),
     observeGltfAsset: vi.fn((asset, callback) => {
       callback(root.gltfAssetSnapshot(asset));
+      return () => undefined;
+    }),
+    observeTextureAsset: vi.fn((texture, callback) => {
+      callback(root.textureAssetSnapshot(texture));
       return () => undefined;
     }),
     observeRenderFailures: vi.fn(() => () => undefined),

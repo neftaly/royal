@@ -221,6 +221,14 @@ of a string when using an explicit asset `version`. Imperative hosts can use
 the same exact asset identity. Both React hooks validate source and version
 identity immediately, including before the Canvas root exists.
 
+`useTextureAssetStatus(texture)` observes the exact `imageTexture(...)` or
+`virtualTexture(...)` descriptor retained by the surrounding Canvas. Ordinary
+textures report `idle`, `loading`, `ready`, or `error`. Authored virtual
+textures additionally report `unsupported` and `pendingPages`; their `ready`
+state means the manifest was accepted, while visible detail may continue to
+stream. Imperative hosts can use `root.textureAssetSnapshot(texture)` and
+`root.observeTextureAsset(texture, callback)` without polling diagnostics.
+
 Both asset and renderer lifecycle results are discriminated unions: `error` is
 required only when `state === 'error'` for an asset or `state === 'failed'` for
 the renderer. Both hooks use React's external-store snapshot contract and

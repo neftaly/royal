@@ -491,10 +491,28 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
 
+    const transportTexture = virtualTexture("/vt/transport.json");
     const transportRoot = createWebGlRoot(fakeCanvas(fakeGl().gl));
-    transportRoot.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/transport.json") })));
+    expect(transportRoot.textureAssetSnapshot(transportTexture)).toEqual({
+      kind: "virtual",
+      pendingPages: 0,
+      state: "idle",
+    });
+    transportRoot.render(renderScene(unlitMaterial({ texture: transportTexture })));
+    expect(transportRoot.textureAssetSnapshot(transportTexture)).toEqual({
+      kind: "virtual",
+      pendingPages: 0,
+      state: "loading",
+    });
     fetchRequests[0]!.reject(new Error("offline"));
     await flushMicrotasks();
+
+    expect(transportRoot.textureAssetSnapshot(transportTexture)).toEqual({
+      error: "manifest transport failed: offline",
+      kind: "virtual",
+      pendingPages: 0,
+      state: "error",
+    });
 
     const jsonRoot = createWebGlRoot(fakeCanvas(fakeGl().gl));
     jsonRoot.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/json.json") })));
@@ -554,7 +572,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/npot.json") })));
+    const texture = virtualTexture("/vt/npot.json");
+    root.render(renderScene(unlitMaterial({ texture })));
     fetchRequests[0]!.resolve(responseJson({
       borderTexels: 1,
       contractVersion: 2,
@@ -565,6 +584,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     }));
     await flushVirtualTextureManifest(root);
 
+    expect(root.textureAssetSnapshot(texture)).toMatchObject({ kind: "virtual", state: "ready" });
     expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/vt/pages/m2-0-0.png"]);
     root.dispose();
   });

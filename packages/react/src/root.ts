@@ -1,4 +1,11 @@
-import type { GltfAssetRef, PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
+import type {
+  GltfAssetRef,
+  PickInput,
+  PickResult,
+  RenderRoot,
+  TextureAssetRef,
+  VirtualTextureAssetRef,
+} from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlContextSnapshot,
@@ -9,6 +16,7 @@ import {
   type WebGlPickingSnapshot,
   type WebGlResourceLifetimeSnapshot,
   type WebGlResourcePressureSnapshot,
+  type WebGlRoot,
   type WebGlTextureResidencySnapshot,
   type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
@@ -18,6 +26,7 @@ import {
   type RoyalRendererFrameClock,
 } from "./renderer-capabilities";
 import { validateGltfAssetRef } from "./gltf-asset-identity";
+import { validateTextureAssetRef } from "./texture-asset-identity";
 import { recordWithAllowedFields } from "./validation";
 
 const RENDERER_OPTION_FIELDS = ["alpha", "antialias", "automaticVirtualTextures"] as const;
@@ -175,6 +184,31 @@ export type RoyalRendererGltfAssetSnapshot =
     readonly variantNames: readonly string[];
   }>;
 
+/** Focused readiness for one exact ordinary image or authored virtual texture. */
+export type RoyalRendererTextureAssetSnapshot =
+  | Readonly<{
+    readonly error?: never;
+    readonly kind: "ordinary";
+    readonly state: "idle" | "loading" | "ready";
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly kind: "ordinary";
+    readonly state: "error";
+  }>
+  | Readonly<{
+    readonly error?: never;
+    readonly kind: "virtual";
+    readonly pendingPages: number;
+    readonly state: "idle" | "loading" | "ready";
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly kind: "virtual";
+    readonly pendingPages: number;
+    readonly state: "error" | "unsupported";
+  }>;
+
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
   readonly canvas: HTMLCanvasElement;
@@ -190,6 +224,10 @@ export interface RoyalRendererRoot {
   invalidate(): void;
   /** Reads one retained glTF asset without allocating the full diagnostics payload. */
   gltfAssetSnapshot(asset: GltfAssetRef): RoyalRendererGltfAssetSnapshot;
+  /** Reads readiness for one exact texture descriptor retained by the scene. */
+  textureAssetSnapshot(
+    texture: TextureAssetRef | VirtualTextureAssetRef,
+  ): RoyalRendererTextureAssetSnapshot;
   /** Observes renderer availability without polling. Calls back immediately. */
   observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
   /** Observes completed renderer frames. Calls back immediately with the current frame index. */
@@ -198,6 +236,11 @@ export interface RoyalRendererRoot {
   observeGltfAsset(
     asset: GltfAssetRef,
     callback: (snapshot: RoyalRendererGltfAssetSnapshot) => void,
+  ): () => void;
+  /** Observes one exact texture descriptor. Calls back immediately. */
+  observeTextureAsset(
+    texture: TextureAssetRef | VirtualTextureAssetRef,
+    callback: (snapshot: RoyalRendererTextureAssetSnapshot) => void,
   ): () => void;
   /** Observes failures from renderer-owned scheduled frames. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
@@ -253,6 +296,10 @@ const royalGltfAssetSnapshot = (
   }
   return Object.freeze({ state: "ready", variantNames: snapshot.variantNames });
 };
+
+const royalTextureAssetSnapshot = (
+  snapshot: ReturnType<WebGlRoot["textureAssetSnapshot"]>,
+): RoyalRendererTextureAssetSnapshot => Object.freeze({ ...snapshot });
 
 export type { RoyalRendererFrameClock } from "./renderer-capabilities";
 
@@ -320,6 +367,10 @@ export const createRendererRoot = (
       validateGltfAssetRef(asset, "RoyalRendererRoot gltfAssetSnapshot asset");
       return royalGltfAssetSnapshot(root.gltfAssetSnapshot(asset));
     },
+    textureAssetSnapshot: (texture) => {
+      validateTextureAssetRef(texture, "RoyalRendererRoot textureAssetSnapshot texture");
+      return royalTextureAssetSnapshot(root.textureAssetSnapshot(texture));
+    },
     invalidate: () => {
       root.invalidate();
     },
@@ -339,6 +390,11 @@ export const createRendererRoot = (
       return root.observeGltfAsset(asset, (snapshot) => {
         callback(royalGltfAssetSnapshot(snapshot));
       });
+    },
+    observeTextureAsset: (texture, callback) => {
+      validateTextureAssetRef(texture, "RoyalRendererRoot observeTextureAsset texture");
+      validateObserver(callback, "RoyalRendererRoot observeTextureAsset callback");
+      return root.observeTextureAsset(texture, (snapshot) => callback(royalTextureAssetSnapshot(snapshot)));
     },
     observeRenderFailures: (callback) => {
       validateObserver(callback, "RoyalRendererRoot observeRenderFailures callback");

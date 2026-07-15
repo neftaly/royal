@@ -133,6 +133,7 @@ export type VirtualTextureRuntimeState = {
   /** Ordered counterpart of `desiredPageKeys`; inactive physical cache is owned by the GPU arena. */
   desiredPages: VirtualTexturePageId[];
   desiredPagesScratch: VirtualTexturePageId[];
+  error?: string;
   readonly key: string;
   /** Most recent successfully committed frame that contained draw demand. */
   lastDemandFrame: number;

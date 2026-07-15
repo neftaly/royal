@@ -189,6 +189,7 @@ describe("renderer-core public API", () => {
       "useOrbitCamera",
       "useOrbitCameraView",
       "useRendererLifecycle",
+      "useTextureAssetStatus",
     ]);
   });
 

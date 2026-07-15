@@ -19,6 +19,7 @@ export type {
   ResolvedWebGlRootOptions,
   WebGlRootSnapshot,
   WebGlTextureResidencySnapshot,
+  WebGlTextureAssetSnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
 export type {

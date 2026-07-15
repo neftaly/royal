@@ -451,14 +451,19 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     const { calls, gl } = fakeGl();
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas);
+    const texture = imageTexture("/textures/restored.png");
     const texturedScene = renderScene([
       mesh({
         geometry: boxGeometry(1),
-        material: unlitMaterial({ texture: imageTexture("/textures/restored.png") }),
+        material: unlitMaterial({ texture }),
       }),
     ]);
+    const states: string[] = [];
+    const stop = root.observeTextureAsset(texture, (snapshot) => states.push(snapshot.state));
 
+    expect(root.textureAssetSnapshot(texture)).toEqual({ kind: "ordinary", state: "idle" });
     root.render(texturedScene);
+    expect(root.textureAssetSnapshot(texture)).toEqual({ kind: "ordinary", state: "loading" });
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
     await flushAnimationFrames(animationFrames);
@@ -469,6 +474,8 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
       preparedSources: 1,
       resources: 1,
     });
+    expect(root.textureAssetSnapshot(texture)).toEqual({ kind: "ordinary", state: "ready" });
+    expect(states).toEqual(["idle", "loading", "ready"]);
     canvas.dispatchContextEvent("webglcontextlost");
     const callsAtLoss = calls.length;
     await flushAnimationFrames(animationFrames);
@@ -493,6 +500,7 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     });
     expect(ControlledImage.instances).toHaveLength(1);
     expect(texturePixelUploadIndexes(calls).some((index) => index >= callsAtLoss)).toBe(true);
+    stop();
   });
 
   it("generates mipmaps after uploading a default imageTexture asset", async () => {

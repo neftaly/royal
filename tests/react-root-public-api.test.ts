@@ -4,8 +4,10 @@ import {
   type RoyalRendererDiagnosticsSnapshot,
 } from "@royal/react";
 import {
+  imageTexture,
   perspectiveCamera,
   scene,
+  virtualTexture,
   type RenderRoot,
 } from "@royal/renderer-core";
 import { acquireExternalRenderClockForRoyalRoot } from "../packages/react/src/root";
@@ -58,6 +60,14 @@ describe("React root public API", () => {
       { uri: "/helmet.gltf" },
       invalidCallback,
     )).toThrow("observeGltfAsset callback must be a function");
+    expect(() => root.textureAssetSnapshot(null as unknown as ReturnType<typeof imageTexture>))
+      .toThrow(/textureAssetSnapshot texture must be a TextureAssetRef or VirtualTextureAssetRef object/i);
+    expect(() => root.observeTextureAsset(
+      { kind: "asset", uri: "" },
+      () => undefined,
+    )).toThrow(/texture asset.*src.*non-empty string/i);
+    expect(() => root.observeTextureAsset(imageTexture("/albedo.png"), invalidCallback))
+      .toThrow("observeTextureAsset callback must be a function");
 
     root.dispose();
   });
@@ -140,6 +150,21 @@ describe("React root public API", () => {
     const stopObservingAsset = root.observeGltfAsset(asset, (snapshot) => assetSnapshots.push(snapshot));
     expect(assetSnapshots).toEqual([{ state: "idle", variantNames: [] }]);
     stopObservingAsset();
+    const ordinaryTexture = imageTexture("/not-retained.png");
+    const authoredVirtualTexture = virtualTexture("/not-retained.vt.json");
+    expect(root.textureAssetSnapshot(ordinaryTexture)).toEqual({ kind: "ordinary", state: "idle" });
+    expect(root.textureAssetSnapshot(authoredVirtualTexture)).toEqual({
+      kind: "virtual",
+      pendingPages: 0,
+      state: "idle",
+    });
+    const textureSnapshots: unknown[] = [];
+    const stopObservingTexture = root.observeTextureAsset(
+      authoredVirtualTexture,
+      (snapshot) => textureSnapshots.push(snapshot),
+    );
+    expect(textureSnapshots).toEqual([{ kind: "virtual", pendingPages: 0, state: "idle" }]);
+    stopObservingTexture();
 
     root.render(renderRoot);
 

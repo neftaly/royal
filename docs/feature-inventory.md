@@ -26,6 +26,7 @@ Status meanings:
 | `useFrame` | product | Opts a settled renderer into time-driven work. Named `active` and `priority` options expose subscription and ordering costs; inactive hooks release the frame clock. Keep, but do not make it the default clock. |
 | Renderer lifecycle snapshot and recovery | product | Needed for context loss and UI state. Keep small. |
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
+| Texture asset status hook | product | Exact ordinary/authored-VT readiness; VT page streaming remains a separate `pendingPages` fact. |
 | Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Scene data and static policy-derived ceiling tables are omitted; retain measured limits, usage, high-water, admissions and denials. |
 | Public resource-governor policy | deleted | Backend admission remains observable in diagnostics, but byte/job classes no longer leak into React or WebGL root options/exports. Constrained policies are injected only through an internal deterministic-test boundary while local caps replace the backend-wide policy. |
 

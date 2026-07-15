@@ -711,14 +711,19 @@ describe("WebGL renderer error and texture contracts", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const failingScene = renderScene(unlitMaterial({
-      texture: imageTexture("/textures/missing-texture.png"),
-    }));
+    const texture = imageTexture("/textures/missing-texture.png");
+    const failingScene = renderScene(unlitMaterial({ texture }));
 
     root.render(failingScene);
     expect(requestedTextureUrls(loader).some((url) => url.includes("/textures/missing-texture.png"))).toBe(true);
 
     await failTextureLoad(loader, new Error(textureLoadFailure));
+
+    expect(root.textureAssetSnapshot(texture)).toEqual({
+      error: textureLoadFailure,
+      kind: "ordinary",
+      state: "error",
+    });
 
     let surfacedError: unknown;
     try {

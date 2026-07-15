@@ -25,6 +25,12 @@ export type {
   GltfAssetStatusInput,
 } from './gltf-status';
 
+export { useTextureAssetStatus } from './texture-status';
+export type {
+  TextureAssetStatus,
+  TextureAssetStatusInput,
+} from './texture-status';
+
 export { useRendererLifecycle } from './renderer-lifecycle';
 
 export {
@@ -69,6 +75,7 @@ export type {
   RoyalRendererRootLifecycle,
   RoyalRendererRootLifecycleSnapshot,
   RoyalRendererTextureResidencyDiagnosticsSnapshot,
+  RoyalRendererTextureAssetSnapshot,
   RoyalRendererVirtualTexturingDiagnosticsSnapshot,
   RendererOptions,
   ResolvedRendererOptions,

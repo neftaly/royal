@@ -15,6 +15,8 @@ import {
   type RenderToneMapping,
   type RenderNode,
   type RenderRoot,
+  type TextureAssetRef,
+  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import { loadHtmlImage } from "./browser-image-loader";
 import { BoundedDiagnosticLog } from "./diagnostics";
@@ -232,6 +234,7 @@ import type {
   WebGlRootOptions,
   WebGlRootSnapshot,
   WebGlRenderViewsOptions,
+  WebGlTextureAssetSnapshot,
 } from "./root-types";
 
 export type {
@@ -247,6 +250,7 @@ export type {
   WebGlRootOptions,
   WebGlRootSnapshot,
   WebGlTextureResidencySnapshot,
+  WebGlTextureAssetSnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
 
@@ -815,6 +819,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
   }
 
+  textureAssetSnapshot(texture: TextureAssetRef | VirtualTextureAssetRef): WebGlTextureAssetSnapshot {
+    if (texture.kind === "asset") {
+      const snapshot = this.#ordinaryTextures.assetSnapshot(texture);
+      return snapshot === undefined
+        ? { kind: "ordinary", state: "idle" }
+        : { kind: "ordinary", ...snapshot };
+    }
+    const snapshot = this.#virtualTextureRuntime.assetSnapshot(texture);
+    return snapshot === undefined
+      ? { kind: "virtual", pendingPages: 0, state: "idle" }
+      : { kind: "virtual", ...snapshot };
+  }
+
   observeGltfAsset(
     asset: GltfAssetRef,
     callback: (snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined) => void,
@@ -823,6 +840,25 @@ class WebGlRootImpl implements InternalWebGlRoot {
       gltfRequestKey(asset.uri, asset.version),
       (state) => callback(preparedGltfLoadDiagnosticsAssetSnapshot(state)),
     );
+  }
+
+  observeTextureAsset(
+    texture: TextureAssetRef | VirtualTextureAssetRef,
+    callback: (snapshot: WebGlTextureAssetSnapshot) => void,
+  ): () => void {
+    let previous: WebGlTextureAssetSnapshot | undefined;
+    return this.observeFrame(() => {
+      const snapshot = this.textureAssetSnapshot(texture);
+      if (
+        previous?.kind === snapshot.kind
+        && previous.state === snapshot.state
+        && previous.error === snapshot.error
+        && (previous.kind === "ordinary"
+          || (snapshot.kind === "virtual" && previous.pendingPages === snapshot.pendingPages))
+      ) return;
+      previous = snapshot;
+      callback(snapshot);
+    });
   }
 
   get frame(): number {
