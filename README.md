@@ -87,6 +87,12 @@ pnpm check:package-consumer
 The example app runs through `pnpm dev` and contains the main task-oriented
 React scenes.
 
+`pnpm check:bundle-size` builds minimal React primitive and glTF consumers and
+enforces their initial and reachable gzip budgets. Use
+`pnpm check:bundle-size:details` to attribute the initial bundle to packaged
+Royal modules and individual renderer source files before choosing a split or
+LOC-reduction target.
+
 ## API Shape
 
 `createRendererRoot(canvas)` is the lower-level host and testing escape hatch

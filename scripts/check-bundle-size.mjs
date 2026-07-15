@@ -12,15 +12,83 @@ const budget = JSON.parse(readFileSync(
   'utf8',
 ));
 const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'royal-bundle-size-'));
+const showDetails = process.argv.includes('--details');
 
 const gzipBytes = (filePath) => gzipSync(readFileSync(filePath), { level: 9 }).byteLength;
 
+const buildRendererAttribution = async () => {
+  const packageRoot = path.join(repoRoot, 'packages/renderer-webgl');
+  const chunks = new Map();
+  const previousWorkingDirectory = process.cwd();
+  try {
+    process.chdir(packageRoot);
+    await build({
+      configFile: path.join(repoRoot, 'vite.config.ts'),
+      logLevel: 'silent',
+      plugins: [{
+        name: 'royal-renderer-source-attribution',
+        generateBundle(_options, bundle) {
+          for (const output of Object.values(bundle)) {
+            if (output.type !== 'chunk') continue;
+            chunks.set(output.fileName, {
+              imports: output.imports,
+              isEntry: output.isEntry,
+              modules: output.modules,
+              name: output.name,
+            });
+          }
+        },
+      }],
+      build: {
+        emptyOutDir: true,
+        outDir: path.join(temporaryRoot, 'renderer-attribution'),
+        sourcemap: false,
+      },
+    });
+  } finally {
+    process.chdir(previousWorkingDirectory);
+  }
+  const entry = Array.from(chunks.values()).find((chunk) => chunk.isEntry && chunk.name === 'index');
+  if (entry === undefined) throw new Error('Renderer attribution build has no index entry');
+  const initialChunks = new Set();
+  const visit = (chunk) => {
+    if (initialChunks.has(chunk)) return;
+    initialChunks.add(chunk);
+    for (const imported of chunk.imports) {
+      const dependency = chunks.get(imported);
+      if (dependency !== undefined) visit(dependency);
+    }
+  };
+  visit(entry);
+  const bytesByModule = new Map();
+  for (const chunk of initialChunks) {
+    for (const [id, module] of Object.entries(chunk.modules)) {
+      bytesByModule.set(id, (bytesByModule.get(id) ?? 0) + (module.renderedLength ?? 0));
+    }
+  }
+  return Array.from(bytesByModule)
+    .filter(([id]) => id.startsWith(path.join(packageRoot, 'src')))
+    .sort((left, right) => right[1] - left[1]);
+};
+
 const buildFixture = async (name) => {
   const outputDirectory = path.join(temporaryRoot, name);
+  const renderedModulesByFile = new Map();
   await build({
     root: path.join(fixtureRoot, name),
     configFile: false,
     logLevel: 'silent',
+    plugins: [{
+      name: 'royal-bundle-size-attribution',
+      generateBundle(_options, bundle) {
+        for (const output of Object.values(bundle)) {
+          if (output.type !== 'chunk') continue;
+          renderedModulesByFile.set(output.fileName, Object.entries(output.modules).map(
+            ([id, module]) => [id, module.renderedLength ?? 0],
+          ));
+        }
+      },
+    }],
     build: {
       emptyOutDir: true,
       manifest: true,
@@ -51,12 +119,22 @@ const buildFixture = async (name) => {
     file,
     gzipBytes(path.join(outputDirectory, 'assets', file)),
   ]));
+  const initialRenderedBytesByModule = new Map();
+  for (const file of initialFiles) {
+    for (const [id, bytes] of renderedModulesByFile.get(file) ?? []) {
+      initialRenderedBytesByModule.set(
+        id,
+        (initialRenderedBytesByModule.get(id) ?? 0) + bytes,
+      );
+    }
+  }
   return {
     gzipByFile,
     initialFiles,
     initialGzipBytes: Array.from(initialFiles)
       .filter((file) => file.endsWith('.js'))
       .reduce((sum, file) => sum + gzipBytes(path.join(outputDirectory, file)), 0),
+    initialRenderedBytesByModule,
   };
 };
 
@@ -80,6 +158,19 @@ try {
   console.log(`glTF all reachable:   ${formatBytes(reachableGzipBytes)} gzip`);
   for (const [file, bytes] of lazyChunks) {
     console.log(`Lazy ${file.padEnd(28)} ${formatBytes(bytes)} gzip`);
+  }
+  if (showDetails) {
+    const royalModules = Array.from(gltf.initialRenderedBytesByModule)
+      .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
+      .sort((left, right) => right[1] - left[1]);
+    console.log('Initial Royal modules by rendered bytes:');
+    for (const [id, bytes] of royalModules.slice(0, 30)) {
+      console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
+    }
+    console.log('Initial renderer sources by rendered bytes:');
+    for (const [id, bytes] of (await buildRendererAttribution()).slice(0, 40)) {
+      console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
+    }
   }
 
   const failures = [];
