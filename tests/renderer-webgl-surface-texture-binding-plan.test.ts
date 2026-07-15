@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
+  createSurfaceTextureBindingWorkspace,
   planSurfaceTextureBindings,
   resolveAdmittedSurfaceTextureBindings,
   type SurfaceTextureBindingPlanInput,
@@ -17,6 +18,25 @@ const input = (overrides: Partial<SurfaceTextureBindingPlanInput> = {}): Surface
 });
 
 describe("surface texture binding planner", () => {
+  it("reuses caller-owned plan and omission storage without retaining stale values", () => {
+    const workspace = createSurfaceTextureBindingWorkspace();
+    const first = planSurfaceTextureBindings(input({
+      candidates: { emissiveTexture: "ready" },
+      maxTextureUnits: 0,
+    }), workspace);
+    const omission = first.omissions[0];
+    expect(first.omissions).toEqual([{ feature: "emissiveTexture", reason: "unit-exhausted" }]);
+
+    const second = planSurfaceTextureBindings(input({
+      candidates: { normalTexture: "unavailable" },
+    }), workspace);
+    expect(second).toBe(first);
+    expect(second.omissions[0]).toBe(omission);
+    expect(second.omissions).toEqual([{ feature: "normalTexture", reason: "unavailable" }]);
+    expect(second.features.size).toBe(0);
+    expect(second.textureUnits.size).toBe(0);
+  });
+
   it("keeps material descriptors exhaustive and unambiguous", () => {
     const unique = <Value>(values: readonly Value[]): boolean => new Set(values).size === values.length;
     expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ feature }) => feature))).toBe(true);
