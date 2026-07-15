@@ -173,7 +173,7 @@ const runSourceTrace = async (trace: readonly SourceOperation[], label: string):
   };
   const assertModel = (step: number): void => {
     expect(store.snapshot(), `${label} step=${step}`).toMatchObject({
-      activeJobs: jobs.size,
+      entries: jobs.size,
       failures,
       starts,
       subscribers: aliases.size,
@@ -288,7 +288,7 @@ describe("ordinary texture source jobs", () => {
 
     store.acquire({ uri: "/dispose-during-admit.png" }, () => undefined);
     expect({ loads, releases }).toEqual({ loads: 0, releases: 1 });
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0 });
   });
 
   it("retries denied work on wake and contains a throwing admission releaser", async () => {
@@ -333,9 +333,9 @@ describe("ordinary texture source jobs", () => {
     await flushJobs();
     expect(results).toEqual([{ error: retainFailure, kind: "error" }]);
     expect(closed).toEqual([source]);
-    expect(store.snapshot()).toMatchObject({ activeJobs: 1, failures: 1, successes: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 1, failures: 1, successes: 0 });
     subscription.release();
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0 });
     store.dispose();
     expect(closed).toEqual([source]);
   });
@@ -366,7 +366,7 @@ describe("ordinary texture source jobs", () => {
     });
     await flushJobs();
     expect({ closes, ready, references }).toEqual({ closes: 1, ready: 0, references: 0 });
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0, successes: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0, successes: 0 });
     store.dispose();
     expect({ closes, references }).toEqual({ closes: 1, references: 0 });
   });
@@ -404,7 +404,7 @@ describe("ordinary texture source jobs", () => {
     deferred[0]!.resolve(fakeSource(3));
     await flushJobs();
     expect(received).toEqual([3, 4]);
-    expect(store.snapshot()).toMatchObject({ activeJobs: 1, subscribers: 4, successes: 1 });
+    expect(store.snapshot()).toMatchObject({ entries: 1, subscribers: 4, successes: 1 });
     store.dispose();
   });
   it("reports the exact failed delivery and can retry it without disturbing peers or ownership", async () => {
@@ -452,7 +452,7 @@ describe("ordinary texture source jobs", () => {
       result: { kind: "ready", source },
     });
     expect(store.snapshot()).toMatchObject({
-      activeJobs: 1,
+      entries: 1,
       deliveryFailures: 1,
       subscribers: 2,
       successes: 1,
@@ -498,7 +498,7 @@ describe("ordinary texture source jobs", () => {
 
     expect(reportedError).toBeNull();
     expect(received).toEqual([1]);
-    expect(store.snapshot()).toMatchObject({ activeJobs: 1, deliveryFailures: 1, subscribers: 1 });
+    expect(store.snapshot()).toMatchObject({ entries: 1, deliveryFailures: 1, subscribers: 1 });
     expect(closed).toEqual([]);
     terminal.release();
     peer.release();
@@ -574,7 +574,7 @@ describe("ordinary texture source jobs", () => {
     expect(releases).toEqual([0, 1, 2, 3]);
     expect(closes).toEqual([1, 3]);
     expect(reentrantAcquireBlocked).toBe(true);
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0 });
     store.dispose();
     expect(releases).toEqual([0, 1, 2, 3]);
     expect(closes).toEqual([1, 3]);
@@ -609,7 +609,7 @@ describe("ordinary texture source jobs", () => {
     subscription.release();
     store.dispose();
     expect({ closes, releases }).toEqual({ closes: 1, releases: 1 });
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0 });
   });
   it("preserves null as a terminal cleanup failure", async () => {
     const store = new OrdinaryTextureSourceStore({
@@ -629,7 +629,7 @@ describe("ordinary texture source jobs", () => {
     }
     expect(thrown).toBe(true);
     expect(failure).toBeNull();
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ entries: 0, subscribers: 0 });
   });
   it("safely discards late resolve and reject completions after disposal", async () => {
     const deferred: DeferredLoad[] = [];
@@ -649,7 +649,7 @@ describe("ordinary texture source jobs", () => {
     deferred[1]!.reject(new Error("late rejection"));
     await flushJobs();
     expect(closed).toEqual([source]);
-    expect(store.snapshot()).toMatchObject({ aborts: 2, activeJobs: 0, failures: 0, subscribers: 0 });
+    expect(store.snapshot()).toMatchObject({ aborts: 2, entries: 0, failures: 0, subscribers: 0 });
   });
   it("keeps abort, retry, stale completion, and close ownership bounded under fuzz", async () => {
     await runFuzzTraces({

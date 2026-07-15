@@ -27,8 +27,9 @@ export interface OrdinaryTextureSourceJobAdmission {
 
 export interface OrdinaryTextureSourceStoreSnapshot {
   readonly aborts: number;
-  readonly activeJobs: number;
   readonly deliveryFailures: number;
+  /** Shared source identities retained by at least one subscriber. */
+  readonly entries: number;
   readonly failures: number;
   readonly starts: number;
   readonly subscribers: number;
@@ -110,7 +111,6 @@ export class OrdinaryTextureSourceStore {
   #failures = 0;
   #nextListener = 1;
   #starts = 0;
-  #subscribers = 0;
   #successes = 0;
 
   constructor(options: {
@@ -162,7 +162,6 @@ export class OrdinaryTextureSourceStore {
       released: false,
     };
     job.listeners.set(listenerKey, subscriber);
-    this.#subscribers += 1;
     if (start) this.#tryStart(job);
     if (!start && job.result !== undefined) this.#notifyListener(job, listenerKey, subscriber, job.result);
 
@@ -178,7 +177,6 @@ export class OrdinaryTextureSourceStore {
     this.#disposed = true;
     const jobs = [...this.#jobs.values()];
     this.#jobs.clear();
-    this.#subscribers = 0;
     const firstError: CapturedError = { error: undefined, present: false };
     for (const job of jobs) {
       job.listeners.clear();
@@ -201,13 +199,15 @@ export class OrdinaryTextureSourceStore {
   }
 
   snapshot(): OrdinaryTextureSourceStoreSnapshot {
+    let subscribers = 0;
+    for (const job of this.#jobs.values()) subscribers += job.listeners.size;
     return {
       aborts: this.#aborts,
-      activeJobs: this.#jobs.size,
       deliveryFailures: this.#deliveryFailures,
+      entries: this.#jobs.size,
       failures: this.#failures,
       starts: this.#starts,
-      subscribers: this.#subscribers,
+      subscribers,
       successes: this.#successes,
     };
   }
@@ -386,7 +386,6 @@ export class OrdinaryTextureSourceStore {
     const current = this.#jobs.get(job.key);
     if (current !== job || current.listeners.get(key) !== subscriber) return;
     current.listeners.delete(key);
-    this.#subscribers -= 1;
     if (current.listeners.size !== 0) return;
     this.#jobs.delete(job.key);
     if (!current.settled) {
