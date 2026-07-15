@@ -135,6 +135,8 @@ type SurfaceMaterialTextureCandidateEntry = Readonly<{
 type SurfaceMaterialTextureCatalog = Readonly<{
   candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>>;
   entries: readonly SurfaceMaterialTextureCandidateEntry[];
+  extendedMaterial: boolean;
+  transmission: boolean;
 }>;
 const textureCoordinateUniformNames = (stem: string): TextureCoordinateUniformNames => ({
   row0: `${stem}Row0`,
@@ -152,6 +154,7 @@ const createSurfaceMaterialTextureCatalog = (
   const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
   const entries: SurfaceMaterialTextureCandidateEntry[] = [];
   const extendedMaterial = surfaceMaterialUsesPbrExtensions(material);
+  const transmission = surfaceMaterialUsesTransmission(material);
   for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
     const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
     if (!extendedMaterial && index >= 4) continue;
@@ -162,7 +165,7 @@ const createSurfaceMaterialTextureCatalog = (
     candidates[descriptor.feature] = "ready";
     entries.push({ descriptor, texture });
   }
-  return { candidates, entries };
+  return { candidates, entries, extendedMaterial, transmission };
 };
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
@@ -206,6 +209,7 @@ const NO_BASE_COLOR_TEXTURE_BINDING = { kind: "none" } as const;
 
 type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"> & {
   readonly baseColor: SurfaceBaseColorTextureBinding;
+  readonly extendedMaterial: boolean;
   readonly readyTextures: ReadonlyMap<SurfaceShaderTextureFeature, Extract<
     OrdinaryTextureGpuResource,
     { readonly uploaded: true }
@@ -214,6 +218,7 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
 
 type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorTextureBinding;
+  extendedMaterial: boolean;
   readonly features: PureSurfaceTextureBindingPlan["features"];
   readonly omissions: PureSurfaceTextureBindingPlan["omissions"];
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
@@ -322,6 +327,7 @@ export class SurfaceExecutionArena {
   } = { diagnostics: EMPTY_SURFACE_DIAGNOSTICS, wakeRequested: false };
   readonly #texturePlan: MutableSurfaceTextureBindingPlan = {
     baseColor: { kind: "none" },
+    extendedMaterial: false,
     features: this.#textureReadinessWorkspace.plan.features,
     omissions: this.#textureReadinessWorkspace.plan.omissions,
     readyTextures: this.#readyTextures,
@@ -428,7 +434,7 @@ export class SurfaceExecutionArena {
         programKind,
         plan?.features,
         (surfaceLights?.punctuals.length ?? 0) > 0,
-        surfaceMaterial?.kind === "standard" && surfaceMaterialUsesPbrExtensions(surfaceMaterial),
+        plan?.extendedMaterial ?? false,
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -491,7 +497,7 @@ export class SurfaceExecutionArena {
         batch.material.kind === "standard" ? "surface-instanced-split" : "unlit-instanced-split",
         plan.features,
         surfaceLights.punctuals.length > 0,
-        batch.material.kind === "standard" && surfaceMaterialUsesPbrExtensions(batch.material),
+        plan.extendedMaterial,
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -571,7 +577,7 @@ export class SurfaceExecutionArena {
     }
     if (
       transmissionScreenColorTexture === undefined
-      || !surfaceMaterialUsesTransmission(material)
+      || !textureCatalog.transmission
     ) delete candidates.transmissionScreenTexture;
     else candidates.transmissionScreenTexture = "ready";
     if (lightSet.specular !== undefined) {
@@ -663,7 +669,7 @@ export class SurfaceExecutionArena {
         break;
       }
     }
-    if (transmissionScreenColorTexture !== undefined && surfaceMaterialUsesTransmission(material)) {
+    if (transmissionScreenColorTexture !== undefined && textureCatalog.transmission) {
       candidates.transmissionScreenTexture = transmissionScreenColorTexture.uploaded ? "ready" : "unavailable";
     }
     if (lightSet.specular !== undefined) {
@@ -705,6 +711,7 @@ export class SurfaceExecutionArena {
       selectedBaseColor = binding;
     }
     this.#texturePlan.baseColor = selectedBaseColor;
+    this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
     return this.#texturePlan;
   }
 
@@ -723,7 +730,7 @@ export class SurfaceExecutionArena {
     plan: SurfaceTextureBindingPlan,
   ): void {
     const factors = surfaceMaterialExtensionFactors(material);
-    const extendedMaterial = surfaceMaterialUsesPbrExtensions(material);
+    const { extendedMaterial } = plan;
     this.#bindAlphaSettings(program, material);
     uniform4f(this.#programs, program, "u_materialPbrFactors",
       surfaceMaterialMetallicFactor(material), surfaceMaterialRoughnessFactor(material), 0, 0);
