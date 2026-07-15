@@ -26,7 +26,6 @@ import {
 import {
   identityMat4,
   multiplyMat4Into,
-  transformMat4Into,
   type Mat4,
 } from "../math/mat4";
 import { isBoundsVisible, type MutableBounds3 } from "../math/picking";
@@ -51,7 +50,6 @@ export class GltfPacketSelectionOwner {
   readonly #boundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
   readonly #instanceTransforms: GltfInstanceTransformRegistry;
   readonly #projectedBounds = createProjectedBoundsWorkspace();
-  readonly #rootModel = identityMat4();
   readonly #rootViewProjection = identityMat4();
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
@@ -102,7 +100,7 @@ export class GltfPacketSelectionOwner {
           ? this.#instanceTransforms.views(node.instances)
           : undefined;
         const ordinaryRootModel = node.kind === "gltf"
-          ? transformMat4Into(this.#rootModel, this.#sceneBindings.transform(node))
+          ? this.#sceneBindings.modelMatrix(node)
           : undefined;
         const first = topology.occurrenceFirsts[occurrenceIndex]!;
         const end = first + topology.occurrenceCounts[occurrenceIndex]!;
@@ -158,8 +156,11 @@ export class GltfPacketSelectionOwner {
         }
         continue;
       }
-      transformMat4Into(this.#rootModel, this.#sceneBindings.transform(node));
-      multiplyMat4Into(this.#rootViewProjection, viewProjection, this.#rootModel);
+      multiplyMat4Into(
+        this.#rootViewProjection,
+        viewProjection,
+        this.#sceneBindings.modelMatrix(node),
+      );
       this.#observeLodRoot(
         state,
         node,

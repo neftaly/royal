@@ -123,6 +123,29 @@ const expectOpaqueFailure = (action: () => void): void => {
 };
 
 describe("scene binding registry", () => {
+  it("retains declarative model matrices and updates imperative refs by version", () => {
+    let handle: RenderObjectHandle | null = null;
+    const ref = (value: RenderObjectHandle | null): void => { handle = value; };
+    const registry = new SceneBindingRegistry(() => undefined);
+    const declarativePlan = plan(camera(), [renderedMesh(undefined, 2)]);
+    reconcile(registry, declarativePlan);
+    const declarativeNode = declarativePlan.nodes[0] as Extract<RenderNode, { kind: "mesh" }>;
+    const declarativeModel = registry.modelMatrix(declarativeNode);
+    expect(declarativeModel[12]).toBe(2);
+    expect(registry.modelMatrix(declarativeNode)).toBe(declarativeModel);
+
+    const imperativePlan = plan(camera(), [renderedMesh(ref, 3)]);
+    reconcile(registry, imperativePlan, declarativePlan);
+    const imperativeNode = imperativePlan.nodes[0] as Extract<RenderNode, { kind: "mesh" }>;
+    const imperativeModel = registry.modelMatrix(imperativeNode);
+    expect(imperativeModel[12]).toBe(3);
+    if (handle === null) throw new Error("Expected render-object handle");
+    (handle as RenderObjectHandle).position.x = 7;
+    expect(registry.modelMatrix(imperativeNode)).toBe(imperativeModel);
+    expect(imperativeModel[12]).toBe(7);
+    registry.dispose();
+  });
+
   it("retains the old camera owner when replacement unsubscribe fails", () => {
     const first = trackedCamera({ unsubscribeFailures: 1 });
     const second = trackedCamera();

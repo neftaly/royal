@@ -20,6 +20,12 @@ import type {
   FramePlan,
   FramePlanRenderObjectRefRow,
 } from "./frame/plan";
+import {
+  identityMat4,
+  transformMat4Into,
+  type Mat4,
+  type MutableMat4,
+} from "./math/mat4";
 
 type CameraViewResourceSubscription = {
   readonly resource: CameraViewResource;
@@ -31,6 +37,11 @@ type RenderObjectBinding = {
   declarativeTransform: Transform;
   readonly handle: RenderObjectHandle;
   node: TransformableRenderNode;
+};
+
+type ModelMatrixBinding = {
+  readonly matrix: MutableMat4;
+  transformVersion: number;
 };
 
 type TransformableRenderNode = Extract<RenderNode, { readonly kind: "gltf" | "mesh" }>;
@@ -82,6 +93,7 @@ export class SceneBindingRegistry {
   readonly #bindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #handles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
   readonly #invalidate: () => void;
+  readonly #modelMatrices = new WeakMap<object, ModelMatrixBinding>();
 
   constructor(invalidate: () => void) {
     this.#invalidate = invalidate;
@@ -111,6 +123,25 @@ export class SceneBindingRegistry {
   transform(node: TransformableRenderNode): Transform | undefined {
     const handle = this.#handles.get(node);
     return handle === undefined ? node.transform : readRenderObjectHandleTransform(handle);
+  }
+
+  /** Returns a stable model matrix, recomputing imperative refs only on version changes. */
+  modelMatrix(node: TransformableRenderNode): Mat4 {
+    const handle = this.#handles.get(node);
+    const key = handle ?? node;
+    const transformVersion = handle?.transformVersion ?? 0;
+    let binding = this.#modelMatrices.get(key);
+    if (binding === undefined) {
+      binding = { matrix: identityMat4(), transformVersion: -1 };
+      this.#modelMatrices.set(key, binding);
+    }
+    if (binding.transformVersion === transformVersion) return binding.matrix;
+    transformMat4Into(
+      binding.matrix,
+      handle === undefined ? node.transform : readRenderObjectHandleTransform(handle),
+    );
+    binding.transformVersion = transformVersion;
+    return binding.matrix;
   }
 
   dispose(): void {

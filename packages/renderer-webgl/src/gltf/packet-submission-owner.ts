@@ -18,7 +18,6 @@ import {
 } from "../gltf-packet-submission-workspace";
 import { GLTF_PACKET_ROOT_SOURCE_KIND } from "../gltf-packet-topology";
 import {
-  transformMat4Into,
   type Mat4,
   type MutableMat4,
   identityMat4,
@@ -103,7 +102,6 @@ export class GltfPacketSubmissionOwner {
   readonly #localModelScratch: MutableMat4 = identityMat4();
   readonly #materials: GltfMaterialPreparationArena;
   readonly #materialBindings = new WeakMap<SurfaceMaterial, GltfFrameMaterialBinding>();
-  readonly #ordinaryRootModels = new WeakMap<AnyGltfNode, MutableMat4>();
   readonly #resourceArena: ResourceArena;
   readonly #rootBindings: Array<MutableGltfFrameRootBinding | undefined> = [];
   readonly #rootSourceScratch: MutablePacketRootSourceRow = {
@@ -231,15 +229,9 @@ export class GltfPacketSubmissionOwner {
     const ordinaryRootTransform = node.kind === "gltf"
       ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
       : undefined;
-    let ordinaryRootModel: MutableMat4 | undefined;
-    if (node.kind === "gltf") {
-      ordinaryRootModel = this.#ordinaryRootModels.get(node);
-      if (ordinaryRootModel === undefined) {
-        ordinaryRootModel = identityMat4();
-        this.#ordinaryRootModels.set(node, ordinaryRootModel);
-      }
-      transformMat4Into(ordinaryRootModel, ordinaryRootTransform);
-    }
+    const ordinaryRootModel = node.kind === "gltf"
+      ? this.#sceneBindings.modelMatrix(node)
+      : undefined;
     const ordinaryAssetLights = ordinaryRootModel === undefined
       ? undefined
       : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);

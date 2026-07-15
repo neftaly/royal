@@ -126,7 +126,6 @@ import {
   identityMat4,
   multiplyMat4Into,
   projectionMat4Into,
-  transformMat4Into,
   viewMat4Into,
   type Mat4,
 } from "./math/mat4";
@@ -254,7 +253,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     hdrOutput: false,
     toneMapping: "pbr-neutral",
   };
-  readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
   readonly #singleGltfDemandModel = identityMat4();
   readonly #singleVirtualTextureDemandSource: {
@@ -1453,7 +1451,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): void {
     const retainedGeometry = this.#geometryRecipes.retainedDirectRecipe(node.geometry, node.material);
     const cpu = retainedGeometry.recipe;
-    const model = transformMat4Into(this.#meshModel, this.#sceneBindings.transform(node));
+    const model = this.#sceneBindings.modelMatrix(node);
     const localBounds = this.#geometryRecipes.localBounds(cpu);
     if (!isBoundsVisible(
       localBounds,
