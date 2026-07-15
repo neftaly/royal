@@ -331,30 +331,35 @@ const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
 // discarded back buffer between frames. CDP captures the composited surface,
 // which is the image a user actually sees.
 const captureCompositedCanvas = async (session) => {
-  await evaluate(session, `
+  const captureState = await evaluate(session, `
     (async () => {
+      const canvas = document.querySelector('canvas');
+      if (!(canvas instanceof HTMLCanvasElement)) return null;
+      const restore = { x: scrollX, y: scrollY };
+      canvas.scrollIntoView({ block: 'start', inline: 'nearest' });
       await globalThis.__royalExamplesRenderNow?.();
       for (let frame = 0; frame < 2; frame += 1) {
         await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       }
-    })()
-  `);
-  const clip = await evaluate(session, `
-    (() => {
-      const canvas = document.querySelector('canvas');
-      if (!(canvas instanceof HTMLCanvasElement)) return null;
       const rect = canvas.getBoundingClientRect();
-      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 };
+      return {
+        clip: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, scale: 1 },
+        restore,
+      };
     })()
   `);
-  if (clip === null || clip.width <= 0 || clip.height <= 0) return undefined;
-  const capture = await session.call('Page.captureScreenshot', {
-    captureBeyondViewport: false,
-    clip,
-    format: 'png',
-    fromSurface: false,
-  });
-  return capture.data;
+  if (captureState === null || captureState.clip.width <= 0 || captureState.clip.height <= 0) return undefined;
+  try {
+    const capture = await session.call('Page.captureScreenshot', {
+      captureBeyondViewport: false,
+      clip: captureState.clip,
+      format: 'png',
+      fromSurface: true,
+    });
+    return capture.data;
+  } finally {
+    await evaluate(session, `scrollTo(${JSON.stringify(captureState.restore.x)}, ${JSON.stringify(captureState.restore.y)})`);
+  }
 };
 
 const compositedCanvasSample = async (session) => {
@@ -638,6 +643,19 @@ const assertRoute = (expected, state) => {
       failures.push(`glTF variants selected ${interaction.selections?.join(',')}, expected ruby,mint,slate`);
     } else if (interaction.pressed?.join(',') !== 'ruby,mint,slate') {
       failures.push(`glTF variants pressed state was ${interaction.pressed?.join(',')}, expected ruby,mint,slate`);
+    } else if (interaction.colorSmoke?.error !== undefined) {
+      failures.push(`glTF variants color smoke failed: ${interaction.colorSmoke.error}`);
+    } else {
+      const { mint, ruby, slate } = interaction.colorSmoke?.colors ?? {};
+      if (!(ruby?.[0] > ruby?.[1] * 1.5 && ruby?.[0] > ruby?.[2] * 1.4)) {
+        failures.push(`glTF ruby variant was not red-dominant: ${JSON.stringify(ruby)}`);
+      }
+      if (!(mint?.[1] > mint?.[0] * 1.25 && mint?.[1] > mint?.[2])) {
+        failures.push(`glTF mint variant was not green-dominant: ${JSON.stringify(mint)}`);
+      }
+      if (!(slate?.[2] > slate?.[0] * 1.25 && slate?.[2] > slate?.[1] * 1.15)) {
+        failures.push(`glTF slate variant was not blue-dominant: ${JSON.stringify(slate)}`);
+      }
     }
   }
 
@@ -1431,6 +1449,49 @@ const runGltfVariantsInteractionSmoke = async (session) => evaluate(session, `
 })()
 `);
 
+const runGltfVariantsColorSmoke = async (session) => {
+  const colors = {};
+  for (const variant of ['ruby', 'mint', 'slate']) {
+    const selected = await evaluate(session, `
+      (async () => {
+        const button = [...document.querySelectorAll('.gltf-variants-actions button')]
+          .find((candidate) => candidate.textContent?.trim() === '${variant}');
+        if (!(button instanceof HTMLButtonElement)) return false;
+        button.click();
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          await globalThis.__royalExamplesRenderNow?.();
+          if (document.querySelector('.gltf-variants')?.getAttribute('data-selected-variant') === '${variant}') {
+            return true;
+          }
+        }
+        return false;
+      })()
+    `);
+    if (!selected) return { error: `could not select ${variant} for color smoke` };
+    const capture = await captureCompositedCanvas(session);
+    if (capture === undefined) return { error: `could not capture ${variant} variant` };
+    colors[variant] = await evaluate(session, `
+      (async () => {
+        const response = await fetch('data:image/png;base64,${capture}');
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (context === null) return null;
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const x = Math.min(canvas.width - 1, Math.max(0, Math.round(canvas.width * 0.5)));
+        const y = Math.min(canvas.height - 1, Math.max(0, Math.round(canvas.height * 0.42)));
+        const pixel = context.getImageData(x, y, 1, 1).data;
+        return [pixel[0] / 255, pixel[1] / 255, pixel[2] / 255];
+      })()
+    `);
+  }
+  return { colors };
+};
+
 const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
@@ -1878,6 +1939,16 @@ const main = async () => {
           state = { ...state, canvas: { ...state.canvas, sample: compositedSample } };
         }
       }
+      if (captureDirectory !== '') {
+        const capture = await captureCompositedCanvas(session);
+        if (capture !== undefined) {
+          await mkdir(captureDirectory, { recursive: true });
+          await writeFile(
+            path.join(captureDirectory, `${route.id}-initial.png`),
+            Buffer.from(capture, 'base64'),
+          );
+        }
+      }
       if (route.id === 'picking') {
         state = {
           ...state,
@@ -1885,9 +1956,13 @@ const main = async () => {
         };
       }
       if (route.id === 'gltf-variants') {
+        const interaction = await runGltfVariantsInteractionSmoke(session);
         state = {
           ...state,
-          variantInteraction: await runGltfVariantsInteractionSmoke(session),
+          variantInteraction: {
+            ...interaction,
+            colorSmoke: await runGltfVariantsColorSmoke(session),
+          },
         };
       }
       if (route.id === 'gltf-ghostscript-tiger-svg') {
