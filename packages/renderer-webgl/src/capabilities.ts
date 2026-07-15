@@ -168,18 +168,13 @@ export const canvasSupportsImageMimeType = (
 };
 
 const extensionCapabilities = {
-  anisotropy: [
-    "EXT_texture_filter_anisotropic",
-    "MOZ_EXT_texture_filter_anisotropic",
-    "WEBKIT_EXT_texture_filter_anisotropic",
-  ],
+  anisotropy: ["EXT_texture_filter_anisotropic"],
   compressed_texture: [
     "WEBGL_compressed_texture_astc",
     "EXT_texture_compression_bptc",
     "WEBGL_compressed_texture_etc",
     "WEBGL_compressed_texture_etc1",
     "WEBGL_compressed_texture_pvrtc",
-    "WEBKIT_WEBGL_compressed_texture_pvrtc",
     "WEBGL_compressed_texture_s3tc",
     "WEBGL_compressed_texture_s3tc_srgb",
   ],
@@ -195,7 +190,6 @@ const compressedTextureFamilies: Readonly<Record<string, CompressedTextureFamily
   WEBGL_compressed_texture_pvrtc: "pvrtc",
   WEBGL_compressed_texture_s3tc: "s3tc",
   WEBGL_compressed_texture_s3tc_srgb: "s3tc_srgb",
-  WEBKIT_WEBGL_compressed_texture_pvrtc: "pvrtc",
 };
 
 const compressedTextureFormatNames: Readonly<Record<number, string>> = {

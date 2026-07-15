@@ -328,6 +328,7 @@ const readWebGlGpu = async (session) => evaluate(session, `
   if (gl === null) return null;
   const debug = gl.getExtension('WEBGL_debug_renderer_info');
   return {
+    extensions: gl.getSupportedExtensions()?.slice().sort() ?? [],
     renderer: debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)),
     vendor: debug === null ? null : String(gl.getParameter(debug.UNMASKED_VENDOR_WEBGL)),
     version: String(gl.getParameter(gl.VERSION)),

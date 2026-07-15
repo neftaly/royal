@@ -455,6 +455,7 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
     webgl: gl === null || gl === undefined
       ? null
       : {
+          extensions: gl.getSupportedExtensions()?.slice().sort() ?? [],
           renderer: gl.getParameter(gl.RENDERER) as string,
           shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION) as string,
           unmaskedRenderer: debugInfo == null ? null : gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string,
