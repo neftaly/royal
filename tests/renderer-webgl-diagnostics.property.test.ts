@@ -27,16 +27,19 @@ describe("bounded WebGL diagnostics", () => {
       }
 
       const snapshot = log.snapshot();
-      expect(snapshot.retained, label).toBeLessThanOrEqual(capacity);
-      expect(snapshot.messages, label).toHaveLength(snapshot.retained);
-      expect(snapshot.occurrences, label).toEqual(
-        [...retained].map(([key, count]) => ({ count, key })),
+      expect(snapshot.entries.length, label).toBeLessThanOrEqual(capacity);
+      expect(snapshot.entries, label).toEqual(
+        [...retained].map(([key, occurrences]) => ({
+          key,
+          message: expect.any(String),
+          occurrences,
+        })),
       );
       expect(snapshot.dropped, label).toBe(dropped);
-      expect(snapshot.messages.every((message) => message.length <= 768), label).toBe(true);
+      expect(snapshot.entries.every((entry) => entry.message.length <= 768), label).toBe(true);
       expect(Object.isFrozen(snapshot), label).toBe(true);
-      expect(Object.isFrozen(snapshot.messages), label).toBe(true);
-      expect(Object.isFrozen(snapshot.occurrences), label).toBe(true);
+      expect(Object.isFrozen(snapshot.entries), label).toBe(true);
+      expect(snapshot.entries.every(Object.isFrozen), label).toBe(true);
     });
 
     const longValue = "attacker-controlled-".repeat(256);
@@ -44,11 +47,12 @@ describe("bounded WebGL diagnostics", () => {
     log.record(longValue, longValue);
     log.record(longValue, longValue);
     const snapshot = log.snapshot();
-    expect(snapshot.messages[0]?.length).toBeLessThanOrEqual(768);
-    expect(snapshot.occurrences).toEqual([{
-      count: 2,
+    expect(snapshot.entries[0]?.message.length).toBeLessThanOrEqual(768);
+    expect(snapshot.entries).toEqual([{
       key: expect.stringMatching(/#[0-9a-f]{8}$/u),
+      message: expect.any(String),
+      occurrences: 2,
     }]);
-    expect(snapshot.occurrences[0]?.key.length).toBeLessThanOrEqual(192);
+    expect(snapshot.entries[0]?.key.length).toBeLessThanOrEqual(192);
   });
 });

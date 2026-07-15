@@ -23,7 +23,8 @@ root.dispose();
 The root owns its WebGL2 context and GPU resources. Renderer creation options
 are fixed for its lifetime. Use `invalidate()` for imperative changes,
 `snapshot()` for lifecycle and planning state, and bounded operational
-diagnostics from the root snapshot. Always call `dispose()`.
+diagnostics from the root snapshot. Its `diagnosticLog.entries` carry stable
+keys, text, and deduplicated occurrence counts. Always call `dispose()`.
 
 ## Entrypoints
 

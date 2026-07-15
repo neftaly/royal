@@ -108,19 +108,21 @@ describe("WebGL root context lifecycle contracts", () => {
 
     root.render(graph);
 
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /Studio IBL specular texture is disabled.*upload bytes exceed the absolute limit/,
-    ));
+    expect(root.snapshot().diagnosticLog.entries).toContainEqual(expect.objectContaining({
+      message: expect.stringMatching(
+        /Studio IBL specular texture is disabled.*upload bytes exceed the absolute limit/,
+      ),
+    }));
     // The HDR surface remains required for physical rendering; only the
     // over-budget studio IBL textures are suppressed.
     expect(countCalls(calls, "createTexture")).toBe(1);
     expect(scheduled).toHaveLength(1);
     expect(warning).toHaveBeenCalledTimes(1);
-    const occurrencesBeforeRestore = root.snapshot().diagnosticStats.occurrences;
+    const messagesBeforeRestore = root.snapshot().diagnosticLog.entries;
     canvas.dispatchContextEvent("webglcontextlost");
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(graph);
-    expect(root.snapshot().diagnosticStats.occurrences).toEqual(occurrencesBeforeRestore);
+    expect(root.snapshot().diagnosticLog.entries).toEqual(messagesBeforeRestore);
     expect(warning).toHaveBeenCalledTimes(1);
     root.dispose();
   });

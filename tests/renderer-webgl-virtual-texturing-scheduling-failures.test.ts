@@ -297,7 +297,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     await flushMicrotasks();
     const wakesAfterFailure = requestAnimationFrame.mock.calls.length;
     expect(root.snapshot().virtualTexturing).toMatchObject({ gpuAdmissionFailures: 1 });
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(
       /GPU resource admission failed: dormant allocation rejected/,
     );
     root.render(renderScene(second));

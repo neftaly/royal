@@ -63,7 +63,8 @@ export type {
 export { createRendererRoot } from './root';
 export type {
   RoyalRendererRoot,
-  RoyalRendererDiagnosticMessageStats,
+  RoyalRendererDiagnosticLog,
+  RoyalRendererDiagnosticMessage,
   RoyalRendererGltfAssetSnapshot,
   RoyalRendererDiagnosticsSnapshot,
   RoyalRendererGltfInstancingDiagnosticsSnapshot,

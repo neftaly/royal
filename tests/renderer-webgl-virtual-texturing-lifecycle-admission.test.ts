@@ -157,7 +157,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(ControlledImage.instances).toHaveLength(0);
     expect(root.snapshot().resourcePressure.denials).toBe(denied);
-    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 144 retained CPU bytes");
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toContain("requires 144 retained CPU bytes");
     root.dispose();
   });
 
@@ -327,7 +327,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       textureCreatesBeforeManifest + 2,
     );
     expect(ControlledImage.instances).toHaveLength(1);
-    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/configured per-frame upload limit/);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).not.toMatch(/configured per-frame upload limit/);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, gpuAdmissionFailures: 0 });
     root.dispose();
   });
@@ -390,7 +390,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(textureCreatesBeforeManifest);
     expect(ControlledImage.instances).toHaveLength(0);
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(expected);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(expected);
     expect(root.snapshot().virtualTexturing).toMatchObject({
       atlasTextures: 0,
       gpuAdmissionFailures: 1,
@@ -439,7 +439,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       outstandingPageRequests: 0,
       pageLoadFailures: 1,
     });
-    expect(root.snapshot().diagnostics.join("\n")).toContain("broken decoded dimensions");
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toContain("broken decoded dimensions");
     root.render(graph);
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(1);
@@ -539,10 +539,10 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     fetchRequests[3]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
 
-    expect(transportRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest transport failed: offline/);
-    expect(jsonRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest JSON decode failed: bad JSON/);
-    expect(parseRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest parse failed/);
-    expect(gpuRoot.snapshot().diagnostics.join("\n")).toMatch(/GPU resource admission failed: allocation rejected/);
+    expect(transportRoot.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/manifest transport failed: offline/);
+    expect(jsonRoot.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/manifest JSON decode failed: bad JSON/);
+    expect(parseRoot.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/manifest parse failed/);
+    expect(gpuRoot.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/GPU resource admission failed: allocation rejected/);
     expect(gpuRoot.snapshot().resourcePressure.outstandingReservations).toBe(0);
     expect(
       gpuRoot.snapshot().resourcePressure.byClass["virtual-texture"].persistentGpuBytes,
@@ -614,7 +614,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(pageUploads(calls)).toHaveLength(0);
     expect(ControlledImage.closeCalls).toBe(1);
     expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, cachedPages: 0 });
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(/has \dx\d pixels; expected 6x6/);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/has \dx\d pixels; expected 6x6/);
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(1);

@@ -952,7 +952,7 @@ describe("WebGL renderer product descriptor contracts", () => {
       preparedResidencyResolutions: 1,
       unsupportedDraws: 0,
     }));
-    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toEqual([]);
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 6)).toBe(true);
   });
 
@@ -985,7 +985,7 @@ describe("WebGL renderer product descriptor contracts", () => {
       removedFallbackColor.map(roundNumber),
     );
     expect(root.snapshot().virtualTexturing.unsupportedDraws).toBeGreaterThan(0);
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toContainEqual(expect.stringMatching(
       /Virtual texture \/textures\/product-wire\.vt\.json is not rendered.*surface materials/i,
     ));
     expect(drawCalls(calls).some((call) => call.args[0] === gl.LINES && drawCount(call) > 0)).toBe(true);

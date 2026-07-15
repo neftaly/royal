@@ -3,6 +3,8 @@ export { resolveWebGlRootOptions } from "./root-options";
 export type {
   WebGlContextSnapshot,
   WebGlContextLifecycle,
+  WebGlDiagnosticLogSnapshot,
+  WebGlDiagnosticMessage,
   WebGlExternalRenderClock,
   WebGlFramePlanningSnapshot,
   WebGlResourceLifetimeSnapshot,

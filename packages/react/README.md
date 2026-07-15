@@ -161,8 +161,9 @@ The imperative root separates its two observational models:
 - `root.snapshot()` returns the current frame, normalized creation `options`,
   and a backend-neutral `lifecycle` with `state`, `generation`,
   `interruptions`, and `recoveries`.
-- `root.diagnostics()` returns bounded messages and operational counters. It
-  does not repeat root state or retain the submitted scene graph.
+- `root.diagnostics()` returns a bounded `messageLog` whose entries carry their
+  stable key and occurrence count, plus operational counters. It does not
+  repeat root state or retain the submitted scene graph.
 
 - `alpha` and `antialias` both default to `true` and are requests made when the
   WebGL context is created.

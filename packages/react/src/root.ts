@@ -11,6 +11,8 @@ import {
   resolveWebGlRootOptions,
   type ResolvedWebGlRootOptions,
   type WebGlContextSnapshot,
+  type WebGlDiagnosticLogSnapshot,
+  type WebGlDiagnosticMessage,
   type WebGlFramePlanningSnapshot,
   type WebGlGltfInstancingSnapshot,
   type WebGlGltfLoadDiagnosticsAssetSnapshot,
@@ -91,16 +93,11 @@ export interface RoyalRendererRootSnapshot {
   readonly options: ResolvedRendererOptions;
 }
 
-/** Capacity and occurrence counts for the bounded renderer message log. */
-export interface RoyalRendererDiagnosticMessageStats {
-  readonly capacity: number;
-  readonly dropped: number;
-  readonly occurrences: readonly Readonly<{
-    readonly count: number;
-    readonly key: string;
-  }>[];
-  readonly retained: number;
-}
+/** One bounded, deduplicated operational message. */
+export type RoyalRendererDiagnosticMessage = WebGlDiagnosticMessage;
+
+/** Fixed-capacity operational message log with per-entry occurrence counts. */
+export type RoyalRendererDiagnosticLog = WebGlDiagnosticLogSnapshot;
 
 /** Retained glTF asset readiness and bounded load timing. */
 export type RoyalRendererGltfLoadDiagnosticsSnapshot = WebGlGltfLoadDiagnosticsSnapshot;
@@ -121,10 +118,8 @@ export type RoyalRendererVirtualTexturingDiagnosticsSnapshot = WebGlVirtualTextu
 
 /** Bounded operational diagnostics projected from the active renderer backend. */
 export interface RoyalRendererDiagnosticsSnapshot {
-  /** Bounded recent diagnostic messages. */
-  readonly messages: readonly string[];
-  /** Capacity and occurrence counts for the bounded diagnostic message log. */
-  readonly messageStats: RoyalRendererDiagnosticMessageStats;
+  /** Bounded recent diagnostic messages with stable identity and occurrence counts. */
+  readonly messageLog: RoyalRendererDiagnosticLog;
   /** Retained glTF asset readiness and bounded load timing. */
   readonly gltfLoads: RoyalRendererGltfLoadDiagnosticsSnapshot;
   /** Instanced glTF planning, drawing, and upload counters. */
@@ -308,8 +303,7 @@ export const createRendererRoot = (
       return Object.freeze({
         gltfInstancing: snapshot.gltfInstancing,
         gltfLoads: snapshot.gltfLoadDiagnostics,
-        messageStats: snapshot.diagnosticStats,
-        messages: snapshot.diagnostics,
+        messageLog: snapshot.diagnosticLog,
         picking: snapshot.picking,
         planning: snapshot.planning,
         resourcePressure: snapshot.resourcePressure,

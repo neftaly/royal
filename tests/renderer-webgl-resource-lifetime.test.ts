@@ -658,7 +658,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(countEvents(calls, "createTexture")).toBe(0);
     expect(countEvents(calls, "texImage2D")).toBe(0);
     expect(animationFrames).toHaveLength(0);
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toContainEqual(expect.stringMatching(
       new RegExp(`requires \\d+ upload bytes, exceeding the per-frame limit ${uploadLimit}`),
     ));
     expect(warning).toHaveBeenCalledTimes(1);
@@ -702,7 +702,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     flushAnimationFrames(frames);
     await flushMicrotasks();
 
-    expect(root.snapshot().diagnostics.join("\n"))
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .toMatch(/requires 20 persistent GPU bytes, exceeding the limit 15/);
     expect(frames).toHaveLength(0);
     expect(warning).toHaveBeenCalledTimes(1);
@@ -745,7 +745,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     root.render(both);
     root.render(both);
     expect(countEvents(calls, "createTexture")).toBe(1);
-    expect(root.snapshot().diagnostics.join("\n")).not.toContain("gpu-second");
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).not.toContain("gpu-second");
 
     root.render(renderScene(boxGeometry(1), second));
     expect(countEvents(calls, "createTexture")).toBe(2);

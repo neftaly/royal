@@ -328,7 +328,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       .map((call, index) => ({ call, index }))
       .filter(({ call }) => call.name === "drawArrays" || call.name === "drawElements")
       .map(({ index }) => index);
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(readyDrawCalls).toHaveLength(2);
     expect(copyIndex).toBeGreaterThan(drawIndexes[0] ?? -1);
@@ -425,7 +425,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(calls).join("\n");
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(calls, "u_useMaterialTransmissionTexture")).toContain(1);
@@ -688,7 +688,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     expect(colors).toContainEqual([0.9, 0.1, 0.08, 1]);
     expect(colors).toContainEqual([0.1, 0.72, 0.46, 1]);
     expect(colors).toContainEqual([0.22, 0.24, 0.28, 1]);
-    expect(root.snapshot().diagnostics).toContain(
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toContain(
       `glTF materialVariant "missing" is not declared by ${triangleGltfSrc}; rendering its base material`,
     );
   });
@@ -947,7 +947,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       () => drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
     );
 
-    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toEqual([]);
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     const payloads = bufferDataPayloads(calls).map(roundVector);
     expect(payloads).toContainEqual([

@@ -47,19 +47,26 @@ export interface WebGlContextSnapshot {
   readonly restores: number;
 }
 
+/** One bounded, deduplicated renderer diagnostic. */
+export interface WebGlDiagnosticMessage {
+  /** Stable semantic identity used to deduplicate repeated occurrences. */
+  readonly key: string;
+  readonly message: string;
+  readonly occurrences: number;
+}
+
+/** Fixed-capacity renderer diagnostic log. */
+export interface WebGlDiagnosticLogSnapshot {
+  readonly capacity: number;
+  /** Diagnostic occurrences rejected after the fixed capacity was reached. */
+  readonly dropped: number;
+  readonly entries: readonly WebGlDiagnosticMessage[];
+}
+
 /** Snapshot of renderer state, intended for tests and host diagnostics. */
 export interface WebGlRootSnapshot {
   readonly context: WebGlContextSnapshot;
-  readonly diagnostics: readonly string[];
-  readonly diagnosticStats: {
-    readonly capacity: number;
-    readonly dropped: number;
-    readonly occurrences: readonly {
-      readonly count: number;
-      readonly key: string;
-    }[];
-    readonly retained: number;
-  };
+  readonly diagnosticLog: WebGlDiagnosticLogSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
   /** Renderer-owned glTF load timing, intended for tests, examples benchmarks, and host diagnostics. */

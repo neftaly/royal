@@ -1266,13 +1266,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gltfImages = this.#preparedGltf.images.snapshot();
     return {
       context: this.#context.snapshot(),
-      diagnostics: diagnostics.messages,
-      diagnosticStats: {
-        capacity: diagnostics.capacity,
-        dropped: diagnostics.dropped,
-        occurrences: diagnostics.occurrences,
-        retained: diagnostics.retained,
-      },
+      diagnosticLog: diagnostics,
       disposed: this.#disposed,
       frame: this.#framePublication.frame,
       gltfLoadDiagnostics: preparedGltfLoadDiagnosticsSnapshot(this.#preparedGltf),

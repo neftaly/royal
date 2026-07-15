@@ -127,7 +127,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
-    expect(root.snapshot().diagnostics.join("\n"))
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .toMatch(/declares up to .*prepared CPU bytes, exceeding its combined maximum/i);
     expect(root.snapshot().resourcePressure.total.cpuDecodedBytes).toBe(0);
     root.dispose();
@@ -734,7 +734,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
 
     expect(drawCalls(calls).length, "failed base-color image should not make the glTF disappear")
       .toBeGreaterThan(drawsBeforeFailure);
-    expect(root.snapshot().diagnostics.some((message) =>
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
     expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
     expect(root.snapshot().resourcePressure.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);

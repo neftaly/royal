@@ -50,7 +50,7 @@ describe("lazy virtual-texture feature", () => {
       root.render(graph);
     }
 
-    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toEqual([]);
     expect(requests).toEqual(["/textures/lazy.vt.json"]);
     expect(root.textureAssetSnapshot(texture)).toMatchObject({
       kind: "virtual",

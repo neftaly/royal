@@ -393,7 +393,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
 
-    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toEqual([]);
   });
 
   it("uses a core SVG source without requesting unrelated raster images", async () => {
@@ -470,9 +470,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
-    await waitForModuleLoad(() => root.snapshot().diagnostics.length > 0);
+    await waitForModuleLoad(() => root.snapshot().diagnosticLog.entries.map((entry) => entry.message).length > 0);
 
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message)).toContainEqual(expect.stringMatching(
       /glTF SVG .*requires a finite viewBox or finite width and height/i,
     ));
     expect(ControlledImage.instances).toHaveLength(0);
@@ -678,7 +678,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       await flushAnimationFrames(viewport.animationFrames);
 
       expect(drawCalls(calls).some((call) => call.args[0] === drawMode(gl) && drawCount(call) === 3)).toBe(true);
-      expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode/i.test(message))).toBe(false);
+      expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) => /unsupported primitive mode/i.test(message))).toBe(false);
       root.dispose();
       vi.unstubAllGlobals();
     }
@@ -711,7 +711,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(drawCalls(calls)).toHaveLength(0);
-    expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode 99/i.test(message))).toBe(true);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) => /unsupported primitive mode 99/i.test(message))).toBe(true);
   });
 
   it("ignores unsupported optional glTF extensions when core fallback data is present", async () => {
@@ -812,7 +812,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(sources).toContain("float visibilityV = NdotL * length(vec3(alphaT * TdotV");
     expect(sources).toContain("return clamp(u_diffuseTransmissionFactors.a * textureTransmission");
     expect(sources).toContain("diffuseColor * (1.0 - diffuseTransmissionFactor)");
-    expect(root.snapshot().diagnostics.some((message) =>
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) =>
       /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(false);
   });
 
@@ -897,9 +897,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(sources).toContain(".a : 1.0");
     expect(sources).toContain("texture(u_diffuseTransmissionColorTexture, materialTextureUv(u_diffuseTransmissionColorUvSet");
     expect(sources).toContain(".rgb : vec3(1.0)");
-    expect(root.snapshot().diagnostics.join("\n"))
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .not.toMatch(/KHR_materials_anisotropy\..*ignored/i);
-    expect(root.snapshot().diagnostics.join("\n"))
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .not.toMatch(/KHR_materials_diffuse_transmission\..*ignored/i);
   });
 

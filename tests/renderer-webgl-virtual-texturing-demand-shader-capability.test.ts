@@ -486,7 +486,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(namedUniform4fvValues(calls)).toEqual(expect.objectContaining({
       u_color: expect.arrayContaining([[1, 0, 1, 1]]),
     }));
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(/requires at least two fragment texture units/i);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/requires at least two fragment texture units/i);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
     expect(consoleWarn).toHaveBeenCalled();
   });
@@ -508,7 +508,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       manifestRequests: 1,
       unsupportedDraws: expect.any(Number),
     }));
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(/requires at least two fragment texture units/i);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).toMatch(/requires at least two fragment texture units/i);
     expect(consoleWarn).toHaveBeenCalled();
 
     expect(() => createWebGlRoot(fakeCanvas(null))).toThrow(/webgl2/i);
@@ -524,7 +524,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/manifest.json"]);
     expect(root.snapshot().virtualTexturing.unsupportedDraws).toBe(0);
     expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBe(1);
-    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/only unlit base-color virtual textures/i);
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n")).not.toMatch(/only unlit base-color virtual textures/i);
   });
 
   it("freezes normalized root options", () => {

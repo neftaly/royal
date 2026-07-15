@@ -123,8 +123,7 @@ describe("React root public API", () => {
     expect(Object.keys(diagnostics)).toEqual([
       "gltfInstancing",
       "gltfLoads",
-      "messageStats",
-      "messages",
+      "messageLog",
       "picking",
       "planning",
       "resourcePressure",
@@ -135,6 +134,11 @@ describe("React root public API", () => {
     expect(diagnostics).toMatchObject({
       gltfInstancing: expect.any(Object),
       gltfLoads: expect.any(Object),
+      messageLog: {
+        capacity: 64,
+        dropped: 0,
+        entries: [],
+      },
       resourcePressure: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });

@@ -27,7 +27,7 @@ Status meanings:
 | Renderer lifecycle snapshot and recovery | product | Needed for context loss and UI state. Keep small. |
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
 | Texture asset status hook | product | Exact ordinary/authored-VT readiness; VT page streaming remains a separate `pendingPages` fact. |
-| Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Scene data and static policy-derived ceiling tables are omitted; retain measured limits, usage, high-water, admissions and denials. |
+| Cold operational diagnostics | product | Opt-in host/profiling surface, not a control model or per-frame subscription. The fixed-capacity message log exposes structured `{ key, message, occurrences }` entries; scene data and static policy ceiling tables remain omitted while measured limits, usage, high-water, admissions, and denials stay observable. |
 | Public resource-governor policy | deleted | Backend admission remains observable in diagnostics, but byte/job classes no longer leak into React or WebGL root options/exports. Constrained policies are injected only through an internal deterministic-test boundary while local caps replace the backend-wide policy. |
 
 ## Scene and camera

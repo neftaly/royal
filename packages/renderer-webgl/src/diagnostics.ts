@@ -42,17 +42,16 @@ type MutableDiagnosticEntry = {
   readonly message: string;
 };
 
-export interface DiagnosticOccurrenceSnapshot {
-  readonly count: number;
+export interface DiagnosticEntrySnapshot {
   readonly key: string;
+  readonly message: string;
+  readonly occurrences: number;
 }
 
 export interface BoundedDiagnosticSnapshot {
   readonly capacity: number;
   readonly dropped: number;
-  readonly messages: readonly string[];
-  readonly occurrences: readonly DiagnosticOccurrenceSnapshot[];
-  readonly retained: number;
+  readonly entries: readonly DiagnosticEntrySnapshot[];
 }
 
 export type DiagnosticRecordResult = "appended" | "dropped" | "incremented";
@@ -110,17 +109,15 @@ export class BoundedDiagnosticLog {
   }
 
   snapshot(): BoundedDiagnosticSnapshot {
-    const messages = Object.freeze(this.#entries.map((entry) => entry.message));
-    const occurrences = Object.freeze(this.#entries.map((entry) => Object.freeze({
-      count: entry.count,
+    const entries = Object.freeze(this.#entries.map((entry) => Object.freeze({
       key: entry.key,
+      message: entry.message,
+      occurrences: entry.count,
     })));
     return Object.freeze({
       capacity: this.#capacity,
       dropped: this.#dropped,
-      messages,
-      occurrences,
-      retained: this.#entries.length,
+      entries,
     });
   }
 }

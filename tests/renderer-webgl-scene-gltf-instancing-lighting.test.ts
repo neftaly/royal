@@ -641,7 +641,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeSpecularImagesSettle);
     const sources = shaderSources(readyFrameCalls).join("\n");
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls).length).toBeGreaterThan(0);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
@@ -786,7 +786,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(0);
@@ -824,7 +824,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(loader.fetchRequests.some((request) => /EnvironmentTest_binary\.bin(?:$|[?#])/.test(request.url)))
       .toBe(true);
     await settleKhronosEnvironmentTestIblBitmaps(loader);
-    expect(root.snapshot().diagnostics.some((message) =>
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) =>
       /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(false);
 
     const callsBeforeReadyRender = calls.length;
@@ -1324,7 +1324,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(calls).join("\n");
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(calls, "u_useSpecularTexture")).toContain(1);
@@ -1393,7 +1393,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     root.render(renderGraph);
     expect(drawCalls(calls).length).toBeGreaterThan(0);
     expect(uniform1iPayloads(calls, "u_useClearcoatNormalTexture")).toContain(1);
-    expect(root.snapshot().diagnostics.join("\n"))
+    expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .not.toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*ignored/i);
   });
 
@@ -1515,7 +1515,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(calls).join("\n");
-    const diagnostics = root.snapshot().diagnostics.join("\n");
+    const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(calls, "u_useSheenColorTexture")).toContain(1);
