@@ -1,15 +1,12 @@
 import type { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
 import type { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
-import type { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
-import type { VirtualTextureRuntimeState } from "./virtual-texture-runtime";
-import type { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
-import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
+import type { VirtualTextureFeatureOwner } from "./virtual-texture-feature-owner";
+import { captureFailure, captureFirstFailure } from "./captured-failure";
 
 type RootResourceReleaseOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
-  readonly virtualTextureAdmission: VirtualTextureGpuAdmissionOwner;
-  readonly virtualTextureRuntime: VirtualTextureRuntimeShell;
+  readonly virtualTextures: VirtualTextureFeatureOwner;
 };
 
 /** Owns fallible ordinary/virtual texture release ordering and wake settlement. */
@@ -22,7 +19,7 @@ export class RootResourceReleaseOwner {
 
   releaseOrdinaryTexture(key: string): void {
     let releaseFailure = captureFailure(() => this.#releaseAutomaticVirtualTextures(key));
-    this.#options.virtualTextureRuntime.releaseAutoMetadata(key);
+    this.#options.virtualTextures.releaseAutoMetadata(key);
     const releaseWakeSuppression = this.#options.capacityWakes.suppressPersistentGpuWake();
     let report: ReturnType<OrdinaryTextureResidencyController["release"]> | undefined;
     try {
@@ -42,26 +39,10 @@ export class RootResourceReleaseOwner {
   }
 
   releaseVirtualTexture(key: string): void {
-    const state = this.#options.virtualTextureRuntime.get(key);
-    if (state !== undefined) this.releaseVirtualTextureState(state);
-  }
-
-  releaseVirtualTextureState(state: VirtualTextureRuntimeState): void {
-    let releaseFailure = captureFailure(() => this.#options.virtualTextureRuntime.forget(state));
-    releaseFailure = captureFirstFailure(
-      releaseFailure,
-      () => this.#options.virtualTextureAdmission.release(state, true),
-    );
-    if (releaseFailure !== undefined) throw releaseFailure.value;
+    this.#options.virtualTextures.releaseKey(key);
   }
 
   #releaseAutomaticVirtualTextures(textureKey: string): void {
-    const prefix = `auto-base-color:${textureKey}:`;
-    let releaseFailure: CapturedFailure | undefined;
-    for (const [key, state] of this.#options.virtualTextureRuntime.resources) {
-      if (!key.startsWith(prefix)) continue;
-      releaseFailure = captureFirstFailure(releaseFailure, () => this.releaseVirtualTextureState(state));
-    }
-    if (releaseFailure !== undefined) throw releaseFailure.value;
+    this.#options.virtualTextures.releaseAutomaticTexture(textureKey);
   }
 }

@@ -89,17 +89,6 @@ import {
   type TextureHandleArena,
 } from "./webgl/texture-handle-arena";
 import {
-  clearVirtualTextureGpuOutcomes,
-  consumeVirtualTextureGpuWake,
-  createVirtualTextureGpuArena,
-  dropVirtualTextureGpuContext,
-  processVirtualTextureGpuUploads,
-  virtualTextureGpuHasActionableUploads,
-  virtualTextureGpuOutcome,
-  virtualTextureGpuOutcomeCount,
-  type VirtualTextureGpuArena,
-} from "./webgl/virtual-texture-gpu-arena";
-import {
   createSurfaceRenderTargetArena,
   dropSurfaceRenderTargetArenaContext,
   ensureHdrRenderTarget,
@@ -156,11 +145,8 @@ import {
   type VirtualTextureRef,
   type ViewportSize,
 } from "./virtual-texture-runtime";
-import { VirtualTextureDemandOwner } from "./virtual-texture-demand-owner";
-import { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
-import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
+import { VirtualTextureFeatureOwner } from "./virtual-texture-feature-owner";
 import { RootResourceReleaseOwner } from "./root-resource-release-owner";
-import { virtualTextureDiagnosticsSnapshot } from "./virtual-texture-diagnostics";
 import { textureResidencyDiagnosticsSnapshot } from "./texture-residency-diagnostics";
 import {
   type ProgramKind,
@@ -294,10 +280,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #ordinaryTextureGpu: OrdinaryTextureGpuOwner;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
-  readonly #virtualTextureGpu: VirtualTextureGpuArena;
-  readonly #virtualTextureRuntime: VirtualTextureRuntimeShell;
-  readonly #virtualTextureAdmission: VirtualTextureGpuAdmissionOwner;
-  readonly #virtualTextureDemand: VirtualTextureDemandOwner;
+  readonly #virtualTextures: VirtualTextureFeatureOwner;
   readonly #resourceReleases: RootResourceReleaseOwner;
   readonly #resourceArena: ResourceArena;
   /** Root authority for cross-subsystem resource admission and accounting. */
@@ -309,13 +292,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     wakeCpuCapacity: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeCpuCapacity();
       const preparedAssetWake = wakeResourceArenaPreparedAssetCpuCapacity(this.#resourceArena);
-      const virtualTextureWake = this.#virtualTextureRuntime.requests.wakeDecodedCapacity();
+      const virtualTextureWake = this.#virtualTextures.wakeDecodedCapacity();
       return ordinaryWake || preparedAssetWake || virtualTextureWake;
     },
     wakePersistentGpuCapacity: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeGpuCapacity();
       const iblWake = wakeIblTextureDurablePressure(this.#iblTextures);
-      this.#virtualTextureRuntime.scheduleGovernedAdmissionRetry();
+      this.#virtualTextures.scheduleGovernedAdmissionRetry();
       return ordinaryWake || iblWake;
     },
   });
@@ -338,7 +321,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           () => this.#preparedGltf.scheduler.wake(),
           () => this.#preparedGltf.wakeImages(),
           () => this.#ordinaryTextures.wakeSourceJobs(),
-          () => this.#virtualTextureRuntime.requests.drain(),
+          () => this.#virtualTextures.drainRequests(),
         ];
         this.#capacityWakes.wakePreparationPeers(wakes);
       },
@@ -620,7 +603,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           ))
           : loadHtmlImage(request.uri, { signal }),
         registerAutoVirtualTextureDecodedSource: (texture, source) => {
-          this.#virtualTextureRuntime.registerAutoDecodedSource(texture, source);
+          this.#virtualTextures.registerAutoDecodedSource(texture, source);
         },
         resourceArena: this.#resourceArena,
         textureHandles: this.#textureHandles,
@@ -663,62 +646,36 @@ class WebGlRootImpl implements InternalWebGlRoot {
           );
         });
       registerRollback(() => this.#unsubscribeResourceGovernorDurableCapacityRelease());
-      this.#virtualTextureGpu = createVirtualTextureGpuArena(gl, this.#textureHandles, {
-        maxPhysicalBytes: maximumResourceGovernorClassDurableBytes(
-          this.#resourceGovernorPolicy,
-          "virtual-texture",
-          "persistentGpuBytes",
-        ),
-      });
-      registerRollback(() => dropVirtualTextureGpuContext(this.#virtualTextureGpu));
-      this.#virtualTextureRuntime = new VirtualTextureRuntimeShell({
+      this.#virtualTextures = new VirtualTextureFeatureOwner({
         active: () => !this.#disposed && this.#context.lifecycle === "active",
         admitJob: this.#admitGltfPreparationJob,
+        automaticVirtualTextures: this.#options.automaticVirtualTextures,
+        capabilities: () => this.#contextCapabilities.capabilities,
+        capacityWakes: this.#capacityWakes,
+        contextGeneration: () => this.#context.generation,
+        contextLifecycle: () => this.#context.lifecycle,
         decodedSources: this.#decodedTextureSources,
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),
         disposed: () => this.#disposed,
         frame: () => this.#framePublication.frame,
-        automaticVirtualTextures: this.#options.automaticVirtualTextures,
-        gpu: this.#virtualTextureGpu,
+        gl,
         invalidate: () => this.invalidate(),
-        loadImageSource: (uri, signal) => loadHtmlImage(uri, { signal }),
         maximumDecodedCpuBytes: this.#maximumResourceClassCpuBytes("virtual-texture"),
-        resourceGovernor: this.#resourceGovernor,
-      });
-      this.#virtualTextureAdmission = new VirtualTextureGpuAdmissionOwner({
-        capabilities: () => this.#contextCapabilities.capabilities,
-        consumeGpuOutcomes: () => this.#consumeVirtualTextureGpuOutcomes(),
-        contextGeneration: () => this.#context.generation,
-        contextLifecycle: () => this.#context.lifecycle,
-        frame: () => this.#framePublication.frame,
-        gpu: this.#virtualTextureGpu,
-        invalidate: () => this.invalidate(),
         maximumPersistentGpuBytes: maximumResourceGovernorClassDurableBytes(
           this.#resourceGovernorPolicy,
           "virtual-texture",
           "persistentGpuBytes",
         ),
         maximumUploadBytes: this.#resourceGovernorPolicy.limits.uploadBytes,
+        recordUnsupported: (texture, reason) => this.#recordUnsupportedVirtualTexture(texture, reason),
         resourceGovernor: this.#resourceGovernor,
-        runtime: this.#virtualTextureRuntime,
-        suppressPersistentGpuWake: () => this.#capacityWakes.suppressPersistentGpuWake(),
-        wakePersistentGpuCapacity: () => this.#capacityWakes.wakePersistentGpuCapacity(),
+        textureHandles: this.#textureHandles,
       });
+      registerRollback(() => this.#virtualTextures.dropGpuContext());
       this.#resourceReleases = new RootResourceReleaseOwner({
         capacityWakes: this.#capacityWakes,
         ordinaryTextures: this.#ordinaryTextures,
-        virtualTextureAdmission: this.#virtualTextureAdmission,
-        virtualTextureRuntime: this.#virtualTextureRuntime,
-      });
-      this.#virtualTextureDemand = new VirtualTextureDemandOwner({
-        consumeGpuOutcomes: () => this.#consumeVirtualTextureGpuOutcomes(),
-        ensureGpuResource: (state, manifest, demandedStates) => (
-          this.#virtualTextureAdmission.ensure(state, manifest, demandedStates)
-        ),
-        frame: () => this.#framePublication.frame,
-        gpu: this.#virtualTextureGpu,
-        recordUnsupported: (texture, reason) => this.#recordUnsupportedVirtualTexture(texture, reason),
-        runtime: this.#virtualTextureRuntime,
+        virtualTextures: this.#virtualTextures,
       });
       this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
       registerRollback(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
@@ -735,7 +692,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         programs: this.#programArena,
         renderTargets: this.#surfaceRenderTargets,
         textureResidencyIntent: this.#textureResidencyIntent,
-        virtualTextures: this.#virtualTextureGpu,
+        virtualTextures: this.#virtualTextures.gpu,
       });
       this.#configureContextCapabilities(this.#contextCapabilities.probe());
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
@@ -817,7 +774,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         ? { kind: "ordinary", state: "idle" }
         : { kind: "ordinary", ...snapshot };
     }
-    const snapshot = this.#virtualTextureRuntime.assetSnapshot(texture);
+    const snapshot = this.#virtualTextures.assetSnapshot(texture);
     return snapshot === undefined
       ? { kind: "virtual", pendingPages: 0, state: "idle" }
       : { kind: "virtual", ...snapshot };
@@ -939,7 +896,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     let renderDeferred = false;
-    this.#virtualTextureRuntime.beginFrame();
+    this.#virtualTextures.beginFrame();
     this.#textureResidencyIntent.beginFrame();
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
@@ -961,7 +918,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
-        this.#virtualTextureRuntime.beginView(viewIndex);
+        this.#virtualTextures.beginView(viewIndex);
         gl.enable(gl.DEPTH_TEST);
         const viewportOffset = viewIndex * 4;
         const x = frameViews.viewports[viewportOffset]!;
@@ -1078,19 +1035,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#virtualTextureDemand.finishFrame(renderFailure === undefined && !renderDeferred),
+      () => this.#virtualTextures.finishFrame(renderFailure === undefined && !renderDeferred),
     );
     if (renderFailure === undefined && !renderDeferred) {
-      renderFailure = captureFirstFailure(renderFailure, () => this.#processVirtualTextureGpuUploads());
+      renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.processGpuUploads());
     }
     renderFailure = captureFirstFailure(
       renderFailure,
       () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined && !renderDeferred),
     );
     renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
-    renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextureRuntime.requests.drain());
+    renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.drainRequests());
     renderFailure = captureFirstFailure(renderFailure, () => {
-      if (virtualTextureGpuHasActionableUploads(this.#virtualTextureGpu)) this.invalidate();
+      if (this.#virtualTextures.hasActionableUploads()) this.invalidate();
     });
     // The renderer exclusively owns its context, but leaving vertex-input
     // bindings neutral makes frame teardown explicit. The EAB is VAO state,
@@ -1163,10 +1120,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const settlement = this.#ordinaryTextures.settleGpuReport(ordinaryReport);
       if (settlement !== undefined) throw settlement.error;
     });
-    releaseFailure = captureFirstFailure(releaseFailure, () => {
-      dropVirtualTextureGpuContext(this.#virtualTextureGpu);
-    });
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextureRuntime.releaseAllGpuLeases());
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextures.dropGpuContext());
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextures.releaseAllGpuLeases());
     if (deleteResources) {
       const gl = this.#gl;
       releaseFailure = captureFirstFailure(releaseFailure, () => {
@@ -1208,7 +1163,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       () => this.#gltfInstanceTransforms.endFrame(false),
     );
 
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextureRuntime.loseContext());
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextures.loseContext());
     if (releaseFailure !== undefined) throw releaseFailure.value;
     } finally {
       releaseWakeSuppression();
@@ -1283,15 +1238,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) {
       teardown(() => this.#resourceReleases.releaseOrdinaryTexture(key));
     }
-    for (const state of this.#virtualTextureRuntime.resources.values()) {
-      teardown(() => this.#resourceReleases.releaseVirtualTextureState(state));
+    for (const state of this.#virtualTextures.resources.values()) {
+      teardown(() => this.#virtualTextures.releaseState(state));
     }
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#geometryRecipes.clearRetainedRecipes();
-    this.#virtualTextureDemand.clear();
+    this.#virtualTextures.clear();
     this.#geometryRecipes.clearPacketPrimitives();
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
-    this.#virtualTextureRuntime.clearAutoMetadata();
     teardown(() => this.#preparedGltf.dispose());
     teardown(() => this.#gltfPacketSubmissions.dispose());
     this.#gltfMaterials.clear();
@@ -1310,11 +1264,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#resourceArena,
       this.#ordinaryTextures,
     );
-    const virtualTexturing = virtualTextureDiagnosticsSnapshot(
-      this.#virtualTextureRuntime,
-      this.#virtualTextureGpu,
-      this.#unsupportedVirtualTextureDraws,
-    );
+    const virtualTexturing = this.#virtualTextures.snapshot(this.#unsupportedVirtualTextureDraws);
     const gltfImages = this.#preparedGltf.images.snapshot();
     return {
       context: this.#context.snapshot(),
@@ -1384,7 +1334,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => {
           this.#geometryRecipes.releaseRecipe(key, id);
         },
-        () => this.#virtualTextureDemand.releaseGeometry(id),
+        () => this.#virtualTextures.releaseGeometry(id),
         () => this.#geometryRecipes.forgetPacketPrimitive(id),
       );
     }
@@ -1566,10 +1516,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const modelSource: VirtualTextureDrawDemandModelSource = batch.localModels.length === 1
       ? { kind: "single", model: multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!) }
       : { kind: "composed", localModels: batch.localModels, rootModels: batch.rootModels };
-    const baseColorResidency = this.#virtualTextureDemand.resolveBaseColorResidency(
+    const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
       batch.geometry,
       batch.material,
-      this.#virtualTextureDemand.drawDemandContext(
+      this.#virtualTextures.drawDemandContext(
         batch.geometryId,
         batch.cpuGeometry,
         batch.material,
@@ -1606,10 +1556,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry: CpuGeometry,
   ): void {
-    const baseColorResidency = this.#virtualTextureDemand.resolveBaseColorResidency(
+    const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
       geometry,
       material,
-      this.#virtualTextureDemand.drawDemandContext(
+      this.#virtualTextures.drawDemandContext(
         geometryId,
         cpuGeometry,
         material,
@@ -1663,50 +1613,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       geometryId,
     );
   }
-
-  #consumeVirtualTextureGpuOutcomes(): void {
-    let firstFailure = captureFailure(() => this.#decodedTextureSources.retryPendingVirtualTexture());
-    const outcomeCount = virtualTextureGpuOutcomeCount(this.#virtualTextureGpu);
-    for (let index = 0; index < outcomeCount; index += 1) {
-      const outcome = virtualTextureGpuOutcome(this.#virtualTextureGpu, index);
-      if (outcome === undefined) continue;
-      const state = this.#virtualTextureRuntime.get(outcome.key);
-      if (state !== undefined && outcome.upload.sourceGeneration === state.sourceGeneration) {
-        this.#virtualTextureRuntime.requests.settleGpuPage(state, outcome.upload.pageKey);
-      }
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        this.#decodedTextureSources.closeVirtualTexture(
-          outcome.upload.payload.kind === "image"
-            ? outcome.upload.payload.image
-            : outcome.upload.payload.data,
-        );
-      });
-    }
-    clearVirtualTextureGpuOutcomes(this.#virtualTextureGpu);
-    if (firstFailure !== undefined) throw firstFailure.value;
-  }
-
-  #processVirtualTextureGpuUploads(): void {
-    const gpuFailure = captureFailure(() => {
-      processVirtualTextureGpuUploads(this.#virtualTextureGpu, this.#framePublication.frame, {
-        reserve: (uploadBytes) => {
-          const reserved = reserveResourceGovernor(this.#resourceGovernor, "virtual-texture", {
-            uploadBytes,
-          });
-          if (typeof reserved === "string") return undefined;
-          return {
-            cancel: () => { reserved.cancel(); },
-            commit: () => { reserved.commit().release(); },
-          };
-        },
-      });
-    });
-    const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
-    if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
-    if (gpuFailure !== undefined) throw gpuFailure.value;
-    if (closeFailure !== undefined) throw closeFailure.value;
-  }
-
 
   #consumeSurfaceExecutionSignals(): void {
     const signals = this.#surfaceExecution.drainSignals();
