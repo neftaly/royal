@@ -7,6 +7,7 @@ import {
 } from './primitives';
 import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
+import { objectWithAllowedFields } from './descriptor-values';
 
 /** Geometry plus material, with an optional transform. */
 export interface MeshNode {
@@ -33,7 +34,12 @@ export interface MeshOptions {
   readonly transform?: TransformOptions;
 }
 
+const MESH_FIELDS = [
+  'geometry', 'material', 'pickingGeometry', 'pickingId', 'ref', 'transform',
+] as const;
+
 export const mesh = (options: MeshOptions): MeshNode => {
+  objectWithAllowedFields(options, MESH_FIELDS, 'mesh');
   const pickingId = resolvePickingId(options.pickingId, 'mesh pickingId');
   const node = {
     kind: 'mesh',

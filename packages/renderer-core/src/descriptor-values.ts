@@ -1,5 +1,22 @@
 import type { EulerRads, LinearRgba, Transform, TransformOptions, Vec3 } from './primitives';
 
+/** Validates one public descriptor-options object before any fields are read. */
+export const objectWithAllowedFields = <Options extends object>(
+  value: Options,
+  allowedFields: readonly string[],
+  label: string,
+): Options => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} options must be an object`);
+  }
+  for (const field of Object.keys(value)) {
+    if (!allowedFields.includes(field)) {
+      throw new TypeError(`${label} options contain unsupported option ${JSON.stringify(field)}`);
+    }
+  }
+  return value;
+};
+
 export const finiteNumber = (value: number, label: string): number => {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite; received ${String(value)}`);
   return value;
@@ -38,16 +55,23 @@ export const frozenRgba = (value: LinearRgba, label: string): LinearRgba => Obje
   finiteNumber(value[3], `${label}[3]`),
 ]) as LinearRgba;
 
-export const frozenTransform = (options: TransformOptions): Transform => Object.freeze({
-  position: frozenVec3(options.position ?? [0, 0, 0], 'transform position'),
-  rotation: frozenVec3(options.rotation ?? [0, 0, 0], 'transform rotation') as EulerRads,
-  scale: frozenVec3(options.scale ?? [1, 1, 1], 'transform scale'),
-});
+const TRANSFORM_FIELDS = ['position', 'rotation', 'scale'] as const;
+const BOUNDS_FIELDS = ['max', 'min'] as const;
+
+export const frozenTransform = (options: TransformOptions): Transform => {
+  objectWithAllowedFields(options, TRANSFORM_FIELDS, 'transform');
+  return Object.freeze({
+    position: frozenVec3(options.position ?? [0, 0, 0], 'transform position'),
+    rotation: frozenVec3(options.rotation ?? [0, 0, 0], 'transform rotation') as EulerRads,
+    scale: frozenVec3(options.scale ?? [1, 1, 1], 'transform scale'),
+  });
+};
 
 export const frozenBounds3 = <Bounds extends { readonly max: Vec3; readonly min: Vec3 }>(
   bounds: Bounds,
   label: string,
 ): Bounds => {
+  objectWithAllowedFields(bounds, BOUNDS_FIELDS, label);
   const min = frozenVec3(bounds.min, `${label} min`);
   const max = frozenVec3(bounds.max, `${label} max`);
   for (let axis = 0; axis < 3; axis += 1) {

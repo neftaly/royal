@@ -91,6 +91,20 @@ describe("renderer-core orbit camera API", () => {
     expect(Object.isFrozen(orbitCameraTransform(view))).toBe(true);
   });
 
+  it("rejects unknown orbit option fields", () => {
+    expect(() => resolveOrbitCameraView({
+      distance: 5,
+      azimuth: 1,
+    } as unknown as Parameters<typeof resolveOrbitCameraView>[0])).toThrow(/unsupported option "azimuth"/);
+    expect(() => clampOrbitCameraView(defaultView, {
+      maximumDistance: 10,
+    } as unknown as Parameters<typeof clampOrbitCameraView>[1])).toThrow(/unsupported option "maximumDistance"/);
+    expect(() => orbitPerspectiveCamera({
+      view: defaultView,
+      zoom: 2,
+    } as unknown as Parameters<typeof orbitPerspectiveCamera>[0])).toThrow(/unsupported option "zoom"/);
+  });
+
   it("clamps orbit view limits as a pure transition", () => {
     expect(clampOrbitCameraView({
       distance: 20,

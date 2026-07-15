@@ -1,4 +1,4 @@
-import { finiteNumber, frozenVec3 } from './descriptor-values';
+import { finiteNumber, frozenVec3, objectWithAllowedFields } from './descriptor-values';
 import type { EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
 /** Perspective camera for a scene. */
@@ -61,7 +61,13 @@ export interface OrthographicCameraOptions {
 
 export type Camera = PerspectiveCamera | OrthographicCamera;
 
+const PERSPECTIVE_CAMERA_FIELDS = ['far', 'fovY', 'near', 'position', 'rotation'] as const;
+const ORTHOGRAPHIC_CAMERA_FIELDS = [
+  'bottom', 'far', 'left', 'near', 'position', 'right', 'rotation', 'top',
+] as const;
+
 export const perspectiveCamera = (options: PerspectiveCameraOptions): PerspectiveCamera => {
+  objectWithAllowedFields(options, PERSPECTIVE_CAMERA_FIELDS, 'perspective camera');
   const position = frozenVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;
   const rotation = frozenVec3(options.rotation ?? [0, 0, 0], 'camera rotation') as EulerRads;
   const fovY = options.fovY ?? Math.PI / 4;
@@ -79,6 +85,7 @@ export const perspectiveCamera = (options: PerspectiveCameraOptions): Perspectiv
 };
 
 export const orthographicCamera = (options: OrthographicCameraOptions): OrthographicCamera => {
+  objectWithAllowedFields(options, ORTHOGRAPHIC_CAMERA_FIELDS, 'orthographic camera');
   const position = frozenVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;
   const rotation = frozenVec3(options.rotation ?? [0, 0, 0], 'camera rotation') as EulerRads;
   const near = options.near ?? -1000;

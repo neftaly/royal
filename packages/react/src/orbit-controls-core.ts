@@ -6,6 +6,7 @@ import {
   zoomOrbitCameraView,
   type Metres,
   type OrbitCameraView,
+  type OrbitCameraViewConstraints,
   type OrbitCameraViewOptions,
   type Rads,
 } from "@royal/renderer-core";
@@ -73,6 +74,15 @@ const DEFAULT_ROTATE_SPEED = 0.006;
 const DEFAULT_ZOOM_SPEED = 0.0018;
 const ignored = (): OrbitGestureDecision => ({ preventDefault: false });
 
+const constraintsFromBehavior = (
+  behavior: OrbitGestureBehavior,
+): OrbitCameraViewConstraints => ({
+  maxDistance: behavior.maxDistance,
+  maxPitch: behavior.maxPitch,
+  minDistance: behavior.minDistance,
+  minPitch: behavior.minPitch,
+});
+
 const pointerDistance = (first: PointerContact, second: PointerContact): number =>
   Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 
@@ -90,9 +100,10 @@ export const createOrbitGestureController = (
   initialBehavior: OrbitGestureBehavior,
 ): OrbitGestureController => {
   let behavior = initialBehavior;
+  let constraints = constraintsFromBehavior(behavior);
   let interaction: Interaction | undefined;
   const pointers = new Map<number, PointerContact>();
-  const clampView = (next: OrbitCameraView): OrbitCameraView => clampOrbitCameraView(next, behavior);
+  const clampView = (next: OrbitCameraView): OrbitCameraView => clampOrbitCameraView(next, constraints);
   let view = clampView(resolveOrbitCameraView(initialView));
   const apply = (next: OrbitCameraViewOptions, clamp: boolean, emit: boolean): void => {
     const resolved = resolveOrbitCameraView(next);
@@ -198,6 +209,7 @@ export const createOrbitGestureController = (
     },
     setBehavior: (next) => {
       behavior = next;
+      constraints = constraintsFromBehavior(behavior);
       const disabled = behavior.enabled === false
         || (interaction?.kind === "pinch" && behavior.enableZoom === false)
         || (interaction?.kind === "drag" && interaction.mode === "orbit" && behavior.enableRotate === false)

@@ -8,9 +8,12 @@ import {
   gltfInstances,
   imageTexture,
   mesh,
+  orthographicCamera,
   perspectiveCamera,
+  planeGeometry,
   pointLight,
   scene,
+  solidTexture,
   spotLight,
   standardMaterial,
   studioEnvironment,
@@ -234,6 +237,76 @@ describe("renderer-core descriptor contract", () => {
       // @ts-expect-error Native WebGL line width is not portable; wireframes are one device pixel.
       wireframeMaterial({ color: [1, 1, 1, 1], width: 2 });
     }
+  });
+
+  it("rejects unknown fields at public scene descriptor boundaries", () => {
+    const material = unlitMaterial({ color: [1, 1, 1, 1] });
+    const instances = createGltfInstanceTransforms({ count: 1 });
+    const cases: readonly [label: string, create: () => unknown][] = [
+      ['perspective camera', () => perspectiveCamera({
+        nearClip: 0.1,
+      } as unknown as Parameters<typeof perspectiveCamera>[0])],
+      ['orthographic camera', () => orthographicCamera({
+        bottom: -1, left: -1, right: 1, top: 1, zoom: 2,
+      } as unknown as Parameters<typeof orthographicCamera>[0])],
+      ['box geometry', () => boxGeometry({
+        segments: 2, size: 1,
+      } as unknown as Parameters<typeof boxGeometry>[0])],
+      ['plane geometry', () => planeGeometry({
+        segments: 2, size: 1,
+      } as unknown as Parameters<typeof planeGeometry>[0])],
+      ['directional light', () => directionalLight({
+        direction: [0, -1, 0], intensityLux: 1,
+      } as unknown as Parameters<typeof directionalLight>[0])],
+      ['point light', () => pointLight({
+        intensityCandela: 1, position: [0, 0, 0], radius: 2,
+      } as unknown as Parameters<typeof pointLight>[0])],
+      ['spot light', () => spotLight({
+        direction: [0, -1, 0], intensityCandela: 1, position: [0, 0, 0], radius: 2,
+      } as unknown as Parameters<typeof spotLight>[0])],
+      ['studio environment', () => studioEnvironment({
+        intensity: 2,
+      } as unknown as Parameters<typeof studioEnvironment>[0])],
+      ['mesh', () => mesh({
+        geometry: boxGeometry(1), material, name: 'box',
+      } as unknown as Parameters<typeof mesh>[0])],
+      ['glTF', () => gltf({ name: 'helmet', src: '/helmet.glb' } as unknown as Parameters<typeof gltf>[0])],
+      ['glTF instance transforms', () => createGltfInstanceTransforms({
+        count: 1, ids: ['one'],
+      } as unknown as Parameters<typeof createGltfInstanceTransforms>[0])],
+      ['glTF instances', () => gltfInstances({
+        instances, name: 'trees', src: '/tree.glb',
+      } as unknown as Parameters<typeof gltfInstances>[0])],
+      ['solid texture', () => solidTexture({
+        color: [1, 1, 1, 1], colorSpace: 'linear',
+      } as unknown as Parameters<typeof solidTexture>[0])],
+      ['texture asset', () => textureAsset({
+        flipY: false, src: '/albedo.png',
+      } as unknown as Parameters<typeof textureAsset>[0])],
+      ['image texture', () => imageTexture({
+        flipY: false, src: '/albedo.png',
+      } as unknown as Parameters<typeof imageTexture>[0])],
+      ['virtual texture', () => virtualTexture({
+        fallback: '/preview.png', manifestUri: '/terrain.vt.json',
+      } as unknown as Parameters<typeof virtualTexture>[0])],
+      ['texture sampler', () => imageTexture({
+        sampler: { anisotropy: 4 }, src: '/albedo.png',
+      } as unknown as Parameters<typeof imageTexture>[0])],
+      ['transform', () => mesh({
+        geometry: boxGeometry(1),
+        material,
+        transform: { quaternion: [0, 0, 0, 1] },
+      } as unknown as Parameters<typeof mesh>[0])],
+      ['scene', () => scene({
+        camera, children: [], nodes: [],
+      } as unknown as Parameters<typeof scene>[0])],
+    ];
+
+    for (const [label, create] of cases) {
+      expect(create, label).toThrow(/unsupported option/);
+    }
+    expect(() => scene(null as unknown as Parameters<typeof scene>[0]))
+      .toThrow('scene options must be an object');
   });
 
   it("preserves explicit texture content keys for renderer-level sharing", () => {

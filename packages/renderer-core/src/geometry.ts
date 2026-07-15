@@ -1,4 +1,4 @@
-import { positiveFiniteNumber } from './descriptor-values';
+import { objectWithAllowedFields, positiveFiniteNumber } from './descriptor-values';
 import type { Metres, WorldSize3 } from './primitives';
 
 interface GeometryDescriptor<Kind extends string> {
@@ -35,8 +35,16 @@ export type PlaneGeometryInput = PlaneGeometryOptions | PlaneGeometrySizeInput;
 /** Geometry supported by Royal's public mesh node. */
 export type Geometry = BoxGeometry | PlaneGeometry;
 
+const GEOMETRY_OPTION_FIELDS = ['size'] as const;
+const isBoxSizeTuple = (input: BoxGeometryInput): input is WorldSize3 => Array.isArray(input);
+const isPlaneSizeTuple = (
+  input: PlaneGeometryInput,
+): input is readonly [width: Metres, height: Metres] => Array.isArray(input);
+
 const boxSize = (input: BoxGeometryInput): WorldSize3 => {
-  const size = typeof input === 'number' ? input : 'size' in input ? input.size : input;
+  const size = typeof input === 'number' || isBoxSizeTuple(input)
+    ? input
+    : objectWithAllowedFields(input, GEOMETRY_OPTION_FIELDS, 'box geometry').size;
 
   const resolved = typeof size === 'number' ? [size, size, size] as const : size;
   return Object.freeze([
@@ -47,7 +55,9 @@ const boxSize = (input: BoxGeometryInput): WorldSize3 => {
 };
 
 const planeSize = (input: PlaneGeometryInput): readonly [width: Metres, height: Metres] => {
-  const size = typeof input === 'number' ? input : 'size' in input ? input.size : input;
+  const size = typeof input === 'number' || isPlaneSizeTuple(input)
+    ? input
+    : objectWithAllowedFields(input, GEOMETRY_OPTION_FIELDS, 'plane geometry').size;
 
   const resolved = typeof size === 'number' ? [size, size] as const : size;
   return Object.freeze([

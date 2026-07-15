@@ -3,7 +3,12 @@ import {
   type Transform,
   type TransformOptions
 } from './primitives';
-import { frozenBounds3, identityScalar, nonEmptyString } from './descriptor-values';
+import {
+  frozenBounds3,
+  identityScalar,
+  nonEmptyString,
+  objectWithAllowedFields,
+} from './descriptor-values';
 import type { WorldPosition3 } from './primitives';
 import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
@@ -58,6 +63,10 @@ export interface GltfOptions {
 
 export type GltfInput = GltfOptions | GltfOptions['src'];
 
+const GLTF_FIELDS = [
+  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'src', 'transform', 'version',
+] as const;
+
 const gltfOptions = (input: GltfInput): GltfOptions =>
   typeof input === 'string' ? { src: input } : input;
 
@@ -86,6 +95,7 @@ export function gltf(src: string): GltfNode;
 export function gltf(options: GltfOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
+  objectWithAllowedFields(options, GLTF_FIELDS, 'glTF');
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);

@@ -229,6 +229,26 @@ describe("renderer-core render object transforms", () => {
     }).toThrow(/expects x, y, and z/);
   });
 
+  it("rejects malformed imperative transform updates before publishing them", () => {
+    let notifications = 0;
+    const handle = createRenderObjectHandle(identityTransform, () => {
+      notifications += 1;
+    });
+
+    expect(() => handle.setTransform({
+      quaternion: [0, 0, 0, 1],
+    } as unknown as Parameters<typeof handle.setTransform>[0])).toThrow(/unsupported option "quaternion"/);
+    expect(() => handle.setTransform({ position: [0, Number.NaN, 0] }))
+      .toThrow(/render object position\[1\] must be finite/);
+    expect(() => {
+      handle.rotation.z = Number.POSITIVE_INFINITY;
+    }).toThrow(/render object rotation\.z must be finite/);
+    expect(() => handle.scale.set([1, 1, Number.NaN]))
+      .toThrow(/render object scale\[2\] must be finite/);
+    expect(notifications).toBe(0);
+    expect(handle.getTransform()).toEqual(identityTransform);
+  });
+
   it("allows internal renderers to read handle transforms without snapshot allocation", () => {
     const handle = createRenderObjectHandle(identityTransform, () => {});
 

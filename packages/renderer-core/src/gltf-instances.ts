@@ -7,6 +7,7 @@ import {
 } from './gltf';
 import { resolvePickingId, type PickingId } from './picking';
 import type { Geometry } from './geometry';
+import { objectWithAllowedFields } from './descriptor-values';
 
 export interface GltfInstanceTransforms {
   readonly count: number;
@@ -47,6 +48,10 @@ export interface CreateGltfInstanceTransformsOptions {
   /** Packed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales?: ArrayLike<number>;
 }
+
+const GLTF_INSTANCE_TRANSFORM_FIELDS = [
+  'count', 'logicalIds', 'positions', 'rotations', 'scales',
+] as const;
 
 const positiveCount = (count: number): number => {
   if (!Number.isInteger(count) || count < 1) {
@@ -133,6 +138,11 @@ const logicalIdsFrom = (
 export const createGltfInstanceTransforms = (
   options: CreateGltfInstanceTransformsOptions,
 ): GltfInstanceTransforms => {
+  objectWithAllowedFields(
+    options,
+    GLTF_INSTANCE_TRANSFORM_FIELDS,
+    'glTF instance transforms',
+  );
   const count = positiveCount(options.count);
   const listeners = new Map<object, GltfInstanceTransformsListener>();
   let poseVersion = 1;
@@ -243,7 +253,12 @@ export interface GltfInstancesOptions {
   readonly version?: GltfAssetRef['version'];
 }
 
+const GLTF_INSTANCES_FIELDS = [
+  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'src', 'version',
+] as const;
+
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
+  objectWithAllowedFields(options, GLTF_INSTANCES_FIELDS, 'glTF instances');
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);

@@ -3,6 +3,7 @@ import {
   frozenRgba,
   frozenVec3,
   nonNegativeFiniteNumber,
+  objectWithAllowedFields,
   positiveFiniteNumber,
 } from './descriptor-values';
 import type { Direction3, LinearRgba, Metres, Rads, WorldPosition3 } from './primitives';
@@ -22,14 +23,14 @@ export interface SpotLightNode {
 }
 
 export interface SpotLightOptions {
-  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. */
+  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. @defaultValue `[1, 1, 1, 1]` */
   readonly color?: LinearRgba;
   readonly direction: Direction3;
-  /** Inner cone angle in radians. */
+  /** Inner cone angle in radians. @defaultValue `0` */
   readonly innerConeAngle?: Rads;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
-  /** Outer cone angle in radians. */
+  /** Outer cone angle in radians. @defaultValue `Math.PI / 4` */
   readonly outerConeAngle?: Rads;
   /** World-space position in metres. */
   readonly position: WorldPosition3;
@@ -38,7 +39,11 @@ export interface SpotLightOptions {
 }
 
 const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'spot light color');
+const SPOT_LIGHT_FIELDS = [
+  'color', 'direction', 'innerConeAngle', 'intensityCandela', 'outerConeAngle', 'position', 'range',
+] as const;
 export const spotLight = (options: SpotLightOptions): SpotLightNode => {
+  objectWithAllowedFields(options, SPOT_LIGHT_FIELDS, 'spot light');
   const outerConeAngle = options.outerConeAngle ?? Math.PI / 4;
   const innerConeAngle = options.innerConeAngle ?? 0;
   if (!Number.isFinite(outerConeAngle) || outerConeAngle <= 0 || outerConeAngle > Math.PI / 2) {

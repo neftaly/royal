@@ -1,5 +1,11 @@
 import type { LinearRgba } from './primitives';
-import { frozenRgba, identityScalar, nonEmptyString, stringChoice } from './descriptor-values';
+import {
+  frozenRgba,
+  identityScalar,
+  nonEmptyString,
+  objectWithAllowedFields,
+  stringChoice,
+} from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
 
@@ -113,6 +119,13 @@ const TEXTURE_MIN_FILTERS = [
   'nearest-mipmap-nearest',
 ] as const;
 const TEXTURE_WRAPS = ['clamp-to-edge', 'mirrored-repeat', 'repeat'] as const;
+const TEXTURE_SAMPLER_FIELDS = ['magFilter', 'minFilter', 'wrapS', 'wrapT'] as const;
+const SOLID_TEXTURE_FIELDS = ['color'] as const;
+const TEXTURE_ASSET_FIELDS = ['colorSpace', 'contentKey', 'sampler', 'src', 'version'] as const;
+const IMAGE_TEXTURE_FIELDS = ['colorSpace', 'sampler', 'src', 'version'] as const;
+const VIRTUAL_TEXTURE_FIELDS = [
+  'colorSpace', 'contentKey', 'manifestUri', 'sampler', 'version',
+] as const;
 
 const optionalChoice = <Choice extends string>(
   value: unknown,
@@ -122,6 +135,7 @@ const optionalChoice = <Choice extends string>(
 
 const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
   if (sampler === undefined) return undefined;
+  objectWithAllowedFields(sampler, TEXTURE_SAMPLER_FIELDS, 'texture sampler');
   if (sampler.magFilter !== undefined) {
     stringChoice(sampler.magFilter, TEXTURE_MAG_FILTERS, 'texture sampler magFilter');
   }
@@ -134,6 +148,7 @@ const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | un
 };
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
+  objectWithAllowedFields(options, SOLID_TEXTURE_FIELDS, 'solid texture');
   return Object.freeze({
     kind: 'solid',
     color: frozenRgba(options.color, 'solid texture color')
@@ -141,6 +156,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
 };
 
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
+  objectWithAllowedFields(options, TEXTURE_ASSET_FIELDS, 'texture asset');
   const uri = nonEmptyString(options.src, 'texture asset "src"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'texture asset colorSpace');
   const sampler = frozenSampler(options.sampler);
@@ -166,6 +182,7 @@ export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
 export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {
   const options: ImageTextureOptions =
     typeof srcOrOptions === 'string' ? { src: srcOrOptions } : srcOrOptions;
+  objectWithAllowedFields(options, IMAGE_TEXTURE_FIELDS, 'image texture');
   const uri = nonEmptyString(options.src, 'image texture "src"');
 
   return textureAsset({
@@ -180,6 +197,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 }
 
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
+  objectWithAllowedFields(options, VIRTUAL_TEXTURE_FIELDS, 'virtual texture');
   const manifestUri = nonEmptyString(options.manifestUri, 'virtual texture "manifestUri"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'virtual texture colorSpace');
   const sampler = frozenSampler(options.sampler);

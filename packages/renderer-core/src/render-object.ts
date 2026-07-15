@@ -1,4 +1,5 @@
 import type { EulerRads, Scale3, Transform, Vec3, WorldPosition3 } from './primitives';
+import { finiteNumber, frozenVec3, objectWithAllowedFields } from './descriptor-values';
 
 export interface RenderObjectVector3 {
   x: number;
@@ -93,6 +94,7 @@ const sameVec3 = (left: Vec3, right: Vec3): boolean =>
 const copyVec3 = (value: Vec3): MutableVec3 => [value[0], value[1], value[2]];
 const copyEulerRads = (value: EulerRads): MutableVec3 => [value[0], value[1], value[2]];
 const transformStateSymbol: unique symbol = Symbol('royal.renderObjectTransformState');
+const RENDER_OBJECT_TRANSFORM_FIELDS = ['position', 'rotation', 'scale'] as const;
 
 const componentIndex = {
   x: 0,
@@ -117,6 +119,23 @@ const copyVec3Into = (target: MutableVec3, source: Vec3): void => {
   target[0] = source[0];
   target[1] = source[1];
   target[2] = source[2];
+};
+
+const validatedRenderObjectTransformUpdate = (
+  transform: RenderObjectTransformUpdate,
+): RenderObjectTransformUpdate => {
+  objectWithAllowedFields(transform, RENDER_OBJECT_TRANSFORM_FIELDS, 'render object transform');
+  return {
+    ...(transform.position === undefined
+      ? {}
+      : { position: frozenVec3(transform.position, 'render object position') as WorldPosition3 }),
+    ...(transform.rotation === undefined
+      ? {}
+      : { rotation: frozenVec3(transform.rotation, 'render object rotation') as EulerRads }),
+    ...(transform.scale === undefined
+      ? {}
+      : { scale: frozenVec3(transform.scale, 'render object scale') as Scale3 }),
+  };
 };
 
 export const renderObjectTransformStateToTransform = (
@@ -246,7 +265,11 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
   }
 
   #setVector(value: Vec3): void {
-    this.#dispatch({ type: 'set-vector', field: this.#field, value });
+    this.#dispatch({
+      type: 'set-vector',
+      field: this.#field,
+      value: frozenVec3(value, `render object ${this.#field}`),
+    });
   }
 
   #setComponent(component: RenderObjectTransformComponent, value: number): void {
@@ -254,7 +277,7 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
       type: 'set-component',
       component,
       field: this.#field,
-      value
+      value: finiteNumber(value, `render object ${this.#field}.${component}`)
     });
   }
 }
@@ -313,7 +336,10 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   setTransform(transform: RenderObjectTransformUpdate): void {
-    this.#dispatch({ type: 'set-transform', transform });
+    this.#dispatch({
+      type: 'set-transform',
+      transform: validatedRenderObjectTransformUpdate(transform),
+    });
   }
 
   [transformStateSymbol](): RenderObjectTransformState {

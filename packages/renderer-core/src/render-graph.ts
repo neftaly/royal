@@ -1,5 +1,5 @@
 import type { CameraSource } from './camera-resource';
-import { frozenRgba, stringChoice } from './descriptor-values';
+import { frozenRgba, objectWithAllowedFields, stringChoice } from './descriptor-values';
 import type { EnvironmentLight } from './environment-light';
 import type { LinearRgba } from './primitives';
 import type { RenderNode } from './render-node';
@@ -8,6 +8,9 @@ const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
 const RENDER_TONE_MAPPINGS = ['linear-clamp', 'pbr-neutral'] as const;
 const MIN_EXPOSURE_EV100 = -128;
 const MAX_EXPOSURE_EV100 = 149;
+const SCENE_OPTION_FIELDS = [
+  'camera', 'clearColor', 'environment', 'exposureEv100', 'nodes', 'toneMapping',
+] as const;
 
 export type RenderToneMapping = 'linear-clamp' | 'pbr-neutral';
 
@@ -47,6 +50,7 @@ const finiteExposureEv100 = (value: number | undefined): number | undefined => {
 
 /** Creates one public scene. Multipass planning remains renderer-private. */
 export const scene = (options: SceneOptions): RenderRoot => {
+  objectWithAllowedFields(options, SCENE_OPTION_FIELDS, 'scene');
   const exposureEv100 = finiteExposureEv100(options.exposureEv100);
   const toneMapping = options.toneMapping === undefined
     ? undefined

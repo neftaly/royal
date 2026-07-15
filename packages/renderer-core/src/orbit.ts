@@ -1,6 +1,11 @@
 import type { PerspectiveCamera, PerspectiveCameraOptions } from './camera';
 import { perspectiveCamera } from './camera';
-import { finiteNumber, frozenVec3, positiveFiniteNumber } from './descriptor-values';
+import {
+  finiteNumber,
+  frozenVec3,
+  objectWithAllowedFields,
+  positiveFiniteNumber,
+} from './descriptor-values';
 import type { Direction3, EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
 export type OrbitCameraView = {
@@ -44,6 +49,9 @@ export type OrbitPerspectiveCameraOptions =
   };
 
 const defaultTarget = frozenVec3([0, 0, 0], 'orbit target');
+const ORBIT_VIEW_FIELDS = ['distance', 'pitch', 'target', 'yaw'] as const;
+const ORBIT_CONSTRAINT_FIELDS = ['maxDistance', 'maxPitch', 'minDistance', 'minPitch'] as const;
+const ORBIT_PERSPECTIVE_CAMERA_FIELDS = ['far', 'fovY', 'near', 'view'] as const;
 
 const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 => {
   if (target === undefined) return defaultTarget;
@@ -63,6 +71,7 @@ const finiteOptional = (value: number | undefined, label: string): number | unde
   value === undefined ? undefined : finiteNumber(value, label);
 
 const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void => {
+  objectWithAllowedFields(constraints, ORBIT_CONSTRAINT_FIELDS, 'orbit constraints');
   const minDistance = constraints.minDistance === undefined
     ? undefined
     : positiveFiniteNumber(constraints.minDistance, 'orbit minDistance');
@@ -79,12 +88,15 @@ const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void
   }
 };
 
-export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => Object.freeze({
-  distance: positiveFiniteNumber(view.distance, 'orbit distance'),
-  pitch: finiteNumber(view.pitch ?? 0, 'orbit pitch'),
-  target: orbitTarget(view.target),
-  yaw: finiteNumber(view.yaw ?? 0, 'orbit yaw')
-});
+export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => {
+  objectWithAllowedFields(view, ORBIT_VIEW_FIELDS, 'orbit view');
+  return Object.freeze({
+    distance: positiveFiniteNumber(view.distance, 'orbit distance'),
+    pitch: finiteNumber(view.pitch ?? 0, 'orbit pitch'),
+    target: orbitTarget(view.target),
+    yaw: finiteNumber(view.yaw ?? 0, 'orbit yaw')
+  });
+};
 
 export const clampOrbitCameraView = (
   view: OrbitCameraViewOptions,
@@ -192,10 +204,13 @@ export const orbitCameraTransform = (
   });
 };
 
-export const orbitPerspectiveCamera = ({
-  view,
-  ...options
-}: OrbitPerspectiveCameraOptions): PerspectiveCamera => perspectiveCamera({
-  ...options,
-  ...orbitCameraTransform(view)
-});
+export const orbitPerspectiveCamera = (
+  input: OrbitPerspectiveCameraOptions,
+): PerspectiveCamera => {
+  objectWithAllowedFields(input, ORBIT_PERSPECTIVE_CAMERA_FIELDS, 'orbit perspective camera');
+  const { view, ...options } = input;
+  return perspectiveCamera({
+    ...options,
+    ...orbitCameraTransform(view)
+  });
+};

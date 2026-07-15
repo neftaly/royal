@@ -2,6 +2,7 @@ import {
   frozenRgba,
   frozenVec3,
   nonNegativeFiniteNumber,
+  objectWithAllowedFields,
   positiveFiniteNumber,
 } from './descriptor-values';
 import type { LinearRgba, Metres, WorldPosition3 } from './primitives';
@@ -18,7 +19,7 @@ export interface PointLightNode {
 }
 
 export interface PointLightOptions {
-  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. */
+  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. @defaultValue `[1, 1, 1, 1]` */
   readonly color?: LinearRgba;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
@@ -29,7 +30,9 @@ export interface PointLightOptions {
 }
 
 const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'point light color');
+const POINT_LIGHT_FIELDS = ['color', 'intensityCandela', 'position', 'range'] as const;
 export const pointLight = (options: PointLightOptions): PointLightNode => {
+  objectWithAllowedFields(options, POINT_LIGHT_FIELDS, 'point light');
   const range = options.range === undefined
     ? undefined
     : positiveFiniteNumber(options.range, 'point light range');

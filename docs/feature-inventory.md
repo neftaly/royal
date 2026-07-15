@@ -34,7 +34,7 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| One immutable scene description | product | Keep; private multipass compilation is a consequence. |
+| One immutable scene description | product | Keep; private multipass compilation is a consequence. Public descriptor constructors reject unknown fields instead of silently accepting typos. |
 | Perspective camera | product | Primary 3D camera. Keep. |
 | Orthographic camera | product | Small cost and preserves flat/diagram/card use cases. Review only if the public vocabulary must be minimal. |
 | Mutable camera-view resource | product | Avoids rebuilding React scene intent during interaction. Keep. |
