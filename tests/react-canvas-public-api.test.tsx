@@ -52,6 +52,26 @@ describe('Canvas public scene boundary', () => {
     expect(invalid.scene).toBe(dom);
   });
 
+  it('forwards ordinary canvas metadata while reserving backing dimensions', () => {
+    const props = {
+      'aria-label': 'Interactive Royal scene',
+      'data-testid': 'royal-canvas',
+      className: 'scene-canvas',
+      scene: renderScene,
+      style: { blockSize: '100%', inlineSize: '100%' },
+    } satisfies CanvasProps;
+
+    expect(props['data-testid']).toBe('royal-canvas');
+
+    if (false) {
+      // @ts-expect-error Royal derives backing width from CSS pixels and DPR.
+      const width = { scene: renderScene, width: 800 } satisfies CanvasProps;
+      // @ts-expect-error Royal derives backing height from CSS pixels and DPR.
+      const height = { height: 600, scene: renderScene } satisfies CanvasProps;
+      expect([width, height]).toHaveLength(2);
+    }
+  });
+
   it('keeps Canvas renderer options at product-level creation choices', () => {
     const rendererOptions = {
       automaticVirtualTextures: true,

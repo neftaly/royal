@@ -91,6 +91,13 @@ Tarstate-derived scene snapshots.
 The imperative `createRendererRoot(canvas)` path accepts the same pure scene
 descriptors as `Canvas.scene`. It does not create or evaluate React elements.
 
+`Canvas` forwards ordinary native canvas props, including `className`, `style`,
+ARIA attributes, native React event handlers, and application-owned `data-*`
+metadata. Royal does not use `data-*` as renderer state or a scene protocol.
+Native `width` and `height` props are intentionally excluded: size the element
+with CSS and Royal keeps its backing buffer synchronized to CSS pixels and the
+current device-pixel ratio.
+
 ### WebXR
 
 `@royal/react/xr` provides an explicit session store and session runtime; it

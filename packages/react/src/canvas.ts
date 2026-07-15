@@ -38,9 +38,12 @@ import {
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
 const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
 
-/** Props for the Royal-owned canvas element. */
+/**
+ * Props for the Royal-owned canvas element. Native DOM, ARIA, and `data-*`
+ * props pass through; CSS owns layout size and Royal owns backing dimensions.
+ */
 export interface CanvasProps
-  extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
+  extends Omit<ComponentPropsWithoutRef<"canvas">, "children" | "height" | "width"> {
   /** Ordinary React controls and imperative controllers rendered under Canvas context. */
   readonly children?: ReactNode;
   /** React-owned pointer handlers keyed by stable `pickingId` values in the pure scene. */
