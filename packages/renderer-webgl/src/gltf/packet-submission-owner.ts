@@ -96,6 +96,7 @@ const orientationDeterminant = (matrix: Mat4): number =>
 export class GltfPacketSubmissionOwner {
   readonly #batches: GltfFrameBatchArena;
   readonly #counters = createCounters();
+  readonly #demandedMaterialIds = new Set<number>();
   readonly #geometryRecipes: GeometryRecipeRegistry;
   readonly #instanceTransforms: GltfInstanceTransformRegistry;
   readonly #lightResolver: SurfaceLightResolver;
@@ -222,6 +223,8 @@ export class GltfPacketSubmissionOwner {
       return packetCursor;
     }
     const state = this.#runtime.stateForNode(node);
+    const contentKeys = resourceArenaContentKeys(this.#resourceArena, state.key);
+    this.#demandedMaterialIds.clear();
     const instanceViews = node.kind === "gltf-instances"
       ? this.#instanceTransforms.views(node.instances)
       : undefined;
@@ -242,6 +245,11 @@ export class GltfPacketSubmissionOwner {
     const instanceAssetLightScopeIds = this.#instanceAssetLightScopeIds;
     instanceAssetLights?.clear();
     instanceAssetLightScopeIds.clear();
+    const expectedKind = node.kind === "gltf"
+      ? GLTF_PACKET_ROOT_SOURCE_KIND.gltf
+      : GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances;
+    let determinantOuterIndex = -1;
+    let rootDeterminant = 1;
     let cursor = packetCursor;
 
     while (cursor < packetEnd) {
@@ -258,9 +266,6 @@ export class GltfPacketSubmissionOwner {
         }
         break;
       }
-      const expectedKind = node.kind === "gltf"
-        ? GLTF_PACKET_ROOT_SOURCE_KIND.gltf
-        : GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances;
       if (source.kind !== expectedKind) {
         throw new Error("Royal retained glTF packet root kind diverged from the frame plan");
       }
@@ -273,16 +278,20 @@ export class GltfPacketSubmissionOwner {
       if (primitive === undefined) {
         throw new Error(`Royal retained glTF packet geometry ${geometryId} has no prepared primitive`);
       }
+      const materialId = catalog.materialIds[packetIndex]!;
       const loadedMaterial = resolvePacketMaterial(
         topology.resources,
-        catalog.materialIds[packetIndex]!,
+        materialId,
       );
-      this.#runtime.images.demandMaterial(state.key, loadedMaterial);
+      if (!this.#demandedMaterialIds.has(materialId)) {
+        this.#demandedMaterialIds.add(materialId);
+        this.#runtime.images.demandMaterial(state.key, loadedMaterial);
+      }
       const baseColorImageUri = loadedMaterial.baseColorTexture?.imageUri;
       const prepared = this.#materials.prepare(
         primitive,
         loadedMaterial,
-        resourceArenaContentKeys(this.#resourceArena, state.key),
+        contentKeys,
         baseColorImageUri !== undefined
           && this.#runtime.images.imageReady(state.key, baseColorImageUri),
       );
@@ -302,7 +311,10 @@ export class GltfPacketSubmissionOwner {
       if (rootModel === undefined) {
         throw new Error("Royal retained glTF packet root source has no current transform");
       }
-      const rootDeterminant = orientationDeterminant(rootModel);
+      if (outerIndex !== determinantOuterIndex) {
+        rootDeterminant = orientationDeterminant(rootModel);
+        determinantOuterIndex = outerIndex;
+      }
       const packetSidedness = catalog.sidedness[packetIndex]!;
       let assetLights = ordinaryAssetLights;
       let lightScopeId = ordinaryLightScopeId;

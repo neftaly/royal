@@ -104,6 +104,7 @@ export class GltfPacketSelectionOwner {
           : undefined;
         const first = topology.occurrenceFirsts[occurrenceIndex]!;
         const end = first + topology.occurrenceCounts[occurrenceIndex]!;
+        let projectedOuterIndex = -1;
         for (let packetIndex = first; packetIndex < end; packetIndex += 1) {
           if (!framePacketLodRequirementsMatch(
             topology.catalog,
@@ -116,7 +117,10 @@ export class GltfPacketSelectionOwner {
           const outerIndex = topology.catalog.instanceFirsts[packetIndex]!;
           const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
           if (rootModel === undefined) continue;
-          multiplyMat4Into(this.#rootViewProjection, this.#viewProjection, rootModel);
+          if (outerIndex !== projectedOuterIndex) {
+            multiplyMat4Into(this.#rootViewProjection, this.#viewProjection, rootModel);
+            projectedOuterIndex = outerIndex;
+          }
           const hasBounds = readPacketBoundsInto(
             topology.resources,
             topology.catalog.boundsIds[packetIndex]!,

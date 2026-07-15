@@ -244,6 +244,10 @@ export class GltfMaterialPreparationArena {
     contentKeys: ReadonlyMap<string, TextureContentKey>,
     baseColorImageReady: boolean,
   ): GltfPreparedPrimitiveMaterial {
+    let primitiveCache = this.#prepared.get(primitive);
+    const cached = primitiveCache?.get(loadedMaterial);
+    if (cached !== undefined) return cached;
+
     let materialPrimitives = this.#materialPrimitives.get(loadedMaterial);
     if (materialPrimitives === undefined) {
       materialPrimitives = new Set();
@@ -251,13 +255,10 @@ export class GltfMaterialPreparationArena {
     }
     materialPrimitives.add(primitive);
 
-    let primitiveCache = this.#prepared.get(primitive);
     if (primitiveCache === undefined) {
       primitiveCache = new WeakMap();
       this.#prepared.set(primitive, primitiveCache);
     }
-    const cached = primitiveCache.get(loadedMaterial);
-    if (cached !== undefined) return cached;
 
     const baseColor = baseColorTextureRef(loadedMaterial, contentKeys);
     const material = loadedGltfSurfaceMaterial(
