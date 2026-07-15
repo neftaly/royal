@@ -5,7 +5,6 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import {
-  boxGeometry,
   directionalLight,
   gltf,
   linearRgbaFromSrgb,
@@ -30,7 +29,6 @@ import {
 
 const backplateGeometry = planeGeometry([4.4, 2.65]);
 const backplateMaterial = unlitMaterial({ color: linearRgbaFromSrgb([0.08, 0.1, 0.12, 1]) });
-const helmetPickingGeometry = boxGeometry([1.45, 1.55, 1.35]);
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 
 const createPickingScene = (
@@ -51,7 +49,6 @@ const createPickingScene = (
       },
     }),
     gltf({
-      pickingGeometry: helmetPickingGeometry,
       pickingId: 'helmet',
       src: helmetSrc,
       transform: {

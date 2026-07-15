@@ -63,6 +63,7 @@ const smokeExpectations = {
     minPaintedRatio: 0.003,
   },
   picking: {
+    gltfReady: true,
     minColorBuckets: 6,
     minPaintedRatio: 0.01,
   },
@@ -209,6 +210,7 @@ const smokeExpression = `
           ? smoke?.absentResourceSubstrings ?? []
           : [],
         id: routeId,
+        gltfReady: smoke?.gltfReady === true,
         path: routePath,
         resourceSubstrings: selectedCasePath === undefined
           ? smoke?.resourceSubstrings ?? []
@@ -265,12 +267,13 @@ const smokeExpression = `
         state.canvas.minColorBuckets === undefined ||
         state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets
       );
-    const gltfDiagnosticsReady = !state.route.id.startsWith('gltf-') ||
+    const gltfDiagnosticsReady = !(state.route.gltfReady || state.route.id.startsWith('gltf-')) ||
       (
         Array.isArray(state.renderer?.gltfLoadDiagnostics?.assets) &&
         state.renderer.gltfLoadDiagnostics.assets.length > 0 &&
-        (state.renderer.gltfLoadDiagnostics.sceneReadyAssets ?? 0) > 0 &&
-        state.renderer.gltfLoadDiagnostics.assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')
+        state.renderer.gltfLoadDiagnostics.assets.some((asset) =>
+          asset.status === 'sceneReady' && typeof asset.phaseMs?.toSceneReady === 'number'
+        )
       );
     return canvasReady && resourceReady && gltfDiagnosticsReady;
   };
@@ -422,7 +425,8 @@ const waitForSvgTextureMode = async (session, expectedMode) => evaluate(session,
       mode: container?.getAttribute('data-svg-texture-mode') ?? null,
       outstandingPageRequests: virtualTexturing?.outstandingPageRequests ?? null,
       pendingPages: virtualTexturing?.pendingPages ?? null,
-      sceneReadyAssets: renderer?.gltfLoadDiagnostics?.sceneReadyAssets ?? null,
+      sceneReadyAssets: renderer?.gltfLoadDiagnostics?.assets
+        ?.filter((asset) => asset.status === 'sceneReady').length ?? null,
     };
     const expectedResidency = '${expectedMode}' === 'virtual'
       ? sample.activePages > 0
@@ -596,6 +600,9 @@ const assertRoute = (expected, state) => {
       }
       if (interaction.leaveClearedId !== 'none') {
         failures.push(`picking pointer leave cleared to "${interaction.leaveClearedId}", expected "none"`);
+      }
+      if (interaction.outlineMissIds?.some((id) => id !== 'none')) {
+        failures.push(`picking selected outside helmet outline: ${interaction.outlineMissIds.join(',')}`);
       }
       if (interaction.before === interaction.hoveredId) {
         failures.push(`picking hover readout did not change from "${interaction.before}"`);
@@ -937,12 +944,12 @@ const assertRoute = (expected, state) => {
     }
   }
 
-  if (expected.id.startsWith('gltf-')) {
+  if (expected.gltfReady === true || expected.id.startsWith('gltf-')) {
     const gltfLoadDiagnostics = state.renderer?.gltfLoadDiagnostics;
     const assets = gltfLoadDiagnostics?.assets;
     if (!Array.isArray(assets) || assets.length === 0) {
       failures.push('missing glTF loading diagnostics');
-    } else if ((gltfLoadDiagnostics.sceneReadyAssets ?? 0) <= 0) {
+    } else if (!assets.some((asset) => asset.status === 'sceneReady')) {
       failures.push('glTF load diagnostics did not report a scene-ready asset');
     } else if (!assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')) {
       failures.push('glTF load diagnostics missed toSceneReady phase timing');
@@ -981,6 +988,9 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
     { x: rect.left + rect.width * 0.45, y: rect.top + rect.height * 0.5 },
     { x: rect.left + rect.width * 0.55, y: rect.top + rect.height * 0.5 },
   ];
+  const outlineMissPoints = [
+    { x: rect.left + rect.width * 0.68, y: rect.top + rect.height * 0.22 },
+  ];
   const emptyPoint = { x: rect.left + rect.width * 0.08, y: rect.top + rect.height * 0.12 };
   const animationFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
   const dispatch = (type, point) => {
@@ -1011,6 +1021,16 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
     }
     await animationFrame();
   }
+  const outlineMissIds = [];
+  for (const point of outlineMissPoints) {
+    dispatch('pointermove', point);
+    let outlineId = readHoveredId();
+    for (let attempt = 0; attempt < 5 && outlineId !== 'none'; attempt += 1) {
+      await animationFrame();
+      outlineId = readHoveredId();
+    }
+    outlineMissIds.push(outlineId);
+  }
   dispatch('pointermove', emptyPoint);
   let clearedId = readHoveredId();
   for (let attempt = 0; attempt < 5 && clearedId !== 'none'; attempt += 1) {
@@ -1024,7 +1044,14 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
   dispatch('pointerleave', hoveredPoint ?? hoverPoints[0]);
   await animationFrame();
 
-  return { before, clearedId, hoveredId, hoveredPoint, leaveClearedId: readHoveredId() };
+  return {
+    before,
+    clearedId,
+    hoveredId,
+    hoveredPoint,
+    leaveClearedId: readHoveredId(),
+    outlineMissIds,
+  };
 })()
 `);
 
