@@ -78,6 +78,15 @@ export type SurfaceLightSet = {
   readonly specular?: SurfaceIblSpecular;
 };
 
+/** Caller-owned storage for allocation-free light-set composition. */
+export type SurfaceLightSetWorkspace = {
+  directionals: SurfaceDirectionalLight[];
+  irradiance?: SurfaceIblIrradiance;
+  lights: SurfaceLight[];
+  punctuals: Array<SurfacePointLight | SurfaceSpotLight>;
+  specular?: SurfaceIblSpecular;
+};
+
 export const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   directionals: [],
   lights: [],
@@ -117,6 +126,49 @@ export const combineSurfaceLightSets = (
   const specular = sceneHasEnvironment ? sceneLights.specular : assetLights.specular;
 
   return surfaceLightSet(lights, irradiance, specular);
+};
+
+export const createSurfaceLightSetWorkspace = (): SurfaceLightSetWorkspace => ({
+  directionals: [],
+  lights: [],
+  punctuals: [],
+});
+
+const appendSurfaceLightSet = (
+  output: SurfaceLightSetWorkspace,
+  lightSet: SurfaceLightSet | undefined,
+): void => {
+  if (lightSet === undefined) return;
+  for (const light of lightSet.lights) {
+    output.lights.push(light);
+    if (light.kind === "directional") output.directionals.push(light);
+    else output.punctuals.push(light);
+  }
+};
+
+/**
+ * Deterministically composes light sets into caller-owned storage.
+ * The output must not alias either input.
+ */
+export const writeCombinedSurfaceLightSet = (
+  output: SurfaceLightSetWorkspace,
+  sceneLights: SurfaceLightSet | undefined,
+  assetLights: SurfaceLightSet | undefined,
+): SurfaceLightSetWorkspace => {
+  output.directionals.length = 0;
+  output.lights.length = 0;
+  output.punctuals.length = 0;
+  appendSurfaceLightSet(output, sceneLights);
+  appendSurfaceLightSet(output, assetLights);
+
+  const sceneHasEnvironment = sceneLights?.irradiance !== undefined || sceneLights?.specular !== undefined;
+  const irradiance = sceneHasEnvironment ? sceneLights?.irradiance : assetLights?.irradiance;
+  const specular = sceneHasEnvironment ? sceneLights?.specular : assetLights?.specular;
+  if (irradiance === undefined) delete output.irradiance;
+  else output.irradiance = irradiance;
+  if (specular === undefined) delete output.specular;
+  else output.specular = specular;
+  return output;
 };
 
 export const transformSurfaceIblIrradiance = (

@@ -35,8 +35,10 @@ import {
   type VertexInputInstanceAllocation,
 } from "../vertex-input/arena";
 import {
-  combineSurfaceLightSets,
+  createSurfaceLightSetWorkspace,
+  writeCombinedSurfaceLightSet,
   type SurfaceLightSet,
+  type SurfaceLightSetWorkspace,
 } from "../webgl/lights";
 import type { SurfaceMaterial } from "../webgl/materials";
 import type { GltfInstanceTransformView } from "./instance-transform-registry";
@@ -67,7 +69,7 @@ export interface GltfFrameDrawBatch {
   geometry: VertexInputGeometry;
   geometryId: number;
   readonly key: number;
-  lights: SurfaceLightSet;
+  readonly lights: SurfaceLightSetWorkspace;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
   readonly localModelSlots: MutableMat4[];
@@ -283,7 +285,7 @@ export class GltfFrameBatchArena {
           geometry,
           geometryId,
           key: batchId,
-          lights: combineSurfaceLightSets(sceneLights, assetLights),
+          lights: createSurfaceLightSetWorkspace(),
           localModelSignature: [],
           localModels: [],
           localModelSlots: [],
@@ -322,7 +324,7 @@ export class GltfFrameBatchArena {
       batch.cpuGeometry = geometry.source;
       batch.geometry = geometry;
       batch.geometryId = geometryId;
-      batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
+      writeCombinedSurfaceLightSet(batch.lights, sceneLights, assetLights);
       batch.material = material.material;
       const sidedness = batch.sidedness as {
         -readonly [Key in keyof GltfFrameDrawSidedness]: GltfFrameDrawSidedness[Key];

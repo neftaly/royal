@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
   combineSurfaceLightSets,
+  createSurfaceLightSetWorkspace,
   surfaceLightSet,
+  writeCombinedSurfaceLightSet,
   type SurfaceIblIrradiance,
   type SurfaceIblSpecular,
 } from "../packages/renderer-webgl/src/webgl/lights";
@@ -55,5 +57,33 @@ describe("WebGL surface light composition", () => {
     expect(combined.lights).toEqual(sceneLights.lights);
     expect(combined.irradiance).toBe(assetIrradiance);
     expect(combined.specular).toBe(assetSpecular);
+  });
+
+  it("writes composition into reusable caller-owned storage", () => {
+    const sceneEnvironment = irradiance(2);
+    const directional = {
+      color: [1, 1, 1, 1] as const,
+      direction: [0, -1, 0] as const,
+      kind: "directional" as const,
+    };
+    const point = {
+      color: [1, 1, 1, 1] as const,
+      kind: "point" as const,
+      position: [0, 1, 0] as const,
+    };
+    const output = createSurfaceLightSetWorkspace();
+
+    expect(writeCombinedSurfaceLightSet(
+      output,
+      surfaceLightSet([directional], sceneEnvironment),
+      surfaceLightSet([point], irradiance(3)),
+    )).toBe(output);
+    expect(output.lights).toEqual([directional, point]);
+    expect(output.directionals).toEqual([directional]);
+    expect(output.punctuals).toEqual([point]);
+    expect(output.irradiance).toBe(sceneEnvironment);
+
+    writeCombinedSurfaceLightSet(output, undefined, undefined);
+    expect(output).toEqual({ directionals: [], lights: [], punctuals: [] });
   });
 });
