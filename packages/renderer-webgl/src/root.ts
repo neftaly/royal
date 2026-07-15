@@ -6,7 +6,6 @@ import {
   type MeshNode,
   type PickInput,
   type PickResult,
-  type RenderToneMapping,
   type RenderNode,
   type RenderRoot,
   type TextureAssetRef,
@@ -165,8 +164,13 @@ import type { SurfaceLightSet } from "./webgl/lights";
 import { prepareFrameBaseline } from "./webgl/imperative-state";
 import {
   SurfaceExecutionArena,
-  type SurfaceToneMappingState,
 } from "./webgl/surface-execution-arena";
+import {
+  resolveSurfaceToneMapping,
+  surfacePresentationRequiresHdr,
+  toneMappingShaderMode,
+  type SurfaceToneMappingState,
+} from "./surface-presentation-policy";
 import { SurfaceLightResolver } from "./surface-light-resolver";
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import {
@@ -214,27 +218,6 @@ export type {
 } from "./root-types";
 
 type GeometryResource = VertexInputGeometry;
-
-type SceneToneMappingState = SurfaceToneMappingState;
-
-const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
-  exposure: 1 / 1.2,
-  hdrOutput: false,
-  toneMapping: "linear-clamp",
-};
-const sceneToneMappingState = (
-  scene: {
-    readonly exposureEv100: number | undefined;
-    readonly toneMapping: RenderToneMapping | undefined;
-  },
-  hdrOutput: boolean,
-): SceneToneMappingState => ({
-  exposure: scene.exposureEv100 === undefined
-    ? DEFAULT_TONE_MAPPING_STATE.exposure
-    : 1 / (1.2 * 2 ** scene.exposureEv100),
-  hdrOutput,
-  toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
-});
 
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
@@ -914,7 +897,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#readyGltfImages.applyPending();
       this.#ordinaryTextureGpu.processUploads();
       this.#gltfInstanceTransforms.beginFrame();
-      const wantsHdr = this.#planWantsHdr(plan);
+      const wantsHdr = surfacePresentationRequiresHdr(
+        plan,
+        resourceArenaHasHdrReadyAsset(this.#resourceArena),
+      );
       if (wantsHdr && !this.#contextCapabilities.capabilities.hdrColorBuffer) {
         throw new Error("Royal physical lighting requires EXT_color_buffer_float");
       }
@@ -924,7 +910,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#scenePlan.sceneSurfaceLights,
         this.#scenePlan.sceneSurfaceLightSet,
       );
-      const toneMapping = sceneToneMappingState(plan, useHdr);
+      const toneMapping = resolveSurfaceToneMapping(plan, useHdr);
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
@@ -1385,7 +1371,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     view: Mat4,
     viewProjection: Mat4,
     sceneLights: SurfaceLightSet | undefined,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     viewportSize: ViewportSize,
   ): void {
     switch (node.kind) {
@@ -1412,24 +1398,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #planWantsHdr(plan: FramePlan): boolean {
-    if (
-      plan.environment !== undefined
-      || plan.exposureEv100 !== undefined
-      || plan.toneMapping === "aces-fitted"
-      || plan.toneMapping === "pbr-neutral"
-      || plan.lightNodes.length > 0
-    ) return true;
-    return resourceArenaHasHdrReadyAsset(this.#resourceArena);
-  }
-
   #drawMesh(
     node: MeshNode,
     projection: Mat4,
     view: Mat4,
     viewProjection: Mat4,
     lights: SurfaceLightSet | undefined,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     viewportSize: ViewportSize,
   ): void {
     const retainedGeometry = this.#geometryRecipes.retainedDirectRecipe(node.geometry, node.material);
@@ -1460,7 +1435,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     projection: Mat4,
     view: Mat4,
     sceneLights: SurfaceLightSet | undefined,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     viewportSize: ViewportSize,
     sourceX: number,
     sourceY: number,
@@ -1520,7 +1495,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     batch: GltfFrameDrawBatch,
     projection: Mat4,
     view: Mat4,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     viewportSize: ViewportSize,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
@@ -1563,7 +1538,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     view: Mat4,
     viewportSize: ViewportSize,
     lights: SurfaceLightSet | undefined,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry: CpuGeometry,
   ): void {
@@ -1663,7 +1638,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     y: number,
     width: number,
     height: number,
-    toneMapping: SceneToneMappingState,
+    toneMapping: SurfaceToneMappingState,
     scissor: boolean,
   ): void {
     const gl = this.#gl;
@@ -1683,7 +1658,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#programArena,
       program,
       "u_displayTransform",
-      toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
+      toneMappingShaderMode(toneMapping.toneMapping),
       toneMapping.exposure,
     );
     gl.bindVertexArray(null);

@@ -1,5 +1,9 @@
-import type { Material, RenderToneMapping, TextureSampler } from "@royal/renderer-core";
+import type { Material, TextureSampler } from "@royal/renderer-core";
 import type { FrameTextureResidencyIntent } from "../frame-texture-residency-intent";
+import {
+  toneMappingShaderMode,
+  type SurfaceToneMappingState,
+} from "../surface-presentation-policy";
 import type { GltfFrameBatchArena, GltfFrameBatchCounters, GltfFrameDrawBatch } from "../gltf/frame-batch-arena";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
 import { multiplyMat4, type Mat4 } from "../math/mat4";
@@ -71,12 +75,6 @@ const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
   drawCalls: number;
   instancesDrawn: number;
-}
-
-export interface SurfaceToneMappingState {
-  readonly exposure: number;
-  readonly hdrOutput: boolean;
-  readonly toneMapping: RenderToneMapping;
 }
 
 export interface SurfaceExecutionDiagnostic {
@@ -645,7 +643,7 @@ export class SurfaceExecutionArena {
 
   #bindToneMapping(program: WebGLProgram, toneMapping: SurfaceToneMappingState): void {
     uniformColor(this.#programs, program, "u_toneMappingSettings", [
-      toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
+      toneMappingShaderMode(toneMapping.toneMapping),
       toneMapping.exposure, toneMapping.hdrOutput ? 1 : 0, 0,
     ]);
   }
