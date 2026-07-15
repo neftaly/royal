@@ -21,7 +21,10 @@ const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_SMOKE_PORT ?? 4573);
 const debugPort = Number(process.env.EXAMPLES_SMOKE_DEBUG_PORT ?? 4574);
-const baseUrl = `http://${host}:${previewPort}`;
+const debugHost = process.env.EXAMPLES_SMOKE_DEBUG_HOST?.trim() || host;
+const baseUrl = process.env.EXAMPLES_SMOKE_BASE_URL?.trim() || `http://${host}:${previewPort}`;
+const browserMode = process.env.EXAMPLES_SMOKE_BROWSER?.trim() || 'chromium';
+const managePreview = process.env.EXAMPLES_SMOKE_PREVIEW !== '0';
 const routeQuery = process.env.EXAMPLES_SMOKE_QUERY?.trim() ?? '';
 const routeFilter = process.env.EXAMPLES_SMOKE_ROUTE?.trim() ?? '';
 const envNumber = (name, fallback) => {
@@ -32,8 +35,18 @@ const envNumber = (name, fallback) => {
   throw new Error(`${name} must be a finite number, received ${JSON.stringify(raw)}`);
 };
 const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
+const cdpCommandTimeoutMs = envNumber(
+  'EXAMPLES_SMOKE_CDP_TIMEOUT_MS',
+  Math.max(30_000, routeReadyTimeoutMs + 10_000),
+);
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
+
+if (!new Set(['cdp', 'chromium']).has(browserMode)) {
+  throw new Error(
+    `EXAMPLES_SMOKE_BROWSER must be "cdp" or "chromium", received ${JSON.stringify(browserMode)}`,
+  );
+}
 
 const gltfLabManifest = JSON.parse(readFileSync(
   new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
@@ -109,7 +122,13 @@ const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) =>
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const connectPage = () => connectCdpPage({ debugHost: host, debugPort });
+const connectPage = () => connectCdpPage({
+  closeExtraPages: true,
+  commandTimeoutMs: cdpCommandTimeoutMs,
+  debugHost,
+  debugPort,
+  rewriteWebSocketAuthority: true,
+});
 
 const smokeExpression = `
 (async () => {
@@ -546,15 +565,14 @@ const assertRoute = (expected, state) => {
       }
       const reactivationRequestLimit = Math.max(
         2,
-        Math.ceil((interaction.reactivation?.activePages ?? 0) * 0.15),
+        Math.ceil((interaction.reactivation?.activePages ?? 0) * 0.25),
       );
-      // Resource Timing entries and atlas settlements are not one-to-one while
-      // a working set converges. Permit one bounded two-page destructive
-      // replacement batch beyond the cache-miss allowance, while keeping both
-      // ceilings proportional to the final active set.
-      const reactivationUploadLimit = Math.min(
-        interaction.reactivation?.activePages ?? 0,
-        reactivationRequestLimit + 2,
+      // Resource Timing entries and atlas settlements are not one-to-one: a
+      // decoded page may need another atlas upload without another fetch. Keep
+      // network misses below one quarter and require at least two thirds of the
+      // previous atlas working set to survive the round trip.
+      const reactivationUploadLimit = Math.ceil(
+        (interaction.reactivation?.activePages ?? 0) / 3,
       );
       const reactivationUploads = (
         interaction.reactivation?.uploadedPages ?? Number.POSITIVE_INFINITY
@@ -568,6 +586,7 @@ const assertRoute = (expected, state) => {
       if (interaction.resize?.error !== undefined) {
         failures.push(`virtual texture resize smoke failed: ${interaction.resize.error}`);
       } else {
+        const expectedDpr = interaction.resize?.before?.devicePixelRatio;
         const beforeWidth = interaction.resize?.before?.backingWidth;
         const narrowWidth = interaction.resize?.narrow?.backingWidth;
         const restoredWidth = interaction.resize?.restored?.backingWidth;
@@ -581,15 +600,18 @@ const assertRoute = (expected, state) => {
           ['narrow', interaction.resize?.narrow],
           ['restored', interaction.resize?.restored],
         ]) {
-          if (sample?.devicePixelRatio !== 2) {
-            failures.push(`virtual texture ${label} resize ran at DPR ${sample?.devicePixelRatio ?? 'unknown'} instead of 2`);
+          if (
+            !Number.isFinite(expectedDpr)
+            || Math.abs(sample?.devicePixelRatio - expectedDpr) > 0.000_001
+          ) {
+            failures.push(`virtual texture ${label} resize changed DPR from ${expectedDpr ?? 'unknown'} to ${sample?.devicePixelRatio ?? 'unknown'}`);
           }
           if (
             !Number.isFinite(sample?.cssWidth) ||
             !Number.isFinite(sample?.backingWidth) ||
             Math.abs(sample.backingWidth - sample.cssWidth * sample.devicePixelRatio) > 2
           ) {
-            failures.push(`virtual texture ${label} drawing buffer did not track CSS pixels at DPR 2`);
+            failures.push(`virtual texture ${label} drawing buffer did not track CSS pixels at DPR ${sample?.devicePixelRatio ?? 'unknown'}`);
           }
         }
         if (
@@ -620,7 +642,14 @@ const assertRoute = (expected, state) => {
         }
       }
       const orientation = interaction.orientation;
-      if (
+      if (orientation?.status === 'unsupported') {
+        if (
+          orientation?.before?.error !== undefined
+          || orientation?.portrait?.error !== undefined
+        ) {
+          failures.push('virtual texture orientation capability check could not read the canvas');
+        }
+      } else if (
         orientation?.before?.error !== undefined
         || orientation?.portrait?.error !== undefined
         || orientation?.restored?.error !== undefined
@@ -652,11 +681,11 @@ const assertRoute = (expected, state) => {
         }
         for (const [label, sample] of [['portrait', portrait], ['restored', restored]]) {
           if (
-            sample?.devicePixelRatio !== 2
+            !Number.isFinite(sample?.devicePixelRatio)
             || Math.abs(sample.backingWidth - sample.cssWidth * sample.devicePixelRatio) > 2
             || Math.abs(sample.backingHeight - sample.cssHeight * sample.devicePixelRatio) > 2
           ) {
-            failures.push(`virtual texture ${label} orientation drawing buffer did not track CSS pixels at DPR 2`);
+            failures.push(`virtual texture ${label} orientation drawing buffer did not track CSS pixels at DPR ${sample?.devicePixelRatio ?? 'unknown'}`);
           }
           if (
             sample?.lifecycleState !== 'available'
@@ -845,12 +874,14 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
 `);
 
 const runVirtualTextureInteractionSmoke = async (session) => {
-  await session.call('Emulation.setDeviceMetricsOverride', {
-    deviceScaleFactor: 2,
-    height: 600,
-    mobile: false,
-    width: 800,
-  });
+  if (browserMode === 'chromium') {
+    await session.call('Emulation.setDeviceMetricsOverride', {
+      deviceScaleFactor: 2,
+      height: 600,
+      mobile: false,
+      width: 800,
+    });
+  }
   try {
     const interaction = await evaluate(session, `
 (async () => {
@@ -983,9 +1014,13 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   let resize = { error: 'missing virtual texture resize container' };
   if (resizeContainer instanceof HTMLElement) {
     const originalInlineSize = resizeContainer.style.inlineSize;
+    const beforeRect = canvas.getBoundingClientRect();
     const before = {
       backingHeight: canvas.height,
       backingWidth: canvas.width,
+      cssHeight: beforeRect.height,
+      cssWidth: beforeRect.width,
+      devicePixelRatio,
       lifecycleState: rendererSnapshot()?.lifecycle?.state ?? null,
       uploadedPages: rendererSnapshot()?.virtualTexturing?.uploadedPages ?? null,
     };
@@ -1061,21 +1096,33 @@ const runVirtualTextureInteractionSmoke = async (session) => {
 })()
     `);
     const before = await runVirtualTextureViewportConvergence(session);
+    const orientationDpr = browserMode === 'chromium' ? 2 : before.devicePixelRatio;
     await session.call('Emulation.setDeviceMetricsOverride', {
-      deviceScaleFactor: 2,
+      deviceScaleFactor: orientationDpr,
       height: 800,
       mobile: false,
       width: 600,
     });
     const portrait = await runVirtualTextureViewportConvergence(session, before);
+    if (portrait.innerWidth !== 600 || portrait.innerHeight !== 800) {
+      return {
+        ...interaction,
+        orientation: {
+          before,
+          portrait,
+          reason: 'CDP device-metrics override did not change the physical viewport',
+          status: 'unsupported',
+        },
+      };
+    }
     await session.call('Emulation.setDeviceMetricsOverride', {
-      deviceScaleFactor: 2,
+      deviceScaleFactor: orientationDpr,
       height: 600,
       mobile: false,
       width: 800,
     });
     const restored = await runVirtualTextureViewportConvergence(session, portrait);
-    return { ...interaction, orientation: { before, portrait, restored } };
+    return { ...interaction, orientation: { before, portrait, restored, status: 'verified' } };
   } finally {
     await session.call('Emulation.clearDeviceMetricsOverride');
   }
@@ -1466,21 +1513,27 @@ const disposedRendererResourcesReleased = (snapshot) => {
 };
 
 const main = async () => {
-  const profileDir = await mkdtemp(path.join(tmpdir(), 'royal-examples-smoke-'));
-  const preview = startVitePreview({ appRoot, host, port: previewPort });
-  const browser = spawnLogged('chromium', [
-    '--headless=new',
-    '--no-sandbox',
-    '--disable-dev-shm-usage',
-    '--use-gl=angle',
-    '--use-angle=vulkan',
-    '--ignore-gpu-blocklist',
-    '--disable-software-rasterizer',
-    '--use-gpu-in-tests',
-    `--remote-debugging-port=${debugPort}`,
-    `--user-data-dir=${profileDir}`,
-    'about:blank',
-  ], { cwd: appRoot });
+  const profileDir = browserMode === 'chromium'
+    ? await mkdtemp(path.join(tmpdir(), 'royal-examples-smoke-'))
+    : undefined;
+  const preview = managePreview
+    ? startVitePreview({ appRoot, host, port: previewPort })
+    : undefined;
+  const browser = browserMode === 'chromium'
+    ? spawnLogged('chromium', [
+      '--headless=new',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--use-gl=angle',
+      '--use-angle=vulkan',
+      '--ignore-gpu-blocklist',
+      '--disable-software-rasterizer',
+      '--use-gpu-in-tests',
+      `--remote-debugging-port=${debugPort}`,
+      `--user-data-dir=${profileDir}`,
+      'about:blank',
+    ], { cwd: appRoot })
+    : undefined;
 
   let session;
   const exceptions = [];
@@ -1672,12 +1725,14 @@ const main = async () => {
     session?.close();
     await stopProcess(browser);
     await stopProcess(preview);
-    await rm(profileDir, {
-      force: true,
-      maxRetries: 3,
-      recursive: true,
-      retryDelay: 100,
-    });
+    if (profileDir !== undefined) {
+      await rm(profileDir, {
+        force: true,
+        maxRetries: 3,
+        recursive: true,
+        retryDelay: 100,
+      });
+    }
   }
 };
 

@@ -94,5 +94,8 @@ CI runs both the built-entrypoint and packed-consumer gates.
    report gate requires successful activation and physical session frames rather
    than accepting window RAFs; Quest XR currently measures `47.5ms` p95 and logs
    one framebuffer-multisample `GL_INVALID_OPERATION` warning during setup.
-   Still cover context loss, camera pan, SVG/raster parity, window
-   resize/orientation, and memory-pressure eviction.
+   The July 15 Quest follow-up covers context restoration, camera pan, and
+   native-DPR CSS resize through the shared browser smoke harness. The Quest
+   browser does not implement CDP device-metrics overrides, so real physical
+   orientation remains outstanding rather than being simulated. Still cover
+   SVG/raster parity, physical orientation, and memory-pressure eviction.

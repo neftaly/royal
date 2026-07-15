@@ -70,6 +70,24 @@ EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
 pnpm --filter @royal/examples-react test:browser
 ```
 
+The same assertions can drive an already-open browser through a forwarded CDP
+endpoint without launching Chromium or a preview server:
+
+```sh
+EXAMPLES_SMOKE_DEBUG_PORT=9222 \
+EXAMPLES_SMOKE_BASE_URL=http://127.0.0.1:4674 \
+EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
+pnpm --filter @royal/examples-react test:browser:cdp
+```
+
+Set `EXAMPLES_SMOKE_DEBUG_HOST` when the endpoint is not local. Remote physical
+browsers keep their native DPR. If they do not implement CDP device-metrics
+overrides, the orientation subcheck reports that capability as unsupported
+while the real CSS resize check still runs; it never treats an ignored override
+as a successful orientation test. CDP commands have a 30-second default timeout,
+overridable with `EXAMPLES_SMOKE_CDP_TIMEOUT_MS`, so a sleeping device cannot
+stall the harness indefinitely.
+
 Fuller host report:
 
 ```sh
