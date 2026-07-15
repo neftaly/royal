@@ -87,6 +87,8 @@ describe("surface shader variants", () => {
 
       expect(source, kind).toContain("cross(basis[1], basis[2]) * normal.x");
       expect(source, kind).toContain("orthogonalizeSurfaceTangent(");
+      expect(source, kind).toContain("normalizeSurfaceDirection(");
+      expect(source, kind).toContain("lengthSquared > 0.0");
       expect(source, kind).toContain("localTangentHandedness *");
       expect(source, kind).not.toMatch(/__[A-Z0-9_]+__/u);
       if (kind.startsWith("surface-instanced-split")) {
@@ -153,6 +155,12 @@ describe("surface shader variants", () => {
       expect(source.match(/iblEnvironmentBrdf\(roughness, NdotV\)/gu)?.length, label).toBe(2);
       expect(source, `${label} energy-conserving diffuse`).toContain(
         "float diffuseEnergy = 1.0 - clamp(maxComponent(totalScattering), 0.0, 1.0);",
+      );
+      expect(source, `${label} scene-referred glTF emission`).toContain(
+        "materialEmissiveColor() * GLTF_EMISSIVE_REFERENCE_NITS",
+      );
+      expect(source, `${label} output-independent glTF emission`).not.toContain(
+        "u_toneMappingSettings.z > 0.5 ? GLTF_EMISSIVE_REFERENCE_NITS",
       );
       expect(source, `${label} multiscatter irradiance`).toContain(
         "+ cosineWeightedIrradiance * scattering.multi",

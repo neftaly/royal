@@ -106,6 +106,11 @@ vec3 orthogonalizeSurfaceTangent(vec3 tangent, vec3 normal) {
     : tangent;
 }
 
+vec3 normalizeSurfaceDirection(vec3 direction) {
+  float lengthSquared = dot(direction, direction);
+  return lengthSquared > 0.0 ? direction * inversesqrt(lengthSquared) : vec3(0.0);
+}
+
 void main() {
   vec3 localPosition = a_position;
   vec3 localNormal = a_normal;
@@ -119,13 +124,17 @@ void main() {
     ? -1.0
     : 1.0;
 
-  vec3 worldNormal = transformRootNormal(
-    transformSurfaceNormal(localModelBasis, localNormal, localModelHandedness),
-    rootHandedness
+  vec3 worldNormal = normalizeSurfaceDirection(
+    transformRootNormal(
+      transformSurfaceNormal(localModelBasis, localNormal, localModelHandedness),
+      rootHandedness
+    )
   );
-  vec3 worldTangent = orthogonalizeSurfaceTangent(
-    transformRootVector(localModelBasis * localTangent),
-    worldNormal
+  vec3 worldTangent = normalizeSurfaceDirection(
+    orthogonalizeSurfaceTangent(
+      transformRootVector(localModelBasis * localTangent),
+      worldNormal
+    )
   );
   v_normal = worldNormal;
   v_tangent = vec4(

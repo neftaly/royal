@@ -866,8 +866,10 @@ void main() {
   }
   lit += clusteredLightContribution(normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
 
-  float emissiveScale = u_toneMappingSettings.z > 0.5 ? GLTF_EMISSIVE_REFERENCE_NITS : 1.0;
-  lit += materialEmissiveColor() * emissiveScale;
+  // Keep glTF's relative emissive scale anchored to the same scene-referred
+  // display white in both paths. The HDR path is mapped by the presentation
+  // pass; the direct SDR path is mapped by outputMappedColor below.
+  lit += materialEmissiveColor() * GLTF_EMISSIVE_REFERENCE_NITS;
 
   float transmission = materialTransmissionFactor();
   if (__MATERIAL_TRANSMISSION_SCREEN_CONDITION__) {
