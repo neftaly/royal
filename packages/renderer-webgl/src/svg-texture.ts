@@ -60,12 +60,6 @@ export const svgVirtualTextureSourceForImage = (
   ? loadedSvgTextureSources.get(source)
   : undefined;
 
-/** Safari currently rejects Canvas pages derived from decoded SVG image sources. */
-export const supportsAutomaticSvgVirtualTexturePages = (
-  userAgent = globalThis.navigator?.userAgent ?? "",
-): boolean => !/AppleWebKit\//u.test(userAgent)
-  || /(?:Chrome|Chromium|Edg|OPR)\//u.test(userAgent);
-
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
 const positiveFiniteProduct = (left: number, right: number): number => {

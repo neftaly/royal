@@ -10,8 +10,8 @@ is `false`; Royal does not probe for a hidden `imageUri + '.vt.json'` sidecar.
 Decoded raster sources qualify when their longest dimension is at least 257 px.
 Browser-decoded SVG sources use the same page-source contract at a fixed
 16,384-texel long edge, preserving vector detail without allocating a full
-16K bitmap. Safari retains the ordinary SVG fallback because WebKit currently
-rejects the derived Canvas page path. The ordinary texture remains active
+16K bitmap. Generated pages use the same browser image-decode and origin-clean
+Canvas readback contract on every supported browser. The ordinary texture remains active
 until generated coverage is ready. Authored `virtualTexture(...)` resources
 are unaffected.
 

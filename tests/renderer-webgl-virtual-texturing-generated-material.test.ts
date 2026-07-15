@@ -228,7 +228,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
-  it("keeps Apple WebKit SVG sources on their ordinary fallback", async () => {
+  it("does not make automatic SVG VT policy depend on browser identity", async () => {
     vi.stubGlobal("navigator", {
       userAgent: "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
     });
@@ -252,14 +252,20 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     await flushMicrotasks();
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    root.render(renderScene(material));
+    for (let frame = 0; frame < 8 && contexts.length === 0; frame += 1) {
+      root.render(renderScene(material));
+      for (const image of ControlledImage.instances.slice(1)) {
+        if (!image.complete) image.settleLoad();
+      }
+      await flushMicrotasks();
+    }
 
-    expect(contexts).toHaveLength(0);
+    expect(contexts.length).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      automaticManifestUses: 0,
+      automaticManifestUses: 1,
       pageLoadFailures: 0,
-      pageLoadRequests: 0,
     }));
+    expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThan(0);
     expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
   });
 

@@ -6,7 +6,6 @@ import {
   isLoadedSvgTextureSource,
   loadSvgTextureFromUri,
   prepareSvgTextForImage,
-  supportsAutomaticSvgVirtualTexturePages,
   svgTextureViewport,
   svgVirtualTextureSourceForImage,
 } from "../packages/renderer-webgl/src/svg-texture";
@@ -143,14 +142,6 @@ describe("SVG texture reference lifecycle", () => {
     expect(objectUrlBlobs).toHaveLength(1);
   });
 
-  it("gates the known Apple WebKit canvas-source failure without hiding Chromium", () => {
-    expect(supportsAutomaticSvgVirtualTexturePages(
-      "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
-    )).toBe(false);
-    expect(supportsAutomaticSvgVirtualTexturePages(
-      "Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
-    )).toBe(true);
-  });
 });
 
 describe("SVG texture viewport normalization", () => {

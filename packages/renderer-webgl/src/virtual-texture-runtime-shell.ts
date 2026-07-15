@@ -42,7 +42,6 @@ import { resolveResourceUri, throwIfAborted } from "./resource-io";
 import {
   automaticSvgVirtualTextureManifest,
   loadAutomaticSvgVirtualTexturePageImage,
-  supportsAutomaticSvgVirtualTexturePages,
   svgVirtualTextureSourceForImage,
 } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
@@ -305,7 +304,6 @@ export class VirtualTextureRuntimeShell {
     if (retainedSourceBytes === undefined) return;
     const svgSource = svgVirtualTextureSourceForImage(source);
     if (svgSource !== undefined) {
-      if (!supportsAutomaticSvgVirtualTexturePages()) return;
       this.#autoSources.set(textureKey, automaticVirtualTextureSource(textureKey, {
         loadPage: (manifest, page, signal) => {
           throwIfAborted(signal);
