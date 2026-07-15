@@ -5,9 +5,9 @@ import {
   virtualTextureStoredPageBytes,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
-} from "../packages/renderer-webgl/src/virtual-texturing";
+} from "../packages/renderer-webgl/src/virtual-texture/model";
 import { stabilizeVirtualTextureDesiredPagesInto } from
-  "../packages/renderer-webgl/src/virtual-texture-demand";
+  "../packages/renderer-webgl/src/virtual-texture/demand";
 import {
   accumulateVirtualTextureGpuActivePagesByMip,
   accumulateVirtualTextureGpuCachedPagesByMip,
@@ -39,7 +39,7 @@ import {
   type VirtualTextureGpuPendingUpload,
   type VirtualTextureGpuResource,
   type VirtualTextureGpuResourceOptions,
-} from "../packages/renderer-webgl/src/webgl/virtual-texture-gpu-arena";
+} from "../packages/renderer-webgl/src/virtual-texture/gpu-arena";
 import {
   createTextureHandleArena,
   dropTextureHandleContext,

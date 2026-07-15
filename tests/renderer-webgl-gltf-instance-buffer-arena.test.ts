@@ -14,7 +14,7 @@ import {
   dropVertexInputArenaContext,
   restoreVertexInputArenaContext,
   vertexInputArenaSnapshot,
-} from "../packages/renderer-webgl/src/vertex-input-arena";
+} from "../packages/renderer-webgl/src/vertex-input/arena";
 
 type Handle = { readonly serial: number };
 

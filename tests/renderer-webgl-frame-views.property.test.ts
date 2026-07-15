@@ -3,7 +3,7 @@ import {
   appendFrameView,
   createFrameViews,
   resetFrameViews,
-} from "../packages/renderer-webgl/src/frame-views";
+} from "../packages/renderer-webgl/src/frame/views";
 import {
   identityMat4,
   multiplyMat4Into,

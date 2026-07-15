@@ -7,7 +7,7 @@ import {
   gltfGeometryDeclaration,
   normalizeGeometryDeclaration,
 } from "../packages/renderer-webgl/src/geometry-recipes";
-import { sameGeometryBytes } from "../packages/renderer-webgl/src/webgl/geometry-identity";
+import { sameGeometryBytes } from "../packages/renderer-webgl/src/vertex-input/geometry-identity";
 import { forEachFuzzCase } from "./fuzz";
 
 describe("WebGL geometry recipes", () => {

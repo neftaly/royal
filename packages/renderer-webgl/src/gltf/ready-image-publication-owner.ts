@@ -1,5 +1,5 @@
 import type { ImageBasedLightingRootFeature } from "../image-based-lighting-feature";
-import { OrdinaryTextureResidencyController } from "../ordinary-texture-residency-controller";
+import { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
 import {
   publishResourceArenaContentKey,
   rekeyPreparedAssetOrdinaryTextures,

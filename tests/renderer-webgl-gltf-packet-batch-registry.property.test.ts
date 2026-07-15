@@ -27,7 +27,7 @@ import {
   FRAME_PACKET_SIDEDNESS,
   NO_FRAME_PACKET_ID,
   type FramePacketRenderClass,
-} from "../packages/renderer-webgl/src/frame-packets";
+} from "../packages/renderer-webgl/src/frame/packets";
 import { forEachFuzzCase } from "./fuzz";
 
 type TupleSpec = GltfPacketBatchTuple;

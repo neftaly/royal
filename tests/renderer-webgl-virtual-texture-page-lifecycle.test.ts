@@ -7,7 +7,7 @@ import {
   virtualTexturePageLifecycleRetryBlocked,
   type VirtualTexturePageLifecycle,
   type VirtualTexturePageLifecycleEvent,
-} from "../packages/renderer-webgl/src/virtual-texture-page-lifecycle";
+} from "../packages/renderer-webgl/src/virtual-texture/page-lifecycle";
 
 const policy = { retryBaseDelayMs: 50, retryLimit: 2 } as const;
 

@@ -44,7 +44,7 @@ describe("lazy virtual-texture feature", () => {
     root.render(graph);
     expect(requests).toEqual([]);
 
-    await import("../packages/renderer-webgl/src/virtual-texture-feature-owner");
+    await import("../packages/renderer-webgl/src/virtual-texture/feature-owner");
     for (let attempt = 0; attempt < 80 && requests.length === 0; attempt += 1) {
       await Promise.resolve();
       root.render(graph);

@@ -17,7 +17,7 @@ import {
   diffResourceManifests,
   type FramePlan,
   type FramePlanResourceManifest,
-} from "../packages/renderer-webgl/src/frame-plan";
+} from "../packages/renderer-webgl/src/frame/plan";
 import { SceneBindingRegistry } from "../packages/renderer-webgl/src/scene-binding-registry";
 import { forEachFuzzCase } from "./fuzz";
 

@@ -5,7 +5,7 @@ import {
   sameArrayViewBytes,
   sameGeometryBytes,
   type GeometryByteLayout,
-} from "../packages/renderer-webgl/src/webgl/geometry-identity";
+} from "../packages/renderer-webgl/src/vertex-input/geometry-identity";
 import { forEachFuzzCase } from "./fuzz";
 
 type GeometryEntry = {

@@ -5,7 +5,7 @@ import type {
   CountedGltfRequest,
   CountedTextureDeclaration,
   ResourceManifestDelta,
-} from "./frame-plan";
+} from "./frame/plan";
 import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
   normalizeGeometryDeclaration,
@@ -19,8 +19,8 @@ import {
   type PreparedGltfAssetSnapshot,
   type PreparedGltfAssetSubscription,
 } from "./gltf/prepared-asset";
-import type { LoadedTextureSource } from "./texture-sources";
-import { sameGeometryBytes } from "./webgl/geometry-identity";
+import type { LoadedTextureSource } from "./texture/sources";
+import { sameGeometryBytes } from "./vertex-input/geometry-identity";
 
 export interface PreparedTextureSource {
   readonly source: LoadedTextureSource;
@@ -471,7 +471,7 @@ const applyTextureSceneDelta = <Texture>(
 
 const applyGeometrySceneDelta = (
   arena: ResourceArena,
-  row: import("./frame-plan").CountedKeyDelta<CountedDirectGeometryDeclaration>,
+  row: import("./frame/plan").CountedKeyDelta<CountedDirectGeometryDeclaration>,
   result: MutableResourceArenaChanges,
 ): void => {
   const arenaState = arena as unknown as ResourceArenaState;
@@ -552,7 +552,7 @@ export const applyResourceDelta = (
     }
   }
   const validateTextureRows = <Texture>(
-    rows: readonly import("./frame-plan").CountedKeyDelta<CountedTextureDeclaration<Texture>>[],
+    rows: readonly import("./frame/plan").CountedKeyDelta<CountedTextureDeclaration<Texture>>[],
     retained: ReadonlyMap<string, TextureDeclaration<Texture>>,
     label: string,
   ): void => {

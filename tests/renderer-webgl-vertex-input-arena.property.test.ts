@@ -20,13 +20,13 @@ import {
   uploadVertexInputInstanceLane,
   VertexInputGpuUploadCapacityError,
   type VertexInputGpuGovernor,
-} from "../packages/renderer-webgl/src/vertex-input-arena";
+} from "../packages/renderer-webgl/src/vertex-input/arena";
 import {
   vertexInputInstanceBufferLayout,
   vertexInputInstanceLaneStride,
   vertexInputInstanceLaneUploadBytes,
   type VertexInputInstanceLane,
-} from "../packages/renderer-webgl/src/vertex-input-instance-plan";
+} from "../packages/renderer-webgl/src/vertex-input/instance-plan";
 import { forEachFuzzCase } from "./fuzz";
 
 type Handle = { readonly kind: "buffer" | "vao"; readonly serial: number };

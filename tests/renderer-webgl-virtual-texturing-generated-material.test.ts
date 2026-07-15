@@ -8,7 +8,7 @@ import {
 import {
   VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
   VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
-} from "../packages/renderer-webgl/src/virtual-texture-runtime";
+} from "../packages/renderer-webgl/src/virtual-texture/runtime";
 import {
   createWebGlRoot,
   fakeCanvas,

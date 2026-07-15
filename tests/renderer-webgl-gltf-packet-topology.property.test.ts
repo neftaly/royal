@@ -14,7 +14,7 @@ import {
   FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
   NO_FRAME_PACKET_ID,
-} from "../packages/renderer-webgl/src/frame-packets";
+} from "../packages/renderer-webgl/src/frame/packets";
 import type { LoadedGltfMaterial } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import type { Mat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {

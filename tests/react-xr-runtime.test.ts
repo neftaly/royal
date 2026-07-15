@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createXrSessionStore, type XrFrame, type XrSession } from "@royal/react/xr";
-import { createXrSessionRuntimeWithRenderer } from "../packages/react/src/xr-runtime";
+import { createXrSessionRuntimeWithRenderer } from "../packages/react/src/xr/runtime";
 import { fakeRendererRoot } from "./react-test-fixtures";
 import type { RoyalRendererRootLifecycleSnapshot } from "../packages/react/src/root";
-import type { XrSessionRenderer } from "../packages/react/src/xr-renderer";
+import type { XrSessionRenderer } from "../packages/react/src/xr/renderer";
 
 type Deferred<Value> = {
   readonly promise: Promise<Value>;

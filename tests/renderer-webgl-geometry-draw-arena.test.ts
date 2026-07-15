@@ -8,7 +8,7 @@ import {
   retainVertexInputGeometry,
   uploadVertexInputInstanceLane,
   vertexInputGeometry,
-} from "../packages/renderer-webgl/src/vertex-input-arena";
+} from "../packages/renderer-webgl/src/vertex-input/arena";
 import {
   clearGeometryDrawArenaContext,
   createGeometryDrawArena,
@@ -16,7 +16,7 @@ import {
   prepareGeometryInstancedDraw,
   submitGeometryInstancedDraw,
 } from "../packages/renderer-webgl/src/webgl/geometry-draw-arena";
-import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/webgl/vertex-attribute-abi";
+import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/vertex-input/attribute-abi";
 
 type Handle = { readonly kind: "buffer" | "vao"; readonly serial: number };
 type DrawCall =

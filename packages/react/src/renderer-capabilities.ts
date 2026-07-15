@@ -2,7 +2,7 @@ import type {
   XrSession,
   XrSessionRenderer,
   XrSessionRendererOptions,
-} from "./xr-renderer-model";
+} from "./xr/renderer-model";
 
 /** Ownership token for an external renderer frame clock. */
 export interface RoyalRendererFrameClock {

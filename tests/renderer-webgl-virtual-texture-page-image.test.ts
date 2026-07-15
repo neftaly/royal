@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   validateVirtualTexturePageImage,
   virtualTexturePageImageDimensions,
-} from "../packages/renderer-webgl/src/virtual-texture-page-image";
-import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
+} from "../packages/renderer-webgl/src/virtual-texture/page-image";
+import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
 
 const manifest: VirtualTextureManifestModel = {
   borderTexels: 2,

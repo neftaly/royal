@@ -4,7 +4,7 @@ import type {
   TextureSampler,
 } from "@royal/renderer-core";
 import { monotonicNowMs, type MonotonicClock } from "../clock";
-import type { LoadedTextureSource } from "../texture-sources";
+import type { LoadedTextureSource } from "../texture/sources";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import type {
   SurfaceImageBasedLight,

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, vi } from "vitest";
-import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/virtual-texture/lazy-feature";
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { preloadClusteredLightingFeature } from "../packages/renderer-webgl/src/lazy-clustered-lighting-feature";
 

@@ -8,7 +8,7 @@ import {
   type VertexInputInstanceAllocation,
   type VertexInputInstanceLaneUploadStats,
   type VertexInputInstanceStaging,
-} from "./vertex-input-arena";
+} from "./vertex-input/arena";
 import {
   isPackedInstanceSlotDirty,
   type GltfInstanceChangeTracker,

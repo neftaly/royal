@@ -4,7 +4,7 @@ import {
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   type LoadedTextureSource,
-} from "../texture-sources";
+} from "../texture/sources";
 import { prepareTextureUpload } from "./imperative-state";
 import type { TextureAssetUploadRef } from "./materials";
 

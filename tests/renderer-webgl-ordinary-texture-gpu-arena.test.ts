@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type { TextureAssetUploadRef } from "../packages/renderer-webgl/src/webgl/materials";
 import {
   clearOrdinaryTextureGpuOutcomes,
@@ -19,7 +19,7 @@ import {
   queueOrdinaryTextureUpload,
   releaseOrdinaryTextureGpuResource,
   wakeOrdinaryTextureGpuUploads,
-} from "../packages/renderer-webgl/src/webgl/ordinary-texture-gpu-arena";
+} from "../packages/renderer-webgl/src/texture/ordinary-gpu-arena";
 import {
   createTextureHandleArena,
   ownsTexture,

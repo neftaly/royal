@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WebGlContextCapabilityOwner } from "../packages/renderer-webgl/src/context-capability-owner";
+import { WebGlContextCapabilityOwner } from "../packages/renderer-webgl/src/context/capability-owner";
 import { createStrictWebGl2Context } from "./webgl-test-harness";
 
 describe("WebGlContextCapabilityOwner", () => {

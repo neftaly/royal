@@ -1,7 +1,7 @@
-import type { DecodedTextureSourceLifetime } from "./decoded-texture-source-lifetime";
+import type { DecodedTextureSourceLifetime } from "./texture/decoded-source-lifetime";
 import type { ResourceArena } from "./resource-arena";
 import type { WebGlContextLifecycle } from "./root-types";
-import type { LoadedTextureSource } from "./texture-sources";
+import type { LoadedTextureSource } from "./texture/sources";
 import type { SurfaceExecutionSignals } from "./webgl/surface-execution-arena";
 import type {
   IblSpecularTextureResource,

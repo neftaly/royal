@@ -8,7 +8,7 @@ import {
   resetVirtualTextureRequestScheduler,
   virtualTextureRequestBudgetAvailable,
   type VirtualTextureRequestResourceSnapshot,
-} from "../packages/renderer-webgl/src/virtual-texture-orchestration";
+} from "../packages/renderer-webgl/src/virtual-texture/orchestration";
 
 const resource = (
   key: string,

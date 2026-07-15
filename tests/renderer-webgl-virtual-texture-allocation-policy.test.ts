@@ -3,8 +3,8 @@ import {
   maximumVirtualTexturePageTableUploadBytes,
   selectColdVirtualTextureAllocation,
   type VirtualTextureAllocationCandidate,
-} from "../packages/renderer-webgl/src/virtual-texture-allocation-policy";
-import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
+} from "../packages/renderer-webgl/src/virtual-texture/allocation-policy";
+import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
 
 const candidate = (
   state: string,

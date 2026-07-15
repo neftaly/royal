@@ -17,7 +17,7 @@ import {
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { vertexShaderSource } from "../packages/renderer-webgl/src/webgl/shaders";
-import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/webgl/vertex-attribute-abi";
+import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/vertex-input/attribute-abi";
 
 type CanvasSize = {
   readonly width: number;

@@ -16,7 +16,7 @@ import {
   virtualTexturePagesForFootprint,
   virtualTextureTargetMip,
   virtualTextureDemandPlanningWorkspaceSnapshot,
-} from "../packages/renderer-webgl/src/virtual-texture-demand";
+} from "../packages/renderer-webgl/src/virtual-texture/demand";
 import { perspectiveCamera } from "@royal/renderer-core";
 import {
   identityMat4,
@@ -25,8 +25,8 @@ import {
   viewMat4,
   type Mat4,
 } from "../packages/renderer-webgl/src/math/mat4";
-import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture-runtime";
-import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
+import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture/runtime";
+import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
 import { forEachFuzzCase } from "./fuzz";
 
 const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({

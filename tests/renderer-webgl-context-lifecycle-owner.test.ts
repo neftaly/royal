@@ -3,12 +3,12 @@ import type {
   WebGlContextLifecycle,
   WebGlContextSnapshot,
 } from "../packages/renderer-webgl/src/root-types";
-import { WebGlContextLifecycleOwner } from "../packages/renderer-webgl/src/context-lifecycle-owner";
+import { WebGlContextLifecycleOwner } from "../packages/renderer-webgl/src/context/lifecycle-owner";
 import {
   initialWebGlContextSnapshot,
   reduceWebGlContextLifecycle,
   type WebGlContextLifecycleEvent,
-} from "../packages/renderer-webgl/src/context-lifecycle";
+} from "../packages/renderer-webgl/src/context/lifecycle";
 import { forEachFuzzCase } from "./fuzz";
 
 describe("WebGL context lifecycle owner", () => {

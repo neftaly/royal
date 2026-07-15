@@ -7,7 +7,7 @@ import {
   resourceArenaSourceReferenceCount,
   retainResourceArenaIblSource,
 } from "./resource-arena";
-import type { LoadedTextureSource } from "./texture-sources";
+import type { LoadedTextureSource } from "./texture/sources";
 import type { SurfaceExecutionSignals } from "./webgl/surface-execution-arena";
 import type {
   IblSpecularTextureResource,

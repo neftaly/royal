@@ -5,7 +5,7 @@ import {
   diffResourceManifests,
   gltfRequestKey,
   type FramePlanResourceManifest,
-} from "../packages/renderer-webgl/src/frame-plan";
+} from "../packages/renderer-webgl/src/frame/plan";
 import {
   directGeometryDeclaration,
   directGeometryDeclarationKey,
@@ -35,14 +35,14 @@ import {
   updatePreparedAssetManifest,
 } from "../packages/renderer-webgl/src/resource-arena";
 import type { PreparedGltfAsset } from "../packages/renderer-webgl/src/gltf/prepared-asset";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import { claimMonotonicId, MAX_RESOURCE_ID } from "../packages/renderer-webgl/src/resource-id";
 import {
   createVertexInputArena,
   releaseLostVertexInputGeometry,
   retainVertexInputGeometry,
   vertexInputArenaSnapshot,
-} from "../packages/renderer-webgl/src/vertex-input-arena";
+} from "../packages/renderer-webgl/src/vertex-input/arena";
 import { fuzzCaseCount, runFuzzTraces, SeededRandom } from "./fuzz";
 const emptyManifest = (): FramePlanResourceManifest => ({
   bulkInstances: [],

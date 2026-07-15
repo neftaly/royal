@@ -11,12 +11,12 @@ import {
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES,
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS,
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES,
-} from "../packages/renderer-webgl/src/virtual-texture-frame-demand";
+} from "../packages/renderer-webgl/src/virtual-texture/frame-demand";
 import {
   selectVirtualTextureFrameWorkingSet,
   type VirtualTextureDemandSubmission,
-} from "../packages/renderer-webgl/src/virtual-texture-demand";
-import type { VirtualTexturePageId } from "../packages/renderer-webgl/src/virtual-texturing";
+} from "../packages/renderer-webgl/src/virtual-texture/demand";
+import type { VirtualTexturePageId } from "../packages/renderer-webgl/src/virtual-texture/model";
 import { forEachFuzzCase } from "./fuzz";
 
 const page = (x: number, mip = 0): VirtualTexturePageId => ({ mip, x, y: 0 });

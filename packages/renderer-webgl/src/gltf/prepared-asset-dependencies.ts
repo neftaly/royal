@@ -1,5 +1,5 @@
 import type { TextureContentKey } from "@royal/renderer-core";
-import type { CountedTextureDeclaration } from "../frame-plan";
+import type { CountedTextureDeclaration } from "../frame/plan";
 import {
   geometryDeclarationBucketKey,
   gltfGeometryDeclaration,

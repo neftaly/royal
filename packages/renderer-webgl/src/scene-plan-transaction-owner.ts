@@ -7,7 +7,7 @@ import {
   type FramePlan,
   type FramePlanResourceManifest,
   type ResourceManifestDelta,
-} from "./frame-plan";
+} from "./frame/plan";
 import {
   surfaceLightSet,
   type SurfaceLight,

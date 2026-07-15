@@ -5,9 +5,9 @@ import {
 import {
   createOrbitCameraController,
   createOrbitControls,
-} from "../packages/react/src/orbit-controls";
-import { validateUseOrbitCameraOptions } from "../packages/react/src/orbit-camera-controller";
-import { createOrbitGestureController } from "../packages/react/src/orbit-controls-core";
+} from "../packages/react/src/orbit/controls";
+import { validateUseOrbitCameraOptions } from "../packages/react/src/orbit/camera-controller";
+import { createOrbitGestureController } from "../packages/react/src/orbit/controls-core";
 
 type FakeEvent = Event & {
   readonly defaultPrevented: boolean;

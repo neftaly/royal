@@ -4,8 +4,8 @@ import {
   type VertexInputArena,
   type VertexInputGeometry,
   type VertexInputInstanceAllocation,
-} from "../vertex-input-arena";
-import { VERTEX_ATTRIBUTE } from "./vertex-attribute-abi";
+} from "../vertex-input/arena";
+import { VERTEX_ATTRIBUTE } from "../vertex-input/attribute-abi";
 
 declare const authority: unique symbol;
 export interface GeometryDrawArena { readonly [authority]: "GeometryDrawArena" }

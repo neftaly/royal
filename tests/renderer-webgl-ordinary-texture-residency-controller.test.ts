@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { DecodedTextureSourceLifetime } from "../packages/renderer-webgl/src/decoded-texture-source-lifetime";
-import type { ResourceManifestDelta } from "../packages/renderer-webgl/src/frame-plan";
-import { OrdinaryTextureResidencyController } from "../packages/renderer-webgl/src/ordinary-texture-residency-controller";
-import type { OrdinaryTextureSourceRequest } from "../packages/renderer-webgl/src/ordinary-texture-source-store";
+import { DecodedTextureSourceLifetime } from "../packages/renderer-webgl/src/texture/decoded-source-lifetime";
+import type { ResourceManifestDelta } from "../packages/renderer-webgl/src/frame/plan";
+import { OrdinaryTextureResidencyController } from "../packages/renderer-webgl/src/texture/ordinary-residency-controller";
+import type { OrdinaryTextureSourceRequest } from "../packages/renderer-webgl/src/texture/ordinary-source-store";
 import {
   applyResourceDelta,
   createResourceArena,
   resourceArenaSourceReferenceCount,
   type ResourceArena,
 } from "../packages/renderer-webgl/src/resource-arena";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type { TextureAssetUploadRef } from "../packages/renderer-webgl/src/webgl/materials";
 import { textureCacheKey } from "../packages/renderer-webgl/src/webgl/materials";
 import { createTextureHandleArena } from "../packages/renderer-webgl/src/webgl/texture-handle-arena";

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DecodedTextureSourceLifetime,
   decodedTextureSourceBytes,
-} from "../packages/renderer-webgl/src/decoded-texture-source-lifetime";
+} from "../packages/renderer-webgl/src/texture/decoded-source-lifetime";
 import type { ResourceGovernorLease } from "../packages/renderer-webgl/src/resource-governor";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 
 const decoded = (width = 2, height = 2): LoadedTextureSource => ({
   data: new Uint8Array(width * height * 4),

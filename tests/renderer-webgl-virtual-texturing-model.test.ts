@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   generatedRasterVirtualTextureManifest,
-} from "../packages/renderer-webgl/src/automatic-virtual-texture-source";
+} from "../packages/renderer-webgl/src/virtual-texture/automatic-source";
 import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,
@@ -14,7 +14,7 @@ import {
   virtualTexturePageUri,
   virtualTextureStoredPageBytes,
   virtualTextureStoredPageSize,
-} from "../packages/renderer-webgl/src/virtual-texturing";
+} from "../packages/renderer-webgl/src/virtual-texture/model";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 type FuzzPage = {

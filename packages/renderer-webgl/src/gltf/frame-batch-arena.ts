@@ -24,7 +24,7 @@ import {
   createGltfPacketSubmissionWorkspace,
   type GltfPacketSubmissionWorkspace,
 } from "../gltf-packet-submission-workspace";
-import { FRAME_PACKET_SIDEDNESS, NO_FRAME_PACKET_ID } from "../frame-packets";
+import { FRAME_PACKET_SIDEDNESS, NO_FRAME_PACKET_ID } from "../frame/packets";
 import type { CpuGeometry } from "../geometry-recipes";
 import { identityMat4, type Mat4, type MutableMat4 } from "../math/mat4";
 import { readPacketLocalModelInto } from "../packet-resource-tables";
@@ -33,7 +33,7 @@ import {
   type VertexInputArena,
   type VertexInputGeometry,
   type VertexInputInstanceAllocation,
-} from "../vertex-input-arena";
+} from "../vertex-input/arena";
 import {
   combineSurfaceLightSets,
   type SurfaceLightSet,

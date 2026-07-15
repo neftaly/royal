@@ -13,18 +13,18 @@ import {
 import {
   attachCanvasPointerEventHandlers,
   reconcileCanvasPointerInteractionScene,
-} from "../packages/react/src/canvas-pointer-events";
-import { createCanvasPointerInteractionState } from "../packages/react/src/canvas-pointer-interaction";
+} from "../packages/react/src/interaction/canvas-pointer-events";
+import { createCanvasPointerInteractionState } from "../packages/react/src/interaction/canvas-pointer-interaction";
 import {
   createRoyalPointerEvent,
   type RoyalPointerEvent,
-} from "../packages/react/src/picking-events";
-import { createOrbitControls } from "../packages/react/src/orbit-controls";
+} from "../packages/react/src/interaction/picking-events";
+import { createOrbitControls } from "../packages/react/src/orbit/controls";
 import {
   createRoyalScenePickingIndex,
   createRoyalScenePointerEventRegistry,
   type ScenePointerEvents,
-} from "../packages/react/src/scene-interactions";
+} from "../packages/react/src/interaction/scene-interactions";
 import { fakeCanvas, fakeRendererRoot } from "./react-test-fixtures";
 
 const perspectiveProps = {

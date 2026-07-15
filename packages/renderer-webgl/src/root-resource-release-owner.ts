@@ -1,6 +1,6 @@
-import type { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
+import type { OrdinaryTextureResidencyController } from "./texture/ordinary-residency-controller";
 import type { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
-import type { VirtualTextureFeature } from "./virtual-texture-feature";
+import type { VirtualTextureFeature } from "./virtual-texture/feature";
 import { captureFailure, captureFirstFailure } from "./captured-failure";
 
 type RootResourceReleaseOwnerOptions = {

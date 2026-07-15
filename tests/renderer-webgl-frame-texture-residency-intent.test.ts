@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FrameTextureResidencyIntent } from "../packages/renderer-webgl/src/frame-texture-residency-intent";
+import { FrameTextureResidencyIntent } from "../packages/renderer-webgl/src/frame/texture-residency-intent";
 import { forEachFuzzCase } from "./fuzz";
 
 describe("frame texture residency intent", () => {

@@ -4,9 +4,9 @@ import {
   ordinaryTextureSourceKey,
   type OrdinaryTextureSourceDeliveryFailure,
   type OrdinaryTextureSourceSubscription,
-} from "../packages/renderer-webgl/src/ordinary-texture-source-store";
+} from "../packages/renderer-webgl/src/texture/ordinary-source-store";
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import { runFuzzTraces, type SeededRandom } from "./fuzz";
 import { ResourceGovernorCpuCapacityError } from "../packages/renderer-webgl/src/resource-governor";
 type DeferredLoad = {

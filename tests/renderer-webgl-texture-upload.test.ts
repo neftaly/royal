@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type { TextureAssetUploadRef } from "../packages/renderer-webgl/src/webgl/materials";
 import {
   samplerConstant,

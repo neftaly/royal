@@ -13,7 +13,7 @@ import type {
   LoadedGltfMaterial,
 } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,

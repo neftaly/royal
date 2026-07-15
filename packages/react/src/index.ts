@@ -6,7 +6,7 @@ export {
   useInvalidate,
 } from './canvas';
 export type { CanvasProps } from './canvas';
-export type { ScenePointerEvents } from './scene-interactions';
+export type { ScenePointerEvents } from './interaction/scene-interactions';
 export type {
   GltfInstancesPickTarget,
   GltfPickTarget,
@@ -35,30 +35,30 @@ export { useRendererLifecycle } from './renderer-lifecycle';
 
 export {
   OrbitControls,
-} from './orbit-controls';
+} from './orbit/controls';
 export {
   useOrbitCamera,
   useOrbitCameraView,
-} from './orbit-camera-controller';
+} from './orbit/camera-controller';
 export type {
   OrbitCameraController,
   OrbitCameraProjection,
   UseOrbitCameraOptions,
-} from './orbit-camera-controller';
+} from './orbit/camera-controller';
 export type {
   OrbitCameraView,
   OrbitCameraViewOptions,
   OrbitControlsBehaviorOptions,
   OrbitControlsProps,
   WorldPosition3,
-} from './orbit-controls';
+} from './orbit/controls';
 
 export type {
   RoyalPointerEvent,
   RoyalPointerEventHandler,
   RoyalPointerEventHandlers,
   RoyalPointerEventType,
-} from './picking-events';
+} from './interaction/picking-events';
 
 export { createRendererRoot } from './root';
 export type {

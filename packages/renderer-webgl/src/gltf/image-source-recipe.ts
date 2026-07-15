@@ -1,11 +1,11 @@
 import type { TextureContentKey } from "@royal/renderer-core";
-import { loadHtmlImage } from "../browser-image-loader";
-import { closeDecodedTextureSource } from "../decoded-texture-source-lifetime";
+import { loadHtmlImage } from "../texture/browser-image-loader";
+import { closeDecodedTextureSource } from "../texture/decoded-source-lifetime";
 import {
   abortError,
   resolveResourceUri,
 } from "../resource-io";
-import type { LoadedTextureSource } from "../texture-sources";
+import type { LoadedTextureSource } from "../texture/sources";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
 import {
   dataUriMediaType,
@@ -210,7 +210,7 @@ export const loadGltfImageSourceRecipe = async (
       image: await loadBitmap(source.bytes, source.mimeType, signal),
     };
     case "svg-uri": {
-      const { loadSvgTextureFromUri } = await import("../svg-texture");
+      const { loadSvgTextureFromUri } = await import("../texture/svg");
       const loaded = await loadSvgTextureFromUri(source.uri, signal);
       return {
         contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),
@@ -218,7 +218,7 @@ export const loadGltfImageSourceRecipe = async (
       };
     }
     case "svg-bytes": {
-      const { loadSvgTextureFromBytes } = await import("../svg-texture");
+      const { loadSvgTextureFromBytes } = await import("../texture/svg");
       const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, signal);
       return {
         contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),

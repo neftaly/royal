@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DecodedTextureSourceLifetime } from "../packages/renderer-webgl/src/decoded-texture-source-lifetime";
+import type { DecodedTextureSourceLifetime } from "../packages/renderer-webgl/src/texture/decoded-source-lifetime";
 import { LazyImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import {
   createResourceArena,
   disposeResourceArena,
   resourceArenaSourceReferenceCount,
 } from "../packages/renderer-webgl/src/resource-arena";
-import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 
 describe("lazy image-based-lighting feature", () => {
   it("retains decoded glTF faces synchronously while its GPU module is unavailable", () => {

@@ -1,5 +1,5 @@
 import type { Material, TextureSampler } from "@royal/renderer-core";
-import type { FrameTextureResidencyIntent } from "../frame-texture-residency-intent";
+import type { FrameTextureResidencyIntent } from "../frame/texture-residency-intent";
 import {
   toneMappingShaderMode,
   type SurfaceToneMappingState,
@@ -7,15 +7,15 @@ import {
 import type { GltfFrameBatchArena, GltfFrameBatchCounters, GltfFrameDrawBatch } from "../gltf/frame-batch-arena";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
 import { multiplyMat4, type Mat4 } from "../math/mat4";
-import type { OrdinaryTextureResidencyController } from "../ordinary-texture-residency-controller";
+import type { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
 import {
   copyTransmissionScreenColorTexture,
   type ScreenColorTextureResource,
   type SurfaceRenderTargetArena,
 } from "../surface-render-target-arena";
-import type { BaseColorTextureResidency, ViewportSize, VirtualTextureRuntimeState } from "../virtual-texture-runtime";
-import type { VertexInputGeometry } from "../vertex-input-arena";
-import type { VirtualTextureGpuBinding } from "./virtual-texture-gpu-arena";
+import type { BaseColorTextureResidency, ViewportSize, VirtualTextureRuntimeState } from "../virtual-texture/runtime";
+import type { VertexInputGeometry } from "../vertex-input/arena";
+import type { VirtualTextureGpuBinding } from "../virtual-texture/gpu-arena";
 import type { ClusteredLightingFeature } from "../clustered-lighting-feature";
 import {
   drawGeometry,
@@ -43,7 +43,7 @@ import {
   type SurfaceMaterialTextureCoordinates,
   type TextureAssetUploadRef,
 } from "./materials";
-import type { OrdinaryTextureGpuResource } from "./ordinary-texture-gpu-arena";
+import type { OrdinaryTextureGpuResource } from "../texture/ordinary-gpu-arena";
 import {
   consumeProgramArenaWake,
   requestProgram,

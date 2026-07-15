@@ -3,7 +3,7 @@ import {
   FRAME_PACKET_SIDEDNESS,
   NO_FRAME_PACKET_ID,
   type FramePacketRenderClass,
-} from "../frame-packets";
+} from "../frame/packets";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
 import {
   appendGltfPacketSubmission,
@@ -33,7 +33,7 @@ import { SceneBindingRegistry } from "../scene-binding-registry";
 import {
   vertexInputGeometry,
   type VertexInputArena,
-} from "../vertex-input-arena";
+} from "../vertex-input/arena";
 import { SurfaceLightResolver } from "../surface-light-resolver";
 import type { SurfaceLightSet } from "../webgl/lights";
 import { GltfFrameBatchArena, type GltfFrameDrawBatch } from "./frame-batch-arena";

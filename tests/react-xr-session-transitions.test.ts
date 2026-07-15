@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createInitialXrSessionStoreData,
   reduceXrSessionStoreData,
-} from "../packages/react/src/xr-session-transitions";
+} from "../packages/react/src/xr/session-transitions";
 
 type Session = { readonly id: string };
 

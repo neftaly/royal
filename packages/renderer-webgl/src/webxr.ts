@@ -10,7 +10,7 @@ import {
   createFrameViews,
   resetFrameViews,
   type FrameViews,
-} from "./frame-views";
+} from "./frame/views";
 import {
   rendererOwnedWebGl2Context,
   type RendererOwnedWebGl2Context,

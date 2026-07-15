@@ -4,17 +4,17 @@ import {
   clearVirtualTextureCoverageProviderCache,
   createVirtualTextureCoverageProviderCache,
   releaseVirtualTextureCoverageProviders,
-} from "../packages/renderer-webgl/src/virtual-texture-coverage-cache";
+} from "../packages/renderer-webgl/src/virtual-texture/coverage-cache";
 import {
   createVirtualTextureDemandPlanningWorkspace,
   planVirtualTextureDrawDemand,
   prepareVirtualTextureCoverageProvider,
   projectVirtualTextureScreenFootprint,
-} from "../packages/renderer-webgl/src/virtual-texture-demand";
+} from "../packages/renderer-webgl/src/virtual-texture/demand";
 import { identityMat4, translationMat4, type Mat4 } from "../packages/renderer-webgl/src/math/mat4";
 import type { CpuGeometry } from "../packages/renderer-webgl/src/geometry-recipes";
-import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture-runtime";
-import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
+import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture/runtime";
+import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
 
 const positions = (): Float32Array => new Float32Array([
   -1, -1, 0,

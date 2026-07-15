@@ -18,17 +18,17 @@ import {
 } from "./canvas-renderer-runtime";
 import {
   createCanvasPointerInteractionState,
-} from "./canvas-pointer-interaction";
+} from "./interaction/canvas-pointer-interaction";
 import {
   attachCanvasPointerEventHandlers,
   reconcileCanvasPointerInteractionScene,
-} from "./canvas-pointer-events";
+} from "./interaction/canvas-pointer-events";
 import { FrameLoopContext } from "./frame";
 import {
   createRoyalScenePickingIndex,
   createRoyalScenePointerEventRegistry,
   type ScenePointerEvents,
-} from "./scene-interactions";
+} from "./interaction/scene-interactions";
 import {
   type RendererOptions,
   type RoyalRendererRoot,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OrdinaryTextureGpuOwner } from "../packages/renderer-webgl/src/ordinary-texture-gpu-owner";
+import { OrdinaryTextureGpuOwner } from "../packages/renderer-webgl/src/texture/ordinary-gpu-owner";
 
 describe("ordinary texture GPU owner", () => {
   it("skips the complete upload transaction while residency is idle", () => {

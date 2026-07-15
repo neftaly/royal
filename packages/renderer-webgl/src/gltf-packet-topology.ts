@@ -10,7 +10,7 @@ import {
   type FramePacketCatalog,
   type FramePacketLodRequirements,
   type FramePacketRenderClass,
-} from "./frame-packets";
+} from "./frame/packets";
 import type { LoadedGltfMaterial } from "./gltf/prepared-asset";
 import type { Mat4 } from "./math/mat4";
 import type { Bounds3 } from "./math/picking";

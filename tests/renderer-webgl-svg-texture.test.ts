@@ -8,7 +8,7 @@ import {
   prepareSvgTextForImage,
   svgTextureViewport,
   svgVirtualTextureSourceForImage,
-} from "../packages/renderer-webgl/src/svg-texture";
+} from "../packages/renderer-webgl/src/texture/svg";
 
 const svg = (hrefs: readonly string[]): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8">${hrefs

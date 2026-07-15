@@ -6,9 +6,9 @@ import {
   endSelectedFramePacketView,
   framePacketLodRequirementsMatch,
   type SelectedFramePackets,
-} from "../frame-packets";
-import { copyFrameViewMatrixInto, type FrameViews } from "../frame-views";
-import type { FramePlan } from "../frame-plan";
+} from "../frame/packets";
+import { copyFrameViewMatrixInto, type FrameViews } from "../frame/views";
+import type { FramePlan } from "../frame/plan";
 import { GltfInstanceTransformRegistry } from "./instance-transform-registry";
 import {
   gltfPrimitiveMaterialForVariant,

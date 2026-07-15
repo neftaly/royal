@@ -1,4 +1,4 @@
-import type { FramePlan } from "../frame-plan";
+import type { FramePlan } from "../frame/plan";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
 import {
   type GltfPacketOccurrence,

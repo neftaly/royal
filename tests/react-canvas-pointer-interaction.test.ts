@@ -15,7 +15,7 @@ import {
   type CanvasPointerInteractionAction,
   type CanvasPointerInteractionResult,
   type CanvasPointerInteractionState,
-} from "../packages/react/src/canvas-pointer-interaction";
+} from "../packages/react/src/interaction/canvas-pointer-interaction";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const targetNode = (id: string): MeshNode =>

@@ -14,7 +14,7 @@ import {
   type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
-import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/virtual-texture/lazy-feature";
 
 await preloadVirtualTextureFeature();
 

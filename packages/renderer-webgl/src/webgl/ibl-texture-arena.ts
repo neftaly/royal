@@ -3,7 +3,7 @@ import {
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
   type LoadedTextureSource,
-} from "../texture-sources";
+} from "../texture/sources";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import { IBL_BRDF_LUT_BYTES, uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
 import { prepareTextureUpload } from "./imperative-state";

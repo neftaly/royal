@@ -15,7 +15,7 @@ import {
   type XrSessionStatus,
   useXrSessionSnapshot,
 } from "@royal/react/xr";
-import { createXrSessionSelectionReaders } from "../packages/react/src/xr-store";
+import { createXrSessionSelectionReaders } from "../packages/react/src/xr/store";
 
 type TestXrSession = {
   readonly id: string;

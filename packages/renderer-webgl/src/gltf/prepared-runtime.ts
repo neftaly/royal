@@ -13,7 +13,7 @@ import {
   type ResourceGovernorReservation,
 } from "../resource-governor";
 import type { SurfaceImageBasedLight, SurfaceLight } from "../webgl/lights";
-import { gltfRequestKey } from "../frame-plan";
+import { gltfRequestKey } from "../frame/plan";
 import type {
   GltfLoadMetrics,
   PreparedGltfAsset,

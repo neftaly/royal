@@ -23,7 +23,7 @@ import {
   type FramePacketCatalog,
   type FramePacketRow,
   type SelectedFramePackets,
-} from "../packages/renderer-webgl/src/frame-packets";
+} from "../packages/renderer-webgl/src/frame/packets";
 import { forEachFuzzCase, SeededRandom } from "./fuzz";
 
 const randomRow = (random: SeededRandom): FramePacketRow => {

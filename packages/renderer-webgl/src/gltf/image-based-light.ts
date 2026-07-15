@@ -1,6 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
 import { quaternionMat4, type Mat4 } from "../math/mat4";
-import { isPowerOfTwo } from "../texture-sources";
+import { isPowerOfTwo } from "../texture/sources";
 import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,

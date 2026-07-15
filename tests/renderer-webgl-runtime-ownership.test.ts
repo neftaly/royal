@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { gltfRequestKey } from "../packages/renderer-webgl/src/frame-plan";
+import { gltfRequestKey } from "../packages/renderer-webgl/src/frame/plan";
 import { textureCacheKey } from "../packages/renderer-webgl/src/webgl/materials";
 import { PreparedGltfRuntime } from "../packages/renderer-webgl/src/gltf/prepared-runtime";
 import type { PreparedAssetArenaEvent } from "../packages/renderer-webgl/src/resource-arena";
@@ -11,9 +11,9 @@ import {
 import { GLTF_PACKET_OCCURRENCE_STATUS } from "../packages/renderer-webgl/src/gltf-packet-topology";
 import {
   automaticRasterVirtualTextureSource,
-} from "../packages/renderer-webgl/src/automatic-virtual-texture-source";
-import type { VirtualTextureRuntimeState } from "../packages/renderer-webgl/src/virtual-texture-runtime";
-import { VirtualTextureRuntimeShell } from "../packages/renderer-webgl/src/virtual-texture-runtime-shell";
+} from "../packages/renderer-webgl/src/virtual-texture/automatic-source";
+import type { VirtualTextureRuntimeState } from "../packages/renderer-webgl/src/virtual-texture/runtime";
+import { VirtualTextureRuntimeShell } from "../packages/renderer-webgl/src/virtual-texture/runtime-shell";
 
 const event = (key: string): PreparedAssetArenaEvent => ({
   snapshot: { key } as PreparedAssetArenaEvent["snapshot"],

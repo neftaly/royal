@@ -4,7 +4,7 @@ import {
   NO_FRAME_PACKET_ID,
   type FramePacketCatalog,
   type FramePacketRenderClass,
-} from "./frame-packets";
+} from "./frame/packets";
 import {
   assertGltfPacketSubmissionWorkspaceCurrent,
   type GltfPacketSubmissionWorkspace,

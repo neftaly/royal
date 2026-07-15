@@ -19,7 +19,7 @@ import type {
   CountedReferenceDelta,
   FramePlan,
   FramePlanRenderObjectRefRow,
-} from "./frame-plan";
+} from "./frame/plan";
 
 type CameraViewResourceSubscription = {
   readonly resource: CameraViewResource;

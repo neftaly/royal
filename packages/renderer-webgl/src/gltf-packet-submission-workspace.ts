@@ -4,7 +4,7 @@ import {
   NO_FRAME_PACKET_ID,
   type FramePacketCatalog,
   type FramePacketRenderClass,
-} from "./frame-packets";
+} from "./frame/packets";
 
 const SUBMISSION_SIDEDNESS_MASK = FRAME_PACKET_SIDEDNESS.doubleSided
   | FRAME_PACKET_SIDEDNESS.frontFaceCcw;

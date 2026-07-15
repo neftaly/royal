@@ -1,6 +1,6 @@
 import type { BoxGeometry, Geometry, PlaneGeometry } from "@royal/renderer-core";
 import type { GltfGeometryDrawMode } from "./gltf/prepared-asset";
-import type { GeometryByteLayout } from "./webgl/geometry-identity";
+import type { GeometryByteLayout } from "./vertex-input/geometry-identity";
 
 export type CpuGeometry = GeometryByteLayout & {
   readonly bucketKey: string;

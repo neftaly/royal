@@ -23,7 +23,7 @@ import {
   type CountedReference,
   type CountedReferenceDelta,
   type FramePlan,
-} from "../packages/renderer-webgl/src/frame-plan";
+} from "../packages/renderer-webgl/src/frame/plan";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const camera = perspectiveCamera({

@@ -32,7 +32,7 @@ import {
 } from "./renderer-webgl-virtual-texturing-fixtures";
 import {
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES,
-} from "../packages/renderer-webgl/src/virtual-texture-frame-demand";
+} from "../packages/renderer-webgl/src/virtual-texture/frame-demand";
 
 describe("WebGL renderer virtual texturing demand, shaders, and capabilities", () => {
   it("requests coarsest resident parent pages before mip-0 children", async () => {

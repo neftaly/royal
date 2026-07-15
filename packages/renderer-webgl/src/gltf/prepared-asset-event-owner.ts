@@ -1,6 +1,6 @@
 import type { TextureContentKey } from "@royal/renderer-core";
 import { monotonicNowMs, type MonotonicClock } from "../clock";
-import type { FramePlan } from "../frame-plan";
+import type { FramePlan } from "../frame/plan";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
 import {
   applyPreparedAssetEvents,

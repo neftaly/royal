@@ -12,16 +12,16 @@ import {
   type TextureAssetRef,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
-import { loadHtmlImage } from "./browser-image-loader";
+import { loadHtmlImage } from "./texture/browser-image-loader";
 import { monotonicNowMs, type MonotonicClock } from "./clock";
 import { GpuUploadCapacityError } from "./gpu-upload-capacity-error";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
   DecodedTextureSourceLifetime,
-} from "./decoded-texture-source-lifetime";
-import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
-import { OrdinaryTextureGpuOwner } from "./ordinary-texture-gpu-owner";
+} from "./texture/decoded-source-lifetime";
+import { OrdinaryTextureResidencyController } from "./texture/ordinary-residency-controller";
+import { OrdinaryTextureGpuOwner } from "./texture/ordinary-gpu-owner";
 import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
   applyResourceDelta,
@@ -55,7 +55,7 @@ import {
 import {
   gltfRequestKey,
   type FramePlan,
-} from "./frame-plan";
+} from "./frame/plan";
 import {
   type CpuGeometry,
 } from "./geometry-recipes";
@@ -72,7 +72,7 @@ import {
   vertexInputGeometry,
   type VertexInputGeometry,
   type VertexInputArena,
-} from "./vertex-input-arena";
+} from "./vertex-input/arena";
 import {
   clearGeometryDrawArenaContext,
   createGeometryDrawArena,
@@ -98,7 +98,7 @@ import {
   createFrameViews,
   resetFrameViews,
   type FrameViews,
-} from "./frame-views";
+} from "./frame/views";
 import { rendererFrameViews, type RendererFrameViewLane } from "./webgl/frame-view-lane";
 import {
   GltfInstanceTransformRegistry,
@@ -134,17 +134,17 @@ import {
   isBoundsVisible,
 } from "./math/picking";
 import { PickingController } from "./picking-controller";
-import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
-import { isSvgUri } from "./svg-texture-uri";
+import { FrameTextureResidencyIntent } from "./frame/texture-residency-intent";
+import { isSvgUri } from "./texture/svg-uri";
 import {
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureRef,
   type ViewportSize,
-} from "./virtual-texture-runtime";
-import { LazyVirtualTextureFeature } from "./lazy-virtual-texture-feature";
-import type { VirtualTextureFeature } from "./virtual-texture-feature";
+} from "./virtual-texture/runtime";
+import { LazyVirtualTextureFeature } from "./virtual-texture/lazy-feature";
+import type { VirtualTextureFeature } from "./virtual-texture/feature";
 import { RootResourceReleaseOwner } from "./root-resource-release-owner";
-import { textureResidencyDiagnosticsSnapshot } from "./texture-residency-diagnostics";
+import { textureResidencyDiagnosticsSnapshot } from "./texture/residency-diagnostics";
 import {
   type ProgramKind,
   type SurfaceShaderFeatures,
@@ -175,12 +175,12 @@ import {
   type SurfaceToneMappingState,
 } from "./surface-presentation-policy";
 import { SurfaceLightResolver } from "./surface-light-resolver";
-import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
+import { WebGlContextLifecycleOwner } from "./context/lifecycle-owner";
 import {
   WebGlContextCapabilityOwner,
   type WebGlContextCapabilities,
-} from "./context-capability-owner";
-import { WebGlFramePublicationOwner } from "./frame-publication-owner";
+} from "./context/capability-owner";
+import { WebGlFramePublicationOwner } from "./frame/publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
@@ -596,7 +596,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           generation: this.#context.generation,
         }),
         loadSource: (request, signal) => isSvgUri(request.uri)
-          ? import("./svg-texture").then(({ loadSvgTextureFromUri }) => (
+          ? import("./texture/svg").then(({ loadSvgTextureFromUri }) => (
             loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
           ))
           : loadHtmlImage(request.uri, { signal }),

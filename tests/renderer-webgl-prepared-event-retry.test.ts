@@ -8,9 +8,9 @@ const vertexInputFault = vi.hoisted(() => ({
   retainCalls: 0,
 }));
 
-vi.mock("../packages/renderer-webgl/src/vertex-input-arena", async (importOriginal) => {
+vi.mock("../packages/renderer-webgl/src/vertex-input/arena", async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import("../packages/renderer-webgl/src/vertex-input-arena")
+    typeof import("../packages/renderer-webgl/src/vertex-input/arena")
   >();
   return {
     ...actual,
@@ -39,7 +39,7 @@ import { PreparedGltfAssetStore } from "../packages/renderer-webgl/src/gltf/prep
 import {
   vertexInputArenaSnapshot,
   type VertexInputArena,
-} from "../packages/renderer-webgl/src/vertex-input-arena";
+} from "../packages/renderer-webgl/src/vertex-input/arena";
 import { triangleBin } from "./renderer-webgl-scene-gltf-binary-fixtures";
 import {
   solidTriangleDocument,

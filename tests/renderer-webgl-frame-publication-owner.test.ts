@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WebGlFramePublicationOwner } from "../packages/renderer-webgl/src/frame-publication-owner";
+import { WebGlFramePublicationOwner } from "../packages/renderer-webgl/src/frame/publication-owner";
 
 afterEach(() => {
   vi.restoreAllMocks();
