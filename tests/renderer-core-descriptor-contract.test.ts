@@ -162,6 +162,29 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/glTF instances pickingGeometry contains unsupported field.*radius/i);
   });
 
+  it("validates the structural glTF instance-transform protocol at the node boundary", () => {
+    const instances = createGltfInstanceTransforms({ count: 2 });
+    expect(gltfInstances({ instances, src: '/models/tree.glb' }).instances).toBe(instances);
+    expect(() => gltfInstances({
+      instances: {
+        ...instances,
+        positions: new Float32Array(3),
+      },
+      src: '/models/tree.glb',
+    })).toThrow('glTF instances instances.positions must be a Float32Array of length 6');
+    expect(() => gltfInstances({
+      instances: {
+        ...instances,
+        subscribe: undefined as unknown as typeof instances.subscribe,
+      },
+      src: '/models/tree.glb',
+    })).toThrow('glTF instances instances.subscribe must be a function');
+    expect(() => instances.subscribe(undefined as unknown as Parameters<typeof instances.subscribe>[0]))
+      .toThrow('glTF instance transform listener must be a function');
+    expect(() => createGltfInstanceTransforms({ count: Number.MAX_SAFE_INTEGER + 1 }))
+      .toThrow(/positive safe integer/);
+  });
+
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
     const options = {
       contentKey: "sha256:terrain",

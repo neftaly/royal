@@ -9,6 +9,12 @@ import { resolvePickingId, type PickingId } from './picking';
 import { validateGeometry, type Geometry } from './geometry';
 import { objectWithAllowedFields } from './descriptor-values';
 
+/**
+ * Mutable packed-transform protocol consumed by `gltfInstances`.
+ * `createGltfInstanceTransforms` is the default implementation; adapters may
+ * wrap it while preserving the exact counts, typed-array channels, versions,
+ * commit methods, and subscription behavior described here.
+ */
 export interface GltfInstanceTransforms {
   readonly count: number;
   /** Stable application identities. Their order is immutable for this source's lifetime. */
@@ -54,10 +60,44 @@ const GLTF_INSTANCE_TRANSFORM_FIELDS = [
 ] as const;
 
 const positiveCount = (count: number): number => {
-  if (!Number.isInteger(count) || count < 1) {
-    throw new Error(`glTF instance transform count must be a positive integer; received ${String(count)}`);
+  if (!Number.isSafeInteger(count) || count < 1) {
+    throw new Error(`glTF instance transform count must be a positive safe integer; received ${String(count)}`);
   }
   return count;
+};
+
+const isFloat32Array = (value: unknown): value is Float32Array =>
+  Object.prototype.toString.call(value) === '[object Float32Array]';
+
+const validateInstanceTransforms = (value: unknown): GltfInstanceTransforms => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('glTF instances instances must be a GltfInstanceTransforms object');
+  }
+  const resource = value as Partial<GltfInstanceTransforms>;
+  const count = positiveCount(resource.count as number);
+  const channelLength = count * 3;
+  for (const field of ['positions', 'rotations', 'scales'] as const) {
+    const channel = resource[field];
+    if (!isFloat32Array(channel) || channel.length !== channelLength) {
+      throw new TypeError(
+        `glTF instances instances.${field} must be a Float32Array of length ${channelLength}`,
+      );
+    }
+  }
+  for (const field of ['poseVersion', 'scaleVersion'] as const) {
+    if (!Number.isSafeInteger(resource[field]) || !(resource[field]! >= 1)) {
+      throw new TypeError(`glTF instances instances.${field} must be a positive safe integer`);
+    }
+  }
+  for (const field of ['commitPose', 'commitScale', 'subscribe'] as const) {
+    if (typeof resource[field] !== 'function') {
+      throw new TypeError(`glTF instances instances.${field} must be a function`);
+    }
+  }
+  if (resource.logicalIds !== undefined && resource.logicalIds.length !== count) {
+    throw new TypeError(`glTF instances instances.logicalIds must contain ${count} strings`);
+  }
+  return resource as GltfInstanceTransforms;
 };
 
 const copyChannel = (
@@ -217,6 +257,9 @@ export const createGltfInstanceTransforms = (
     },
     scales,
     subscribe: (listener) => {
+      if (typeof listener !== 'function') {
+        throw new TypeError('glTF instance transform listener must be a function');
+      }
       const token = {};
       listeners.set(token, listener);
       let subscribed = true;
@@ -259,6 +302,7 @@ const GLTF_INSTANCES_FIELDS = [
 
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
   objectWithAllowedFields(options, GLTF_INSTANCES_FIELDS, 'glTF instances');
+  const instances = validateInstanceTransforms(options.instances);
   if (options.pickingGeometry !== undefined) {
     validateGeometry(options.pickingGeometry, 'glTF instances pickingGeometry');
   }
@@ -267,7 +311,7 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
   return Object.freeze({
     asset,
-    instances: options.instances,
+    instances,
     kind: 'gltf-instances',
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
