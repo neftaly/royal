@@ -1776,6 +1776,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
       toneMappingShaderMode(toneMapping.toneMapping),
       toneMapping.exposure,
     );
+    uniform2f(
+      this.#programArena,
+      program,
+      "u_hdrUvScale",
+      width / target.width,
+      height / target.height,
+    );
     gl.bindVertexArray(null);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindTexture(gl.TEXTURE_2D, null);

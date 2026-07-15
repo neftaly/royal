@@ -4,6 +4,7 @@ precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_hdrColor;
 uniform vec2 u_displayTransform;
+uniform vec2 u_hdrUvScale;
 out vec4 outColor;
 
 vec3 toneMapPbrNeutral(vec3 color) {
@@ -29,7 +30,7 @@ vec3 linearToSrgb(vec3 color) {
 }
 
 void main() {
-  vec4 scene = texture(u_hdrColor, v_uv);
+  vec4 scene = texture(u_hdrColor, v_uv * u_hdrUvScale);
   vec3 straightColor = scene.a > 0.000001 ? scene.rgb / scene.a : scene.rgb;
   vec3 exposed = straightColor * max(u_displayTransform.y, 0.0);
   vec3 mapped = u_displayTransform.x > 0.5

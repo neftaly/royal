@@ -54,6 +54,41 @@ export const createSurfaceRenderTargetArena = (
   framebuffers: new Set(), ...(governor === undefined ? {} : { governor }), quarantinedLeases: new Set(), renderbuffers: new Set(), textures: new Set(),
 } as unknown as SurfaceRenderTargetArena);
 
+export interface HdrRenderTargetCapacityPlan {
+  readonly height: number;
+  readonly reallocate: boolean;
+  readonly width: number;
+}
+
+/**
+ * Keeps small viewport differences inside existing storage while still
+ * releasing meaningfully oversized render targets after a resize. Stereo XR
+ * viewports can differ by a pixel, so exact-size storage would otherwise be
+ * reallocated once per eye and force a synchronous framebuffer validation.
+ */
+export const planHdrRenderTargetCapacity = (
+  currentWidth: number,
+  currentHeight: number,
+  requestedWidth: number,
+  requestedHeight: number,
+  storageInvalid: boolean,
+): HdrRenderTargetCapacityPlan => {
+  if (storageInvalid || currentWidth <= 0 || currentHeight <= 0) {
+    return { height: requestedHeight, reallocate: true, width: requestedWidth };
+  }
+  if (requestedWidth > currentWidth || requestedHeight > currentHeight) {
+    return {
+      height: Math.max(currentHeight, requestedHeight),
+      reallocate: true,
+      width: Math.max(currentWidth, requestedWidth),
+    };
+  }
+  if (requestedWidth * 2 <= currentWidth || requestedHeight * 2 <= currentHeight) {
+    return { height: requestedHeight, reallocate: true, width: requestedWidth };
+  }
+  return { height: currentHeight, reallocate: false, width: currentWidth };
+};
+
 const checkedBytes = (width: number, height: number, bytesPerPixel: number): number => {
   const value = width * height * bytesPerPixel;
   if (!Number.isSafeInteger(value)) throw new RangeError("Render-target byte size exceeds safe accounting range");
@@ -104,10 +139,17 @@ export const ensureHdrRenderTarget = (
 ): HdrRenderTarget => {
   dimension(width, "HDR target width"); dimension(height, "HDR target height");
   const state = arena as unknown as State;
-  const bytes = checkedBytes(width, height, 11);
   let target = state.hdr;
+  const capacity = planHdrRenderTargetCapacity(
+    target?.width ?? 0,
+    target?.height ?? 0,
+    width,
+    height,
+    target?.storageInvalid ?? true,
+  );
+  if (!capacity.reallocate && target !== undefined) return target;
+  const bytes = checkedBytes(capacity.width, capacity.height, 11);
   const previousBytes = target?.gpuBytes ?? 0;
-  if (target?.width === width && target.height === height && !target.storageInvalid) return target;
   const reservation = reserveStorage(state, target?.gpuLease, bytes);
   let allocationStarted = false;
   if (target === undefined) {
@@ -132,9 +174,9 @@ export const ensureHdrRenderTarget = (
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     allocationStarted = true;
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, capacity.width, capacity.height, 0, gl.RGBA, gl.HALF_FLOAT, null);
     gl.bindRenderbuffer(gl.RENDERBUFFER, target.depth);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, capacity.width, capacity.height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.color, 0);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, target.depth);
@@ -146,7 +188,7 @@ export const ensureHdrRenderTarget = (
     if (lease !== undefined) target.gpuLease = lease;
     target.gpuBytes = bytes;
     target.storageInvalid = false;
-    target.width = width; target.height = height;
+    target.width = capacity.width; target.height = capacity.height;
     return target;
   } catch (error) {
     target.storageInvalid = true;

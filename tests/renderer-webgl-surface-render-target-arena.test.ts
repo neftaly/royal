@@ -4,6 +4,7 @@ import {
   createSurfaceRenderTargetArena,
   dropSurfaceRenderTargetArenaContext,
   ensureHdrRenderTarget,
+  planHdrRenderTargetCapacity,
   releaseSurfaceRenderTargetContextHandles,
   type SurfaceRenderTargetGpuGovernor,
   type SurfaceRenderTargetGpuLease,
@@ -155,6 +156,21 @@ const recordingGovernor = (denied = false): {
 };
 
 describe("surface render-target arena", () => {
+  it("plans hysteretic HDR capacity without GPU state", () => {
+    expect(planHdrRenderTargetCapacity(0, 0, 320, 180, true)).toEqual({
+      height: 180, reallocate: true, width: 320,
+    });
+    expect(planHdrRenderTargetCapacity(320, 180, 319, 180, false)).toEqual({
+      height: 180, reallocate: false, width: 320,
+    });
+    expect(planHdrRenderTargetCapacity(320, 180, 321, 179, false)).toEqual({
+      height: 180, reallocate: true, width: 321,
+    });
+    expect(planHdrRenderTargetCapacity(640, 360, 320, 180, false)).toEqual({
+      height: 180, reallocate: true, width: 320,
+    });
+  });
+
   it("allocates and reuses one complete HDR target, resizing with RGBA16F storage", () => {
     const gl = new FakeGl();
     const arena = createSurfaceRenderTargetArena();
@@ -172,6 +188,10 @@ describe("surface render-target arena", () => {
     expect(ensureHdrRenderTarget(arena, context(gl), 320, 180)).toBe(first);
     expect(calls(gl, "texImage2D")).toHaveLength(1);
     expect(ensureHdrRenderTarget(arena, context(gl), 640, 360)).toBe(first);
+    expect(first).toMatchObject({ height: 360, width: 640 });
+    expect(calls(gl, "texImage2D")).toHaveLength(2);
+
+    expect(ensureHdrRenderTarget(arena, context(gl), 639, 360)).toBe(first);
     expect(first).toMatchObject({ height: 360, width: 640 });
     expect(calls(gl, "texImage2D")).toHaveLength(2);
   });
