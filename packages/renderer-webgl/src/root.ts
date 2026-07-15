@@ -1,6 +1,7 @@
 import { LazyClusteredLightingFeature } from "./lazy-clustered-lighting-feature";
 import type { ClusteredLightingFeature } from "./clustered-lighting-feature";
 import {
+  validatePickInput,
   type GltfAssetRef,
   type Material,
   type MeshNode,
@@ -1096,6 +1097,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   pick(input: PickInput): PickResult | undefined {
+    validatePickInput(input);
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
     }

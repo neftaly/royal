@@ -40,6 +40,12 @@ describe("React root public API", () => {
       .toThrow("Royal pick input clientX must be a finite number");
     expect(() => root.pick({ clientX: 10, clientY: Number.POSITIVE_INFINITY }))
       .toThrow("Royal pick input clientY must be a finite number");
+    expect(() => root.pick({
+      clientX: 10,
+      clientY: 20,
+      x: 10,
+    } as unknown as Parameters<typeof root.pick>[0]))
+      .toThrow(/unsupported field.*x/i);
 
     root.dispose();
   });

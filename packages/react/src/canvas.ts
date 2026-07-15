@@ -1,4 +1,4 @@
-import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
+import { validatePickInput, type PickInput, type PickResult, type RenderRoot } from "@royal/renderer-core";
 import {
   createContext,
   createElement,
@@ -30,7 +30,6 @@ import {
   type ScenePointerEvents,
 } from "./scene-interactions";
 import {
-  validatePickInput,
   type RendererOptions,
   type RoyalRendererRoot,
 } from "./root";

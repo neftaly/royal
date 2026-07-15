@@ -20,6 +20,27 @@ export interface PickInput {
   readonly clientY: number;
 }
 
+const PICK_INPUT_FIELDS = ['clientX', 'clientY'] as const;
+
+/** Validates DOM client coordinates before renderer-specific picking work. */
+export const validatePickInput: (input: unknown) => asserts input is PickInput = (input) => {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new TypeError('Royal pick input must be an object with clientX and clientY coordinates');
+  }
+  for (const field of Object.keys(input)) {
+    if (!PICK_INPUT_FIELDS.includes(field as (typeof PICK_INPUT_FIELDS)[number])) {
+      throw new TypeError(`Royal pick input contains unsupported field ${JSON.stringify(field)}`);
+    }
+  }
+  const coordinates = input as Partial<PickInput>;
+  if (typeof coordinates.clientX !== 'number' || !Number.isFinite(coordinates.clientX)) {
+    throw new TypeError('Royal pick input clientX must be a finite number');
+  }
+  if (typeof coordinates.clientY !== 'number' || !Number.isFinite(coordinates.clientY)) {
+    throw new TypeError('Royal pick input clientY must be a finite number');
+  }
+};
+
 export interface MeshPickTarget {
   readonly id?: PickingId;
   readonly kind: 'mesh';

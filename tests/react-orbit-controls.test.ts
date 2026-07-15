@@ -194,6 +194,13 @@ describe("OrbitControls", () => {
       fovY: 1,
       near: 0.1,
     })).toThrow("Orbit camera projection requires 0 < near < far");
+    expect(() => orbit.setProjection({
+      far: 100,
+      fieldOfView: 1,
+      fovY: 1,
+      near: 0.1,
+    } as unknown as Parameters<typeof orbit.setProjection>[0]))
+      .toThrow(/unsupported field.*fieldOfView/i);
     expect(orbit.cameraResource).toMatchObject({ far: 100, fovY: 1, near: 0.1 });
 
     orbit.setProjection({ far: 200, fovY: 0.8, near: 0.01 });

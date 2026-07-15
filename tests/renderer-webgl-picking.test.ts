@@ -98,6 +98,21 @@ afterEach(() => {
 });
 
 describe("WebGL picking", () => {
+  it("validates the shared pick-input contract before renderer state", () => {
+    const root = createWebGlRoot(fakeCanvas(fakeGl()));
+
+    expect(() => root.pick({
+      clientX: 10,
+      clientY: 20,
+      screenX: 10,
+    } as unknown as Parameters<typeof root.pick>[0]))
+      .toThrow(/unsupported field.*screenX/i);
+    expect(() => root.pick({ clientX: Number.NaN, clientY: 20 }))
+      .toThrow("Royal pick input clientX must be a finite number");
+
+    root.dispose();
+  });
+
   it("returns the intended mesh or loaded glTF target for DOM client coordinates", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     vi.stubGlobal("fetch", loadedTriangleGltfFetch());

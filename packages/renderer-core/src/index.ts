@@ -119,6 +119,7 @@ export type {
   PickResult,
   PickTarget,
 } from './picking';
+export { validatePickInput } from './picking';
 export type {
   RenderObjectHandle,
   RenderObjectRef,

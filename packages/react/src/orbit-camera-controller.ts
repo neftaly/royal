@@ -10,9 +10,10 @@ import {
   type WorldPosition3,
 } from "@royal/renderer-core";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { objectRecord, recordWithAllowedFields } from "./validation";
+import { recordWithAllowedFields } from "./validation";
 
 const USE_ORBIT_CAMERA_OPTION_FIELDS = ["far", "fovY", "initial", "near"] as const;
+const ORBIT_CAMERA_PROJECTION_FIELDS = ["far", "fovY", "near"] as const;
 
 /** Perspective projection owned by an orbit camera controller. */
 export interface OrbitCameraProjection {
@@ -81,9 +82,11 @@ const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
 };
 
 const validOrbitCameraProjection = (input: unknown): OrbitCameraProjection => {
-  const { far, fovY, near } = objectRecord(
+  const { far, fovY, near } = recordWithAllowedFields(
     input,
+    ORBIT_CAMERA_PROJECTION_FIELDS,
     "Orbit camera projection",
+    "field",
   ) as Partial<OrbitCameraProjection>;
   if (typeof far !== "number" || !Number.isFinite(far)) {
     throw new TypeError("Orbit camera projection far must be a finite number");

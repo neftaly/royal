@@ -6,6 +6,7 @@ import type {
   TextureAssetRef,
   VirtualTextureAssetRef,
 } from "@royal/renderer-core";
+import { validatePickInput } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   resolveWebGlRootOptions,
@@ -59,19 +60,6 @@ export const rendererRootOptionsSemanticKey = (options?: RendererOptions): strin
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
 export type ResolvedRendererOptions = Required<RendererOptions>;
-
-/** @internal Distinguishes malformed public pick input from a legitimate miss. */
-export const validatePickInput = (input: PickInput): void => {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new TypeError("Royal pick input must be an object with clientX and clientY coordinates");
-  }
-  if (typeof input.clientX !== "number" || !Number.isFinite(input.clientX)) {
-    throw new TypeError("Royal pick input clientX must be a finite number");
-  }
-  if (typeof input.clientY !== "number" || !Number.isFinite(input.clientY)) {
-    throw new TypeError("Royal pick input clientY must be a finite number");
-  }
-};
 
 /** Availability states for the renderer owned by a Canvas. */
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
