@@ -6,7 +6,7 @@ import {
   type GltfMaterialVariantName,
 } from './gltf';
 import { resolvePickingId, type PickingId } from './picking';
-import type { Geometry } from './geometry';
+import { validateGeometry, type Geometry } from './geometry';
 import { objectWithAllowedFields } from './descriptor-values';
 
 export interface GltfInstanceTransforms {
@@ -259,6 +259,9 @@ const GLTF_INSTANCES_FIELDS = [
 
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
   objectWithAllowedFields(options, GLTF_INSTANCES_FIELDS, 'glTF instances');
+  if (options.pickingGeometry !== undefined) {
+    validateGeometry(options.pickingGeometry, 'glTF instances pickingGeometry');
+  }
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);

@@ -140,6 +140,26 @@ describe("renderer-core descriptor contract", () => {
       count: 1,
       logicalIds: [""],
     })).toThrow(/glTF instance logicalIds\[0\] must be a non-empty string/);
+    expect(() => mesh({
+      geometry: null as unknown as ReturnType<typeof boxGeometry>,
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+    })).toThrow(/mesh geometry must be a boxGeometry or planeGeometry descriptor/);
+    expect(() => gltf({
+      pickingGeometry: {
+        kind: "sphere",
+        size: [1, 1, 1],
+      } as unknown as ReturnType<typeof boxGeometry>,
+      src: "/models/helmet.gltf",
+    })).toThrow(/glTF pickingGeometry must be a boxGeometry or planeGeometry descriptor/);
+    expect(() => gltfInstances({
+      instances,
+      pickingGeometry: {
+        kind: "box",
+        radius: 1,
+        size: [1, 1, 1],
+      } as unknown as ReturnType<typeof boxGeometry>,
+      src: "/models/helmet.gltf",
+    })).toThrow(/glTF instances pickingGeometry contains unsupported field.*radius/i);
   });
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {

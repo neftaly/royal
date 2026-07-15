@@ -36,10 +36,34 @@ export type PlaneGeometryInput = PlaneGeometryOptions | PlaneGeometrySizeInput;
 export type Geometry = BoxGeometry | PlaneGeometry;
 
 const GEOMETRY_OPTION_FIELDS = ['size'] as const;
+const GEOMETRY_DESCRIPTOR_FIELDS = ['kind', 'size'] as const;
 const isBoxSizeTuple = (input: BoxGeometryInput): input is WorldSize3 => Array.isArray(input);
 const isPlaneSizeTuple = (
   input: PlaneGeometryInput,
 ): input is readonly [width: Metres, height: Metres] => Array.isArray(input);
+
+/** @internal Validates structurally supplied geometry at node boundaries. */
+export const validateGeometry: (
+  value: unknown,
+  label: string,
+) => asserts value is Geometry = (value, label) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} must be a boxGeometry or planeGeometry descriptor`);
+  }
+  for (const field of Object.keys(value)) {
+    if (!GEOMETRY_DESCRIPTOR_FIELDS.includes(field as (typeof GEOMETRY_DESCRIPTOR_FIELDS)[number])) {
+      throw new TypeError(`${label} contains unsupported field ${JSON.stringify(field)}`);
+    }
+  }
+  const descriptor = value as { readonly kind?: unknown; readonly size?: unknown };
+  const dimensions = descriptor.kind === 'box' ? 3 : descriptor.kind === 'plane' ? 2 : 0;
+  if (dimensions === 0 || !Array.isArray(descriptor.size) || descriptor.size.length !== dimensions) {
+    throw new TypeError(`${label} must be a boxGeometry or planeGeometry descriptor`);
+  }
+  for (let axis = 0; axis < dimensions; axis += 1) {
+    positiveFiniteNumber(descriptor.size[axis] as number, `${label} size[${axis}]`);
+  }
+};
 
 const boxSize = (input: BoxGeometryInput): WorldSize3 => {
   const size = typeof input === 'number' || isBoxSizeTuple(input)

@@ -12,7 +12,7 @@ import {
 import type { WorldPosition3 } from './primitives';
 import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
-import type { Geometry } from './geometry';
+import { validateGeometry, type Geometry } from './geometry';
 
 export interface GltfAssetBounds {
   /** Asset-space maximum in metres, following glTF's metre unit. */
@@ -96,6 +96,9 @@ export function gltf(options: GltfOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
   objectWithAllowedFields(options, GLTF_FIELDS, 'glTF');
+  if (options.pickingGeometry !== undefined) {
+    validateGeometry(options.pickingGeometry, 'glTF pickingGeometry');
+  }
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);

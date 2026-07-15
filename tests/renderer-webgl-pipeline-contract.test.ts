@@ -988,28 +988,12 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
   });
 
-  it("throws a deterministic error for unknown geometry kinds", () => {
-    const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+  it("rejects unknown geometry kinds before renderer planning", () => {
     const unsupportedGeometry = { kind: "custom-pyramid" } as unknown as Geometry;
 
-    expect(() => root.render(scene({
-      camera: orthographicCamera({
-            bottom: -1,
-            far: 10,
-            left: -1,
-            near: 0.1,
-            position: [0, 0, 4],
-            right: 1,
-            rotation: [0, 0, 0],
-            top: 1,
-      }),
-      nodes: [
-            mesh({
-              geometry: unsupportedGeometry,
-              material: unlitMaterial({ color: [1, 1, 1, 1] }),
-            }),
-      ],
-    }))).toThrow('Unsupported geometry kind "custom-pyramid"');
+    expect(() => mesh({
+      geometry: unsupportedGeometry,
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+    })).toThrow("mesh geometry must be a boxGeometry or planeGeometry descriptor");
   });
 });

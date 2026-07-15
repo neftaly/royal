@@ -1,4 +1,4 @@
-import type { Geometry } from './geometry';
+import { validateGeometry, type Geometry } from './geometry';
 import type { Material } from './material';
 import {
   resolveTransform,
@@ -40,6 +40,10 @@ const MESH_FIELDS = [
 
 export const mesh = (options: MeshOptions): MeshNode => {
   objectWithAllowedFields(options, MESH_FIELDS, 'mesh');
+  validateGeometry(options.geometry, 'mesh geometry');
+  if (options.pickingGeometry !== undefined) {
+    validateGeometry(options.pickingGeometry, 'mesh pickingGeometry');
+  }
   const pickingId = resolvePickingId(options.pickingId, 'mesh pickingId');
   const node = {
     kind: 'mesh',
