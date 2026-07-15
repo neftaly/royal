@@ -20,6 +20,7 @@ import {
 } from "./webgl/ibl-texture-arena";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
+import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
 
 /** Owns IBL GPU resources, surface binding, and lifecycle over retained sources. */
 export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature {
@@ -38,6 +39,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
   }
 
   bindSurface(
+    bindings: WebGlTextureBindingShell,
     programs: ProgramArena,
     program: WebGLProgram,
     lightSet: SurfaceLightSet,
@@ -51,6 +53,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
       lightSet,
       specularTextureUnit,
       brdfLutTextureUnit,
+      bindings,
     );
   }
 

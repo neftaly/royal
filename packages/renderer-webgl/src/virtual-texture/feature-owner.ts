@@ -39,6 +39,7 @@ import {
 } from "./gpu-arena";
 import type { VertexInputGeometry } from "../vertex-input/arena";
 import type { VirtualTextureFeature, VirtualTextureFeatureOptions } from "./feature";
+import type { WebGlTextureBindingShell } from "../webgl/texture-binding-shell";
 
 /** Owns the complete virtual-texture runtime and its renderer-facing lifecycle. */
 export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
@@ -115,6 +116,7 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
   }
 
   bindGpuResource(
+    bindings: WebGlTextureBindingShell,
     key: string,
     atlasTextureUnit: number,
     pageTableTextureUnit: number,
@@ -124,6 +126,7 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
       key,
       atlasTextureUnit,
       pageTableTextureUnit,
+      bindings,
     );
   }
 

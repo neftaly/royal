@@ -14,6 +14,7 @@ import {
   type ProgramArena,
 } from "./program-arena";
 import { bindSurfaceIblIrradiance } from "./surface-ibl-uniforms";
+import { WebGlTextureBindingShell } from "./texture-binding-shell";
 import {
   STUDIO_ENVIRONMENT_SPECULAR_KEY,
   STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
@@ -481,6 +482,9 @@ export const bindSurfaceIbl = (
   lightSet: SurfaceLightSet,
   specularTextureUnit: number | undefined,
   brdfLutTextureUnit: number | undefined,
+  bindings: WebGlTextureBindingShell = new WebGlTextureBindingShell(
+    (arena as unknown as State).gl,
+  ),
 ): void => {
   const state = arena as unknown as State;
   bindSurfaceIblIrradiance(programArena, program, lightSet);
@@ -499,15 +503,17 @@ export const bindSurfaceIbl = (
     useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
     specular?.encoding === "rgbd" ? 1 : 0);
   if (useSpecular) {
-    state.gl.activeTexture(state.gl.TEXTURE0 + specularTextureUnit);
-    state.gl.bindTexture(state.gl.TEXTURE_CUBE_MAP, specular.texture);
+    bindings.bindCube(specularTextureUnit, specular.texture);
     uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
   }
+  const hadBrdfLut = state.brdfLut !== undefined;
   const brdfLut = useBrdfLut ? ensureBrdfLut(state) : undefined;
+  // First-time LUT realization uses the raw upload lane and invalidates every
+  // target binding on its transient unit before retained draw binding resumes.
+  if (!hadBrdfLut && brdfLut !== undefined) bindings.invalidate();
   uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
   if (brdfLut !== undefined && brdfLutTextureUnit !== undefined) {
-    state.gl.activeTexture(state.gl.TEXTURE0 + brdfLutTextureUnit);
-    state.gl.bindTexture(state.gl.TEXTURE_2D, brdfLut);
+    bindings.bindTexture2d(brdfLutTextureUnit, brdfLut);
     uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
   }
 };

@@ -10,6 +10,7 @@ import type {
 } from "./webgl/ibl-texture-arena";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
+import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
 
 export type ImageBasedLightingFeatureOptions = {
   readonly contextLifecycle: () => WebGlContextLifecycle;
@@ -22,6 +23,7 @@ export type ImageBasedLightingFeatureOptions = {
 
 export interface ImageBasedLightingFeature {
   bindSurface(
+    bindings: WebGlTextureBindingShell,
     programs: ProgramArena,
     program: WebGLProgram,
     lightSet: SurfaceLightSet,

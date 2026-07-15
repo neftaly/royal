@@ -65,6 +65,7 @@ import {
   type SurfaceTextureCandidate,
   type SurfaceTextureBindingWorkspace,
 } from "./surface-texture-binding-plan";
+import { WebGlTextureBindingShell } from "./texture-binding-shell";
 
 const TEXTURE_COLOR = [1, 1, 1, 1] as const;
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR = [1, 0, 1, 1] as const;
@@ -149,12 +150,14 @@ export interface SurfaceGltfBatchExecution {
 
 export interface SurfaceExecutionArenaOptions {
   readonly bindIbl: (
+    bindings: WebGlTextureBindingShell,
     program: WebGLProgram,
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
   ) => void;
   readonly bindVirtualTexture: (
+    bindings: WebGlTextureBindingShell,
     key: string,
     atlasTextureUnit: number,
     pageTableTextureUnit: number,
@@ -214,6 +217,7 @@ export class SurfaceExecutionArena {
     textureUnits: this.#textureReadinessWorkspace.plan.textureUnits,
   };
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
+  readonly #textureBindings: WebGlTextureBindingShell;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #wakeRequested = false;
 
@@ -230,6 +234,7 @@ export class SurfaceExecutionArena {
     this.#prepareIblBrdfLut = options.prepareIblBrdfLut;
     this.#renderTargets = options.renderTargets;
     this.#textureResidencyIntent = options.textureResidencyIntent;
+    this.#textureBindings = new WebGlTextureBindingShell(options.gl);
     this.#virtualTextureDrawable = options.virtualTextureDrawable;
   }
 
@@ -243,6 +248,12 @@ export class SurfaceExecutionArena {
     this.#cullEnabled = false;
     this.#depthWriteEnabled = true;
     this.#frontFaceCcw = undefined;
+    this.#textureBindings.invalidate();
+  }
+
+  /** Invalidates retained bindings after a raw pass owned outside this shell. */
+  invalidateTextureBindings(): void {
+    this.#textureBindings.invalidate();
   }
 
   /** Leaves state required by passes that follow surface drawing. */
@@ -260,15 +271,19 @@ export class SurfaceExecutionArena {
     sourceY: number,
     hdr: boolean,
   ): ScreenColorTextureResource {
-    return copyTransmissionScreenColorTexture(
-      this.#renderTargets,
-      this.#gl,
-      width,
-      height,
-      sourceX,
-      sourceY,
-      hdr,
-    );
+    try {
+      return copyTransmissionScreenColorTexture(
+        this.#renderTargets,
+        this.#gl,
+        width,
+        height,
+        sourceX,
+        sourceY,
+        hdr,
+      );
+    } finally {
+      this.#textureBindings.invalidate();
+    }
   }
 
   executeSingle(input: SurfaceSingleExecution): void {
@@ -721,8 +736,7 @@ export class SurfaceExecutionArena {
       uniform1i(this.#programs, program, descriptor.useUniform, 0);
       return;
     }
-    this.#gl.activeTexture(this.#gl.TEXTURE0 + allocatedUnit);
-    this.#gl.bindTexture(this.#gl.TEXTURE_2D, resource.texture);
+    this.#textureBindings.bindTexture2d(allocatedUnit, resource.texture);
     uniform1i(this.#programs, program, descriptor.samplerUniform, allocatedUnit);
     uniform1i(this.#programs, program, descriptor.useUniform, 1);
   }
@@ -738,8 +752,7 @@ export class SurfaceExecutionArena {
       return;
     }
     uniform1i(this.#programs, program, "u_useTransmissionTexture", 1);
-    this.#gl.activeTexture(this.#gl.TEXTURE0 + textureUnit);
-    this.#gl.bindTexture(this.#gl.TEXTURE_2D, resource.texture);
+    this.#textureBindings.bindTexture2d(textureUnit, resource.texture);
     uniform1i(this.#programs, program, "u_transmissionScreenTexture", textureUnit);
     uniform2f(this.#programs, program, "u_viewportOrigin", resource.originX, resource.originY);
     uniform2f(this.#programs, program, "u_viewportSize", resource.width, resource.height);
@@ -762,6 +775,7 @@ export class SurfaceExecutionArena {
   ): void {
     try {
       this.#bindIbl(
+        this.#textureBindings,
         program,
         lightSet,
         plan.textureUnits.get("iblSpecularCube"),
@@ -785,16 +799,23 @@ export class SurfaceExecutionArena {
       uniform4f(this.#programs, program, `u_surfaceLightPosition[${index}]`, 0, 0, 0, 0);
       uniform4f(this.#programs, program, `u_surfaceLightCone[${index}]`, 1, 0, 0, 0);
     }
-    this.#clusteredLights.bind(
-      this.#programs,
-      program,
-      lightSet.punctuals,
-      projection,
-      view,
-      viewportSize[0],
-      viewportSize[1],
-      frame,
-    );
+    if (lightSet.punctuals.length > 0) {
+      this.#textureBindings.invalidate();
+      try {
+        this.#clusteredLights.bind(
+          this.#programs,
+          program,
+          lightSet.punctuals,
+          projection,
+          view,
+          viewportSize[0],
+          viewportSize[1],
+          frame,
+        );
+      } finally {
+        this.#textureBindings.invalidate();
+      }
+    }
   }
 
   #bindBaseColorTexture(
@@ -835,8 +856,7 @@ export class SurfaceExecutionArena {
   ): boolean {
     const textureUnit = plan.textureUnits.get("baseColorTexture");
     if (textureUnit === undefined) return false;
-    this.#gl.activeTexture(this.#gl.TEXTURE0 + textureUnit);
-    this.#gl.bindTexture(this.#gl.TEXTURE_2D, binding.resource.texture);
+    this.#textureBindings.bindTexture2d(textureUnit, binding.resource.texture);
     uniform1i(this.#programs, program, "u_texture", textureUnit);
     return true;
   }
@@ -856,6 +876,7 @@ export class SurfaceExecutionArena {
     const pageTableTextureUnit = plan.textureUnits.get("baseColorVirtualTexturePageTable");
     if (atlasTextureUnit === undefined || pageTableTextureUnit === undefined) return false;
     const binding = this.#bindVirtualTextureGpu(
+      this.#textureBindings,
       state.key,
       atlasTextureUnit,
       pageTableTextureUnit,

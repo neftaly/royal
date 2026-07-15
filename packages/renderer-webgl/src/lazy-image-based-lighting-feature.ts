@@ -16,6 +16,7 @@ import type {
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
 import { bindSurfaceIblFallback } from "./webgl/surface-ibl-uniforms";
+import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
 
 type ImageBasedLightingFeatureModule = typeof import("./image-based-lighting-feature-owner");
 const EMPTY_SIGNALS: SurfaceExecutionSignals = { diagnostics: [], wakeRequested: false };
@@ -45,6 +46,7 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
   }
 
   bindSurface(
+    bindings: WebGlTextureBindingShell,
     programs: ProgramArena,
     program: WebGLProgram,
     lightSet: SurfaceLightSet,
@@ -54,6 +56,7 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
     this.#activate();
     if (this.#feature !== undefined) {
       this.#feature.bindSurface(
+        bindings,
         programs,
         program,
         lightSet,

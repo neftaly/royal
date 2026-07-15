@@ -24,6 +24,7 @@ import type { TextureAssetUploadRef } from "../webgl/materials";
 import type { TextureHandleArena } from "../webgl/texture-handle-arena";
 import type { VirtualTextureGpuBinding } from "./gpu-arena";
 import type { VertexInputGeometry } from "../vertex-input/arena";
+import type { WebGlTextureBindingShell } from "../webgl/texture-binding-shell";
 
 export type VirtualTextureFeatureOptions = {
   readonly active: () => boolean;
@@ -54,6 +55,7 @@ export interface VirtualTextureFeature {
   beginFrame(): void;
   beginView(viewIndex: number): void;
   bindGpuResource(
+    bindings: WebGlTextureBindingShell,
     key: string,
     atlasTextureUnit: number,
     pageTableTextureUnit: number,

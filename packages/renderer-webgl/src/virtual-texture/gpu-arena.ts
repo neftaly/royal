@@ -24,6 +24,7 @@ import {
   type TextureHandleArena,
 } from "../webgl/texture-handle-arena";
 import { textureUploadInternalFormat } from "../webgl/texture-upload";
+import type { WebGlTextureBindingShell } from "../webgl/texture-binding-shell";
 
 const MAX_PAGE_UPLOADS_PER_FRAME = 2;
 // Preserve two-page throughput for the 256px generated-VT path, while keeping
@@ -1267,6 +1268,7 @@ export const bindVirtualTextureGpuResource = (
   key: string,
   atlasTextureUnit: number,
   pageTableTextureUnit: number,
+  bindings?: WebGlTextureBindingShell,
 ): VirtualTextureGpuBinding | undefined => {
   const state = stateOf(arena);
   if (
@@ -1287,10 +1289,15 @@ export const bindVirtualTextureGpuResource = (
     || !ownsTexture(state.handles, allocation.atlasTexture)
     || !ownsTexture(state.handles, allocation.pageTableTexture)
   ) return undefined;
-  state.gl.activeTexture(state.gl.TEXTURE0 + atlasTextureUnit);
-  state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.atlasTexture);
-  state.gl.activeTexture(state.gl.TEXTURE0 + pageTableTextureUnit);
-  state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.pageTableTexture);
+  if (bindings === undefined) {
+    state.gl.activeTexture(state.gl.TEXTURE0 + atlasTextureUnit);
+    state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.atlasTexture);
+    state.gl.activeTexture(state.gl.TEXTURE0 + pageTableTextureUnit);
+    state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.pageTableTexture);
+  } else {
+    bindings.bindTexture2d(atlasTextureUnit, allocation.atlasTexture);
+    bindings.bindTexture2d(pageTableTextureUnit, allocation.pageTableTexture);
+  }
   return {
     atlasCellSize: virtualTextureStoredPageSize(resource.options.manifest),
     atlasGridColumns: allocation.atlasGridColumns,

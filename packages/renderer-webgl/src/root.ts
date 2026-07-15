@@ -702,8 +702,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
       this.#surfaceExecution = new SurfaceExecutionArena({
-        bindIbl: (program, lightSet, specularTextureUnit, brdfLutTextureUnit) => {
+        bindIbl: (bindings, program, lightSet, specularTextureUnit, brdfLutTextureUnit) => {
           this.#ibl.bindSurface(
+            bindings,
             this.#programArena,
             program,
             lightSet,
@@ -711,8 +712,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
             brdfLutTextureUnit,
           );
         },
-        bindVirtualTexture: (key, atlasTextureUnit, pageTableTextureUnit) => (
-          this.#virtualTextures.bindGpuResource(key, atlasTextureUnit, pageTableTextureUnit)
+        bindVirtualTexture: (bindings, key, atlasTextureUnit, pageTableTextureUnit) => (
+          this.#virtualTextures.bindGpuResource(bindings, key, atlasTextureUnit, pageTableTextureUnit)
         ),
         clusteredLights: this.#clusteredLights,
         consumeIblSignals: () => this.#ibl.consumeSurfaceSignals(),
@@ -1057,6 +1058,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           // The post-process pass binds its fullscreen VAO. Geometry for the
           // next view must not trust the cached surface VAO.
           beginGeometryDrawFrame(this.#geometryDrawArena);
+          this.#surfaceExecution.invalidateTextureBindings();
         }
       }
     } catch (value) {

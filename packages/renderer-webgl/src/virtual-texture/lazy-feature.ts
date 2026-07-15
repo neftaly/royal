@@ -18,6 +18,7 @@ import type { VirtualTextureAssetSnapshot } from "./runtime-shell";
 import { textureCacheKey, type TextureAssetUploadRef } from "../webgl/materials";
 import type { VirtualTextureGpuBinding } from "./gpu-arena";
 import type { VertexInputGeometry } from "../vertex-input/arena";
+import type { WebGlTextureBindingShell } from "../webgl/texture-binding-shell";
 
 type VirtualTextureFeatureModule = typeof import("./feature-owner");
 type PendingAutoSource = {
@@ -82,11 +83,12 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   }
 
   bindGpuResource(
+    bindings: WebGlTextureBindingShell,
     key: string,
     atlasTextureUnit: number,
     pageTableTextureUnit: number,
   ): VirtualTextureGpuBinding | undefined {
-    return this.#feature?.bindGpuResource(key, atlasTextureUnit, pageTableTextureUnit);
+    return this.#feature?.bindGpuResource(bindings, key, atlasTextureUnit, pageTableTextureUnit);
   }
 
   clear(): void {
