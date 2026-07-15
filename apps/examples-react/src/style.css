@@ -242,6 +242,28 @@ canvas {
   inline-size: 100%;
 }
 
+.svg-texture-example {
+  block-size: 100%;
+  inline-size: 100%;
+  position: relative;
+}
+
+.svg-texture-mode {
+  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--panel), transparent 12%);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.45rem 0.7rem;
+  position: absolute;
+  right: 0.8rem;
+  top: 0.8rem;
+}
+
 .picking-example {
   block-size: 100%;
   inline-size: 100%;

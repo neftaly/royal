@@ -88,6 +88,17 @@ as a successful orientation test. CDP commands have a 30-second default timeout,
 overridable with `EXAMPLES_SMOKE_CDP_TIMEOUT_MS`, so a sleeping device cannot
 stall the harness indefinitely.
 
+The Ghostscript Tiger SVG route exposes the same React canvas in generated-VT
+and ordinary-texture modes. Its focused smoke toggles the renderer option,
+requires each distinct residency path to settle, captures the composited canvas
+in both modes, then bounds mean RGB error below 1.5% and materially changed
+pixels below 5%:
+
+```sh
+EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
+pnpm --filter @royal/examples-react test:browser
+```
+
 Fuller host report:
 
 ```sh

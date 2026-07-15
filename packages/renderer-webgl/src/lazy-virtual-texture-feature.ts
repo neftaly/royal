@@ -43,6 +43,8 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   readonly #pendingAutoSources = new Map<string, PendingAutoSource>();
   #failure: unknown;
   #feature: VirtualTextureFeature | undefined;
+  #frameFeature: VirtualTextureFeature | undefined;
+  #frameOpen = false;
   #loading: Promise<void> | undefined;
   #module: VirtualTextureFeatureModule | undefined;
   #requested = false;
@@ -70,7 +72,9 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
 
   beginFrame(): void {
     this.#activate();
-    this.#feature?.beginFrame();
+    this.#frameOpen = true;
+    this.#frameFeature = this.#feature;
+    this.#frameFeature?.beginFrame();
   }
 
   beginView(viewIndex: number): void {
@@ -120,7 +124,10 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   }
 
   finishFrame(commit: boolean): void {
-    this.#feature?.finishFrame(commit);
+    const feature = this.#frameFeature;
+    this.#frameFeature = undefined;
+    this.#frameOpen = false;
+    feature?.finishFrame(commit);
   }
 
   hasActionableUploads(): boolean {
@@ -222,6 +229,14 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
     ) return;
     try {
       this.#feature = new this.#module.VirtualTextureFeatureOwner(this.#options);
+      // Decoded ordinary images are applied after the root begins its frame.
+      // Automatic-VT demand can therefore instantiate the lazy feature in the
+      // middle of that frame; enroll it before any draw or finish call reaches
+      // its frame-demand workspace.
+      if (this.#frameOpen) {
+        this.#feature.beginFrame();
+        this.#frameFeature = this.#feature;
+      }
       for (const { source, texture } of this.#pendingAutoSources.values()) {
         this.#feature.registerAutoDecodedSource(texture, source);
       }

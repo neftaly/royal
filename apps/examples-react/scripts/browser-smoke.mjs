@@ -319,7 +319,7 @@ const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
 // With preserveDrawingBuffer disabled, drawImage(canvas) may then observe the
 // discarded back buffer between frames. CDP captures the composited surface,
 // which is the image a user actually sees.
-const compositedCanvasSample = async (session) => {
+const captureCompositedCanvas = async (session) => {
   await evaluate(session, `
     (async () => {
       await globalThis.__royalExamplesRenderNow?.();
@@ -343,9 +343,15 @@ const compositedCanvasSample = async (session) => {
     format: 'png',
     fromSurface: false,
   });
+  return capture.data;
+};
+
+const compositedCanvasSample = async (session) => {
+  const capture = await captureCompositedCanvas(session);
+  if (capture === undefined) return undefined;
   return evaluate(session, `
     (async () => {
-      const response = await fetch('data:image/png;base64,${capture.data}');
+      const response = await fetch('data:image/png;base64,${capture}');
       const bitmap = await createImageBitmap(await response.blob());
       const width = Math.max(1, Math.min(160, bitmap.width));
       const height = Math.max(1, Math.min(160, bitmap.height));
@@ -396,6 +402,151 @@ const compositedCanvasSample = async (session) => {
       };
     })()
   `);
+};
+
+const waitForSvgTextureMode = async (session, expectedMode) => evaluate(session, `
+(async () => {
+  const deadline = performance.now() + 12000;
+  let stableFrames = 0;
+  let sample;
+  while (performance.now() < deadline && stableFrames < 6) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const container = document.querySelector('.svg-texture-example');
+    const renderer = ${rendererSnapshotExpression};
+    const virtualTexturing = renderer?.virtualTexturing;
+    sample = {
+      activePages: virtualTexturing?.activePages ?? null,
+      frame: renderer?.frame ?? null,
+      lifecycleError: renderer?.lifecycle?.error ?? null,
+      lifecycleState: renderer?.lifecycle?.state ?? null,
+      mode: container?.getAttribute('data-svg-texture-mode') ?? null,
+      outstandingPageRequests: virtualTexturing?.outstandingPageRequests ?? null,
+      pendingPages: virtualTexturing?.pendingPages ?? null,
+      sceneReadyAssets: renderer?.gltfLoadDiagnostics?.sceneReadyAssets ?? null,
+    };
+    const expectedResidency = '${expectedMode}' === 'virtual'
+      ? sample.activePages > 0
+      : sample.activePages === 0;
+    if (
+      sample.mode === '${expectedMode}'
+      && sample.lifecycleState === 'available'
+      && sample.lifecycleError === null
+      && sample.sceneReadyAssets > 0
+      && sample.pendingPages === 0
+      && sample.outstandingPageRequests === 0
+      && expectedResidency
+    ) stableFrames += 1;
+    else stableFrames = 0;
+  }
+  return { ...sample, settled: stableFrames >= 6 };
+})()
+`);
+
+const captureSvgTextureCanvas = async (session) => {
+  await evaluate(session, `
+    (() => {
+      const control = document.querySelector('.svg-texture-mode');
+      if (control instanceof HTMLElement) control.style.visibility = 'hidden';
+    })()
+  `);
+  try {
+    return await captureCompositedCanvas(session);
+  } finally {
+    await evaluate(session, `
+      (() => {
+        const control = document.querySelector('.svg-texture-mode');
+        if (control instanceof HTMLElement) control.style.removeProperty('visibility');
+      })()
+    `);
+  }
+};
+
+const runSvgTextureParitySmoke = async (session) => {
+  const virtual = await waitForSvgTextureMode(session, 'virtual');
+  if (virtual.settled !== true) return { error: 'generated VT mode did not settle', virtual };
+  const virtualCapture = await captureSvgTextureCanvas(session);
+  if (virtualCapture === undefined) return { error: 'could not capture generated VT mode', virtual };
+
+  let ordinary;
+  try {
+    await evaluate(session, `
+      (() => {
+        const control = document.querySelector('.svg-texture-mode');
+        if (!(control instanceof HTMLButtonElement)) return false;
+        control.click();
+        return true;
+      })()
+    `);
+    ordinary = await waitForSvgTextureMode(session, 'ordinary');
+    if (ordinary.settled !== true) {
+      return { error: 'ordinary SVG texture mode did not settle', ordinary, virtual };
+    }
+    const ordinaryCapture = await captureSvgTextureCanvas(session);
+    if (ordinaryCapture === undefined) {
+      return { error: 'could not capture ordinary SVG texture mode', ordinary, virtual };
+    }
+    const comparison = await evaluate(session, `
+      (async () => {
+        const decode = async (data) => {
+          const response = await fetch('data:image/png;base64,' + data);
+          return createImageBitmap(await response.blob());
+        };
+        const [virtualBitmap, ordinaryBitmap] = await Promise.all([
+          decode('${virtualCapture}'),
+          decode('${ordinaryCapture}'),
+        ]);
+        const width = 160;
+        const height = Math.max(1, Math.round(width * virtualBitmap.height / virtualBitmap.width));
+        const pixels = (bitmap) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (context === null) return undefined;
+          context.drawImage(bitmap, 0, 0, width, height);
+          return context.getImageData(0, 0, width, height).data;
+        };
+        const virtualPixels = pixels(virtualBitmap);
+        const ordinaryPixels = pixels(ordinaryBitmap);
+        virtualBitmap.close();
+        ordinaryBitmap.close();
+        if (virtualPixels === undefined || ordinaryPixels === undefined) {
+          return { error: '2D comparison context unavailable' };
+        }
+        const errors = [];
+        let changedPixels = 0;
+        let sum = 0;
+        let sumSquares = 0;
+        for (let index = 0; index < virtualPixels.length; index += 4) {
+          const error = (
+            Math.abs(virtualPixels[index] - ordinaryPixels[index])
+            + Math.abs(virtualPixels[index + 1] - ordinaryPixels[index + 1])
+            + Math.abs(virtualPixels[index + 2] - ordinaryPixels[index + 2])
+          ) / (3 * 255);
+          errors.push(error);
+          sum += error;
+          sumSquares += error * error;
+          if (error > 0.1) changedPixels += 1;
+        }
+        errors.sort((left, right) => left - right);
+        const count = errors.length;
+        return {
+          changedPixelRatio: changedPixels / count,
+          height,
+          meanAbsoluteError: sum / count,
+          p95Error: errors[Math.min(count - 1, Math.floor(count * 0.95))],
+          rootMeanSquareError: Math.sqrt(sumSquares / count),
+          width,
+        };
+      })()
+    `);
+    return { comparison, ordinary, virtual };
+  } finally {
+    if (ordinary?.mode === 'ordinary') {
+      await evaluate(session, `document.querySelector('.svg-texture-mode')?.click()`);
+      await waitForSvgTextureMode(session, 'virtual');
+    }
+  }
 };
 
 const assertRoute = (expected, state) => {
@@ -462,6 +613,30 @@ const assertRoute = (expected, state) => {
       failures.push(`glTF variants selected ${interaction.selections?.join(',')}, expected ruby,mint,slate`);
     } else if (interaction.pressed?.join(',') !== 'ruby,mint,slate') {
       failures.push(`glTF variants pressed state was ${interaction.pressed?.join(',')}, expected ruby,mint,slate`);
+    }
+  }
+
+  if (expected.id === 'gltf-ghostscript-tiger-svg') {
+    const parity = state.svgTextureParity;
+    if (parity === undefined) {
+      failures.push('SVG texture route missed generated-VT parity smoke');
+    } else if (parity.error !== undefined) {
+      failures.push(`SVG texture parity smoke failed: ${parity.error}`);
+    } else if (parity.comparison?.error !== undefined) {
+      failures.push(`SVG texture comparison failed: ${parity.comparison.error}`);
+    } else {
+      if (!(parity.comparison?.meanAbsoluteError < 0.015)) {
+        failures.push(`SVG generated VT mean pixel error was ${parity.comparison?.meanAbsoluteError ?? 'unknown'}`);
+      }
+      if (!(parity.comparison?.changedPixelRatio < 0.05)) {
+        failures.push(`SVG generated VT changed-pixel ratio was ${parity.comparison?.changedPixelRatio ?? 'unknown'}`);
+      }
+      if (
+        parity.virtual?.activePages <= 0
+        || parity.ordinary?.activePages !== 0
+      ) {
+        failures.push('SVG parity modes did not exercise distinct generated-VT and ordinary residency');
+      }
     }
   }
 
@@ -1543,7 +1718,11 @@ const main = async () => {
     await waitForHttp(baseUrl, 15_000);
     session = await connectPage();
     session.on('Runtime.exceptionThrown', (event) => {
-      exceptions.push(event.exceptionDetails?.text ?? 'Runtime exception');
+      const details = event.exceptionDetails;
+      const location = details?.url === undefined
+        ? ''
+        : ` at ${details.url}:${(details.lineNumber ?? 0) + 1}:${(details.columnNumber ?? 0) + 1}`;
+      exceptions.push(`${details?.exception?.description ?? details?.text ?? 'Runtime exception'}${location}`);
     });
     session.on('Runtime.consoleAPICalled', (event) => {
       if (event.type !== 'warning' && event.type !== 'error') return;
@@ -1626,6 +1805,12 @@ const main = async () => {
           variantInteraction: await runGltfVariantsInteractionSmoke(session),
         };
       }
+      if (route.id === 'gltf-ghostscript-tiger-svg') {
+        state = {
+          ...state,
+          svgTextureParity: await runSvgTextureParitySmoke(session),
+        };
+      }
       if (route.id === 'virtual-texture-stress') {
         const virtualTextureInteraction = await runVirtualTextureInteractionSmoke(session);
         const refreshedSample = await compositedCanvasSample(session);
@@ -1644,9 +1829,8 @@ const main = async () => {
         const recentResources = (state.resources ?? [])
           .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
           .join('; ');
-        const interactionDiagnostics = state.virtualTextureInteraction === undefined
-          ? ''
-          : JSON.stringify(state.virtualTextureInteraction);
+        const interaction = state.virtualTextureInteraction ?? state.svgTextureParity;
+        const interactionDiagnostics = interaction === undefined ? '' : JSON.stringify(interaction);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`
         }${
@@ -1681,7 +1865,10 @@ const main = async () => {
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)} luma=${state.canvas.sample.meanPaintedLuminance.toFixed(3)} p25=${state.canvas.sample.paintedLuminanceP25.toFixed(3)} p50=${state.canvas.sample.paintedLuminanceP50.toFixed(3)} p75=${state.canvas.sample.paintedLuminanceP75.toFixed(3)} chroma=${state.canvas.sample.meanPaintedChroma.toFixed(3)} saturation=${state.canvas.sample.meanPaintedSaturation.toFixed(3)}`;
-      console.log(`ok ${route.id}${canvasSummary}`);
+      const paritySummary = state.svgTextureParity?.comparison?.meanAbsoluteError === undefined
+        ? ''
+        : ` svgParityMae=${state.svgTextureParity.comparison.meanAbsoluteError.toFixed(4)} changed=${state.svgTextureParity.comparison.changedPixelRatio.toFixed(4)}`;
+      console.log(`ok ${route.id}${canvasSummary}${paritySummary}`);
     }
 
     if (contextLossSmoke && !contextLossChecked) {
