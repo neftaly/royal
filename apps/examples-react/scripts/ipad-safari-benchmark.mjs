@@ -25,6 +25,14 @@ const route = optionValue('route', process.env.IPAD_BENCH_ROUTE ?? '/gltf-instan
 const frames = numericOption('frames', Number.parseInt(process.env.IPAD_BENCH_FRAMES ?? '120', 10));
 const warmup = numericOption('warmup', Number.parseInt(process.env.IPAD_BENCH_WARMUP ?? '20', 10));
 const timeoutMs = numericOption('timeout-ms', Number.parseInt(process.env.IPAD_BENCH_TIMEOUT_MS ?? '30000', 10));
+const waitForPhysicalOrientation = optionValue(
+  'wait-for-orientation',
+  process.env.IPAD_BENCH_WAIT_FOR_ORIENTATION ?? 'false',
+) === 'true';
+const orientationTimeoutMs = numericOption(
+  'orientation-timeout-ms',
+  Number.parseInt(process.env.IPAD_BENCH_ORIENTATION_TIMEOUT_MS ?? '120000', 10),
+);
 const host = optionValue('host', process.env.IPAD_BENCH_HOST);
 const appPort = numericOption('app-port', Number.parseInt(process.env.IPAD_BENCH_APP_PORT ?? '4673', 10));
 const outputDir = path.resolve(
@@ -317,19 +325,31 @@ const evaluate = async (client, targetId, expression, waitMs = timeoutMs) => {
 
 const waitForReport = async (client, targetId) => {
   const deadline = Date.now() + timeoutMs + frames * 1000;
+  let lastTransportError;
   while (Date.now() < deadline) {
-    const value = await evaluate(
-      client,
-      targetId,
-      [
-        'globalThis.__royalBrowserBenchmarkError !== undefined',
-        '? JSON.stringify({ error: globalThis.__royalBrowserBenchmarkError })',
-        ': globalThis.__royalBrowserBenchmarkReport === undefined',
-        '? null',
-        ': JSON.stringify({ report: globalThis.__royalBrowserBenchmarkReport })',
-      ].join(' '),
-      5_000,
-    );
+    let value;
+    try {
+      value = await evaluate(
+        client,
+        targetId,
+        [
+          'globalThis.__royalBrowserBenchmarkError !== undefined',
+          '? JSON.stringify({ error: globalThis.__royalBrowserBenchmarkError })',
+          ': globalThis.__royalBrowserBenchmarkReport === undefined',
+          '? null',
+          ': JSON.stringify({ report: globalThis.__royalBrowserBenchmarkReport })',
+        ].join(' '),
+        5_000,
+      );
+      lastTransportError = undefined;
+    } catch (error) {
+      // Mobile WebKit can briefly stop servicing inspector commands while a
+      // navigation commits or Safari swaps processes. The run already has a
+      // hard deadline, so a single missed poll is not evidence of failure.
+      lastTransportError = error;
+      await sleep(500);
+      continue;
+    }
     if (typeof value === 'string') {
       const parsed = JSON.parse(value);
       if (typeof parsed.error === 'string') throw new Error(parsed.error);
@@ -345,7 +365,112 @@ const waitForReport = async (client, targetId) => {
     }
     await sleep(500);
   }
-  throw new Error('Timed out waiting for iPad benchmark report');
+  const detail = lastTransportError instanceof Error ? `: ${lastTransportError.message}` : '';
+  throw new Error(`Timed out waiting for iPad benchmark report${detail}`);
+};
+
+const physicalOrientationSample = async (client, targetId) => {
+  const value = await evaluate(
+    client,
+    targetId,
+    `JSON.stringify((() => {
+      const canvas = document.querySelector('canvas');
+      const rect = canvas?.getBoundingClientRect();
+      const renderer = globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+      return {
+        canvas: {
+          cssHeight: rect?.height ?? null,
+          cssWidth: rect?.width ?? null,
+          height: canvas?.height ?? null,
+          width: canvas?.width ?? null
+        },
+        dpr: globalThis.devicePixelRatio,
+        renderer,
+        viewport: { height: globalThis.innerHeight, width: globalThis.innerWidth }
+      };
+    })())`,
+    5_000,
+  );
+  if (typeof value !== 'string') throw new Error('iPad orientation sample was unavailable');
+  return JSON.parse(value);
+};
+
+const physicalOrientationKind = (sample) =>
+  sample.viewport.width > sample.viewport.height ? 'landscape' : 'portrait';
+
+const canvasTracksPhysicalViewport = (sample) => {
+  const { canvas, dpr } = sample;
+  if (
+    !Number.isFinite(canvas.cssWidth)
+    || !Number.isFinite(canvas.cssHeight)
+    || !Number.isFinite(canvas.width)
+    || !Number.isFinite(canvas.height)
+    || !Number.isFinite(dpr)
+  ) return false;
+  return Math.abs(canvas.width - Math.ceil(canvas.cssWidth * dpr)) <= 1
+    && Math.abs(canvas.height - Math.ceil(canvas.cssHeight * dpr)) <= 1;
+};
+
+const waitForPhysicalOrientationChange = async (client, targetId) => {
+  const before = await physicalOrientationSample(client, targetId);
+  const beforeKind = physicalOrientationKind(before);
+  const beforeFrame = before.renderer?.frame;
+  if (!Number.isFinite(beforeFrame)) {
+    throw new Error('Renderer frame evidence was unavailable before physical iPad rotation');
+  }
+  const deadline = Date.now() + orientationTimeoutMs;
+  console.log(`Waiting up to ${orientationTimeoutMs}ms for the iPad to rotate from ${beforeKind}...`);
+
+  let lastTransportError;
+  let changed;
+  while (Date.now() < deadline) {
+    try {
+      const sample = await physicalOrientationSample(client, targetId);
+      lastTransportError = undefined;
+      if (physicalOrientationKind(sample) !== beforeKind) {
+        changed = sample;
+        break;
+      }
+    } catch (error) {
+      lastTransportError = error;
+    }
+    await sleep(250);
+  }
+  if (changed === undefined) {
+    const detail = lastTransportError instanceof Error ? `: ${lastTransportError.message}` : '';
+    throw new Error(`Timed out waiting for physical iPad orientation change${detail}`);
+  }
+
+  const settleDeadline = Date.now() + Math.min(orientationTimeoutMs, 30_000);
+  while (Date.now() < settleDeadline) {
+    try {
+      await evaluate(client, targetId, 'globalThis.__royalExamplesRenderNow?.(); "invalidated";', 5_000);
+      const sample = await physicalOrientationSample(client, targetId);
+      const renderer = sample.renderer;
+      lastTransportError = undefined;
+      if (
+        canvasTracksPhysicalViewport(sample)
+        && renderer?.lifecycle?.state === 'available'
+        && renderer.frame > beforeFrame
+        && renderer.virtualTexturing?.pendingPages === 0
+      ) {
+        return {
+          after: sample,
+          before,
+          changed: true,
+          settled: true,
+        };
+      }
+      changed = sample;
+    } catch (error) {
+      lastTransportError = error;
+    }
+    await sleep(250);
+  }
+  const detail = lastTransportError instanceof Error ? `; transport=${lastTransportError.message}` : '';
+  throw new Error(
+    `Physical iPad orientation changed but Royal did not reconverge: ${JSON.stringify(changed)}${detail}`,
+  );
 };
 
 const safeSegment = (value) =>
@@ -369,6 +494,23 @@ const incompleteRendererEvidence = (report) => {
   return failures;
 };
 
+const isExpectedDevTransportDiagnostic = (entry, entries) => {
+  if (
+    entry.kind !== 'console'
+    || entry.level !== 'error'
+    || !/^WebSocket connection to 'ws:\/\/[^/]+\/\?token=[^']+' failed: WebSocket is closed due to suspension\.$/u
+      .test(entry.text)
+  ) return false;
+  return entries.some((candidate) =>
+    candidate.kind === 'console'
+    && candidate.level === 'debug'
+    && candidate.text === '[vite] connecting...'
+    && /\/@vite\/client(?:\?|$)/u.test(candidate.url)
+    && candidate.timestamp >= entry.timestamp
+    && candidate.timestamp - entry.timestamp < 2
+  );
+};
+
 const run = async () => {
   const page = await findPage();
   const client = websocketConnect(page.webSocketDebuggerUrl);
@@ -378,6 +520,7 @@ const run = async () => {
   if (typeof targetId !== 'string') throw new Error('WebKit target id was missing');
   const browserDiagnostics = captureWebKitDiagnostics(client, targetId);
   let report;
+  let physicalOrientation;
 
   try {
     await targetCommand(client, targetId, 'Console.enable');
@@ -409,9 +552,13 @@ const run = async () => {
         `iPad benchmark evidence incomplete: ${evidenceFailures.join('; ')}; page=${String(pageState)}`,
       );
     }
+    if (waitForPhysicalOrientation) {
+      physicalOrientation = await waitForPhysicalOrientationChange(client, targetId);
+    }
     const diagnosticSnapshot = browserDiagnostics.snapshot();
     const browserErrors = diagnosticSnapshot.entries.filter((entry) =>
-      entry.kind === 'exception' || entry.level === 'error'
+      (entry.kind === 'exception' || entry.level === 'error')
+      && !isExpectedDevTransportDiagnostic(entry, diagnosticSnapshot.entries)
     );
     if (browserErrors.length > 0) {
       throw new Error(
@@ -424,6 +571,7 @@ const run = async () => {
     const outputPath = path.join(outputDir, filename);
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: diagnosticSnapshot,
+      physicalOrientation,
       receivedAt: new Date().toISOString(),
       report,
     }, null, 2)}\n`);

@@ -25,7 +25,7 @@ const mapMaterial = unlitMaterial({
 });
 const residencyMarkerGeometry = planeGeometry([0.24, 0.24]);
 const residencyMarkerSrc = 'data:image/png;base64,'
-  + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==';
+  + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12P4z/D/PwAG/gL+93DmpAAAAABJRU5ErkJggg==';
 const residencyMarkerMaterial = unlitMaterial({
   texture: imageTexture({
     sampler: { magFilter: 'nearest', minFilter: 'nearest' },

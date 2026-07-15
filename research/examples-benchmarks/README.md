@@ -62,6 +62,15 @@ is true and `warnings` is empty or understood.
   origin-unclean pixels there; the accepted run has zero generated-VT requests,
   failures, or allocations.
 
+2026-07-15 iPad Safari orientation pass:
+
+- `ipad-safari/2026-07-15T03-42-06-461Z-virtual-texture-stress.json` retains
+  one renderer root across a physical landscape-to-portrait turn. The viewport
+  changed from `1024x698` to `768x954` at DPR 2, the canvas backing dimensions
+  tracked its CSS size in both orientations, the renderer advanced from frame
+  27 to 30 without a lifecycle interruption, and VT reconverged to zero pending
+  pages with no Royal or WebGL errors.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at

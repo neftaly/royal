@@ -245,6 +245,22 @@ IPAD_BENCH_HOST=<host-lan-ip> \
 pnpm --filter @royal/examples-react bench:ipad-safari -- --route='/gltf-lab?case=Box' --frames=24 --warmup=8
 ```
 
+For a real orientation lifecycle check, start the route in either orientation,
+run the command below, and rotate the unlocked iPad once when the script prints
+its waiting message:
+
+```sh
+IPAD_BENCH_HOST=<host-lan-ip> \
+pnpm --filter @royal/examples-react bench:ipad-safari -- \
+  --route=/virtual-texture-stress --frames=24 --warmup=8 \
+  --wait-for-orientation=true --orientation-timeout-ms=120000
+```
+
+This records both physical viewports in one report and requires the same
+renderer root to advance a frame, resize its drawing buffer at the physical
+DPR, remain available, and return VT demand to zero pending pages. It does not
+substitute an emulated device-metrics override.
+
 The script drives the existing Safari tab over the WebKit inspector protocol,
 navigates it to `?bench=auto`, waits for the in-page collector, and writes JSON
 reports under `research/examples-benchmarks/ipad-safari/`. The collector runs

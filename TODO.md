@@ -96,9 +96,8 @@ CI runs both the built-entrypoint and packed-consumer gates.
    one framebuffer-multisample `GL_INVALID_OPERATION` warning during setup.
    The July 15 Quest follow-up covers context restoration, camera pan,
    native-DPR CSS resize, and generated-VT/ordinary SVG raster parity through
-   the shared browser smoke harness. The Quest browser does not implement CDP
-   device-metrics overrides, so real physical orientation remains outstanding
-   rather than being simulated. Desktop/CI now covers bounded page-slot
-   eviction under a fixed VT allocation while protecting an ordinary texture;
-   rerun that pressure gate with a foreground physical Quest panel. Still cover
-   physical orientation and the foreground Quest pressure pass.
+   the shared browser smoke harness. A July 15 physical iPad pass now covers an
+   in-place landscape-to-portrait resize on one retained renderer root, including
+   DPR-correct backing dimensions and VT reconvergence. Desktop/CI covers bounded
+   page-slot eviction under a fixed VT allocation while protecting an ordinary
+   texture; rerun that pressure gate with a foreground physical Quest panel.
