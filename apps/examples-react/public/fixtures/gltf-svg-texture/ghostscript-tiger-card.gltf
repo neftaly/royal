@@ -24,7 +24,8 @@
     { "buffer": 0, "byteLength": 512, "byteOffset": 768, "target": 34962 },
     { "buffer": 0, "byteLength": 372, "byteOffset": 1280, "target": 34963 }
   ],
-  "extensionsUsed": ["KHR_materials_unlit"],
+  "extensionsRequired": ["KHR_materials_unlit", "KHR_texture_transform"],
+  "extensionsUsed": ["KHR_materials_unlit", "KHR_texture_transform"],
   "images": [{ "mimeType": "image/svg+xml", "name": "Ghostscript Tiger.svg", "uri": "ghostscript-tiger.svg" }],
   "materials": [
     {
@@ -42,7 +43,19 @@
       "doubleSided": true,
       "extensions": { "KHR_materials_unlit": {} },
       "name": "Ghostscript tiger SVG",
-      "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 }, "metallicFactor": 0, "roughnessFactor": 1 }
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "extensions": {
+            "KHR_texture_transform": {
+              "offset": [0.05964372184276368, 0.046353291014474836],
+              "scale": [0.9072934112111877, 0.9072934112111877]
+            }
+          },
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
     }
   ],
   "meshes": [{

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -27,6 +27,7 @@ const browserMode = process.env.EXAMPLES_SMOKE_BROWSER?.trim() || 'chromium';
 const managePreview = process.env.EXAMPLES_SMOKE_PREVIEW !== '0';
 const routeQuery = process.env.EXAMPLES_SMOKE_QUERY?.trim() ?? '';
 const routeFilter = process.env.EXAMPLES_SMOKE_ROUTE?.trim() ?? '';
+const captureDirectory = process.env.EXAMPLES_SMOKE_CAPTURE_DIR?.trim() ?? '';
 const envNumber = (name, fallback) => {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -472,6 +473,10 @@ const runSvgTextureParitySmoke = async (session) => {
   if (virtual.settled !== true) return { error: 'generated VT mode did not settle', virtual };
   const virtualCapture = await captureSvgTextureCanvas(session);
   if (virtualCapture === undefined) return { error: 'could not capture generated VT mode', virtual };
+  if (captureDirectory !== '') {
+    await mkdir(captureDirectory, { recursive: true });
+    await writeFile(path.join(captureDirectory, 'ghostscript-tiger-vt.png'), Buffer.from(virtualCapture, 'base64'));
+  }
 
   let ordinary;
   try {
@@ -490,6 +495,12 @@ const runSvgTextureParitySmoke = async (session) => {
     const ordinaryCapture = await captureSvgTextureCanvas(session);
     if (ordinaryCapture === undefined) {
       return { error: 'could not capture ordinary SVG texture mode', ordinary, virtual };
+    }
+    if (captureDirectory !== '') {
+      await writeFile(
+        path.join(captureDirectory, 'ghostscript-tiger-ordinary.png'),
+        Buffer.from(ordinaryCapture, 'base64'),
+      );
     }
     const comparison = await evaluate(session, `
       (async () => {
