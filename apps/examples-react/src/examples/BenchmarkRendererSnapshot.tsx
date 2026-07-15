@@ -66,9 +66,10 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
     typeof value.nodeCount !== 'number' ||
     phaseMs === null ||
     typeof value.primitiveCount !== 'number' ||
-    typeof value.sourceUri !== 'string' ||
+    typeof value.uri !== 'string' ||
     typeof value.status !== 'string' ||
-    typeof value.variantCount !== 'number'
+    !Array.isArray(value.variantNames) ||
+    value.variantNames.some((name) => typeof name !== 'string')
   ) {
     return null;
   }
@@ -82,12 +83,12 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
     nodeCount: value.nodeCount,
     phaseMs,
     primitiveCount: value.primitiveCount,
-    sourceUri: value.sourceUri,
-    ...(typeof value.sourceVersion === 'number' || typeof value.sourceVersion === 'string'
-      ? { sourceVersion: value.sourceVersion }
-      : {}),
     status: value.status,
-    variantCount: value.variantCount,
+    uri: value.uri,
+    variantNames: [...value.variantNames] as string[],
+    ...(typeof value.version === 'number' || typeof value.version === 'string'
+      ? { version: value.version }
+      : {}),
   };
 };
 

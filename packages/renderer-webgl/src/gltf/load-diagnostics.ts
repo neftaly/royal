@@ -52,10 +52,9 @@ const gltfLoadDiagnosticsAssetSnapshot = (
     nodeCount: state.nodeCount,
     phaseMs,
     primitiveCount: state.primitiveCount,
-    sourceUri: state.sourceUri,
-    ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
+    uri: state.sourceUri,
+    ...(state.sourceVersion === undefined ? {} : { version: state.sourceVersion }),
     status: state.status === "ready" ? "sceneReady" : state.status,
-    variantCount: state.variants.length,
     variantNames: Object.freeze([...state.variants]),
   };
 };

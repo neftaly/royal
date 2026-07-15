@@ -21,10 +21,10 @@ export type GltfLoadDiagnosticsAsset = {
   readonly nodeCount: number;
   readonly phaseMs: Record<string, number>;
   readonly primitiveCount: number;
-  readonly sourceUri: string;
-  readonly sourceVersion?: number | string;
   readonly status: string;
-  readonly variantCount: number;
+  readonly uri: string;
+  readonly variantNames: readonly string[];
+  readonly version?: number | string;
 };
 
 export type GltfLoadDiagnosticsSnapshot = {

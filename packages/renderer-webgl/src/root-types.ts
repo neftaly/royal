@@ -170,15 +170,14 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
     readonly toSceneReady?: number;
   };
   readonly primitiveCount: number;
-  /** Source URI supplied by the public glTF descriptor. */
-  readonly sourceUri: string;
-  /** Optional application-supplied asset version used for cache identity. */
-  readonly sourceVersion?: number | string;
+  /** URI supplied by the public glTF descriptor. */
+  readonly uri: string;
+  /** Optional application-supplied version used for cache identity. */
+  readonly version?: number | string;
   /** `sceneReady` is renderable; image completion metrics may still advance afterward. */
   readonly status: "loading" | "sceneReady" | "error";
   /** Ordered `KHR_materials_variants` names accepted by public glTF descriptors. */
   readonly variantNames: readonly string[];
-  readonly variantCount: number;
 }
 
 export interface WebGlGltfLoadDiagnosticsSnapshot {
