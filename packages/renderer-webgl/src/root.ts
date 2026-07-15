@@ -123,19 +123,11 @@ import {
 } from "./gltf/image-demand-coordinator";
 import {
   PreparedGltfRuntime,
-  type AnyGltfNode,
-  type PreparedGltfState as GltfState,
 } from "./gltf/prepared-runtime";
-import {
-  GltfMaterialPreparationArena,
-  gltfPrimitiveMaterialForVariant,
-  selectedGltfVariantIndex,
-} from "./gltf/material-preparation-arena";
-import {
-  GltfPacketSelectionOwner,
-  gltfMaterialLodSelectionKey,
-} from "./gltf/packet-selection-owner";
+import { GltfMaterialPreparationArena } from "./gltf/material-preparation-arena";
+import { GltfPacketSelectionOwner } from "./gltf/packet-selection-owner";
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
+import { GltfPacketOccurrenceBuilder } from "./gltf/packet-occurrence-builder";
 import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
 import { GltfAssetPreparationOwner } from "./gltf/asset-preparation-owner";
 import {
@@ -143,10 +135,6 @@ import {
   preparedGltfLoadDiagnosticsSnapshot,
 } from "./gltf/load-diagnostics";
 import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-owner";
-import {
-  type GltfPacketOccurrence,
-  type GltfPacketPreparedPrimitive,
-} from "./gltf-packet-topology";
 import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
 import {
   identityMat4,
@@ -364,6 +352,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#admitGltfPreparationJob,
     (failure) => this.#framePublication.reportRenderFailure(failure),
   );
+  readonly #gltfPacketOccurrences = new GltfPacketOccurrenceBuilder(
+    this.#geometryRecipes,
+    this.#preparedGltf,
+  );
   readonly #gltfPreparation: GltfAssetPreparationOwner;
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
@@ -394,7 +386,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   });
   readonly #clusteredLights: ClusteredLightArena;
   readonly #scenePlan = new ScenePlanTransactionOwner({
-    rebuildTopology: (plan) => this.#rebuildGltfPacketTopology(plan),
+    rebuildTopology: (plan) => this.#gltfPacketOccurrences.rebuild(plan),
     reconcileBulkInstances: (changes) => this.#gltfInstanceTransforms.reconcile(changes),
     reconcileRenderObjectRefs: (plan, changes) => this.#sceneBindings.reconcile(plan, changes),
   });
@@ -605,7 +597,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         disposed: () => this.#disposed,
         drainResourceSideEffects: () => this.#resourceArenaSideEffects.drain(),
         geometryRecipes: this.#geometryRecipes,
-        packetOccurrence: (plan, occurrenceIndex) => this.#gltfPacketOccurrence(plan, occurrenceIndex),
+        packetOccurrence: (plan, occurrenceIndex) => this.#gltfPacketOccurrences.occurrence(plan, occurrenceIndex),
         plan: () => this.#scenePlan.plan,
         recordDiagnostic: (message, key) => this.#recordDiagnostic(message, key),
         resourceArena: this.#resourceArena,
@@ -1365,107 +1357,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       (delta) => applyResourceDelta(this.#resourceArena, delta),
     );
     if (commit.kind === "retained") return commit.plan;
-    this.#preparedGltf.sharedViewLods.resetPlan();
+    this.#gltfPacketOccurrences.resetPlan();
     const resourceFailure = captureFailure(
       () => this.#applyResourceArenaChanges(commit.resourceChanges),
     );
     this.#scenePlan.finishReconciliation(resourceFailure);
     return commit.plan;
-  }
-
-  #gltfPacketPreparedPrimitives(
-    node: AnyGltfNode,
-    state: GltfState,
-    renderInstanceOrdinal: number,
-  ): readonly GltfPacketPreparedPrimitive[] {
-    const outerCount = node.kind === "gltf-instances" ? node.instances.count : 1;
-    const selectedVariantIndex = state.hasMaterialVariants
-      ? selectedGltfVariantIndex(state.variants, node.variant)
-      : undefined;
-    return state.primitives.map((primitive) => {
-      const retainedGeometry = this.#geometryRecipes.retainedGltfRecipe(primitive);
-      if (retainedGeometry === undefined) {
-        throw new Error(`Royal glTF primitive geometry ${primitive.key} was not retained for packets`);
-      }
-      this.#geometryRecipes.bindPacketPrimitive(retainedGeometry.id, primitive);
-      const primitiveMaterial = selectedVariantIndex === undefined
-        ? primitive.baseMaterial
-        : gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const materialLod = primitiveMaterial.materialLod;
-      const materialAlternatives = materialLod === undefined
-        ? [{ material: primitiveMaterial.material }]
-        : materialLod.levels.map((material, level) => ({ level, material }));
-      const renderInstanceKey = (outerIndex: number): string => node.kind === "gltf-instances"
-        ? `instance:${renderInstanceOrdinal}:${outerIndex}`
-        : `instance:${renderInstanceOrdinal}`;
-      const materialLodSelectionIds = materialLod === undefined
-        ? undefined
-        : Array.from({ length: outerCount * primitive.localModels.length }, (_, index) => {
-            const outerIndex = Math.floor(index / primitive.localModels.length);
-            const localIndex = index % primitive.localModels.length;
-            return this.#preparedGltf.sharedViewLods.materialSelectionId(
-              state.key,
-              gltfMaterialLodSelectionKey(
-                state,
-                renderInstanceKey(outerIndex),
-                primitive,
-                primitiveMaterial,
-                localIndex,
-              ),
-              materialLod,
-            );
-          });
-      const nodeLod = primitive.nodeLod === undefined
-        ? undefined
-        : {
-            level: primitive.nodeLod.level,
-            selectionIds: Array.from({ length: outerCount }, (_, outerIndex) =>
-              this.#preparedGltf.sharedViewLods.nodeSelectionId(
-                state.key,
-                `${state.key}:${renderInstanceKey(outerIndex)}:node:${primitive.nodeLod!.group}`,
-                primitive.nodeLod!,
-                state.primitives,
-              )),
-          };
-      return {
-        geometryId: retainedGeometry.id,
-        localBounds: primitive.localBounds,
-        localModelDeterminants: primitive.localModelDeterminants,
-        localModels: primitive.localModels,
-        materialAlternatives,
-        ...(materialLodSelectionIds === undefined ? {} : { materialLodSelectionIds }),
-        ...(nodeLod === undefined ? {} : { nodeLod }),
-      };
-    });
-  }
-
-  #gltfPacketOccurrence(
-    plan: FramePlan,
-    topologyOccurrenceIndex: number,
-  ): GltfPacketOccurrence {
-    const row = plan.gltfRequestRows[topologyOccurrenceIndex]!;
-    const node = plan.nodes[row.nodeIndex] as AnyGltfNode;
-    const state = this.#preparedGltf.get(row.requestKey);
-    const primitives = state?.status === "ready"
-      ? this.#gltfPacketPreparedPrimitives(node, state, topologyOccurrenceIndex)
-      : undefined;
-    return {
-      kind: node.kind,
-      occurrenceIndex: topologyOccurrenceIndex,
-      orderingSegment: plan.orderSegments[row.nodeIndex]!,
-      outerCount: node.kind === "gltf-instances" ? node.instances.count : 1,
-      planOccurrenceIndex: row.nodeIndex,
-      ...(primitives === undefined ? {} : { primitives }),
-    };
-  }
-
-  #rebuildGltfPacketTopology(plan: FramePlan): void {
-    this.#geometryRecipes.clearPacketPrimitives();
-    this.#preparedGltf.rebuildPacketTopology(
-      plan.revision,
-      plan.gltfRequestRows.map((row) => row.requestKey),
-      plan.gltfRequestRows.map((_, index) => this.#gltfPacketOccurrence(plan, index)),
-    );
   }
 
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
