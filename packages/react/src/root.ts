@@ -15,6 +15,7 @@ import {
 import {
   registerRoyalRendererCapabilities,
   royalRendererCapabilitiesFor,
+  type RoyalRendererFrameClock,
 } from "./renderer-capabilities";
 import { validateGltfAssetRef } from "./gltf-asset-identity";
 import { recordWithAllowedFields } from "./validation";
@@ -250,13 +251,7 @@ const royalGltfAssetSnapshot = (
   return Object.freeze({ state: "ready", variantNames: snapshot.variantNames });
 };
 
-/** @internal Transfers demand scheduling to a React-owned frame loop. */
-export type RoyalRendererFrameClock = {
-  /** Flushes demand while this is the root's sole external clock owner. */
-  flushInvalidated(): void;
-  /** Returns scheduling to the root after the last external owner releases. */
-  release(): void;
-};
+export type { RoyalRendererFrameClock } from "./renderer-capabilities";
 
 export const acquireExternalRenderClockForRoyalRoot = (
   root: RoyalRendererRoot,

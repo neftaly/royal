@@ -1,9 +1,16 @@
-import type { RoyalRendererFrameClock, RoyalRendererRoot } from "./root";
 import type {
   XrSession,
   XrSessionRenderer,
   XrSessionRendererOptions,
-} from "./xr-renderer";
+} from "./xr-renderer-model";
+
+/** Ownership token for an external renderer frame clock. */
+export interface RoyalRendererFrameClock {
+  /** Flushes demand while this is the root's sole external clock owner. */
+  flushInvalidated(): void;
+  /** Returns scheduling to the root after the last external owner releases. */
+  release(): void;
+}
 
 /** @internal Backend operations used by optional React renderer integrations. */
 export interface RoyalRendererCapabilities {
@@ -14,11 +21,11 @@ export interface RoyalRendererCapabilities {
   ): Promise<XrSessionRenderer>;
 }
 
-const rendererCapabilities = new WeakMap<RoyalRendererRoot, RoyalRendererCapabilities>();
+const rendererCapabilities = new WeakMap<object, RoyalRendererCapabilities>();
 
 /** @internal Registers the capability adapter owned by a renderer root factory. */
 export const registerRoyalRendererCapabilities = (
-  root: RoyalRendererRoot,
+  root: object,
   capabilities: RoyalRendererCapabilities,
 ): void => {
   if (rendererCapabilities.has(root)) {
@@ -29,7 +36,7 @@ export const registerRoyalRendererCapabilities = (
 
 /** @internal Resolves optional integration operations without exposing a concrete backend root. */
 export const royalRendererCapabilitiesFor = (
-  root: RoyalRendererRoot,
+  root: object,
 ): RoyalRendererCapabilities => {
   const capabilities = rendererCapabilities.get(root);
   if (capabilities === undefined) {
