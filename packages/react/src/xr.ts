@@ -29,9 +29,12 @@ export {
   createXrSessionStore,
   selectXrSessionControlSnapshot,
   selectXrSessionSnapshot,
+} from "./xr-store";
+
+export {
   useXrSessionSelector,
   useXrSessionSnapshot,
-} from "./xr-store";
+} from "./xr-store-react";
 
 export type {
   XrSessionSelectorEquality,

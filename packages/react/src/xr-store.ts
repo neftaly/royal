@@ -1,4 +1,3 @@
-import { useMemo, useSyncExternalStore } from "react";
 import {
   copyXrViewports,
   createInitialXrSessionStoreData,
@@ -358,28 +357,3 @@ export const createXrSessionSelectionReaders = <Session extends object, State>(
     getSelection: createCachedSelectionReader(store.getState, selector, isEqual),
   };
 };
-
-/**
- * Subscribes to a derived XR value. Store updates whose selected value is equal
- * do not rerender the component; pass an equality function for object selections.
- */
-export const useXrSessionSelector = <Session extends object, State>(
-  store: XrSessionStore<Session>,
-  selector: (state: XrSessionStoreState<Session>) => State,
-  isEqual: XrSessionSelectorEquality<State> = Object.is,
-): State => {
-  const readers = useMemo(
-    () => createXrSessionSelectionReaders(store, selector, isEqual),
-    [isEqual, selector, store],
-  );
-  return useSyncExternalStore(
-    store.subscribe,
-    readers.getSelection,
-    readers.getInitialSelection,
-  );
-};
-
-export const useXrSessionSnapshot = <Session extends object>(
-  store: XrSessionStore<Session>,
-): XrSessionState =>
-  useXrSessionSelector(store, selectXrSessionSnapshot);
