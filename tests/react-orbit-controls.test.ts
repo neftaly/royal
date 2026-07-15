@@ -149,6 +149,15 @@ describe("OrbitControls", () => {
       initialView: defaultView,
       zoomSpeed: Number.NaN,
     })).toThrow("OrbitControls zoomSpeed must be a finite number");
+    expect(() => createOrbitControls(canvas, {
+      initialView: defaultView,
+      minDistance: 0,
+    })).toThrow("OrbitControls minDistance must be positive");
+    expect(() => createOrbitControls(canvas, {
+      initialView: defaultView,
+      maxPitch: -1,
+      minPitch: 1,
+    })).toThrow("OrbitControls minPitch must not exceed maxPitch");
 
     expect(() => createOrbitControls(canvas, {
       defaultView,
@@ -167,6 +176,25 @@ describe("OrbitControls", () => {
     expect(() => controls.setView(defaultView, {
       emitChange: "no",
     } as unknown as Parameters<typeof controls.setView>[1])).toThrow("OrbitControls setView emitChange must be a boolean");
+    controls.dispose();
+  });
+
+  it("keeps behavior unchanged when setOptions validation fails", () => {
+    const canvas = fakeCanvas();
+    const controls = createOrbitControls(canvas, {
+      initialView: defaultView,
+      minDistance: 2,
+    });
+
+    expect(() => controls.setOptions({ minDistance: -1 }))
+      .toThrow("OrbitControls minDistance must be positive");
+    expect(() => controls.setOptions({ maxDistance: 1 }))
+      .toThrow("OrbitControls minDistance must not exceed maxDistance");
+
+    const wheel = wheelEvent(-120);
+    canvas.dispatchFakeEvent("wheel", wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(controls.getView().distance).toBeGreaterThanOrEqual(2);
     controls.dispose();
   });
 

@@ -91,6 +91,14 @@ const optionalFiniteNumber = (value: unknown, label: string): number | undefined
   return value;
 };
 
+const optionalPositiveFiniteNumber = (value: unknown, label: string): number | undefined => {
+  const number = optionalFiniteNumber(value, label);
+  if (number !== undefined && !(number > 0)) {
+    throw new RangeError(`${label} must be positive`);
+  }
+  return number;
+};
+
 const optionalChangeHandler = (
   value: unknown,
 ): OrbitControlsBehaviorOptions["onChange"] => {
@@ -117,15 +125,39 @@ export const orbitControlsBehaviorOptionsFrom = (
     rotateSpeed,
     zoomSpeed,
   } = objectRecord(options, "OrbitControls options") as OrbitControlsBehaviorOptions;
+  const resolvedMaxDistance = optionalPositiveFiniteNumber(
+    maxDistance,
+    "OrbitControls maxDistance",
+  );
+  const resolvedMaxPitch = optionalFiniteNumber(maxPitch, "OrbitControls maxPitch");
+  const resolvedMinDistance = optionalPositiveFiniteNumber(
+    minDistance,
+    "OrbitControls minDistance",
+  );
+  const resolvedMinPitch = optionalFiniteNumber(minPitch, "OrbitControls minPitch");
+  if (
+    resolvedMinDistance !== undefined
+    && resolvedMaxDistance !== undefined
+    && resolvedMinDistance > resolvedMaxDistance
+  ) {
+    throw new RangeError("OrbitControls minDistance must not exceed maxDistance");
+  }
+  if (
+    resolvedMinPitch !== undefined
+    && resolvedMaxPitch !== undefined
+    && resolvedMinPitch > resolvedMaxPitch
+  ) {
+    throw new RangeError("OrbitControls minPitch must not exceed maxPitch");
+  }
   return {
     enabled: optionalBoolean(enabled, "OrbitControls enabled"),
     enablePan: optionalBoolean(enablePan, "OrbitControls enablePan"),
     enableRotate: optionalBoolean(enableRotate, "OrbitControls enableRotate"),
     enableZoom: optionalBoolean(enableZoom, "OrbitControls enableZoom"),
-    maxDistance,
-    maxPitch,
-    minDistance,
-    minPitch,
+    maxDistance: resolvedMaxDistance,
+    maxPitch: resolvedMaxPitch,
+    minDistance: resolvedMinDistance,
+    minPitch: resolvedMinPitch,
     onChange: optionalChangeHandler(onChange),
     panSpeed: optionalFiniteNumber(panSpeed, "OrbitControls panSpeed"),
     rotateSpeed: optionalFiniteNumber(rotateSpeed, "OrbitControls rotateSpeed"),
