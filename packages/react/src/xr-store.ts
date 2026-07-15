@@ -250,7 +250,7 @@ export const createXrSessionStore = <Session extends object = object>(
       if (!isXrSessionBlockReason(reason)) {
         throw new TypeError("XR blockSession reason must be immersive-session-already-active or session-request-denied");
       }
-      validateModeOptions(options, AVAILABLE_MODE_OPTIONS, "XR blockSession options");
+      validateModeOptions(options, MODE_OPTIONS, "XR blockSession options");
       apply({ error, options, reason, type: "block" });
     },
     endSession: (options = {}) => {

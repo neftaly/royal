@@ -228,13 +228,13 @@ describe("React XR session store", () => {
   });
 
   it("records why acquisition was blocked without claiming session ownership", () => {
-    const store = createXrSessionStore<TestXrSession>({ available: true });
+    const store = createXrSessionStore<TestXrSession>({ available: false });
 
     store.getState().beginSession(undefined, { mode: "immersive-vr" });
     store.getState().blockSession(
       "immersive-session-already-active",
       new Error("another immersive session owns the device"),
-      { available: true, mode: "immersive-vr" },
+      { mode: "immersive-vr" },
     );
     expect(store.getState()).toMatchObject({
       available: true,

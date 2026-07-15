@@ -336,12 +336,10 @@ const XrSessionControl = (): ReactNode => {
           void enterXr().catch((error: unknown) => {
             if (immersiveSessionAlreadyActive(error)) {
               blockSession('immersive-session-already-active', error, {
-                available: true,
                 mode: 'immersive-vr',
               });
             } else if (sessionRequestDenied(error)) {
               blockSession('session-request-denied', error, {
-                available: true,
                 mode: 'immersive-vr',
               });
             } else {

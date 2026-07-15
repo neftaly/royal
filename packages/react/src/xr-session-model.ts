@@ -3,6 +3,12 @@ const XR_SESSION_MODES = ["immersive-ar", "immersive-vr", "inline"] as const;
 
 export type XrSessionMode = (typeof XR_SESSION_MODES)[number];
 
+/**
+ * Closed XR lifecycle. `active`, `suspended`, and `ending` own a browser
+ * session; `starting` may represent acquisition before one is returned.
+ * `available` and `unavailable` are idle capability results, while `blocked`
+ * is a denied acquisition on an otherwise supported mode.
+ */
 export type XrSessionStatus =
   | "active"
   | "available"
@@ -32,21 +38,32 @@ const XR_SESSION_VISIBILITY_STATES = [
 export type XrSessionVisibilityState = (typeof XR_SESSION_VISIBILITY_STATES)[number];
 
 export type XrViewport = {
+  /** Framebuffer-pixel height. */
   readonly height: number;
+  /** Framebuffer-pixel width. */
   readonly width: number;
+  /** Framebuffer-pixel horizontal origin. */
   readonly x: number;
+  /** Framebuffer-pixel vertical origin. */
   readonly y: number;
 };
 
 /** Serializable XR lifecycle and per-frame telemetry exposed to application code. */
 export type XrSessionState = {
+  /** Latest capability result; independent of a currently owned session's lifecycle. */
   readonly available: boolean;
+  /** Present only while `status` is `blocked`. */
   readonly blockReason: XrSessionBlockReason | null;
+  /** Latest transition failure, including a rejected session end. */
   readonly error: string | null;
+  /** Last recorded XR frame index; reset when session identity changes. */
   readonly frameIndex: number;
+  /** Requested or active mode, or `null` when no mode is selected. */
   readonly mode: XrSessionMode | null;
   readonly status: XrSessionStatus;
+  /** Browser session visibility while a session is owned. */
   readonly visibilityState: XrSessionVisibilityState | null;
+  /** Detached viewport telemetry from the last recorded XR frame. */
   readonly viewports: readonly XrViewport[];
 };
 
@@ -62,10 +79,12 @@ export type XrSessionStoreInitialState = {
 };
 
 export type XrSessionAvailabilityOptions = {
+  /** Mode whose capability result was checked. */
   readonly mode?: XrSessionMode | null;
 };
 
 export type XrSessionBeginOptions = {
+  /** Requested mode; omit when acquisition has not selected one yet. */
   readonly mode?: XrSessionMode | null;
 };
 
@@ -75,21 +94,26 @@ export type XrSessionActivationOptions = {
 };
 
 export type XrSessionBlockOptions = {
-  readonly available?: boolean;
+  /** Mode whose acquisition was blocked. */
   readonly mode?: XrSessionMode | null;
 };
 
 export type XrSessionEndOptions = {
+  /** Capability result to publish after releasing session ownership. */
   readonly available?: boolean;
 };
 
 export type XrSessionFailureOptions = {
+  /** Override the retained capability result after failure. */
   readonly available?: boolean;
+  /** Mode whose acquisition or runtime failed. */
   readonly mode?: XrSessionMode | null;
 };
 
 export type XrSessionFrameRecord = {
+  /** Omit to increment the retained index by one. */
   readonly frameIndex?: number;
+  /** Omit to preserve the previous viewport telemetry. */
   readonly viewports?: readonly XrViewport[];
 };
 

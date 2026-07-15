@@ -146,9 +146,7 @@ export const reduceXrSessionStoreData = <Session extends object>(
         throw new Error("Cannot block XR acquisition while a live session is owned");
       }
       return patchState(state, {
-        ...(transition.options.available === undefined
-          ? {}
-          : { available: transition.options.available }),
+        available: true,
         blockReason: transition.reason,
         error: transition.error === undefined ? null : errorMessageFromUnknown(transition.error),
         frameIndex: 0,
