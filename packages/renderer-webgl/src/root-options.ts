@@ -5,6 +5,7 @@ import type {
   WebGlRootOptions,
 } from "./root-types";
 import { defineResourceGovernorPolicy } from "./resource-governor";
+import { objectWithAllowedFields } from "./option-values";
 
 export type NormalizedInternalWebGlRootOptions = ResolvedWebGlRootOptions & {
   readonly resourceGovernorPolicy: ResourceGovernorPolicy;
@@ -23,13 +24,7 @@ const resolveOptions = (
   options: WebGlRootOptions,
   allowedFields: readonly string[],
 ): ResolvedWebGlRootOptions => {
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw new TypeError("Renderer options must be an object");
-  }
-  const allowed = new Set(allowedFields);
-  for (const field of Object.keys(options)) {
-    if (!allowed.has(field)) throw new TypeError(`Renderer options contain unsupported option ${JSON.stringify(field)}`);
-  }
+  objectWithAllowedFields(options, allowedFields, "Renderer options");
   return Object.freeze({
     alpha: booleanOption(options.alpha, true, "Renderer alpha"),
     antialias: booleanOption(options.antialias, true, "Renderer antialias"),

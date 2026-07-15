@@ -19,6 +19,7 @@ import {
   rendererFrameViews,
   type RendererFrameViewLane,
 } from "./webgl/frame-view-lane";
+import { objectWithAllowedFields } from "./option-values";
 
 export interface WebGlXrReferenceSpace {
   readonly __royalXrReferenceSpace?: never;
@@ -135,29 +136,9 @@ const REFERENCE_SPACE_TYPES: readonly WebXrReferenceSpaceType[] = [
   "unbounded",
 ];
 
-const objectOption = (value: unknown, label: string): Record<string, unknown> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-};
-
-const rejectUnknownOptions = (
-  options: Record<string, unknown>,
-  allowed: readonly string[],
-  label: string,
-): void => {
-  for (const name of Object.keys(options)) {
-    if (!allowed.includes(name)) {
-      throw new TypeError(`${label} contain unsupported option ${JSON.stringify(name)}`);
-    }
-  }
-};
-
 const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
-  const rootOptions = objectOption(options, "Royal WebXR options");
-  rejectUnknownOptions(
-    rootOptions,
+  objectWithAllowedFields(
+    options,
     ["advanced", "onFrameSnapshot", "referenceSpacePreference", "webGlLayer"],
     "Royal WebXR options",
   );
@@ -165,9 +146,8 @@ const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
     throw new TypeError("Royal WebXR onFrameSnapshot must be a function");
   }
   if (options.advanced !== undefined) {
-    const advanced = objectOption(options.advanced, "Royal WebXR advanced options");
-    rejectUnknownOptions(
-      advanced,
+    objectWithAllowedFields(
+      options.advanced,
       ["xrWebGLLayerConstructor"],
       "Royal WebXR advanced options",
     );
@@ -180,9 +160,8 @@ const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
   }
   const layer = options.webGlLayer;
   if (layer !== undefined) {
-    const layerOptions = objectOption(layer, "Royal WebXR webGlLayer");
-    rejectUnknownOptions(
-      layerOptions,
+    objectWithAllowedFields(
+      layer,
       ["antialias", "framebufferScaleFactor"],
       "Royal WebXR webGlLayer options",
     );

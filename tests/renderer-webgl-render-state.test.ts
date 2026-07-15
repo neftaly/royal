@@ -47,6 +47,8 @@ describe("WebGL root render state contracts", () => {
       {},
       { extra: true, views: [validView] },
       { views: [] },
+      { views: [{ ...validView, projection: identity }] },
+      { views: [{ ...validView, viewport: { ...validView.viewport, left: 0 } }] },
       { views: [{ ...validView, projectionMatrix: identity.slice(1) }] },
       { views: [{ ...validView, viewMatrix: [...identity.slice(0, 15), Number.NaN] }] },
       { views: [{ ...validView, viewport: { ...validView.viewport, width: 0 } }] },
