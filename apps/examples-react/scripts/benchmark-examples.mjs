@@ -19,6 +19,7 @@ import {
   exampleContract,
   rendererSnapshotExpression,
 } from './example-contract.mjs';
+import { summarizeCpuProfile } from './cpu-profile-summary.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -45,6 +46,13 @@ const configuredTraceOutputPath = process.env.EXAMPLES_BENCH_TRACE_OUTPUT?.trim(
 const traceOutputPath = configuredTraceOutputPath === ''
   ? replaceJsonSuffix(artifactBasePath, '.trace')
   : resolveInvocationPath(configuredTraceOutputPath);
+const cpuProfileOption = process.env.EXAMPLES_BENCH_CPU_PROFILE?.trim() ?? '';
+const cpuProfileEnabled = cpuProfileOption !== '' && cpuProfileOption !== '0';
+const cpuProfileOutputPath = cpuProfileOption === '1'
+  ? artifactBasePath.endsWith('.json')
+    ? `${artifactBasePath.slice(0, -5)}.cpuprofile`
+    : `${artifactBasePath}.cpuprofile`
+  : resolveInvocationPath(cpuProfileOption);
 const virtualTextureCloseScreenshotPath = artifactBasePath.endsWith('.json')
   ? `${artifactBasePath.slice(0, -5)}.vt-close.png`
   : `${artifactBasePath}.vt-close.png`;
@@ -1854,7 +1862,23 @@ Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-m
   };
 };
 
-const benchmarkRoute = async (session, route, onSessionChanged) => {
+const startCpuProfiler = async (session) => {
+  await session.call('Profiler.enable');
+  await session.call('Profiler.setSamplingInterval', { interval: 100 });
+  await session.call('Profiler.start');
+  let stopped = false;
+  return async () => {
+    if (stopped) throw new Error('Examples CPU profiler was already stopped');
+    stopped = true;
+    try {
+      return (await session.call('Profiler.stop')).profile;
+    } finally {
+      await session.call('Profiler.disable').catch(() => undefined);
+    }
+  };
+};
+
+const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }) => {
   await session.call('Page.bringToFront');
   if (clearCachePerRoute) await session.call('Network.clearBrowserCache');
   const loaded = session.once('Page.loadEventFired');
@@ -1887,6 +1911,9 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
     await session.call('Page.bringToFront');
     await onSessionChanged(session, diagnostics);
   }
+  const stopCpuProfiler = cpuProfileEnabled ? await startCpuProfiler(session) : undefined;
+  let result;
+  let routeFailure;
   try {
     const prepared = await prepareRouteForBenchmark(session, route);
     const virtualTextureClose = await prepareVirtualTextureCloseView(session, route);
@@ -1908,7 +1935,7 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
         timeoutMs: prepared.timeoutMs,
       }
       : undefined;
-    return {
+    result = {
       ...route,
       ...(prepared === undefined ? {} : { prepared }),
       ...(virtualTextureClose === undefined ? {} : { virtualTextureClose }),
@@ -1920,16 +1947,28 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
       wallNavigationAndReadyMs: performance.now() - start,
       ...measured,
     };
-  } finally {
-    if (realXrEnabled && route.id === 'webxr-vr') {
-      await evaluate(session, `
+  } catch (error) {
+    routeFailure = error;
+  }
+  let cpuProfileFailure;
+  if (stopCpuProfiler !== undefined) {
+    try {
+      await onCpuProfile(await stopCpuProfiler());
+    } catch (error) {
+      cpuProfileFailure = error;
+    }
+  }
+  if (realXrEnabled && route.id === 'webxr-vr') {
+    await evaluate(session, `
 (async () => {
   await globalThis.__royalBench?.endXrSession?.();
   return globalThis.__royalBench?.xrSnapshot?.().active ?? false;
 })()
 `).catch(() => false);
-    }
   }
+  if (routeFailure !== undefined) throw routeFailure;
+  if (cpuProfileFailure !== undefined) throw cpuProfileFailure;
+  return result;
 };
 
 const round = (value, digits = 2) => {
@@ -2282,6 +2321,9 @@ const main = async () => {
   let performanceTrace;
   let traceReport;
   let traceFailure;
+  let cpuProfile;
+  let cpuProfileSummary;
+  let cpuProfileWritten = false;
   const results = [];
   try {
     const size = await deploymentSize();
@@ -2307,15 +2349,25 @@ const main = async () => {
     // that replacement attachment instead of the one this path closes.
     if (traceEnabled && !realXrEnabled) performanceTrace = await startPerformanceTrace(session);
 
-    for (const route of selectedRoutes()) {
+    const benchmarkRoutes = selectedRoutes();
+    if (cpuProfileEnabled && benchmarkRoutes.length !== 1) {
+      throw new Error('EXAMPLES_BENCH_CPU_PROFILE requires EXAMPLES_BENCH_ROUTE to select exactly one route');
+    }
+    for (const route of benchmarkRoutes) {
       currentRoute = route;
       browserDiagnostics.reset();
-      const result = await benchmarkRoute(session, route, async (nextSession, nextDiagnostics) => {
-        session = nextSession;
-        browserDiagnostics = mergeBrowserDiagnostics(browserDiagnostics, nextDiagnostics);
-        if (traceEnabled && performanceTrace === undefined) {
-          performanceTrace = await startPerformanceTrace(session);
-        }
+      const result = await benchmarkRoute(session, route, {
+        onCpuProfile: async (profile) => {
+          cpuProfile = profile;
+          cpuProfileSummary = summarizeCpuProfile(profile);
+        },
+        onSessionChanged: async (nextSession, nextDiagnostics) => {
+          session = nextSession;
+          browserDiagnostics = mergeBrowserDiagnostics(browserDiagnostics, nextDiagnostics);
+          if (traceEnabled && performanceTrace === undefined) {
+            performanceTrace = await startPerformanceTrace(session);
+          }
+        },
       });
       results.push(result);
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
@@ -2410,6 +2462,17 @@ const main = async () => {
     }
     currentRoute = undefined;
 
+    if (cpuProfileEnabled) {
+      if (cpuProfile === undefined || cpuProfileSummary === undefined) {
+        throw new Error('Examples CPU profiler did not capture a profile');
+      }
+      await mkdir(path.dirname(cpuProfileOutputPath), { recursive: true });
+      await writeFile(cpuProfileOutputPath, `${JSON.stringify(cpuProfile)}\n`);
+      cpuProfileWritten = true;
+      console.log(`wrote ${cpuProfileOutputPath}`);
+      console.log('CPU top script self-time', cpuProfileSummary.topScriptSelfTime.slice(0, 12));
+    }
+
     if (performanceTrace !== undefined) {
       try {
         traceReport = await performanceTrace.stop();
@@ -2455,6 +2518,7 @@ const main = async () => {
         virtualTextureCloseEnabled,
         virtualTextureCloseTarget,
         benchmarkMode,
+        cpuProfileEnabled,
         instancingFuzzEnabled,
         instancingFuzzCases,
         instancingSeed,
@@ -2476,6 +2540,9 @@ const main = async () => {
               : { failure: 'Performance trace did not start' }),
         } }
         : {}),
+      ...(cpuProfileSummary === undefined
+        ? {}
+        : { cpuProfile: { outputPath: cpuProfileOutputPath, summary: cpuProfileSummary } }),
     };
 
     console.log(JSON.stringify({
@@ -2501,6 +2568,9 @@ const main = async () => {
       instancingHighestSetupInstancedDrawCallsPer1000Instances:
         analysis.instancing.highestSetupInstancedDrawCallsPer1000Instances.slice(0, 5),
       xrFrameFailures: analysis.xrFrameFailures,
+      ...(cpuProfileSummary === undefined
+        ? {}
+        : { cpuProfileTopScriptSelfTime: cpuProfileSummary.topScriptSelfTime.slice(0, 12) }),
     }, null, 2));
 
     if (outputPath !== '') {
@@ -2509,6 +2579,12 @@ const main = async () => {
       console.log(`wrote ${outputPath}`);
     }
   } catch (error) {
+    if (cpuProfile !== undefined && !cpuProfileWritten && cpuProfileOutputPath !== '') {
+      await mkdir(path.dirname(cpuProfileOutputPath), { recursive: true });
+      await writeFile(cpuProfileOutputPath, `${JSON.stringify(cpuProfile)}\n`);
+      cpuProfileWritten = true;
+      console.log(`wrote ${cpuProfileOutputPath}`);
+    }
     if (
       performanceTrace !== undefined
       && traceReport === undefined
