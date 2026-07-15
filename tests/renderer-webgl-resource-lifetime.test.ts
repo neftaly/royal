@@ -673,6 +673,24 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(() => root.dispose()).not.toThrow();
   });
 
+  it("terminally rejects geometry that exceeds the per-frame upload limit", () => {
+    const frames = installAnimationFrameQueue();
+    const { calls, gl } = fakeGl();
+    const uploadLimit = 1;
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: uploadLimit },
+      },
+    });
+
+    expect(() => root.render(renderScene(boxGeometry(1))))
+      .toThrow(new RegExp(`\\d+ upload bytes exceed the per-frame limit ${uploadLimit}`));
+    expect(countEvents(calls, "bufferData")).toBe(0);
+    expect(frames).toHaveLength(0);
+    root.dispose();
+  });
+
   it("terminally rejects an ordinary allocation above its mandatory-floor-adjusted maximum", async () => {
     ControlledImage.closeFailures = 0;
     vi.stubGlobal("Image", ControlledImage);

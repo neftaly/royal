@@ -865,6 +865,31 @@ describe("vertex-input arena", () => {
     expect(gl.uploads).toHaveLength(0);
   });
 
+  it("does not retry an upload that can never fit in one governor frame", () => {
+    const gl = new FakeGl();
+    const arena = createVertexInputArena({
+      reserve: () => ({
+        permanent: true,
+        reason: "64 upload bytes exceed the per-frame limit 32",
+      }),
+    });
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("oversized-static", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+
+    let failure: unknown;
+    try {
+      vertexInputGeometry(arena, glContext(gl), 1, 1);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(VertexInputGpuUploadCapacityError);
+    expect((failure as Error).message).toContain("64 upload bytes exceed the per-frame limit 32");
+    expect(gl.uploads).toHaveLength(0);
+  });
+
   it("spends failed upload bandwidth and leases retained rollback handles until retry", () => {
     const clean = recordingGovernor();
     const cleanGl = new FakeGl();

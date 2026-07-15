@@ -39,6 +39,7 @@ import {
   beginResourceGovernorFrame,
   createResourceGovernor,
   maximumResourceGovernorClassDurableBytes,
+  resourceGovernorImpossibleCostReason,
   ResourceGovernorCpuCapacityError,
   replaceResourceGovernorLease,
   reserveResourceGovernor,
@@ -276,6 +277,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   });
   readonly #vertexInputs: VertexInputArena = createVertexInputArena({
     reserve: (cost) => {
+      const impossible = resourceGovernorImpossibleCostReason(
+        this.#resourceGovernorPolicy,
+        "geometry",
+        cost,
+      );
+      if (impossible !== undefined) return { permanent: true, reason: impossible };
       const reservation = reserveResourceGovernor(this.#resourceGovernor, "geometry", cost);
       return typeof reservation === "string" ? { reason: reservation } : reservation;
     },
@@ -508,23 +515,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
         governor: {
           reserve: (cost) => {
             const policy = requestedOptions.resourceGovernorPolicy;
-            if (cost.uploadBytes > policy.limits.uploadBytes) {
-              return {
-                permanent: true,
-                reason: `${cost.uploadBytes} upload bytes exceed the absolute limit ${policy.limits.uploadBytes}`,
-              };
-            }
-            const maximumPersistentBytes = maximumResourceGovernorClassDurableBytes(
+            const impossible = resourceGovernorImpossibleCostReason(
               policy,
               "ordinary-texture",
-              "persistentGpuBytes",
+              cost,
             );
-            if (cost.persistentGpuBytes > maximumPersistentBytes) {
-              return {
-                permanent: true,
-                reason: `${cost.persistentGpuBytes} persistent GPU bytes exceed the ordinary-texture maximum ${maximumPersistentBytes}`,
-              };
-            }
+            if (impossible !== undefined) return { permanent: true, reason: impossible };
             const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
             return typeof reservation === "string"
               ? { permanent: false, reason: reservation }

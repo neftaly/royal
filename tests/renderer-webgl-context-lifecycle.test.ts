@@ -110,7 +110,7 @@ describe("WebGL root context lifecycle contracts", () => {
 
     expect(root.snapshot().diagnosticLog.entries).toContainEqual(expect.objectContaining({
       message: expect.stringMatching(
-        /Studio IBL specular texture is disabled.*upload bytes exceed the absolute limit/,
+        /Studio IBL specular texture is disabled.*upload bytes exceed the per-frame limit/,
       ),
     }));
     // The HDR surface remains required for physical rendering; only the

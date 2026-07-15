@@ -9,6 +9,7 @@ import {
   maximumResourceGovernorClassDurableBytes,
   reserveResourceGovernor,
   replaceResourceGovernorLease,
+  resourceGovernorImpossibleCostReason,
   resourceGovernorSnapshot,
   subscribeResourceGovernorDurableCapacityRelease,
   type ResourceGovernorClassPolicy,
@@ -131,6 +132,43 @@ describe("root resource governor", () => {
     expect(zero.total).toEqual({
       cpuDecodedBytes: 0, jobs: 0, persistentGpuBytes: 0, transientPeakBytes: 0, uploadBytes: 0,
     });
+  });
+
+  it("separates permanently impossible costs from current usage contention", () => {
+    const base = policy();
+    const configured: ResourceGovernorPolicy = {
+      ...base,
+      classes: {
+        ...base.classes,
+        geometry: {
+          cpuDecodedBytes: { hardLimit: 30, mandatoryFloor: 0 },
+          persistentGpuBytes: { hardLimit: 35, mandatoryFloor: 0 },
+        },
+      },
+    };
+
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      cpuDecodedBytes: 31,
+    })).toBe("31 decoded CPU bytes exceed the geometry maximum 30");
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      persistentGpuBytes: 36,
+    })).toBe("36 persistent GPU bytes exceed the geometry maximum 35");
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      transientPeakBytes: 51,
+    })).toBe("51 transient GPU bytes exceed the root maximum 50");
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      uploadBytes: 41,
+    })).toBe("41 upload bytes exceed the per-frame limit 40");
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      jobs: 5,
+    })).toBe("5 jobs exceed the root maximum 4");
+    expect(resourceGovernorImpossibleCostReason(configured, "geometry", {
+      cpuDecodedBytes: 30,
+      jobs: 4,
+      persistentGpuBytes: 35,
+      transientPeakBytes: 50,
+      uploadBytes: 40,
+    })).toBeUndefined();
   });
 
   it("protects other classes' mandatory floors while allowing soft-budget borrowing", () => {

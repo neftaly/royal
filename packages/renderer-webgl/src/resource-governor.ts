@@ -159,6 +159,45 @@ export const maximumResourceGovernorClassDurableBytes = (
   );
 };
 
+/**
+ * Explains costs that cannot fit even with an otherwise empty frame and no
+ * borrowed durable capacity. Current usage is deliberately absent: callers
+ * must keep retryable contention distinct from permanently impossible work.
+ */
+export const resourceGovernorImpossibleCostReason = (
+  policy: ResourceGovernorPolicy,
+  resourceClass: ResourceGovernorClass,
+  requestedCost: ResourceGovernorCost,
+): string | undefined => {
+  const cost = checkedCost(requestedCost);
+  const maximumCpuBytes = maximumResourceGovernorClassDurableBytes(
+    policy,
+    resourceClass,
+    "cpuDecodedBytes",
+  );
+  if (cost.cpuDecodedBytes > maximumCpuBytes) {
+    return `${cost.cpuDecodedBytes} decoded CPU bytes exceed the ${resourceClass} maximum ${maximumCpuBytes}`;
+  }
+  const maximumGpuBytes = maximumResourceGovernorClassDurableBytes(
+    policy,
+    resourceClass,
+    "persistentGpuBytes",
+  );
+  if (cost.persistentGpuBytes > maximumGpuBytes) {
+    return `${cost.persistentGpuBytes} persistent GPU bytes exceed the ${resourceClass} maximum ${maximumGpuBytes}`;
+  }
+  if (cost.transientPeakBytes > policy.limits.transientPeakBytes) {
+    return `${cost.transientPeakBytes} transient GPU bytes exceed the root maximum ${policy.limits.transientPeakBytes}`;
+  }
+  if (cost.uploadBytes > policy.limits.uploadBytes) {
+    return `${cost.uploadBytes} upload bytes exceed the per-frame limit ${policy.limits.uploadBytes}`;
+  }
+  if (cost.jobs > policy.limits.jobs) {
+    return `${cost.jobs} jobs exceed the root maximum ${policy.limits.jobs}`;
+  }
+  return undefined;
+};
+
 /** Pure admission decision; callers can fuzz this independently of resource side effects. */
 export const evaluateResourceGovernorAdmission = (
   policy: ResourceGovernorPolicy,

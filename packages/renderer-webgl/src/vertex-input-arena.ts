@@ -19,6 +19,8 @@ export interface VertexInputGpuReservation {
   commit(): VertexInputGpuLease;
 }
 export interface VertexInputGpuDenial {
+  /** True when the request cannot fit even in an otherwise empty governor frame. */
+  readonly permanent?: boolean;
   readonly reason: string;
 }
 
@@ -347,7 +349,9 @@ const reserveGpu = (
   });
   if (reservation === undefined) throw new Error("Vertex-input GPU allocation denied by root resource governor");
   if ("reason" in reservation) {
-    if (reservation.reason === "upload-capacity") throw new VertexInputGpuUploadCapacityError();
+    if (reservation.reason === "upload-capacity" && reservation.permanent !== true) {
+      throw new VertexInputGpuUploadCapacityError();
+    }
     throw new Error(`Vertex-input GPU allocation denied by root resource governor: ${reservation.reason}`);
   }
   return reservation;
