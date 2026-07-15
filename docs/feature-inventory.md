@@ -55,7 +55,7 @@ Status meanings:
 | Box and plane geometry | product | Very small convenience surface. Plane is also a VT/ground stress primitive. |
 | Standard material | product | Public simple PBR material. Keep. |
 | Unlit material | product | Essential for authored artwork and diagnostic parity. Keep. |
-| Wireframe material | product | Useful authoring, inspection, selection, and diagnostic surface. Keep. |
+| Wireframe material | product | Useful authoring, inspection, selection, and diagnostic surface. Keep its portable one-device-pixel lines; native WebGL line width is not a cross-device feature. |
 | Directional, point and spot lights | product | Standard compact light set. Keep unless environment-only lighting becomes an explicit product restriction. |
 | Studio environment preset | product | Currently the one scene environment authority. Keep; expand by data, not new environment classes. |
 | Render-object refs and imperative transform updates | product | Important high-frequency React DX. Keep. |

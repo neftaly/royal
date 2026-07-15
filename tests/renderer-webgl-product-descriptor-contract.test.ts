@@ -826,11 +826,11 @@ describe("WebGL renderer product descriptor contracts", () => {
     root.render(renderScene([
       mesh({
         geometry: planeGeometry(1),
-        material: wireframeMaterial({ color, width: 2.5 }),
+        material: wireframeMaterial({ color }),
       }),
     ]));
 
-    expect(calls).toContainEqual({ name: "lineWidth", args: [2.5] });
+    expect(calls).not.toContainEqual(expect.objectContaining({ name: "lineWidth" }));
     expectUniformVector(calls, color);
     expect(drawCalls(calls).some((call) =>
       call.args[0] === gl.LINES
@@ -974,7 +974,6 @@ describe("WebGL renderer product descriptor contracts", () => {
               version: "contract-v1",
             }),
             kind: "wireframe",
-            width: 2.5,
           },
         }),
       ]));

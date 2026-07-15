@@ -281,7 +281,6 @@ export class SurfaceExecutionArena {
         input.contextGeneration,
         input.geometryId,
         input.geometry,
-        input.material.kind === "wireframe" ? input.material.width : undefined,
       );
     } finally {
       if (manageState) this.#endDirectDraw();

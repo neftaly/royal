@@ -436,7 +436,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
             mesh({ geometry: boxGeometry(1), material: material([0.2, 0.6, 1, 1]) }),
             mesh({
               geometry: boxGeometry(1),
-              material: wireframeMaterial({ color: [1, 0.8, 0.1, 1], width: 1 }),
+              material: wireframeMaterial({ color: [1, 0.8, 0.1, 1] }),
             }),
       ],
       clearColor: [0, 0, 0, 0],

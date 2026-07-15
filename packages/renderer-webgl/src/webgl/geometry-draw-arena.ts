@@ -57,12 +57,10 @@ export const drawGeometry = (
   contextGeneration: number,
   geometryId: number,
   geometry: VertexInputGeometry,
-  lineWidth?: number,
 ): void => {
   const state = arena as unknown as State;
   state.gl.bindVertexArray(vertexInputBaseVertexArray(state.vertexInputs, state.gl, contextGeneration, geometryId));
   defaults(state, geometry);
-  if (lineWidth !== undefined) state.gl.lineWidth(lineWidth);
   draw(state, geometry);
 };
 

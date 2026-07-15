@@ -18,6 +18,7 @@ import {
   type TextureRef,
   unlitMaterial,
   virtualTexture,
+  wireframeMaterial,
   type VirtualTextureAssetOptions,
   type VirtualTextureInput,
 } from "@royal/renderer-core";
@@ -211,6 +212,28 @@ describe("renderer-core descriptor contract", () => {
       color: [1, 1, 1, 1],
       metallic: Number.NaN,
     })).toThrow(/finite/);
+  });
+
+  it("rejects ambiguous and misspelled material options", () => {
+    expect(() => standardMaterial({
+      color: [1, 1, 1, 1],
+      texture: imageTexture("/textures/albedo.png"),
+    } as unknown as Parameters<typeof standardMaterial>[0])).toThrow(/exactly one of color or texture/);
+    expect(() => unlitMaterial({} as Parameters<typeof unlitMaterial>[0]))
+      .toThrow(/exactly one of color or texture/);
+    expect(() => standardMaterial({
+      color: [1, 1, 1, 1],
+      metalic: 0.5,
+    } as unknown as Parameters<typeof standardMaterial>[0])).toThrow(/unsupported option "metalic"/);
+    expect(() => wireframeMaterial({
+      color: [1, 1, 1, 1],
+      width: 2,
+    } as unknown as Parameters<typeof wireframeMaterial>[0])).toThrow(/unsupported option "width"/);
+
+    if (false) {
+      // @ts-expect-error Native WebGL line width is not portable; wireframes are one device pixel.
+      wireframeMaterial({ color: [1, 1, 1, 1], width: 2 });
+    }
   });
 
   it("preserves explicit texture content keys for renderer-level sharing", () => {

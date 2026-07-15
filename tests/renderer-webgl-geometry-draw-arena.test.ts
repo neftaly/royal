@@ -118,7 +118,7 @@ describe("geometry draw arena", () => {
     const arena = createGeometryDrawArena(context(gl), vertexInputs);
 
     gl.events.length = 0;
-    drawGeometry(arena, 7, 1, geometry, 3);
+    drawGeometry(arena, 7, 1, geometry);
     drawGeometry(arena, 7, 1, geometry);
 
     expect(gl.boundVertexArrays.at(-1)).toEqual(expect.objectContaining({ kind: "vao" }));
@@ -130,10 +130,7 @@ describe("geometry draw arena", () => {
       { location: VERTEX_ATTRIBUTE.tangent, values: [0, 0, 0, 0] },
       { location: VERTEX_ATTRIBUTE.color, values: [1, 1, 1, 1] },
     ]);
-    const lineWidthIndex = gl.events.indexOf("lineWidth");
-    expect(gl.events.slice(lineWidthIndex - 2, lineWidthIndex + 2)).toEqual([
-      "vertexAttrib4f", "vertexAttrib4f", "lineWidth", "drawElements",
-    ]);
+    expect(gl.events).not.toContain("lineWidth");
 
     clearGeometryDrawArenaContext(arena);
     drawGeometry(arena, 7, 1, geometry);

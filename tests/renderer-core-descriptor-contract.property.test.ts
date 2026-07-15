@@ -208,7 +208,6 @@ describe("renderer-core descriptor properties", () => {
       expect(wireframeMaterial({ color: wireColor }), `${label} wireframe defaults`).toEqual({
         baseColor: { color: wireColor, kind: "solid" },
         kind: "wireframe",
-        width: 1.25,
       });
     });
   });
