@@ -34,7 +34,7 @@ describe("XR session transition core", () => {
       status: "active",
       visibilityState: "visible-blurred",
     });
-    expect(framed).toMatchObject({ frameIndex: 1, viewCount: 1 });
+    expect(framed).toMatchObject({ frameIndex: 1 });
     expect(framed.viewports).toEqual(sourceViewports);
     expect(framed.viewports).not.toBe(sourceViewports);
     expect(initial).toMatchObject({ session: null, status: "available" });

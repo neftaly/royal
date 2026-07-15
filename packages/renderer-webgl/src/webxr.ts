@@ -96,7 +96,6 @@ export interface WebGlXrFrameSnapshotViewport {
 
 export interface WebGlXrFrameSnapshot {
   readonly frameIndex: number;
-  readonly viewCount: number;
   readonly viewports: readonly WebGlXrFrameSnapshotViewport[];
 }
 
@@ -258,7 +257,6 @@ const frameSnapshot = (
   frameViews: FrameViews,
 ): WebGlXrFrameSnapshot => ({
   frameIndex,
-  viewCount: frameViews.count,
   viewports: Array.from({ length: frameViews.count }, (_value, index) => {
     const offset = index * 4;
     return {

@@ -238,7 +238,6 @@ describe("WebGL root WebXR working state contracts", () => {
     expect(onFrameSnapshot).toHaveBeenCalledTimes(1);
     expect(snapshots).toEqual([{
       frameIndex: 0,
-      viewCount: 1,
       viewports: [xrViewport],
     }]);
     expect(snapshots[0]?.viewports[0]).not.toBe(xrViewport);

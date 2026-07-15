@@ -47,7 +47,6 @@ export type XrSessionState = {
   readonly mode: XrSessionMode | null;
   readonly status: XrSessionStatus;
   readonly visibilityState: XrSessionVisibilityState | null;
-  readonly viewCount: number;
   readonly viewports: readonly XrViewport[];
 };
 
@@ -91,7 +90,6 @@ export type XrSessionFailureOptions = {
 
 export type XrSessionFrameRecord = {
   readonly frameIndex?: number;
-  readonly viewCount?: number;
   readonly viewports?: readonly XrViewport[];
 };
 

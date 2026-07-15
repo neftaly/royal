@@ -90,7 +90,6 @@ export const createInitialXrSessionStoreData = <Session extends object>(
       ? "checking"
       : availabilityStatus(available),
     visibilityState: null,
-    viewCount: 0,
     viewports: [],
   };
 };
@@ -121,7 +120,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         session: transition.session,
         status: suspended ? "suspended" : "active",
         visibilityState,
-        viewCount: 0,
         viewports: [],
       });
     }
@@ -137,7 +135,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         session: transition.session,
         status: "starting",
         visibilityState: null,
-        viewCount: 0,
         viewports: [],
       });
     case "begin-end":
@@ -158,7 +155,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         ...(transition.options.mode === undefined ? {} : { mode: transition.options.mode }),
         session: null,
         status: "blocked",
-        viewCount: 0,
         viewports: [],
         visibilityState: null,
       });
@@ -172,7 +168,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         session: null,
         status: availabilityStatus(available),
         visibilityState: null,
-        viewCount: 0,
         viewports: [],
       });
     }
@@ -188,7 +183,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         session: null,
         status: "error",
         visibilityState: null,
-        viewCount: 0,
         viewports: [],
       });
     case "fail-end": {
@@ -207,7 +201,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         : copyXrViewports(transition.frame.viewports);
       return patchState(state, {
         frameIndex: transition.frame.frameIndex ?? state.frameIndex + 1,
-        viewCount: transition.frame.viewCount ?? viewports.length,
         viewports,
       });
     }
@@ -229,7 +222,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
           mode: transition.options.mode ?? null,
           session: null,
           visibilityState: null,
-          viewCount: 0,
           viewports: [],
         }),
       });

@@ -92,7 +92,7 @@ const MODE_OPTIONS = ["mode"] as const;
 const AVAILABLE_OPTIONS = ["available"] as const;
 const AVAILABLE_MODE_OPTIONS = ["available", "mode"] as const;
 const ACTIVATION_OPTIONS = ["mode", "visibilityState"] as const;
-const FRAME_FIELDS = ["frameIndex", "viewCount", "viewports"] as const;
+const FRAME_FIELDS = ["frameIndex", "viewports"] as const;
 const VIEWPORT_FIELDS = ["height", "width", "x", "y"] as const;
 const validateOptionalAvailability = (value: unknown, label: string): void => {
   if (value !== undefined && typeof value !== "boolean") {
@@ -144,7 +144,6 @@ const validateNonNegativeInteger = (
 const validateFrameRecord = (frame: XrSessionFrameRecord): void => {
   const record = recordWithAllowedFields(frame, FRAME_FIELDS, "XR recordFrame frame");
   validateNonNegativeInteger(record.frameIndex, "XR recordFrame frameIndex");
-  validateNonNegativeInteger(record.viewCount, "XR recordFrame viewCount");
   if (record.viewports !== undefined && !Array.isArray(record.viewports)) {
     throw new TypeError("XR recordFrame viewports must be an array");
   }
@@ -181,7 +180,6 @@ export const selectXrSessionSnapshot = <Session extends object>(
   mode: state.mode,
   status: state.status,
   visibilityState: state.visibilityState,
-  viewCount: state.viewCount,
   viewports: copyXrViewports(state.viewports),
 });
 

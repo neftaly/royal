@@ -9,6 +9,7 @@ import {
   type XrSessionBlockReason,
   type XrSessionEndOptions,
   type XrSessionFailureOptions,
+  type XrSessionFrameRecord,
   type XrSessionMode,
   type XrSessionStoreInitialState,
   type XrSessionStatus,
@@ -312,7 +313,7 @@ describe("React XR session store", () => {
       available: true,
       frameIndex: 1,
       status: "active",
-      viewCount: 1,
+      viewports: [{ height: 20, width: 10, x: 1, y: 2 }],
     });
 
     store.getState().failSession(new Error("XR failed"), {
@@ -325,7 +326,6 @@ describe("React XR session store", () => {
       mode: null,
       session: null,
       status: "error",
-      viewCount: 0,
       viewports: [],
     });
 
@@ -353,6 +353,8 @@ describe("React XR session store", () => {
     const invalidBlockReason = "unknown" satisfies XrSessionBlockReason;
     // @ts-expect-error A store cannot begin with an active session it does not own.
     const invalidInitial = { active: true } satisfies XrSessionStoreInitialState;
+    // @ts-expect-error View count is derived from viewports.length.
+    const invalidFrame = { viewCount: 2 } satisfies XrSessionFrameRecord;
     // @ts-expect-error No lifecycle action produces an ended status.
     const invalidStatus = "ended" satisfies XrSessionStatus;
     expect([
@@ -364,8 +366,9 @@ describe("React XR session store", () => {
       invalidBlock,
       invalidBlockReason,
       invalidInitial,
+      invalidFrame,
       invalidStatus,
-    ]).toHaveLength(9);
+    ]).toHaveLength(10);
 
     const store = createXrSessionStore<TestXrSession>();
     if (false) {

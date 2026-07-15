@@ -52,7 +52,6 @@ export interface XrSession {
 
 export type XrSessionRendererFrameSnapshot = {
   readonly frameIndex: number;
-  readonly viewCount: number;
   readonly viewports: readonly XrViewport[];
 };
 
