@@ -7,9 +7,7 @@ in vec4 v_color;
 
 uniform vec4 u_color;
 uniform vec4 u_alphaSettings;
-uniform int u_baseColorUvSet;
-uniform vec4 u_baseColorUvRow0;
-uniform vec4 u_baseColorUvRow1;
+__SURFACE_TEXTURE_COORDINATE_UNIFORMS__
 uniform vec4 u_toneMappingSettings;
 
 __SURFACE_SAMPLER_UNIFORMS__

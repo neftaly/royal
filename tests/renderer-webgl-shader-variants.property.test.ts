@@ -9,6 +9,7 @@ import {
   type SurfaceShaderTextureFeature,
 } from "../packages/renderer-webgl/src/webgl/shaders";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+import { SURFACE_MATERIAL_TEXTURE_BINDINGS } from "../packages/renderer-webgl/src/webgl/surface-texture-binding-plan";
 
 const samplerDeclarations = {
   baseColorTexture: "uniform sampler2D u_texture;",
@@ -159,6 +160,14 @@ describe("surface shader variants", () => {
       expect(samplerDeclarationCount(source), label).toBe(features.size);
       for (const feature of SURFACE_SHADER_TEXTURE_FEATURES) {
         expect(source.includes(samplerDeclarations[feature]), `${label} ${feature}`).toBe(features.has(feature));
+      }
+      expect(source.includes("uniform int u_baseColorUvSet;"), `${label} base color UV uniforms`)
+        .toBe(features.has("baseColorTexture") || hasVirtualBaseColor);
+      for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
+        expect(
+          source.includes(`uniform int ${descriptor.uvUniformStem}Set;`),
+          `${label} ${descriptor.feature} UV uniforms`,
+        ).toBe(features.has(descriptor.feature));
       }
       for (const invariant of virtualBaseColorSourceInvariants) {
         expect(source.includes(invariant), `${label} ${invariant}`).toBe(hasVirtualBaseColor);

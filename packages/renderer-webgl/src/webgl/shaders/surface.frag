@@ -12,65 +12,9 @@ in vec4 v_color;
 
 uniform highp mat4 u_view;
 
-// Each authored glTF material slot selects one of the two retained raw UV sets
-// and applies its KHR_texture_transform affine rows in the fragment shader.
-uniform int u_baseColorUvSet;
-uniform vec4 u_baseColorUvRow0;
-uniform vec4 u_baseColorUvRow1;
-uniform int u_emissiveUvSet;
-uniform vec4 u_emissiveUvRow0;
-uniform vec4 u_emissiveUvRow1;
-uniform int u_metallicRoughnessUvSet;
-uniform vec4 u_metallicRoughnessUvRow0;
-uniform vec4 u_metallicRoughnessUvRow1;
-uniform int u_normalUvSet;
-uniform vec4 u_normalUvRow0;
-uniform vec4 u_normalUvRow1;
-uniform int u_occlusionUvSet;
-uniform vec4 u_occlusionUvRow0;
-uniform vec4 u_occlusionUvRow1;
-uniform int u_anisotropyUvSet;
-uniform vec4 u_anisotropyUvRow0;
-uniform vec4 u_anisotropyUvRow1;
-uniform int u_specularUvSet;
-uniform vec4 u_specularUvRow0;
-uniform vec4 u_specularUvRow1;
-uniform int u_specularColorUvSet;
-uniform vec4 u_specularColorUvRow0;
-uniform vec4 u_specularColorUvRow1;
-uniform int u_clearcoatUvSet;
-uniform vec4 u_clearcoatUvRow0;
-uniform vec4 u_clearcoatUvRow1;
-uniform int u_clearcoatRoughnessUvSet;
-uniform vec4 u_clearcoatRoughnessUvRow0;
-uniform vec4 u_clearcoatRoughnessUvRow1;
-uniform int u_clearcoatNormalUvSet;
-uniform vec4 u_clearcoatNormalUvRow0;
-uniform vec4 u_clearcoatNormalUvRow1;
-uniform int u_diffuseTransmissionUvSet;
-uniform vec4 u_diffuseTransmissionUvRow0;
-uniform vec4 u_diffuseTransmissionUvRow1;
-uniform int u_diffuseTransmissionColorUvSet;
-uniform vec4 u_diffuseTransmissionColorUvRow0;
-uniform vec4 u_diffuseTransmissionColorUvRow1;
-uniform int u_sheenColorUvSet;
-uniform vec4 u_sheenColorUvRow0;
-uniform vec4 u_sheenColorUvRow1;
-uniform int u_sheenRoughnessUvSet;
-uniform vec4 u_sheenRoughnessUvRow0;
-uniform vec4 u_sheenRoughnessUvRow1;
-uniform int u_iridescenceUvSet;
-uniform vec4 u_iridescenceUvRow0;
-uniform vec4 u_iridescenceUvRow1;
-uniform int u_iridescenceThicknessUvSet;
-uniform vec4 u_iridescenceThicknessUvRow0;
-uniform vec4 u_iridescenceThicknessUvRow1;
-uniform int u_materialTransmissionUvSet;
-uniform vec4 u_materialTransmissionUvRow0;
-uniform vec4 u_materialTransmissionUvRow1;
-uniform int u_thicknessUvSet;
-uniform vec4 u_thicknessUvRow0;
-uniform vec4 u_thicknessUvRow1;
+// Each admitted material sampler selects a retained raw UV set and applies its
+// KHR_texture_transform affine rows. Unused slots are absent from the variant.
+__SURFACE_TEXTURE_COORDINATE_UNIFORMS__
 
 // Material state.
 uniform vec4 u_color;

@@ -9,6 +9,18 @@ import wireframeFragmentShaderSource from "./shaders/wireframe.frag";
 import wireframeVertexShaderSource from "./shaders/wireframe.vert";
 import postprocessFragmentShaderSource from "./shaders/postprocess.frag";
 import postprocessVertexShaderSource from "./shaders/postprocess.vert";
+import {
+  SURFACE_MATERIAL_TEXTURE_BINDINGS,
+  SURFACE_SHADER_TEXTURE_FEATURES,
+  type SurfaceShaderFeatures,
+  type SurfaceShaderTextureFeature,
+} from "./surface-texture-features";
+
+export {
+  SURFACE_SHADER_TEXTURE_FEATURES,
+  type SurfaceShaderFeatures,
+  type SurfaceShaderTextureFeature,
+} from "./surface-texture-features";
 
 export type ProgramKind =
   | "surface"
@@ -17,36 +29,6 @@ export type ProgramKind =
   | "unlit"
   | "unlit-instanced-split"
   | "wireframe";
-
-export const SURFACE_SHADER_TEXTURE_FEATURES = [
-  "baseColorTexture",
-  "baseColorVirtualTextureAtlas",
-  "baseColorVirtualTexturePageTable",
-  "emissiveTexture",
-  "metallicRoughnessTexture",
-  "normalTexture",
-  "occlusionTexture",
-  "anisotropyTexture",
-  "specularTexture",
-  "specularColorTexture",
-  "clearcoatTexture",
-  "clearcoatRoughnessTexture",
-  "clearcoatNormalTexture",
-  "diffuseTransmissionTexture",
-  "diffuseTransmissionColorTexture",
-  "sheenColorTexture",
-  "sheenRoughnessTexture",
-  "iridescenceTexture",
-  "iridescenceThicknessTexture",
-  "materialTransmissionTexture",
-  "thicknessTexture",
-  "transmissionScreenTexture",
-  "iblSpecularCube",
-  "iblBrdfLut",
-] as const;
-
-export type SurfaceShaderTextureFeature = typeof SURFACE_SHADER_TEXTURE_FEATURES[number];
-export type SurfaceShaderFeatures = ReadonlySet<SurfaceShaderTextureFeature>;
 
 const ALL_SURFACE_SHADER_TEXTURE_FEATURES: SurfaceShaderFeatures = new Set(SURFACE_SHADER_TEXTURE_FEATURES);
 
@@ -126,6 +108,23 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
       ? "uniform sampler2D u_transmissionScreenTexture;"
       : "",
   ].filter((declaration) => declaration.length > 0).join("\n");
+
+const textureCoordinateUniformDeclarations = (stem: string): string => `uniform int ${stem}Set;
+uniform vec4 ${stem}Row0;
+uniform vec4 ${stem}Row1;`;
+
+const surfaceTextureCoordinateUniformDeclarations = (features: SurfaceShaderFeatures): string => {
+  const declarations: string[] = [];
+  if (hasSurfaceShaderFeature(features, "baseColorTexture") || hasSurfaceShaderVirtualBaseColor(features)) {
+    declarations.push(textureCoordinateUniformDeclarations("u_baseColorUv"));
+  }
+  for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
+    const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
+    if (!hasSurfaceShaderFeature(features, descriptor.feature)) continue;
+    declarations.push(textureCoordinateUniformDeclarations(descriptor.uvUniformStem));
+  }
+  return declarations.join("\n");
+};
 
 const surfaceTextureExpression = (
   features: SurfaceShaderFeatures,
@@ -277,6 +276,7 @@ export const fragmentShaderSource = (
 const unlitFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
   assertNoShaderTokens(replaceShaderTokens(unlitFragmentTemplate, new Map([
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
+    ["__SURFACE_TEXTURE_COORDINATE_UNIFORMS__", surfaceTextureCoordinateUniformDeclarations(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
     ["__BASE_COLOR_EXPR__", surfaceBaseColorExpression(features)],
@@ -327,6 +327,7 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredL
   assertNoShaderTokens(replaceShaderTokens(surfaceFragmentTemplate, new Map([
     ["__MAX_SURFACE_LIGHTS__", String(MAX_SURFACE_LIGHTS)],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
+    ["__SURFACE_TEXTURE_COORDINATE_UNIFORMS__", surfaceTextureCoordinateUniformDeclarations(features)],
     ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],
     ["__CLUSTERED_LIGHT_FUNCTIONS__", clusteredLights
       ? clusteredLightFunctions
