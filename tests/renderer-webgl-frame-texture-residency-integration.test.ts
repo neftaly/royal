@@ -74,7 +74,7 @@ describe("WebGL frame texture residency arbitration", () => {
       resources: 1,
     });
     expect(ControlledImage.instances).toHaveLength(sourceCount);
-    expect(namedUniform1iValues(calls).u_useEmissiveTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_emissiveTexture).toBeDefined();
   });
 
   it("rolls back VT suppression intent when a later frame operation fails", async () => {
@@ -120,7 +120,7 @@ describe("WebGL frame texture residency arbitration", () => {
 
     expect(root.snapshot().textureResidency.resources).toBe(1);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
-    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_texture).toContain(0);
   });
 
   it("avoids stale fallback handles and re-promotes retained source after context recovery", async () => {
@@ -148,8 +148,7 @@ describe("WebGL frame texture residency arbitration", () => {
     const invalidatedUniforms = namedUniform1iValues(calls.slice(invalidatedDrawStart));
 
     expect(invalidateAfterPlan).toBe(false);
-    expect(invalidatedUniforms.u_useTexture).not.toContain(1);
-    expect(invalidatedUniforms.u_useVirtualTexture).not.toContain(1);
+    expect(invalidatedUniforms.u_texture).toBeUndefined();
     expect(invalidatedUniforms.u_vtAtlas).toBeUndefined();
 
     const recoveredDrawStart = calls.length;
@@ -161,8 +160,8 @@ describe("WebGL frame texture residency arbitration", () => {
     for (let frame = 0; frame < 8; frame += 1) {
       root.render(renderScene(standardMaterial({ texture: material.baseColor })));
       await flushMicrotasks();
-      if (namedUniform1iValues(calls.slice(recoveredDrawStart)).u_useTexture?.includes(1)) break;
+      if (namedUniform1iValues(calls.slice(recoveredDrawStart)).u_texture?.includes(0)) break;
     }
-    expect(namedUniform1iValues(calls.slice(recoveredDrawStart)).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls.slice(recoveredDrawStart)).u_texture).toContain(0);
   });
 });

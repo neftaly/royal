@@ -15,6 +15,7 @@ import {
   ControlledImage,
   installViewportInvalidationStubs,
   flushMicrotasks,
+  settleControlledImageWave,
   waitForModuleLoad,
   flushPreparedAssetBoundary,
   flushAnimationFrames,
@@ -158,11 +159,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     loader.bitmapRequests[0]?.resolve({ height: 1, width: 1 } as ImageBitmap);
     await flushMicrotasks();
-    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
-    expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_texture")).toContain(0);
     expect(bufferDataPayloads(calls).map(roundVector)).not.toContainEqual([
       0, 0, 1,
       0, 0, 1,
@@ -831,20 +832,17 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushMicrotasks();
     await waitForAnimationFrameWork(
       viewport.animationFrames,
-      () => uniform1iPayloads(calls, "u_useAnisotropyTexture").includes(1)
-        && uniform1iPayloads(calls, "u_useDiffuseTransmissionTexture").includes(1)
-        && uniform1iPayloads(calls, "u_useDiffuseTransmissionColorTexture").includes(1),
+      () => uniform1iPayloads(calls, "u_anisotropyTexture").includes(13)
+        && uniform1iPayloads(calls, "u_diffuseTransmissionTexture").includes(11)
+        && uniform1iPayloads(calls, "u_diffuseTransmissionColorTexture").includes(12),
     );
 
     expect(
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
       "supported diffuse-transmission textures keep the material drawable",
     ).toBe(true);
-    expect(uniform1iPayloads(calls, "u_useAnisotropyTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_anisotropyTexture")).toContain(13);
-    expect(uniform1iPayloads(calls, "u_useDiffuseTransmissionTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_diffuseTransmissionTexture")).toContain(11);
-    expect(uniform1iPayloads(calls, "u_useDiffuseTransmissionColorTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_diffuseTransmissionColorTexture")).toContain(12);
     const sources = shaderSources(calls).join("\n");
     expect(sources).toContain("texture(u_anisotropyTexture, materialTextureUv(u_anisotropyUvSet");
@@ -853,9 +851,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(sources).toContain("materialFallbackCotangentFrame(normal, materialAnisotropyUv())");
     expect(sources).toContain("float alphaT = mix(alpha, 1.0, strength * strength)");
     expect(sources).toContain("texture(u_diffuseTransmissionTexture, materialTextureUv(u_diffuseTransmissionUvSet");
-    expect(sources).toContain(".a : 1.0");
     expect(sources).toContain("texture(u_diffuseTransmissionColorTexture, materialTextureUv(u_diffuseTransmissionColorUvSet");
-    expect(sources).toContain(".rgb : vec3(1.0)");
     expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
       .not.toMatch(/KHR_materials_anisotropy\..*ignored/i);
     expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))
@@ -1320,6 +1316,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await settleControlledImageWave(1);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(uniform4fvPayloads(calls, "u_baseColorUvRow0").map(roundVector))
@@ -1432,14 +1430,14 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     const settledCallsStart = calls.length;
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
 
     const settledCalls = calls.slice(settledCallsStart);
     const uploadIndex = settledCalls.findIndex((call) => call.name === "texImage2D");
     const drawIndex = settledCalls.findIndex((call) => drawCalls([call]).length === 1);
     expect(uploadIndex, "settled decoded glTF image should upload through the texture cache").toBeGreaterThanOrEqual(0);
     expect(drawIndex, "settled lower material should draw on the invalidated frame").toBeGreaterThan(uploadIndex);
-    expect(uniform1iPayloads(settledCalls, "u_useTexture").at(-1)).toBe(1);
+    expect(uniform1iPayloads(settledCalls, "u_texture").at(-1)).toBe(0);
   });
 
   it("draws the selected material LOD while secondary texture slots are pending", async () => {
@@ -1478,11 +1476,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     expect(drawCalls(pendingCalls), "pending normal/ORM/emissive/extension textures should not block the LOD").toHaveLength(1);
     expect(uniform4fvPayloads(pendingCalls, "u_color").map(roundVector)).toContainEqual([0, 1, 0, 1]);
-    expect(uniform1iPayloads(pendingCalls, "u_useMetallicRoughnessTexture")).not.toContain(1);
-    expect(uniform1iPayloads(pendingCalls, "u_useNormalTexture")).not.toContain(1);
-    expect(uniform1iPayloads(pendingCalls, "u_useEmissiveTexture")).not.toContain(1);
-    expect(uniform1iPayloads(pendingCalls, "u_useOcclusionTexture")).not.toContain(1);
-    expect(uniform1iPayloads(pendingCalls, "u_useSpecularTexture")).not.toContain(1);
+    expect(uniform1iPayloads(pendingCalls, "u_metallicRoughnessTexture")).toHaveLength(0);
+    expect(uniform1iPayloads(pendingCalls, "u_normalTexture")).toHaveLength(0);
+    expect(uniform1iPayloads(pendingCalls, "u_emissiveTexture")).toHaveLength(0);
+    expect(uniform1iPayloads(pendingCalls, "u_occlusionTexture")).toHaveLength(0);
+    expect(uniform1iPayloads(pendingCalls, "u_specularTexture")).toHaveLength(0);
   });
 
   it("budgets settled glTF ordinary texture uploads across animation frames", async () => {
@@ -1529,8 +1527,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     await waitForAnimationFrameWork(
       viewport.animationFrames,
-      () => uniform1iPayloads(calls, "u_useSpecularTexture").includes(1)
-        && uniform1iPayloads(calls, "u_useEmissiveTexture").includes(1),
+      () => uniform1iPayloads(calls, "u_specularTexture").length > 0
+        && uniform1iPayloads(calls, "u_emissiveTexture").length > 0,
     );
     expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
   });

@@ -478,10 +478,8 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     root.render(graph);
 
     expect(ControlledImage.instances).toHaveLength(0);
-    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
-      u_useTexture: expect.arrayContaining([0]),
-      u_useVirtualTexture: expect.arrayContaining([0]),
-    }));
+    expect(namedUniform1iValues(calls).u_texture).toBeUndefined();
+    expect(namedUniform1iValues(calls).u_vtAtlas).toBeUndefined();
     expect(namedUniform4fvValues(calls)).toEqual(expect.objectContaining({
       u_color: expect.arrayContaining([[1, 0, 1, 1]]),
     }));

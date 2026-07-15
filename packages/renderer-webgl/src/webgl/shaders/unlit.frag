@@ -5,7 +5,6 @@ in vec2 v_uv0;
 in vec2 v_uv1;
 in vec4 v_color;
 
-uniform bool u_useTexture;
 uniform vec4 u_color;
 uniform vec4 u_alphaSettings;
 uniform int u_baseColorUvSet;

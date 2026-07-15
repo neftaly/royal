@@ -51,9 +51,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     for (let frame = 0; frame < 3; frame += 1) root.render(graph);
     const uniforms = namedUniform1iValues(calls);
 
-    expect(uniforms.u_useEmissiveTexture).toContain(1);
     expect(uniforms.u_emissiveTexture).toContain(0);
-    expect(uniforms.u_useMetallicRoughnessTexture).not.toContain(1);
+    expect(uniforms.u_metallicRoughnessTexture).toBeUndefined();
     expect(imageBySrc("ready-metallic-roughness")).toBeUndefined();
     expect(root.snapshot().textureResidency.resources).toBe(1);
   });
@@ -78,8 +77,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     root.render(graph);
 
-    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
-    expect(namedUniform1iValues(calls).u_useEmissiveTexture).not.toContain(1);
+    expect(namedUniform1iValues(calls).u_texture).toContain(0);
+    expect(namedUniform1iValues(calls).u_emissiveTexture).toBeUndefined();
     expect(imageBySrc("omitted-emissive")).toBeUndefined();
     expect(root.snapshot().textureResidency.resources).toBe(1);
   });
@@ -106,7 +105,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     root.render(graph);
 
-    expect(namedUniform1iValues(calls).u_useEmissiveTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_emissiveTexture).toContain(0);
     expect(imageBySrc("still-omitted")).toBeUndefined();
   });
 

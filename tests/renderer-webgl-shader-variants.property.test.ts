@@ -46,7 +46,6 @@ const virtualBaseColorFeaturePair = [
 ] as const satisfies readonly SurfaceShaderTextureFeature[];
 
 const virtualBaseColorSourceInvariants = [
-  "uniform bool u_useVirtualTexture;",
   "uniform vec2 u_vtAtlasPageUvSize;",
   "uniform vec2 u_vtPageTableSize;",
   "uniform float u_vtBorderPageRatio;",
@@ -142,6 +141,9 @@ describe("surface shader variants", () => {
       expect(surfaceShaderFeatureKey(features), label).toBe(expectedKey);
       expect(surfaceShaderFeatureMask(features), label).toBe(expectedMask);
       expect(source, label).not.toMatch(/__[A-Z0-9_]+__/u);
+      expect(source, `${label} sampler readiness is specialized`).not.toMatch(
+        /uniform bool u_use(?:Texture|VirtualTexture|EmissiveTexture|MetallicRoughnessTexture|NormalTexture|OcclusionTexture|AnisotropyTexture|SpecularTexture|SpecularColorTexture|ClearcoatTexture|ClearcoatRoughnessTexture|ClearcoatNormalTexture|DiffuseTransmissionTexture|DiffuseTransmissionColorTexture|SheenColorTexture|SheenRoughnessTexture|IridescenceTexture|IridescenceThicknessTexture|MaterialTransmissionTexture|ThicknessTexture|TransmissionTexture);/u,
+      );
       expect(source, `${label} surface lighting path`).toContain("materialDiffuseColor(baseColor.rgb)");
       expect(source, `${label} specular occlusion`).toContain("iblSpecularOcclusion(NdotV, occlusion, roughness)");
       expect(source, `${label} single DFG evaluation`).toContain(

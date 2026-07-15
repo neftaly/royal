@@ -500,7 +500,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(ControlledImage.instances).toHaveLength(1);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
 
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.2, 0.4, 0.6, 0.8]);
   });
@@ -764,18 +764,18 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     await settleDocumentAndBuffer(loader);
     await flushAnimationFrames(viewport.animationFrames);
 
-    expect(uniform1iPayloads(calls, "u_useTexture").at(-1)).toBe(0);
+    expect(uniform1iPayloads(calls, "u_texture")).toHaveLength(0);
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.5, 0.5, 0.5, 1]);
     expect(ControlledImage.instances).toHaveLength(1);
 
     const callsBeforeImageSettle = calls.length;
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
     const imageReadyCalls = calls.slice(callsBeforeImageSettle);
 
     expect(drawCalls(imageReadyCalls).length).toBeGreaterThanOrEqual(1);
-    expect(uniform1iPayloads(imageReadyCalls, "u_useTexture")).toContain(1);
+    expect(uniform1iPayloads(imageReadyCalls, "u_texture")).toContain(0);
   });
 
   it("uses opted-in generated VT for glTF raster baseColorTexture without manifest probing", async () => {
@@ -838,7 +838,8 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     });
     expect(contexts[0]?.fillRect).toHaveBeenCalledWith(0, 0, 258, 258);
     expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
-    expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_vtAtlas")).toContain(0);
+    expect(uniform1iPayloads(calls, "u_vtPageTable")).toContain(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       automaticManifestUses: 1,
       pageLoadFailures: 0,

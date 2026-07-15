@@ -136,7 +136,6 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       args: [gl.TEXTURE0 + 1],
       name: "activeTexture",
     });
-    expect(uniform1iPayloads(readyFrameCalls, "u_useTransmissionTexture")).toContain(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_transmissionScreenTexture")).toContain(1);
     expect(uniform2fvPayloads(readyFrameCalls, "u_viewportOrigin").map(roundVector))
       .toContainEqual([0, 0]);
@@ -284,7 +283,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useTransmissionTexture")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_transmissionScreenTexture")).toHaveLength(0);
     expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor").map(roundVector))
       .toContainEqual([1, 1, 1, 1]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
@@ -429,9 +428,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(calls, "u_useMaterialTransmissionTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
-    expect(uniform1iPayloads(calls, "u_useThicknessTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
     for (const unit of [14, 15]) {
       expect(calls.some((call) =>
@@ -478,8 +475,8 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     await flushMicrotasks();
     await waitForAnimationFrameWork(
       viewport.animationFrames,
-      () => uniform1iPayloads(calls, "u_useSheenColorTexture").includes(1)
-        && uniform1iPayloads(calls, "u_useThicknessTexture").includes(1),
+      () => uniform1iPayloads(calls, "u_sheenColorTexture").length > 0
+        && uniform1iPayloads(calls, "u_thicknessTexture").length > 0,
     );
 
     const callsBeforeReadyRender = calls.length;
@@ -511,9 +508,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     expect(enabledSamplerUniforms).toEqual(expect.arrayContaining(Array.from({ length: 16 }, (_value, index) => index)));
     expect((overfullSurfaceSource.match(/uniform sampler/g) ?? [])).toHaveLength(16);
     expect(overfullSurfaceSource).not.toContain("u_iblSpecularCube");
-    expect(uniform1iPayloads(calls, "u_useMaterialTransmissionTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
-    expect(uniform1iPayloads(calls, "u_useThicknessTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
     expect(calls.some((call) =>
       call.name === "activeTexture"
@@ -1165,6 +1160,14 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await settleControlledImageWave(1);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_texture").length > 0
+        && uniform1iPayloads(calls, "u_metallicRoughnessTexture").length > 0
+        && uniform1iPayloads(calls, "u_normalTexture").length > 0
+        && uniform1iPayloads(calls, "u_occlusionTexture").length > 0,
+    );
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(uniform4fvPayloads(calls, "u_baseColorUvRow0").map(roundVector))

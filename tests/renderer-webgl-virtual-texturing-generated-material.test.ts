@@ -59,7 +59,6 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThan(0);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_texture: expect.arrayContaining([0]),
-      u_useTexture: expect.arrayContaining([1]),
     }));
     expect(contexts[0]?.createPattern).toHaveBeenCalledWith(
       ControlledImage.instances[0],
@@ -180,7 +179,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       automaticPagesTarget: 5_461,
       manifestsReady: 1,
     }));
-    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_texture).toContain(0);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(consoleWarn).not.toHaveBeenCalled();
   });
@@ -229,7 +228,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       manifestsReady: 1,
     }));
     expect(contexts.length).toBeGreaterThan(0);
-    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_texture).toContain(0);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
@@ -272,7 +271,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       pageLoadFailures: 0,
     }));
     expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThan(0);
-    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_texture).toContain(0);
   });
 
   it("bounds large generated VT page preparation work per frame", async () => {
@@ -378,8 +377,6 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     ]));
     expect(uniform1i).toEqual(expect.objectContaining({
       u_surfaceLightCount: expect.arrayContaining([1]),
-      u_useTexture: expect.arrayContaining([0]),
-      u_useVirtualTexture: expect.arrayContaining([1]),
       u_vtAtlas: expect.arrayContaining([0]),
       u_vtPageTable: expect.arrayContaining([1]),
     }));

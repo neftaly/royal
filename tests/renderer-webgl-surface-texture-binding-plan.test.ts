@@ -42,7 +42,6 @@ describe("surface texture binding planner", () => {
     expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ feature }) => feature))).toBe(true);
     expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ key }) => key))).toBe(true);
     expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ samplerUniform }) => samplerUniform))).toBe(true);
-    expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ useUniform }) => useUniform))).toBe(true);
     expect(unique(SURFACE_MATERIAL_TEXTURE_BINDINGS.map(({ uvUniformStem }) => uvUniformStem))).toBe(true);
   });
 

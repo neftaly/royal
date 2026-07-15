@@ -441,14 +441,7 @@ export class SurfaceExecutionArena {
           this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
         }
       }
-      const baseColorBindingKind = this.#bindBaseColorTexture(program, plan);
-      uniform1i(this.#programs, program, "u_useTexture", baseColorBindingKind === "ordinary" ? 1 : 0);
-      uniform1i(
-        this.#programs,
-        program,
-        "u_useVirtualTexture",
-        baseColorBindingKind === "prepared-virtual" ? 1 : 0,
-      );
+      this.#bindBaseColorTexture(program, plan);
       drawGeometry(
         this.#geometry,
         input.contextGeneration,
@@ -507,14 +500,7 @@ export class SurfaceExecutionArena {
       } else {
         this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
       }
-      const baseColorBindingKind = this.#bindBaseColorTexture(program, plan);
-      uniform1i(this.#programs, program, "u_useTexture", baseColorBindingKind === "ordinary" ? 1 : 0);
-      uniform1i(
-        this.#programs,
-        program,
-        "u_useVirtualTexture",
-        baseColorBindingKind === "prepared-virtual" ? 1 : 0,
-      );
+      this.#bindBaseColorTexture(program, plan);
       const allocation = this.#gltfFrames.bindInstanceBuffer(
         this.#gl,
         input.contextGeneration,
@@ -854,14 +840,13 @@ export class SurfaceExecutionArena {
     uniforms: TextureCoordinateUniformNames,
     virtualBaseColor: boolean,
   ): void {
-    const preparedCoordinates = material.textureCoordinates?.[key];
-    const active = preparedCoordinates !== undefined
-      || plan.features.has(feature)
+    const active = plan.features.has(feature)
       || (virtualBaseColor && (
         plan.features.has("baseColorVirtualTextureAtlas")
         || plan.features.has("baseColorVirtualTexturePageTable")
       ));
     if (!active) return;
+    const preparedCoordinates = material.textureCoordinates?.[key];
     const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
     uniform1i(this.#programs, program, uniforms.set, coordinates.set);
     uniformColor(this.#programs, program, uniforms.row0, coordinates.row0);
@@ -873,15 +858,14 @@ export class SurfaceExecutionArena {
     descriptor: (typeof SURFACE_MATERIAL_TEXTURE_BINDINGS)[number],
     plan: SurfaceTextureBindingPlan,
   ): void {
+    if (!plan.features.has(descriptor.feature)) return;
     const resource = plan.readyTextures.get(descriptor.feature);
     const allocatedUnit = plan.textureUnits.get(descriptor.feature);
     if (resource === undefined || allocatedUnit === undefined) {
-      uniform1i(this.#programs, program, descriptor.useUniform, 0);
-      return;
+      throw new Error(`Admitted surface texture ${descriptor.feature} has no ready binding`);
     }
     this.#textureBindings.bindTexture2d(allocatedUnit, resource.texture);
     uniform1i(this.#programs, program, descriptor.samplerUniform, allocatedUnit);
-    uniform1i(this.#programs, program, descriptor.useUniform, 1);
   }
 
   #bindTransmissionScreenColorTexture(
@@ -889,12 +873,11 @@ export class SurfaceExecutionArena {
     resource: ScreenColorTextureResource | undefined,
     plan: SurfaceTextureBindingPlan,
   ): void {
+    if (!plan.features.has("transmissionScreenTexture")) return;
     const textureUnit = plan.textureUnits.get("transmissionScreenTexture");
     if (resource === undefined || !resource.uploaded || textureUnit === undefined) {
-      uniform1i(this.#programs, program, "u_useTransmissionTexture", 0);
-      return;
+      throw new Error("Admitted transmission screen texture has no ready binding");
     }
-    uniform1i(this.#programs, program, "u_useTransmissionTexture", 1);
     this.#textureBindings.bindTexture2d(textureUnit, resource.texture);
     uniform1i(this.#programs, program, "u_transmissionScreenTexture", textureUnit);
     uniform2f(this.#programs, program, "u_viewportOrigin", resource.originX, resource.originY);

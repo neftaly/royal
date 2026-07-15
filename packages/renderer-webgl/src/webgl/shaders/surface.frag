@@ -11,25 +11,6 @@ in vec4 v_color;
 #define MAX_SURFACE_LIGHTS __MAX_SURFACE_LIGHTS__
 
 uniform highp mat4 u_view;
-uniform bool u_useTexture;
-uniform bool u_useEmissiveTexture;
-uniform bool u_useMetallicRoughnessTexture;
-uniform bool u_useNormalTexture;
-uniform bool u_useOcclusionTexture;
-uniform bool u_useAnisotropyTexture;
-uniform bool u_useSpecularTexture;
-uniform bool u_useSpecularColorTexture;
-uniform bool u_useClearcoatTexture;
-uniform bool u_useClearcoatRoughnessTexture;
-uniform bool u_useClearcoatNormalTexture;
-uniform bool u_useDiffuseTransmissionTexture;
-uniform bool u_useDiffuseTransmissionColorTexture;
-uniform bool u_useSheenColorTexture;
-uniform bool u_useSheenRoughnessTexture;
-uniform bool u_useIridescenceTexture;
-uniform bool u_useIridescenceThicknessTexture;
-uniform bool u_useMaterialTransmissionTexture;
-uniform bool u_useThicknessTexture;
 
 // Each authored glTF material slot selects one of the two retained raw UV sets
 // and applies its KHR_texture_transform affine rows in the fragment shader.
@@ -133,7 +114,6 @@ uniform vec4 u_attenuationColorFactor;
 uniform vec4 u_transmissionVolumeFactors;
 uniform vec2 u_viewportOrigin;
 uniform vec2 u_viewportSize;
-uniform bool u_useTransmissionTexture;
 
 out vec4 outColor;
 
@@ -875,7 +855,7 @@ void main() {
   lit += materialEmissiveColor() * emissiveScale;
 
   float transmission = materialTransmissionFactor();
-  if (transmission > 0.0 && u_useTransmissionTexture) {
+  if (__MATERIAL_TRANSMISSION_SCREEN_CONDITION__) {
     vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);
     float NdotV = max(dot(normal, viewDirection), 0.0);
     vec3 fresnel = mix(materialF0(baseColor.rgb), materialF90(), fresnelPow(NdotV));
