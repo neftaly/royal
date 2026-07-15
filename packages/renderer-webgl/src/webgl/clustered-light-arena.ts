@@ -1,4 +1,5 @@
 import type { Mat4 } from "../math/mat4";
+import { GpuUploadCapacityError } from "../gpu-upload-capacity-error";
 import {
   buildClusterGrid,
   clusterBuildScratchCapacity,
@@ -33,15 +34,19 @@ export interface ClusteredLightGpuReservation {
   cancel(): boolean;
   commit(): ClusteredLightGpuLease;
 }
+export interface ClusteredLightGpuDenial {
+  readonly permanent?: boolean;
+  readonly reason: string;
+}
 export interface ClusteredLightGpuGovernor {
   replace(lease: ClusteredLightGpuLease, cost: {
     readonly cpuDecodedBytes?: number; readonly persistentGpuBytes?: number;
     readonly transientPeakBytes?: number; readonly uploadBytes?: number;
-  }): ClusteredLightGpuReservation | undefined;
+  }): ClusteredLightGpuDenial | ClusteredLightGpuReservation | undefined;
   reserve(cost: {
     readonly cpuDecodedBytes?: number; readonly persistentGpuBytes?: number;
     readonly transientPeakBytes?: number; readonly uploadBytes?: number;
-  }): ClusteredLightGpuReservation | undefined;
+  }): ClusteredLightGpuDenial | ClusteredLightGpuReservation | undefined;
 }
 
 declare const authority: unique symbol;
@@ -83,6 +88,10 @@ type State = {
   resource?: ClusteredLightResource;
   readonly textureUnits: MutableTextureUnits;
 };
+
+const isGpuDenial = (
+  value: ClusteredLightGpuDenial | ClusteredLightGpuReservation | undefined,
+): value is ClusteredLightGpuDenial => value !== undefined && "reason" in value;
 
 export const createClusteredLightArena = (
   gl: WebGL2RenderingContext,
@@ -369,7 +378,7 @@ const upload = (
   let storageReservation: ClusteredLightGpuReservation | undefined;
   let uploadReservation: ClusteredLightGpuReservation | undefined;
   if (state.governor !== undefined) {
-    storageReservation = !storageChanged
+    const storageAdmission = !storageChanged
       ? undefined
       : current?.gpuLease !== undefined
       ? state.governor.replace(current.gpuLease, {
@@ -377,14 +386,27 @@ const upload = (
         transientPeakBytes: current.gpuBytes + persistentGpuBytes,
       })
       : state.governor.reserve({ persistentGpuBytes, transientPeakBytes: persistentGpuBytes });
-    if (storageChanged && storageReservation === undefined) {
-      throw new Error("Clustered-light GPU update denied by root resource governor");
+    if (storageChanged && (storageAdmission === undefined || isGpuDenial(storageAdmission))) {
+      const reason = isGpuDenial(storageAdmission) ? `: ${storageAdmission.reason}` : "";
+      throw new Error(`Clustered-light GPU update denied by root resource governor${reason}`);
     }
-    uploadReservation = state.governor.reserve({ uploadBytes });
-    if (uploadReservation === undefined) {
+    storageReservation = storageAdmission as ClusteredLightGpuReservation | undefined;
+    const uploadAdmission = state.governor.reserve({ uploadBytes });
+    if (uploadAdmission === undefined || isGpuDenial(uploadAdmission)) {
       storageReservation?.cancel();
-      throw new Error("Clustered-light GPU upload denied by root resource governor");
+      if (
+        isGpuDenial(uploadAdmission)
+        && uploadAdmission.reason === "upload-capacity"
+        && uploadAdmission.permanent !== true
+      ) {
+        throw new GpuUploadCapacityError(
+          "Clustered-light GPU update deferred by root resource governor: upload-capacity",
+        );
+      }
+      const reason = isGpuDenial(uploadAdmission) ? `: ${uploadAdmission.reason}` : "";
+      throw new Error(`Clustered-light GPU upload denied by root resource governor${reason}`);
     }
+    uploadReservation = uploadAdmission;
   }
   let resource = current;
   if (resource === undefined) {
@@ -537,12 +559,14 @@ export const bindClusteredLights = (
         cpuDecodedBytes: conservativeCpuBytes,
         transientPeakBytes: state.cpuBytes + conservativeCpuBytes,
       };
-      cpuReservation = state.cpuLease === undefined
+      const cpuAdmission = state.cpuLease === undefined
         ? state.governor.reserve(cost)
         : state.governor.replace(state.cpuLease, cost);
-      if (cpuReservation === undefined) {
-        throw new Error("Clustered-light CPU update denied by root resource governor");
+      if (cpuAdmission === undefined || isGpuDenial(cpuAdmission)) {
+        const reason = isGpuDenial(cpuAdmission) ? `: ${cpuAdmission.reason}` : "";
+        throw new Error(`Clustered-light CPU update denied by root resource governor${reason}`);
       }
+      cpuReservation = cpuAdmission;
     }
     let nextScratch: ClusterBuildScratch;
     let builtGrid: ClusterGrid;
@@ -569,13 +593,15 @@ export const bindClusteredLights = (
         cpuDecodedBytes: nextCpuBytes,
         transientPeakBytes: state.cpuBytes + nextCpuBytes,
       };
-      cpuReservation = state.cpuLease === undefined
+      const cpuAdmission = state.cpuLease === undefined
         ? state.governor.reserve(cost)
         : state.governor.replace(state.cpuLease, cost);
       reservedCpuBytes = nextCpuBytes;
-      if (cpuReservation === undefined) {
-        throw new Error("Clustered-light CPU update denied by root resource governor");
+      if (cpuAdmission === undefined || isGpuDenial(cpuAdmission)) {
+        const reason = isGpuDenial(cpuAdmission) ? `: ${cpuAdmission.reason}` : "";
+        throw new Error(`Clustered-light CPU update denied by root resource governor${reason}`);
       }
+      cpuReservation = cpuAdmission;
     }
     try {
       resource = upload(state, resource, builtGrid, lights, lightsChanged);

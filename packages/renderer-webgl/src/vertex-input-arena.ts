@@ -1,4 +1,5 @@
 import type { CpuGeometry } from "./geometry-recipes";
+import { GpuUploadCapacityError } from "./gpu-upload-capacity-error";
 import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
@@ -25,7 +26,7 @@ export interface VertexInputGpuDenial {
 }
 
 /** Retryable frame-local backpressure, distinct from durable allocation failure. */
-export class VertexInputGpuUploadCapacityError extends Error {
+export class VertexInputGpuUploadCapacityError extends GpuUploadCapacityError {
   constructor() {
     super("Vertex-input GPU allocation deferred by root resource governor: upload-capacity");
     this.name = "VertexInputGpuUploadCapacityError";

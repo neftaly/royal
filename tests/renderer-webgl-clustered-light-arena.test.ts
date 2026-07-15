@@ -12,6 +12,7 @@ import {
   type ClusteredLightGpuGovernor,
   type ClusteredLightGpuLease,
 } from "../packages/renderer-webgl/src/webgl/clustered-light-arena";
+import { GpuUploadCapacityError } from "../packages/renderer-webgl/src/gpu-upload-capacity-error";
 import type { SurfacePointLight } from "../packages/renderer-webgl/src/webgl/lights";
 import { createProgramArena } from "../packages/renderer-webgl/src/webgl/program-arena";
 
@@ -167,12 +168,15 @@ const recordingGovernor = (denied = false): {
       },
       reserve: (cost) => {
         costs.push({ ...cost });
-        return denied
+        if (
+          denied
           || (denyCpu.value && cost.cpuDecodedBytes !== undefined)
           || (denyTransient.value && cost.transientPeakBytes !== undefined)
-          || (denyUploads.value && cost.uploadBytes !== undefined)
-          ? undefined
-          : reservation();
+        ) return undefined;
+        if (denyUploads.value && cost.uploadBytes !== undefined) {
+          return { reason: "upload-capacity" };
+        }
+        return reservation();
       },
     },
     released,
@@ -521,7 +525,7 @@ describe("clustered light arena", () => {
 
     expect(() => bindClusteredLights(
       arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 1,
-    )).toThrow(/GPU upload denied/);
+    )).toThrow(GpuUploadCapacityError);
 
     expect(recorded.replacements.value).toBeGreaterThanOrEqual(2);
     expect(recorded.cancelled.value).toBeGreaterThanOrEqual(cancelsBefore + 2);
@@ -540,6 +544,34 @@ describe("clustered light arena", () => {
     expect(recorded.replacements.value).toBeGreaterThanOrEqual(4);
     expect(calls(gl, "createTexture")).toHaveLength(createsBefore);
     releaseClusteredLightContextHandles(arena);
+  });
+
+  it("does not retry a clustered-light upload that cannot fit an empty frame", () => {
+    const gl = new FakeGl();
+    const arena = createClusteredLightArena(context(gl), {
+      replace: () => undefined,
+      reserve: (cost) => cost.uploadBytes === undefined
+        ? {
+            cancel: () => true,
+            commit: () => ({ release: () => true }),
+          }
+        : {
+            permanent: true,
+            reason: `${cost.uploadBytes} upload bytes exceed the per-frame limit 1`,
+          },
+    });
+    configureClusteredLightArena(arena, 8, 1024);
+
+    let failure: unknown;
+    try {
+      bind(gl, arena);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(GpuUploadCapacityError);
+    expect((failure as Error).message).toMatch(/upload bytes exceed the per-frame limit 1/);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
   });
 
   it("keeps a conservative lease across upload and deletion failures", () => {

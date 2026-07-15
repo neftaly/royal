@@ -70,6 +70,32 @@ describe("WebGL root context lifecycle contracts", () => {
     root.dispose();
   });
 
+  it("retries clustered-light upload contention on a clean governor frame", () => {
+    const scheduled: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const { calls, gl } = fakeGl();
+    const resourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 3_500 },
+    } satisfies ResourceGovernorPolicy;
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
+
+    expect(() => root.render(clusteredScene())).not.toThrow();
+    expect(root.snapshot().resourcePressure.denialsByReason["upload-capacity"]).toBe(1);
+    expect(scheduled).toHaveLength(1);
+    const frameAfterDeferredRender = root.frame;
+
+    scheduled.shift()?.(16);
+    expect(root.frame).toBeGreaterThan(frameAfterDeferredRender);
+    expect(drawCalls(calls).length).toBeGreaterThan(0);
+    expect(scheduled).toHaveLength(0);
+    root.dispose();
+  });
+
   it("rejects a zero-job resource policy before requesting a WebGL context", () => {
     const { gl } = fakeGl();
     const canvas = fakeCanvas(gl);

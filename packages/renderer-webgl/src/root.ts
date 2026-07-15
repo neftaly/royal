@@ -12,6 +12,7 @@ import {
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import { loadHtmlImage } from "./browser-image-loader";
+import { GpuUploadCapacityError } from "./gpu-upload-capacity-error";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
@@ -66,7 +67,6 @@ import {
   releaseLostVertexInputGeometry,
   restoreVertexInputArenaContext,
   retainVertexInputGeometry,
-  VertexInputGpuUploadCapacityError,
   vertexInputGeometry,
   type VertexInputGeometry,
   type VertexInputArena,
@@ -277,14 +277,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
   });
   readonly #vertexInputs: VertexInputArena = createVertexInputArena({
     reserve: (cost) => {
+      const reservation = reserveResourceGovernor(this.#resourceGovernor, "geometry", cost);
+      if (typeof reservation !== "string") return reservation;
       const impossible = resourceGovernorImpossibleCostReason(
         this.#resourceGovernorPolicy,
         "geometry",
         cost,
       );
       if (impossible !== undefined) return { permanent: true, reason: impossible };
-      const reservation = reserveResourceGovernor(this.#resourceGovernor, "geometry", cost);
-      return typeof reservation === "string" ? { reason: reservation } : reservation;
+      return { reason: reservation };
     },
   });
   readonly #admitGltfPreparationJob = () => {
@@ -494,11 +495,25 @@ class WebGlRootImpl implements InternalWebGlRoot {
         governor: {
           replace: (lease, cost) => {
             const reservation = replaceResourceGovernorLease(this.#resourceGovernor, lease, cost);
-            return typeof reservation === "string" ? undefined : reservation;
+            if (typeof reservation !== "string") return reservation;
+            const impossible = resourceGovernorImpossibleCostReason(
+              requestedOptions.resourceGovernorPolicy,
+              "render-target",
+              cost,
+            );
+            if (impossible !== undefined) return { permanent: true, reason: impossible };
+            return { reason: reservation };
           },
           reserve: (cost) => {
             const reservation = reserveResourceGovernor(this.#resourceGovernor, "render-target", cost);
-            return typeof reservation === "string" ? undefined : reservation;
+            if (typeof reservation !== "string") return reservation;
+            const impossible = resourceGovernorImpossibleCostReason(
+              requestedOptions.resourceGovernorPolicy,
+              "render-target",
+              cost,
+            );
+            if (impossible !== undefined) return { permanent: true, reason: impossible };
+            return { reason: reservation };
           },
         },
         invalidate: () => this.invalidate(),
@@ -515,16 +530,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
         governor: {
           reserve: (cost) => {
             const policy = requestedOptions.resourceGovernorPolicy;
+            const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
+            if (typeof reservation !== "string") return reservation;
             const impossible = resourceGovernorImpossibleCostReason(
               policy,
               "ordinary-texture",
               cost,
             );
             if (impossible !== undefined) return { permanent: true, reason: impossible };
-            const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
-            return typeof reservation === "string"
-              ? { permanent: false, reason: reservation }
-              : reservation;
+            return { permanent: false, reason: reservation };
           },
         },
         invalidate: () => this.invalidate(),
@@ -1011,7 +1025,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }
       }
     } catch (value) {
-      if (value instanceof VertexInputGpuUploadCapacityError) {
+      if (value instanceof GpuUploadCapacityError) {
         renderDeferred = true;
         this.invalidate();
       } else renderFailure = { value };
