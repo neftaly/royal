@@ -38,6 +38,20 @@ type XrSessionRendererFactory<Session extends XrSession> = (
   options?: XrSessionRendererOptions,
 ) => Promise<XrSessionRenderer>;
 
+type CapturedFailure = { readonly value: unknown };
+
+const captureFailure = (
+  failure: CapturedFailure | undefined,
+  operation: () => void,
+): CapturedFailure | undefined => {
+  try {
+    operation();
+  } catch (error) {
+    return failure ?? { value: error };
+  }
+  return failure;
+};
+
 const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
   recordWithAllowedFields(
     options,
@@ -87,16 +101,36 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
     throw new Error("Cannot start an XR session while another session is owned");
   }
 
-  store.getState().beginSession(session, { mode: options.mode });
+  const requestSessionEnd = (): void => {
+    try {
+      void session.end().catch(() => undefined);
+    } catch {
+      // Startup already has an authoritative failure; a broken end request cannot replace it.
+    }
+  };
+  const failOwnedStartup = (error: unknown): void => {
+    if (store.getState().session !== session) return;
+    try {
+      store.getState().failSession(error);
+    } catch {
+      // The transition commits before notifying subscribers; preserve the startup failure.
+    }
+  };
+
+  try {
+    store.getState().beginSession(session, { mode: options.mode });
+  } catch (error) {
+    failOwnedStartup(error);
+    requestSessionEnd();
+    throw error;
+  }
 
   let renderer: XrSessionRenderer;
   try {
     renderer = await createRenderer(root, session, options.rendererOptions);
   } catch (error) {
-    if (store.getState().session === session) {
-      store.getState().failSession(error);
-    }
-    void session.end().catch(() => undefined);
+    failOwnedStartup(error);
+    requestSessionEnd();
     throw error;
   }
 
@@ -105,10 +139,25 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
     || store.getState().session !== session
     || store.getState().status !== "starting"
   ) {
-    renderer.dispose();
-    if (store.getState().session === session) store.getState().endSession();
-    await session.end().catch(() => undefined);
-    throw new Error("XR session startup was interrupted before activation");
+    const error = new Error("XR session startup was interrupted before activation");
+    try {
+      renderer.dispose();
+    } catch {
+      // Preserve the interrupted-startup failure after attempting every owner cleanup.
+    }
+    if (store.getState().session === session) {
+      try {
+        store.getState().endSession();
+      } catch {
+        // The state transition is already committed before subscriber notification.
+      }
+    }
+    try {
+      await session.end();
+    } catch {
+      // The session is already unusable to this runtime.
+    }
+    throw error;
   }
 
   let disposed = false;
@@ -120,14 +169,20 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
   const cleanupRoyalResources = (): void => {
     if (disposed) return;
     disposed = true;
+    let failure: CapturedFailure | undefined;
     if (frameHandle !== undefined) {
-      session.cancelAnimationFrame(frameHandle);
+      const handle = frameHandle;
       frameHandle = undefined;
+      failure = captureFailure(failure, () => session.cancelAnimationFrame(handle));
     }
-    session.removeEventListener("end", onEnd);
-    session.removeEventListener("visibilitychange", onVisibilityChange);
-    unobserveRoot();
-    renderer.dispose();
+    failure = captureFailure(failure, () => session.removeEventListener("end", onEnd));
+    failure = captureFailure(
+      failure,
+      () => session.removeEventListener("visibilitychange", onVisibilityChange),
+    );
+    failure = captureFailure(failure, unobserveRoot);
+    failure = captureFailure(failure, () => renderer.dispose());
+    if (failure !== undefined) throw failure.value;
   };
   const finish = (error?: unknown): void => {
     cleanupRoyalResources();
@@ -205,16 +260,27 @@ export const createXrSessionRuntimeWithRenderer = async <Session extends XrSessi
     },
   };
 
-  session.addEventListener("end", onEnd);
-  session.addEventListener("visibilitychange", onVisibilityChange);
-  store.getState().activateSession(session, {
-    mode: options.mode,
-    visibilityState: initialVisibilityState,
-  });
-  unobserveRoot = root.observeLifecycle(onRootLifecycle);
-  if (disposed) unobserveRoot();
-  requestNextFrame();
-  return runtime;
+  try {
+    session.addEventListener("end", onEnd);
+    session.addEventListener("visibilitychange", onVisibilityChange);
+    store.getState().activateSession(session, {
+      mode: options.mode,
+      visibilityState: initialVisibilityState,
+    });
+    unobserveRoot = root.observeLifecycle(onRootLifecycle);
+    if (disposed) unobserveRoot();
+    requestNextFrame();
+    return runtime;
+  } catch (error) {
+    try {
+      cleanupRoyalResources();
+    } catch {
+      // Preserve the setup failure after attempting every acquired Royal resource.
+    }
+    failOwnedStartup(error);
+    requestSessionEnd();
+    throw error;
+  }
 };
 
 export const createXrSessionRuntime = async <Session extends XrSession>(

@@ -352,4 +352,52 @@ describe("React XR session runtime", () => {
       status: "available",
     });
   });
+
+  it("rolls back session ownership when startup observers or event setup throw", async () => {
+    const observerSession = createTestSession();
+    const observerStore = createXrSessionStore<TestXrSession>({ available: true });
+    const observerFailure = new Error("starting observer failed");
+    observerStore.subscribe(() => {
+      throw observerFailure;
+    });
+    const createRenderer = vi.fn(async () => createTestRenderer());
+
+    await expect(createXrSessionRuntimeWithRenderer(
+      createObservedRoot().root,
+      observerStore,
+      observerSession,
+      { mode: "immersive-vr" },
+      createRenderer,
+    )).rejects.toBe(observerFailure);
+    expect(createRenderer).not.toHaveBeenCalled();
+    expect(observerSession.end).toHaveBeenCalledOnce();
+    expect(observerStore.getState()).toMatchObject({
+      error: "starting observer failed",
+      session: null,
+      status: "error",
+    });
+
+    const eventSession = createTestSession();
+    const eventStore = createXrSessionStore<TestXrSession>({ available: true });
+    const renderer = createTestRenderer();
+    const eventFailure = new Error("event setup failed");
+    vi.spyOn(eventSession, "addEventListener").mockImplementationOnce(() => {
+      throw eventFailure;
+    });
+
+    await expect(createXrSessionRuntimeWithRenderer(
+      createObservedRoot().root,
+      eventStore,
+      eventSession,
+      { mode: "immersive-vr" },
+      async () => renderer,
+    )).rejects.toBe(eventFailure);
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+    expect(eventSession.end).toHaveBeenCalledOnce();
+    expect(eventStore.getState()).toMatchObject({
+      error: "event setup failed",
+      session: null,
+      status: "error",
+    });
+  });
 });
