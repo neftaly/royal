@@ -1097,11 +1097,6 @@ export const resourceArenaIblSources = (
 ): ReadonlyMap<string, LoadedTextureSource> | undefined =>
   (arena as unknown as ResourceArenaState).iblSources.get(iblKey);
 
-export const resourceArenaIblSourceCount = (arena: ResourceArena, iblKey: string): number => {
-  const state = arena as unknown as ResourceArenaState;
-  return state.iblSources.get(iblKey)?.size ?? 0;
-};
-
 export const updatePreparedAssetManifest = (
   arena: ResourceArena,
   key: string,

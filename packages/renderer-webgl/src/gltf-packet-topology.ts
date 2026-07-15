@@ -314,7 +314,7 @@ const appendReadyOccurrenceRows = (
 };
 
 /** Clears logical counts while retaining all allocated typed-array capacity. */
-export const resetGltfPacketTopologyForPlan = (topology: GltfPacketTopology): void => {
+const resetGltfPacketTopologyForPlan = (topology: GltfPacketTopology): void => {
   resetFramePacketCatalog(topology.catalog);
   resetFramePacketLodRequirements(topology.requirements);
   resetPacketResourceTablesForPlan(topology.resources);

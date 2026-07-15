@@ -1,5 +1,5 @@
 /** Texture unit reserved transiently while CPU/image data is uploaded. */
-export const TEXTURE_UPLOAD_UNIT = 0;
+const TEXTURE_UPLOAD_UNIT = 0;
 
 /** Establishes the fixed state Royal requires before clearing and drawing. */
 export const prepareFrameBaseline = (

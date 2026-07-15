@@ -57,25 +57,3 @@ export const rasterizeGeneratedVirtualTexturePage = (
   }
   return canvas;
 };
-
-/**
- * Converts a browser-decoded vector page into owned pixels before it reaches
- * WebGL. Origin-clean failures therefore stay in the async page-source path.
- */
-export const rasterizeGeneratedVirtualTexturePageImageData = (
-  source: GeneratedVirtualTextureRasterSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): ImageData => {
-  const canvas = rasterizeGeneratedVirtualTexturePage(source, manifest, page);
-  const storedPageSize = virtualTextureStoredPageSize(manifest);
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  try {
-    return context.getImageData(0, 0, storedPageSize, storedPageSize);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Generated virtual texture page ${source.label} ${virtualTexturePageKey(page)} could not produce origin-clean pixels: ${detail}`,
-    );
-  }
-};

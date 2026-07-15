@@ -27,7 +27,7 @@ export const supportedGltfExtensions = new Set<string>([
   "MSFT_lod",
 ]);
 
-export class UnsupportedRequiredGltfExtensionError extends Error {
+class UnsupportedRequiredGltfExtensionError extends Error {
   readonly extensions: readonly string[];
   readonly src: string;
 

@@ -208,7 +208,7 @@ export const surfaceMaterialRoughnessFactor = (material: SurfaceMaterial): numbe
 export const surfaceMaterialOcclusionStrength = (material: SurfaceMaterial): number =>
   material.kind === "standard" ? material.occlusionStrength ?? 1 : 1;
 
-export const surfaceMaterialExtensionFactorsKey = (
+const surfaceMaterialExtensionFactorsKey = (
   factors: SurfaceMaterialExtensionFactors,
 ): string =>
   [

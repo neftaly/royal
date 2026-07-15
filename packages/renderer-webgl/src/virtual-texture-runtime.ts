@@ -192,15 +192,6 @@ export type VirtualTextureDrawDemand = {
   readonly viewportDominant?: true;
 };
 
-export const normalizeVirtualTextureDemandUvRange = (
-  min: number,
-  max: number,
-): readonly [number, number] => {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
-  if (max - min >= 1 || min < 0 || max > 1) return [0, 1];
-  return [Math.max(0, min), Math.min(1, max)];
-};
-
 export const virtualTextureDemandPageDistance = (
   page: VirtualTexturePageId,
   centerX: number,

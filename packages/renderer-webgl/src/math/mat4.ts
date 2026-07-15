@@ -61,7 +61,7 @@ export const inverseMat4Into = (
 export const inverseMat4 = (matrix: Mat4): Mat4 | undefined =>
   inverseMat4Into(identityMat4(), matrix);
 
-export const transformVec4 = (matrix: Mat4, [x, y, z, w]: Vec4): Vec4 => [
+const transformVec4 = (matrix: Mat4, [x, y, z, w]: Vec4): Vec4 => [
   matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
   matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
   matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,

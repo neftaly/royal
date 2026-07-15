@@ -48,7 +48,7 @@ const validateGltfNodeTransform = (node: GltfSceneNode | undefined): void => {
   }
 };
 
-export const gltfNodeMat4Into = (
+const gltfNodeMat4Into = (
   out: MutableMat4,
   node: GltfSceneNode | undefined,
 ): MutableMat4 => {

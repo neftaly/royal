@@ -56,10 +56,10 @@ export const gltfImageBasedLightRotation = (light: GltfImageBasedLight): Mat4 =>
   return quaternionMat4(light.rotation);
 };
 
-export const gltfImageBasedLightIntensity = (light: GltfImageBasedLight): number =>
+const gltfImageBasedLightIntensity = (light: GltfImageBasedLight): number =>
   Math.max(0, finiteNumber(light.intensity, 1));
 
-export const gltfImageBasedLightIrradianceCoefficients = (
+const gltfImageBasedLightIrradianceCoefficients = (
   light: GltfImageBasedLight,
 ): readonly Vec3[] | undefined => {
   const coefficients = light.irradianceCoefficients;

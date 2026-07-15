@@ -60,7 +60,7 @@ export const geometryArrayBucketKey = (array: ArrayBufferView | undefined): stri
   )}`;
 };
 
-export const geometryBucketKey = (geometry: GeometryByteLayout): string => [
+const geometryBucketKey = (geometry: GeometryByteLayout): string => [
   "geometry-v1",
   geometry.mode,
   geometryArrayBucketKey(geometry.positions),

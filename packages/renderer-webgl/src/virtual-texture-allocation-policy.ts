@@ -1,6 +1,6 @@
 import type { VirtualTextureManifestModel } from "./virtual-texturing";
 
-export const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
+const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 /** Largest page-table write that admission must fit into one upload chunk. */
 export const maximumVirtualTexturePageTableUploadBytes = (

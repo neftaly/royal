@@ -21,7 +21,7 @@ export type GltfLoadDiagnosticsState = {
 const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
   start === undefined || end === undefined ? undefined : Math.max(0, end - start);
 
-export const gltfLoadDiagnosticsAssetSnapshot = (
+const gltfLoadDiagnosticsAssetSnapshot = (
   state: GltfLoadDiagnosticsState,
 ): WebGlGltfLoadDiagnosticsAssetSnapshot => {
   const load = state.load;

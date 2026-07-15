@@ -1,6 +1,6 @@
 import { prepareTextureUpload } from "./imperative-state";
 
-export const IBL_BRDF_LUT_SIZE = 64;
+const IBL_BRDF_LUT_SIZE = 64;
 export const IBL_BRDF_LUT_BYTES = IBL_BRDF_LUT_SIZE * IBL_BRDF_LUT_SIZE * 4;
 export const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
 

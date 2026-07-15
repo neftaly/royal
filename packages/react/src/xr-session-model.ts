@@ -1,5 +1,5 @@
 /** Session modes defined by the WebXR Device API. */
-export const XR_SESSION_MODES = ["immersive-ar", "immersive-vr", "inline"] as const;
+const XR_SESSION_MODES = ["immersive-ar", "immersive-vr", "inline"] as const;
 
 export type XrSessionMode = (typeof XR_SESSION_MODES)[number];
 
@@ -15,7 +15,7 @@ export type XrSessionStatus =
   | "unavailable";
 
 /** Why acquisition failed even though immersive XR remains supported. */
-export const XR_SESSION_BLOCK_REASONS = [
+const XR_SESSION_BLOCK_REASONS = [
   "immersive-session-already-active",
   "session-request-denied",
 ] as const;
@@ -23,7 +23,7 @@ export const XR_SESSION_BLOCK_REASONS = [
 export type XrSessionBlockReason = (typeof XR_SESSION_BLOCK_REASONS)[number];
 
 /** Browser-owned visibility states defined by the WebXR Device API. */
-export const XR_SESSION_VISIBILITY_STATES = [
+const XR_SESSION_VISIBILITY_STATES = [
   "hidden",
   "visible",
   "visible-blurred",

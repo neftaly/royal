@@ -18,7 +18,7 @@ export const createInstanceDirtyBits = (count: number, dirty = false): InstanceD
   };
 };
 
-export const clearInstanceDirtyBits = (dirty: InstanceDirtyBits): void => {
+const clearInstanceDirtyBits = (dirty: InstanceDirtyBits): void => {
   if (dirty.maxDirtyWord >= dirty.minDirtyWord) {
     dirty.words.fill(0, dirty.minDirtyWord, dirty.maxDirtyWord + 1);
   }

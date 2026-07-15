@@ -68,21 +68,6 @@ const pointerEventHandlerProp = {
   pointerup: 'onPointerUp',
 } as const satisfies Record<RoyalPointerEventType, PointerHandlerProp>;
 
-export const royalPointerEventHandlersFrom = (
-  props: Record<string, unknown>,
-): RoyalPointerEventHandlers => {
-  const handlers: RoyalPointerEventHandlers = {};
-
-  for (const prop of pointerHandlerProps) {
-    const handler = props[prop];
-    if (typeof handler === 'function') {
-      handlers[prop] = handler as RoyalPointerEventHandler;
-    }
-  }
-
-  return handlers;
-};
-
 type RoyalPointerEventHandlersValidator = (
   value: unknown,
   label: string,
