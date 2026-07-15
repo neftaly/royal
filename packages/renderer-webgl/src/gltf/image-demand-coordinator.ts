@@ -100,7 +100,6 @@ type Row = {
 };
 
 type RecipeOwnership = {
-  activeJobs: number;
   readonly activeRecipes: Set<GltfImageSourceRecipe>;
   readonly assetKey: string;
   readonly lease: GltfImageRecipeLease;
@@ -206,7 +205,6 @@ export class GltfImageDemandCoordinator {
       key: input.key,
       load: input.load,
       recipeOwnership: {
-        activeJobs: 0,
         activeRecipes: new Set(),
         assetKey: input.key,
         lease: input.recipeLease,
@@ -516,7 +514,6 @@ export class GltfImageDemandCoordinator {
     if (recipe === undefined) return;
     const ownership = asset.recipeOwnership;
     row.status = "queued";
-    ownership.activeJobs += 1;
     ownership.activeRecipes.add(recipe);
     asset.load.imageLoadStartedAt ??= nowMs();
     asset.load.imageRequests += 1;
@@ -565,7 +562,6 @@ export class GltfImageDemandCoordinator {
       this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
       this.#requestInvalidate(row.key);
     }).finally(() => {
-      ownership.activeJobs = Math.max(0, ownership.activeJobs - 1);
       ownership.activeRecipes.delete(recipe);
       try {
         this.#releaseSettledRecipes(asset, [recipe]);
@@ -589,7 +585,7 @@ export class GltfImageDemandCoordinator {
     if (
       ownership.released
       || ownership.operationInProgress
-      || ownership.activeJobs !== 0
+      || ownership.activeRecipes.size !== 0
       || (!ownership.releaseRequested && ownership.retainedRecipes.size !== 0)
     ) return;
     ownership.operationInProgress = true;
@@ -690,7 +686,7 @@ export class GltfImageDemandCoordinator {
       return;
     }
     if (ownership.operationInProgress) return;
-    if (ownership.activeJobs !== 0) {
+    if (ownership.activeRecipes.size !== 0) {
       this.#forgetRecipes(
         ownership,
         [...ownership.retainedRecipes].filter((recipe) =>

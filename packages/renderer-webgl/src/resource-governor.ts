@@ -341,16 +341,19 @@ interface ResourceGovernorState {
   lastDenial: ResourceGovernorSnapshot["lastDenial"];
   readonly leases: Map<ResourceGovernorLease, ResourceGovernorLeaseRecord>;
   readonly durableCapacityReleaseListeners: Set<ResourceGovernorDurableCapacityReleaseListener>;
-  nextId: number;
-  outstandingLeases: number;
   readonly policy: ResourceGovernorPolicy;
-  readonly reservations: Map<number, { readonly cost: ResourceGovernorUsage; readonly resourceClass: ResourceGovernorClass }>;
+  readonly reservations: Set<ResourceGovernorReservationRecord>;
   readonly total: MutableUsage;
 }
 
 interface ResourceGovernorLeaseRecord {
   cost: ResourceGovernorUsage;
   replacementPending: boolean;
+  readonly resourceClass: ResourceGovernorClass;
+}
+
+interface ResourceGovernorReservationRecord {
+  readonly cost: ResourceGovernorUsage;
   readonly resourceClass: ResourceGovernorClass;
 }
 
@@ -435,10 +438,8 @@ export const createResourceGovernor = (
     lastDenial: undefined,
     leases: new Map(),
     durableCapacityReleaseListeners: new Set(),
-    nextId: 1,
-    outstandingLeases: 0,
     policy,
-    reservations: new Map(),
+    reservations: new Set(),
     total: { ...ZERO_USAGE },
   } as unknown as ResourceGovernor;
 };
@@ -496,7 +497,6 @@ const releaseLease = (
   const durable = durableUsage(record.cost);
   addUsage(state.total, durable, -1);
   addUsage(state.byClass[record.resourceClass], durable, -1);
-  state.outstandingLeases -= 1;
   if (!replacing) notifyDurableCapacityReleased(state, durable);
   return true;
 };
@@ -509,7 +509,6 @@ const createLease = (
   let lease!: ResourceGovernorLease;
   lease = { release: () => releaseLease(state, lease) };
   state.leases.set(lease, { cost, replacementPending: false, resourceClass });
-  state.outstandingLeases += 1;
   return lease;
 };
 
@@ -531,7 +530,7 @@ export const subscribeResourceGovernorDurableCapacityRelease = (
 /** Starts a new upload-accounting frame. Upload-bearing reservations may not straddle frames. */
 export const beginResourceGovernorFrame = (governor: ResourceGovernor): void => {
   const state = stateOf(governor);
-  for (const reservation of state.reservations.values()) {
+  for (const reservation of state.reservations) {
     if (reservation.cost.uploadBytes !== 0) {
       throw new Error("Resource governor upload reservations cannot straddle frames");
     }
@@ -562,10 +561,9 @@ export const reserveResourceGovernor = (
     state.lastDenial = { reason, resourceClass };
     return reason;
   }
-  const id = state.nextId;
-  state.nextId += 1;
   state.admissions += 1;
-  state.reservations.set(id, { cost, resourceClass });
+  const reservation = { cost, resourceClass };
+  state.reservations.add(reservation);
   addUsage(state.total, cost, 1);
   addUsage(state.byClass[resourceClass], cost, 1);
   updateHighWater(state);
@@ -573,7 +571,7 @@ export const reserveResourceGovernor = (
   const settleReservation = (): boolean => {
     if (settled) return false;
     settled = true;
-    state.reservations.delete(id);
+    state.reservations.delete(reservation);
     return true;
   };
   return {
@@ -649,9 +647,8 @@ export const replaceResourceGovernorLease = (
     transientPeakBytes: cost.transientPeakBytes,
     uploadBytes: cost.uploadBytes,
   };
-  const id = state.nextId;
-  state.nextId += 1;
-  state.reservations.set(id, { cost, resourceClass: previous.resourceClass });
+  const reservation = { cost, resourceClass: previous.resourceClass };
+  state.reservations.add(reservation);
   previous.replacementPending = true;
   addUsage(state.total, transactionCost, 1);
   addUsage(state.byClass[previous.resourceClass], transactionCost, 1);
@@ -660,7 +657,7 @@ export const replaceResourceGovernorLease = (
   const settle = (): boolean => {
     if (settled) return false;
     settled = true;
-    state.reservations.delete(id);
+    state.reservations.delete(reservation);
     previous.replacementPending = false;
     return true;
   };
@@ -720,7 +717,7 @@ export const resourceGovernorSnapshot = (governor: ResourceGovernor): ResourceGo
     highWater: { ...state.highWater },
     ...(state.lastDenial === undefined ? {} : { lastDenial: { ...state.lastDenial } }),
     limits: { ...state.policy.limits },
-    outstandingLeases: state.outstandingLeases,
+    outstandingLeases: state.leases.size,
     outstandingReservations: state.reservations.size,
     total: { ...state.total },
   };
