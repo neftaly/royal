@@ -113,8 +113,13 @@ const smokeExpectations = {
     minPaintedRatio: 0.006,
   },
   'webxr-vr': {
+    gltfReady: true,
     minColorBuckets: 10,
     minPaintedRatio: 0.01,
+    resourceSubstrings: [
+      '/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf',
+      '/fixtures/gltf-svg-texture/ghostscript-tiger.svg',
+    ],
   },
 };
 

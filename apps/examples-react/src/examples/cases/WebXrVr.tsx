@@ -1,7 +1,7 @@
 import {
   boxGeometry,
   directionalLight,
-  imageTexture,
+  gltf,
   linearRgbaFromSrgb,
   mesh,
   perspectiveCamera,
@@ -38,7 +38,7 @@ const camera = perspectiveCamera({
   rotation: [-0.2, 0, 0],
 });
 const virtualTextureFixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
-const generatedSvgFixtureRoot = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/';
+const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
 const virtualGroundMaterial = unlitMaterial({
   texture: virtualTexture({
     sampler: {
@@ -49,9 +49,6 @@ const virtualGroundMaterial = unlitMaterial({
     },
     manifestUri: `${virtualTextureFixtureRoot}map.vt.json`,
   }),
-});
-const generatedSvgMaterial = unlitMaterial({
-  texture: imageTexture(`${generatedSvgFixtureRoot}ghostscript-tiger.svg`),
 });
 const renderScene = scene({
   camera,
@@ -65,10 +62,9 @@ const renderScene = scene({
       material: virtualGroundMaterial,
       transform: { position: [0, -0.04, -4], rotation: [-Math.PI / 2, 0, 0] },
     }),
-    mesh({
-      geometry: planeGeometry([2.8, 2.8]),
-      material: generatedSvgMaterial,
-      transform: { position: [0, 1.6, -3.8] },
+    gltf({
+      src: tigerCardSrc,
+      transform: { position: [0, 1.6, -3.8], scale: [13, 13, 13] },
     }),
     mesh({
       geometry: boxGeometry([0.82, 0.82, 0.82]),
