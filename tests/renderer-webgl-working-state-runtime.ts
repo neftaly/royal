@@ -237,6 +237,7 @@ export const fakeGl = (): FakeGl => {
     texStorage2D: record("texStorage2D"),
     texSubImage2D: record("texSubImage2D"),
     uniform1i: record("uniform1i"),
+    uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform4fv: record("uniform4fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),

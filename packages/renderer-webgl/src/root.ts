@@ -1,4 +1,4 @@
-import { ClusteredLightingFeatureOwner } from "./clustered-lighting-feature-owner";
+import { LazyClusteredLightingFeature } from "./lazy-clustered-lighting-feature";
 import type { ClusteredLightingFeature } from "./clustered-lighting-feature";
 import {
   type GltfAssetRef,
@@ -493,7 +493,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
         automaticVirtualTextures: requestedOptions.automaticVirtualTextures,
         ...this.#contextCapabilities.attributes,
       });
-      this.#clusteredLights = new ClusteredLightingFeatureOwner({
+      this.#clusteredLights = new LazyClusteredLightingFeature({
+        active: () => !this.#disposed && this.#context.lifecycle === "active",
+        diagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        disposed: () => this.#disposed,
         gl,
         governor: {
           replace: (lease, cost) => {
@@ -505,6 +508,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             return typeof reservation === "string" ? undefined : reservation;
           },
         },
+        invalidate: () => this.invalidate(),
       });
       registerRollback(() => this.#clusteredLights.dropContext());
       registerRollback(() => this.#clusteredLights.releaseContextHandles());

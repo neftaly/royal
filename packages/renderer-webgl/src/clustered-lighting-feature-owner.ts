@@ -60,6 +60,10 @@ export class ClusteredLightingFeatureOwner implements ClusteredLightingFeature {
     endClusteredLightFrame(this.#arena, frame);
   }
 
+  prepare(): boolean {
+    return true;
+  }
+
   releaseContextHandles(): void {
     releaseClusteredLightContextHandles(this.#arena);
   }

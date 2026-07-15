@@ -20,6 +20,7 @@ import {
 } from "../packages/renderer-webgl/src/resource-governor";
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
+import { preloadClusteredLightingFeature } from "../packages/renderer-webgl/src/lazy-clustered-lighting-feature";
 import { forEachFuzzCase } from "./fuzz";
 import {
   camera,
@@ -33,6 +34,7 @@ import {
 } from "./renderer-webgl-working-state-runtime";
 
 await preloadImageBasedLightingFeature();
+await preloadClusteredLightingFeature();
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -11,6 +11,13 @@ export type ClusteredLightingFeatureOptions = {
   readonly governor: ClusteredLightGpuGovernor;
 };
 
+export type LazyClusteredLightingFeatureOptions = ClusteredLightingFeatureOptions & {
+  readonly active: () => boolean;
+  readonly diagnostic: (message: string, key: string) => void;
+  readonly disposed: () => boolean;
+  readonly invalidate: () => void;
+};
+
 /** Optional Forward+ punctual-light GPU feature boundary. */
 export interface ClusteredLightingFeature {
   bind(
@@ -26,6 +33,8 @@ export interface ClusteredLightingFeature {
   configure(maxTextureImageUnits: number, maxTextureSize: number): void;
   dropContext(): void;
   endFrame(frame: number): void;
+  /** Returns false while a demanded optional implementation is still loading. */
+  prepare(lights: readonly (SurfacePointLight | SurfaceSpotLight)[]): boolean;
   releaseContextHandles(): void;
   textureUnits(): ClusteredLightTextureUnits;
 }

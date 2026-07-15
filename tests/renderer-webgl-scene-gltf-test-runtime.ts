@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, vi } from "vitest";
 import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
+import { preloadClusteredLightingFeature } from "../packages/renderer-webgl/src/lazy-clustered-lighting-feature";
 
 const hoistedMocks = vi.hoisted(() => ({
   decodeBasisu: vi.fn(),
@@ -22,6 +23,7 @@ import type { WebGlGltfInstancingSnapshot, WebGlRoot } from "@royal/renderer-web
 
 await preloadVirtualTextureFeature();
 await preloadImageBasedLightingFeature();
+await preloadClusteredLightingFeature();
 
 export type CanvasSize = {
   readonly height: number;

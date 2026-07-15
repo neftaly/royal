@@ -1,6 +1,6 @@
 {
-  "gltfInitialGzipBytes": 181000,
-  "gltfIncrementalGzipBytes": 122000,
+  "gltfInitialGzipBytes": 177000,
+  "gltfIncrementalGzipBytes": 118000,
   "gltfReachableGzipBytes": 267000,
-  "primitiveInitialGzipBytes": 181000
+  "primitiveInitialGzipBytes": 177000
 }

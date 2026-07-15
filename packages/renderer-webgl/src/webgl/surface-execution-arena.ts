@@ -232,6 +232,10 @@ export class SurfaceExecutionArena {
       const surfaceLights = surfaceMaterial?.kind === "standard"
         ? input.lights ?? EMPTY_SURFACE_LIGHT_SET
         : surfaceMaterial === undefined ? undefined : EMPTY_SURFACE_LIGHT_SET;
+      if (
+        surfaceLights !== undefined
+        && !this.#clusteredLights.prepare(surfaceLights.punctuals)
+      ) return;
       const plan = surfaceMaterial === undefined || surfaceLights === undefined
         ? undefined
         : this.#textureBindingPlan(
@@ -309,6 +313,7 @@ export class SurfaceExecutionArena {
         return;
       }
       const surfaceLights = batch.material.kind === "standard" ? batch.lights : EMPTY_SURFACE_LIGHT_SET;
+      if (!this.#clusteredLights.prepare(surfaceLights.punctuals)) return;
       const plan = this.#textureBindingPlan(
         batch.material,
         input.transmissionScreenColorTexture,
