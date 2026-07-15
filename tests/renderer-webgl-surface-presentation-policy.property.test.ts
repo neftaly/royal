@@ -4,29 +4,16 @@ import {
   resolveSurfaceToneMapping,
   surfacePresentationRequiresHdr,
   toneMappingShaderMode,
-  type SurfacePresentationPlan,
 } from "../packages/renderer-webgl/src/surface-presentation-policy";
 import { forEachFuzzCase } from "./fuzz";
 
 const toneMappings = ["linear-clamp", "pbr-neutral"] as const;
 
 describe("surface presentation policy properties", () => {
-  it("keeps HDR admission equivalent to its independent inputs", () => {
+  it("admits an HDR intermediate exactly for scene-linear composition", () => {
     forEachFuzzCase({ cases: 128, seed: 0x4852_4452 }, ({ random }) => {
-      const plan: SurfacePresentationPlan = {
-        environment: random.boolean() ? {} : undefined,
-        exposureEv100: random.boolean() ? random.number(-24, 24) : undefined,
-        lightNodes: random.boolean() ? [{}] : [],
-        toneMapping: random.boolean() ? random.pick(toneMappings) : undefined,
-      };
-      const hasHdrReadyAsset = random.boolean();
-      const expected = plan.environment !== undefined
-        || plan.exposureEv100 !== undefined
-        || plan.toneMapping === "pbr-neutral"
-        || plan.lightNodes.length > 0
-        || hasHdrReadyAsset;
-
-      expect(surfacePresentationRequiresHdr(plan, hasHdrReadyAsset)).toBe(expected);
+      const hasHdrCompositionAsset = random.boolean();
+      expect(surfacePresentationRequiresHdr(hasHdrCompositionAsset)).toBe(hasHdrCompositionAsset);
     });
   });
 

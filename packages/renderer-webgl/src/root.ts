@@ -30,7 +30,7 @@ import {
   detachResourceArenaImagePreparation,
   disposeResourceArena,
   resourceArenaCountersSnapshot,
-  resourceArenaHasHdrReadyAsset,
+  resourceArenaRequiresHdrComposition,
   resourceArenaPreparedSourceKeys,
   resourceArenaSourceReferenceCount,
   retainResourceArenaSourceLease,
@@ -941,14 +941,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#readyGltfImages.applyPending();
       this.#ordinaryTextureGpu.processUploads();
       this.#gltfInstanceTransforms.beginFrame();
-      const wantsHdr = surfacePresentationRequiresHdr(
-        plan,
-        resourceArenaHasHdrReadyAsset(this.#resourceArena),
+      const requiresHdrComposition = surfacePresentationRequiresHdr(
+        resourceArenaRequiresHdrComposition(this.#resourceArena),
       );
-      if (wantsHdr && !this.#contextCapabilities.capabilities.hdrColorBuffer) {
-        throw new Error("Royal physical lighting requires EXT_color_buffer_float");
+      if (requiresHdrComposition && !this.#contextCapabilities.capabilities.hdrColorBuffer) {
+        throw new Error("Royal scene-linear material composition requires EXT_color_buffer_float");
       }
-      const useHdr = wantsHdr && this.#contextCapabilities.capabilities.hdrColorBuffer;
+      const useHdr = requiresHdrComposition && this.#contextCapabilities.capabilities.hdrColorBuffer;
       const surfaceLights = this.#lightResolver.resolveScene(
         plan.environment,
         this.#scenePlan.sceneSurfaceLights,

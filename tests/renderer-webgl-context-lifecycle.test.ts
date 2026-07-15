@@ -139,9 +139,9 @@ describe("WebGL root context lifecycle contracts", () => {
         /Studio IBL specular texture is disabled.*upload bytes exceed the per-frame limit/,
       ),
     }));
-    // The HDR surface remains required for physical rendering; only the
-    // over-budget studio IBL textures are suppressed.
-    expect(countCalls(calls, "createTexture")).toBe(1);
+    // Opaque lighting maps directly to the presentation target, while the
+    // over-budget studio IBL textures remain suppressed.
+    expect(countCalls(calls, "createTexture")).toBe(0);
     expect(scheduled).toHaveLength(1);
     expect(warning).toHaveBeenCalledTimes(1);
     const messagesBeforeRestore = root.snapshot().diagnosticLog.entries;
@@ -376,7 +376,7 @@ describe("WebGL root context lifecycle contracts", () => {
     root.dispose();
   });
 
-  it("uses extension support structurally when deciding whether physical lighting can render", () => {
+  it("renders opaque physical lighting directly without requiring an HDR color buffer", () => {
     const supported = fakeGl();
     const supportedRoot = createWebGlRoot(fakeCanvas(supported.gl));
     expect(() => supportedRoot.render(clusteredScene())).not.toThrow();
@@ -385,8 +385,7 @@ describe("WebGL root context lifecycle contracts", () => {
     const unsupported = fakeGl();
     vi.mocked(unsupported.gl.getExtension).mockReturnValue(null);
     const unsupportedRoot = createWebGlRoot(fakeCanvas(unsupported.gl));
-    expect(() => unsupportedRoot.render(clusteredScene()))
-      .toThrow("Royal physical lighting requires EXT_color_buffer_float");
+    expect(() => unsupportedRoot.render(clusteredScene())).not.toThrow();
     unsupportedRoot.dispose();
   });
 
@@ -669,11 +668,11 @@ describe("WebGL root context lifecycle contracts", () => {
     expect(unsubscribeAttempts).toBe(2);
   });
 
-  it("retains an HDR target lease across an opaque delete failure and releases it on retry", () => {
+  it("retains a clustered-light lease across an opaque delete failure and releases it on retry", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     root.render(clusteredScene());
-    expect(gl.createTexture).toHaveBeenCalledTimes(4);
+    expect(gl.createTexture).toHaveBeenCalledTimes(3);
     let attempts = 0;
     vi.mocked(gl.deleteTexture).mockImplementation(() => {
       attempts += 1;
@@ -689,15 +688,15 @@ describe("WebGL root context lifecycle contracts", () => {
     }
 
     expect(firstFailurePresent).toBe(true);
-    expect(attempts).toBe(4);
-    // The failed HDR texture retains its target lease until deletion retries;
-    // the clustered-light resources completed their independent cleanup.
-    expect(root.snapshot().resourcePressure.outstandingLeases).toBe(1);
+    expect(attempts).toBe(3);
+    // One failed clustered-light texture retains the triple's CPU and GPU
+    // leases until deletion retries.
+    expect(root.snapshot().resourcePressure.outstandingLeases).toBe(2);
     expect(() => root.dispose()).not.toThrow();
-    expect(attempts).toBe(5);
+    expect(attempts).toBe(4);
     expect(root.snapshot().resourcePressure.outstandingLeases).toBe(0);
     expect(() => root.dispose()).not.toThrow();
-    expect(attempts).toBe(5);
+    expect(attempts).toBe(4);
   });
 
   it("drops clustered-light handles and accounting without GL calls on genuine context loss", () => {

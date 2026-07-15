@@ -50,6 +50,7 @@ export const planPreparedAssetDependencies = (
   contentKeys: ReadonlyMap<string, TextureContentKey>,
   assetKey: string,
 ): PreparedAssetDependencyPlan => {
+  const materials = preparedAssetMaterials(asset);
   const geometryAssociations: PreparedAssetGeometryAssociation[] = [];
   const geometries = asset.primitives.map((primitive, index) => {
     const declaration = gltfGeometryDeclaration({
@@ -79,9 +80,12 @@ export const planPreparedAssetDependencies = (
       iblKeys: asset.imageBasedLight?.specular === undefined
         ? []
         : [{ count: 1, key: asset.imageBasedLight.specular.key }],
-      ordinaryTextures: materialDependencies(preparedAssetMaterials(asset), contentKeys),
+      ordinaryTextures: materialDependencies(materials, contentKeys),
       virtualTextures: [],
-      wantsHdr: asset.lights.length !== 0 || asset.imageBasedLight !== undefined,
+      requiresHdrComposition: materials.some((material) =>
+        material.alphaMode === "BLEND"
+        || (material.extensionFactors?.transmissionFactor ?? 0) > 0
+      ),
     },
   };
 };

@@ -1,9 +1,7 @@
 import type { RenderToneMapping } from "@royal/renderer-core";
 
 export interface SurfacePresentationPlan {
-  readonly environment: object | undefined;
   readonly exposureEv100: number | undefined;
-  readonly lightNodes: readonly unknown[];
   readonly toneMapping: RenderToneMapping | undefined;
 }
 
@@ -24,15 +22,10 @@ const TONE_MAPPING_SHADER_MODES: Readonly<Record<RenderToneMapping, 0 | 1>> = {
   "pbr-neutral": 1,
 };
 
-/** Pure scene policy deciding whether the frame requires the HDR pipeline. */
+/** Pure policy: only scene-linear composition needs an HDR intermediate. */
 export const surfacePresentationRequiresHdr = (
-  plan: SurfacePresentationPlan,
-  hasHdrReadyAsset: boolean,
-): boolean => plan.environment !== undefined
-  || plan.exposureEv100 !== undefined
-  || plan.toneMapping === "pbr-neutral"
-  || plan.lightNodes.length > 0
-  || hasHdrReadyAsset;
+  hasHdrCompositionAsset: boolean,
+): boolean => hasHdrCompositionAsset;
 
 /** Writes public EV100/display-transform inputs into retained shader state. */
 export const writeSurfaceToneMappingState = (

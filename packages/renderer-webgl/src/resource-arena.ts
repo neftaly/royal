@@ -39,7 +39,7 @@ export interface PreparedAssetDependencyManifest {
   readonly iblKeys: readonly { readonly count: number; readonly key: string }[];
   readonly ordinaryTextures: readonly CountedTextureDeclaration<TextureAssetRef>[];
   readonly virtualTextures: readonly CountedTextureDeclaration<VirtualTextureAssetRef>[];
-  readonly wantsHdr: boolean;
+  readonly requiresHdrComposition: boolean;
 }
 
 export interface CountedGeometryDeclaration {
@@ -72,7 +72,7 @@ type PreparedAssetPlan = {
   readonly ordinaryTextures: Map<string, MutableCountedTextureDeclaration<TextureAssetRef>>;
   sourceRevision: number;
   readonly virtualTextures: readonly CountedTextureDeclaration<VirtualTextureAssetRef>[];
-  readonly wantsHdr: boolean;
+  readonly requiresHdrComposition: boolean;
 };
 
 type MutableCountedGeometryDeclaration = {
@@ -185,7 +185,7 @@ interface ResourceArenaState {
   readonly contentKeysByAsset: ReadonlyMap<string, ReadonlyMap<string, TextureContentKey>>;
   readonly gltfRequests: Map<string, GltfRequestDeclaration>;
   readonly geometries: Map<string, MutableResourceArenaGeometryRow>;
-  hdrReadyAssetCount: number;
+  hdrCompositionAssetCount: number;
   readonly iblReferences: Map<string, number>;
   readonly iblSources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>;
   nextGeometryId: number;
@@ -380,11 +380,11 @@ const geometryAcquisitionCount = (
   return acquisitions;
 };
 
-const adjustHdrReadyAssetCount = (arena: ResourceArena, delta: -1 | 1): void => {
+const adjustHdrCompositionAssetCount = (arena: ResourceArena, delta: -1 | 1): void => {
   const state = arena as unknown as ResourceArenaState;
-  const next = state.hdrReadyAssetCount + delta;
-  if (next < 0) throw new Error("resource arena HDR-ready asset count became negative");
-  state.hdrReadyAssetCount = next;
+  const next = state.hdrCompositionAssetCount + delta;
+  if (next < 0) throw new Error("resource arena HDR-composition asset count became negative");
+  state.hdrCompositionAssetCount = next;
 };
 
 const EMPTY_CHANGES: ResourceArenaChanges = Object.freeze({
@@ -424,7 +424,7 @@ export const createResourceArena = (
     contentKeysByAsset: new Map(),
     gltfRequests: new Map(),
     geometries: new Map(),
-    hdrReadyAssetCount: 0,
+    hdrCompositionAssetCount: 0,
     iblReferences: new Map(),
     iblSources: new Map(),
     nextGeometryId: 1,
@@ -810,7 +810,7 @@ const releaseAssetPlan = (
   const state = arena as unknown as ResourceArenaState;
   const previous = declaration.plan;
   if (previous === undefined) return;
-  if (previous.wantsHdr) adjustHdrReadyAssetCount(arena, -1);
+  if (previous.requiresHdrComposition) adjustHdrCompositionAssetCount(arena, -1);
   applyAssetIblDelta(arena, previous.iblKeys, [], result);
   applyAssetGeometryDelta(arena, previous.geometries.values(), [], result);
   applyAssetTextureDelta(state.ordinaryTextures, previous.ordinaryTextures.values(), [], result.releasedOrdinaryTextureKeys);
@@ -879,8 +879,8 @@ export const applyPreparedAssetEvents = (
   for (const { declaration, manifest, snapshot } of planUpdates) {
     const previous = declaration.plan;
     applyAssetGeometryDelta(arena, previous?.geometries.values() ?? [], manifest.geometries, result);
-    if ((previous?.wantsHdr ?? false) !== manifest.wantsHdr) {
-      adjustHdrReadyAssetCount(arena, manifest.wantsHdr ? 1 : -1);
+    if ((previous?.requiresHdrComposition ?? false) !== manifest.requiresHdrComposition) {
+      adjustHdrCompositionAssetCount(arena, manifest.requiresHdrComposition ? 1 : -1);
     }
     applyAssetIblDelta(arena, previous?.iblKeys ?? [], manifest.iblKeys, result);
     applyAssetTextureDelta(
@@ -903,7 +903,7 @@ export const applyPreparedAssetEvents = (
       ordinaryTextures: new Map(manifest.ordinaryTextures.map((entry) => [entry.key, entry])),
       sourceRevision: snapshot.revision,
       virtualTextures: manifest.virtualTextures,
-      wantsHdr: manifest.wantsHdr,
+      requiresHdrComposition: manifest.requiresHdrComposition,
     };
     state.counters.assetPlanCompiles += 1;
     state.counters.preparedAssetUpdates += 1;
@@ -916,8 +916,8 @@ const EMPTY_CONTENT_KEYS: ReadonlyMap<string, TextureContentKey> = new Map();
 export const resourceArenaHasPendingAssetEvents = (arena: ResourceArena): boolean =>
   (arena as unknown as ResourceArenaState).pendingAssetKeySet.size !== 0;
 
-export const resourceArenaHasHdrReadyAsset = (arena: ResourceArena): boolean =>
-  (arena as unknown as ResourceArenaState).hdrReadyAssetCount > 0;
+export const resourceArenaRequiresHdrComposition = (arena: ResourceArena): boolean =>
+  (arena as unknown as ResourceArenaState).hdrCompositionAssetCount > 0;
 
 export const resourceArenaCountersSnapshot = (arena: ResourceArena): Readonly<ResourceArenaCounters> => ({
   ...(arena as unknown as ResourceArenaState).counters,
@@ -1084,8 +1084,8 @@ export const updatePreparedAssetManifest = (
     manifest.geometries,
     result,
   );
-  if (declaration.plan.wantsHdr !== manifest.wantsHdr) {
-    adjustHdrReadyAssetCount(arena, manifest.wantsHdr ? 1 : -1);
+  if (declaration.plan.requiresHdrComposition !== manifest.requiresHdrComposition) {
+    adjustHdrCompositionAssetCount(arena, manifest.requiresHdrComposition ? 1 : -1);
   }
   applyAssetTextureDelta(
     state.ordinaryTextures,
@@ -1108,7 +1108,7 @@ export const updatePreparedAssetManifest = (
     ordinaryTextures: new Map(manifest.ordinaryTextures.map((entry) => [entry.key, entry])),
     sourceRevision: declaration.plan.sourceRevision,
     virtualTextures: manifest.virtualTextures,
-    wantsHdr: manifest.wantsHdr,
+    requiresHdrComposition: manifest.requiresHdrComposition,
   };
   state.counters.assetPlanCompiles += 1;
   state.counters.preparedAssetUpdates += 1;
@@ -1187,7 +1187,7 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
   state.geometries.clear();
   state.gltfRequests.clear();
   arenaContentKeys(arena).clear();
-  state.hdrReadyAssetCount = 0;
+  state.hdrCompositionAssetCount = 0;
   const preparedSources = arenaPreparedSources(arena);
   for (const prepared of preparedSources.values()) {
     finish(() => {

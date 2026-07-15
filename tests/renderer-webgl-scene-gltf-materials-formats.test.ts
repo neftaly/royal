@@ -248,6 +248,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       "drawElements",
       "copyTexSubImage2D",
       "drawElements",
+      "drawArrays",
     ]);
     root.dispose();
   });

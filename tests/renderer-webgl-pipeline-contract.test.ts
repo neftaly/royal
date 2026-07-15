@@ -901,7 +901,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([1, 0.833333, 1, 0]);
+      .toContainEqual([1, 0.833333, 0, 0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
     expect(calls.some((call) =>
       call.name === "texStorage2D"
@@ -944,7 +944,10 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform4fvPayloadsByName(calls, "u_iblSpecularSettings").map(roundVector))
       .toContainEqual([1, 80, 6, 0]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([1, 0.446572, 1, 0]);
+      .toContainEqual([1, 0.446572, 0, 0]);
+    expect(calls.some((call) => call.name === "drawArrays")).toBe(false);
+    expect(calls.some((call) =>
+      call.name === "texImage2D" && call.args[2] === gl.RGBA16F)).toBe(false);
     const cubeFaceUploads = calls.filter((call) =>
       call.name === "texImage2D"
       && Number(call.args[0]) >= gl.TEXTURE_CUBE_MAP_POSITIVE_X

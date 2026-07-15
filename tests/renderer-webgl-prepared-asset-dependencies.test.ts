@@ -11,6 +11,7 @@ import type {
 } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../packages/renderer-webgl/src/gltf/texture-coordinates";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
+import { DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS } from "../packages/renderer-webgl/src/webgl/materials";
 
 const material = (textureUri: string): LoadedGltfMaterial => ({
   alphaMode: "OPAQUE",
@@ -125,7 +126,28 @@ describe("prepared glTF asset dependency core", () => {
       texture: { contentKey, uri: "texture:shared" },
     });
     expect(plan.manifest.iblKeys).toEqual([{ count: 1, key: "ibl:studio" }]);
-    expect(plan.manifest.wantsHdr).toBe(true);
+    expect(plan.manifest.requiresHdrComposition).toBe(false);
     expect(plan.manifest.virtualTextures).toEqual([]);
+  });
+
+  it("requires an HDR intermediate only for scene-linear material composition", () => {
+    const opaque = material("texture:opaque");
+    const blended = { ...material("texture:blend"), alphaMode: "BLEND" as const };
+    const transmissive = {
+      ...material("texture:transmission"),
+      extensionFactors: {
+        ...DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
+        transmissionFactor: 0.5,
+      },
+    };
+    const plan = (value: LoadedGltfMaterial) => planPreparedAssetDependencies(
+      asset([primitive("primitive:0", value, value, value, value)]),
+      new Map(),
+      "asset:a",
+    ).manifest.requiresHdrComposition;
+
+    expect(plan(opaque)).toBe(false);
+    expect(plan(blended)).toBe(true);
+    expect(plan(transmissive)).toBe(true);
   });
 });

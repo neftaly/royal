@@ -385,7 +385,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     }));
     expect(uniform4fv).toEqual(expect.objectContaining({
       u_color: expect.arrayContaining([[1, 1, 1, 1]]),
-      u_toneMappingSettings: expect.arrayContaining([[1, 1 / (1.2 * (2 ** 1.75)), 1, 0]]),
+      u_toneMappingSettings: expect.arrayContaining([[1, 1 / (1.2 * (2 ** 1.75)), 0, 0]]),
     }));
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
