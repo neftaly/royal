@@ -1799,6 +1799,7 @@ const main = async () => {
     let contextLossChecked = false;
 
     for (const route of selectedRoutes) {
+      const routeExceptionStart = exceptions.length;
       const routeUrl = new URL(baseUrl + route.path);
       for (const [name, value] of new URLSearchParams(routeQuery)) {
         routeUrl.searchParams.set(name, value);
@@ -1862,6 +1863,10 @@ const main = async () => {
         };
       }
       try {
+        const routeExceptions = exceptions.slice(routeExceptionStart);
+        if (routeExceptions.length > 0) {
+          throw new Error(`${route.id}: browser runtime exceptions: ${routeExceptions.join('; ')}`);
+        }
         assertRoute(effectiveRoute, state);
       } catch (error) {
         const recentConsole = consoleMessages.slice(-8).join('; ');

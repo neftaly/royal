@@ -377,6 +377,9 @@ describe("React Canvas picking optimization", () => {
     canvas.dispatchFakeEvent("pointerup", pointerEvent(1));
 
     expect(root.pick).toHaveBeenCalledTimes(3);
+    expect(root.pick).toHaveBeenNthCalledWith(1, { clientX: 24, clientY: 36 });
+    expect(root.pick).toHaveBeenNthCalledWith(2, { clientX: 24, clientY: 36 });
+    expect(root.pick).toHaveBeenNthCalledWith(3, { clientX: 24, clientY: 36 });
     expect(onPointerMove).toHaveBeenCalledTimes(1);
     expect(onPointerDown).toHaveBeenCalledTimes(1);
     expect(onPointerUp).toHaveBeenCalledTimes(1);
