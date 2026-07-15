@@ -69,6 +69,13 @@ type MutableVirtualTextureDrawDemandContext = {
   -readonly [Key in keyof VirtualTextureDrawDemandContext]: VirtualTextureDrawDemandContext[Key];
 };
 
+/** Pure monotonic policy: automatic VT may activate once, but never source-flap afterward. */
+export const resolveAutomaticVirtualTextureActivation = (
+  activated: boolean,
+  drawable: boolean,
+  coverageReady: boolean,
+): boolean => activated || (drawable && coverageReady);
+
 const NO_BASE_COLOR_RESIDENCY: BaseColorTextureResidency = { kind: "none" };
 
 /**
@@ -250,7 +257,7 @@ export class VirtualTextureDemandOwner {
       );
     }
 
-    return this.#isAutoCoverageReady(state, drawDemand)
+    return this.#activateAutoResidencyWhenReady(state, drawDemand)
       ? this.#prepared(state, texture)
       : ordinary;
   }
@@ -518,17 +525,21 @@ export class VirtualTextureDemandOwner {
     return demand;
   }
 
-  #isAutoCoverageReady(
+  #activateAutoResidencyWhenReady(
     state: VirtualTextureRuntimeState,
     drawDemand: VirtualTextureDrawDemand | undefined,
   ): boolean {
-    if (state.status !== "ready" || !virtualTextureGpuDrawable(this.#options.gpu, state.key)) return false;
     const candidates = drawDemand?.coverageCandidates;
-    if (candidates === undefined) return true;
-
-    return candidates.length > 0
+    const coverageReady = candidates === undefined || (candidates.length > 0
       && candidates.every((page) => (
         virtualTextureGpuExactResidency(this.#options.gpu, state.key, page) !== undefined
-      ));
+      )));
+    const activated = resolveAutomaticVirtualTextureActivation(
+      state.automaticResidencyActivated === true,
+      state.status === "ready" && virtualTextureGpuDrawable(this.#options.gpu, state.key),
+      coverageReady,
+    );
+    if (activated) state.automaticResidencyActivated = true;
+    return activated;
   }
 }

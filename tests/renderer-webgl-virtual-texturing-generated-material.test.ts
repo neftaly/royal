@@ -9,6 +9,7 @@ import {
   VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
   VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
 } from "../packages/renderer-webgl/src/virtual-texture/runtime";
+import { resolveAutomaticVirtualTextureActivation } from "../packages/renderer-webgl/src/virtual-texture/demand-owner";
 import {
   createWebGlRoot,
   fakeCanvas,
@@ -34,6 +35,14 @@ import {
 } from "./renderer-webgl-virtual-texturing-fixtures";
 
 describe("WebGL renderer generated and material virtual texturing", () => {
+  it("makes automatic VT activation monotonic across coverage changes", () => {
+    expect(resolveAutomaticVirtualTextureActivation(false, false, false)).toBe(false);
+    expect(resolveAutomaticVirtualTextureActivation(false, true, false)).toBe(false);
+    expect(resolveAutomaticVirtualTextureActivation(false, true, true)).toBe(true);
+    expect(resolveAutomaticVirtualTextureActivation(true, false, false)).toBe(true);
+    expect(resolveAutomaticVirtualTextureActivation(true, true, false)).toBe(true);
+  });
+
   it("uses the opted-in generated raster VT policy without manifest requests", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const { canvases, contexts } = installCanvas2d();
@@ -307,6 +316,37 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       expect(context.createPattern.mock.results[0]?.value.setTransform).toHaveBeenCalledTimes(1);
       expect(context.fillRect).toHaveBeenCalledWith(0, 0, 258, 258);
     }
+  });
+
+  it("keeps automatic VT active while new camera coverage converges", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    installCanvas2d();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
+    const material = unlitMaterial({ texture: imageTexture("/textures/moving-large.png") });
+
+    const initialScene = renderScene(material, { planeSize: [8, 2] });
+    root.render(initialScene);
+    const source = ControlledImage.instances[0]!;
+    source.height = 2048;
+    source.naturalHeight = 2048;
+    source.naturalWidth = 2048;
+    source.width = 2048;
+    source.settleLoad();
+    await flushMicrotasks();
+
+    for (let frame = 0; frame < 20 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      root.render(initialScene);
+      await flushMicrotasks();
+    }
+    const shaderBindsBeforeMotion = root.snapshot().virtualTexturing.shaderBinds;
+    expect(shaderBindsBeforeMotion).toBeGreaterThan(0);
+
+    root.render(renderScene(material, { cameraX: 2.5, planeSize: [8, 2] }));
+    expect(
+      root.snapshot().virtualTexturing.shaderBinds,
+      "camera motion must refine within VT instead of switching back to the ordinary texture",
+    ).toBeGreaterThan(shaderBindsBeforeMotion);
   });
 
   it("resolves explicit virtualTexture base color through prepared VT residency without ordinary image loads", async () => {

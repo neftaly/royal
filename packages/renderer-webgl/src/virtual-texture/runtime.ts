@@ -83,6 +83,8 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTexturePageSource;
+  /** Monotonic handoff: automatic VT never returns to ordinary source selection after activation. */
+  automaticResidencyActivated?: true;
   availablePageKeys?: ReadonlySet<string>;
   /** Stable root-policy ordering for admission and cold-reclamation ties. */
   readonly admissionTicket: number;
