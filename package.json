@@ -26,6 +26,7 @@
     "lint": "pnpm -r --if-present lint",
     "perf:vt-pages": "node scripts/virtual-texture-page-perf.ts",
     "quest:browser": "node scripts/quest-browser-control.mjs",
+    "quest:telemetry": "node scripts/quest-telemetry.ts",
     "test": "vitest run tests/*.test.ts tests/*.test.tsx",
     "test:browser": "pnpm --filter @royal/examples-react test:browser",
     "typecheck": "tsc"

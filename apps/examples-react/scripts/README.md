@@ -109,6 +109,33 @@ EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-quest2.json \
 pnpm --filter @royal/examples-react bench:examples
 ```
 
+Quest device telemetry is an optional, decoupled sidecar rather than part of
+the accepted browser report. Wrap the same command when firmware, battery,
+thermal, package-memory, or filtered Browser/Adreno/runtime log context is
+needed:
+
+```sh
+EXAMPLES_BENCH_BROWSER=cdp \
+EXAMPLES_BENCH_DEBUG_PORT=9222 \
+EXAMPLES_BENCH_FAKE_XR=0 \
+EXAMPLES_BENCH_REAL_XR=1 \
+EXAMPLES_BENCH_MODE=labs \
+EXAMPLES_BENCH_ROUTE=webxr-vr \
+EXAMPLES_BENCH_OUTPUT=research/examples-benchmarks/quest2-webxr.json \
+pnpm quest:telemetry record \
+  --output research/examples-benchmarks/quest2-webxr.telemetry.json \
+  -- pnpm --filter @royal/examples-react bench:examples
+```
+
+The wrapper records bounded snapshots before and after the command, then reads a
+bounded filtered logcat window without clearing device logs. Thermal snapshots
+retain the hottest sensor of each Android thermal type. It writes a versioned
+`royal-quest-telemetry` JSON document even when individual ADB probes fail, and
+returns the wrapped command's exit status. It imports no Royal package or
+benchmark code, and it runs no ADB observer while the wrapped command is active.
+The before/after probes still add time outside the command. Set `ANDROID_SERIAL`
+or pass `--serial` when more than one ADB device is connected.
+
 On Quest Browser 148 the standard `@chrome_devtools_remote` socket is still
 used, but it exists only while the Browser process is active. If port 9222 is
 empty, keep a normal page visible in the headset and diagnose before forwarding:
