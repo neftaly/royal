@@ -4,8 +4,16 @@ import {
   type TextureAssetRef,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
+import { recordWithAllowedFields } from "./validation";
 
 export type TextureAssetStatusInput = TextureAssetRef | VirtualTextureAssetRef;
+
+const TEXTURE_ASSET_REF_FIELDS = [
+  "colorSpace", "contentKey", "kind", "sampler", "uri", "version",
+] as const;
+const VIRTUAL_TEXTURE_ASSET_REF_FIELDS = [
+  "colorSpace", "contentKey", "kind", "manifestUri", "sampler", "version",
+] as const;
 
 /** @internal Validates public texture observation inputs before Canvas availability affects behavior. */
 export const validateTextureAssetRef: (
@@ -20,6 +28,7 @@ export const validateTextureAssetRef: (
   }
   const candidate = input as Partial<TextureAssetStatusInput>;
   if (candidate.kind === "asset") {
+    recordWithAllowedFields(input, TEXTURE_ASSET_REF_FIELDS, label, "field");
     const texture = candidate as TextureAssetRef;
     textureAsset({
       ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
@@ -31,6 +40,7 @@ export const validateTextureAssetRef: (
     return;
   }
   if (candidate.kind === "virtual-asset") {
+    recordWithAllowedFields(input, VIRTUAL_TEXTURE_ASSET_REF_FIELDS, label, "field");
     const texture = candidate as VirtualTextureAssetRef;
     virtualTexture({
       ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),

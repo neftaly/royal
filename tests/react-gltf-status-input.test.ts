@@ -27,5 +27,13 @@ describe("React glTF status input", () => {
       uri: "/helmet.gltf",
       version: false,
     })).toThrow(/version must be a non-empty string or finite number/i);
+    expect(() => validateGltfAssetStatusInput({
+      uri: "/helmet.gltf",
+      cacheKey: "helmet",
+    })).toThrow(/unsupported field.*cacheKey/i);
+    expect(() => validateGltfAssetStatusInput({
+      bounds: { max: [1, 1], min: [0, 0, 0] },
+      uri: "/helmet.gltf",
+    })).toThrow(/bounds max must be an array of exactly 3 numbers/i);
   });
 });

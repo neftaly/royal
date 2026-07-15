@@ -24,5 +24,10 @@ describe("React texture status input", () => {
       manifestUri: "/terrain.vt.json",
       version: Number.NaN,
     }, "texture")).toThrow(/version.*finite/i);
+    expect(() => validateTextureAssetRef({
+      kind: "asset",
+      uri: "/albedo.png",
+      flipY: false,
+    }, "texture")).toThrow(/unsupported field.*flipY/i);
   });
 });
