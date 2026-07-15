@@ -11,11 +11,7 @@ import {
 } from "../surface-render-target-arena";
 import type { BaseColorTextureResidency, ViewportSize, VirtualTextureRuntimeState } from "../virtual-texture-runtime";
 import type { VertexInputGeometry } from "../vertex-input-arena";
-import {
-  bindVirtualTextureGpuResource,
-  virtualTextureGpuDrawable,
-  type VirtualTextureGpuArena,
-} from "./virtual-texture-gpu-arena";
+import type { VirtualTextureGpuBinding } from "./virtual-texture-gpu-arena";
 import {
   bindClusteredLights,
   clusteredLightTextureUnits,
@@ -154,6 +150,11 @@ export interface SurfaceGltfBatchExecution {
 }
 
 export interface SurfaceExecutionArenaOptions {
+  readonly bindVirtualTexture: (
+    key: string,
+    atlasTextureUnit: number,
+    pageTableTextureUnit: number,
+  ) => VirtualTextureGpuBinding | undefined;
   readonly clusteredLights: ClusteredLightArena;
   readonly geometry: GeometryDrawArena;
   readonly gl: WebGL2RenderingContext;
@@ -163,12 +164,13 @@ export interface SurfaceExecutionArenaOptions {
   readonly programs: ProgramArena;
   readonly renderTargets: SurfaceRenderTargetArena;
   readonly textureResidencyIntent: FrameTextureResidencyIntent;
-  readonly virtualTextures: VirtualTextureGpuArena;
+  readonly virtualTextureDrawable: (key: string) => boolean;
 }
 
 /** Owns concrete WebGL surface planning, binding, state, and submission. */
 export class SurfaceExecutionArena {
   readonly #clusteredLights: ClusteredLightArena;
+  readonly #bindVirtualTextureGpu: SurfaceExecutionArenaOptions["bindVirtualTexture"];
   readonly #diagnostics: SurfaceExecutionDiagnostic[] = [];
   readonly #geometry: GeometryDrawArena;
   readonly #gl: WebGL2RenderingContext;
@@ -179,10 +181,11 @@ export class SurfaceExecutionArena {
   readonly #programs: ProgramArena;
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
-  readonly #virtualTextures: VirtualTextureGpuArena;
+  readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #wakeRequested = false;
 
   constructor(options: SurfaceExecutionArenaOptions) {
+    this.#bindVirtualTextureGpu = options.bindVirtualTexture;
     this.#clusteredLights = options.clusteredLights;
     this.#geometry = options.geometry;
     this.#gl = options.gl;
@@ -192,7 +195,7 @@ export class SurfaceExecutionArena {
     this.#programs = options.programs;
     this.#renderTargets = options.renderTargets;
     this.#textureResidencyIntent = options.textureResidencyIntent;
-    this.#virtualTextures = options.virtualTextures;
+    this.#virtualTextureDrawable = options.virtualTextureDrawable;
   }
 
   configureTextureUnits(maxTextureImageUnits: number): void {
@@ -737,7 +740,7 @@ export class SurfaceExecutionArena {
   }
 
   #isVirtualTextureDrawable(state: VirtualTextureRuntimeState): boolean {
-    return state.status === "ready" && virtualTextureGpuDrawable(this.#virtualTextures, state.key);
+    return state.status === "ready" && this.#virtualTextureDrawable(state.key);
   }
 
   #bindVirtualTexture(
@@ -750,8 +753,7 @@ export class SurfaceExecutionArena {
     const atlasTextureUnit = plan.textureUnits.get("baseColorVirtualTextureAtlas");
     const pageTableTextureUnit = plan.textureUnits.get("baseColorVirtualTexturePageTable");
     if (atlasTextureUnit === undefined || pageTableTextureUnit === undefined) return false;
-    const binding = bindVirtualTextureGpuResource(
-      this.#virtualTextures,
+    const binding = this.#bindVirtualTextureGpu(
       state.key,
       atlasTextureUnit,
       pageTableTextureUnit,

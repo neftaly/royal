@@ -14,6 +14,9 @@ import {
   type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
+
+await preloadVirtualTextureFeature();
 
 type CanvasSize = {
   readonly width: number;

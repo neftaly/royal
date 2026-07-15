@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, vi } from "vitest";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
 
 const hoistedMocks = vi.hoisted(() => ({
   decodeBasisu: vi.fn(),
@@ -17,6 +18,8 @@ import {
   type RenderRoot as SceneRenderRoot,
 } from "@royal/renderer-core";
 import type { WebGlGltfInstancingSnapshot, WebGlRoot } from "@royal/renderer-webgl";
+
+await preloadVirtualTextureFeature();
 
 export type CanvasSize = {
   readonly height: number;

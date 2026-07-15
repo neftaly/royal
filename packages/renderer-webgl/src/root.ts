@@ -145,7 +145,8 @@ import {
   type VirtualTextureRef,
   type ViewportSize,
 } from "./virtual-texture-runtime";
-import { VirtualTextureFeatureOwner } from "./virtual-texture-feature-owner";
+import { LazyVirtualTextureFeature } from "./lazy-virtual-texture-feature";
+import type { VirtualTextureFeature } from "./virtual-texture-feature";
 import { RootResourceReleaseOwner } from "./root-resource-release-owner";
 import { textureResidencyDiagnosticsSnapshot } from "./texture-residency-diagnostics";
 import {
@@ -280,7 +281,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #ordinaryTextureGpu: OrdinaryTextureGpuOwner;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
-  readonly #virtualTextures: VirtualTextureFeatureOwner;
+  readonly #virtualTextures: VirtualTextureFeature;
   readonly #resourceReleases: RootResourceReleaseOwner;
   readonly #resourceArena: ResourceArena;
   /** Root authority for cross-subsystem resource admission and accounting. */
@@ -646,7 +647,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           );
         });
       registerRollback(() => this.#unsubscribeResourceGovernorDurableCapacityRelease());
-      this.#virtualTextures = new VirtualTextureFeatureOwner({
+      this.#virtualTextures = new LazyVirtualTextureFeature({
         active: () => !this.#disposed && this.#context.lifecycle === "active",
         admitJob: this.#admitGltfPreparationJob,
         automaticVirtualTextures: this.#options.automaticVirtualTextures,
@@ -683,6 +684,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
       this.#surfaceExecution = new SurfaceExecutionArena({
+        bindVirtualTexture: (key, atlasTextureUnit, pageTableTextureUnit) => (
+          this.#virtualTextures.bindGpuResource(key, atlasTextureUnit, pageTableTextureUnit)
+        ),
         clusteredLights: this.#clusteredLights,
         geometry: this.#geometryDrawArena,
         gl,
@@ -692,7 +696,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         programs: this.#programArena,
         renderTargets: this.#surfaceRenderTargets,
         textureResidencyIntent: this.#textureResidencyIntent,
-        virtualTextures: this.#virtualTextures.gpu,
+        virtualTextureDrawable: (key) => this.#virtualTextures.isGpuDrawable(key),
       });
       this.#configureContextCapabilities(this.#contextCapabilities.probe());
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
@@ -896,6 +900,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     let renderDeferred = false;
+    this.#virtualTextures.prepareFrame(plan.manifest.virtualTextures.length > 0);
     this.#virtualTextures.beginFrame();
     this.#textureResidencyIntent.beginFrame();
     try {

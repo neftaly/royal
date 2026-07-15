@@ -8,9 +8,7 @@ import {
   reserveResourceGovernor,
   type ResourceGovernor,
 } from "./resource-governor";
-import type { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
-import type { WebGlContextCapabilities } from "./context-capability-owner";
-import type { WebGlContextLifecycle, WebGlVirtualTexturingSnapshot } from "./root-types";
+import type { WebGlVirtualTexturingSnapshot } from "./root-types";
 import { virtualTextureDiagnosticsSnapshot } from "./virtual-texture-diagnostics";
 import { VirtualTextureDemandOwner } from "./virtual-texture-demand-owner";
 import { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
@@ -18,53 +16,32 @@ import type {
   BaseColorTextureResidency,
   VirtualTextureDrawDemandContext,
   VirtualTextureDrawDemandModelSource,
-  VirtualTextureRef,
   VirtualTextureRuntimeState,
   ViewportSize,
 } from "./virtual-texture-runtime";
 import {
   VirtualTextureRuntimeShell,
   type VirtualTextureAssetSnapshot,
-  type VirtualTextureRuntimeShellOptions,
 } from "./virtual-texture-runtime-shell";
 import {
+  bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
   consumeVirtualTextureGpuWake,
   createVirtualTextureGpuArena,
   dropVirtualTextureGpuContext,
   processVirtualTextureGpuUploads,
   virtualTextureGpuHasActionableUploads,
+  virtualTextureGpuDrawable,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
   type VirtualTextureGpuArena,
+  type VirtualTextureGpuBinding,
 } from "./webgl/virtual-texture-gpu-arena";
-import type { TextureHandleArena } from "./webgl/texture-handle-arena";
 import type { VertexInputGeometry } from "./vertex-input-arena";
-
-type VirtualTextureFeatureOwnerOptions = {
-  readonly active: () => boolean;
-  readonly admitJob: VirtualTextureRuntimeShellOptions["admitJob"];
-  readonly automaticVirtualTextures: boolean;
-  readonly capabilities: () => WebGlContextCapabilities;
-  readonly capacityWakes: ResourceCapacityWakeOwner;
-  readonly contextGeneration: () => number;
-  readonly contextLifecycle: () => WebGlContextLifecycle;
-  readonly decodedSources: DecodedTextureSourceLifetime;
-  readonly diagnostic: (message: string, key: string) => void;
-  readonly disposed: () => boolean;
-  readonly frame: () => number;
-  readonly gl: WebGL2RenderingContext;
-  readonly invalidate: () => void;
-  readonly maximumDecodedCpuBytes: number;
-  readonly maximumPersistentGpuBytes: number;
-  readonly maximumUploadBytes: number;
-  readonly recordUnsupported: (texture: VirtualTextureRef, reason: string) => void;
-  readonly resourceGovernor: ResourceGovernor;
-  readonly textureHandles: TextureHandleArena;
-};
+import type { VirtualTextureFeature, VirtualTextureFeatureOptions } from "./virtual-texture-feature";
 
 /** Owns the complete virtual-texture runtime and its renderer-facing lifecycle. */
-export class VirtualTextureFeatureOwner {
+export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
   readonly #admission: VirtualTextureGpuAdmissionOwner;
   readonly #decodedSources: DecodedTextureSourceLifetime;
   readonly #demand: VirtualTextureDemandOwner;
@@ -74,7 +51,7 @@ export class VirtualTextureFeatureOwner {
   readonly #resourceGovernor: ResourceGovernor;
   readonly #runtime: VirtualTextureRuntimeShell;
 
-  constructor(options: VirtualTextureFeatureOwnerOptions) {
+  constructor(options: VirtualTextureFeatureOptions) {
     this.#decodedSources = options.decodedSources;
     this.#frame = options.frame;
     this.#invalidate = options.invalidate;
@@ -123,10 +100,6 @@ export class VirtualTextureFeatureOwner {
     });
   }
 
-  get gpu(): VirtualTextureGpuArena {
-    return this.#gpu;
-  }
-
   get resources(): ReadonlyMap<string, VirtualTextureRuntimeState> {
     return this.#runtime.resources;
   }
@@ -137,6 +110,19 @@ export class VirtualTextureFeatureOwner {
 
   beginFrame(): void {
     this.#runtime.beginFrame();
+  }
+
+  bindGpuResource(
+    key: string,
+    atlasTextureUnit: number,
+    pageTableTextureUnit: number,
+  ): VirtualTextureGpuBinding | undefined {
+    return bindVirtualTextureGpuResource(
+      this.#gpu,
+      key,
+      atlasTextureUnit,
+      pageTableTextureUnit,
+    );
   }
 
   beginView(viewIndex: number): void {
@@ -180,9 +166,15 @@ export class VirtualTextureFeatureOwner {
     return virtualTextureGpuHasActionableUploads(this.#gpu);
   }
 
+  isGpuDrawable(key: string): boolean {
+    return virtualTextureGpuDrawable(this.#gpu, key);
+  }
+
   loseContext(): void {
     this.#runtime.loseContext();
   }
+
+  prepareFrame(_authoredVirtualTextures: boolean): void {}
 
   processGpuUploads(): void {
     const gpuFailure = captureFailure(() => {

@@ -16,7 +16,10 @@ import {
 import {
   createWebGlRootWithResourcePolicy as createRendererWebGlRoot,
 } from "../packages/renderer-webgl/src/root";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
 import type { SurfaceMaterial } from "../packages/renderer-webgl/src/webgl/materials";
+
+await preloadVirtualTextureFeature();
 
 type CanvasSize = {
   readonly height: number;

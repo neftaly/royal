@@ -13,6 +13,9 @@ import {
   type ResourceGovernorPolicy,
 } from "../packages/renderer-webgl/src/resource-governor";
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
+import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/lazy-virtual-texture-feature";
+
+await preloadVirtualTextureFeature();
 
 type GlCall = { readonly args: readonly unknown[]; readonly name: string };
 type FetchRequest = { readonly resolve: (response: Response) => void; readonly url: string };

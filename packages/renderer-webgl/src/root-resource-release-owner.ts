@@ -1,12 +1,12 @@
 import type { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
 import type { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
-import type { VirtualTextureFeatureOwner } from "./virtual-texture-feature-owner";
+import type { VirtualTextureFeature } from "./virtual-texture-feature";
 import { captureFailure, captureFirstFailure } from "./captured-failure";
 
 type RootResourceReleaseOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
-  readonly virtualTextures: VirtualTextureFeatureOwner;
+  readonly virtualTextures: VirtualTextureFeature;
 };
 
 /** Owns fallible ordinary/virtual texture release ordering and wake settlement. */
