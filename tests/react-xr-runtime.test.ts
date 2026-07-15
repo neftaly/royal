@@ -151,7 +151,6 @@ describe("React XR session runtime", () => {
       { referenceSpacePreference: ["local"] },
     );
     expect(store.getState()).toMatchObject({
-      active: true,
       session,
       status: "active",
       visibilityState: "visible",
@@ -161,7 +160,6 @@ describe("React XR session runtime", () => {
     session.setVisibility("hidden");
     session.emit("visibilitychange");
     expect(store.getState()).toMatchObject({
-      active: false,
       session,
       status: "suspended",
       visibilityState: "hidden",
@@ -204,7 +202,6 @@ describe("React XR session runtime", () => {
     expect(runtime.disposed).toBe(false);
     expect(renderer.dispose).not.toHaveBeenCalled();
     expect(store.getState()).toMatchObject({
-      active: true,
       error: "browser refused to end",
       session,
       status: "active",

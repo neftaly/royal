@@ -164,7 +164,7 @@ Status meanings:
 | React pointer enter/leave/move/down/up/click dispatch | product | Keep if Canvas is the normal interaction host. |
 | Touch/pointer orbit interactions | product | Keep. |
 | Imperative pick API | product | Keep for XR and non-DOM hosts. |
-| WebXR session runtime/store | product | Keep; physically exercised on Quest. |
+| WebXR session runtime/store | product | Keep; physically exercised on Quest. The closed `status` is the sole lifecycle authority rather than duplicating an `active` boolean. |
 | External XR frame clock and stereo views | product | Required consequence of WebXR support. |
 | Session lifecycle, visibility and interruption states | fallback/product | Required by real browser/XR behavior, not independent product scope. |
 

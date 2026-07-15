@@ -122,6 +122,8 @@ bridge for applications that intentionally own a custom frame loop.
 The store's initial state accepts only `available` and `mode`, because a newly
 created store cannot already own a browser session. Omit `available` to begin in
 `checking`; pass it explicitly to begin in `available` or `unavailable`.
+`status` is the lifecycle authority: a session is actively presenting exactly
+when `status === "active"`; `available` remains independent capability state.
 
 The application owns support detection, the user gesture and request policy,
 and controller or input picking. Use `blockSession()` only when a request failed

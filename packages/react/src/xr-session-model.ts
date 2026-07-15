@@ -40,7 +40,6 @@ export type XrViewport = {
 
 /** Serializable XR lifecycle and per-frame telemetry exposed to application code. */
 export type XrSessionState = {
-  readonly active: boolean;
   readonly available: boolean;
   readonly blockReason: XrSessionBlockReason | null;
   readonly error: string | null;

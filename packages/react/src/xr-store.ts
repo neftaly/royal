@@ -174,7 +174,6 @@ const validateFrameRecord = (frame: XrSessionFrameRecord): void => {
 export const selectXrSessionSnapshot = <Session extends object>(
   state: XrSessionStoreState<Session>,
 ): XrSessionState => ({
-  active: state.active,
   available: state.available,
   blockReason: state.blockReason,
   error: state.error,

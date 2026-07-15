@@ -158,11 +158,11 @@ const XrSessionControl = (): ReactNode => {
   }
 
   const store = storeRef.current;
-  const active = useXrSessionSelector(store, (state) => state.active);
   const available = useXrSessionSelector(store, (state) => state.available);
   const error = useXrSessionSelector(store, (state) => state.error);
   const session = useXrSessionSelector(store, (state) => state.session);
   const status = useXrSessionSelector(store, (state) => state.status);
+  const active = status === 'active';
   const beginSession = useXrSessionSelector(store, (state) => state.beginSession);
   const beginSessionEnd = useXrSessionSelector(store, (state) => state.beginSessionEnd);
   const blockSession = useXrSessionSelector(store, (state) => state.blockSession);

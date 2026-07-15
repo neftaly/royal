@@ -26,20 +26,18 @@ describe("XR session transition core", () => {
     });
 
     expect(activeHidden).toMatchObject({
-      active: false,
       session,
       status: "suspended",
       visibilityState: "hidden",
     });
     expect(visible).toMatchObject({
-      active: true,
       status: "active",
       visibilityState: "visible-blurred",
     });
     expect(framed).toMatchObject({ frameIndex: 1, viewCount: 1 });
     expect(framed.viewports).toEqual(sourceViewports);
     expect(framed.viewports).not.toBe(sourceViewports);
-    expect(initial).toMatchObject({ active: false, session: null, status: "available" });
+    expect(initial).toMatchObject({ session: null, status: "available" });
   });
 
   it("preserves identity for inapplicable owned-session transitions", () => {
@@ -67,6 +65,6 @@ describe("XR session transition core", () => {
       reason: "immersive-session-already-active",
       type: "block",
     })).toThrow("Cannot block XR acquisition while a live session is owned");
-    expect(active).toMatchObject({ active: true, session, status: "active" });
+    expect(active).toMatchObject({ session, status: "active" });
   });
 });

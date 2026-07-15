@@ -140,7 +140,6 @@ describe("React XR session store", () => {
 
     const snapshot = selectXrSessionSnapshot(store.getState());
     expect(snapshot).toMatchObject({
-      active: true,
       available: true,
       blockReason: null,
       mode: "immersive-vr",
@@ -162,7 +161,6 @@ describe("React XR session store", () => {
       visibilityState: "hidden",
     });
     expect(store.getState()).toMatchObject({
-      active: false,
       session,
       status: "suspended",
       visibilityState: "hidden",
@@ -170,7 +168,6 @@ describe("React XR session store", () => {
 
     store.getState().setSessionVisibility("visible-blurred");
     expect(store.getState()).toMatchObject({
-      active: true,
       session,
       status: "active",
       visibilityState: "visible-blurred",
@@ -178,14 +175,12 @@ describe("React XR session store", () => {
 
     store.getState().beginSessionEnd();
     expect(store.getState()).toMatchObject({
-      active: false,
       session,
       status: "ending",
     });
 
     store.getState().failSessionEnd(new Error("end rejected"));
     expect(store.getState()).toMatchObject({
-      active: true,
       error: "end rejected",
       session,
       status: "active",
@@ -201,7 +196,6 @@ describe("React XR session store", () => {
 
     store.getState().endSession();
     expect(store.getState()).toMatchObject({
-      active: false,
       available: false,
       session: null,
       status: "unavailable",
@@ -242,7 +236,6 @@ describe("React XR session store", () => {
       { available: true, mode: "immersive-vr" },
     );
     expect(store.getState()).toMatchObject({
-      active: false,
       available: true,
       blockReason: "immersive-session-already-active",
       error: "another immersive session owns the device",
@@ -306,7 +299,6 @@ describe("React XR session store", () => {
     store.getState().setAvailability(true);
     store.getState().beginSession(session, { mode: "immersive-vr" });
     expect(store.getState()).toMatchObject({
-      active: false,
       mode: "immersive-vr",
       session,
       status: "starting",
@@ -317,7 +309,6 @@ describe("React XR session store", () => {
       viewports: [{ height: 20, width: 10, x: 1, y: 2 }],
     });
     expect(store.getState()).toMatchObject({
-      active: true,
       available: true,
       frameIndex: 1,
       status: "active",
@@ -329,7 +320,6 @@ describe("React XR session store", () => {
       mode: null,
     });
     expect(store.getState()).toMatchObject({
-      active: false,
       available: false,
       error: "XR failed",
       mode: null,

@@ -80,7 +80,6 @@ export const createInitialXrSessionStoreData = <Session extends object>(
   validateInitialState(initialState);
   const available = initialState.available ?? false;
   return {
-    active: false,
     available,
     blockReason: null,
     error: null,
@@ -114,7 +113,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
       const visibilityState = transition.options.visibilityState ?? "visible";
       const suspended = visibilityState === "hidden";
       return patchState(state, {
-        active: !suspended,
         available: true,
         blockReason: null,
         error: null,
@@ -132,7 +130,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         throw new Error("Cannot begin a different XR session while a live session is owned");
       }
       return patchState(state, {
-        active: false,
         blockReason: null,
         error: null,
         frameIndex: 0,
@@ -146,13 +143,12 @@ export const reduceXrSessionStoreData = <Session extends object>(
     case "begin-end":
       return state.session === null
         ? state
-        : patchState(state, { active: false, error: null, status: "ending" });
+        : patchState(state, { error: null, status: "ending" });
     case "block":
       if (state.session !== null) {
         throw new Error("Cannot block XR acquisition while a live session is owned");
       }
       return patchState(state, {
-        active: false,
         ...(transition.options.available === undefined
           ? {}
           : { available: transition.options.available }),
@@ -169,7 +165,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
     case "end": {
       const available = transition.options.available ?? state.available;
       return patchState(state, {
-        active: false,
         available,
         blockReason: null,
         error: null,
@@ -183,7 +178,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
     }
     case "fail":
       return patchState(state, {
-        active: false,
         ...(transition.options.available === undefined
           ? {}
           : { available: transition.options.available }),
@@ -201,7 +195,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
       if (state.session === null || state.status !== "ending") return state;
       const suspended = state.visibilityState === "hidden";
       return patchState(state, {
-        active: !suspended,
         blockReason: null,
         error: errorMessageFromUnknown(transition.error),
         status: suspended ? "suspended" : "active",
@@ -233,7 +226,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
         status: availabilityStatus(transition.available),
         ...(transition.options.mode === undefined ? {} : { mode: transition.options.mode }),
         ...(transition.available ? {} : {
-          active: false,
           mode: transition.options.mode ?? null,
           session: null,
           visibilityState: null,
@@ -246,14 +238,12 @@ export const reduceXrSessionStoreData = <Session extends object>(
       if (state.session === null) return state;
       if (transition.visibilityState === "hidden" && state.status === "active") {
         return patchState(state, {
-          active: false,
           status: "suspended",
           visibilityState: transition.visibilityState,
         });
       }
       if (transition.visibilityState !== "hidden" && state.status === "suspended") {
         return patchState(state, {
-          active: true,
           status: "active",
           visibilityState: transition.visibilityState,
         });
