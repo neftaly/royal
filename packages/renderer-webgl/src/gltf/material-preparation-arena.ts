@@ -15,6 +15,7 @@ import type {
 import {
   surfaceMaterialBatchKey,
   type SurfaceMaterial,
+  type SurfaceMaterialPublication,
   type SurfaceMaterialTextureCoordinates,
   type TextureAssetUploadRef,
 } from "../webgl/materials";
@@ -42,17 +43,22 @@ type LoadedGltfSurfaceTextures = {
 };
 
 export type GltfPreparedPrimitiveMaterial = {
+  readonly criticalImagePending: boolean;
+  readonly imagesPending: boolean;
   readonly material: SurfaceMaterial;
   readonly materialBatchClassId: number;
 };
 
-const DEFAULT_COLOR: LinearRgba = [0.5, 0.5, 0.5, 1];
+// Perceptual 50% sRGB gray represented in Royal's scene-linear color space.
+const DEFAULT_COLOR: LinearRgba = [0.21404114, 0.21404114, 0.21404114, 1];
 const TEXTURE_COLOR: LinearRgba = [1, 1, 1, 1];
 
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
   textures: LoadedGltfSurfaceTextures,
+  criticalImagePending: boolean,
+  publication?: SurfaceMaterialPublication,
 ): SurfaceMaterial => {
   const emissive = loadedMaterial.emissive;
   const extensionFactors = loadedMaterial.extensionFactors;
@@ -60,6 +66,8 @@ const loadedGltfSurfaceMaterial = (
     baseColor,
     baseColorFactor: loadedMaterial.color ?? TEXTURE_COLOR,
     alphaMode: loadedMaterial.alphaMode,
+    ...(criticalImagePending ? { criticalTexturePending: true as const } : {}),
+    ...(publication === undefined ? {} : { publication }),
     ...(loadedMaterial.alphaMode === "MASK" ? { alphaCutoff: loadedMaterial.alphaCutoff ?? 0.5 } : {}),
     doubleSided: loadedMaterial.doubleSided,
     ...(emissive === undefined ? {} : { emissive }),
@@ -125,8 +133,12 @@ const textureSlotRef = (
   slot: LoadedGltfMaterialTextureSlot | undefined,
   colorSpace: TextureColorSpace,
   contentKeys: ReadonlyMap<string, TextureContentKey>,
+  readyImageKeys?: ReadonlySet<string>,
 ): TextureAssetUploadRef | undefined => {
   if (slot?.textureUri === undefined) return undefined;
+  if (readyImageKeys !== undefined && slot.imageUri !== undefined && !readyImageKeys.has(slot.imageUri)) {
+    return undefined;
+  }
   return {
     colorSpace,
     ...textureContentKeyProps(slot.textureUri, slot.contentKey, contentKeys),
@@ -140,11 +152,18 @@ const textureSlotRef = (
 const baseColorTextureRef = (
   material: LoadedGltfMaterial,
   contentKeys: ReadonlyMap<string, TextureContentKey>,
-): TextureAssetUploadRef | undefined => textureSlotRef(material.baseColorTexture, "srgb", contentKeys);
+  readyImageKeys?: ReadonlySet<string>,
+): TextureAssetUploadRef | undefined => textureSlotRef(
+  material.baseColorTexture,
+  "srgb",
+  contentKeys,
+  readyImageKeys,
+);
 
 const surfaceTextures = (
   material: LoadedGltfMaterial,
   contentKeys: ReadonlyMap<string, TextureContentKey>,
+  readyImageKeys: ReadonlySet<string>,
 ): LoadedGltfSurfaceTextures => {
   const extensionTextures = material.extensionTextures;
   const textures: {
@@ -166,13 +185,13 @@ const surfaceTextures = (
     if (slot !== undefined) textureCoordinates[key] = slot.coordinates;
   };
 
-  setTexture("emissiveTexture", textureSlotRef(material.emissiveTexture, "srgb", contentKeys));
+  setTexture("emissiveTexture", textureSlotRef(material.emissiveTexture, "srgb", contentKeys, readyImageKeys));
   setTexture(
     "metallicRoughnessTexture",
-    textureSlotRef(material.metallicRoughnessTexture, "linear", contentKeys),
+    textureSlotRef(material.metallicRoughnessTexture, "linear", contentKeys, readyImageKeys),
   );
-  setTexture("normalTexture", textureSlotRef(material.normalTexture, "linear", contentKeys));
-  setTexture("occlusionTexture", textureSlotRef(material.occlusionTexture, "linear", contentKeys));
+  setTexture("normalTexture", textureSlotRef(material.normalTexture, "linear", contentKeys, readyImageKeys));
+  setTexture("occlusionTexture", textureSlotRef(material.occlusionTexture, "linear", contentKeys, readyImageKeys));
   setCoordinates("baseColorTexture", material.baseColorTexture);
   setCoordinates("emissiveTexture", material.emissiveTexture);
   setCoordinates("metallicRoughnessTexture", material.metallicRoughnessTexture);
@@ -180,7 +199,7 @@ const surfaceTextures = (
   setCoordinates("occlusionTexture", material.occlusionTexture);
   for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
     const slot = extensionTextures?.[texture.key];
-    setTexture(texture.key, textureSlotRef(slot, texture.colorSpace, contentKeys));
+    setTexture(texture.key, textureSlotRef(slot, texture.colorSpace, contentKeys, readyImageKeys));
     setCoordinates(texture.key, slot);
   }
 
@@ -242,11 +261,18 @@ export class GltfMaterialPreparationArena {
     primitive: LoadedGltfPrimitive,
     loadedMaterial: LoadedGltfMaterial,
     contentKeys: ReadonlyMap<string, TextureContentKey>,
-    baseColorImageReady: boolean,
+    readyImageKeys: ReadonlySet<string>,
+    imagesPending: boolean,
+    criticalImagePending = false,
+    publication?: SurfaceMaterialPublication,
   ): GltfPreparedPrimitiveMaterial {
     let primitiveCache = this.#prepared.get(primitive);
     const cached = primitiveCache?.get(loadedMaterial);
-    if (cached !== undefined) return cached;
+    if (
+      cached !== undefined
+      && cached.imagesPending === imagesPending
+      && cached.criticalImagePending === criticalImagePending
+    ) return cached;
 
     let materialPrimitives = this.#materialPrimitives.get(loadedMaterial);
     if (materialPrimitives === undefined) {
@@ -260,11 +286,10 @@ export class GltfMaterialPreparationArena {
       this.#prepared.set(primitive, primitiveCache);
     }
 
-    const baseColor = baseColorTextureRef(loadedMaterial, contentKeys);
+    const baseColor = baseColorTextureRef(loadedMaterial, contentKeys, readyImageKeys);
     const material = loadedGltfSurfaceMaterial(
       loadedMaterial,
       loadedMaterial.baseColorTexture?.imageUri !== undefined
-        && baseColorImageReady
         && baseColor !== undefined
         ? baseColor
         : {
@@ -273,9 +298,13 @@ export class GltfMaterialPreparationArena {
               : DEFAULT_COLOR,
             kind: "solid",
           },
-      surfaceTextures(loadedMaterial, contentKeys),
+      surfaceTextures(loadedMaterial, contentKeys, readyImageKeys),
+      criticalImagePending,
+      publication,
     );
     const prepared = {
+      criticalImagePending,
+      imagesPending,
       material,
       materialBatchClassId: this.#batchClassId(surfaceMaterialBatchKey(material)),
     };

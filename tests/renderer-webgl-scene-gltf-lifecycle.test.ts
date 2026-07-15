@@ -765,7 +765,9 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(uniform1iPayloads(calls, "u_texture")).toHaveLength(0);
-    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.5, 0.5, 0.5, 1]);
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([
+      0.214041, 0.214041, 0.214041, 1,
+    ]);
     expect(ControlledImage.instances).toHaveLength(1);
 
     const callsBeforeImageSettle = calls.length;

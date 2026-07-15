@@ -16,7 +16,10 @@ import {
 import { uploadTexture, usesMipmaps } from "../webgl/texture-upload";
 import { captureFailure, type CapturedFailure } from "../captured-failure";
 
-const MAX_UPLOADS_PER_FRAME = 1;
+// The byte governor remains the authoritative frame budget. Keep a separate
+// command-count ceiling so a collection of tiny images cannot monopolize a
+// frame, while allowing one material's common texture set to settle together.
+const MAX_UPLOADS_PER_FRAME = 4;
 
 declare const authority: unique symbol;
 

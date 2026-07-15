@@ -287,13 +287,14 @@ export class GltfPacketSubmissionOwner {
         this.#demandedMaterialIds.add(materialId);
         this.#runtime.images.demandMaterial(state.key, loadedMaterial);
       }
-      const baseColorImageUri = loadedMaterial.baseColorTexture?.imageUri;
       const prepared = this.#materials.prepare(
         primitive,
         loadedMaterial,
         contentKeys,
-        baseColorImageUri !== undefined
-          && this.#runtime.images.imageReady(state.key, baseColorImageUri),
+        this.#runtime.images.readyImageKeys(state.key),
+        this.#runtime.images.materialImagesPending(state.key, loadedMaterial),
+        this.#runtime.images.materialCriticalImagePending(state.key, loadedMaterial),
+        this.#runtime.images.publication(state.key),
       );
       const geometry = vertexInputGeometry(
         this.#vertexInputs,

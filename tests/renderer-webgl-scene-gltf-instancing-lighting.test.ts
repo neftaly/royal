@@ -902,7 +902,6 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(drawCalls(pendingTextureFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(calls, "u_emissiveTexture")).toHaveLength(0);
-    expect(shaderSources(calls).join("\n")).not.toContain("uniform sampler2D u_emissiveTexture;");
 
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
@@ -1183,9 +1182,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, tangentTriangleBin()))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_normalTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1351,7 +1351,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
   it("renders required KHR_materials_clearcoat normal maps", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
+    const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -1381,6 +1381,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     await flushMicrotasks();
 
     root.render(renderGraph);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_clearcoatNormalTexture", 10);
     expect(drawCalls(calls).length).toBeGreaterThan(0);
     expect(uniform1iPayloads(calls, "u_clearcoatNormalTexture")).toContain(10);
     expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))

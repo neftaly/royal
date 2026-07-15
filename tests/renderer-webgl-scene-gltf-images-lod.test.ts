@@ -930,6 +930,12 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     root.render(renderGraph);
     await settleDocumentAndBuffer(loader);
     await flushAnimationFrames(viewport.animationFrames);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform4fvPayloads(calls, "u_surfaceLightDirection[0]").length > 0,
+    );
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(calls.some((call) => call.name === "getAttribLocation")).toBe(false);
@@ -1384,7 +1390,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     ).toEqual([6, 6, 3, 3]);
   });
 
-  it("draws selected material LOD fallback before binding its settled base-color texture", async () => {
+  it("retains the published material LOD until a selected replacement base texture settles", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -1404,15 +1410,19 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     root.render(renderGraph(1));
     await settleLodDocumentAndBuffer(loader, materialTexturePendingLodDocument());
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform4fvPayloads(calls, "u_color").map(roundVector).some((color) =>
+        color.join(",") === "1,0,0,1"),
+    );
 
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
     expect(ControlledImage.instances, "unselected lower LOD texture should remain dormant").toHaveLength(0);
 
     const pendingCallsStart = calls.length;
     root.render(renderGraph(0.2));
-    const pendingCalls = calls.slice(pendingCallsStart);
     expect(ControlledImage.instances, "selected lower LOD texture should begin decoding").toHaveLength(1);
+    const pendingCalls = calls.slice(pendingCallsStart);
     expect(drawCalls(pendingCalls), "pending lower texture LOD should not blank the glTF").toHaveLength(1);
     expect(
       callCount(pendingCalls, "texImage2D"),
@@ -1424,8 +1434,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     ).toBe(0);
     expect(
       uniform4fvPayloads(calls, "u_color").map(roundVector).at(-1),
-      "renderer should draw the selected lower material with its solid fallback",
-    ).toEqual([0.5, 0.5, 0.5, 1]);
+      "renderer should retain the already-published material until the replacement is useful",
+    ).toEqual([1, 0, 0, 1]);
 
     const settledCallsStart = calls.length;
     ControlledImage.instances[0]?.settleLoad();
@@ -1464,7 +1474,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     root.render(renderGraph(1));
     await settleLodDocumentAndBuffer(loader, materialSecondaryTexturePendingLodDocument());
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform4fvPayloads(calls, "u_color").map(roundVector).some((color) =>
+        color.join(",") === "1,0,0,1"),
+    );
 
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
     expect(ControlledImage.instances, "unselected secondary material textures should remain dormant").toHaveLength(0);
@@ -1483,7 +1497,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(uniform1iPayloads(pendingCalls, "u_specularTexture")).toHaveLength(0);
   });
 
-  it("budgets settled glTF ordinary texture uploads across animation frames", async () => {
+  it("settles one material texture set together within the frame byte budget", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -1511,6 +1525,10 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     expect(ControlledImage.instances, "secondary material textures should share one staged image").toHaveLength(1);
     expect(callCount(calls, "texImage2D")).toBe(0);
+    expect(
+      uniform4fvPayloads(calls, "u_color").map(roundVector),
+      "slow secondary maps must not hold an otherwise useful first paint gray",
+    ).toContainEqual([0, 1, 0, 1]);
 
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
@@ -1518,12 +1536,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     const uploadsBeforeFrames = callCount(calls, "texImage2D");
     const mipmapsBeforeFrames = callCount(calls, "generateMipmap");
     await flushAnimationFrames(viewport.animationFrames);
-    expect(callCount(calls, "texImage2D") - uploadsBeforeFrames).toBe(1);
-    expect(callCount(calls, "generateMipmap") - mipmapsBeforeFrames).toBe(1);
+    expect(callCount(calls, "texImage2D") - uploadsBeforeFrames).toBe(2);
+    expect(callCount(calls, "generateMipmap") - mipmapsBeforeFrames).toBe(2);
 
     await flushAnimationFrames(viewport.animationFrames);
     expect(callCount(calls, "texImage2D") - uploadsBeforeFrames).toBe(2);
-    expect(callCount(calls, "generateMipmap") - mipmapsBeforeFrames).toBe(2);
 
     await waitForAnimationFrameWork(
       viewport.animationFrames,

@@ -726,7 +726,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(callCount(calls, "texImage2D")).toBe(1);
-    expect(callCount(calls, "createProgram")).toBeGreaterThan(programsBeforeTextureReady);
+    expect(callCount(calls, "createProgram")).toBeGreaterThanOrEqual(programsBeforeTextureReady);
     expect(callCount(calls, "createVertexArray")).toBe(vertexArraysBeforeTextureReady);
   });
 

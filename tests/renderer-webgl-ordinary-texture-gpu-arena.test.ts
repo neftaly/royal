@@ -128,13 +128,17 @@ const runOperationTrace = (trace: readonly Operation[], label: string): void => 
         frame = operation.frame;
         uploadsInFrame = 0;
       }
-      const eligible = [...pending].find((candidate) => live.has(candidate) && !actual.get(candidate)!.uploaded);
+      const eligible = [...pending]
+        .filter((candidate) => live.has(candidate) && !actual.get(candidate)!.uploaded)
+        .slice(0, 4 - uploadsInFrame);
       processOrdinaryTextureUploads(arena, frame, operation.generation);
-      if (eligible !== undefined && operation.generation === 1 && uploadsInFrame === 0) {
-        pending.delete(eligible);
-        uploaded.add(eligible);
-        uploadsInFrame = 1;
-        uploads += 1;
+      if (operation.generation === 1) {
+        for (const candidate of eligible) {
+          pending.delete(candidate);
+          uploaded.add(candidate);
+          uploadsInFrame += 1;
+          uploads += 1;
+        }
       } else if (operation.generation !== 1) {
         pending.clear();
       }
@@ -256,6 +260,25 @@ describe("ordinary texture GPU arena", () => {
     expect(wakeOrdinaryTextureGpuUploads(arena)).toBe(true);
     expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
   });
+  it("settles up to four affordable texture uploads in one frame", () => {
+    const { arena, gl } = setup();
+    const resources = Array.from({ length: 5 }, (_value, index) => {
+      const resource = ensureOrdinaryTextureGpuResource(arena, String(index), 1);
+      queueOrdinaryTextureUpload(arena, resource, { source: source(index + 1), texture });
+      return resource;
+    });
+
+    processOrdinaryTextureUploads(arena, 1, 1);
+
+    expect(resources.slice(0, 4).every((resource) => resource.uploaded)).toBe(true);
+    expect(resources[4]?.uploaded).toBe(false);
+    expect(gl.uploads).toHaveLength(4);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+
+    processOrdinaryTextureUploads(arena, 2, 1);
+    expect(resources[4]?.uploaded).toBe(true);
+    expect(gl.uploads).toHaveLength(5);
+  });
   it("requests a next-frame retry for frame-local upload-capacity denial", () => {
     const { arena } = setup();
     const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
@@ -359,7 +382,10 @@ describe("ordinary texture GPU arena", () => {
     expect(small.uploaded).toBe(true);
     expect(gl.created).toHaveLength(1);
     expect(gl.uploads).toHaveLength(1);
-    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+    expect(
+      consumeOrdinaryTextureGpuWake(arena),
+      "durable-capacity denial remains quiescent until the owner publishes released capacity",
+    ).toBe(false);
   });
   it("spends upload admission and releases its failed unpublished allocation", () => {
     const { arena, gl, handles } = setup();

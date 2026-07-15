@@ -94,13 +94,14 @@ describe("glTF material preparation arena", () => {
     const secondPrimitive = primitive(loadedMaterial);
     const contentKeys = new Map<string, TextureContentKey>();
 
-    const pending = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, false);
-    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true)).toBe(pending);
+    const pending = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, new Set(), true);
+    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, new Set(), true)).toBe(pending);
     expect(pending.material.baseColor).toMatchObject({ kind: "solid" });
 
     arena.invalidate([loadedMaterial]);
-    const ready = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true);
-    const otherPrimitiveReady = arena.prepare(secondPrimitive, loadedMaterial, contentKeys, true);
+    const readyImages = new Set(["image:base"]);
+    const ready = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, readyImages, false);
+    const otherPrimitiveReady = arena.prepare(secondPrimitive, loadedMaterial, contentKeys, readyImages, false);
     expect(ready).not.toBe(pending);
     expect(ready.material.baseColor).toMatchObject({
       colorSpace: "srgb",
@@ -111,7 +112,37 @@ describe("glTF material preparation arena", () => {
     expect(otherPrimitiveReady.materialBatchClassId).toBe(ready.materialBatchClassId);
 
     arena.clear();
-    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true)).not.toBe(ready);
+    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, readyImages, false)).not.toBe(ready);
+  });
+
+  it("publishes a gray degraded base with a ready normal after base-color failure", () => {
+    const arena = new GltfMaterialPreparationArena();
+    const loadedMaterial: LoadedGltfMaterial = {
+      ...material(),
+      normalTexture: {
+        coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+        imageUri: "image:normal",
+        textureUri: "texture:normal",
+      },
+    };
+    const prepared = arena.prepare(
+      primitive(loadedMaterial),
+      loadedMaterial,
+      new Map(),
+      new Set(["image:normal"]),
+      false,
+      false,
+    );
+
+    expect(prepared.material.baseColor).toEqual({
+      color: [0.21404114, 0.21404114, 0.21404114, 1],
+      kind: "solid",
+    });
+    expect(prepared.material.normalTexture).toMatchObject({
+      kind: "asset",
+      uri: "texture:normal",
+    });
+    expect(prepared.material.criticalTexturePending).toBeUndefined();
   });
 
   it("resolves named and numeric variants without accepting invalid selections", () => {

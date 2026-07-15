@@ -19,8 +19,19 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
+/** Mutable renderer-owned state shared by every material from one glTF asset. */
+export type SurfaceMaterialPublication = {
+  evaluationFrame: number;
+  pending: boolean;
+  published: boolean;
+};
+
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly anisotropyTexture?: TextureAssetUploadRef;
+  /** Internal glTF base/alpha publication barrier; never authored through the public API. */
+  readonly criticalTexturePending?: true;
+  /** Internal asset-wide glTF publication state; never authored through the public API. */
+  readonly publication?: SurfaceMaterialPublication;
   readonly baseColorFactor?: LinearRgba;
   readonly alphaCutoff?: number;
   readonly alphaMode?: SurfaceMaterialAlphaMode;
@@ -267,6 +278,7 @@ const surfaceMaterialExtensionFactorsKey = (
 export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
+    material.criticalTexturePending === true ? "critical-texture-pending" : "critical-texture-settled",
     material.doubleSided === true ? "double-sided" : "front-sided",
     surfaceMaterialAlphaMode(material),
     surfaceLightValueKey(surfaceMaterialAlphaCutoff(material)),
