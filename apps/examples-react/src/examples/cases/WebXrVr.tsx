@@ -211,7 +211,7 @@ const XrSessionControl = (): ReactNode => {
       rendererOptions: {
         webGlLayer: {
           antialias: true,
-          framebufferScaleFactor: 0.8,
+          framebufferScaleFactor: 1,
         },
         referenceSpacePreference: ['local-floor', 'local'],
       },

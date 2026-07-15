@@ -90,6 +90,8 @@ export class VirtualTextureRuntimeShell {
   >();
   readonly #demanded = new Set<VirtualTextureRuntimeState>();
   readonly #demandCursors = new WeakMap<VirtualTextureRuntimeState, number>();
+  readonly #demandCursorFor = (state: VirtualTextureRuntimeState): number =>
+    this.#demandCursors.get(state) ?? 0;
   readonly #frameDemand = createVirtualTextureFrameDemandWorkspace<VirtualTextureRuntimeState>();
   readonly #autoRefs = new Map<string, VirtualTextureRef>();
   readonly #autoSources = new Map<string, AutomaticVirtualTextureSource>();
@@ -97,6 +99,11 @@ export class VirtualTextureRuntimeShell {
   readonly #resources = new Map<string, VirtualTextureRuntimeState>();
   readonly #gpuLeases = new Map<string, ResourceGovernorLease>();
   readonly #quarantinedGpuLeases = new Set<ResourceGovernorLease>();
+  readonly #publication: VirtualTextureFramePublication = {
+    admissions: this.#admissions,
+    commits: this.#commits,
+    demanded: this.#demanded,
+  };
   readonly requests: VirtualTextureRequestCoordinator;
   #basisuCodec: Promise<typeof import("../gltf/codecs/basisu")> | undefined;
   #nextAdmissionTicket = 1;
@@ -411,7 +418,7 @@ export class VirtualTextureRuntimeShell {
     const commits = finalizeVirtualTextureFrameDemand(
       this.#frameDemand,
       commit,
-      (state) => this.#demandCursors.get(state) ?? 0,
+      this.#demandCursorFor,
     );
     if (!commit) return undefined;
 
@@ -437,21 +444,20 @@ export class VirtualTextureRuntimeShell {
       if (state.status === "ready" && state.manifest !== undefined) this.#admissions.push(state);
     }
     this.#admissions.sort((left, right) => left.admissionTicket - right.admissionTicket);
-    let admissionStart = this.#admissions.findIndex(
-      (state) => state.admissionTicket >= this.#retryTicket,
-    );
+    let admissionStart = -1;
+    for (let index = 0; index < this.#admissions.length; index += 1) {
+      if (this.#admissions[index]!.admissionTicket < this.#retryTicket) continue;
+      admissionStart = index;
+      break;
+    }
     if (admissionStart < 0) admissionStart = 0;
-    if (admissionStart > 0) {
-      this.#admissions.push(...this.#admissions.splice(0, admissionStart));
+    for (let index = 0; index < admissionStart; index += 1) {
+      this.#admissions.push(this.#admissions.shift()!);
     }
     if (this.#admissions.length > 0) {
       this.#retryTicket = this.#admissions[1 % this.#admissions.length]!.admissionTicket;
     }
-    return {
-      admissions: this.#admissions,
-      commits: this.#commits,
-      demanded: this.#demanded,
-    };
+    return this.#publication;
   }
 
   /** Advances fairness for windows whose publication policy is satisfied. */

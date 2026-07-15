@@ -842,8 +842,14 @@ export const uniform4fvPayloads = (
   name: string,
 ): readonly (readonly number[])[] =>
   calls
-    .filter((call) => call.name === "uniform4fv" && uniformLocationName(call.args[0]) === name)
+    .filter((call) =>
+      (call.name === "uniform4f" || call.name === "uniform4fv")
+      && uniformLocationName(call.args[0]) === name
+    )
     .map((call) => {
+      if (call.name === "uniform4f") {
+        return call.args.slice(1, 5).map((value) => typeof value === "number" ? value : NaN);
+      }
       const values = numericArray(call.args[1]);
       const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
       const length = typeof call.args[3] === "number" ? call.args[3] : 4;

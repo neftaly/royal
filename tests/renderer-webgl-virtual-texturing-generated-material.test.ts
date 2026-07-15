@@ -371,9 +371,9 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       "u_vtAtlas",
       "u_vtPageTable",
       "u_vtPageTableSize",
-      "u_vtAtlasTexelSize",
-      "u_vtBorderTexels",
-      "u_vtPageSize",
+      "u_vtAtlasPageUvSize",
+      "u_vtBorderPageRatio",
+      "u_vtVirtualPageScale",
       "u_vtVirtualSize",
     ]));
     expect(uniform1i).toEqual(expect.objectContaining({

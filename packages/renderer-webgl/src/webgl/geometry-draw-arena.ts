@@ -10,7 +10,12 @@ import { VERTEX_ATTRIBUTE } from "../vertex-input/attribute-abi";
 declare const authority: unique symbol;
 export interface GeometryDrawArena { readonly [authority]: "GeometryDrawArena" }
 type Default = { readonly w: number; readonly x: number; readonly y: number; readonly z: number };
-type State = { readonly defaults: Map<number, Default>; readonly gl: WebGL2RenderingContext; readonly vertexInputs: VertexInputArena };
+type State = {
+  activeVertexArray?: WebGLVertexArrayObject;
+  readonly defaults: Map<number, Default>;
+  readonly gl: WebGL2RenderingContext;
+  readonly vertexInputs: VertexInputArena;
+};
 
 export const createGeometryDrawArena = (
   gl: WebGL2RenderingContext,
@@ -52,6 +57,17 @@ const draw = (state: State, geometry: VertexInputGeometry, instanceCount?: numbe
   } else state.gl.drawElementsInstanced(glMode, geometry.drawCount, geometry.indexType, 0, instanceCount);
 };
 
+const bindVertexArray = (state: State, vertexArray: WebGLVertexArrayObject): void => {
+  if (state.activeVertexArray === vertexArray) return;
+  state.gl.bindVertexArray(vertexArray);
+  state.activeVertexArray = vertexArray;
+};
+
+/** Invalidates the VAO cache after non-geometry passes may have changed it. */
+export const beginGeometryDrawFrame = (arena: GeometryDrawArena): void => {
+  delete (arena as unknown as State).activeVertexArray;
+};
+
 export const drawGeometry = (
   arena: GeometryDrawArena,
   contextGeneration: number,
@@ -59,7 +75,10 @@ export const drawGeometry = (
   geometry: VertexInputGeometry,
 ): void => {
   const state = arena as unknown as State;
-  state.gl.bindVertexArray(vertexInputBaseVertexArray(state.vertexInputs, state.gl, contextGeneration, geometryId));
+  bindVertexArray(
+    state,
+    vertexInputBaseVertexArray(state.vertexInputs, state.gl, contextGeneration, geometryId),
+  );
   defaults(state, geometry);
   draw(state, geometry);
 };
@@ -69,7 +88,7 @@ export const prepareGeometryInstancedDraw = (
   geometry: VertexInputGeometry, allocation: VertexInputInstanceAllocation,
 ): void => {
   const state = arena as unknown as State;
-  state.gl.bindVertexArray(vertexInputCompositeVertexArrayForInstance(
+  bindVertexArray(state, vertexInputCompositeVertexArrayForInstance(
     state.vertexInputs, state.gl, contextGeneration, geometryId, allocation,
   ));
   defaults(state, geometry);
@@ -84,5 +103,7 @@ export const submitGeometryInstancedDraw = (
 };
 
 export const clearGeometryDrawArenaContext = (arena: GeometryDrawArena): void => {
-  (arena as unknown as State).defaults.clear();
+  const state = arena as unknown as State;
+  delete state.activeVertexArray;
+  state.defaults.clear();
 };

@@ -668,7 +668,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(frontFaceValues).toContain(gl.CCW);
     expect(frontFaceValues).toContain(gl.CW);
     expect(readyFrameCalls.filter((call) =>
-      call.name === "cullFace" && call.args[0] === gl.BACK)).toHaveLength(2);
+      call.name === "cullFace" && call.args[0] === gl.BACK)).toHaveLength(1);
   });
 
   it("allows explicitly unlit standardMaterial meshes to render black", () => {

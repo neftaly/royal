@@ -74,6 +74,7 @@ import {
   type VertexInputArena,
 } from "./vertex-input/arena";
 import {
+  beginGeometryDrawFrame,
   clearGeometryDrawArenaContext,
   createGeometryDrawArena,
   type GeometryDrawArena,
@@ -166,9 +167,11 @@ import type { SurfaceLightSet } from "./webgl/lights";
 import { prepareFrameBaseline } from "./webgl/imperative-state";
 import {
   SurfaceExecutionArena,
+  type SurfaceGltfBatchExecution,
+  type SurfaceSingleExecution,
 } from "./webgl/surface-execution-arena";
 import {
-  resolveSurfaceToneMapping,
+  writeSurfaceToneMappingState,
   surfacePresentationRequiresHdr,
   toneMappingShaderMode,
   type SurfaceToneMappingState,
@@ -221,6 +224,7 @@ export type {
 } from "./root-types";
 
 type GeometryResource = VertexInputGeometry;
+type Mutable<Value> = { -readonly [Key in keyof Value]: Value[Key] };
 
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
@@ -245,9 +249,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #renderView = identityMat4();
   readonly #renderViewProjection = identityMat4();
   readonly #renderViewportSize: [number, number] = [0, 0];
+  readonly #surfaceToneMapping: Mutable<SurfaceToneMappingState> = {
+    exposure: 0,
+    hdrOutput: false,
+    toneMapping: "pbr-neutral",
+  };
   readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
   readonly #singleGltfDemandModel = identityMat4();
+  readonly #singleVirtualTextureDemandSource: {
+    kind: "single";
+    model: Mat4;
+  } = { kind: "single", model: this.#singleGltfDemandModel };
+  readonly #composedVirtualTextureDemandSource: {
+    kind: "composed";
+    localModels: readonly Mat4[];
+    rootModels: readonly Mat4[];
+  } = { kind: "composed", localModels: [], rootModels: [] };
   readonly #context = new WebGlContextLifecycleOwner();
   readonly #framePublication = new WebGlFramePublicationOwner();
   readonly #programArena: ProgramArena;
@@ -364,6 +382,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #viewport: WebGlCanvasViewportOwner;
   readonly #geometryDrawArena: GeometryDrawArena;
   readonly #surfaceExecution: SurfaceExecutionArena;
+  #surfaceGltfBatchExecution: Mutable<SurfaceGltfBatchExecution> | undefined;
+  #surfaceSingleExecution: Mutable<SurfaceSingleExecution> | undefined;
   #unsupportedVirtualTextureDraws = 0;
   readonly #contextLostListener = (event: Event): void => {
     event.preventDefault();
@@ -913,7 +933,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#textureResidencyIntent.beginFrame();
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
+      let boundFramebuffer = frameViews.framebuffer;
+      let depthTestEnabled = true;
       prepareFrameBaseline(gl, frameViews.scissor);
+      beginGeometryDrawFrame(this.#geometryDrawArena);
+      this.#surfaceExecution.beginFrame();
       this.#readyGltfImages.applyPending();
       this.#ordinaryTextureGpu.processUploads();
       this.#gltfInstanceTransforms.beginFrame();
@@ -930,12 +954,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#scenePlan.sceneSurfaceLights,
         this.#scenePlan.sceneSurfaceLightSet,
       );
-      const toneMapping = resolveSurfaceToneMapping(plan, useHdr);
+      const toneMapping = writeSurfaceToneMappingState(this.#surfaceToneMapping, plan, useHdr);
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         this.#virtualTextures.beginView(viewIndex);
-        gl.enable(gl.DEPTH_TEST);
+        if (!depthTestEnabled) {
+          gl.enable(gl.DEPTH_TEST);
+          depthTestEnabled = true;
+        }
         const viewportOffset = viewIndex * 4;
         const x = frameViews.viewports[viewportOffset]!;
         const y = frameViews.viewports[viewportOffset + 1]!;
@@ -944,7 +971,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const hdrTarget = useHdr
           ? ensureHdrRenderTarget(this.#surfaceRenderTargets, gl, width, height)
           : undefined;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, hdrTarget?.framebuffer ?? frameViews.framebuffer);
+        const viewFramebuffer = hdrTarget?.framebuffer ?? frameViews.framebuffer;
+        if (boundFramebuffer !== viewFramebuffer) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, viewFramebuffer);
+          boundFramebuffer = viewFramebuffer;
+        }
         gl.viewport(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
         if (frameViews.scissor) gl.scissor(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
         const [r, g, b, a] = plan.clearColor;
@@ -966,30 +997,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
           plan.revision,
           viewIndex,
         );
-        const flushGltfPacketSubmissions = (): void => {
-          if (this.#gltfPacketSubmissions.submissionCount === 0) return;
-          this.#drawGltfPacketSubmissions(
-            projection,
-            view,
-            surfaceLights,
-            toneMapping,
-            viewportSize,
-            sourceX,
-            sourceY,
-          );
-          this.#gltfPacketSubmissions.resetSegment(
-            plan.revision,
-            this.#gltfPacketSubmissions.segment,
-          );
-        };
-
         for (let nodeIndex = 0; nodeIndex < plan.nodes.length; nodeIndex += 1) {
           const node = plan.nodes[nodeIndex]!;
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
           if (node.kind === "gltf" || node.kind === "gltf-instances") {
             const orderingSegment = plan.orderSegments[nodeIndex]!;
             if (this.#gltfPacketSubmissions.segment !== orderingSegment) {
-              flushGltfPacketSubmissions();
+              this.#flushGltfPacketSubmissions(
+                plan.revision, projection, view, surfaceLights, toneMapping,
+                viewportSize, sourceX, sourceY,
+              );
               this.#gltfPacketSubmissions.resetSegment(plan.revision, orderingSegment);
             }
             packetCursor = this.#gltfPacketSubmissions.appendNode(
@@ -1003,7 +1020,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
             );
             continue;
           }
-          flushGltfPacketSubmissions();
+          this.#flushGltfPacketSubmissions(
+            plan.revision, projection, view, surfaceLights, toneMapping,
+            viewportSize, sourceX, sourceY,
+          );
           this.#drawNode(
             node,
             projection,
@@ -1014,7 +1034,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
             viewportSize,
           );
         }
-        flushGltfPacketSubmissions();
+        this.#flushGltfPacketSubmissions(
+          plan.revision, projection, view, surfaceLights, toneMapping,
+          viewportSize, sourceX, sourceY,
+        );
+        this.#surfaceExecution.finishPass();
         if (packetCursor !== packetEnd) {
           throw new Error("Royal retained glTF packet selection contains draws outside the frame plan");
         }
@@ -1029,6 +1053,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
             toneMapping,
             frameViews.scissor,
           );
+          boundFramebuffer = frameViews.framebuffer;
+          depthTestEnabled = false;
+          // The post-process pass binds its fullscreen VAO. Geometry for the
+          // next view must not trust the cached surface VAO.
+          beginGeometryDrawFrame(this.#geometryDrawArena);
         }
       }
     } catch (value) {
@@ -1505,6 +1534,29 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
+  #flushGltfPacketSubmissions(
+    planRevision: number,
+    projection: Mat4,
+    view: Mat4,
+    sceneLights: SurfaceLightSet | undefined,
+    toneMapping: SurfaceToneMappingState,
+    viewportSize: ViewportSize,
+    sourceX: number,
+    sourceY: number,
+  ): void {
+    if (this.#gltfPacketSubmissions.submissionCount === 0) return;
+    this.#drawGltfPacketSubmissions(
+      projection,
+      view,
+      sceneLights,
+      toneMapping,
+      viewportSize,
+      sourceX,
+      sourceY,
+    );
+    this.#gltfPacketSubmissions.resetSegment(planRevision, this.#gltfPacketSubmissions.segment);
+  }
+
   #drawGltfPrimitiveDrawBatch(
     batch: GltfFrameDrawBatch,
     projection: Mat4,
@@ -1513,13 +1565,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
     viewportSize: ViewportSize,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
-    const modelSource: VirtualTextureDrawDemandModelSource = batch.localModels.length === 1
-      ? { kind: "single", model: multiplyMat4Into(
-          this.#singleGltfDemandModel,
-          batch.rootModels[0]!,
-          batch.localModels[0]!,
-        ) }
-      : { kind: "composed", localModels: batch.localModels, rootModels: batch.rootModels };
+    let modelSource: VirtualTextureDrawDemandModelSource;
+    if (batch.localModels.length === 1) {
+      this.#singleVirtualTextureDemandSource.model = multiplyMat4Into(
+        this.#singleGltfDemandModel,
+        batch.rootModels[0]!,
+        batch.localModels[0]!,
+      );
+      modelSource = this.#singleVirtualTextureDemandSource;
+    } else {
+      this.#composedVirtualTextureDemandSource.localModels = batch.localModels;
+      this.#composedVirtualTextureDemandSource.rootModels = batch.rootModels;
+      modelSource = this.#composedVirtualTextureDemandSource;
+    }
     const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
       batch.geometry,
       batch.material,
@@ -1533,18 +1591,34 @@ class WebGlRootImpl implements InternalWebGlRoot {
         viewportSize,
       ),
     );
-    this.#surfaceExecution.executeGltfBatch({
-      baseColorResidency,
-      batch,
-      contextGeneration: this.#context.generation,
-      counters: this.#gltfPacketSubmissions.counters,
-      frame: this.#framePublication.frame,
-      projection,
-      toneMapping,
-      transmissionScreenColorTexture,
-      view,
-      viewportSize,
-    });
+    let execution = this.#surfaceGltfBatchExecution;
+    if (execution === undefined) {
+      execution = {
+        baseColorResidency,
+        batch,
+        contextGeneration: this.#context.generation,
+        counters: this.#gltfPacketSubmissions.counters,
+        frame: this.#framePublication.frame,
+        projection,
+        toneMapping,
+        transmissionScreenColorTexture,
+        view,
+        viewportSize,
+      };
+      this.#surfaceGltfBatchExecution = execution;
+    } else {
+      execution.baseColorResidency = baseColorResidency;
+      execution.batch = batch;
+      execution.contextGeneration = this.#context.generation;
+      execution.counters = this.#gltfPacketSubmissions.counters;
+      execution.frame = this.#framePublication.frame;
+      execution.projection = projection;
+      execution.toneMapping = toneMapping;
+      execution.transmissionScreenColorTexture = transmissionScreenColorTexture;
+      execution.view = view;
+      execution.viewportSize = viewportSize;
+    }
+    this.#surfaceExecution.executeGltfBatch(execution);
   }
 
   #drawGeometry(
@@ -1567,27 +1641,51 @@ class WebGlRootImpl implements InternalWebGlRoot {
         geometryId,
         cpuGeometry,
         material,
-        { kind: "single", model },
+        this.#singleDemandSource(model),
         projection,
         view,
         viewportSize,
       ),
     );
-    this.#surfaceExecution.executeSingle({
-      baseColorResidency,
-      contextGeneration: this.#context.generation,
-      frame: this.#framePublication.frame,
-      geometry,
-      geometryId,
-      lights,
-      material,
-      model,
-      projection,
-      toneMapping,
-      transmissionScreenColorTexture,
-      view,
-      viewportSize,
-    });
+    let execution = this.#surfaceSingleExecution;
+    if (execution === undefined) {
+      execution = {
+        baseColorResidency,
+        contextGeneration: this.#context.generation,
+        frame: this.#framePublication.frame,
+        geometry,
+        geometryId,
+        lights,
+        material,
+        model,
+        projection,
+        toneMapping,
+        transmissionScreenColorTexture,
+        view,
+        viewportSize,
+      };
+      this.#surfaceSingleExecution = execution;
+    } else {
+      execution.baseColorResidency = baseColorResidency;
+      execution.contextGeneration = this.#context.generation;
+      execution.frame = this.#framePublication.frame;
+      execution.geometry = geometry;
+      execution.geometryId = geometryId;
+      execution.lights = lights;
+      execution.material = material;
+      execution.model = model;
+      execution.projection = projection;
+      execution.toneMapping = toneMapping;
+      execution.transmissionScreenColorTexture = transmissionScreenColorTexture;
+      execution.view = view;
+      execution.viewportSize = viewportSize;
+    }
+    this.#surfaceExecution.executeSingle(execution);
+  }
+
+  #singleDemandSource(model: Mat4): VirtualTextureDrawDemandModelSource {
+    this.#singleVirtualTextureDemandSource.model = model;
+    return this.#singleVirtualTextureDemandSource;
   }
 
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {

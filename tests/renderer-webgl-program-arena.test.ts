@@ -71,6 +71,7 @@ class FakeGl {
   uniform1i = (...args: readonly unknown[]): void => this.#record("uniform1i", ...args);
   uniform2f = (...args: readonly unknown[]): void => this.#record("uniform2f", ...args);
   uniform2fv = (...args: readonly unknown[]): void => this.#record("uniform2fv", ...args);
+  uniform4f = (...args: readonly unknown[]): void => this.#record("uniform4f", ...args);
   uniform4fv = (...args: readonly unknown[]): void => this.#record("uniform4fv", ...args);
   uniformMatrix4fv = (...args: readonly unknown[]): void => this.#record("uniformMatrix4fv", ...args);
   useProgram = (...args: readonly unknown[]): void => this.#record("useProgram", ...args);
@@ -135,7 +136,7 @@ describe("program arena", () => {
     expect(count(gl, "uniform1i")).toBe(1);
     expect(count(gl, "uniform1f")).toBe(3);
     expect(count(gl, "uniform2f")).toBe(1);
-    expect(count(gl, "uniform4fv")).toBe(1);
+    expect(count(gl, "uniform4f")).toBe(1);
     expect(gl.calls.filter((call) => call.name === "getUniformLocation" && call.args[0] === "u_missing"))
       .toHaveLength(1);
   });

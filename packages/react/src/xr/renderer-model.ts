@@ -33,6 +33,8 @@ export type XrFrameCallback = (time: number, frame: XrFrame) => void;
 
 /** Browser XR session surface consumed by Royal's renderer and runtime. */
 export interface XrSession {
+  readonly frameRate?: number | null;
+  readonly supportedFrameRates?: Float32Array | null;
   readonly visibilityState?: XrSessionVisibilityState;
   addEventListener(
     type: "end" | "visibilitychange",
@@ -48,6 +50,7 @@ export interface XrSession {
   ): void;
   requestAnimationFrame(callback: XrFrameCallback): number;
   requestReferenceSpace(type: XrReferenceSpaceType): Promise<XrReferenceSpace>;
+  updateTargetFrameRate?(rate: number): Promise<void>;
   updateRenderState(state: { readonly baseLayer: unknown }): void | Promise<void>;
 }
 

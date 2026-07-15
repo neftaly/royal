@@ -46,10 +46,10 @@ const virtualBaseColorFeaturePair = [
 
 const virtualBaseColorSourceInvariants = [
   "uniform bool u_useVirtualTexture;",
-  "uniform vec2 u_vtAtlasTexelSize;",
+  "uniform vec2 u_vtAtlasPageUvSize;",
   "uniform vec2 u_vtPageTableSize;",
-  "uniform float u_vtBorderTexels;",
-  "uniform float u_vtPageSize;",
+  "uniform float u_vtBorderPageRatio;",
+  "uniform vec2 u_vtVirtualPageScale;",
   "uniform vec2 u_vtVirtualSize;",
   "uniform int u_vtWrapS;",
   "uniform int u_vtWrapT;",
@@ -57,16 +57,15 @@ const virtualBaseColorSourceInvariants = [
   "sampleVirtualBaseColor",
   "vec2(tableEntry.rg)",
   "residentMip",
-  "ivec2(floor(sourceTexel / u_vtPageSize))",
+  "ivec2(floor(sourcePage))",
   "halfTexel",
   "reflected",
-  "residentPageMin",
-  "residentLocalTexel",
-  "atlasCellSize",
-  "atlasTexel",
+  "residentLocalPageUv",
+  "atlasCellPages",
+  "atlasPageUv",
   "atlasLocalUv",
   "if (tableEntry.a == 0u)",
-  "u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet",
+  "sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet",
 ] as const;
 
 const randomFeatureSet = (random: SeededRandom): ReadonlySet<SurfaceShaderTextureFeature> =>

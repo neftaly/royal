@@ -57,10 +57,14 @@ const hasSurfaceShaderVirtualBaseColor = (features: SurfaceShaderFeatures): bool
   hasSurfaceShaderFeature(features, "baseColorVirtualTextureAtlas")
   && hasSurfaceShaderFeature(features, "baseColorVirtualTexturePageTable");
 
-export const surfaceShaderFeatureKey = (features: SurfaceShaderFeatures): string =>
-  SURFACE_SHADER_TEXTURE_FEATURES
-    .filter((feature) => hasSurfaceShaderFeature(features, feature))
-    .join(",");
+export const surfaceShaderFeatureKey = (features: SurfaceShaderFeatures): string => {
+  let key = "";
+  for (const feature of SURFACE_SHADER_TEXTURE_FEATURES) {
+    if (!hasSurfaceShaderFeature(features, feature)) continue;
+    key += key === "" ? feature : `,${feature}`;
+  }
+  return key;
+};
 
 const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): string =>
   [
@@ -129,10 +133,10 @@ const surfaceFeatureBlock = (
 const surfaceBaseColorVirtualTextureUniforms = (features: SurfaceShaderFeatures): string =>
   hasSurfaceShaderVirtualBaseColor(features)
     ? `uniform bool u_useVirtualTexture;
-uniform vec2 u_vtAtlasTexelSize;
+uniform vec2 u_vtAtlasPageUvSize;
 uniform vec2 u_vtPageTableSize;
-uniform float u_vtBorderTexels;
-uniform float u_vtPageSize;
+uniform float u_vtBorderPageRatio;
+uniform vec2 u_vtVirtualPageScale;
 uniform vec2 u_vtVirtualSize;
 uniform int u_vtWrapS;
 uniform int u_vtWrapT;`
@@ -169,9 +173,9 @@ vec2 wrapVirtualTextureUv(vec2 uv) {
 
 vec4 sampleVirtualBaseColor(vec2 uv) {
   vec2 wrappedUv = wrapVirtualTextureUv(uv);
-  vec2 sourceTexel = wrappedUv * u_vtVirtualSize;
+  vec2 sourcePage = wrappedUv * u_vtVirtualPageScale;
   ivec2 pageCoord = min(
-    ivec2(floor(sourceTexel / u_vtPageSize)),
+    ivec2(floor(sourcePage)),
     ivec2(u_vtPageTableSize) - ivec2(1)
   );
   uvec4 tableEntry = texelFetch(u_vtPageTable, pageCoord, 0);
@@ -183,13 +187,12 @@ vec4 sampleVirtualBaseColor(vec2 uv) {
 
   vec2 atlasSlotCoord = vec2(tableEntry.rg);
   float residentCoverage = exp2(residentMip);
-  vec2 residentPageMin = floor(vec2(pageCoord) / residentCoverage) * residentCoverage * u_vtPageSize;
-  vec2 residentLocalTexel = (sourceTexel - residentPageMin) / residentCoverage;
-  float atlasCellSize = u_vtPageSize + 2.0 * u_vtBorderTexels;
-  vec2 atlasTexel = atlasSlotCoord * atlasCellSize
-    + vec2(u_vtBorderTexels)
-    + residentLocalTexel;
-  vec2 atlasLocalUv = atlasTexel * u_vtAtlasTexelSize;
+  vec2 residentLocalPageUv = fract(sourcePage / residentCoverage);
+  float atlasCellPages = 1.0 + 2.0 * u_vtBorderPageRatio;
+  vec2 atlasPageUv = atlasSlotCoord * atlasCellPages
+    + vec2(u_vtBorderPageRatio)
+    + residentLocalPageUv;
+  vec2 atlasLocalUv = atlasPageUv * u_vtAtlasPageUvSize;
 
   return texture(u_vtAtlas, atlasLocalUv) * u_color;
 }`
@@ -200,12 +203,12 @@ const surfaceBaseColorExpression = (features: SurfaceShaderFeatures): string => 
   const ordinary = surfaceTextureExpression(
     features,
     "baseColorTexture",
-    "u_useTexture ? texture(u_texture, materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1)) : u_color",
+    "texture(u_texture, materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1))",
     fallback,
   );
 
   return hasSurfaceShaderVirtualBaseColor(features)
-    ? `u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1)) : (${ordinary})`
+    ? "sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1))"
     : ordinary;
 };
 

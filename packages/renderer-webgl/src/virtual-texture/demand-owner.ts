@@ -65,6 +65,12 @@ type VirtualTextureDemandOwnerOptions = {
   readonly runtime: VirtualTextureRuntimeShell;
 };
 
+type MutableVirtualTextureDrawDemandContext = {
+  -readonly [Key in keyof VirtualTextureDrawDemandContext]: VirtualTextureDrawDemandContext[Key];
+};
+
+const NO_BASE_COLOR_RESIDENCY: BaseColorTextureResidency = { kind: "none" };
+
 /**
  * Owns virtual-texture draw coverage, working-set planning, and atomic frame
  * publication. GPU allocation remains an injected root policy decision.
@@ -72,8 +78,15 @@ type VirtualTextureDemandOwnerOptions = {
 export class VirtualTextureDemandOwner {
   readonly #advanceablePublicationStates: VirtualTextureRuntimeState[] = [];
   readonly #coverageProviders = createVirtualTextureCoverageProviderCache();
+  #drawContext: MutableVirtualTextureDrawDemandContext | undefined;
   readonly #options: VirtualTextureDemandOwnerOptions;
+  #ordinaryResidency: { kind: "ordinary"; texture: TextureAssetUploadRef } | undefined;
   readonly #planning = createVirtualTextureDemandPlanningWorkspace();
+  #preparedResidency: {
+    kind: "prepared-virtual";
+    ordinaryFallback?: TextureAssetUploadRef;
+    state: VirtualTextureRuntimeState;
+  } | undefined;
   readonly #publicationStates: VirtualTextureRuntimeState[] = [];
 
   constructor(options: VirtualTextureDemandOwnerOptions) {
@@ -109,16 +122,24 @@ export class VirtualTextureDemandOwner {
       requestedSet,
     );
     if (provider === undefined) return undefined;
-    return {
-      modelSource,
-      projection,
-      provider,
-      ...(baseColorCoordinates === undefined ? {} : { textureCoordinates: baseColorCoordinates }),
-      view,
-      viewportSize,
-      ...(texture.sampler?.wrapS === undefined ? {} : { wrapS: texture.sampler.wrapS }),
-      ...(texture.sampler?.wrapT === undefined ? {} : { wrapT: texture.sampler.wrapT }),
-    };
+    let context = this.#drawContext;
+    if (context === undefined) {
+      context = { modelSource, projection, provider, view, viewportSize };
+      this.#drawContext = context;
+    } else {
+      context.modelSource = modelSource;
+      context.projection = projection;
+      context.provider = provider;
+      context.view = view;
+      context.viewportSize = viewportSize;
+    }
+    if (baseColorCoordinates === undefined) delete context.textureCoordinates;
+    else context.textureCoordinates = baseColorCoordinates;
+    if (texture.sampler?.wrapS === undefined) delete context.wrapS;
+    else context.wrapS = texture.sampler.wrapS;
+    if (texture.sampler?.wrapT === undefined) delete context.wrapT;
+    else context.wrapT = texture.sampler.wrapT;
+    return context;
   }
 
   resolveBaseColorResidency(
@@ -129,7 +150,7 @@ export class VirtualTextureDemandOwner {
     const texture = material.baseColor;
     switch (texture.kind) {
       case "solid":
-        return { kind: "none" };
+        return NO_BASE_COLOR_RESIDENCY;
       case "asset":
         return this.#resolveAutoResidency(geometry, material, texture, demandContext);
       case "virtual-asset":
@@ -208,7 +229,7 @@ export class VirtualTextureDemandOwner {
     texture: TextureAssetUploadRef,
     demandContext: VirtualTextureDrawDemandContext | undefined,
   ): BaseColorTextureResidency {
-    const ordinary: BaseColorTextureResidency = { kind: "ordinary", texture };
+    const ordinary = this.#ordinary(texture);
     if (material.kind === "wireframe" || geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
       return ordinary;
     }
@@ -230,7 +251,7 @@ export class VirtualTextureDemandOwner {
     }
 
     return this.#isAutoCoverageReady(state, drawDemand)
-      ? { kind: "prepared-virtual", ordinaryFallback: texture, state }
+      ? this.#prepared(state, texture)
       : ordinary;
   }
 
@@ -242,17 +263,40 @@ export class VirtualTextureDemandOwner {
   ): BaseColorTextureResidency {
     if (material.kind === "wireframe") {
       this.#options.recordUnsupported(texture, "virtual textures require surface materials");
-      return { kind: "none" };
+      return NO_BASE_COLOR_RESIDENCY;
     }
     if (geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
       this.#options.recordUnsupported(texture, "virtual textures require triangle geometry with UVs");
-      return { kind: "none" };
+      return NO_BASE_COLOR_RESIDENCY;
     }
 
     const state = this.#options.runtime.acquire(texture);
     state.stats.preparedResidencyResolutions += 1;
     if (state.status === "ready") this.#demandPages(state, demandContext);
-    return { kind: "prepared-virtual", state };
+    return this.#prepared(state);
+  }
+
+  #ordinary(texture: TextureAssetUploadRef): BaseColorTextureResidency {
+    let residency = this.#ordinaryResidency;
+    if (residency === undefined) {
+      residency = { kind: "ordinary", texture };
+      this.#ordinaryResidency = residency;
+    } else residency.texture = texture;
+    return residency;
+  }
+
+  #prepared(
+    state: VirtualTextureRuntimeState,
+    ordinaryFallback?: TextureAssetUploadRef,
+  ): BaseColorTextureResidency {
+    let residency = this.#preparedResidency;
+    if (residency === undefined) {
+      residency = { kind: "prepared-virtual", state };
+      this.#preparedResidency = residency;
+    } else residency.state = state;
+    if (ordinaryFallback === undefined) delete residency.ordinaryFallback;
+    else residency.ordinaryFallback = ordinaryFallback;
+    return residency;
   }
 
   #demandPages(

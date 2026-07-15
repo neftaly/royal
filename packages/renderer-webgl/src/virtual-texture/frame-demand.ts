@@ -184,10 +184,14 @@ const rebalanceEvidence = <K>(resource: MutableResourceDemand<K>): void => {
   const limits = evidenceLimits(resource);
   for (const view of resource.views.values()) {
     while (view.candidates.size > limits.candidates) {
-      view.candidates.delete([...view.candidates.keys()].at(-1)!);
+      let lastKey: string | undefined;
+      for (const key of view.candidates.keys()) lastKey = key;
+      view.candidates.delete(lastKey!);
     }
     while (view.nonconvergentCandidates.size > limits.nonconvergent) {
-      view.nonconvergentCandidates.delete([...view.nonconvergentCandidates.keys()].at(-1)!);
+      let lastKey: string | undefined;
+      for (const key of view.nonconvergentCandidates.keys()) lastKey = key;
+      view.nonconvergentCandidates.delete(lastKey!);
     }
     while (view.preferredAfterCursor.size > limits.preferred) {
       let greatest: readonly [string, PreferredItem] | undefined;
@@ -248,14 +252,6 @@ const retainedView = <K>(
   clearView(worstView!);
   demand.views.set(viewIndex, worstView!);
   return worstView;
-};
-
-const preferredPages = (submission: VirtualTextureDemandSubmission): readonly VirtualTexturePageId[] => {
-  if (submission.preferredCandidates !== undefined) return submission.preferredCandidates;
-  const targetMip = submission.candidates.at(-1)?.mip;
-  return targetMip === undefined
-    ? []
-    : submission.candidates.filter((page) => page.mip === targetMip);
 };
 
 export const submitVirtualTextureFrameDemand = <K>(
@@ -342,10 +338,19 @@ export const submitVirtualTextureFrameDemand = <K>(
   viewDemand.preferTargetMip ||= submission.preferTargetMip;
   if (!submission.preferTargetMip || limits.preferred === 0) return;
   const cursor = workspace.preferenceCursors.get(resource)?.get(viewIndex);
-  const preferred = preferredPages(submission);
-  const signature = preferred.map(virtualTexturePageKey).join("|");
-  for (let index = 0; index < preferred.length; index += 1) {
-    const page = preferred[index]!;
+  const preferred = submission.preferredCandidates ?? submission.candidates;
+  const targetMip = submission.preferredCandidates === undefined ? preferred.at(-1)?.mip : undefined;
+  let signature = "";
+  for (const page of preferred) {
+    if (targetMip !== undefined && page.mip !== targetMip) continue;
+    if (signature.length > 0) signature += "|";
+    signature += virtualTexturePageKey(page);
+  }
+  let preferredIndex = 0;
+  for (const page of preferred) {
+    if (targetMip !== undefined && page.mip !== targetMip) continue;
+    const index = preferredIndex;
+    preferredIndex += 1;
     const key = `${signature}#${String(index).padStart(3, "0")}`;
     const item = { index, page, signature };
     retainBoundedPreferredItem(viewDemand.preferredWrap, key, item, limits.preferred);
@@ -447,23 +452,20 @@ export const finalizeVirtualTextureFrameDemand = <K>(
     cyclicOrderDistance(left.order, workspace.resourceCursor)
     - cyclicOrderDistance(right.order, workspace.resourceCursor)
   ));
-  const retainedResourceKeys = new Set<K>();
   for (const resourceDemand of retainedResources) {
     const resource = resourceDemand.resource;
     if (resource === undefined) continue;
-    retainedResourceKeys.add(resource);
     const views = [...resourceDemand.views.entries()].sort(([left], [right]) => left - right);
     const nonconvergentCandidates = new Map<string, VirtualTexturePageId>();
     for (const view of resourceDemand.views.values()) {
       for (const [key, page] of view.nonconvergentCandidates) nonconvergentCandidates.set(key, page);
     }
-    const preferredByView = new Map<
-      number,
-      ReturnType<typeof orderedPreferredCandidates>
-    >();
+    const preferenceCursorUpdates: Array<{ next: PreferredCursor; viewIndex: number }> = [];
     const submissions = views.map(([viewIndex, view]) => {
       const preferred = orderedPreferredCandidates(view, resourceDemand.capacity);
-      preferredByView.set(viewIndex, preferred);
+      if (preferred.cursor !== undefined) {
+        preferenceCursorUpdates.push({ next: preferred.cursor, viewIndex });
+      }
       return {
         candidates: [...view.candidates.values()],
         preferTargetMip: view.preferTargetMip,
@@ -476,15 +478,14 @@ export const finalizeVirtualTextureFrameDemand = <K>(
     const startSubmission = submissions.length <= 1
       ? 0
       : Math.max(0, cursorFor(resource)) % submissions.length;
-    const preferenceCursorUpdates: Array<{ next: PreferredCursor; viewIndex: number }> = [];
+    let lastCyclicViewIndex: number | undefined;
+    let lastCyclicViewDistance = -1;
     for (const [viewIndex] of views) {
-      const next = preferredByView.get(viewIndex)!.cursor;
-      if (next !== undefined) preferenceCursorUpdates.push({ next, viewIndex });
+      const distance = cyclicViewDistance(viewIndex, resourceDemand.viewCursor);
+      if (distance <= lastCyclicViewDistance) continue;
+      lastCyclicViewDistance = distance;
+      lastCyclicViewIndex = viewIndex;
     }
-    const cyclicViews = [...views].sort(([left], [right]) => (
-      cyclicViewDistance(left, resourceDemand.viewCursor)
-      - cyclicViewDistance(right, resourceDemand.viewCursor)
-    ));
     commits.push({
       nextStartSubmission: submissions.length <= 1 ? 0 : (startSubmission + 1) % submissions.length,
       nonconvergentCandidates: [...nonconvergentCandidates.values()],
@@ -493,14 +494,14 @@ export const finalizeVirtualTextureFrameDemand = <K>(
       resourceCursorUpdate: retainedResources.at(-1)!.order,
       startSubmission,
       submissions,
-      ...(cyclicViews.length === 0 ? {} : { viewCursorUpdate: cyclicViews.at(-1)![0] }),
+      ...(lastCyclicViewIndex === undefined ? {} : { viewCursorUpdate: lastCyclicViewIndex }),
     });
   }
   for (const resource of workspace.preferenceCursors.keys()) {
-    if (!retainedResourceKeys.has(resource)) workspace.preferenceCursors.delete(resource);
+    if (!workspace.resources.has(resource)) workspace.preferenceCursors.delete(resource);
   }
   for (const resource of workspace.viewCursors.keys()) {
-    if (!retainedResourceKeys.has(resource)) workspace.viewCursors.delete(resource);
+    if (!workspace.resources.has(resource)) workspace.viewCursors.delete(resource);
   }
   releasePools(workspace);
   return commits;
@@ -518,7 +519,9 @@ export const advanceVirtualTextureFrameDemand = <K>(
     workspace.preferenceCursors.delete(commit.resource);
     return;
   }
-  const resourceCursors = new Map<number, PreferredCursor>();
+  let resourceCursors = workspace.preferenceCursors.get(commit.resource);
+  if (resourceCursors === undefined) resourceCursors = new Map();
+  else resourceCursors.clear();
   for (const update of commit.preferenceCursorUpdates) resourceCursors.set(update.viewIndex, update.next);
   workspace.preferenceCursors.set(commit.resource, resourceCursors);
 };

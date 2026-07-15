@@ -324,10 +324,13 @@ export class GltfFrameBatchArena {
       batch.geometryId = geometryId;
       batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
       batch.material = material.material;
-      batch.sidedness = {
-        doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-        frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
+      const sidedness = batch.sidedness as {
+        -readonly [Key in keyof GltfFrameDrawSidedness]: GltfFrameDrawSidedness[Key];
       };
+      sidedness.doubleSided =
+        (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0;
+      sidedness.frontFaceCcw =
+        (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0;
       for (let memberOffset = 0; memberOffset < memberCount; memberOffset += 1) {
         this.#appendSubmission(batch, groups.memberIndices[memberFirst + memberOffset]!);
       }

@@ -91,6 +91,49 @@ export type SurfaceTextureBindingPlan = {
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
 };
 
+type MutableSurfaceTextureBindingPlan = {
+  baseColor: SurfaceBaseColorBindingPlan;
+  readonly features: Set<SurfaceShaderTextureFeature>;
+  readonly omissions: SurfaceTextureBindingOmission[];
+  readonly textureUnits: Map<SurfaceShaderTextureFeature, number>;
+};
+
+/** Reusable scratch storage for the draw-time sampler planner. */
+export interface SurfaceTextureBindingWorkspace {
+  readonly plan: MutableSurfaceTextureBindingPlan;
+  readonly usedTextureUnits: Set<number>;
+}
+
+const BASE_COLOR_NONE: SurfaceBaseColorBindingPlan = { kind: "none" };
+const BASE_COLOR_ORDINARY: SurfaceBaseColorBindingPlan = { kind: "ordinary" };
+const BASE_COLOR_VIRTUAL: SurfaceBaseColorBindingPlan = { fallback: "none", kind: "virtual" };
+const BASE_COLOR_VIRTUAL_FALLBACK: SurfaceBaseColorBindingPlan = {
+  fallback: "atlas-unit",
+  kind: "virtual",
+};
+
+export const createSurfaceTextureBindingWorkspace = (): SurfaceTextureBindingWorkspace => ({
+  plan: {
+    baseColor: BASE_COLOR_NONE,
+    features: new Set(),
+    omissions: [],
+    textureUnits: new Map(),
+  },
+  usedTextureUnits: new Set(),
+});
+
+const resetWorkspace = (
+  workspace: SurfaceTextureBindingWorkspace,
+): MutableSurfaceTextureBindingPlan => {
+  const { plan } = workspace;
+  plan.baseColor = BASE_COLOR_NONE;
+  plan.features.clear();
+  plan.omissions.length = 0;
+  plan.textureUnits.clear();
+  workspace.usedTextureUnits.clear();
+  return plan;
+};
+
 export type AdmittedSurfaceTextureReadiness = Pick<
   SurfaceTextureBindingPlanInput,
   "baseColor" | "candidates"
@@ -104,11 +147,12 @@ const IBL_SPECULAR_PREFERRED_TEXTURE_UNIT = 2;
  */
 export const planSurfaceTextureBindings = (
   input: SurfaceTextureBindingPlanInput,
+  workspace: SurfaceTextureBindingWorkspace = createSurfaceTextureBindingWorkspace(),
 ): SurfaceTextureBindingPlan => {
+  const output = resetWorkspace(workspace);
   const maxUnits = Number.isSafeInteger(input.maxTextureUnits) ? Math.max(0, input.maxTextureUnits) : 0;
-  const used = new Set<number>();
-  const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
-  const omissions: SurfaceTextureBindingOmission[] = [];
+  const used = workspace.usedTextureUnits;
+  const { features, omissions, textureUnits } = output;
   const allocate = (preferred: number): number | undefined => {
     if (preferred >= 0 && preferred < maxUnits && !input.reservedTextureUnits.has(preferred) && !used.has(preferred)) {
       used.add(preferred);
@@ -148,18 +192,18 @@ export const planSurfaceTextureBindings = (
     else assign(feature, preferred);
   };
   const ordinaryBaseColor = (status: SurfaceTextureCandidate | undefined): SurfaceBaseColorBindingPlan => {
-    if (status === undefined) return { kind: "none" };
+    if (status === undefined) return BASE_COLOR_NONE;
     if (status === "unavailable") {
       omissions.push({ feature: "baseColorTexture", reason: "unavailable" });
-      return { kind: "none" };
+      return BASE_COLOR_NONE;
     }
-    return assign("baseColorTexture", 0) === undefined ? { kind: "none" } : { kind: "ordinary" };
+    return assign("baseColorTexture", 0) === undefined ? BASE_COLOR_NONE : BASE_COLOR_ORDINARY;
   };
 
   let baseColor: SurfaceBaseColorBindingPlan;
   switch (input.baseColor.kind) {
     case "none":
-      baseColor = { kind: "none" };
+      baseColor = BASE_COLOR_NONE;
       break;
     case "ordinary":
       baseColor = ordinaryBaseColor(input.baseColor.ordinary);
@@ -192,7 +236,7 @@ export const planSurfaceTextureBindings = (
       else if (input.baseColor.fallback === "unavailable") {
         omissions.push({ feature: "baseColorTexture", reason: "unavailable" });
       }
-      baseColor = { fallback, kind: "virtual" };
+        baseColor = fallback === "atlas-unit" ? BASE_COLOR_VIRTUAL_FALLBACK : BASE_COLOR_VIRTUAL;
       break;
     }
   }
@@ -216,12 +260,9 @@ export const planSurfaceTextureBindings = (
     else assign("iblBrdfLut", input.brdfLutPreferredUnit);
   }
 
-  return {
-    baseColor,
-    features: new Set(textureUnits.keys()),
-    omissions,
-    textureUnits,
-  };
+  output.baseColor = baseColor;
+  for (const feature of textureUnits.keys()) features.add(feature);
+  return output;
 };
 
 /**
@@ -232,9 +273,11 @@ export const planSurfaceTextureBindings = (
 export const resolveAdmittedSurfaceTextureBindings = (
   admission: SurfaceTextureBindingPlan,
   readiness: AdmittedSurfaceTextureReadiness,
+  workspace: SurfaceTextureBindingWorkspace = createSurfaceTextureBindingWorkspace(),
 ): SurfaceTextureBindingPlan => {
-  const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
-  const omissions = [...admission.omissions];
+  const output = resetWorkspace(workspace);
+  const { features, omissions, textureUnits } = output;
+  omissions.push(...admission.omissions);
   const admit = (feature: SurfaceShaderTextureFeature): void => {
     const unit = admission.textureUnits.get(feature);
     if (unit !== undefined) textureUnits.set(feature, unit);
@@ -243,7 +286,7 @@ export const resolveAdmittedSurfaceTextureBindings = (
     omissions.push({ feature, reason: "unavailable" });
   };
 
-  let baseColor: SurfaceBaseColorBindingPlan = { kind: "none" };
+  let baseColor: SurfaceBaseColorBindingPlan = BASE_COLOR_NONE;
   switch (admission.baseColor.kind) {
     case "none":
       break;
@@ -255,7 +298,7 @@ export const resolveAdmittedSurfaceTextureBindings = (
           : undefined;
       if (status === "ready") {
         admit("baseColorTexture");
-        baseColor = { kind: "ordinary" };
+        baseColor = BASE_COLOR_ORDINARY;
       } else if (status === "unavailable") unavailable("baseColorTexture");
       break;
     }
@@ -266,16 +309,15 @@ export const resolveAdmittedSurfaceTextureBindings = (
         admit("baseColorVirtualTexturePageTable");
         if (readiness.baseColor.fallback === "ready") admit("baseColorTexture");
         else if (readiness.baseColor.fallback === "unavailable") unavailable("baseColorTexture");
-        baseColor = {
-          fallback: readiness.baseColor.fallback === "ready" ? "atlas-unit" : "none",
-          kind: "virtual",
-        };
+        baseColor = readiness.baseColor.fallback === "ready"
+          ? BASE_COLOR_VIRTUAL_FALLBACK
+          : BASE_COLOR_VIRTUAL;
       } else {
         unavailable("baseColorVirtualTextureAtlas");
         unavailable("baseColorVirtualTexturePageTable");
         if (readiness.baseColor.fallback === "ready") {
           admit("baseColorTexture");
-          baseColor = { kind: "ordinary" };
+          baseColor = BASE_COLOR_ORDINARY;
         } else if (readiness.baseColor.fallback === "unavailable") unavailable("baseColorTexture");
       }
       break;
@@ -296,10 +338,7 @@ export const resolveAdmittedSurfaceTextureBindings = (
     else unavailable(feature);
   }
 
-  return {
-    baseColor,
-    features: new Set(textureUnits.keys()),
-    omissions,
-    textureUnits,
-  };
+  output.baseColor = baseColor;
+  for (const feature of textureUnits.keys()) features.add(feature);
+  return output;
 };

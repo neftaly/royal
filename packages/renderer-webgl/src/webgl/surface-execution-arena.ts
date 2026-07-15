@@ -30,8 +30,6 @@ import {
 } from "./lights";
 import {
   isBlendedSurfaceMaterial,
-  materialColor,
-  materialEmissiveColor,
   surfaceMaterialAlphaCutoff,
   surfaceMaterialAlphaMode,
   surfaceMaterialExtensionFactors,
@@ -58,15 +56,19 @@ import {
 } from "./program-arena";
 import type { ProgramKind, SurfaceShaderTextureFeature } from "./shaders";
 import {
+  createSurfaceTextureBindingWorkspace,
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
   planSurfaceTextureBindings,
   resolveAdmittedSurfaceTextureBindings,
   type SurfaceIndependentTextureFeature,
   type SurfaceTextureBindingPlan as PureSurfaceTextureBindingPlan,
   type SurfaceTextureCandidate,
+  type SurfaceTextureBindingWorkspace,
 } from "./surface-texture-binding-plan";
 
 const TEXTURE_COLOR = [1, 1, 1, 1] as const;
+const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR = [1, 0, 1, 1] as const;
+const EMPTY_SURFACE_DIAGNOSTICS: readonly SurfaceExecutionDiagnostic[] = [];
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
@@ -105,6 +107,15 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
     OrdinaryTextureGpuResource,
     { readonly uploaded: true }
   >>;
+};
+
+type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
+type MutableSurfaceTextureBindingPlan = {
+  baseColor: SurfaceBaseColorTextureBinding;
+  readonly features: PureSurfaceTextureBindingPlan["features"];
+  readonly omissions: PureSurfaceTextureBindingPlan["omissions"];
+  readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
+  readonly textureUnits: PureSurfaceTextureBindingPlan["textureUnits"];
 };
 
 export interface SurfaceSingleExecution {
@@ -171,12 +182,37 @@ export class SurfaceExecutionArena {
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfFrames: GltfFrameBatchArena;
   readonly #consumeIblSignals: SurfaceExecutionArenaOptions["consumeIblSignals"];
+  #blendEnabled = false;
+  #cullEnabled = false;
+  #depthWriteEnabled = true;
+  #frontFaceCcw: boolean | undefined;
   #maxTextureImageUnits = 0;
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #programs: ProgramArena;
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
+  readonly #textureAdmissionWorkspace: SurfaceTextureBindingWorkspace =
+    createSurfaceTextureBindingWorkspace();
+  readonly #textureCandidates: Partial<Record<
+    SurfaceIndependentTextureFeature,
+    SurfaceTextureCandidate
+  >> = {};
+  readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
+    createSurfaceTextureBindingWorkspace();
+  readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
+  readonly #reservedTextureUnits = new Set<number>();
+  readonly #signals: {
+    diagnostics: readonly SurfaceExecutionDiagnostic[];
+    wakeRequested: boolean;
+  } = { diagnostics: EMPTY_SURFACE_DIAGNOSTICS, wakeRequested: false };
+  readonly #texturePlan: MutableSurfaceTextureBindingPlan = {
+    baseColor: { kind: "none" },
+    features: this.#textureReadinessWorkspace.plan.features,
+    omissions: this.#textureReadinessWorkspace.plan.omissions,
+    readyTextures: this.#readyTextures,
+    textureUnits: this.#textureReadinessWorkspace.plan.textureUnits,
+  };
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #wakeRequested = false;
@@ -199,6 +235,22 @@ export class SurfaceExecutionArena {
 
   configureTextureUnits(maxTextureImageUnits: number): void {
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
+  }
+
+  /** Synchronizes the state cache with Royal's frame baseline. */
+  beginFrame(): void {
+    this.#blendEnabled = false;
+    this.#cullEnabled = false;
+    this.#depthWriteEnabled = true;
+    this.#frontFaceCcw = undefined;
+  }
+
+  /** Leaves state required by passes that follow surface drawing. */
+  finishPass(): void {
+    this.#setBlend(false);
+    this.#setCull(false);
+    this.#setDepthWrite(true);
+    if (this.#frontFaceCcw !== undefined) this.#setFrontFace(true);
   }
 
   copyTransmissionScreenColor(
@@ -225,7 +277,7 @@ export class SurfaceExecutionArena {
 
   #executeSingle(input: SurfaceSingleExecution, manageState: boolean): void {
     if (manageState) this.#beginDirectDraw(input.material);
-    try {
+    {
       const programKind: ProgramKind = input.material.kind === "wireframe"
         ? "wireframe"
         : input.material.kind === "standard" ? "surface" : "unlit";
@@ -256,17 +308,10 @@ export class SurfaceExecutionArena {
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
       uniformMatrix(this.#programs, program, "u_model", input.model);
-      uniformColor(
-        this.#programs,
-        program,
-        "u_color",
-        plan?.baseColor.kind === "prepared-virtual"
-          ? ("baseColorFactor" in input.material ? materialColor(input.material) : TEXTURE_COLOR)
-          : materialColor(input.material),
-      );
+      this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
       if (plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
         if (surfaceMaterial.kind === "standard") {
-          uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
+          this.#bindEmissiveColor(program, surfaceMaterial);
           this.#bindMaterialFactors(program, surfaceMaterial, input.transmissionScreenColorTexture, plan);
           this.#bindToneMapping(program, input.toneMapping);
           this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
@@ -288,15 +333,13 @@ export class SurfaceExecutionArena {
         input.geometryId,
         input.geometry,
       );
-    } finally {
-      if (manageState) this.#endDirectDraw();
     }
   }
 
   executeGltfBatch(input: SurfaceGltfBatchExecution): void {
     const { batch } = input;
     this.#beginGltfDraw(batch.material, batch.sidedness);
-    try {
+    {
       if (batch.localModels.length === 1) {
         this.#executeSingle({
           baseColorResidency: input.baseColorResidency,
@@ -333,16 +376,9 @@ export class SurfaceExecutionArena {
       useProgram(this.#programs, program);
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
-      uniformColor(
-        this.#programs,
-        program,
-        "u_color",
-        plan.baseColor.kind === "prepared-virtual"
-          ? ("baseColorFactor" in batch.material ? materialColor(batch.material) : TEXTURE_COLOR)
-          : materialColor(batch.material),
-      );
+      this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
       if (batch.material.kind === "standard") {
-        uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(batch.material));
+        this.#bindEmissiveColor(program, batch.material);
         this.#bindMaterialFactors(program, batch.material, input.transmissionScreenColorTexture, plan);
         this.#bindToneMapping(program, input.toneMapping);
         this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
@@ -373,18 +409,18 @@ export class SurfaceExecutionArena {
       input.counters.drawCalls += 1;
       input.counters.instancesDrawn += batch.localModels.length;
       submitGeometryInstancedDraw(this.#geometry, batch.geometry, batch.localModels.length);
-    } finally {
-      this.#endGltfDraw();
     }
   }
 
   drainSignals(): SurfaceExecutionSignals {
     this.#captureIblSignals();
-    const diagnostics = this.#diagnostics.slice();
+    this.#signals.diagnostics = this.#diagnostics.length === 0
+      ? EMPTY_SURFACE_DIAGNOSTICS
+      : this.#diagnostics.slice();
     this.#diagnostics.length = 0;
-    const wakeRequested = this.#wakeRequested || consumeProgramArenaWake(this.#programs);
+    this.#signals.wakeRequested = this.#wakeRequested || consumeProgramArenaWake(this.#programs);
     this.#wakeRequested = false;
-    return { diagnostics, wakeRequested };
+    return this.#signals;
   }
 
   #program(
@@ -403,21 +439,24 @@ export class SurfaceExecutionArena {
     lightSet: SurfaceLightSet,
     baseColorResidency: BaseColorTextureResidency,
   ): SurfaceTextureBindingPlan {
-    type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
-    const declaredCandidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
-    const declaredTextures = new Map<SurfaceShaderTextureFeature, TextureAssetUploadRef>();
+    const candidates = this.#textureCandidates;
+    const readyTextures = this.#readyTextures;
+    readyTextures.clear();
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
       const texture = descriptor.key === "emissiveTexture"
         ? material.emissiveTexture
         : material.kind === "standard" ? material[descriptor.key] : undefined;
-      if (texture === undefined) continue;
-      declaredCandidates[descriptor.feature] = "ready";
-      declaredTextures.set(descriptor.feature, texture);
+      if (texture === undefined) delete candidates[descriptor.feature];
+      else candidates[descriptor.feature] = "ready";
     }
-    if (transmissionScreenColorTexture !== undefined) declaredCandidates.transmissionScreenTexture = "ready";
+    if (transmissionScreenColorTexture === undefined) delete candidates.transmissionScreenTexture;
+    else candidates.transmissionScreenTexture = "ready";
     if (lightSet.specular !== undefined) {
-      declaredCandidates.iblSpecularCube = "ready";
-      declaredCandidates.iblBrdfLut = "ready";
+      candidates.iblSpecularCube = "ready";
+      candidates.iblBrdfLut = "ready";
+    } else {
+      delete candidates.iblSpecularCube;
+      delete candidates.iblBrdfLut;
     }
     const declaredBaseColor = (() => {
       switch (baseColorResidency.kind) {
@@ -432,23 +471,27 @@ export class SurfaceExecutionArena {
     })();
     const clusterUnits = this.#clusteredLights.textureUnits();
     const reserveClusterUnits = lightSet.punctuals.length > 0;
-    const reservedTextureUnits = reserveClusterUnits
-      ? new Set([clusterUnits.grid, clusterUnits.indices, clusterUnits.lights].filter((unit) => unit >= 0))
-      : new Set<number>();
+    const reservedTextureUnits = this.#reservedTextureUnits;
+    reservedTextureUnits.clear();
+    if (reserveClusterUnits) {
+      if (clusterUnits.grid >= 0) reservedTextureUnits.add(clusterUnits.grid);
+      if (clusterUnits.indices >= 0) reservedTextureUnits.add(clusterUnits.indices);
+      if (clusterUnits.lights >= 0) reservedTextureUnits.add(clusterUnits.lights);
+    }
     const admission = planSurfaceTextureBindings({
       baseColor: declaredBaseColor,
       brdfLutPreferredUnit: reserveClusterUnits && clusterUnits.grid > 0
         ? clusterUnits.grid - 1
         : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-      candidates: declaredCandidates,
+      candidates,
       maxTextureUnits: this.#maxTextureImageUnits,
       reservedTextureUnits,
-    });
-    const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
-    const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
+    }, this.#textureAdmissionWorkspace);
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
       if (!admission.features.has(descriptor.feature)) continue;
-      const texture = declaredTextures.get(descriptor.feature);
+      const texture = descriptor.key === "emissiveTexture"
+        ? material.emissiveTexture
+        : material.kind === "standard" ? material[descriptor.key] : undefined;
       if (texture === undefined) continue;
       const resource = this.#requestOrdinaryTexture(texture);
       const ready = resource.uploaded ? resource : undefined;
@@ -512,7 +555,11 @@ export class SurfaceExecutionArena {
         candidates.iblBrdfLut = ready ? "ready" : "unavailable";
       }
     }
-    const pure = resolveAdmittedSurfaceTextureBindings(admission, { baseColor, candidates });
+    const pure = resolveAdmittedSurfaceTextureBindings(
+      admission,
+      { baseColor, candidates },
+      this.#textureReadinessWorkspace,
+    );
     this.#recordTextureBindingOmissions(pure);
     const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
       ? ordinaryBaseColor === undefined && virtualFallbackReady !== undefined
@@ -525,7 +572,8 @@ export class SurfaceExecutionArena {
             state: baseColorResidency.state,
           }
         : { kind: "none" };
-    return { ...pure, baseColor: selectedBaseColor, readyTextures };
+    this.#texturePlan.baseColor = selectedBaseColor;
+    return this.#texturePlan;
   }
 
   #bindMaterialFactors(
@@ -569,6 +617,53 @@ export class SurfaceExecutionArena {
     uniform4f(this.#programs, program, "u_occlusionSettings",
       surfaceMaterialOcclusionStrength(material), 0, 0, 0);
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) this.#bindCachedTexture2d(program, descriptor, plan);
+  }
+
+  #bindMaterialColor(
+    program: WebGLProgram,
+    material: Material,
+    preparedVirtual: boolean,
+  ): void {
+    const factor = "baseColorFactor" in material && Array.isArray(material.baseColorFactor)
+      ? material.baseColorFactor
+      : undefined;
+    if (factor !== undefined) {
+      const base = material.baseColor.kind === "solid" ? material.baseColor.color : TEXTURE_COLOR;
+      uniform4f(
+        this.#programs,
+        program,
+        "u_color",
+        (factor[0] ?? 1) * (base[0] ?? 1),
+        (factor[1] ?? 1) * (base[1] ?? 1),
+        (factor[2] ?? 1) * (base[2] ?? 1),
+        (factor[3] ?? 1) * (base[3] ?? 1),
+      );
+      return;
+    }
+    if (material.baseColor.kind === "solid") {
+      const color = material.baseColor.color;
+      uniform4f(this.#programs, program, "u_color", color[0], color[1], color[2], color[3]);
+      return;
+    }
+    const color = preparedVirtual || material.baseColor.kind === "asset"
+      ? TEXTURE_COLOR
+      : UNSUPPORTED_VIRTUAL_TEXTURE_COLOR;
+    uniform4f(this.#programs, program, "u_color", color[0], color[1], color[2], color[3]);
+  }
+
+  #bindEmissiveColor(program: WebGLProgram, material: Material): void {
+    const emissive = "emissive" in material && Array.isArray(material.emissive) && material.emissive.length >= 3
+      ? material.emissive
+      : undefined;
+    uniform4f(
+      this.#programs,
+      program,
+      "u_emissiveColor",
+      emissive?.[0] ?? 0,
+      emissive?.[1] ?? 0,
+      emissive?.[2] ?? 0,
+      emissive?.[3] ?? 1,
+    );
   }
 
   #bindUnlitMaterial(
@@ -769,15 +864,23 @@ export class SurfaceExecutionArena {
     uniform1i(this.#programs, program, "u_vtAtlas", atlasTextureUnit);
     uniform1i(this.#programs, program, "u_vtPageTable", pageTableTextureUnit);
     uniform2f(this.#programs, program, "u_vtPageTableSize", binding.pageTableWidth, binding.pageTableHeight);
+    const atlasWidth = binding.atlasGridColumns * binding.atlasCellSize;
+    const atlasHeight = binding.atlasGridRows * binding.atlasCellSize;
     uniform2f(
       this.#programs,
       program,
-      "u_vtAtlasTexelSize",
-      1 / (binding.atlasGridColumns * binding.atlasCellSize),
-      1 / (binding.atlasGridRows * binding.atlasCellSize),
+      "u_vtAtlasPageUvSize",
+      manifest.pageSize / atlasWidth,
+      manifest.pageSize / atlasHeight,
     );
-    uniform1f(this.#programs, program, "u_vtBorderTexels", binding.borderTexels);
-    uniform1f(this.#programs, program, "u_vtPageSize", manifest.pageSize);
+    uniform1f(this.#programs, program, "u_vtBorderPageRatio", binding.borderTexels / manifest.pageSize);
+    uniform2f(
+      this.#programs,
+      program,
+      "u_vtVirtualPageScale",
+      manifest.width / manifest.pageSize,
+      manifest.height / manifest.pageSize,
+    );
     uniform2f(this.#programs, program, "u_vtVirtualSize", manifest.width, manifest.height);
     uniform1i(this.#programs, program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
     uniform1i(this.#programs, program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
@@ -806,7 +909,7 @@ export class SurfaceExecutionArena {
 
   #captureIblSignals(): void {
     const signals = this.#consumeIblSignals();
-    this.#diagnostics.push(...signals.diagnostics);
+    for (const diagnostic of signals.diagnostics) this.#diagnostics.push(diagnostic);
     this.#wakeRequested ||= signals.wakeRequested;
   }
 
@@ -814,45 +917,62 @@ export class SurfaceExecutionArena {
     this.#beginAlpha(material);
   }
 
-  #endDirectDraw(): void {
-    this.#endAlpha();
-  }
-
   #beginGltfDraw(material: Material, sidedness: GltfFrameDrawBatch["sidedness"]): void {
-    if (sidedness.doubleSided) this.#gl.disable(this.#gl.CULL_FACE);
+    if (sidedness.doubleSided) this.#setCull(false);
     else {
-      this.#gl.enable(this.#gl.CULL_FACE);
-      this.#gl.cullFace(this.#gl.BACK);
-      this.#gl.frontFace(sidedness.frontFaceCcw ? this.#gl.CCW : this.#gl.CW);
+      const wasCullEnabled = this.#cullEnabled;
+      this.#setCull(true);
+      if (!wasCullEnabled) {
+        this.#gl.cullFace(this.#gl.BACK);
+        this.#gl.frontFace(sidedness.frontFaceCcw ? this.#gl.CCW : this.#gl.CW);
+        this.#frontFaceCcw = sidedness.frontFaceCcw;
+      } else this.#setFrontFace(sidedness.frontFaceCcw);
     }
     this.#beginAlpha(material);
   }
 
-  #endGltfDraw(): void {
-    this.#endAlpha();
-    this.#gl.disable(this.#gl.CULL_FACE);
-    this.#gl.frontFace(this.#gl.CCW);
-  }
-
   #beginAlpha(material: Material): void {
     if (material.kind !== "wireframe" && isBlendedSurfaceMaterial(material)) {
-      this.#gl.enable(this.#gl.BLEND);
-      this.#gl.blendFuncSeparate(
-        this.#gl.SRC_ALPHA,
-        this.#gl.ONE_MINUS_SRC_ALPHA,
-        this.#gl.ONE,
-        this.#gl.ONE_MINUS_SRC_ALPHA,
-      );
-      this.#gl.depthMask(false);
+      if (!this.#blendEnabled) {
+        this.#setBlend(true);
+        this.#gl.blendFuncSeparate(
+          this.#gl.SRC_ALPHA,
+          this.#gl.ONE_MINUS_SRC_ALPHA,
+          this.#gl.ONE,
+          this.#gl.ONE_MINUS_SRC_ALPHA,
+        );
+      }
+      this.#setDepthWrite(false);
     } else {
-      this.#gl.disable(this.#gl.BLEND);
-      this.#gl.depthMask(true);
+      this.#setBlend(false);
+      this.#setDepthWrite(true);
     }
   }
 
-  #endAlpha(): void {
-    this.#gl.disable(this.#gl.BLEND);
-    this.#gl.depthMask(true);
+  #setBlend(enabled: boolean): void {
+    if (this.#blendEnabled === enabled) return;
+    this.#blendEnabled = enabled;
+    if (enabled) this.#gl.enable(this.#gl.BLEND);
+    else this.#gl.disable(this.#gl.BLEND);
+  }
+
+  #setCull(enabled: boolean): void {
+    if (this.#cullEnabled === enabled) return;
+    this.#cullEnabled = enabled;
+    if (enabled) this.#gl.enable(this.#gl.CULL_FACE);
+    else this.#gl.disable(this.#gl.CULL_FACE);
+  }
+
+  #setDepthWrite(enabled: boolean): void {
+    if (this.#depthWriteEnabled === enabled) return;
+    this.#depthWriteEnabled = enabled;
+    this.#gl.depthMask(enabled);
+  }
+
+  #setFrontFace(ccw: boolean): void {
+    if (this.#frontFaceCcw === ccw) return;
+    this.#frontFaceCcw = ccw;
+    this.#gl.frontFace(ccw ? this.#gl.CCW : this.#gl.CW);
   }
 
 }

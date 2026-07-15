@@ -62,7 +62,7 @@ type State = {
   startFrame: number;
   startsThisFrame: number;
   readonly uniformLocations: Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>;
-  readonly uniformValues: Map<WebGLProgram, Map<string, readonly number[]>>;
+  readonly uniformValues: Map<WebGLProgram, Map<string, number[]>>;
   wakeRequested: boolean;
 };
 
@@ -245,7 +245,14 @@ export const requestProgram = (
     : `${kind}:${surfaceShaderFeatureKey(features)}:${clusteredLights ? "clustered" : "global"}`;
   let request = state.requests.get(key);
   if (request === undefined) {
-    request = { clusteredLights, features, key, kind };
+    // Draw-time feature sets may come from a reusable planner workspace.
+    // Retain a snapshot only for the lifetime of a newly compiled variant.
+    request = {
+      clusteredLights,
+      features: features === undefined ? undefined : new Set(features),
+      key,
+      kind,
+    };
     state.requests.set(key, request);
     state.pendingRequests.push(request);
   }
@@ -307,9 +314,40 @@ const cacheValue = (
     values = new Map();
     state.uniformValues.set(program, values);
   }
-  const copy = Array.from<number>({ length });
-  for (let index = 0; index < length; index += 1) copy[index] = value[index] as number;
-  values.set(name, copy);
+  let cached = values.get(name);
+  if (cached === undefined || cached.length !== length) {
+    cached = new Array<number>(length);
+    values.set(name, cached);
+  }
+  for (let index = 0; index < length; index += 1) cached[index] = value[index] as number;
+};
+
+const cacheScalars = (
+  state: State,
+  program: WebGLProgram,
+  name: string,
+  length: 1 | 2 | 4,
+  x: number,
+  y = 0,
+  z = 0,
+  w = 0,
+): void => {
+  let values = state.uniformValues.get(program);
+  if (values === undefined) {
+    values = new Map();
+    state.uniformValues.set(program, values);
+  }
+  let cached = values.get(name);
+  if (cached === undefined || cached.length !== length) {
+    cached = new Array<number>(length);
+    values.set(name, cached);
+  }
+  cached[0] = x;
+  if (length >= 2) cached[1] = y;
+  if (length === 4) {
+    cached[2] = z;
+    cached[3] = w;
+  }
 };
 
 const prepareVectorUniform = (
@@ -347,7 +385,7 @@ export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: s
   cacheValue(state, program, name, value, 4);
 };
 
-/** Scalar hot-path form that allocates a vector only when the cached GPU value changes. */
+/** Scalar hot-path form that does not allocate an intermediate vector. */
 export const uniform4f = (
   arena: ProgramArena,
   program: WebGLProgram,
@@ -368,9 +406,11 @@ export const uniform4f = (
   ) return;
   const location = uniformLocation(state, program, name);
   if (location === null) return;
-  const value: LinearRgba = [x, y, z, w];
-  state.gl.uniform4fv(location, value);
-  cacheValue(state, program, name, value, 4);
+  // WebGL2 always supplies the scalar form. Keep the vector fallback for
+  // intentionally minimal structural test contexts.
+  if (typeof state.gl.uniform4f === "function") state.gl.uniform4f(location, x, y, z, w);
+  else state.gl.uniform4fv(location, [x, y, z, w]);
+  cacheScalars(state, program, name, 4, x, y, z, w);
 };
 
 export const uniform1i = (arena: ProgramArena, program: WebGLProgram, name: string, value: number): void => {
@@ -380,7 +420,7 @@ export const uniform1i = (arena: ProgramArena, program: WebGLProgram, name: stri
   const location = uniformLocation(state, program, name);
   if (location === null) return;
   state.gl.uniform1i(location, value);
-  cacheValue(state, program, name, { 0: value, length: 1 }, 1);
+  cacheScalars(state, program, name, 1, value);
 };
 
 export const uniform1f = (arena: ProgramArena, program: WebGLProgram, name: string, value: number): void => {
@@ -390,7 +430,7 @@ export const uniform1f = (arena: ProgramArena, program: WebGLProgram, name: stri
   const location = uniformLocation(state, program, name);
   if (location === null) return;
   state.gl.uniform1f(location, value);
-  cacheValue(state, program, name, { 0: value, length: 1 }, 1);
+  cacheScalars(state, program, name, 1, value);
 };
 
 export const uniform2fv = (
@@ -419,7 +459,7 @@ export const uniform2f = (
   const location = uniformLocation(state, program, name);
   if (location === null) return;
   state.gl.uniform2f(location, x, y);
-  cacheValue(state, program, name, { 0: x, 1: y, length: 2 }, 2);
+  cacheScalars(state, program, name, 2, x, y);
 };
 
 const clearState = (state: State): void => {

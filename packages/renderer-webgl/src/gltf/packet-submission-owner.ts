@@ -1,5 +1,6 @@
 import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
 import {
+  FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
   NO_FRAME_PACKET_ID,
   type FramePacketRenderClass,
@@ -13,10 +14,11 @@ import {
   retainGltfPacketSubmissionLightBinding,
   retainGltfPacketSubmissionMaterialBinding,
   retainGltfPacketSubmissionRootBinding,
+  type GltfPacketSubmissionRow,
 } from "../gltf-packet-submission-workspace";
 import { GLTF_PACKET_ROOT_SOURCE_KIND } from "../gltf-packet-topology";
 import {
-  transformMat4,
+  transformMat4Into,
   type Mat4,
   type MutableMat4,
   identityMat4,
@@ -36,7 +38,13 @@ import {
 } from "../vertex-input/arena";
 import { SurfaceLightResolver } from "../surface-light-resolver";
 import type { SurfaceLightSet } from "../webgl/lights";
-import { GltfFrameBatchArena, type GltfFrameDrawBatch } from "./frame-batch-arena";
+import type { SurfaceMaterial } from "../webgl/materials";
+import {
+  GltfFrameBatchArena,
+  type GltfFrameDrawBatch,
+  type GltfFrameMaterialBinding,
+  type GltfFrameRootBinding,
+} from "./frame-batch-arena";
 import { GltfInstanceTransformRegistry } from "./instance-transform-registry";
 import { GltfMaterialPreparationArena } from "./material-preparation-arena";
 import { PreparedGltfRuntime, type AnyGltfNode } from "./prepared-runtime";
@@ -44,6 +52,10 @@ import { GltfPacketSelectionOwner } from "./packet-selection-owner";
 
 type GltfInstancingCounters = {
   -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
+};
+
+type MutableGltfFrameRootBinding = {
+  -readonly [Key in keyof GltfFrameRootBinding]: GltfFrameRootBinding[Key];
 };
 
 export interface GltfPacketViewSelection {
@@ -90,7 +102,10 @@ export class GltfPacketSubmissionOwner {
   readonly #lightResolver: SurfaceLightResolver;
   readonly #localModelScratch: MutableMat4 = identityMat4();
   readonly #materials: GltfMaterialPreparationArena;
+  readonly #materialBindings = new WeakMap<SurfaceMaterial, GltfFrameMaterialBinding>();
+  readonly #ordinaryRootModels = new WeakMap<AnyGltfNode, MutableMat4>();
   readonly #resourceArena: ResourceArena;
+  readonly #rootBindings: Array<MutableGltfFrameRootBinding | undefined> = [];
   readonly #rootSourceScratch: MutablePacketRootSourceRow = {
     kind: 0,
     outerIndex: 0,
@@ -99,6 +114,24 @@ export class GltfPacketSubmissionOwner {
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
   readonly #selection: GltfPacketSelectionOwner;
+  readonly #instanceAssetLights = new Map<number, SurfaceLightSet | undefined>();
+  readonly #instanceAssetLightScopeIds = new Map<number, number>();
+  readonly #submissionRow: GltfPacketSubmissionRow = {
+    geometryId: 0,
+    geometryIdentityId: 0,
+    lightBindingId: NO_FRAME_PACKET_ID,
+    lightScopeId: 0,
+    localModelId: 0,
+    materialBindingId: 0,
+    packetIndex: 0,
+    renderClass: FRAME_PACKET_RENDER_CLASS.opaque,
+    rootBindingId: 0,
+    sidedness: 0,
+  };
+  readonly #viewSelection: { packetCursor: number; packetEnd: number } = {
+    packetCursor: 0,
+    packetEnd: 0,
+  };
   readonly #vertexInputs: VertexInputArena;
   #renderInstanceOrdinal = 0;
 
@@ -149,10 +182,9 @@ export class GltfPacketSubmissionOwner {
     );
     this.#renderInstanceOrdinal = 0;
     const packetCursor = this.#selection.selected.viewFirsts[viewIndex]!;
-    return {
-      packetCursor,
-      packetEnd: packetCursor + this.#selection.selected.viewCounts[viewIndex]!,
-    };
+    this.#viewSelection.packetCursor = packetCursor;
+    this.#viewSelection.packetEnd = packetCursor + this.#selection.selected.viewCounts[viewIndex]!;
+    return this.#viewSelection;
   }
 
   resetSegment(planRevision: number, segment: number): void {
@@ -199,18 +231,25 @@ export class GltfPacketSubmissionOwner {
     const ordinaryRootTransform = node.kind === "gltf"
       ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
       : undefined;
-    const ordinaryRootModel = node.kind === "gltf"
-      ? transformMat4(ordinaryRootTransform)
-      : undefined;
+    let ordinaryRootModel: MutableMat4 | undefined;
+    if (node.kind === "gltf") {
+      ordinaryRootModel = this.#ordinaryRootModels.get(node);
+      if (ordinaryRootModel === undefined) {
+        ordinaryRootModel = identityMat4();
+        this.#ordinaryRootModels.set(node, ordinaryRootModel);
+      }
+      transformMat4Into(ordinaryRootModel, ordinaryRootTransform);
+    }
     const ordinaryAssetLights = ordinaryRootModel === undefined
       ? undefined
       : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
       ? 0
       : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
-    const instanceAssetLights = instanceViews === undefined
-      ? undefined
-      : new Map<number, { readonly lights: SurfaceLightSet | undefined; readonly scopeId: number }>();
+    const instanceAssetLights = instanceViews === undefined ? undefined : this.#instanceAssetLights;
+    const instanceAssetLightScopeIds = this.#instanceAssetLightScopeIds;
+    instanceAssetLights?.clear();
+    instanceAssetLightScopeIds.clear();
     let cursor = packetCursor;
 
     while (cursor < packetEnd) {
@@ -276,17 +315,22 @@ export class GltfPacketSubmissionOwner {
       let assetLights = ordinaryAssetLights;
       let lightScopeId = ordinaryLightScopeId;
       if (instanceAssetLights !== undefined) {
-        const cachedLights = instanceAssetLights.get(outerIndex);
-        if (cachedLights !== undefined) {
-          assetLights = cachedLights.lights;
-          lightScopeId = cachedLights.scopeId;
+        if (instanceAssetLights.has(outerIndex)) {
+          assetLights = instanceAssetLights.get(outerIndex);
+          lightScopeId = instanceAssetLightScopeIds.get(outerIndex)!;
         } else {
           assetLights = this.#lightResolver.resolveGltfAsset(state, rootModel);
           lightScopeId = assetLights === undefined
             ? 0
             : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
-          instanceAssetLights.set(outerIndex, { lights: assetLights, scopeId: lightScopeId });
+          instanceAssetLights.set(outerIndex, assetLights);
+          instanceAssetLightScopeIds.set(outerIndex, lightScopeId);
         }
+      }
+      let materialBinding = this.#materialBindings.get(prepared.material);
+      if (materialBinding === undefined) {
+        materialBinding = { material: prepared.material };
+        this.#materialBindings.set(prepared.material, materialBinding);
       }
       const materialBindingId = retainGltfPacketSubmissionMaterialBinding(
         this.#batches.workspace,
@@ -294,35 +338,46 @@ export class GltfPacketSubmissionOwner {
         catalog,
         catalog.materialIds[packetIndex]!,
         prepared.materialBatchClassId,
-        { material: prepared.material },
+        materialBinding,
       );
+      const rootSourceId = catalog.rootSourceIds[packetIndex]!;
+      let rootBinding = this.#rootBindings[rootSourceId];
+      if (rootBinding === undefined) {
+        rootBinding = {
+          rootModel,
+          rootSignatureInstanceIndex: -1,
+          rootSignatureRenderInstanceOrdinal: 0,
+          rootTransform,
+        };
+        this.#rootBindings[rootSourceId] = rootBinding;
+      }
+      rootBinding.rootModel = rootModel;
+      rootBinding.rootSignatureInstanceIndex = instanceViews === undefined ? -1 : outerIndex;
+      rootBinding.rootSignatureRenderInstanceOrdinal = renderInstanceOrdinal;
+      rootBinding.rootTransform = rootTransform;
+      if (instanceViews === undefined) delete rootBinding.rootInstanceViews;
+      else rootBinding.rootInstanceViews = instanceViews;
+      if (instanceViews !== undefined) {
+        rootBinding.rootPositionSignatureVersion = instanceViews.sourceKey;
+        rootBinding.rootRotationSignatureVersion = instanceViews.sourceKey;
+        rootBinding.rootScaleSignatureVersion = instanceViews.sourceKey;
+      } else if (rootHandle === undefined) {
+        delete rootBinding.rootPositionSignatureVersion;
+        delete rootBinding.rootRotationSignatureVersion;
+        delete rootBinding.rootScaleSignatureVersion;
+      } else {
+        rootBinding.rootPositionSignatureVersion = rootHandle.positionVersion;
+        rootBinding.rootRotationSignatureVersion = rootHandle.rotationVersion;
+        rootBinding.rootScaleSignatureVersion = rootHandle.scaleVersion;
+      }
       const rootBindingId = retainGltfPacketSubmissionRootBinding(
         this.#batches.workspace,
         planRevision,
         catalog,
-        catalog.rootSourceIds[packetIndex]!,
+        rootSourceId,
         outerIndex,
         lightScopeId,
-        {
-          rootModel,
-          ...(instanceViews === undefined ? {} : { rootInstanceViews: instanceViews }),
-          ...(instanceViews !== undefined
-            ? {
-                rootPositionSignatureVersion: instanceViews.sourceKey,
-                rootRotationSignatureVersion: instanceViews.sourceKey,
-                rootScaleSignatureVersion: instanceViews.sourceKey,
-              }
-            : rootHandle === undefined
-              ? {}
-              : {
-                  rootPositionSignatureVersion: rootHandle.positionVersion,
-                  rootRotationSignatureVersion: rootHandle.rotationVersion,
-                  rootScaleSignatureVersion: rootHandle.scaleVersion,
-                }),
-          rootSignatureInstanceIndex: instanceViews === undefined ? -1 : outerIndex,
-          rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
-          rootTransform,
-        },
+        rootBinding,
       );
       const lightBindingId = assetLights === undefined
         ? NO_FRAME_PACKET_ID
@@ -333,23 +388,25 @@ export class GltfPacketSubmissionOwner {
             lightScopeId,
             assetLights,
           );
+      const submissionRow = this.#submissionRow as {
+        -readonly [Key in keyof GltfPacketSubmissionRow]: GltfPacketSubmissionRow[Key];
+      };
+      submissionRow.geometryId = geometryId;
+      submissionRow.geometryIdentityId = geometry.staticIdentityId;
+      submissionRow.lightBindingId = lightBindingId;
+      submissionRow.lightScopeId = lightScopeId;
+      submissionRow.localModelId = catalog.localModelIds[packetIndex]!;
+      submissionRow.materialBindingId = materialBindingId;
+      submissionRow.packetIndex = packetIndex;
+      submissionRow.renderClass = catalog.renderClasses[packetIndex]! as FramePacketRenderClass;
+      submissionRow.rootBindingId = rootBindingId;
+      submissionRow.sidedness = (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
+        | (rootDeterminant * localDeterminant >= 0 ? FRAME_PACKET_SIDEDNESS.frontFaceCcw : 0);
       appendGltfPacketSubmission(
         this.#batches.workspace,
         planRevision,
         catalog,
-        {
-          geometryId,
-          geometryIdentityId: geometry.staticIdentityId,
-          lightBindingId,
-          lightScopeId,
-          localModelId: catalog.localModelIds[packetIndex]!,
-          materialBindingId,
-          packetIndex,
-          renderClass: catalog.renderClasses[packetIndex]! as FramePacketRenderClass,
-          rootBindingId,
-          sidedness: (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
-            | (rootDeterminant * localDeterminant >= 0 ? FRAME_PACKET_SIDEDNESS.frontFaceCcw : 0),
-        },
+        submissionRow,
       );
       cursor += 1;
     }

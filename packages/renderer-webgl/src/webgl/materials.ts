@@ -121,6 +121,7 @@ export const DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS: SurfaceMaterialExtensio
 };
 
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: LinearRgba = [1, 0, 1, 1];
+const textureCacheKeys = new WeakMap<TextureRef, string>();
 
 type TextureCacheScalar = number | string;
 
@@ -145,12 +146,14 @@ const textureSourceCacheKey = (texture: TextureRef): readonly unknown[] => {
 };
 
 export const textureCacheKey = (texture: TextureRef): string => {
+  const cached = textureCacheKeys.get(texture);
+  if (cached !== undefined) return cached;
+  let key: string;
   if (texture.kind === "solid") {
-    return textureCacheTupleKey(["solid", texture.color]);
-  }
-  if (texture.kind === "asset") {
+    key = textureCacheTupleKey(["solid", texture.color]);
+  } else if (texture.kind === "asset") {
     const sampler = texture.sampler;
-    return textureCacheTupleKey([
+    key = textureCacheTupleKey([
       "asset",
       textureSourceCacheKey(texture),
       textureCacheScalarKey(texture.version),
@@ -160,19 +163,21 @@ export const textureCacheKey = (texture: TextureRef): string => {
       sampler?.wrapS ?? null,
       sampler?.wrapT ?? null,
     ]);
+  } else {
+    const sampler = texture.sampler;
+    key = textureCacheTupleKey([
+      "virtual",
+      textureSourceCacheKey(texture),
+      textureCacheScalarKey(texture.version),
+      texture.colorSpace ?? null,
+      sampler?.magFilter ?? null,
+      sampler?.minFilter ?? null,
+      sampler?.wrapS ?? null,
+      sampler?.wrapT ?? null,
+    ]);
   }
-
-  const sampler = texture.sampler;
-  return textureCacheTupleKey([
-    "virtual",
-    textureSourceCacheKey(texture),
-    textureCacheScalarKey(texture.version),
-    texture.colorSpace ?? null,
-    sampler?.magFilter ?? null,
-    sampler?.minFilter ?? null,
-    sampler?.wrapS ?? null,
-    sampler?.wrapT ?? null,
-  ]);
+  textureCacheKeys.set(texture, key);
+  return key;
 };
 
 export const materialEmissiveColor = (material: Material): LinearRgba =>

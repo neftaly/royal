@@ -199,6 +199,7 @@ export const createStrictWebGl2Context = (
     uniform1i: noop,
     uniform3f: noop,
     uniform3fv: noop,
+    uniform4f: noop,
     uniform4fv: noop,
     uniformMatrix4fv: noop,
     useProgram: noop,

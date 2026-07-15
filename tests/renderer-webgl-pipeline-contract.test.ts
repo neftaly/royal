@@ -308,6 +308,7 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform3fv: record("uniform3fv"),
+    uniform4f: record("uniform4f"),
     uniform4fv: record("uniform4fv"),
     uniformMatrix3fv: record("uniformMatrix3fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),
@@ -358,8 +359,11 @@ const expectMatrixUniform = (
 
 const uniform4fvPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
   calls
-    .filter((call) => call.name === "uniform4fv")
+    .filter((call) => call.name === "uniform4f" || call.name === "uniform4fv")
     .map((call) => {
+      if (call.name === "uniform4f") {
+        return call.args.slice(1, 5).map((value) => typeof value === "number" ? value : Number.NaN);
+      }
       const values = numericArray(call.args[1]);
       const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
       const length = typeof call.args[3] === "number" ? call.args[3] : 4;

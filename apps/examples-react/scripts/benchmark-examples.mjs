@@ -1060,6 +1060,12 @@ const installBenchmarkHooks = async (session) => {
     counters,
     cameraDragSample,
     latencyPulse,
+    async endXrSession() {
+      const session = xr.activeSession;
+      if (session === null) return false;
+      await session.end();
+      return true;
+    },
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
       xr.frameTimes.length = 0;
@@ -1071,11 +1077,22 @@ const installBenchmarkHooks = async (session) => {
     },
     stopFrameRecorder,
     xrSnapshot() {
+      const activeSession = xr.activeSession;
+      const baseLayer = activeSession?.renderState?.baseLayer;
+      const supportedFrameRates = activeSession?.supportedFrameRates === undefined
+        || activeSession.supportedFrameRates === null
+        ? []
+        : [...activeSession.supportedFrameRates];
       return {
-        active: xr.activeSession !== null,
+        active: activeSession !== null,
+        canUpdateTargetFrameRate: typeof activeSession?.updateTargetFrameRate === 'function',
+        framebufferHeight: baseLayer?.framebufferHeight ?? null,
+        framebufferWidth: baseLayer?.framebufferWidth ?? null,
+        frameRate: activeSession?.frameRate ?? null,
         frameCount: xr.frameTimes.length,
-        hz: xr.hz,
+        hz: activeSession?.frameRate ?? xr.hz,
         sessions: xr.sessions,
+        supportedFrameRates,
         viewCount: config.fakeXrViews,
       };
     },
@@ -1730,38 +1747,49 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
     await session.call('Page.bringToFront');
     await onSessionChanged(session, diagnostics);
   }
-  const prepared = await prepareRouteForBenchmark(session, route);
-  const virtualTextureClose = await prepareVirtualTextureCloseView(session, route);
-  if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
-    throw new Error(
-      `Real XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
-    );
-  }
-  const measured = await collectPageMetrics(session, frameSampleCount, {
-    sampleXr: prepared?.active !== false,
-    xrOnly: realXrEnabled && prepared?.active === true,
-  });
-  const activationFailure = prepared?.active === false
-    ? {
-      error: prepared.error,
-      reason: prepared.reason ?? 'activation-failed',
-      status: prepared.status,
-      timedOut: prepared.timedOut === true,
-      timeoutMs: prepared.timeoutMs,
+  try {
+    const prepared = await prepareRouteForBenchmark(session, route);
+    const virtualTextureClose = await prepareVirtualTextureCloseView(session, route);
+    if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
+      throw new Error(
+        `Real XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
+      );
     }
-    : undefined;
-  return {
-    ...route,
-    ...(prepared === undefined ? {} : { prepared }),
-    ...(virtualTextureClose === undefined ? {} : { virtualTextureClose }),
-    ...(activationFailure === undefined ? {} : { xrActivationFailure: activationFailure }),
-    ...(activationFailure === undefined || !fakeXrEnabled
-      ? {}
-      : { fakeXrActivationFailure: activationFailure }),
-    ready,
-    wallNavigationAndReadyMs: performance.now() - start,
-    ...measured,
-  };
+    const measured = await collectPageMetrics(session, frameSampleCount, {
+      sampleXr: prepared?.active !== false,
+      xrOnly: realXrEnabled && prepared?.active === true,
+    });
+    const activationFailure = prepared?.active === false
+      ? {
+        error: prepared.error,
+        reason: prepared.reason ?? 'activation-failed',
+        status: prepared.status,
+        timedOut: prepared.timedOut === true,
+        timeoutMs: prepared.timeoutMs,
+      }
+      : undefined;
+    return {
+      ...route,
+      ...(prepared === undefined ? {} : { prepared }),
+      ...(virtualTextureClose === undefined ? {} : { virtualTextureClose }),
+      ...(activationFailure === undefined ? {} : { xrActivationFailure: activationFailure }),
+      ...(activationFailure === undefined || !fakeXrEnabled
+        ? {}
+        : { fakeXrActivationFailure: activationFailure }),
+      ready,
+      wallNavigationAndReadyMs: performance.now() - start,
+      ...measured,
+    };
+  } finally {
+    if (realXrEnabled && route.id === 'webxr-vr') {
+      await evaluate(session, `
+(async () => {
+  await globalThis.__royalBench?.endXrSession?.();
+  return globalThis.__royalBench?.xrSnapshot?.().active ?? false;
+})()
+`).catch(() => false);
+    }
+  }
 };
 
 const round = (value, digits = 2) => {

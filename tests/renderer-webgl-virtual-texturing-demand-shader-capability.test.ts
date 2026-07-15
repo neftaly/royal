@@ -325,9 +325,9 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       "u_vtAtlas",
       "u_vtPageTable",
       "u_vtPageTableSize",
-      "u_vtAtlasTexelSize",
-      "u_vtBorderTexels",
-      "u_vtPageSize",
+      "u_vtAtlasPageUvSize",
+      "u_vtBorderPageRatio",
+      "u_vtVirtualPageScale",
       "u_vtVirtualSize",
     ]));
     expect(uniformNames(calls)).not.toContain("u_texture");
