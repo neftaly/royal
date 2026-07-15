@@ -679,15 +679,7 @@ export const projectVirtualTextureScreenFootprint = (
   resetVirtualTextureCoverageWorkspace(workspace);
   return queryVirtualTextureCoverage(
     context.provider,
-    {
-      modelSource: context.modelSource,
-      projection: context.projection,
-      ...(context.textureCoordinates === undefined ? {} : { textureCoordinates: context.textureCoordinates }),
-      view: context.view,
-      viewportSize: context.viewportSize,
-      ...(context.wrapS === undefined ? {} : { wrapS: context.wrapS }),
-      ...(context.wrapT === undefined ? {} : { wrapT: context.wrapT }),
-    },
+    context,
     workspace,
     manifest,
   );
@@ -702,16 +694,10 @@ const virtualTexturePageScreenError = (
   const { clippedPolygonA, clippedPolygonB } = workspace;
   const [viewportWidth, viewportHeight] = viewportSize;
   const pageTexelSpan = virtualTexturePageTexelSpan(manifest, page.mip);
-  const [minPageU, maxPageU] = virtualTexturePageUvRange(
-    manifest.width,
-    page.x,
-    pageTexelSpan,
-  );
-  const [minPageV, maxPageV] = virtualTexturePageUvRange(
-    manifest.height,
-    page.y,
-    pageTexelSpan,
-  );
+  const minPageU = Math.min(1, page.x * pageTexelSpan / manifest.width);
+  const maxPageU = Math.min(1, (page.x + 1) * pageTexelSpan / manifest.width);
+  const minPageV = Math.min(1, page.y * pageTexelSpan / manifest.height);
+  const maxPageV = Math.min(1, (page.y + 1) * pageTexelSpan / manifest.height);
   let minNdcX = Number.POSITIVE_INFINITY;
   let maxNdcX = Number.NEGATIVE_INFINITY;
   let minNdcY = Number.POSITIVE_INFINITY;
@@ -726,14 +712,20 @@ const virtualTexturePageScreenError = (
       );
       let input = clippedPolygonA;
       let output = clippedPolygonB;
-      const uvBoundaries = [minPageU, maxPageU, minPageV, maxPageV] as const;
       for (let boundaryIndex = 0; boundaryIndex < 4 && polygonCount > 0; boundaryIndex += 1) {
+        const boundary = boundaryIndex === 0
+          ? minPageU
+          : boundaryIndex === 1
+            ? maxPageU
+            : boundaryIndex === 2
+              ? minPageV
+              : maxPageV;
         polygonCount = clipPolygonAgainstUvBoundary(
           input,
           polygonCount,
           output,
           boundaryIndex < 2 ? 4 : 5,
-          uvBoundaries[boundaryIndex]!,
+          boundary,
           boundaryIndex % 2 === 0,
         );
         const swap = input;
@@ -772,15 +764,6 @@ const virtualTexturePageTexelSpan = (
   manifest: VirtualTextureManifestModel,
   mip: number,
 ): number => manifest.pageSize * (2 ** mip);
-
-const virtualTexturePageUvRange = (
-  dimension: number,
-  pageIndex: number,
-  pageTexelSpan: number,
-): readonly [number, number] => [
-  Math.min(1, pageIndex * pageTexelSpan / dimension),
-  Math.min(1, (pageIndex + 1) * pageTexelSpan / dimension),
-];
 
 const virtualTextureTargetMipFromMetrics = (
   manifest: VirtualTextureManifestModel,
