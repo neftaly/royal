@@ -155,16 +155,6 @@ float maxComponent(vec3 value) {
   return max(max(value.r, value.g), value.b);
 }
 
-vec3 toneMapAces(vec3 color) {
-  vec3 safeColor = max(color, vec3(0.0));
-
-  return clamp(
-    (safeColor * (2.51 * safeColor + 0.03)) / (safeColor * (2.43 * safeColor + 0.59) + 0.14),
-    vec3(0.0),
-    vec3(1.0)
-  );
-}
-
 vec3 toneMapPbrNeutral(vec3 color) {
   const float startCompression = 0.76;
   const float desaturation = 0.15;
@@ -194,11 +184,9 @@ vec4 outputLinearColor(vec3 color, float alpha) {
 
 vec4 outputMappedColor(vec3 color, float alpha) {
   vec3 exposed = color * max(u_toneMappingSettings.y, 0.0);
-  vec3 mapped = u_toneMappingSettings.x > 1.5
+  vec3 mapped = u_toneMappingSettings.x > 0.5
     ? toneMapPbrNeutral(exposed)
-    : u_toneMappingSettings.x > 0.5
-      ? toneMapAces(exposed)
-      : clamp(exposed, vec3(0.0), vec3(1.0));
+    : clamp(exposed, vec3(0.0), vec3(1.0));
 
   return vec4(linearToSrgb(mapped), alpha);
 }

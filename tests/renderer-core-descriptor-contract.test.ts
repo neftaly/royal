@@ -49,7 +49,7 @@ describe("renderer-core descriptor contract", () => {
       clearColor: [0.1, 0.2, 0.3, 1],
       environment,
       exposureEv100: 1.25,
-      toneMapping: "aces-fitted",
+      toneMapping: "pbr-neutral",
     })).toEqual({
       camera,
       clearColor: [0.1, 0.2, 0.3, 1],
@@ -57,7 +57,7 @@ describe("renderer-core descriptor contract", () => {
       exposureEv100: 1.25,
       kind: "scene",
       nodes: [],
-      toneMapping: "aces-fitted",
+      toneMapping: "pbr-neutral",
     });
 
     expect(() => scene({

@@ -351,7 +351,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const material = standardMaterial({
       texture: virtualTexture({ manifestUri: "/vt/manifest.json" }),
     });
-    const graph = renderScene(material, { exposureEv100: 1.75, toneMapping: "aces-fitted" });
+    const graph = renderScene(material, { exposureEv100: 1.75, toneMapping: "pbr-neutral" });
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));

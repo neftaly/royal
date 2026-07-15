@@ -15,10 +15,9 @@ export interface SurfaceToneMappingState {
 
 const DEFAULT_EXPOSURE = 1 / 1.2;
 const DEFAULT_TONE_MAPPING: RenderToneMapping = "pbr-neutral";
-const TONE_MAPPING_SHADER_MODES: Readonly<Record<RenderToneMapping, 0 | 1 | 2>> = {
+const TONE_MAPPING_SHADER_MODES: Readonly<Record<RenderToneMapping, 0 | 1>> = {
   "linear-clamp": 0,
-  "aces-fitted": 1,
-  "pbr-neutral": 2,
+  "pbr-neutral": 1,
 };
 
 /** Pure scene policy deciding whether the frame requires the HDR pipeline. */
@@ -27,7 +26,6 @@ export const surfacePresentationRequiresHdr = (
   hasHdrReadyAsset: boolean,
 ): boolean => plan.environment !== undefined
   || plan.exposureEv100 !== undefined
-  || plan.toneMapping === "aces-fitted"
   || plan.toneMapping === "pbr-neutral"
   || plan.lightNodes.length > 0
   || hasHdrReadyAsset;
@@ -45,5 +43,5 @@ export const resolveSurfaceToneMapping = (
 });
 
 /** Stable numeric ABI shared by material and postprocess shaders. */
-export const toneMappingShaderMode = (toneMapping: RenderToneMapping): 0 | 1 | 2 =>
+export const toneMappingShaderMode = (toneMapping: RenderToneMapping): 0 | 1 =>
   TONE_MAPPING_SHADER_MODES[toneMapping];

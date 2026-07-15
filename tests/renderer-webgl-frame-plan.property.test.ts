@@ -83,7 +83,7 @@ const randomScene = (random: SeededRandom): RenderRoot => {
     clearColor: [random.float(), random.float(), random.float(), random.float()],
     exposureEv100: random.number(-4, 16),
     nodes,
-    toneMapping: random.pick(["linear-clamp", "aces-fitted", "pbr-neutral"] as const),
+    toneMapping: random.pick(["linear-clamp", "pbr-neutral"] as const),
   });
 };
 

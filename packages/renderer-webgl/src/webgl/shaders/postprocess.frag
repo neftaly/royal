@@ -6,15 +6,6 @@ uniform sampler2D u_hdrColor;
 uniform vec2 u_displayTransform;
 out vec4 outColor;
 
-vec3 toneMapAcesFitted(vec3 color) {
-  vec3 safeColor = max(color, vec3(0.0));
-  return clamp(
-    (safeColor * (2.51 * safeColor + 0.03)) / (safeColor * (2.43 * safeColor + 0.59) + 0.14),
-    vec3(0.0),
-    vec3(1.0)
-  );
-}
-
 vec3 toneMapPbrNeutral(vec3 color) {
   const float startCompression = 0.76;
   const float desaturation = 0.15;
@@ -41,10 +32,8 @@ void main() {
   vec4 scene = texture(u_hdrColor, v_uv);
   vec3 straightColor = scene.a > 0.000001 ? scene.rgb / scene.a : scene.rgb;
   vec3 exposed = straightColor * max(u_displayTransform.y, 0.0);
-  vec3 mapped = u_displayTransform.x > 1.5
+  vec3 mapped = u_displayTransform.x > 0.5
     ? toneMapPbrNeutral(exposed)
-    : u_displayTransform.x > 0.5
-      ? toneMapAcesFitted(exposed)
-      : clamp(exposed, vec3(0.0), vec3(1.0));
+    : clamp(exposed, vec3(0.0), vec3(1.0));
   outColor = vec4(linearToSrgb(mapped) * scene.a, scene.a);
 }

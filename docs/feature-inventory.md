@@ -41,7 +41,7 @@ Status meanings:
 | Orbit camera/controller | product | React-first DX feature. Keep. |
 | Clear colour and transparent canvas | product | Keep. |
 | Exposure in EV100 | product | Keep if physically coherent lighting remains a goal. |
-| Tone maps: linear clamp, ACES fitted, PBR Neutral | candidate | PBR Neutral is the implicit HDR default; linear clamp remains the explicit display-referred/debug path. Multiple filmic choices still overlap, so compare ACES/PBR oracles before deciding whether both remain. |
+| Tone maps: linear clamp and PBR Neutral | product | PBR Neutral is the implicit HDR/PBR default; linear clamp is the explicit display-referred/debug path. The overlapping, unvalidated ACES-fitted aesthetic was deleted before release. |
 | Royal coordinate convention descriptor | product | One typed constant documents right-handed, +Y-up, -Z view-forward, metres, and radians. Foreign-coordinate conversion belongs at ingestion boundaries. |
 | Generic Y-up/Z-up and left/right-handed descriptor mini-model | deleted | It had no runtime consumer and implied conversions Royal did not perform. |
 

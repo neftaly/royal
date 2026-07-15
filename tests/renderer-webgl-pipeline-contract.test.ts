@@ -492,7 +492,7 @@ const iblEnvironmentScene = () =>
       radianceScaleNits: 80,
     }),
     exposureEv100: 0.9,
-    toneMapping: "aces-fitted",
+    toneMapping: "pbr-neutral",
   });
 
 afterEach(() => {
@@ -879,7 +879,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("uniform vec4 u_toneMappingSettings;");
     expect(sources).toContain("uniform bool u_useIblBrdfLut;");
     expect(sources).toContain("materialGgxDistribution");
-    expect(sources).toContain("toneMapAces");
+    expect(sources).toContain("toneMapPbrNeutral");
     expect(sources).toContain("linearToSrgb");
     expect(sources).toContain("if (!u_useIblIrradiance) {\n    return vec3(0.0);");
     expect(sources).not.toContain("uniform sampler2D u_iblBrdfLut;");
@@ -897,7 +897,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([2, 0.833333, 1, 0]);
+      .toContainEqual([1, 0.833333, 1, 0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
     expect(calls.some((call) =>
       call.name === "texStorage2D"

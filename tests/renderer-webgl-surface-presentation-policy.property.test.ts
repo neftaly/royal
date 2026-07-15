@@ -8,7 +8,7 @@ import {
 } from "../packages/renderer-webgl/src/surface-presentation-policy";
 import { forEachFuzzCase } from "./fuzz";
 
-const toneMappings = ["linear-clamp", "aces-fitted", "pbr-neutral"] as const;
+const toneMappings = ["linear-clamp", "pbr-neutral"] as const;
 
 describe("surface presentation policy properties", () => {
   it("keeps HDR admission equivalent to its independent inputs", () => {
@@ -22,7 +22,6 @@ describe("surface presentation policy properties", () => {
       const hasHdrReadyAsset = random.boolean();
       const expected = plan.environment !== undefined
         || plan.exposureEv100 !== undefined
-        || plan.toneMapping === "aces-fitted"
         || plan.toneMapping === "pbr-neutral"
         || plan.lightNodes.length > 0
         || hasHdrReadyAsset;
@@ -50,7 +49,7 @@ describe("surface presentation policy properties", () => {
     });
 
     for (const toneMapping of toneMappings) shaderModes.add(toneMappingShaderMode(toneMapping));
-    expect(shaderModes).toEqual(new Set([0, 1, 2]));
+    expect(shaderModes).toEqual(new Set([0, 1]));
     for (const exposureEv100 of [-128, 149]) {
       const exposure = resolveSurfaceToneMapping({ exposureEv100, toneMapping: undefined }, true).exposure;
       expect(Number.isFinite(Math.fround(exposure))).toBe(true);

@@ -490,7 +490,7 @@ export const renderScene = (
     readonly exposureEv100?: number;
     readonly cameraX?: number;
     readonly planeSize?: readonly [number, number];
-    readonly toneMapping?: "aces-fitted" | "linear-clamp" | "pbr-neutral";
+    readonly toneMapping?: "linear-clamp" | "pbr-neutral";
   } = {},
 ) => scene({
   camera: camera(options.cameraX),

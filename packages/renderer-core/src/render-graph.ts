@@ -5,11 +5,11 @@ import type { LinearRgba } from './primitives';
 import type { RenderNode } from './render-node';
 
 const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
-const RENDER_TONE_MAPPINGS = ['linear-clamp', 'aces-fitted', 'pbr-neutral'] as const;
+const RENDER_TONE_MAPPINGS = ['linear-clamp', 'pbr-neutral'] as const;
 const MIN_EXPOSURE_EV100 = -128;
 const MAX_EXPOSURE_EV100 = 149;
 
-export type RenderToneMapping = 'linear-clamp' | 'aces-fitted' | 'pbr-neutral';
+export type RenderToneMapping = 'linear-clamp' | 'pbr-neutral';
 
 /** Public normalized scene description accepted by renderer roots. */
 export interface RenderRoot {
