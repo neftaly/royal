@@ -16,7 +16,7 @@ describe("Canvas renderer root cleanup", () => {
     } as unknown as Parameters<typeof validateRendererOptions>[0]))
       .toThrow(/unsupported option.*automaticVirtualTexture/i);
     expect(() => rendererRootOptionsSemanticKey([] as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0]))
-      .toThrow("WebGL root options must be an object");
+      .toThrow("Renderer options must be an object");
   });
 
   it("replaces the DOM canvas only for immutable WebGL context attributes", () => {

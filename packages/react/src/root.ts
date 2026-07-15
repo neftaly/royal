@@ -9,7 +9,6 @@ import type {
 import {
   createWebGlRoot,
   resolveWebGlRootOptions,
-  type ResolvedWebGlRootOptions,
   type WebGlContextSnapshot,
   type WebGlDiagnosticLogSnapshot,
   type WebGlDiagnosticMessage,
@@ -21,7 +20,6 @@ import {
   type WebGlResourceLifetimeSnapshot,
   type WebGlResourcePressureSnapshot,
   type WebGlRoot,
-  type WebGlRootOptions,
   type WebGlTextureResidencySnapshot,
   type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
@@ -34,7 +32,19 @@ import { validateGltfAssetRef } from "./gltf-asset-identity";
 import { validateTextureAssetRef } from "./texture-asset-identity";
 
 /** Immutable renderer creation options shared by `<Canvas>` and `createRendererRoot`. */
-export interface RendererOptions extends WebGlRootOptions {}
+export interface RendererOptions {
+  /** Request a canvas alpha channel when creating its WebGL context. @defaultValue `true` */
+  readonly alpha?: boolean;
+  /** Request browser context antialiasing. @defaultValue `true` */
+  readonly antialias?: boolean;
+  /**
+   * Stream sufficiently large ordinary images and SVGs through Royal's
+   * virtual-texture page source. The ordinary texture remains active until
+   * generated coverage is ready; authored virtual textures are unaffected.
+   * @defaultValue `false`
+   */
+  readonly automaticVirtualTextures?: boolean;
+}
 
 /** @internal Validates the product-level root creation boundary. */
 export const validateRendererOptions = (options: RendererOptions | undefined): void => {
@@ -48,7 +58,7 @@ export const rendererRootOptionsSemanticKey = (options?: RendererOptions): strin
 };
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
-export type ResolvedRendererOptions = ResolvedWebGlRootOptions;
+export type ResolvedRendererOptions = Required<RendererOptions>;
 
 /** @internal Distinguishes malformed public pick input from a legitimate miss. */
 export const validatePickInput = (input: PickInput): void => {

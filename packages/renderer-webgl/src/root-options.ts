@@ -24,19 +24,19 @@ const resolveOptions = (
   allowedFields: readonly string[],
 ): ResolvedWebGlRootOptions => {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw new TypeError("WebGL root options must be an object");
+    throw new TypeError("Renderer options must be an object");
   }
   const allowed = new Set(allowedFields);
   for (const field of Object.keys(options)) {
-    if (!allowed.has(field)) throw new TypeError(`WebGL root options contain unsupported option ${JSON.stringify(field)}`);
+    if (!allowed.has(field)) throw new TypeError(`Renderer options contain unsupported option ${JSON.stringify(field)}`);
   }
   return Object.freeze({
-    alpha: booleanOption(options.alpha, true, "WebGL root alpha"),
-    antialias: booleanOption(options.antialias, true, "WebGL root antialias"),
+    alpha: booleanOption(options.alpha, true, "Renderer alpha"),
+    antialias: booleanOption(options.antialias, true, "Renderer antialias"),
     automaticVirtualTextures: booleanOption(
       options.automaticVirtualTextures,
       false,
-      "WebGL root automaticVirtualTextures",
+      "Renderer automaticVirtualTextures",
     ),
   });
 };
