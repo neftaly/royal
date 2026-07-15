@@ -270,6 +270,32 @@ const stateOf = (arena: VirtualTextureGpuArena): State => arena as unknown as St
 const mutableResource = (resource: VirtualTextureGpuResource): MutableResource =>
   resource as unknown as MutableResource;
 
+const pageTableInitializationScratchBytes = (pageTableWidth: number): number =>
+  Math.max(PAGE_TABLE_UPLOAD_SCRATCH_BYTES, pageTableWidth * 4);
+
+const initializePageTableTexture = (
+  gl: WebGL2RenderingContext,
+  pageTableWidth: number,
+  pageTableHeight: number,
+  zeroScratch: Uint8Array,
+): void => {
+  const rowBytes = pageTableWidth * 4;
+  const rowsPerUpload = Math.max(1, Math.floor(zeroScratch.byteLength / rowBytes));
+  for (let y = 0; y < pageTableHeight; y += rowsPerUpload) {
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      y,
+      pageTableWidth,
+      Math.min(rowsPerUpload, pageTableHeight - y),
+      WEBGL_RGBA_INTEGER,
+      gl.UNSIGNED_BYTE,
+      zeroScratch,
+    );
+  }
+};
+
 export const createVirtualTextureGpuArena = (
   gl: WebGL2RenderingContext,
   handles: TextureHandleArena,
@@ -480,6 +506,7 @@ const allocate = (
   const atlasGridColumns = Math.ceil(Math.sqrt(slots));
   const atlasGridRows = Math.ceil(slots / atlasGridColumns);
   const { pageTableHeight, pageTableWidth } = admission;
+  const pageTableUploadScratch = new Uint8Array(pageTableInitializationScratchBytes(pageTableWidth));
   let atlasTexture: WebGLTexture | undefined;
   let pageTableTexture: WebGLTexture | undefined;
   try {
@@ -529,6 +556,7 @@ const allocate = (
       gl.UNSIGNED_BYTE,
       null,
     );
+    initializePageTableTexture(gl, pageTableWidth, pageTableHeight, pageTableUploadScratch);
     setSampler(gl, gl.NEAREST, gl.NEAREST);
     const pageTable = new VirtualTextureAtlasPageTable({ slotCount: slots });
     if (resource.desiredPageKeysPublished) {
@@ -543,7 +571,7 @@ const allocate = (
       generation,
       pageTable,
       pageTableHeight,
-      pageTableUploadScratch: new Uint8Array(PAGE_TABLE_UPLOAD_SCRATCH_BYTES),
+      pageTableUploadScratch,
       pageTableTexture,
       pageTableWidth,
     };

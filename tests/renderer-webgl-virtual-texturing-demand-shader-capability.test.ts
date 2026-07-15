@@ -22,6 +22,7 @@ import {
   flushMicrotasks,
   flushVirtualTextureManifest,
   pageUploads,
+  pageTableInitializationUploads,
   pageTableUploads,
   pageTableUploadSummary,
   imageBySrc,
@@ -248,6 +249,14 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
     fetchRequests[0]!.resolve(responseJson(vtParentFallbackManifest(3)));
     await flushMicrotasks();
+
+    const [initialization] = pageTableInitializationUploads(calls);
+    expect(initialization?.args.slice(2, 6)).toEqual([0, 0, 3, 1]);
+    const initializationPixels = initialization?.args[8];
+    expect(
+      initializationPixels instanceof Uint8Array
+      && initializationPixels.every((value) => value === 0),
+    ).toBe(true);
 
     imageBySrc("m1-0-0")?.settleLoad();
     await flushMicrotasks();

@@ -741,11 +741,38 @@ export const pageUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
     call.name === "texSubImage2D"
     && !ArrayBuffer.isView(call.args.at(-1)));
 
-export const pageTableUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
-  calls.filter((call) =>
-    call.name === "texSubImage2D"
+const pageTableInitializationUploadIndexes = (calls: readonly GlCall[]): ReadonlySet<number> => {
+  const indexes = new Set<number>();
+  let initializing = false;
+  for (const [index, call] of calls.entries()) {
+    if (call.name === "texImage2D" && call.args[2] === 0x8D7C) {
+      initializing = true;
+      continue;
+    }
+    if (initializing && call.name === "texParameteri") initializing = false;
+    if (
+      initializing
+      && call.name === "texSubImage2D"
+      && ArrayBuffer.isView(call.args[8])
+      && !(call.args[8] instanceof DataView)
+    ) indexes.add(index);
+  }
+  return indexes;
+};
+
+export const pageTableInitializationUploads = (calls: readonly GlCall[]): readonly GlCall[] => {
+  const indexes = pageTableInitializationUploadIndexes(calls);
+  return calls.filter((_call, index) => indexes.has(index));
+};
+
+export const pageTableUploads = (calls: readonly GlCall[]): readonly GlCall[] => {
+  const initializationIndexes = pageTableInitializationUploadIndexes(calls);
+  return calls.filter((call, index) =>
+    !initializationIndexes.has(index)
+    && call.name === "texSubImage2D"
     && ArrayBuffer.isView(call.args[8])
     && !(call.args[8] instanceof DataView));
+};
 
 export const texParameterTriples = (calls: readonly GlCall[]): readonly (readonly unknown[])[] =>
   calls
