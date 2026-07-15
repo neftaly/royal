@@ -96,6 +96,23 @@ describe("surface shader variants", () => {
     }
   });
 
+  it("keeps unlit vertex variants free of unused lighting work", () => {
+    for (const kind of ["unlit", "unlit-instanced-split"] as const) {
+      const source = vertexShaderSource(kind);
+      expect(source, kind).not.toContain("a_normal");
+      expect(source, kind).not.toContain("a_tangent");
+      expect(source, kind).not.toContain("v_normal");
+      expect(source, kind).not.toContain("v_tangent");
+      expect(source, kind).not.toContain("basisHandedness");
+      expect(source, kind).not.toContain("orthogonalizeSurfaceTangent");
+      expect(source, kind).toContain("v_uv0 = a_uv0;");
+      expect(source, kind).toContain("v_uv1 = a_uv1;");
+      expect(source, kind).toContain("v_color = a_color;");
+    }
+    expect(vertexShaderSource("unlit")).toContain("u_model * vec4(a_position, 1.0)");
+    expect(vertexShaderSource("unlit-instanced-split")).toContain("transformRootPoint(assetPosition.xyz)");
+  });
+
   it("generates sampler declarations only for enabled texture features", () => {
     forEachFuzzCase({
       cases: 32,

@@ -3,6 +3,8 @@ import surfaceFragmentTemplate from "./shaders/surface.frag";
 import unlitFragmentTemplate from "./shaders/unlit.frag";
 import surfaceVertexShaderSource from "./shaders/surface.vert";
 import surfaceInstancedSplitVertexShaderSource from "./shaders/surface-instanced-split.vert";
+import unlitVertexShaderSource from "./shaders/unlit.vert";
+import unlitInstancedSplitVertexShaderSource from "./shaders/unlit-instanced-split.vert";
 import wireframeFragmentShaderSource from "./shaders/wireframe.frag";
 import wireframeVertexShaderSource from "./shaders/wireframe.vert";
 import postprocessFragmentShaderSource from "./shaders/postprocess.frag";
@@ -245,9 +247,11 @@ export const vertexShaderSource = (kind: ProgramKind): string => {
     case "wireframe":
       return wireframeVertexShaderSource;
     case "surface-instanced-split":
-    case "unlit-instanced-split":
       return surfaceInstancedSplitVertexShaderSource;
+    case "unlit-instanced-split":
+      return unlitInstancedSplitVertexShaderSource;
     case "unlit":
+      return unlitVertexShaderSource;
     case "surface":
       return surfaceVertexShaderSource;
   }
