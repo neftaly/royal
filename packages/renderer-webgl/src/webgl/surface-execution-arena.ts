@@ -126,6 +126,14 @@ type TextureCoordinateUniformNames = Readonly<{
   row1: string;
   set: string;
 }>;
+type SurfaceMaterialTextureCandidateEntry = Readonly<{
+  descriptor: (typeof SURFACE_MATERIAL_TEXTURE_BINDINGS)[number];
+  texture: TextureAssetUploadRef;
+}>;
+type SurfaceMaterialTextureCatalog = Readonly<{
+  candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>>;
+  entries: readonly SurfaceMaterialTextureCandidateEntry[];
+}>;
 const textureCoordinateUniformNames = (stem: string): TextureCoordinateUniformNames => ({
   row0: `${stem}Row0`,
   row1: `${stem}Row1`,
@@ -135,6 +143,23 @@ const BASE_COLOR_TEXTURE_COORDINATE_UNIFORMS = textureCoordinateUniformNames("u_
 const SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS = SURFACE_MATERIAL_TEXTURE_BINDINGS.map(
   (descriptor) => textureCoordinateUniformNames(descriptor.uvUniformStem),
 );
+
+const createSurfaceMaterialTextureCatalog = (
+  material: SurfaceMaterial,
+): SurfaceMaterialTextureCatalog => {
+  const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
+  const entries: SurfaceMaterialTextureCandidateEntry[] = [];
+  for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
+    const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
+    const texture = descriptor.key === "emissiveTexture"
+      ? material.emissiveTexture
+      : material.kind === "standard" ? material[descriptor.key] : undefined;
+    if (texture === undefined) continue;
+    candidates[descriptor.feature] = "ready";
+    entries.push({ descriptor, texture });
+  }
+  return { candidates, entries };
+};
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
   drawCalls: number;
@@ -267,25 +292,22 @@ export class SurfaceExecutionArena {
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
+  readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
   readonly #textureAdmissionWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
-  readonly #textureCandidates: Partial<Record<
-    SurfaceIndependentTextureFeature,
-    SurfaceTextureCandidate
-  >> = {};
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
     baseColor: BASE_COLOR_INPUT_NONE,
     brdfLutPreferredUnit: IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-    candidates: this.#textureCandidates,
+    candidates: {},
     maxTextureUnits: 0,
     reservedTextureUnits: this.#reservedTextureUnits,
   };
   readonly #textureReadinessInput: MutableTextureReadiness = {
     baseColor: BASE_COLOR_INPUT_NONE,
-    candidates: this.#textureCandidates,
+    candidates: {},
   };
   readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
   #ordinaryBaseColorBinding: MutableOrdinaryBaseColorTextureBinding | undefined;
@@ -539,15 +561,13 @@ export class SurfaceExecutionArena {
     lightSet: SurfaceLightSet,
     baseColorResidency: BaseColorTextureResidency,
   ): SurfaceTextureBindingPlan {
-    const candidates = this.#textureCandidates;
+    const textureCatalog = this.#materialTextureCatalog(material);
+    const candidates = textureCatalog.candidates;
+    const entries = textureCatalog.entries;
     const readyTextures = this.#readyTextures;
     readyTextures.clear();
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      const texture = descriptor.key === "emissiveTexture"
-        ? material.emissiveTexture
-        : material.kind === "standard" ? material[descriptor.key] : undefined;
-      if (texture === undefined) delete candidates[descriptor.feature];
-      else candidates[descriptor.feature] = "ready";
+    for (let index = 0; index < entries.length; index += 1) {
+      candidates[entries[index]!.descriptor.feature] = "ready";
     }
     if (transmissionScreenColorTexture === undefined) delete candidates.transmissionScreenTexture;
     else candidates.transmissionScreenTexture = "ready";
@@ -579,14 +599,12 @@ export class SurfaceExecutionArena {
     admissionInput.brdfLutPreferredUnit = reserveClusterUnits && clusterUnits.grid > 0
       ? clusterUnits.grid - 1
       : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT;
+    admissionInput.candidates = candidates;
     admissionInput.maxTextureUnits = this.#maxTextureImageUnits;
     const admission = planSurfaceTextureBindings(admissionInput, this.#textureAdmissionWorkspace);
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
+    for (let index = 0; index < entries.length; index += 1) {
+      const { descriptor, texture } = entries[index]!;
       if (!admission.features.has(descriptor.feature)) continue;
-      const texture = descriptor.key === "emissiveTexture"
-        ? material.emissiveTexture
-        : material.kind === "standard" ? material[descriptor.key] : undefined;
-      if (texture === undefined) continue;
       const resource = this.#requestOrdinaryTexture(texture);
       const ready = resource.uploaded ? resource : undefined;
       candidates[descriptor.feature] = ready === undefined ? "unavailable" : "ready";
@@ -659,6 +677,7 @@ export class SurfaceExecutionArena {
     }
     const readinessInput = this.#textureReadinessInput;
     readinessInput.baseColor = baseColor;
+    readinessInput.candidates = candidates;
     const pure = resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
     this.#recordTextureBindingOmissions(pure);
     let selectedBaseColor: SurfaceBaseColorTextureBinding = NO_BASE_COLOR_TEXTURE_BINDING;
@@ -684,6 +703,14 @@ export class SurfaceExecutionArena {
     }
     this.#texturePlan.baseColor = selectedBaseColor;
     return this.#texturePlan;
+  }
+
+  #materialTextureCatalog(material: SurfaceMaterial): SurfaceMaterialTextureCatalog {
+    let catalog = this.#materialTextureCatalogs.get(material);
+    if (catalog !== undefined) return catalog;
+    catalog = createSurfaceMaterialTextureCatalog(material);
+    this.#materialTextureCatalogs.set(material, catalog);
+    return catalog;
   }
 
   #bindMaterialFactors(
