@@ -93,7 +93,14 @@ CI runs both the built-entrypoint and packed-consumer gates.
    instancing, SVG generated VT, camera drag, and real immersive WebXR. The XR
    report gate requires successful activation and physical session frames rather
    than accepting window RAFs; Quest XR currently measures `47.5ms` p95 and logs
-   one framebuffer-multisample `GL_INVALID_OPERATION` warning during setup.
+   one framebuffer-attachment `GL_INVALID_OPERATION` warning during setup. A
+   July 15 physical A/B with XR-layer antialiasing disabled, then with both the
+   WebGL context and XR layer disabled, retained one warning: the command changed
+   from `glFramebufferTexture2DMultisample` to `glFramebufferTexture2D` only when
+   the browser changed its XR-layer attachment path. Royal does not call the
+   multisample entry point, sessions activated normally, and all sampled XR
+   frames rendered, so this remains browser/Adreno evidence rather than a Royal
+   fallback or failure condition.
    The July 15 Quest follow-up covers context restoration, camera pan,
    native-DPR CSS resize, and generated-VT/ordinary SVG raster parity through
    the shared browser smoke harness. A July 15 physical iPad pass now covers an
