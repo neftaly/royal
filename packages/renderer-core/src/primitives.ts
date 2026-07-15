@@ -60,12 +60,17 @@ const normalizedAlpha = (value: number): number => {
 };
 
 /** Converts an artist-authored normalized sRGB tuple to Royal's scene-linear color domain. */
-export const linearRgbaFromSrgb = (color: SrgbRgba): LinearRgba => Object.freeze([
-  linearChannelFromSrgb(color[0]),
-  linearChannelFromSrgb(color[1]),
-  linearChannelFromSrgb(color[2]),
-  normalizedAlpha(color[3]),
-]);
+export const linearRgbaFromSrgb = (color: SrgbRgba): LinearRgba => {
+  if (!Array.isArray(color) || color.length !== 4) {
+    throw new TypeError('sRGB color must be an array of exactly 4 numbers');
+  }
+  return Object.freeze([
+    linearChannelFromSrgb(color[0]),
+    linearChannelFromSrgb(color[1]),
+    linearChannelFromSrgb(color[2]),
+    normalizedAlpha(color[3]),
+  ]);
+};
 
 export interface Transform {
   /** Translation in metres. */

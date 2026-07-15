@@ -71,6 +71,31 @@ describe("camera view resource properties", () => {
     expect(resource.version).toBe(2);
   });
 
+  it("validates replacement cameras before mutating staged state", () => {
+    const initial = perspectiveCamera({
+      position: [1, 2, 3], rotation: [0.1, 0.2, 0.3], fovY: 1, near: 0.1, far: 100,
+    });
+    const resource = createCameraViewResource(initial);
+
+    expect(() => resource.set({
+      ...initial,
+      near: -1,
+      position: [9, 9, 9],
+    })).toThrow(/requires 0 < near < far/);
+    expect([...resource.position]).toEqual([1, 2, 3]);
+    expect(resource.near).toBe(0.1);
+    expect(() => resource.set(orthographicCamera({
+      bottom: -1, left: -1, right: 1, top: 1,
+    }) as unknown as Parameters<typeof resource.set>[0]))
+      .toThrow('perspective camera view set requires a perspectiveCamera descriptor');
+    expect(() => resource.subscribe(null as unknown as (version: number) => void))
+      .toThrow('camera view listener must be a function');
+    expect(() => createCameraViewResource({
+      ...initial,
+      aperture: 2.8,
+    } as unknown as typeof initial)).toThrow(/unsupported option.*aperture/i);
+  });
+
   it("rejects reentrant commits before they can invert subscriber version order", () => {
     const resource = createCameraViewResource(perspectiveCamera({
       position: [0, 0, 5], rotation: [0, 0, 0], fovY: 1, near: 0.1, far: 100,

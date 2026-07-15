@@ -1,4 +1,11 @@
-import type { Camera, OrthographicCamera, PerspectiveCamera } from './camera';
+import {
+  orthographicCamera,
+  perspectiveCamera,
+  type Camera,
+  type OrthographicCamera,
+  type PerspectiveCamera,
+} from './camera';
+import { objectWithAllowedFields } from './descriptor-values';
 import type { Rads } from './primitives';
 
 export interface CameraViewReadTarget {
@@ -59,6 +66,25 @@ export type CameraSource = Camera | CameraViewResource;
 
 type ListenerSlot = { active: boolean; readonly listener: CameraViewResourceListener };
 
+const PERSPECTIVE_CAMERA_FIELDS = ['far', 'fovY', 'kind', 'near', 'position', 'rotation'] as const;
+const ORTHOGRAPHIC_CAMERA_FIELDS = [
+  'bottom', 'far', 'kind', 'left', 'near', 'position', 'right', 'rotation', 'top',
+] as const;
+
+const normalizedCamera = (camera: Camera): Camera => {
+  if (camera?.kind === 'perspective-camera') {
+    objectWithAllowedFields(camera, PERSPECTIVE_CAMERA_FIELDS, 'camera view perspective camera');
+    const { kind: _kind, ...options } = camera;
+    return perspectiveCamera(options);
+  }
+  if (camera?.kind === 'orthographic-camera') {
+    objectWithAllowedFields(camera, ORTHOGRAPHIC_CAMERA_FIELDS, 'camera view orthographic camera');
+    const { kind: _kind, ...options } = camera;
+    return orthographicCamera(options);
+  }
+  throw new TypeError('camera view source must be a perspectiveCamera or orthographicCamera descriptor');
+};
+
 const finite = (value: number, label: string): void => {
   if (!Number.isFinite(value)) throw new Error(`camera view ${label} must be finite; received ${String(value)}`);
 };
@@ -104,6 +130,9 @@ const listenerList = () => {
       if (firstError !== undefined) throw firstError;
     },
     subscribe: (listener: CameraViewResourceListener): (() => void) => {
+      if (typeof listener !== 'function') {
+        throw new TypeError('camera view listener must be a function');
+      }
       if (tombstones > 16 && tombstones * 2 > slots.length) {
         let write = 0;
         for (const slot of slots) {
@@ -128,6 +157,7 @@ const listenerList = () => {
 export function createCameraViewResource(camera: PerspectiveCamera): PerspectiveCameraViewResource;
 export function createCameraViewResource(camera: OrthographicCamera): OrthographicCameraViewResource;
 export function createCameraViewResource(camera: Camera): CameraViewResource {
+  camera = normalizedCamera(camera);
   const position = new Float64Array(camera.position);
   const rotation = new Float64Array(camera.rotation);
   const committedPosition = new Float64Array(position);
@@ -184,11 +214,15 @@ export function createCameraViewResource(camera: Camera): CameraViewResource {
         out.far = committedFar;
       },
       set: (next) => {
-        copy3(position, next.position);
-        copy3(rotation, next.rotation);
-        fovY = next.fovY;
-        near = next.near;
-        far = next.far;
+        const normalized = normalizedCamera(next);
+        if (normalized.kind !== 'perspective-camera') {
+          throw new TypeError('perspective camera view set requires a perspectiveCamera descriptor');
+        }
+        copy3(position, normalized.position);
+        copy3(rotation, normalized.rotation);
+        fovY = normalized.fovY;
+        near = normalized.near;
+        far = normalized.far;
         commit();
       },
       subscribe: listeners.subscribe,
@@ -244,8 +278,14 @@ export function createCameraViewResource(camera: Camera): CameraViewResource {
       out.near = committedNear; out.far = committedFar;
     },
     set: (next) => {
-      copy3(position, next.position); copy3(rotation, next.rotation);
-      left = next.left; right = next.right; bottom = next.bottom; top = next.top; near = next.near; far = next.far;
+      const normalized = normalizedCamera(next);
+      if (normalized.kind !== 'orthographic-camera') {
+        throw new TypeError('orthographic camera view set requires an orthographicCamera descriptor');
+      }
+      copy3(position, normalized.position); copy3(rotation, normalized.rotation);
+      left = normalized.left; right = normalized.right;
+      bottom = normalized.bottom; top = normalized.top;
+      near = normalized.near; far = normalized.far;
       commit();
     },
     subscribe: listeners.subscribe,

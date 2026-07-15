@@ -104,6 +104,9 @@ describe("renderer-core public API", () => {
     expect(color[2]).toBe(1);
     expect(color[3]).toBe(0.75);
     expect(Object.isFrozen(color)).toBe(true);
+    expect(() => linearRgbaFromSrgb(
+      [0.5, 0.25, 1] as unknown as import("@royal/renderer-core").SrgbRgba,
+    )).toThrow('sRGB color must be an array of exactly 4 numbers');
   });
 
   it("builds plain render descriptors without backend state", () => {
