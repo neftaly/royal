@@ -18,6 +18,8 @@ import {
   automaticRasterVirtualTextureSource,
   automaticVirtualTextureSource,
   type AutomaticVirtualTextureSource,
+} from "./automatic-virtual-texture-source";
+import {
   type VirtualTexturePagePayload,
   type VirtualTexturePageLoad,
   type VirtualTexturePageSource,

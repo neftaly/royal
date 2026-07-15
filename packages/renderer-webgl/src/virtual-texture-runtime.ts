@@ -1,28 +1,13 @@
-import type { TextureColorSpace, TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
-import {
-  isDecodedCompressedTexture,
-  isDecodedRgbaTexture,
-  type LoadedTextureSource,
-} from "./texture-sources";
+import type { TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
 import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
-import { throwIfAborted } from "./resource-io";
 import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-provider";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
-  generatedVirtualTextureManifest,
   type VirtualTextureManifestModel,
   type VirtualTextureManifestParseResult,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
-import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
-import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-rasterizer";
-
-const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
-const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
-const GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX = "royal-generated-vt:";
-
-export const GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE + 1;
 export const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
 export const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
 export const VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW = 32;
@@ -31,16 +16,6 @@ export const VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS = 50;
 
 export type ViewportSize = readonly [width: number, height: number];
 export type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
-
-export type RasterVirtualTextureSource = {
-  canvasSource?: CanvasImageSource;
-  readonly colorSpace?: TextureColorSpace;
-  readonly decodedBytes: number;
-  readonly height: number;
-  readonly label: string;
-  readonly source: LoadedTextureSource;
-  readonly width: number;
-};
 
 export type VirtualTexturePagePayload =
   | {
@@ -81,17 +56,6 @@ type DeferredVirtualTexturePageSource = {
 export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | DeferredVirtualTexturePageSource) & {
   readonly loadPage: VirtualTexturePageLoader;
   readonly manifestUri: string;
-};
-
-export type AutomaticVirtualTextureSource = VirtualTexturePageSource & {
-  readonly manifest: VirtualTextureManifestParseResult & { readonly manifest: VirtualTextureManifestModel };
-  readonly retainedSourceBytes: number;
-};
-
-export type AutomaticVirtualTextureSourceDefinition = {
-  readonly loadPage: VirtualTexturePageLoader;
-  readonly manifest: VirtualTextureManifestModel;
-  readonly retainedSourceBytes: number;
 };
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
@@ -200,85 +164,4 @@ export const virtualTextureDemandPageDistance = (
   const pageCenterX = page.x + 0.5;
   const pageCenterY = page.y + 0.5;
   return (pageCenterX - centerX) ** 2 + (pageCenterY - centerY) ** 2;
-};
-
-const generatedVirtualTextureManifestUri = (key: string): string =>
-  `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
-
-export const automaticVirtualTextureSource = (
-  textureKey: string,
-  definition: AutomaticVirtualTextureSourceDefinition,
-): AutomaticVirtualTextureSource => ({
-  loadPage: definition.loadPage,
-  manifest: { diagnostics: [], manifest: definition.manifest },
-  manifestUri: generatedVirtualTextureManifestUri(textureKey),
-  retainedSourceBytes: definition.retainedSourceBytes,
-});
-
-export const automaticRasterVirtualTextureSource = (
-  textureKey: string,
-  source: RasterVirtualTextureSource,
-): AutomaticVirtualTextureSource => automaticVirtualTextureSource(textureKey, {
-  loadPage: (activeManifest, page, signal) => {
-    throwIfAborted(signal);
-    return {
-      kind: "page",
-      promise: Promise.resolve({
-        image: generatedRasterVirtualTexturePageImage(source, activeManifest, page),
-        kind: "image",
-      }),
-    };
-  },
-  manifest: generatedRasterVirtualTextureManifest(source),
-  retainedSourceBytes: source.decodedBytes,
-});
-
-export const generatedRasterVirtualTextureManifest = (
-  source: RasterVirtualTextureSource,
-): VirtualTextureManifestModel => generatedVirtualTextureManifest({
-    ...(source.colorSpace === undefined ? {} : { colorSpace: source.colorSpace }),
-    height: source.height,
-    pageSize: GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE,
-    physicalSlotCap: GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    width: source.width,
-  });
-
-const rasterVirtualTextureCanvasSource = (
-  source: RasterVirtualTextureSource,
-): CanvasImageSource => {
-  if (source.canvasSource !== undefined) return source.canvasSource;
-  if (isDecodedCompressedTexture(source.source)) {
-    throw new Error(`Compressed source ${source.label} cannot be cropped through Canvas 2D`);
-  }
-  if (!isDecodedRgbaTexture(source.source)) {
-    source.canvasSource = source.source;
-    return source.canvasSource;
-  }
-
-  const canvas = createVirtualTextureCanvas(source.width, source.height, source.label);
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  if (typeof globalThis.ImageData !== "function") {
-    throw new Error(`ImageData is unavailable for ${source.label}`);
-  }
-  const imageData = new globalThis.ImageData(
-    new Uint8ClampedArray(source.source.data),
-    source.source.width,
-    source.source.height,
-  );
-  context.putImageData(imageData, 0, 0);
-  source.canvasSource = canvas;
-  return source.canvasSource;
-};
-
-export const generatedRasterVirtualTexturePageImage = (
-  source: RasterVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): TexImageSource => {
-  return rasterizeGeneratedVirtualTexturePage({
-    height: source.height,
-    image: rasterVirtualTextureCanvasSource(source),
-    label: source.label,
-    width: source.width,
-  }, manifest, page);
 };

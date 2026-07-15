@@ -1,4 +1,4 @@
-import type { LinearRgba, TextureContentKey, TextureSampler, Vec3 } from "@royal/renderer-core";
+import type { LinearRgba, TextureContentKey, TextureSampler } from "@royal/renderer-core";
 import {
   identityMat4,
   multiplyMat4,
@@ -7,7 +7,7 @@ import {
   type Mat4,
 } from "../math/mat4";
 import { worldBounds } from "../math/picking";
-import { normalizeLodThresholds, type LodLevelMembership, type LodSet } from "../lod";
+import { normalizeLodThresholds, type LodLevelMembership } from "../lod";
 import { resolveResourceUri } from "../resource-io";
 import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./accessors";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
@@ -17,7 +17,6 @@ import type {
   GltfContentExtras,
   GltfDocument,
   GltfImage,
-  GltfMaterial,
   GltfMeshPrimitive,
   GltfPunctualLight,
   GltfSampler,
@@ -33,99 +32,18 @@ import {
 } from "./transforms";
 import type {
   GltfGeometryDrawMode,
-  LoadedGltfMaterial,
-  LoadedGltfMaterialExtensionTextures,
   LoadedGltfMaterialTextureSlot,
-  LoadedGltfMaterialVariant,
   LoadedGltfPrimitive,
   LoadedGltfPrimitiveMaterial,
 } from "./prepared-asset";
 import {
-  DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
-  type SurfaceMaterialAlphaMode,
-  type SurfaceMaterialExtensionFactors,
-} from "../webgl/materials";
+  readGltfMaterial,
+  readGltfMaterialLod,
+  readGltfMaterialVariants,
+  type GltfMaterialReader,
+} from "./material-reader";
+import { finiteNumber, positiveFiniteNumber } from "./numbers";
 import type { SurfaceImageBasedLight, SurfaceLight } from "../webgl/lights";
-
-export type GltfMaterialExtensionTextureDefinition = {
-  readonly colorSpace: "linear" | "srgb";
-  readonly key: keyof LoadedGltfMaterialExtensionTextures;
-  readonly textureInfo: (material: GltfMaterial | undefined) => GltfTextureInfo | undefined;
-};
-
-/** Shared declarative metadata used by scene preparation and material binding. */
-export const GLTF_MATERIAL_EXTENSION_TEXTURES = [
-  {
-    colorSpace: "linear",
-    key: "anisotropyTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_anisotropy?.anisotropyTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "clearcoatNormalTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "clearcoatRoughnessTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatRoughnessTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "clearcoatTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatTexture,
-  },
-  {
-    colorSpace: "srgb",
-    key: "diffuseTransmissionColorTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "diffuseTransmissionTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "iridescenceTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_iridescence?.iridescenceTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "iridescenceThicknessTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_iridescence?.iridescenceThicknessTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "materialTransmissionTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_transmission?.transmissionTexture,
-  },
-  {
-    colorSpace: "srgb",
-    key: "sheenColorTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_sheen?.sheenColorTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "sheenRoughnessTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_sheen?.sheenRoughnessTexture,
-  },
-  {
-    colorSpace: "srgb",
-    key: "specularColorTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_specular?.specularColorTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "specularTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_specular?.specularTexture,
-  },
-  {
-    colorSpace: "linear",
-    key: "thicknessTexture",
-    textureInfo: (material) => material?.extensions?.KHR_materials_volume?.thicknessTexture,
-  },
-] as const satisfies readonly GltfMaterialExtensionTextureDefinition[];
 
 export type GltfSceneReaderDiagnosticSink = {
   readonly recordDiagnostic: (message: string, dedupeKey?: string) => void;
@@ -148,30 +66,12 @@ export type ReadGltfSceneInput = {
   readonly document: GltfDocument;
   readonly dracoPrimitives: ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive>;
   readonly src: string;
-  /** Browser capability resolved by the preparation shell. */
-  readonly webpSupported: boolean;
 };
 
 type GltfTextureImageSelection = {
   readonly imageIndex: number;
   readonly kind: GltfImageKind;
 };
-
-const finiteNumber = (value: number | undefined, fallback: number): number =>
-  typeof value === "number" && Number.isFinite(value) ? value : fallback;
-
-const positiveFiniteNumber = (value: number | undefined): number | undefined =>
-  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
-
-const clampedFiniteNumber = (
-  value: number | undefined,
-  fallback: number,
-  min: number,
-  max: number,
-): number => Math.min(max, Math.max(min, finiteNumber(value, fallback)));
-
-const nonNegativeFiniteNumber = (value: number | undefined, fallback: number): number =>
-  Math.max(0, finiteNumber(value, fallback));
 
 const gltfSamplerMagFilter = (value: number | undefined): NonNullable<TextureSampler["magFilter"]> => {
   switch (value) {
@@ -262,14 +162,11 @@ const gltfImageIsSvg = (image: GltfImage | undefined): boolean => {
 const gltfTextureImageSelection = (
   document: GltfDocument,
   texture: GltfTexture | undefined,
-  webpSupported: boolean,
 ): GltfTextureImageSelection | undefined => {
   const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
   if (basisuSource !== undefined) return { imageIndex: basisuSource, kind: "basisu" };
   const webpSource = texture?.extensions?.EXT_texture_webp?.source;
-  const imageIndex = webpSource !== undefined && webpSupported
-    ? webpSource
-    : texture?.source;
+  const imageIndex = webpSource ?? texture?.source;
   return imageIndex === undefined
     ? undefined
     : { imageIndex, kind: gltfImageIsSvg(document.images?.[imageIndex]) ? "svg" : "image" };
@@ -280,12 +177,11 @@ const gltfMaterialTextureSlot = (
   assetKey: string,
   src: string,
   textureInfo: GltfTextureInfo | undefined,
-  webpSupported: boolean,
 ): LoadedGltfMaterialTextureSlot | undefined => {
   if (textureInfo === undefined) return undefined;
   const textureIndex = textureInfo.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-  const imageSelection = gltfTextureImageSelection(document, texture, webpSupported);
+  const imageSelection = gltfTextureImageSelection(document, texture);
   const imageIndex = imageSelection?.imageIndex;
   const imageKind = imageSelection?.kind ?? "image";
   const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
@@ -310,117 +206,6 @@ const gltfMaterialTextureSlot = (
   };
 };
 
-const gltfMaterialExtensionTextureSlots = (
-  document: GltfDocument,
-  assetKey: string,
-  src: string,
-  material: GltfMaterial | undefined,
-  webpSupported: boolean,
-): LoadedGltfMaterialExtensionTextures | undefined => {
-  const slots: Partial<Record<keyof LoadedGltfMaterialExtensionTextures, LoadedGltfMaterialTextureSlot>> = {};
-  for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-    const slot = gltfMaterialTextureSlot(document, assetKey, src, texture.textureInfo(material), webpSupported);
-    if (slot !== undefined) slots[texture.key] = slot;
-  }
-  return Object.keys(slots).length === 0 ? undefined : slots;
-};
-
-const gltfColor = (values: readonly number[] | undefined): LinearRgba | undefined => {
-  if (values === undefined || values.length < 3) return undefined;
-  return [values[0] ?? 1, values[1] ?? 1, values[2] ?? 1, values[3] ?? 1];
-};
-
-const gltfMaterialAlphaMode = (mode: unknown): SurfaceMaterialAlphaMode => {
-  switch (mode) {
-    case "MASK": return "MASK";
-    case "BLEND": return "BLEND";
-    default: return "OPAQUE";
-  }
-};
-
-const gltfIor = (value: number | undefined): number => {
-  if (value === 0) return 0;
-  return typeof value === "number" && Number.isFinite(value) && value >= 1
-    ? value
-    : DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.ior;
-};
-
-const gltfIridescenceIor = (value: number | undefined): number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 1
-    ? value
-    : DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.iridescenceIor;
-
-const gltfSpecularColorFactor = (values: readonly number[] | undefined): Vec3 => [
-  nonNegativeFiniteNumber(values?.[0], 1),
-  nonNegativeFiniteNumber(values?.[1], 1),
-  nonNegativeFiniteNumber(values?.[2], 1),
-];
-
-const gltfSheenColorFactor = (values: readonly number[] | undefined): Vec3 => [
-  clampedFiniteNumber(values?.[0], 0, 0, 1),
-  clampedFiniteNumber(values?.[1], 0, 0, 1),
-  clampedFiniteNumber(values?.[2], 0, 0, 1),
-];
-
-const gltfDiffuseTransmissionColorFactor = (values: readonly number[] | undefined): Vec3 => [
-  clampedFiniteNumber(values?.[0], 1, 0, 1),
-  clampedFiniteNumber(values?.[1], 1, 0, 1),
-  clampedFiniteNumber(values?.[2], 1, 0, 1),
-];
-
-const readGltfMaterialExtensionFactors = (
-  material: GltfMaterial | undefined,
-): SurfaceMaterialExtensionFactors | undefined => {
-  const extensions = material?.extensions;
-  const anisotropy = extensions?.KHR_materials_anisotropy;
-  const specular = extensions?.KHR_materials_specular;
-  const ior = extensions?.KHR_materials_ior;
-  const sheen = extensions?.KHR_materials_sheen;
-  const iridescence = extensions?.KHR_materials_iridescence;
-  const clearcoat = extensions?.KHR_materials_clearcoat;
-  const dispersion = extensions?.KHR_materials_dispersion;
-  const diffuseTransmission = extensions?.KHR_materials_diffuse_transmission;
-  const transmission = extensions?.KHR_materials_transmission;
-  const volume = extensions?.KHR_materials_volume;
-  if (anisotropy === undefined && specular === undefined && ior === undefined && sheen === undefined
-    && iridescence === undefined && clearcoat === undefined && dispersion === undefined
-    && diffuseTransmission === undefined && transmission === undefined && volume === undefined) return undefined;
-  return {
-    anisotropyRotation: finiteNumber(anisotropy?.anisotropyRotation, 0),
-    anisotropyStrength: clampedFiniteNumber(anisotropy?.anisotropyStrength, 0, 0, 1),
-    attenuationColor: [
-      nonNegativeFiniteNumber(volume?.attenuationColor?.[0], 1),
-      nonNegativeFiniteNumber(volume?.attenuationColor?.[1], 1),
-      nonNegativeFiniteNumber(volume?.attenuationColor?.[2], 1),
-    ],
-    attenuationDistance: positiveFiniteNumber(volume?.attenuationDistance)
-      ?? DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.attenuationDistance,
-    clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
-    clearcoatNormalScale: finiteNumber(clearcoat?.clearcoatNormalTexture?.scale, 1),
-    clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
-    diffuseTransmissionColorFactor: gltfDiffuseTransmissionColorFactor(diffuseTransmission?.diffuseTransmissionColorFactor),
-    diffuseTransmissionFactor: clampedFiniteNumber(diffuseTransmission?.diffuseTransmissionFactor, 0, 0, 1),
-    dispersionFactor: nonNegativeFiniteNumber(dispersion?.dispersion, 0),
-    ior: gltfIor(ior?.ior),
-    iridescenceFactor: clampedFiniteNumber(iridescence?.iridescenceFactor, 0, 0, 1),
-    iridescenceIor: gltfIridescenceIor(iridescence?.iridescenceIor),
-    iridescenceThicknessMaximum: nonNegativeFiniteNumber(
-      iridescence?.iridescenceThicknessMaximum,
-      DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.iridescenceThicknessMaximum,
-    ),
-    iridescenceThicknessMinimum: nonNegativeFiniteNumber(
-      iridescence?.iridescenceThicknessMinimum,
-      DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.iridescenceThicknessMinimum,
-    ),
-    sheenColorFactor: gltfSheenColorFactor(sheen?.sheenColorFactor),
-    sheenRoughnessFactor: clampedFiniteNumber(sheen?.sheenRoughnessFactor, 0, 0, 1),
-    specularColorFactor: gltfSpecularColorFactor(specular?.specularColorFactor),
-    specularFactor: clampedFiniteNumber(specular?.specularFactor, 1, 0, 1),
-    thicknessFactor: nonNegativeFiniteNumber(volume?.thicknessFactor, 0),
-    transmissionFactor: clampedFiniteNumber(transmission?.transmissionFactor, 0, 0, 1),
-  };
-};
-
 const gltfLightColor = (light: GltfPunctualLight): LinearRgba => {
   const intensity = Math.max(0, finiteNumber(light.intensity, 1));
   return [
@@ -435,18 +220,6 @@ const gltfSpotConeAngles = (light: GltfPunctualLight): { readonly innerConeAngle
   const outerConeAngle = Math.min(Math.PI / 2, Math.max(0.0001, finiteNumber(light.spot?.outerConeAngle, Math.PI / 4)));
   const innerConeAngle = Math.min(outerConeAngle - 0.0001, Math.max(0, finiteNumber(light.spot?.innerConeAngle, 0)));
   return { innerConeAngle, outerConeAngle };
-};
-
-const gltfEmissiveColor = (material: GltfMaterial | undefined): LinearRgba | undefined => {
-  const factor = material?.emissiveFactor;
-  const strength = Math.max(0, finiteNumber(material?.extensions?.KHR_materials_emissive_strength?.emissiveStrength, 1));
-  const emissive: LinearRgba = [
-    (factor?.[0] ?? 0) * strength,
-    (factor?.[1] ?? 0) * strength,
-    (factor?.[2] ?? 0) * strength,
-    1,
-  ];
-  return emissive[0] === 0 && emissive[1] === 0 && emissive[2] === 0 ? undefined : emissive;
 };
 
 const gltfPrimitiveMode = (mode: number | undefined): GltfGeometryDrawMode | undefined => {
@@ -506,84 +279,6 @@ const mat4OrientationDeterminant = (matrix: Mat4): number =>
   - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
   + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
 
-const readGltfMaterial = (
-  document: GltfDocument,
-  src: string,
-  assetKey: string,
-  materialIndex: number | undefined,
-  webpSupported: boolean,
-): LoadedGltfMaterial => {
-  const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
-  const baseColorTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.baseColorTexture, webpSupported);
-  const metallicRoughnessTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.metallicRoughnessTexture, webpSupported);
-  const normalTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.normalTexture, webpSupported);
-  const emissiveTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.emissiveTexture, webpSupported);
-  const occlusionTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.occlusionTexture, webpSupported);
-  const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
-  const emissive = gltfEmissiveColor(material);
-  const extensionFactors = readGltfMaterialExtensionFactors(material);
-  const extensionTextures = gltfMaterialExtensionTextureSlots(document, assetKey, src, material, webpSupported);
-  const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
-  return {
-    alphaMode,
-    ...(alphaMode === "MASK" ? { alphaCutoff: finiteNumber(material?.alphaCutoff, 0.5) } : {}),
-    ...(baseColorTexture === undefined ? {} : { baseColorTexture }),
-    ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
-    ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
-    ...(normalTexture === undefined ? {} : { normalTexture }),
-    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
-    ...(color === undefined ? {} : { color }),
-    ...(emissive === undefined ? {} : { emissive }),
-    ...(extensionFactors === undefined ? {} : { extensionFactors }),
-    ...(extensionTextures === undefined ? {} : { extensionTextures }),
-    doubleSided: material?.doubleSided === true,
-    metallicFactor: clampedFiniteNumber(material?.pbrMetallicRoughness?.metallicFactor, 1, 0, 1),
-    normalScale: material?.normalTexture?.scale ?? 1,
-    occlusionStrength: clampedFiniteNumber(material?.occlusionTexture?.strength, 1, 0, 1),
-    roughnessFactor: clampedFiniteNumber(material?.pbrMetallicRoughness?.roughnessFactor, 1, 0, 1),
-    ...(materialIndex === undefined ? {} : { sourceMaterialIndex: materialIndex }),
-    ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
-  };
-};
-
-const readGltfMaterialLod = (
-  document: GltfDocument,
-  src: string,
-  assetKey: string,
-  materialIndex: number | undefined,
-  webpSupported: boolean,
-): LodSet<LoadedGltfMaterial> | undefined => {
-  const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
-  const lodIds = material?.extensions?.MSFT_lod?.ids ?? [];
-  if (materialIndex === undefined || lodIds.length === 0) return undefined;
-  const levels = [
-    readGltfMaterial(document, src, assetKey, materialIndex, webpSupported),
-    ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id, webpSupported)),
-  ];
-  return { levels, thresholds: normalizeLodThresholds(material?.extras?.MSFT_screencoverage, levels.length) };
-};
-
-const readGltfMaterialVariants = (
-  document: GltfDocument,
-  src: string,
-  assetKey: string,
-  primitive: GltfMeshPrimitive,
-  variantCount: number,
-  webpSupported: boolean,
-): readonly LoadedGltfMaterialVariant[] =>
-  (primitive.extensions?.KHR_materials_variants?.mappings ?? [])
-    .map((mapping): LoadedGltfMaterialVariant | undefined => {
-      const materialIndex = mapping.material;
-      const variants = (mapping.variants ?? [])
-        .filter((variant) => Number.isInteger(variant) && variant >= 0 && variant < variantCount);
-      if (materialIndex === undefined || !Number.isInteger(materialIndex) || materialIndex < 0
-        || document.materials?.[materialIndex] === undefined || variants.length === 0) return undefined;
-      const material = readGltfMaterial(document, src, assetKey, materialIndex, webpSupported);
-      const materialLod = readGltfMaterialLod(document, src, assetKey, materialIndex, webpSupported);
-      return { material, ...(materialLod === undefined ? {} : { materialLod }), variants };
-    })
-    .filter((mapping): mapping is LoadedGltfMaterialVariant => mapping !== undefined);
-
 const gltfNodeInstanceTransforms = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
@@ -642,6 +337,7 @@ const gltfNodeInstanceTransforms = (
 
 type TraversalContext = ReadGltfSceneInput & {
   readonly lights: SurfaceLight[];
+  readonly materialReader: GltfMaterialReader;
   readonly primitives: LoadedGltfPrimitive[];
   readonly referencedLodNodes: ReadonlySet<number>;
   readonly variantCount: number;
@@ -756,15 +452,12 @@ const appendNodeTreePrimitives = (
     const indices = dracoPrimitive?.indices
       ?? (primitive.indices === undefined ? undefined : readGltfIndices(context.document, context.buffers, primitive.indices));
     const normals = baseNormals;
-    const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material, context.webpSupported);
-    const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material, context.webpSupported);
+    const material = readGltfMaterial(context.materialReader, primitive.material);
+    const materialLod = readGltfMaterialLod(context.materialReader, primitive.material);
     const materialVariants = readGltfMaterialVariants(
-      context.document,
-      context.src,
-      context.assetKey,
+      context.materialReader,
       primitive,
       context.variantCount,
-      context.webpSupported,
     );
     const baseMaterial: LoadedGltfPrimitiveMaterial = {
       material,
@@ -822,6 +515,15 @@ export const readGltfScene = (input: ReadGltfSceneInput): GltfSceneFacts => {
   const context: TraversalContext = {
     ...input,
     lights,
+    materialReader: {
+      document: input.document,
+      textureSlot: (textureInfo) => gltfMaterialTextureSlot(
+        input.document,
+        input.assetKey,
+        input.src,
+        textureInfo,
+      ),
+    },
     primitives,
     referencedLodNodes,
     variantCount: variants.length,

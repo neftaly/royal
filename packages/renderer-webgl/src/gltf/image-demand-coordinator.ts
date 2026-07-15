@@ -3,6 +3,7 @@ import type {
   TextureContentKey,
   TextureSampler,
 } from "@royal/renderer-core";
+import { monotonicNowMs, type MonotonicClock } from "../clock";
 import type { LoadedTextureSource } from "../texture-sources";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import type {
@@ -18,7 +19,7 @@ import type {
   LoadedGltfMaterial,
   LoadedGltfMaterialTextureSlot,
 } from "./prepared-asset";
-import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./scene-reader";
+import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./material-texture-definitions";
 import {
   gltfImageSourceRecipeBytes,
   loadGltfImageSourceRecipe,
@@ -119,7 +120,6 @@ type Asset = {
 };
 
 const GLTF_IMAGE_LANE_CONCURRENCY = 1;
-const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
 
 const imageDemandKeys = (
   materials: readonly LoadedGltfMaterial[],
@@ -153,6 +153,7 @@ export class GltfImageDemandCoordinator {
   readonly #diagnostic: (message: string, key: string) => void;
   readonly #iblScheduler: GltfPreparationScheduler;
   readonly #invalidate: () => void;
+  readonly #now: MonotonicClock;
   readonly #ordinaryScheduler: GltfPreparationScheduler;
   readonly #pendingOutcomes: Row[] = [];
   readonly #recipeCleanupDebt = new Set<RecipeOwnership>();
@@ -167,12 +168,14 @@ export class GltfImageDemandCoordinator {
     readonly closeSource: (source: LoadedTextureSource) => void;
     readonly diagnostic: (message: string, key: string) => void;
     readonly invalidate: () => void;
+    readonly now?: MonotonicClock;
     readonly retainSource: (source: LoadedTextureSource) => SourceLease;
   }) {
     this.#closeSource = options.closeSource;
     this.#diagnostic = options.diagnostic;
     this.#iblScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
     this.#invalidate = options.invalidate;
+    this.#now = options.now ?? monotonicNowMs;
     this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
     this.#retainSource = options.retainSource;
   }
@@ -277,7 +280,7 @@ export class GltfImageDemandCoordinator {
     if (asset === undefined) return;
     for (const row of asset.rows.values()) this.#demand(row);
     if (asset.rows.size === 0) {
-      asset.load.imagesSettledAt = nowMs();
+      asset.load.imagesSettledAt = this.#now();
       asset.recipeOwnership.releaseRequested = true;
       this.#releaseRecipesIfUnused(asset.recipeOwnership);
     }
@@ -515,7 +518,7 @@ export class GltfImageDemandCoordinator {
     const ownership = asset.recipeOwnership;
     row.status = "queued";
     ownership.activeRecipes.add(recipe);
-    asset.load.imageLoadStartedAt ??= nowMs();
+    asset.load.imageLoadStartedAt ??= this.#now();
     asset.load.imageRequests += 1;
     const scheduler = row.iblSpecular === undefined ? this.#ordinaryScheduler : this.#iblScheduler;
     void scheduler.run(asset.controller.signal, () => {
@@ -575,9 +578,9 @@ export class GltfImageDemandCoordinator {
   #recordSettled(asset: Asset, failed: boolean): void {
     if (failed) asset.load.imageFailures += 1;
     else asset.load.imageLoaded += 1;
-    asset.load.firstImageSettledAt ??= nowMs();
+    asset.load.firstImageSettledAt ??= this.#now();
     if (asset.load.imageLoaded + asset.load.imageFailures >= asset.load.imageRequests) {
-      asset.load.imagesSettledAt = nowMs();
+      asset.load.imagesSettledAt = this.#now();
     }
   }
 

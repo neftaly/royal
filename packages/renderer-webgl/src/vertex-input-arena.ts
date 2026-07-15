@@ -8,6 +8,15 @@ import {
   sameGeometryBytes,
 } from "./webgl/geometry-identity";
 import { VERTEX_ATTRIBUTE } from "./webgl/vertex-attribute-abi";
+import {
+  growVertexInputInstanceArrays,
+  vertexInputInstanceBufferLayout,
+  vertexInputInstanceLaneStride,
+  vertexInputInstanceLaneUploadBytes,
+  type VertexInputInstanceLane,
+} from "./vertex-input-instance-plan";
+
+export type { VertexInputInstanceLane } from "./vertex-input-instance-plan";
 
 export interface VertexInputSemanticRow {
   readonly geometryId: number;
@@ -54,8 +63,6 @@ declare const vertexInputInstanceAuthority: unique symbol;
 export interface VertexInputInstanceAllocation {
   readonly [vertexInputInstanceAuthority]: "VertexInputInstanceAllocation";
 }
-
-export type VertexInputInstanceLane = "localModels" | "rootPoses" | "rootScales";
 
 export interface VertexInputInstanceStaging {
   /** True when preparation requires callers to repopulate every active lane element. */
@@ -399,50 +406,8 @@ const staticGeometryByteLength = (recipe: CpuGeometry): number =>
   + (recipe.texCoords1?.byteLength ?? 0)
   + (recipe.indices?.byteLength ?? 0);
 
-const MAX_TYPED_ARRAY_ELEMENTS = 0xffff_ffff;
-
-const checkedProduct = (left: number, right: number, label: string): number => {
-  const product = left * right;
-  if (!Number.isSafeInteger(product)) throw new RangeError(`${label} exceeds the safe integer range`);
-  return product;
-};
-
-const checkedInstanceElementLength = (capacity: number, stride: number, label: string): number => {
-  const length = checkedProduct(capacity, stride, label);
-  if (length > MAX_TYPED_ARRAY_ELEMENTS) {
-    throw new RangeError(`${label} exceeds the maximum typed-array element count`);
-  }
-  return length;
-};
-
-type InstanceBufferLayout = {
-  readonly byteLength: number;
-  readonly localModelElements: number;
-  readonly rangeElements: number;
-  readonly rootPoseElements: number;
-  readonly rootScaleElements: number;
-};
-
-const checkedInstanceBufferLayout = (capacity: number): InstanceBufferLayout => {
-  const localModelElements = checkedInstanceElementLength(capacity, 16, "instance local-model staging");
-  const rootPoseElements = checkedInstanceElementLength(capacity, 6, "instance root-pose staging");
-  const rootScaleElements = checkedInstanceElementLength(capacity, 3, "instance root-scale staging");
-  const rangeElements = checkedInstanceElementLength(capacity, 2, "instance range staging");
-  const floatElements = localModelElements + rootPoseElements + rootScaleElements;
-  if (!Number.isSafeInteger(floatElements)) {
-    throw new RangeError("instance buffer element count exceeds the safe integer range");
-  }
-  return {
-    byteLength: checkedProduct(floatElements, Float32Array.BYTES_PER_ELEMENT, "instance buffer byte size"),
-    localModelElements,
-    rangeElements,
-    rootPoseElements,
-    rootScaleElements,
-  };
-};
-
 const instanceBufferByteLength = (capacity: number): number =>
-  checkedInstanceBufferLayout(capacity).byteLength;
+  vertexInputInstanceBufferLayout(capacity).byteLength;
 
 const unbindVertexInput = (gl: WebGL2RenderingContext): void => {
   gl.bindVertexArray(null);
@@ -703,7 +668,7 @@ export const prepareVertexInputInstance = (
   requireContextGeneration(state, contextGeneration);
   const resource = instanceAllocation(state, allocation);
   validSerial(instanceCount, "instance count");
-  const nextLayout = checkedInstanceBufferLayout(instanceCount);
+  const nextLayout = vertexInputInstanceBufferLayout(instanceCount);
   const countChanged = resource.instanceCount !== instanceCount;
   const grew = instanceCount > resource.capacity;
   const buffersMissing = resource.buffers === undefined;
@@ -715,18 +680,9 @@ export const prepareVertexInputInstance = (
       ? 0
       : governedBytes + nextLayout.byteLength;
     const reservation = reserveGpu(state, persistentGpuBytes, 0, transientPeakBytes);
-    let localModels: Float32Array;
-    let rootPoses: Float32Array;
-    let rootScales: Float32Array;
-    let ranges: Int32Array;
+    let arrays: ReturnType<typeof growVertexInputInstanceArrays>;
     try {
-      localModels = new Float32Array(nextLayout.localModelElements);
-      rootPoses = new Float32Array(nextLayout.rootPoseElements);
-      rootScales = new Float32Array(nextLayout.rootScaleElements);
-      ranges = new Int32Array(nextLayout.rangeElements);
-      localModels.set(resource.staging.localModels.subarray(0, resource.instanceCount * 16));
-      rootPoses.set(resource.staging.rootPoses.subarray(0, resource.instanceCount * 6));
-      rootScales.set(resource.staging.rootScales.subarray(0, resource.instanceCount * 3));
+      arrays = growVertexInputInstanceArrays(nextLayout, resource.staging, resource.instanceCount);
     } catch (error) {
       reservation?.cancel();
       throw error;
@@ -751,10 +707,10 @@ export const prepareVertexInputInstance = (
       }
     }
     resource.capacity = instanceCount;
-    resource.staging.localModels = localModels;
-    resource.staging.rootPoses = rootPoses;
-    resource.staging.rootScales = rootScales;
-    resource.staging.ranges = ranges;
+    resource.staging.localModels = arrays.localModels;
+    resource.staging.rootPoses = arrays.rootPoses;
+    resource.staging.rootScales = arrays.rootScales;
+    resource.staging.ranges = arrays.ranges;
   } else if (resource.buffers === undefined) {
     const reservation = reserveGpu(state, instanceBufferByteLength(resource.capacity), 0);
     const created = createOwnedInstanceBuffers(state, gl, resource.capacity, reservation);
@@ -782,9 +738,6 @@ export const uploadVertexInputInstanceLane = (
   requireContextGeneration(state, contextGeneration);
   const resource = instanceAllocation(state, allocation);
   validSerial(rangeCount, "instance upload range count");
-  if (rangeCount * 2 > resource.staging.ranges.length) {
-    throw new Error(`Invalid instance upload range count ${rangeCount}`);
-  }
   let buffer: WebGLBuffer | undefined;
   let data: Float32Array;
   let stride: number;
@@ -793,19 +746,19 @@ export const uploadVertexInputInstanceLane = (
   if (lane === "localModels") {
     buffer = resource.buffers?.localModelBuffer;
     data = resource.staging.localModels;
-    stride = 16;
+    stride = vertexInputInstanceLaneStride(lane);
     forceFull = resource.localModelsDirty;
     stats = resource.localModelsStats;
   } else if (lane === "rootPoses") {
     buffer = resource.buffers?.rootPoseBuffer;
     data = resource.staging.rootPoses;
-    stride = 6;
+    stride = vertexInputInstanceLaneStride(lane);
     forceFull = resource.rootPosesDirty;
     stats = resource.rootPosesStats;
   } else if (lane === "rootScales") {
     buffer = resource.buffers?.rootScaleBuffer;
     data = resource.staging.rootScales;
-    stride = 3;
+    stride = vertexInputInstanceLaneStride(lane);
     forceFull = resource.rootScalesDirty;
     stats = resource.rootScalesStats;
   } else {
@@ -813,30 +766,13 @@ export const uploadVertexInputInstanceLane = (
   }
   if (buffer === undefined) throw new Error("Vertex-input instance must be prepared before upload");
   const actualRangeCount = forceFull ? (resource.instanceCount === 0 ? 0 : 1) : rangeCount;
-  let previousEnd = 0;
-  for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
-    const start = forceFull ? 0 : resource.staging.ranges[rangeIndex * 2]!;
-    const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
-      || start < previousEnd || start < 0 || end <= start || end > resource.instanceCount) {
-      throw new Error(`Invalid ${lane} upload range [${start}, ${end})`);
-    }
-    previousEnd = end;
-  }
-  let bytes = 0;
-  for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
-    const start = forceFull ? 0 : resource.staging.ranges[rangeIndex * 2]!;
-    const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
-    const rangeBytes = checkedProduct(
-      checkedProduct(end - start, stride, `${lane} upload element count`),
-      Float32Array.BYTES_PER_ELEMENT,
-      `${lane} upload byte size`,
-    );
-    if (!Number.isSafeInteger(bytes + rangeBytes)) {
-      throw new RangeError(`${lane} upload byte size exceeds the safe integer range`);
-    }
-    bytes += rangeBytes;
-  }
+  const bytes = vertexInputInstanceLaneUploadBytes(
+    lane,
+    resource.instanceCount,
+    resource.staging.ranges,
+    rangeCount,
+    forceFull,
+  );
   const reservation = reserveGpu(state, 0, bytes);
   let uploadAttempted = false;
   let reservationSettled = false;

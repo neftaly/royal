@@ -133,22 +133,6 @@ export const installStagedGltfLoader = () => {
   };
 };
 
-export const installCanvasImageMimeTypeSupport = (supported: readonly string[]): void => {
-  const supportedTypes = new Set(supported.map((type) => type.toLowerCase()));
-  vi.stubGlobal("document", {
-    createElement: vi.fn((tagName: string) => tagName === "canvas"
-      ? {
-        toDataURL: vi.fn((type?: string) => {
-          const normalizedType = String(type ?? "image/png").toLowerCase();
-          return supportedTypes.has(normalizedType)
-            ? `data:${normalizedType};base64,AA==`
-            : "data:image/png;base64,AA==";
-        }),
-      }
-      : {}),
-  });
-};
-
 export const installCanvas2d = (): {
   readonly contexts: Array<{
     readonly clearRect: ReturnType<typeof vi.fn>;

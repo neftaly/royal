@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   generatedRasterVirtualTextureManifest,
-} from "../packages/renderer-webgl/src/virtual-texture-runtime";
+} from "../packages/renderer-webgl/src/automatic-virtual-texture-source";
 import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,

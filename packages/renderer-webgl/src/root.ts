@@ -13,6 +13,7 @@ import {
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import { loadHtmlImage } from "./browser-image-loader";
+import { monotonicNowMs, type MonotonicClock } from "./clock";
 import { GpuUploadCapacityError } from "./gpu-upload-capacity-error";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
@@ -234,6 +235,7 @@ const getNodeKind = (node: RenderNode): string =>
 type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameViewLane;
 
 class WebGlRootImpl implements InternalWebGlRoot {
+  readonly #now: MonotonicClock = monotonicNowMs;
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
   readonly #options: ResolvedWebGlRootOptions;
@@ -439,6 +441,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         scheduleCapacityWake: () => this.#capacityWakes.scheduleCpuCapacityWake(),
       });
       this.#gltfPreparation = new GltfAssetPreparationOwner({
+        now: this.#now,
         recordDiagnostic: (message, key) => this.#recordDiagnostic(message, key),
         runtime: this.#preparedGltf,
       });
@@ -471,6 +474,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         closeSource: (source) => this.#decodedTextureSources.closeOrdinary(source),
         diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
         invalidate: () => this.invalidate(),
+        now: this.#now,
         retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
       }));
       registerRollback(() => this.#preparedGltf.disposeImages());
@@ -570,6 +574,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         disposed: () => this.#disposed,
         drainResourceSideEffects: () => this.#resourceArenaSideEffects.drain(),
         geometryRecipes: this.#geometryRecipes,
+        now: this.#now,
         packetOccurrence: (plan, occurrenceIndex) => this.#gltfPacketOccurrences.occurrence(plan, occurrenceIndex),
         plan: () => this.#scenePlan.plan,
         recordDiagnostic: (message, key) => this.#recordDiagnostic(message, key),
@@ -660,6 +665,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           "persistentGpuBytes",
         ),
         maximumUploadBytes: this.#resourceGovernorPolicy.limits.uploadBytes,
+        now: this.#now,
         recordUnsupported: (texture, reason) => this.#recordUnsupportedVirtualTexture(texture, reason),
         resourceGovernor: this.#resourceGovernor,
         textureHandles: this.#textureHandles,

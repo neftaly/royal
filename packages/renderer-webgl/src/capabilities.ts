@@ -140,33 +140,6 @@ export type RendererCapabilitySummary = Readonly<Partial<Record<RendererCapabili
 
 type RendererCapabilityRowsInput = RendererCapabilityProbeResult | readonly RendererCapabilityProbeRow[];
 
-export type CanvasImageMimeTypeDocument = {
-  readonly createElement?: (tagName: string) => {
-    readonly toDataURL?: (type?: string, quality?: number) => string;
-  } | null;
-};
-
-export const canvasSupportsImageMimeType = (
-  mimeType: string,
-  {
-    document = globalThis.document as CanvasImageMimeTypeDocument | undefined,
-    quality = 0.75,
-  }: {
-    readonly document?: CanvasImageMimeTypeDocument | undefined;
-    readonly quality?: number;
-  } = {},
-): boolean => {
-  const normalizedMimeType = mimeType.toLowerCase();
-  const canvas = document?.createElement?.("canvas");
-  if (typeof canvas?.toDataURL !== "function") return false;
-
-  try {
-    return canvas.toDataURL(normalizedMimeType, quality).toLowerCase().startsWith(`data:${normalizedMimeType}`);
-  } catch {
-    return false;
-  }
-};
-
 const extensionCapabilities = {
   anisotropy: ["EXT_texture_filter_anisotropic"],
   compressed_texture: [

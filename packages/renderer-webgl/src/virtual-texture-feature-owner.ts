@@ -58,6 +58,7 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
     this.#resourceGovernor = options.resourceGovernor;
     this.#gpu = createVirtualTextureGpuArena(options.gl, options.textureHandles, {
       maxPhysicalBytes: options.maximumPersistentGpuBytes,
+      ...(options.now === undefined ? {} : { now: options.now }),
     });
     this.#runtime = new VirtualTextureRuntimeShell({
       active: options.active,
@@ -71,6 +72,7 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
       invalidate: options.invalidate,
       loadImageSource: (uri, signal) => loadHtmlImage(uri, { signal }),
       maximumDecodedCpuBytes: options.maximumDecodedCpuBytes,
+      ...(options.now === undefined ? {} : { now: options.now }),
       resourceGovernor: options.resourceGovernor,
     });
     this.#admission = new VirtualTextureGpuAdmissionOwner({

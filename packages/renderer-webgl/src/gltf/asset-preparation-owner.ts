@@ -1,5 +1,5 @@
-import { canvasSupportsImageMimeType } from "../capabilities";
 import { throwIfAborted } from "../resource-io";
+import { monotonicNowMs, type MonotonicClock } from "../clock";
 import { loadGltfBuffers, loadGltfDocument } from "./io";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
 import { gltfCodecDemand } from "./codecs/demand";
@@ -53,19 +53,20 @@ const importCodecs = (document: GltfDocument): GltfCodecImports => {
   };
 };
 
-const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
-
 type GltfAssetPreparationOwnerOptions = {
+  readonly now?: MonotonicClock;
   readonly recordDiagnostic: (message: string, key?: string) => void;
   readonly runtime: PreparedGltfRuntime;
 };
 
 /** Owns glTF transport, codec, CPU-admission, scene-read, and recipe phases. */
 export class GltfAssetPreparationOwner {
+  readonly #now: MonotonicClock;
   readonly #options: GltfAssetPreparationOwnerOptions;
 
   constructor(options: GltfAssetPreparationOwnerOptions) {
     this.#options = options;
+    this.#now = options.now ?? monotonicNowMs;
   }
 
   ensure(
@@ -79,7 +80,7 @@ export class GltfAssetPreparationOwner {
       sourceUri,
       sourceVersion,
       preparedGeneration,
-      nowMs(),
+      this.#now(),
     );
   }
 
@@ -108,12 +109,12 @@ export class GltfAssetPreparationOwner {
       imageFailures: 0,
       imageLoaded: 0,
       imageRequests: 0,
-      startedAt: nowMs(),
+      startedAt: this.#now(),
     };
     let cpuAdmission: PreparedGltfCpuAdmission | undefined;
     try {
       const { binaryChunk, document } = await loadGltfDocument(src, signal);
-      load.documentLoadedAt = nowMs();
+      load.documentLoadedAt = this.#now();
       throwIfAborted(signal);
       assertSupportedRequiredGltfExtensions(src, document);
       throwIfAborted(signal);
@@ -122,17 +123,17 @@ export class GltfAssetPreparationOwner {
       throwIfAborted(signal);
       const codecs = importCodecs(document);
       const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk, signal);
-      load.buffersLoadedAt = nowMs();
+      load.buffersLoadedAt = this.#now();
       throwIfAborted(signal);
       const { buffers, document: decodedDocument } = codecs.meshopt === undefined
         ? { buffers: loadedBuffers, document }
         : await (await codecs.meshopt).decodeGltfMeshoptBufferViews(document, loadedBuffers);
-      load.meshoptDecodedAt = nowMs();
+      load.meshoptDecodedAt = this.#now();
       throwIfAborted(signal);
       const dracoPrimitives = codecs.draco === undefined
         ? new Map<GltfMeshPrimitive, DecodedGltfDracoPrimitive>()
         : (await codecs.draco).decodeGltfDracoPrimitives(decodedDocument, buffers);
-      load.dracoDecodedAt = nowMs();
+      load.dracoDecodedAt = this.#now();
       throwIfAborted(signal);
       const scene = readGltfScene({
         assetKey,
@@ -141,12 +142,9 @@ export class GltfAssetPreparationOwner {
         document: decodedDocument,
         dracoPrimitives,
         src,
-        webpSupported: decodedDocument.textures?.some(
-          (texture) => texture.extensions?.EXT_texture_webp?.source !== undefined,
-        ) === true && canvasSupportsImageMimeType("image/webp"),
       });
-      load.sceneReadAt = nowMs();
-      load.readyAt = nowMs();
+      load.sceneReadAt = this.#now();
+      load.readyAt = this.#now();
       const materials = preparedGltfPrimitiveMaterials(scene.primitives);
       const imageRecipes = createGltfImageSourceRecipes(
         assetKey,
@@ -172,7 +170,7 @@ export class GltfAssetPreparationOwner {
       cpuAdmission = undefined;
       return asset;
     } catch (error) {
-      load.readyAt = nowMs();
+      load.readyAt = this.#now();
       if (cpuAdmission !== undefined) this.#options.runtime.discardCpuAdmission(cpuAdmission);
       throw error;
     }

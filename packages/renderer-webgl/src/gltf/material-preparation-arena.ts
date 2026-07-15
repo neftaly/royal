@@ -4,7 +4,7 @@ import type {
   TextureContentKey,
   TextureRef,
 } from "@royal/renderer-core";
-import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./scene-reader";
+import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./material-texture-definitions";
 import type { GltfTextureCoordinates } from "./texture-coordinates";
 import type {
   LoadedGltfMaterial,

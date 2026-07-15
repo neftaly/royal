@@ -21,9 +21,54 @@ import {
   VertexInputGpuUploadCapacityError,
   type VertexInputGpuGovernor,
 } from "../packages/renderer-webgl/src/vertex-input-arena";
+import {
+  vertexInputInstanceBufferLayout,
+  vertexInputInstanceLaneStride,
+  vertexInputInstanceLaneUploadBytes,
+  type VertexInputInstanceLane,
+} from "../packages/renderer-webgl/src/vertex-input-instance-plan";
 import { forEachFuzzCase } from "./fuzz";
 
 type Handle = { readonly kind: "buffer" | "vao"; readonly serial: number };
+
+describe("vertex-input instance planning core", () => {
+  it("matches checked layout and upload costs across generated capacities and lanes", () => {
+    forEachFuzzCase({ cases: 96, seed: 0x1a2e_f00d }, ({ label, random }) => {
+      const instanceCount = random.int(1, 2_048);
+      const lane = random.pick([
+        "localModels",
+        "rootPoses",
+        "rootScales",
+      ] as const satisfies readonly VertexInputInstanceLane[]);
+      const start = random.int(0, instanceCount - 1);
+      const end = random.int(start + 1, instanceCount);
+      const stride = vertexInputInstanceLaneStride(lane);
+      const layout = vertexInputInstanceBufferLayout(instanceCount);
+
+      expect(layout, `${label} layout`).toEqual({
+        byteLength: instanceCount * 25 * Float32Array.BYTES_PER_ELEMENT,
+        localModelElements: instanceCount * 16,
+        rangeElements: instanceCount * 2,
+        rootPoseElements: instanceCount * 6,
+        rootScaleElements: instanceCount * 3,
+      });
+      expect(vertexInputInstanceLaneUploadBytes(
+        lane,
+        instanceCount,
+        new Int32Array([start, end]),
+        1,
+        false,
+      ), `${label} partial`).toBe((end - start) * stride * Float32Array.BYTES_PER_ELEMENT);
+      expect(vertexInputInstanceLaneUploadBytes(
+        lane,
+        instanceCount,
+        new Int32Array(0),
+        0,
+        true,
+      ), `${label} full`).toBe(instanceCount * stride * Float32Array.BYTES_PER_ELEMENT);
+    });
+  });
+});
 
 class FakeGl {
   readonly ARRAY_BUFFER = 0x8892;

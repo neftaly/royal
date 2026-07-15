@@ -1,4 +1,5 @@
 import type { TextureColorSpace } from "@royal/renderer-core";
+import { monotonicNowMs, type MonotonicClock } from "../clock";
 import type { VirtualTexturePagePayload } from "../virtual-texture-runtime";
 import {
   derivedVirtualTextureMipCount,
@@ -250,6 +251,7 @@ type State = {
   readonly handles: TextureHandleArena;
   readonly maxTextureSize: number;
   readonly maxTextureUnits: number;
+  readonly now: MonotonicClock;
   readonly outcomes: VirtualTextureGpuOutcome[];
   quarantinedBytes: number;
   resourceCursor: number;
@@ -261,8 +263,6 @@ type State = {
   wakeRequested: boolean;
 };
 
-const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
-
 const stateOf = (arena: VirtualTextureGpuArena): State => arena as unknown as State;
 const mutableResource = (resource: VirtualTextureGpuResource): MutableResource =>
   resource as unknown as MutableResource;
@@ -270,7 +270,7 @@ const mutableResource = (resource: VirtualTextureGpuResource): MutableResource =
 export const createVirtualTextureGpuArena = (
   gl: WebGL2RenderingContext,
   handles: TextureHandleArena,
-  options: { readonly maxPhysicalBytes: number },
+  options: { readonly maxPhysicalBytes: number; readonly now?: MonotonicClock },
 ): VirtualTextureGpuArena => {
   if (!Number.isSafeInteger(options.maxPhysicalBytes) || options.maxPhysicalBytes < 0) {
     throw new Error("Virtual texture physical byte maximum must be a non-negative safe integer");
@@ -285,6 +285,7 @@ export const createVirtualTextureGpuArena = (
     handles,
     maxTextureSize,
     maxTextureUnits,
+    now: options.now ?? monotonicNowMs,
     outcomes: [],
     quarantinedBytes: 0,
     resourceCursor: 0,
@@ -713,7 +714,7 @@ export const queueVirtualTextureGpuUpload = (
     if (mutable.pendingUploads[index]?.pageKey === upload.pageKey) return false;
   }
   mutable.pendingUploads.push(upload);
-  state.uploadQueuedAt.set(upload, nowMs());
+  state.uploadQueuedAt.set(upload, state.now());
   if (allocation !== undefined) state.wakeRequested = true;
   return true;
 };
@@ -953,7 +954,7 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   const queuedAt = state.uploadQueuedAt.get(upload);
   state.uploadQueuedAt.delete(upload);
   if (queuedAt !== undefined) {
-    const waitMs = Math.max(0, nowMs() - queuedAt);
+    const waitMs = Math.max(0, state.now() - queuedAt);
     const mip = upload.page.mip;
     resource.uploadQueueWaitMs += waitMs;
     resource.uploadQueueWaitMaxMs = Math.max(resource.uploadQueueWaitMaxMs, waitMs);

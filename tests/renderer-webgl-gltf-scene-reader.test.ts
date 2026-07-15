@@ -51,7 +51,6 @@ describe("glTF scene reader", () => {
       document,
       dracoPrimitives: new Map(),
       src: "https://example.test/models/scene.gltf",
-      webpSupported: false,
     });
 
     expect(diagnostics).toEqual([]);
@@ -74,7 +73,7 @@ describe("glTF scene reader", () => {
     });
   });
 
-  it("selects WebP alternatives from an explicit capability fact", () => {
+  it("prefers WebP extension sources without relying on canvas encoding support", () => {
     const document: GltfDocument = {
       ...triangleDocument(),
       images: [{ uri: "fallback.png" }, { uri: "preferred.webp" }],
@@ -84,19 +83,16 @@ describe("glTF scene reader", () => {
         source: 0,
       }],
     };
-    const read = (webpSupported: boolean) => readGltfScene({
+    const scene = readGltfScene({
       assetKey: "asset",
       buffers: [triangleBuffer()],
       diagnostics: { recordDiagnostic: () => undefined },
       document,
       dracoPrimitives: new Map(),
       src: "https://example.test/models/scene.gltf",
-      webpSupported,
     });
 
-    expect(read(false).primitives[0]?.material.baseColorTexture?.sourceUri)
-      .toBe("https://example.test/models/fallback.png");
-    expect(read(true).primitives[0]?.material.baseColorTexture?.sourceUri)
+    expect(scene.primitives[0]?.material.baseColorTexture?.sourceUri)
       .toBe("https://example.test/models/preferred.webp");
   });
 
@@ -140,7 +136,6 @@ describe("glTF scene reader", () => {
       },
       dracoPrimitives: new Map(),
       src: "scene.gltf",
-      webpSupported: false,
     });
 
     expect(scene).toMatchObject({
@@ -174,7 +169,6 @@ describe("glTF scene reader", () => {
       },
       dracoPrimitives: new Map(),
       src: "cycle.gltf",
-      webpSupported: false,
     });
 
     expect(scene.primitives).toHaveLength(1);

@@ -123,6 +123,7 @@ const coordinatorHarness = (options: {
   readonly closeSource?: (value: LoadedTextureSource) => void;
   readonly diagnostic?: (message: string, key: string) => void;
   readonly invalidate?: () => void;
+  readonly now?: () => number;
   readonly retainSource?: (value: LoadedTextureSource) => ResourceArenaSourceLease;
 } = {}) => {
   const closeSource = vi.fn(options.closeSource ?? ((_value: LoadedTextureSource) => undefined));
@@ -138,6 +139,7 @@ const coordinatorHarness = (options: {
     closeSource,
     diagnostic,
     invalidate,
+    ...(options.now === undefined ? {} : { now: options.now }),
     retainSource,
   });
   return {
@@ -158,6 +160,7 @@ afterEach(() => {
 
 describe("GltfImageDemandCoordinator lifecycle", () => {
   it("keeps material recipes dormant while eagerly demanding IBL on its independent lane", async () => {
+    let now = 10;
     const ordinaryKey = "ordinary";
     const iblKey = "ibl";
     const jobs = new Map([
@@ -165,7 +168,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       [iblKey, deferred<LoadedGltfImageSource>()],
     ]);
     loadRecipeMock.mockImplementation((value) => jobs.get(value.key)!.promise);
-    const harness = coordinatorHarness();
+    const harness = coordinatorHarness({ now: () => now });
     const load = metrics();
     const ownership = recipeLease();
     const ibl = imageBasedLight(iblKey);
@@ -187,6 +190,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       loading: 1,
     });
     expect(load.imageRequests).toBe(1);
+    expect(load.imageLoadStartedAt).toBe(10);
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([iblKey]);
 
     harness.coordinator.demandMaterial("asset", ordinaryMaterial);
@@ -196,16 +200,19 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     expect(harness.coordinator.snapshot()).toMatchObject({ active: 2, loading: 2, queued: 0 });
     expect(ownership.release).not.toHaveBeenCalled();
 
+    now = 20;
     jobs.get(ordinaryKey)!.resolve(loaded(ordinaryKey));
     await flushMicrotasks();
     expect(load.imageLoaded).toBe(1);
     expect(ownership.release).not.toHaveBeenCalled();
 
+    now = 30;
     jobs.get(iblKey)!.resolve(loaded(iblKey));
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 2, imageRequests: 2 });
-    expect(load.imagesSettledAt).toEqual(expect.any(Number));
+    expect(load.firstImageSettledAt).toBe(20);
+    expect(load.imagesSettledAt).toBe(30);
     expect(ownership.release).toHaveBeenCalledOnce();
     expect(harness.coordinator.imageReady("asset", ordinaryKey)).toBe(true);
     expect(harness.coordinator.imageReady("asset", iblKey)).toBe(true);

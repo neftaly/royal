@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  canvasSupportsImageMimeType,
   probeWebGlCapabilities,
   rendererCapabilitySummary,
   rendererCapabilitySupported,
-  type CanvasImageMimeTypeDocument,
   type WebGlCapabilityProbeContext,
 } from "@royal/renderer-webgl/capabilities";
 
@@ -62,23 +60,6 @@ const fakeCapabilityContext = (
 };
 
 describe("renderer-webgl capabilities public API", () => {
-  it("feature-detects canvas image MIME support", () => {
-    const document = {
-      createElement: (tagName: string) => tagName === "canvas"
-        ? {
-          toDataURL: (type?: string) =>
-            type === "image/avif" || type === "image/jpeg"
-              ? `data:${type};base64,AA==`
-              : "data:image/png;base64,AA==",
-        }
-        : null,
-    } satisfies CanvasImageMimeTypeDocument;
-
-    expect(canvasSupportsImageMimeType("image/avif", { document })).toBe(true);
-    expect(canvasSupportsImageMimeType("image/jpeg", { document })).toBe(true);
-    expect(canvasSupportsImageMimeType("image/webp", { document })).toBe(false);
-  });
-
   it("reports probed capabilities from a fake WebGL2-like context", () => {
     const { gl, parameterQueries } = fakeCapabilityContext();
     const result = probeWebGlCapabilities(gl);

@@ -213,6 +213,7 @@ const upload = (
 const setup = (
   maxPhysicalBytes = 10_000_000_000,
   capabilities: { readonly maxTextureSize?: number; readonly maxTextureUnits?: number } = {},
+  now?: () => number,
 ) => {
   const gl = new FakeGl();
   gl.maxTextureSize = capabilities.maxTextureSize ?? gl.maxTextureSize;
@@ -220,7 +221,10 @@ const setup = (
   const context = gl as unknown as WebGL2RenderingContext;
   const handles = createTextureHandleArena(context);
   return {
-    arena: createVirtualTextureGpuArena(context, handles, { maxPhysicalBytes }),
+    arena: createVirtualTextureGpuArena(context, handles, {
+      maxPhysicalBytes,
+      ...(now === undefined ? {} : { now }),
+    }),
     gl,
     handles,
   };
@@ -608,13 +612,15 @@ describe("virtual texture GPU arena", () => {
   });
 
   it("publishes one sticky demand wake when the final page upload settles", () => {
-    const { arena } = setup();
+    let now = 10;
+    const { arena } = setup(10_000_000_000, {}, () => now);
     const resource = admitTestVirtualTextureGpuResource(arena, "a", 1, options());
     const pending = upload({ mip: 0, x: 0, y: 0 }, 1);
     setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([pending.pageKey]));
     expect(queueVirtualTextureGpuUpload(arena, resource, pending)).toBe(true);
     expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
 
+    now = 25;
     processVirtualTextureGpuUploads(arena, 1);
 
     expect(virtualTextureGpuHasActionableUploads(arena)).toBe(false);
@@ -623,6 +629,7 @@ describe("virtual texture GPU arena", () => {
       atlasUploadBytesPerChunkMin: virtualTextureDecodedPageBytes(manifest),
       atlasUploadChunkSamples: 1,
       uploadQueueWaitSamples: 1,
+      uploadQueueWaitTotalMs: 15,
     });
     expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "completed", upload: pending });
     expect(consumeVirtualTextureGpuWake(arena)).toBe(true);

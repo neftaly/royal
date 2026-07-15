@@ -1,4 +1,5 @@
 import type { Material, VirtualTextureAssetRef } from "@royal/renderer-core";
+import type { MonotonicClock } from "./clock";
 import type { WebGlContextCapabilities } from "./context-capability-owner";
 import type { DecodedTextureSourceLifetime } from "./decoded-texture-source-lifetime";
 import type { CpuGeometry } from "./geometry-recipes";
@@ -41,6 +42,7 @@ export type VirtualTextureFeatureOptions = {
   readonly maximumDecodedCpuBytes: number;
   readonly maximumPersistentGpuBytes: number;
   readonly maximumUploadBytes: number;
+  readonly now?: MonotonicClock;
   readonly recordUnsupported: (texture: VirtualTextureRef, reason: string) => void;
   readonly resourceGovernor: ResourceGovernor;
   readonly textureHandles: TextureHandleArena;

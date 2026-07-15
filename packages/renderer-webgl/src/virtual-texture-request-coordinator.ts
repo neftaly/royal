@@ -1,4 +1,5 @@
 import { DecodedTextureSourceLifetime } from "./decoded-texture-source-lifetime";
+import { monotonicNowMs, type MonotonicClock } from "./clock";
 import {
   reserveResourceGovernor,
   type ResourceGovernor,
@@ -85,6 +86,7 @@ export type VirtualTextureRequestCoordinatorOptions = {
     signal: AbortSignal,
   ) => VirtualTexturePageLoad;
   readonly maximumDecodedCpuBytes: number;
+  readonly now?: MonotonicClock;
   readonly resourceGovernor: ResourceGovernor;
   readonly resources: ReadonlyMap<string, VirtualTextureRuntimeState>;
 };
@@ -102,14 +104,12 @@ const emptyResourceSnapshot = (): MutableResourceSnapshot => ({
 const virtualTexturePayloadSource = (payload: VirtualTexturePagePayload): object =>
   payload.kind === "image" ? payload.image : payload.data;
 
-const virtualTextureRequestNow = (): number =>
-  typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
-
 const recordVirtualTexturePageLoadDuration = (
   state: VirtualTextureRuntimeState,
   startedAt: number,
+  now: number,
 ): void => {
-  const duration = Math.max(0, virtualTextureRequestNow() - startedAt);
+  const duration = Math.max(0, now - startedAt);
   state.stats.pageLoadDurationMs += duration;
   state.stats.pageLoadDurationMaxMs = Math.max(state.stats.pageLoadDurationMaxMs, duration);
   state.stats.pageLoadDurationSamples += 1;
@@ -140,6 +140,7 @@ const validVirtualTexturePayload = (
 
 /** Owns VT page eligibility, request fairness, retries, and asynchronous load identity. */
 export class VirtualTextureRequestCoordinator {
+  readonly #now: MonotonicClock;
   readonly #options: VirtualTextureRequestCoordinatorOptions;
   readonly #planning = createVirtualTextureRequestPlanningWorkspace();
   readonly #resourcePool: MutableResourceSnapshot[] = [];
@@ -152,6 +153,7 @@ export class VirtualTextureRequestCoordinator {
 
   constructor(options: VirtualTextureRequestCoordinatorOptions) {
     this.#options = options;
+    this.#now = options.now ?? monotonicNowMs;
   }
 
   canBecomeResident(state: VirtualTextureRuntimeState, pageKey: string): boolean {
@@ -430,7 +432,7 @@ export class VirtualTextureRequestCoordinator {
     const controller = new AbortController();
     requestState.abortControllers.set(pageKey, controller);
     const sourceGeneration = state.sourceGeneration;
-    const pageLoadStartedAt = virtualTextureRequestNow();
+    const pageLoadStartedAt = this.#now();
     state.stats.pageLoadRequests += 1;
     let pageLoad: VirtualTexturePageLoad;
     try {
@@ -439,7 +441,7 @@ export class VirtualTextureRequestCoordinator {
       pageLoad = { kind: "page", promise: Promise.reject(error) };
     }
     if (pageLoad.kind === "absent") {
-      recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
+      recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt, this.#now());
       decodedReservation.cancel();
       job.release();
       requestState.abortControllers.delete(pageKey);
@@ -449,11 +451,11 @@ export class VirtualTextureRequestCoordinator {
     }
     const pageImage = pageLoad.promise.then(
       (payload) => {
-        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
+        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt, this.#now());
         return payload;
       },
       (error: unknown) => {
-        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
+        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt, this.#now());
         throw error;
       },
     );

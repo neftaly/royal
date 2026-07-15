@@ -1,4 +1,5 @@
 import type { TextureContentKey } from "@royal/renderer-core";
+import { monotonicNowMs, type MonotonicClock } from "../clock";
 import type { FramePlan } from "../frame-plan";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
 import {
@@ -22,6 +23,7 @@ type PreparedAssetEventOwnerOptions = {
   readonly disposed: () => boolean;
   readonly drainResourceSideEffects: () => void;
   readonly geometryRecipes: GeometryRecipeRegistry;
+  readonly now?: MonotonicClock;
   readonly packetOccurrence: (plan: FramePlan, occurrenceIndex: number) => GltfPacketOccurrence;
   readonly plan: () => FramePlan | undefined;
   readonly recordDiagnostic: (message: string, key: string) => void;
@@ -29,14 +31,14 @@ type PreparedAssetEventOwnerOptions = {
   readonly runtime: PreparedGltfRuntime;
 };
 
-const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
-
 /** Owns prepared-asset dependency publication and generation-safe event handoff. */
 export class PreparedAssetEventOwner {
+  readonly #now: MonotonicClock;
   readonly #options: PreparedAssetEventOwnerOptions;
 
   constructor(options: PreparedAssetEventOwnerOptions) {
     this.#options = options;
+    this.#now = options.now ?? monotonicNowMs;
   }
 
   applyPending(): void {
@@ -85,7 +87,7 @@ export class PreparedAssetEventOwner {
       this.#releaseImageAssetForReplacement(snapshot.key);
       state.status = "error";
       state.error = snapshot.error;
-      state.load.readyAt = nowMs();
+      state.load.readyAt = this.#now();
       this.#options.recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
       const currentPlan = this.#currentPlan();
       if (currentPlan !== undefined) runtime.publishPacketError(snapshot.key, currentPlan.revision);
@@ -120,7 +122,7 @@ export class PreparedAssetEventOwner {
     } catch (error) {
       state.status = "error";
       state.error = error instanceof Error ? error.message : String(error);
-      state.load.readyAt = nowMs();
+      state.load.readyAt = this.#now();
       this.#options.recordDiagnostic(state.error, `gltf-packets:${state.key}`);
       if (asset.imagePreparation !== undefined) {
         this.#options.detachImagePreparation(snapshot.key, snapshot.generation);
@@ -164,7 +166,7 @@ export class PreparedAssetEventOwner {
       this.#options.detachImagePreparation(snapshot.key, snapshot.generation);
       state.status = "error";
       state.error = error instanceof Error ? error.message : String(error);
-      state.load.readyAt = nowMs();
+      state.load.readyAt = this.#now();
       this.#options.recordDiagnostic(state.error, `gltf-images:${state.key}`);
     }
     runtime.publishStateChange(state.key);

@@ -63,7 +63,6 @@ import {
   responseWithBuffer,
   responseWithText,
   installStagedGltfLoader,
-  installCanvasImageMimeTypeSupport,
   settleDocumentAndBuffer,
   settleLodDocumentAndBuffer,
 } from "./renderer-webgl-scene-gltf-loader-fixtures";
@@ -176,7 +175,6 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
   it("loads required EXT_texture_webp base-color texture sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    installCanvasImageMimeTypeSupport(["image/webp"]);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
@@ -210,9 +208,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
-  it("uses core JPEG sources when optional EXT_texture_webp is not canvas-supported", async () => {
+  it("uses optional WebP extension sources instead of core fallbacks", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    installCanvasImageMimeTypeSupport(["image/jpeg"]);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
@@ -221,44 +218,6 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     root.render(renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       gltf({ src: triangleGltfSrc, version: "optional-webp-unsupported" }),
-    ]));
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        extensionsUsed: ["EXT_texture_webp"],
-        images: [
-          { mimeType: "image/jpeg", uri: triangleJpegImageUri },
-          { mimeType: "image/webp", uri: triangleWebpImageUri },
-        ],
-        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, sampler: 0, source: 0 }],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleJpegImageUri}`))).toBe(true);
-    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleWebpImageUri}`))).toBe(false);
-    for (const image of ControlledImage.instances) image.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
-    expect(callCount(calls, "texImage2D")).toBe(1);
-  });
-
-  it("uses optional EXT_texture_webp sources when canvas-supported", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installCanvasImageMimeTypeSupport(["image/jpeg", "image/webp"]);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "optional-webp-supported" }),
     ]));
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
