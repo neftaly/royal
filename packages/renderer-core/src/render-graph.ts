@@ -6,6 +6,8 @@ import type { RenderNode } from './render-node';
 
 const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
 const RENDER_TONE_MAPPINGS = ['linear-clamp', 'aces-fitted', 'pbr-neutral'] as const;
+const MIN_EXPOSURE_EV100 = -128;
+const MAX_EXPOSURE_EV100 = 149;
 
 export type RenderToneMapping = 'linear-clamp' | 'aces-fitted' | 'pbr-neutral';
 
@@ -26,7 +28,7 @@ export interface SceneOptions {
   /** @defaultValue `[0, 0, 0, 0]` */
   readonly clearColor?: LinearRgba;
   readonly environment?: EnvironmentLight;
-  /** Camera exposure value at ISO 100. Higher values produce a darker image. */
+  /** Camera exposure value at ISO 100 in `[-128, 149]`. Higher values produce a darker image. */
   readonly exposureEv100?: number;
   /** Display transform applied to scene-linear output. */
   readonly toneMapping?: RenderToneMapping;
@@ -35,6 +37,11 @@ export interface SceneOptions {
 const finiteExposureEv100 = (value: number | undefined): number | undefined => {
   if (value === undefined) return undefined;
   if (!Number.isFinite(value)) throw new Error('scene exposureEv100 must be finite');
+  if (value < MIN_EXPOSURE_EV100 || value > MAX_EXPOSURE_EV100) {
+    throw new RangeError(
+      `scene exposureEv100 must be within ${MIN_EXPOSURE_EV100}..${MAX_EXPOSURE_EV100}`
+    );
+  }
   return value;
 };
 

@@ -65,6 +65,10 @@ describe("renderer-core descriptor contract", () => {
       nodes: [],
       exposureEv100: Number.NaN,
     })).toThrow(/exposureEv100/);
+    expect(scene({ camera, exposureEv100: -128, nodes: [] }).exposureEv100).toBe(-128);
+    expect(scene({ camera, exposureEv100: 149, nodes: [] }).exposureEv100).toBe(149);
+    expect(() => scene({ camera, exposureEv100: -129, nodes: [] })).toThrow(/-128\.\.149/);
+    expect(() => scene({ camera, exposureEv100: 150, nodes: [] })).toThrow(/-128\.\.149/);
     expect(() => scene({
       camera,
       nodes: [],
