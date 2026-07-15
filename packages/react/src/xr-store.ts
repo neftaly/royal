@@ -22,6 +22,7 @@ import {
   type XrSessionStoreInitialState,
   type XrSessionVisibilityState,
 } from "./xr-session-model";
+import { recordWithAllowedFields } from "./validation";
 
 export type {
   XrSessionActivationOptions,
@@ -94,22 +95,6 @@ const AVAILABLE_MODE_OPTIONS = ["available", "mode"] as const;
 const ACTIVATION_OPTIONS = ["mode", "visibilityState"] as const;
 const FRAME_FIELDS = ["frameIndex", "viewCount", "viewports"] as const;
 const VIEWPORT_FIELDS = ["height", "width", "x", "y"] as const;
-const validateActionObject = (
-  value: unknown,
-  allowedNames: readonly string[],
-  label: string,
-): Record<string, unknown> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  for (const name of Object.keys(value)) {
-    if (!allowedNames.includes(name)) {
-      throw new TypeError(`${label} contains unsupported field ${JSON.stringify(name)}`);
-    }
-  }
-  return value as Record<string, unknown>;
-};
-
 const validateOptionalAvailability = (value: unknown, label: string): void => {
   if (value !== undefined && typeof value !== "boolean") {
     throw new TypeError(`${label} available must be a boolean`);
@@ -132,7 +117,7 @@ const validateModeOptions = (
   label: string,
   modeRequired = false,
 ): void => {
-  const options = validateActionObject(value, allowedNames, label);
+  const options = recordWithAllowedFields(value, allowedNames, label);
   validateOptionalAvailability(options.available, label);
   validateMode(options.mode, label, modeRequired);
 };
@@ -158,7 +143,7 @@ const validateNonNegativeInteger = (
 };
 
 const validateFrameRecord = (frame: XrSessionFrameRecord): void => {
-  const record = validateActionObject(frame, FRAME_FIELDS, "XR recordFrame frame");
+  const record = recordWithAllowedFields(frame, FRAME_FIELDS, "XR recordFrame frame");
   validateNonNegativeInteger(record.frameIndex, "XR recordFrame frameIndex");
   validateNonNegativeInteger(record.viewCount, "XR recordFrame viewCount");
   if (record.viewports !== undefined && !Array.isArray(record.viewports)) {
@@ -166,7 +151,7 @@ const validateFrameRecord = (frame: XrSessionFrameRecord): void => {
   }
   if (Array.isArray(record.viewports)) {
     for (let index = 0; index < record.viewports.length; index += 1) {
-      const viewport = validateActionObject(
+      const viewport = recordWithAllowedFields(
         record.viewports[index],
         VIEWPORT_FIELDS,
         `XR recordFrame viewports[${index}]`,

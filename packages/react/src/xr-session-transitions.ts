@@ -15,6 +15,9 @@ import type {
   XrViewport,
 } from "./xr-session-model";
 import { isXrSessionMode } from "./xr-session-model";
+import { recordWithAllowedFields } from "./validation";
+
+const XR_INITIAL_STATE_FIELDS = ["available", "mode"] as const;
 
 export type XrSessionStoreData<Session extends object> =
   XrSessionState & XrSessionControlSnapshot<Session>;
@@ -53,14 +56,12 @@ const availabilityStatus = (available: boolean): XrSessionStatus =>
   available ? "available" : "unavailable";
 
 const validateInitialState = (initialState: XrSessionStoreInitialState): void => {
-  if (typeof initialState !== "object" || initialState === null || Array.isArray(initialState)) {
-    throw new TypeError("XR session store initialState must be an object");
-  }
-  for (const name of Object.keys(initialState)) {
-    if (name !== "available" && name !== "mode") {
-      throw new TypeError(`XR session store initialState contains unsupported option ${JSON.stringify(name)}`);
-    }
-  }
+  recordWithAllowedFields(
+    initialState,
+    XR_INITIAL_STATE_FIELDS,
+    "XR session store initialState",
+    "option",
+  );
   if (initialState.available !== undefined && typeof initialState.available !== "boolean") {
     throw new TypeError("XR session store initialState available must be a boolean");
   }

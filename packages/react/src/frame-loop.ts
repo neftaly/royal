@@ -1,3 +1,5 @@
+import { recordWithAllowedFields } from "./validation";
+
 /**
  * Callback-scoped values backed by one reused frame-loop object. Copy the
  * scalar fields if they must be retained after the callback returns.
@@ -24,16 +26,11 @@ export interface UseFrameOptions {
   readonly priority?: number;
 }
 
+const USE_FRAME_OPTION_FIELDS = ["active", "priority"] as const;
+
 /** @internal Validates the public hook boundary without allocating normalized options. */
 export const validateUseFrameOptions = (options: UseFrameOptions): void => {
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw new TypeError("useFrame options must be an object");
-  }
-  for (const name of Object.keys(options)) {
-    if (name !== "active" && name !== "priority") {
-      throw new TypeError(`useFrame options contain unsupported option ${JSON.stringify(name)}`);
-    }
-  }
+  recordWithAllowedFields(options, USE_FRAME_OPTION_FIELDS, "useFrame options", "option");
   if (options.active !== undefined && typeof options.active !== "boolean") {
     throw new TypeError("useFrame active must be a boolean");
   }

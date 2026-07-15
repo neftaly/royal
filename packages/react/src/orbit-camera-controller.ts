@@ -10,6 +10,9 @@ import {
   type WorldPosition3,
 } from "@royal/renderer-core";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { objectRecord, recordWithAllowedFields } from "./validation";
+
+const USE_ORBIT_CAMERA_OPTION_FIELDS = ["far", "fovY", "initial", "near"] as const;
 
 /** Perspective projection owned by an orbit camera controller. */
 export interface OrbitCameraProjection {
@@ -52,14 +55,12 @@ export interface UseOrbitCameraOptions {
 
 /** @internal Validates hook-only option shape before React state is retained. */
 export const validateUseOrbitCameraOptions = (options: UseOrbitCameraOptions): void => {
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw new TypeError("useOrbitCamera options must be an object");
-  }
-  for (const name of Object.keys(options)) {
-    if (name !== "far" && name !== "fovY" && name !== "initial" && name !== "near") {
-      throw new TypeError(`useOrbitCamera options contain unsupported option ${JSON.stringify(name)}`);
-    }
-  }
+  recordWithAllowedFields(
+    options,
+    USE_ORBIT_CAMERA_OPTION_FIELDS,
+    "useOrbitCamera options",
+    "option",
+  );
   if (
     typeof options.initial !== "object"
     || options.initial === null
@@ -80,10 +81,10 @@ const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
 };
 
 const validOrbitCameraProjection = (input: unknown): OrbitCameraProjection => {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new TypeError("Orbit camera projection must be an object");
-  }
-  const { far, fovY, near } = input as Partial<OrbitCameraProjection>;
+  const { far, fovY, near } = objectRecord(
+    input,
+    "Orbit camera projection",
+  ) as Partial<OrbitCameraProjection>;
   if (typeof far !== "number" || !Number.isFinite(far)) {
     throw new TypeError("Orbit camera projection far must be a finite number");
   }

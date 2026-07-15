@@ -6,6 +6,7 @@ import {
 } from "@royal/renderer-core";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
 import { createOrbitGestureController } from "./orbit-controls-core";
+import { objectRecord, recordWithAllowedFields } from "./validation";
 
 export type OrbitControlsBehaviorOptions = {
   /** Enables all configured camera gestures. @defaultValue `true` */
@@ -74,25 +75,7 @@ const behaviorOptionNames = new Set<string>([
   "zoomSpeed",
 ]);
 const creationOptionNames = new Set<string>([...behaviorOptionNames, "initialView"]);
-
-const optionObject = (value: unknown, label: string): Record<string, unknown> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-};
-
-const validateOptionNames = (
-  options: Record<string, unknown>,
-  names: ReadonlySet<string>,
-  label: string,
-): void => {
-  for (const name of Object.keys(options)) {
-    if (!names.has(name)) {
-      throw new TypeError(`${label} contain unsupported option ${JSON.stringify(name)}`);
-    }
-  }
-};
+const setViewOptionNames = ["clamp", "emitChange"] as const;
 
 const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
   if (value === undefined) return undefined;
@@ -133,7 +116,7 @@ export const orbitControlsBehaviorOptionsFrom = (
     panSpeed,
     rotateSpeed,
     zoomSpeed,
-  } = optionObject(options, "OrbitControls options") as OrbitControlsBehaviorOptions;
+  } = objectRecord(options, "OrbitControls options") as OrbitControlsBehaviorOptions;
   return {
     enabled: optionalBoolean(enabled, "OrbitControls enabled"),
     enablePan: optionalBoolean(enablePan, "OrbitControls enablePan"),
@@ -154,12 +137,12 @@ const setViewOptionsFrom = (
   options: OrbitControlsSetViewOptions | undefined,
 ): { readonly clamp: boolean; readonly emitChange: boolean } => {
   if (options === undefined) return { clamp: true, emitChange: true };
-  const value = optionObject(options, "OrbitControls setView options");
-  for (const key of Object.keys(value)) {
-    if (key !== "clamp" && key !== "emitChange") {
-      throw new TypeError(`OrbitControls setView options contain unsupported option ${JSON.stringify(key)}`);
-    }
-  }
+  const value = recordWithAllowedFields(
+    options,
+    setViewOptionNames,
+    "OrbitControls setView options",
+    "option",
+  );
   return {
     clamp: optionalBoolean(value.clamp, "OrbitControls setView clamp") ?? true,
     emitChange: optionalBoolean(value.emitChange, "OrbitControls setView emitChange") ?? true,
@@ -176,8 +159,7 @@ export const createOrbitControls = (
   canvas: HTMLCanvasElement,
   options: OrbitControlsOptions,
 ): OrbitControlsHandle => {
-  const creationOptions = optionObject(options, "OrbitControls options");
-  validateOptionNames(creationOptions, creationOptionNames, "OrbitControls options");
+  recordWithAllowedFields(options, creationOptionNames, "OrbitControls options", "option");
   if (options.initialView === undefined) {
     throw new TypeError("OrbitControls initialView is required");
   }
@@ -242,10 +224,11 @@ export const createOrbitControls = (
     },
     getView: () => core.getView(),
     setOptions: (nextOptions) => {
-      validateOptionNames(
-        optionObject(nextOptions, "OrbitControls setOptions options"),
+      recordWithAllowedFields(
+        nextOptions,
         behaviorOptionNames,
         "OrbitControls setOptions options",
+        "option",
       );
       behaviorOptions = orbitControlsBehaviorOptionsFrom({
         ...behaviorOptions,

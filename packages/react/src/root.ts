@@ -17,6 +17,9 @@ import {
   royalRendererCapabilitiesFor,
 } from "./renderer-capabilities";
 import { validateGltfAssetRef } from "./gltf-asset-identity";
+import { recordWithAllowedFields } from "./validation";
+
+const RENDERER_OPTION_FIELDS = ["alpha", "antialias", "automaticVirtualTextures"] as const;
 
 /** Immutable renderer creation options shared by `<Canvas>` and `createRendererRoot`. */
 export interface RendererOptions {
@@ -35,14 +38,7 @@ export interface RendererOptions {
 /** @internal Validates the product-level root creation boundary. */
 export const validateRendererOptions = (options: RendererOptions | undefined): void => {
   if (options === undefined) return;
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw new TypeError("RendererOptions must be an object");
-  }
-  for (const name of Object.keys(options)) {
-    if (name !== "alpha" && name !== "antialias" && name !== "automaticVirtualTextures") {
-      throw new TypeError(`RendererOptions contain unsupported option ${JSON.stringify(name)}`);
-    }
-  }
+  recordWithAllowedFields(options, RENDERER_OPTION_FIELDS, "RendererOptions", "option");
   if (options.alpha !== undefined && typeof options.alpha !== "boolean") {
     throw new TypeError("RendererOptions alpha must be a boolean");
   }
