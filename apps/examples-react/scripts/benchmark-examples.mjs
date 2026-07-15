@@ -1185,8 +1185,12 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const beforeGc = await session.call('Runtime.getHeapUsage');
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
-  const rendererBeforeFrames = await evaluate(session, rendererSnapshotExpression);
-  await evaluate(session, 'globalThis.__royalBench?.reset?.()');
+  const rendererBeforeFrames = await evaluate(session, `
+(() => {
+  globalThis.__royalBench?.reset?.();
+  return ${rendererSnapshotExpression};
+})()
+`);
   const frameStats = xrOnly
     ? xrStats(await evaluate(session, `
 (async () => globalThis.__royalBench?.sampleXrFrames?.(${frames}, ${fakeXrSampleTimeoutMs}) ?? null)()
@@ -1253,8 +1257,18 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   };
 })()
 `);
-  const gl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
-  const rendererAfterFrames = await evaluate(session, rendererSnapshotExpression);
+  // Capture the GL counters and renderer frame together. An active XR session
+  // keeps presenting between DevTools requests, so separate reads produce a
+  // numerator and denominator from different frame windows.
+  const frameMeasurement = await evaluate(session, `
+(() => ({
+  gl: globalThis.__royalBench?.snapshot?.() ?? {},
+  renderer: ${rendererSnapshotExpression},
+}))()
+`);
+  const gl = frameMeasurement.gl;
+  const rendererAfterFrames = frameMeasurement.renderer;
+  const renderedFrameCount = rendererFrameDelta(rendererAfterFrames, rendererBeforeFrames);
   const cameraDrag = cameraDragEnabled
     ? await (async () => {
         const dragRendererBefore = await evaluate(session, rendererSnapshotExpression);
@@ -1348,6 +1362,9 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const afterFinalGc = await session.call('Runtime.getHeapUsage');
   return {
     frameStats,
+    glFrameCount: xrOnly && renderedFrameCount > 0
+      ? renderedFrameCount
+      : frameStats.sampleCount ?? frames,
     gl: {
       ...glCounterTotals(gl),
       setup: glCounterTotals(setupGl),
@@ -1757,7 +1774,7 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
     }
     const measured = await collectPageMetrics(session, frameSampleCount, {
       sampleXr: prepared?.active !== false,
-      xrOnly: realXrEnabled && prepared?.active === true,
+      xrOnly: (realXrEnabled || fakeXrEnabled) && prepared?.active === true,
     });
     const activationFailure = prepared?.active === false
       ? {
@@ -1799,7 +1816,9 @@ const round = (value, digits = 2) => {
 };
 
 const routeSummary = (route) => {
-  const sampledFrameCount = route.frameStats.sampleCount > 0 ? route.frameStats.sampleCount : frameSampleCount;
+  const sampledFrameCount = route.glFrameCount > 0
+    ? route.glFrameCount
+    : route.frameStats.sampleCount > 0 ? route.frameStats.sampleCount : frameSampleCount;
   const drawCallsPerFrame = route.gl.drawCalls / sampledFrameCount;
   const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / sampledFrameCount;
   const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / sampledFrameCount;
@@ -2168,10 +2187,11 @@ const main = async () => {
       results.push(result);
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
-      const drawCallsPerFrame = result.gl.drawCalls / frameSampleCount;
-      const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / frameSampleCount;
-      const stateChangesPerFrame = result.gl.stateChanges / frameSampleCount;
-      const uniformCallsPerFrame = result.gl.uniformCalls / frameSampleCount;
+      const measuredGlFrameCount = result.glFrameCount > 0 ? result.glFrameCount : frameSampleCount;
+      const drawCallsPerFrame = result.gl.drawCalls / measuredGlFrameCount;
+      const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / measuredGlFrameCount;
+      const stateChangesPerFrame = result.gl.stateChanges / measuredGlFrameCount;
+      const uniformCallsPerFrame = result.gl.uniformCalls / measuredGlFrameCount;
       const cameraDragFrameStats = result.cameraDrag?.frameStats;
       const frameFailure = result.frameStats.failed === true
         ? result.frameStats.reason
