@@ -98,5 +98,7 @@ CI runs both the built-entrypoint and packed-consumer gates.
    native-DPR CSS resize, and generated-VT/ordinary SVG raster parity through
    the shared browser smoke harness. The Quest browser does not implement CDP
    device-metrics overrides, so real physical orientation remains outstanding
-   rather than being simulated. Still cover physical orientation and
-   memory-pressure eviction.
+   rather than being simulated. Desktop/CI now covers bounded page-slot
+   eviction under a fixed VT allocation while protecting an ordinary texture;
+   rerun that pressure gate with a foreground physical Quest panel. Still cover
+   physical orientation and the foreground Quest pressure pass.

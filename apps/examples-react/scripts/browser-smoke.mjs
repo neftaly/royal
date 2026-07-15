@@ -657,6 +657,39 @@ const assertRoute = (expected, state) => {
       if ((interaction.presets?.[1]?.pageCount ?? 0) <= (interaction.presets?.[0]?.pageCount ?? 0)) {
         failures.push('virtual texture map focus did not request finer public pages');
       }
+      const pressureSamples = [
+        ...(interaction.presets ?? []),
+        interaction.zoom,
+        interaction.far,
+        interaction.reactivation,
+        interaction.pan,
+      ].filter((sample) => sample !== undefined);
+      const physicalAllocatedBytes = interaction.presets?.[0]?.physicalAllocatedBytes;
+      const ordinaryGpuBytes = interaction.presets?.[0]?.ordinaryGpuBytes;
+      if (
+        !(physicalAllocatedBytes > 0)
+        || !pressureSamples.every((sample) => (
+          sample.physicalAllocatedBytes === physicalAllocatedBytes
+          && sample.physicalAllocatedBytes <= sample.physicalBudgetBytes
+          && sample.physicalQuarantinedBytes === 0
+          && sample.virtualGpuBytes === sample.physicalAllocatedBytes
+        ))
+      ) {
+        failures.push('virtual texture page pressure changed atlas allocation, exceeded budget, leaked quarantine, or diverged from governor accounting');
+      }
+      if (
+        !(ordinaryGpuBytes > 0)
+        || !pressureSamples.every((sample) => sample.ordinaryGpuBytes === ordinaryGpuBytes)
+      ) {
+        failures.push('virtual texture page pressure displaced or duplicated the protected ordinary texture');
+      }
+      if (!(
+        interaction.pan?.uploadedPages > interaction.pan?.cachedPages
+        && interaction.pan?.cachedPages > 0
+        && interaction.pan?.cachedPages <= 24
+      )) {
+        failures.push('virtual texture pressure did not reuse fixed physical slots across more uploaded than cached pages');
+      }
       if ((interaction.pan?.errors?.length ?? 0) > 0) {
         failures.push(`virtual texture map pan crashed: ${interaction.pan.errors.join('; ')}`);
       }
@@ -1101,6 +1134,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     const currentPageUrls = pageUrls();
     const previousPages = new Set(previousPageUrls);
     const canvasRect = canvas.getBoundingClientRect();
+    const pressure = renderer?.resourcePressure;
     return {
       activePages: vt?.activePages ?? null,
       activePagesByMip: [0, 1, 2, 3].map((mip) => vt?.['activePagesMip' + mip] ?? 0),
@@ -1120,11 +1154,16 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       pageUrls: currentPageUrls,
       newPageUrls: currentPageUrls.filter((url) => !previousPages.has(url)),
       newPageRequestCount: Math.max(0, currentPageUrls.length - previousPageUrls.length),
+      ordinaryGpuBytes: pressure?.byClass?.['ordinary-texture']?.persistentGpuBytes ?? null,
       pendingPages: vt?.pendingPages ?? null,
+      physicalAllocatedBytes: vt?.physicalAllocatedBytes ?? null,
+      physicalBudgetBytes: vt?.physicalBudgetBytes ?? null,
+      physicalQuarantinedBytes: vt?.physicalQuarantinedBytes ?? null,
       settled: stableFrames >= 8,
       targetX: Number(canvas.dataset.mapTargetX),
       targetY: Number(canvas.dataset.mapTargetY),
       uploadedPages: vt?.uploadedPages ?? null,
+      virtualGpuBytes: pressure?.byClass?.['virtual-texture']?.persistentGpuBytes ?? null,
     };
   };
   const presets = [await waitForConvergence(null, [])];

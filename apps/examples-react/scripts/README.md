@@ -70,6 +70,12 @@ EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
 pnpm --filter @royal/examples-react test:browser
 ```
 
+The route deliberately visits enough distinct pages to upload more pages than
+its 24 physical slots can retain. It also keeps a one-texel ordinary texture in
+the same scene. The smoke requires fixed VT atlas bytes while slots are reused,
+matching root-governor accounting, stable ordinary-texture residency, and zero
+quarantined VT bytes throughout the camera, zoom, resize, and revisit sequence.
+
 The same assertions can drive an already-open browser through a forwarded CDP
 endpoint without launching Chromium or a preview server:
 

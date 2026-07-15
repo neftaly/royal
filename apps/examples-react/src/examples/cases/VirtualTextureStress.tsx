@@ -5,6 +5,7 @@ import {
   useOrbitCameraView,
 } from '@royal/react';
 import {
+  imageTexture,
   mesh,
   planeGeometry,
   scene,
@@ -14,13 +15,21 @@ import {
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
-
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
 const mapMaterial = unlitMaterial({
   texture: virtualTexture({
     sampler: { magFilter: 'nearest', minFilter: 'nearest', wrapS: 'clamp-to-edge', wrapT: 'clamp-to-edge' },
     manifestUri: `${fixtureRoot}map.vt.json`,
+  }),
+});
+const residencyMarkerGeometry = planeGeometry([0.24, 0.24]);
+const residencyMarkerSrc = 'data:image/png;base64,'
+  + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==';
+const residencyMarkerMaterial = unlitMaterial({
+  texture: imageTexture({
+    sampler: { magFilter: 'nearest', minFilter: 'nearest' },
+    src: residencyMarkerSrc,
   }),
 });
 
@@ -40,7 +49,14 @@ export const VirtualTextureStress = (): ReactNode => {
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     clearColor: [0.018, 0.024, 0.036, 1],
-    nodes: [mesh({ geometry: mapGeometry, material: mapMaterial })],
+    nodes: [
+      mesh({ geometry: mapGeometry, material: mapMaterial }),
+      mesh({
+        geometry: residencyMarkerGeometry,
+        material: residencyMarkerMaterial,
+        transform: { position: [0, 0, 0.01] },
+      }),
+    ],
   }), [orbit.cameraResource]);
   const activeView = (name: ViewName): boolean => {
     const view = views[name];
