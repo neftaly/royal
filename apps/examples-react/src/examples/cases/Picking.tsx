@@ -5,6 +5,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import {
+  boxGeometry,
   directionalLight,
   gltf,
   linearRgbaFromSrgb,
@@ -29,6 +30,7 @@ import {
 
 const backplateGeometry = planeGeometry([4.4, 2.65]);
 const backplateMaterial = unlitMaterial({ color: linearRgbaFromSrgb([0.08, 0.1, 0.12, 1]) });
+const helmetPickingGeometry = boxGeometry([1.45, 1.55, 1.35]);
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 
 const createPickingScene = (
@@ -49,6 +51,7 @@ const createPickingScene = (
       },
     }),
     gltf({
+      pickingGeometry: helmetPickingGeometry,
       pickingId: 'helmet',
       src: helmetSrc,
       transform: {
@@ -65,7 +68,13 @@ export const Picking = (): ReactNode => {
   const [clicks, setClicks] = useState(0);
   const active = hovered || clicks % 2 === 1;
   const hoveredId = hovered ? 'helmet' : 'none';
-  const readoutText = active ? `Helmet ${clicks}` : 'Helmet';
+  const readoutText = hovered
+    ? `Hovering helmet · ${clicks} ${clicks === 1 ? 'click' : 'clicks'}`
+    : active
+      ? `Helmet selected · ${clicks} ${clicks === 1 ? 'click' : 'clicks'}`
+      : clicks === 0
+        ? 'Move over the helmet, then click it'
+        : `Helmet released · ${clicks} clicks`;
   const orbit = useOrbitCamera({
     initial: { distance: 3.5, pitch: 0.04, target: [0, -0.08, 0] },
   });
@@ -82,17 +91,25 @@ export const Picking = (): ReactNode => {
   }) satisfies ScenePointerEvents, []);
 
   return (
-    <Canvas
-      aria-label="Pickable helmet"
-      data-royal-picking-hovered-id={hoveredId}
-      data-royal-picking-readout={`Target ${readoutText}`}
-      scenePointerEvents={interactions}
-      rendererOptions={exampleCanvasRendererOptions}
-      style={{ cursor: 'pointer', touchAction: 'none' }}
-      scene={renderScene}
-    >
-      <BenchmarkRendererSnapshot />
-      <OrbitControls orbit={orbit} />
-    </Canvas>
+    <div className="picking-example">
+      <Canvas
+        aria-label="Pickable helmet"
+        scenePointerEvents={interactions}
+        rendererOptions={exampleCanvasRendererOptions}
+        style={{ cursor: hovered ? 'pointer' : 'grab', touchAction: 'none' }}
+        scene={renderScene}
+      >
+        <BenchmarkRendererSnapshot />
+        <OrbitControls orbit={orbit} />
+      </Canvas>
+      <output
+        aria-live="polite"
+        className={`picking-readout${active ? ' picking-readout-active' : ''}`}
+        data-royal-picking-hovered-id={hoveredId}
+        data-royal-picking-readout={readoutText}
+      >
+        {readoutText}
+      </output>
+    </div>
   );
 };

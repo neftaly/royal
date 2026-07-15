@@ -13,6 +13,8 @@ export interface MeshNode {
   readonly kind: 'mesh';
   readonly geometry: Geometry;
   readonly material: Material;
+  /** Exact triangle proxy in this mesh's local space. It does not affect rendering. */
+  readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
   readonly transform?: Transform;
@@ -21,6 +23,8 @@ export interface MeshNode {
 export interface MeshOptions {
   readonly geometry: Geometry;
   readonly material: Material;
+  /** Exact triangle proxy in this mesh's local space. It does not affect rendering. */
+  readonly pickingGeometry?: Geometry;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
@@ -34,6 +38,7 @@ export const mesh = (options: MeshOptions): MeshNode => {
     kind: 'mesh',
     geometry: options.geometry,
     material: options.material,
+    ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref })
   } satisfies Omit<MeshNode, 'transform'>;

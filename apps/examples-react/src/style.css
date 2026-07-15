@@ -242,6 +242,36 @@ canvas {
   inline-size: 100%;
 }
 
+.picking-example {
+  block-size: 100%;
+  inline-size: 100%;
+  position: relative;
+}
+
+.picking-readout {
+  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--panel), transparent 12%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  bottom: 0.8rem;
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  left: 50%;
+  max-inline-size: calc(100% - 1.6rem);
+  padding: 0.45rem 0.75rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.picking-readout-active {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .vt-stress {
   block-size: 100%;
   display: grid;

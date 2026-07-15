@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
+  createGltfInstanceTransforms,
   defaultImageTextureSampler,
   directionalLight,
   gltf,
+  gltfInstances,
   imageTexture,
   mesh,
   perspectiveCamera,
@@ -70,19 +72,23 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/clearColor.*finite/);
   });
 
-  it("preserves picking ids on pickable mesh and glTF descriptors", () => {
+  it("preserves picking identity and geometry on every pickable descriptor", () => {
+    const pickingGeometry = boxGeometry(0.5);
     expect(mesh({
       geometry: boxGeometry(1),
       material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      pickingGeometry,
       pickingId: "box-a",
     })).toEqual({
       geometry: boxGeometry(1),
       kind: "mesh",
       material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      pickingGeometry,
       pickingId: "box-a",
     });
 
     expect(gltf({
+      pickingGeometry,
       pickingId: "helmet",
       src: "/models/helmet.gltf",
     })).toEqual({
@@ -90,7 +96,22 @@ describe("renderer-core descriptor contract", () => {
         uri: "/models/helmet.gltf",
       },
       kind: "gltf",
+      pickingGeometry,
       pickingId: "helmet",
+    });
+
+    const instances = createGltfInstanceTransforms({ count: 1 });
+    expect(gltfInstances({
+      instances,
+      pickingGeometry,
+      pickingId: "helmets",
+      src: "/models/helmet.gltf",
+    })).toEqual({
+      asset: { uri: "/models/helmet.gltf" },
+      instances,
+      kind: "gltf-instances",
+      pickingGeometry,
+      pickingId: "helmets",
     });
   });
 

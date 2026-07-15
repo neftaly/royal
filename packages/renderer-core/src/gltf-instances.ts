@@ -6,6 +6,7 @@ import {
   type GltfMaterialVariantSelection,
 } from './gltf';
 import type { PickingId } from './picking';
+import type { Geometry } from './geometry';
 
 export interface GltfInstanceTransforms {
   readonly count: number;
@@ -225,6 +226,8 @@ export interface GltfInstancesNode {
   readonly asset: GltfAssetRef;
   readonly instances: GltfInstanceTransforms;
   readonly kind: 'gltf-instances';
+  /** Exact triangle proxy repeated in each instance's local space. */
+  readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   /** Unknown names or out-of-range indices fall back to the base material. */
   readonly variant?: GltfMaterialVariantSelection;
@@ -233,6 +236,8 @@ export interface GltfInstancesNode {
 export interface GltfInstancesOptions {
   readonly bounds?: GltfAssetBounds;
   readonly instances: GltfInstanceTransforms;
+  /** Exact triangle proxy repeated in each instance's local space, available before asset load. */
+  readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   readonly src: string;
   /** Select by exact name or zero-based declaration index. */
@@ -247,6 +252,7 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
     asset,
     instances: options.instances,
     kind: 'gltf-instances',
+    ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(variant === undefined ? {} : { variant }),
   });

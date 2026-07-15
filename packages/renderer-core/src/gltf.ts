@@ -7,6 +7,7 @@ import { frozenBounds3, identityScalar, nonEmptyString } from './descriptor-valu
 import type { WorldPosition3 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
+import type { Geometry } from './geometry';
 
 export interface GltfAssetBounds {
   /** Asset-space maximum in metres, following glTF's metre unit. */
@@ -32,6 +33,8 @@ export type GltfMaterialVariantSelection = string | number;
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
+  /** Exact triangle proxy in this node's local space, available before the asset loads. */
+  readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
   readonly transform?: Transform;
@@ -41,6 +44,8 @@ export interface GltfNode {
 
 export interface GltfOptions {
   readonly bounds?: GltfAssetBounds;
+  /** Exact triangle proxy in this node's local space, available before the asset loads. */
+  readonly pickingGeometry?: Geometry;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
@@ -94,6 +99,7 @@ export function gltf(input: GltfInput): GltfNode {
   const node = {
     kind: 'gltf',
     asset,
+    ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
     ...(variant === undefined ? {} : { variant })

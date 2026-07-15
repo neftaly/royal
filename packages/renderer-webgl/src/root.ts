@@ -429,6 +429,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         gltfInstanceRootModels: (node) => this.#gltfInstanceTransforms.views(node.instances).rootModels,
         meshGeometry: (node) => this.#geometryRecipes.retainedDirectRecipe(node.geometry, node.material).recipe,
         meshLocalBounds: (geometry) => this.#geometryRecipes.localBounds(geometry),
+        pickingGeometry: (geometry) => this.#geometryRecipes.pickingRecipe(geometry),
         preparedGltfPrimitives: (node) => {
           const state = this.#preparedGltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
           return state?.status === "ready" ? state.primitives : undefined;

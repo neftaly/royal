@@ -202,10 +202,13 @@ const smokeExpression = `
         minPaintedRatio: selectedCasePath === undefined ? smoke?.minPaintedRatio ?? 0 : 0.0001,
         sample: sampleCanvas(canvas),
       },
-      picking: routeId === 'picking' ? {
-        hoveredId: canvas?.dataset.royalPickingHoveredId ?? '',
-        text: canvas?.dataset.royalPickingReadout ?? '',
-      } : undefined,
+      picking: routeId === 'picking' ? (() => {
+        const readout = document.querySelector('[data-royal-picking-hovered-id]');
+        return {
+          hoveredId: readout?.dataset.royalPickingHoveredId ?? '',
+          text: readout?.textContent?.trim() ?? '',
+        };
+      })() : undefined,
       renderer: ${rendererSnapshotExpression},
       resources: performance.getEntriesByType('resource')
         .slice(-20)
@@ -407,6 +410,8 @@ const assertRoute = (expected, state) => {
     const interaction = state.pickingInteraction;
     if (state.picking === undefined) {
       failures.push('picking route missed readout');
+    } else if (state.picking.text.length === 0) {
+      failures.push('picking route readout is not visible');
     }
     if (interaction === undefined) {
       failures.push('picking route missed interaction smoke');
@@ -727,8 +732,10 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing picking canvas' };
+  const readout = document.querySelector('[data-royal-picking-hovered-id]');
+  if (readout === null) return { error: 'missing visible picking readout' };
   const readHoveredId = () =>
-    canvas.dataset.royalPickingHoveredId ?? '';
+    readout.dataset.royalPickingHoveredId ?? '';
   if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent' };
   const rect = canvas.getBoundingClientRect();
   const hoverPoints = [

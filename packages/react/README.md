@@ -254,9 +254,23 @@ and hover stay coherent across immutable scene replacement. Every map entry must
 contain at least one supported function handler; invalid or misspelled handlers
 throw during render instead of becoming silent no-ops.
 
+By default Royal tests the rendered mesh or loaded glTF triangles. Set
+`pickingGeometry` when interaction needs a simpler or more forgiving exact
+triangle proxy. Mesh and glTF proxies use node-local coordinates; a
+`gltfInstances` proxy is repeated in each instance's local coordinates. A glTF
+proxy is pickable before the asset finishes loading. It goes through the same
+geometry normalization, bounds rejection, and ray/triangle path as ordinary
+picking and does not allocate GPU geometry.
+
 ```tsx
+const helmet = gltf({
+  pickingGeometry: boxGeometry([1.45, 1.55, 1.35]),
+  pickingId: 'helmet',
+  src: '/DamagedHelmet/DamagedHelmet.gltf',
+});
+
 <Canvas
-  scene={renderScene}
+  scene={scene({ camera, nodes: [helmet] })}
   scenePointerEvents={{
     helmet: { onClick: ({ hit }) => select(hit.target) },
   }}

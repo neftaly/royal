@@ -1,7 +1,8 @@
-import type { Material, MeshNode } from "@royal/renderer-core";
+import type { Geometry, Material, MeshNode } from "@royal/renderer-core";
 import {
   directGeometryDeclaration,
   directGeometryDeclarationKey,
+  normalizeGeometryDeclaration,
   type CpuGeometry,
 } from "./geometry-recipes";
 import type { LoadedGltfPrimitive } from "./gltf/prepared-asset";
@@ -16,6 +17,7 @@ export type RetainedGeometryRecipe = {
 /** Owns semantic CPU geometry identity, bounds, and glTF packet reverse lookup. */
 export class GeometryRecipeRegistry {
   readonly #localBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
+  readonly #pickingRecipes = new WeakMap<Geometry, CpuGeometry>();
   readonly #retained = new Map<string, RetainedGeometryRecipe>();
   readonly #gltfKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #packetPrimitives = new Map<number, LoadedGltfPrimitive>();
@@ -42,6 +44,15 @@ export class GeometryRecipeRegistry {
       throw new Error(`Royal direct geometry ${key} was not semantically retained`);
     }
     return retained;
+  }
+
+  /** Normalizes a node-local picking override through the ordinary direct-geometry recipe path. */
+  pickingRecipe(geometry: Geometry): CpuGeometry {
+    const cached = this.#pickingRecipes.get(geometry);
+    if (cached !== undefined) return cached;
+    const recipe = normalizeGeometryDeclaration(directGeometryDeclaration(geometry, "surface"));
+    this.#pickingRecipes.set(geometry, recipe);
+    return recipe;
   }
 
   associateGltfPrimitiveKey(primitive: LoadedGltfPrimitive, key: string): void {

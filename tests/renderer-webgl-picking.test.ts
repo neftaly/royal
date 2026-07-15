@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boxGeometry,
+  createGltfInstanceTransforms,
   gltf,
+  gltfInstances,
   mesh,
   orthographicCamera,
   scene,
@@ -223,5 +225,111 @@ describe("WebGL picking", () => {
     }));
 
     expect(root.pick({ clientX: 272, clientY: 100 })).toBeUndefined();
+  });
+
+  it("uses optional geometry as an exact mesh picking proxy", () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const root = createWebGlRoot(fakeCanvas(fakeGl()));
+    const proxyMesh = mesh({
+      geometry: boxGeometry([3, 1, 1]),
+      material: unlitMaterial({ color: [1, 0, 0, 1] }),
+      pickingGeometry: boxGeometry(0.5),
+      pickingId: "proxy-mesh",
+    });
+
+    root.render(scene({
+      camera: orthographicCamera({
+        bottom: -1,
+        far: 10,
+        left: -2,
+        near: 0.1,
+        position: [0, 0, 4],
+        right: 2,
+        rotation: [0, 0, 0],
+        top: 1,
+      }),
+      nodes: [proxyMesh],
+    }));
+
+    expect(root.pick({ clientX: 300, clientY: 100 })).toBeUndefined();
+    expect(root.pick({ clientX: 200, clientY: 100 })?.target).toMatchObject({
+      id: "proxy-mesh",
+      kind: "mesh",
+      node: proxyMesh,
+    });
+    expect(root.snapshot().picking).toMatchObject({ candidates: 1, exactTests: 1 });
+  });
+
+  it("picks a glTF proxy before its asset is prepared", () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    const root = createWebGlRoot(fakeCanvas(fakeGl()));
+    const proxyGltf = gltf({
+      pickingGeometry: boxGeometry(0.7),
+      pickingId: "pending-gltf",
+      src: "/models/pending.gltf",
+      transform: { position: [1, 0, 0], rotation: [0, 0, 0] },
+    });
+
+    root.render(scene({
+      camera: orthographicCamera({
+        bottom: -1,
+        far: 10,
+        left: -2,
+        near: 0.1,
+        position: [0, 0, 4],
+        right: 2,
+        rotation: [0, 0, 0],
+        top: 1,
+      }),
+      nodes: [proxyGltf],
+    }));
+
+    expect(root.pick({ clientX: 300, clientY: 100 })?.target).toEqual({
+      id: "pending-gltf",
+      kind: "gltf",
+      node: proxyGltf,
+    });
+    expect(root.snapshot().picking).toMatchObject({ candidates: 1, exactTests: 1 });
+  });
+
+  it("reuses one proxy geometry across glTF instances while preserving instance identity", () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    const root = createWebGlRoot(fakeCanvas(fakeGl()));
+    const instances = createGltfInstanceTransforms({
+      count: 2,
+      logicalIds: ["left", "right"],
+      positions: [-1, 0, 0, 1, 0, 0],
+    });
+    const proxyInstances = gltfInstances({
+      instances,
+      pickingGeometry: boxGeometry(0.7),
+      pickingId: "pending-instances",
+      src: "/models/pending.gltf",
+    });
+
+    root.render(scene({
+      camera: orthographicCamera({
+        bottom: -1,
+        far: 10,
+        left: -2,
+        near: 0.1,
+        position: [0, 0, 4],
+        right: 2,
+        rotation: [0, 0, 0],
+        top: 1,
+      }),
+      nodes: [proxyInstances],
+    }));
+
+    expect(root.pick({ clientX: 300, clientY: 100 })?.target).toEqual({
+      id: "pending-instances",
+      instanceId: "right",
+      instanceIndex: 1,
+      kind: "gltf-instances",
+      node: proxyInstances,
+    });
+    expect(root.snapshot().picking).toMatchObject({ candidates: 1, exactTests: 1 });
   });
 });

@@ -160,6 +160,7 @@ Status meanings:
 | --- | --- | --- |
 | Canvas point picking | product | Keep. |
 | Mesh, glTF node and glTF instance identities | product | Keep; logical identity is a core promise. |
+| Optional exact picking geometry | product | Node-local mesh/glTF and instance-local bulk proxies share ordinary geometry normalization and exact triangle picking; glTF proxies work before asset preparation and never become GPU resources. |
 | React pointer enter/leave/move/down/up/click dispatch | product | Keep if Canvas is the normal interaction host. |
 | Touch/pointer orbit interactions | product | Keep. |
 | Imperative pick API | product | Keep for XR and non-DOM hosts. |
