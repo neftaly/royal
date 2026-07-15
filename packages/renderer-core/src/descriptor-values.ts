@@ -34,11 +34,20 @@ export const nonNegativeFiniteNumber = (value: number, label: string): number =>
   return value;
 };
 
-export const frozenVec3 = (value: Vec3, label: string): Vec3 => Object.freeze([
-  finiteNumber(value[0], `${label}[0]`),
-  finiteNumber(value[1], `${label}[1]`),
-  finiteNumber(value[2], `${label}[2]`),
-]) as Vec3;
+const frozenNumberTuple = (
+  value: unknown,
+  length: number,
+  label: string,
+): readonly number[] => {
+  if (!Array.isArray(value) || value.length !== length) {
+    throw new TypeError(`${label} must be an array of exactly ${length} numbers`);
+  }
+  return Object.freeze(value.map((component, index) =>
+    finiteNumber(component, `${label}[${index}]`)));
+};
+
+export const frozenVec3 = (value: unknown, label: string): Vec3 =>
+  frozenNumberTuple(value, 3, label) as Vec3;
 
 export const frozenDirection3 = (value: Vec3, label: string): Vec3 => {
   const direction = frozenVec3(value, label);
@@ -48,12 +57,8 @@ export const frozenDirection3 = (value: Vec3, label: string): Vec3 => {
   return direction;
 };
 
-export const frozenRgba = (value: LinearRgba, label: string): LinearRgba => Object.freeze([
-  finiteNumber(value[0], `${label}[0]`),
-  finiteNumber(value[1], `${label}[1]`),
-  finiteNumber(value[2], `${label}[2]`),
-  finiteNumber(value[3], `${label}[3]`),
-]) as LinearRgba;
+export const frozenRgba = (value: unknown, label: string): LinearRgba =>
+  frozenNumberTuple(value, 4, label) as LinearRgba;
 
 const TRANSFORM_FIELDS = ['position', 'rotation', 'scale'] as const;
 const BOUNDS_FIELDS = ['max', 'min'] as const;

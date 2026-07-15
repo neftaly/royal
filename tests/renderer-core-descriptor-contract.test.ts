@@ -329,6 +329,26 @@ describe("renderer-core descriptor contract", () => {
       .toThrow('scene options must be an object');
   });
 
+  it("rejects malformed fixed-size tuples with descriptor-local errors", () => {
+    expect(() => perspectiveCamera({
+      position: [1, 2] as unknown as readonly [number, number, number],
+    })).toThrow('camera position must be an array of exactly 3 numbers');
+    expect(() => pointLight({
+      intensityCandela: 1,
+      position: undefined as unknown as readonly [number, number, number],
+    })).toThrow('point light position must be an array of exactly 3 numbers');
+    expect(() => solidTexture({
+      color: [1, 1, 1, 1, 1] as unknown as readonly [number, number, number, number],
+    })).toThrow('solid texture color must be an array of exactly 4 numbers');
+    expect(() => gltf({
+      bounds: {
+        max: [1, 1, 1],
+        min: [0, 0] as unknown as readonly [number, number, number],
+      },
+      src: '/models/avatar.glb',
+    })).toThrow('glTF asset bounds min must be an array of exactly 3 numbers');
+  });
+
   it("preserves explicit texture content keys for renderer-level sharing", () => {
     expect(textureAsset({
       colorSpace: "srgb",
