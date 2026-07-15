@@ -17,10 +17,16 @@ import {
 
 /** Lowers retained glTF state into backend-neutral packet topology occurrences. */
 export class GltfPacketOccurrenceBuilder {
+  readonly #diagnostic: (message: string, key: string) => void;
   readonly #geometryRecipes: GeometryRecipeRegistry;
   readonly #runtime: PreparedGltfRuntime;
 
-  constructor(geometryRecipes: GeometryRecipeRegistry, runtime: PreparedGltfRuntime) {
+  constructor(
+    geometryRecipes: GeometryRecipeRegistry,
+    runtime: PreparedGltfRuntime,
+    diagnostic: (message: string, key: string) => void,
+  ) {
+    this.#diagnostic = diagnostic;
     this.#geometryRecipes = geometryRecipes;
     this.#runtime = runtime;
   }
@@ -64,6 +70,12 @@ export class GltfPacketOccurrenceBuilder {
     const selectedVariantIndex = state.hasMaterialVariants
       ? selectedGltfVariantIndex(state.variants, node.materialVariant)
       : undefined;
+    if (node.materialVariant !== undefined && selectedVariantIndex === undefined) {
+      this.#diagnostic(
+        `glTF materialVariant "${node.materialVariant}" is not declared by ${state.sourceUri}; rendering its base material`,
+        `gltf-material-variant:${state.key}:${node.materialVariant}`,
+      );
+    }
     return state.primitives.map((primitive) => {
       const retainedGeometry = this.#geometryRecipes.retainedGltfRecipe(primitive);
       if (retainedGeometry === undefined) {

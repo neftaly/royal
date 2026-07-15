@@ -688,6 +688,9 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     expect(colors).toContainEqual([0.9, 0.1, 0.08, 1]);
     expect(colors).toContainEqual([0.1, 0.72, 0.46, 1]);
     expect(colors).toContainEqual([0.22, 0.24, 0.28, 1]);
+    expect(root.snapshot().diagnostics).toContain(
+      `glTF materialVariant "missing" is not declared by ${triangleGltfSrc}; rendering its base material`,
+    );
   });
 
   it("settles and uploads images referenced only by KHR_materials_variants materials", async () => {

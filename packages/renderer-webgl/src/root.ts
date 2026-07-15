@@ -306,6 +306,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #gltfPacketOccurrences = new GltfPacketOccurrenceBuilder(
     this.#geometryRecipes,
     this.#preparedGltf,
+    (message, key) => this.#recordDiagnostic(message, key),
   );
   readonly #gltfPreparation: GltfAssetPreparationOwner;
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
