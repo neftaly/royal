@@ -594,6 +594,15 @@ export const flushMicrotasks = async (): Promise<void> => {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
 };
 
+export const waitForModuleLoad = async (ready: () => boolean): Promise<void> => {
+  for (let index = 0; index < 80; index += 1) {
+    if (ready()) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
+  }
+  throw new Error("Timed out waiting for dynamically loaded renderer work");
+};
+
 export const fakeImageBitmap = (size: number): ImageBitmap => ({
   close: vi.fn(),
   height: size,

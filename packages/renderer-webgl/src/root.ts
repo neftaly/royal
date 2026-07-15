@@ -150,10 +150,7 @@ import {
 } from "./math/picking";
 import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
-import {
-  isSvgUri,
-  loadSvgTextureFromUri,
-} from "./svg-texture";
+import { isSvgUri } from "./svg-texture-uri";
 import {
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureRef,
@@ -618,7 +615,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
           generation: this.#context.generation,
         }),
         loadSource: (request, signal) => isSvgUri(request.uri)
-          ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
+          ? import("./svg-texture").then(({ loadSvgTextureFromUri }) => (
+            loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
+          ))
           : loadHtmlImage(request.uri, { signal }),
         registerAutoVirtualTextureDecodedSource: (texture, source) => {
           this.#virtualTextureRuntime.registerAutoDecodedSource(texture, source);

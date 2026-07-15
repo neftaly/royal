@@ -41,9 +41,8 @@ import {
 import { resolveResourceUri, throwIfAborted } from "./resource-io";
 import {
   automaticSvgVirtualTextureManifest,
-  loadAutomaticSvgVirtualTexturePageImage,
   svgVirtualTextureSourceForImage,
-} from "./svg-texture";
+} from "./svg-virtual-texture-source";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
 import { captureFailure, type CapturedFailure } from "./captured-failure";
@@ -328,7 +327,9 @@ export class VirtualTextureRuntimeShell {
           throwIfAborted(signal);
           return {
             kind: "page",
-            promise: loadAutomaticSvgVirtualTexturePageImage(svgSource, manifest, page, signal)
+            promise: import("./svg-texture").then(({ loadAutomaticSvgVirtualTexturePageImage }) => (
+              loadAutomaticSvgVirtualTexturePageImage(svgSource, manifest, page, signal)
+            ))
               .then((image) => ({ image, kind: "image" })),
           };
         },

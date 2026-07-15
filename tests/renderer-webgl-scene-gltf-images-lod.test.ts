@@ -15,6 +15,7 @@ import {
   ControlledImage,
   installViewportInvalidationStubs,
   flushMicrotasks,
+  waitForModuleLoad,
   flushPreparedAssetBoundary,
   flushAnimationFrames,
   waitForAnimationFrameWork,
@@ -310,6 +311,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => loader.fetchRequests.some((request) => (
+      /staged-triangle\.svg(?:$|[?#])/.test(request.url)
+    )));
 
     expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
       responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
@@ -364,6 +368,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => loader.fetchRequests.some((request) => (
+      /staged-triangle\.svg(?:$|[?#])/.test(request.url)
+    )));
 
     expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
       responseWithText(url, wrapperSvgTexture, "image/svg+xml"))).toBe(true);
@@ -414,6 +421,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => loader.fetchRequests.some((request) => (
+      /staged-triangle\.svg(?:$|[?#])/.test(request.url)
+    )));
 
     expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
       responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
@@ -460,6 +470,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => root.snapshot().diagnostics.length > 0);
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
       /glTF SVG .*requires a finite viewBox or finite width and height/i,

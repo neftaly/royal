@@ -22,6 +22,7 @@ import {
   vtManifest,
   vtSinglePageManifest,
   flushMicrotasks,
+  waitForModuleLoad,
   textureAllocations,
   textureDataUploads,
   textureResourceBinds,
@@ -126,6 +127,9 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     ].join("");
 
     root.render(renderScene(material));
+    await waitForModuleLoad(() => fetchRequests.some((request) => (
+      request.url === "/textures/plain.svg"
+    )));
     expect(fetchRequests.some((request) => request.url === "/textures/plain.svg")).toBe(true);
     fetchRequests.find((request) => request.url === "/textures/plain.svg")!
       .resolve(responseText("/textures/plain.svg", svgText));
@@ -202,6 +206,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const material = unlitMaterial({ texture: imageTexture(svgUri) });
 
     root.render(renderScene(material));
+    await waitForModuleLoad(() => fetchRequests.some((request) => request.url === svgUri));
     expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
     fetchRequests[0]!.resolve(responseText(svgUri, svgText));
     await flushMicrotasks();
@@ -245,6 +250,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const material = unlitMaterial({ texture: imageTexture("/textures/webkit.svg") });
 
     root.render(renderScene(material));
+    await waitForModuleLoad(() => fetchRequests.length > 0);
     fetchRequests[0]!.resolve(responseText(
       "/textures/webkit.svg",
       '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512"/></svg>',

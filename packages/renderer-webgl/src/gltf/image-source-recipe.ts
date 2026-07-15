@@ -5,10 +5,6 @@ import {
   abortError,
   resolveResourceUri,
 } from "../resource-io";
-import {
-  loadSvgTextureFromBytes,
-  loadSvgTextureFromUri,
-} from "../svg-texture";
 import type { LoadedTextureSource } from "../texture-sources";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
 import {
@@ -214,6 +210,7 @@ export const loadGltfImageSourceRecipe = async (
       image: await loadBitmap(source.bytes, source.mimeType, signal),
     };
     case "svg-uri": {
+      const { loadSvgTextureFromUri } = await import("../svg-texture");
       const loaded = await loadSvgTextureFromUri(source.uri, signal);
       return {
         contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),
@@ -221,6 +218,7 @@ export const loadGltfImageSourceRecipe = async (
       };
     }
     case "svg-bytes": {
+      const { loadSvgTextureFromBytes } = await import("../svg-texture");
       const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, signal);
       return {
         contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),
