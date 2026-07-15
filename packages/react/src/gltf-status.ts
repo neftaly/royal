@@ -66,7 +66,7 @@ export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus
 /**
  * Observes the ordered `KHR_materials_variants` names declared by one retained
  * glTF asset. Returns an empty immutable list until that exact asset is ready.
- * The names can be passed directly to the scene descriptor's `variant` option.
+ * The names can be passed directly to the scene descriptor's `materialVariant` option.
  */
 export const useGltfAssetVariants = (input: GltfAssetStatusInput): readonly string[] => {
   validateGltfAssetStatusInput(input);

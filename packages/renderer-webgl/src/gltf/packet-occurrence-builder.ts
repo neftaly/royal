@@ -62,7 +62,7 @@ export class GltfPacketOccurrenceBuilder {
   ): readonly GltfPacketPreparedPrimitive[] {
     const outerCount = node.kind === "gltf-instances" ? node.instances.count : 1;
     const selectedVariantIndex = state.hasMaterialVariants
-      ? selectedGltfVariantIndex(state.variants, node.variant)
+      ? selectedGltfVariantIndex(state.variants, node.materialVariant)
       : undefined;
     return state.primitives.map((primitive) => {
       const retainedGeometry = this.#geometryRecipes.retainedGltfRecipe(primitive);

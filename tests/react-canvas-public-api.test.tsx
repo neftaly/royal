@@ -17,13 +17,14 @@ import type {
   TextureAssetRef,
   TextureAssetOptions,
   TextureColorSpace,
-  GltfMaterialVariantSelection,
+  GltfMaterialVariantName,
   TextureSampler,
   VirtualTextureAssetOptions,
   VirtualTextureAssetRef,
   VirtualTextureInput,
 } from '@royal/react/scene';
 import {
+  gltf,
   perspectiveCamera,
   scene,
   type PickingId as ScenePickingId,
@@ -189,8 +190,15 @@ describe('Canvas public scene boundary', () => {
   });
 
   it('names the glTF material-variant selection contract', () => {
-    const byName = 'ruby' satisfies GltfMaterialVariantSelection;
-    const byIndex = 1 satisfies GltfMaterialVariantSelection;
-    expect([byName, byIndex]).toEqual(['ruby', 1]);
+    const byName = 'ruby' satisfies GltfMaterialVariantName;
+    expect(byName).toBe('ruby');
+
+    if (false) {
+      // @ts-expect-error Material variants use stable authored names, not declaration-order indices.
+      const byIndex = 1 satisfies GltfMaterialVariantName;
+      // @ts-expect-error The public descriptor spells out that this selects a material variant.
+      const legacyField = gltf({ src: '/model.gltf', variant: 'ruby' });
+      expect([byIndex, legacyField]).toHaveLength(2);
+    }
   });
 });

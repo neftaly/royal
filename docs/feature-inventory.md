@@ -111,7 +111,7 @@ Status meanings:
 | POSITION, NORMAL, TANGENT, TEXCOORD_0/1 and COLOR_0 | ingestion | Current prepared vertex profile. Keep unless a narrower asset contract is chosen. |
 | Flat normals when `NORMAL` is omitted | ingestion | glTF-compatible fragment-space face normals preserve hard edges without generating and retaining a smooth CPU/GPU normal buffer. |
 | Sparse accessors | ingestion | Core glTF compatibility with isolated implementation cost. Keep. |
-| Mesh/material variants | ingestion/product | Keep. Applications select by named type-safe descriptor value, discover ready names through `useGltfAssetVariants`, and can exercise the interactive demo. |
+| Mesh/material variants | ingestion/product | Keep. Applications select by the self-documenting `materialVariant` name, discover ready names through `useGltfAssetVariants`, and can exercise the interactive demo. Declaration-order indices are intentionally not public. |
 | glTF punctual lights | ingestion | Low-cost lowering into Royal lights. Keep unless asset lights are unwanted by policy. |
 | glTF image-based lights | ingestion/product | Keep as asset-scoped fallback lighting. It cannot mutate the Royal scene, and an explicit Royal environment wins. |
 | glTF cameras | unsupported | Deliberately ignored; Royal scene owns the camera. |

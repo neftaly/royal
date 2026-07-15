@@ -23,11 +23,8 @@ export interface GltfAssetRef {
   readonly version?: number | string;
 }
 
-/**
- * Selects one `KHR_materials_variants` entry by its exact name or zero-based
- * declaration index. An asset without that selection renders its base material.
- */
-export type GltfMaterialVariantSelection = string | number;
+/** Exact `KHR_materials_variants` name selected from an asset. */
+export type GltfMaterialVariantName = string;
 
 /** glTF asset node loaded from a source URL. */
 export interface GltfNode {
@@ -38,8 +35,8 @@ export interface GltfNode {
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
   readonly transform?: Transform;
-  /** Unknown names or out-of-range indices fall back to the base material. */
-  readonly variant?: GltfMaterialVariantSelection;
+  /** Exact material-variant name. Unknown names fall back to the base material. */
+  readonly materialVariant?: GltfMaterialVariantName;
 }
 
 export interface GltfOptions {
@@ -53,8 +50,8 @@ export interface GltfOptions {
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
-  /** Unknown names or out-of-range indices fall back to the base material. */
-  readonly variant?: GltfMaterialVariantSelection;
+  /** Exact material-variant name. Unknown names fall back to the base material. */
+  readonly materialVariant?: GltfMaterialVariantName;
   /** Preferred asset version override for cache keys. */
   readonly version?: GltfAssetRef['version'];
 }
@@ -79,16 +76,11 @@ export const resolveGltfAsset = (options: {
   });
 };
 
-export const validateGltfVariant = (
-  variant: GltfMaterialVariantSelection | undefined,
-): GltfMaterialVariantSelection | undefined => {
-  if (variant === undefined) return undefined;
-  if (typeof variant === 'string') return nonEmptyString(variant, 'glTF material variant');
-  if (!Number.isInteger(variant) || variant < 0) {
-    throw new Error('glTF material variant index must be a non-negative integer');
-  }
-  return variant;
-};
+export const validateGltfMaterialVariantName = (
+  materialVariant: GltfMaterialVariantName | undefined,
+): GltfMaterialVariantName | undefined => materialVariant === undefined
+  ? undefined
+  : nonEmptyString(materialVariant, 'glTF materialVariant');
 
 export function gltf(src: string): GltfNode;
 export function gltf(options: GltfOptions): GltfNode;
@@ -96,14 +88,14 @@ export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
-  const variant = validateGltfVariant(options.variant);
+  const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
   const node = {
     kind: 'gltf',
     asset,
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
-    ...(variant === undefined ? {} : { variant })
+    ...(materialVariant === undefined ? {} : { materialVariant })
   } satisfies Omit<GltfNode, 'transform'>;
 
   return Object.freeze(options.transform === undefined

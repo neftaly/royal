@@ -24,8 +24,8 @@ export const GltfVariants = (): ReactNode => {
     environment: studioEnvironment({ radianceScaleNits: 80 }),
     nodes: [
       gltf({ src: variantSrc, transform: { position: [-1.05, 0, 0], rotation: [0, -0.16, 0], scale: [0.76, 0.76, 0.76] } }),
-      gltf({ src: variantSrc, variant, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [0.76, 0.76, 0.76] } }),
-      gltf({ src: variantSrc, variant: 1, transform: { position: [1.05, 0, 0], rotation: [0, 0.16, 0], scale: [0.76, 0.76, 0.76] } }),
+      gltf({ src: variantSrc, materialVariant: variant, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [0.76, 0.76, 0.76] } }),
+      gltf({ src: variantSrc, materialVariant: 'mint', transform: { position: [1.05, 0, 0], rotation: [0, 0.16, 0], scale: [0.76, 0.76, 0.76] } }),
     ],
   }), [orbit.cameraResource, variant]);
 
@@ -34,7 +34,7 @@ export const GltfVariants = (): ReactNode => {
       <div className="gltf-variants-toolbar">
         <div>
           <strong>KHR_materials_variants</strong>
-          <span>Base material · selected named variant · index 1</span>
+          <span>Base material · interactive named variant · mint</span>
         </div>
         <div aria-label="Center material variant" className="gltf-variants-actions" role="group">
           {variantNames.map((name) => (

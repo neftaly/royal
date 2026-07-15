@@ -281,16 +281,14 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/texture asset contentKey must be a non-empty string/);
   });
 
-  it("preserves selected glTF material variants by name or index", () => {
+  it("preserves selected glTF material variants by exact name", () => {
     const src = "/models/chair.gltf";
-    const cases: Array<[string, NonNullable<Parameters<typeof gltf>[0]["variant"]>, object]> = [
-      ["named variant", "walnut", { asset: { uri: src }, kind: "gltf", variant: "walnut" }],
-      ["indexed variant", 2, { kind: "gltf", variant: 2 }],
-    ];
-
-    for (const [label, variant, expected] of cases) {
-      expect(gltf({ src, variant }), label).toMatchObject(expected);
-    }
+    expect(gltf({ materialVariant: "walnut", src })).toMatchObject({
+      asset: { uri: src },
+      kind: "gltf",
+      materialVariant: "walnut",
+    });
+    expect(() => gltf({ materialVariant: "", src })).toThrow(/materialVariant must be a non-empty string/);
   });
 
   it("preserves directional light descriptor fields", () => {

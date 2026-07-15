@@ -1,9 +1,9 @@
 import {
   resolveGltfAsset,
-  validateGltfVariant,
+  validateGltfMaterialVariantName,
   type GltfAssetBounds,
   type GltfAssetRef,
-  type GltfMaterialVariantSelection,
+  type GltfMaterialVariantName,
 } from './gltf';
 import { resolvePickingId, type PickingId } from './picking';
 import type { Geometry } from './geometry';
@@ -227,8 +227,8 @@ export interface GltfInstancesNode {
   /** Exact triangle proxy repeated in each instance's local space. */
   readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
-  /** Unknown names or out-of-range indices fall back to the base material. */
-  readonly variant?: GltfMaterialVariantSelection;
+  /** Exact material-variant name. Unknown names fall back to the base material. */
+  readonly materialVariant?: GltfMaterialVariantName;
 }
 
 export interface GltfInstancesOptions {
@@ -238,21 +238,21 @@ export interface GltfInstancesOptions {
   readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   readonly src: string;
-  /** Select by exact name or zero-based declaration index. */
-  readonly variant?: GltfMaterialVariantSelection;
+  /** Exact `KHR_materials_variants` name selected from the asset. */
+  readonly materialVariant?: GltfMaterialVariantName;
   readonly version?: GltfAssetRef['version'];
 }
 
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
-  const variant = validateGltfVariant(options.variant);
+  const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
   return Object.freeze({
     asset,
     instances: options.instances,
     kind: 'gltf-instances',
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
-    ...(variant === undefined ? {} : { variant }),
+    ...(materialVariant === undefined ? {} : { materialVariant }),
   });
 };

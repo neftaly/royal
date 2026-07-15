@@ -221,14 +221,9 @@ export const gltfPrimitiveMaterialForVariant = (
 
 export const selectedGltfVariantIndex = (
   variants: readonly string[],
-  selection: number | string | undefined,
+  selection: string | undefined,
 ): number | undefined => {
   if (selection === undefined) return undefined;
-  if (typeof selection === "number") {
-    return Number.isInteger(selection) && selection >= 0 && selection < variants.length
-      ? selection
-      : undefined;
-  }
   const index = variants.indexOf(selection);
   return index === -1 ? undefined : index;
 };

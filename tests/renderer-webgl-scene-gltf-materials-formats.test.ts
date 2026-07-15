@@ -639,7 +639,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       .toContainEqual([0.8, 0, 0, 0]);
   });
 
-  it("selects KHR_materials_variants materials by name or index and falls back to the base material", async () => {
+  it("selects KHR_materials_variants materials by name and falls back to the base material", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -653,19 +653,19 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       gltf({
         src: triangleGltfSrc,
         transform: { position: [-0.45, 0, 0], rotation: [0, 0, 0] },
-        variant: "ruby",
+        materialVariant: "ruby",
         version: "khr-materials-variants",
       }),
       gltf({
         src: triangleGltfSrc,
         transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
-        variant: 1,
+        materialVariant: "mint",
         version: "khr-materials-variants",
       }),
       gltf({
         src: triangleGltfSrc,
         transform: { position: [0.45, 0, 0], rotation: [0, 0, 0] },
-        variant: "missing",
+        materialVariant: "missing",
         version: "khr-materials-variants",
       }),
     ]);
@@ -703,7 +703,7 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        variant: "textured",
+        materialVariant: "textured",
         version: "khr-materials-variants-texture",
       }),
     ]);

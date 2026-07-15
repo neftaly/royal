@@ -178,12 +178,12 @@ describe("renderer-core descriptor properties", () => {
         clearColor,
       });
       const bounds = randomBounds(random);
-      const variant = random.boolean() ? randomString(random, "variant") : random.int(0, 8);
+      const materialVariant = randomString(random, "variant");
       const model = gltf({
         bounds,
         pickingId: randomString(random, "pick"),
         src: `/models/${seed.toString(16)}.glb`,
-        variant,
+        materialVariant,
         version: seed,
       });
       const light = directionalLight({
@@ -203,7 +203,7 @@ describe("renderer-core descriptor properties", () => {
         uri: `/models/${seed.toString(16)}.glb`,
         version: seed,
       });
-      expect(model.variant, `${label} glTF variant`).toBe(variant);
+      expect(model.materialVariant, `${label} glTF material variant`).toBe(materialVariant);
       expect(light.kind, `${label} directional light kind`).toBe("directional-light");
       expect(wireframeMaterial({ color: wireColor }), `${label} wireframe defaults`).toEqual({
         baseColor: { color: wireColor, kind: "solid" },
@@ -300,7 +300,8 @@ describe("renderer-core descriptor properties", () => {
       expect(() => studioEnvironment({ radianceScaleNits: nonFinite }), `${label} environment`).toThrow(/finite/);
       expect(() => directionalLight({ direction: [0, 0, 0] }), `${label} direction`).toThrow(/non-zero/);
       expect(() => gltf(""), `${label} source`).toThrow(/must be a non-empty string/);
-      expect(() => gltf({ src: "/model.glb", variant: -1 }), `${label} variant`).toThrow(/non-negative integer/);
+      expect(() => gltf({ materialVariant: "", src: "/model.glb" }), `${label} variant`)
+        .toThrow(/non-empty string/);
       expect(() => gltf({
         bounds: { max: [0, 0, 0], min: [1, 0, 0] },
         src: "/model.glb",

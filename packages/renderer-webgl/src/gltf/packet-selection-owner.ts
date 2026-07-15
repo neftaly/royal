@@ -178,7 +178,7 @@ export class GltfPacketSelectionOwner {
     phase: 1 | 2,
   ): void {
     const selectedVariantIndex = phase === 2 && state.hasMaterialVariants
-      ? selectedGltfVariantIndex(state.variants, node.variant)
+      ? selectedGltfVariantIndex(state.variants, node.materialVariant)
       : undefined;
     for (const primitive of state.primitives) {
       const nodeLod = primitive.nodeLod;

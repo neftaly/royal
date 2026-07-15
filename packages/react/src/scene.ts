@@ -43,7 +43,7 @@ export type {
   GltfAssetBounds,
   GltfAssetRef,
   GltfInput,
-  GltfMaterialVariantSelection,
+  GltfMaterialVariantName,
   GltfInstancesNode,
   GltfInstancesOptions,
   GltfInstanceTransformChannel,

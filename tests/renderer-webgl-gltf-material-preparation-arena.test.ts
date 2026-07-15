@@ -121,9 +121,7 @@ describe("glTF material preparation arena", () => {
     const loadedPrimitive = primitive(base, [red, blue]);
 
     expect(selectedGltfVariantIndex(["red", "blue"], "blue")).toBe(1);
-    expect(selectedGltfVariantIndex(["red", "blue"], 0)).toBe(0);
     expect(selectedGltfVariantIndex(["red", "blue"], "missing")).toBeUndefined();
-    expect(selectedGltfVariantIndex(["red", "blue"], 2)).toBeUndefined();
     expect(gltfPrimitiveMaterialForVariant(1, loadedPrimitive)).toMatchObject({
       material: blue,
       selectionKey: "variant:1",
