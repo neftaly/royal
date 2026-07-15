@@ -5,6 +5,7 @@ import type { Bounds3 } from "../packages/renderer-webgl/src/math/picking";
 import {
   appendPacketRootSource,
   createPacketResourceTables,
+  packetLocalModelSemanticId,
   packetResourceTablesSnapshot,
   readPacketBoundsInto,
   readPacketLocalModelInto,
@@ -207,6 +208,7 @@ describe("packet resource tables", () => {
       appendPacketRootSource(tables, { kind: 0, outerIndex: index, planOccurrenceIndex: index });
     }
     const warm = packetResourceTablesSnapshot(tables);
+    const modelSemanticId = packetLocalModelSemanticId(tables, 0);
 
     resetPacketResourceTablesForPlan(tables);
     const reset = packetResourceTablesSnapshot(tables);
@@ -226,6 +228,10 @@ describe("packet resource tables", () => {
 
     expect(retainPacketBounds(tables, bounds)).toBe(0);
     expect(retainPacketLocalModel(tables, model, 1)).toBe(0);
+    expect(packetLocalModelSemanticId(tables, 0)).toBe(modelSemanticId);
+    const otherModel = randomModel(new SeededRandom(0x4e45_574d));
+    expect(retainPacketLocalModel(tables, otherModel, 1)).toBe(1);
+    expect(packetLocalModelSemanticId(tables, 1)).not.toBe(modelSemanticId);
     expect(retainPacketMaterial(tables, material)).toBe(0);
     expect(appendPacketRootSource(tables, { kind: 1, outerIndex: 2, planOccurrenceIndex: 3 })).toBe(0);
   });

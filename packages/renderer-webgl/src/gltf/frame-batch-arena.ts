@@ -27,7 +27,11 @@ import {
 import { FRAME_PACKET_SIDEDNESS, NO_FRAME_PACKET_ID } from "../frame/packets";
 import type { CpuGeometry } from "../geometry-recipes";
 import { identityMat4, type Mat4, type MutableMat4 } from "../math/mat4";
-import { readPacketLocalModelInto } from "../packet-resource-tables";
+import {
+  packetLocalModelSemanticId,
+  packetResourceTablesPlanRevision,
+  readPacketLocalModelInto,
+} from "../packet-resource-tables";
 import {
   vertexInputGeometry,
   type VertexInputArena,
@@ -72,7 +76,6 @@ export interface GltfFrameDrawBatch {
   readonly lights: SurfaceLightSetWorkspace;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
-  readonly localModelSlots: MutableMat4[];
   material: SurfaceMaterial;
   readonly rootPositionSignature: number[];
   readonly rootRotationSignature: number[];
@@ -150,9 +153,11 @@ export class GltfFrameBatchArena {
   readonly #prepared: PreparedGltfRuntime;
   readonly #registry: GltfPacketBatchRegistry = createGltfPacketBatchRegistry();
   readonly #groups: GltfPacketBatchSegmentGroups = createGltfPacketBatchSegmentGroups();
+  readonly #localModels: Array<MutableMat4 | undefined> = [];
   readonly #vertexInputs: VertexInputArena;
   #liveBatchIds = new Uint32Array(1);
   #liveBatchCount = 0;
+  #localModelResourceRevision = -1;
 
   constructor(
     prepared: PreparedGltfRuntime,
@@ -176,6 +181,13 @@ export class GltfFrameBatchArena {
     counters: GltfFrameBatchCounters,
   ): GltfPacketBatchSegmentGroups {
     const catalog = this.#prepared.packetTopology.catalog;
+    const localModelResourceRevision = packetResourceTablesPlanRevision(
+      this.#prepared.packetTopology.resources,
+    );
+    if (this.#localModelResourceRevision !== localModelResourceRevision) {
+      this.#localModels.length = 0;
+      this.#localModelResourceRevision = localModelResourceRevision;
+    }
     groupGltfPacketSubmissionSegment(
       this.#registry,
       this.#groups,
@@ -247,6 +259,8 @@ export class GltfFrameBatchArena {
 
   dispose(): void {
     this.#batches.length = 0;
+    this.#localModels.length = 0;
+    this.#localModelResourceRevision = -1;
     this.#liveBatchCount = 0;
     let failure: CapturedFailure | undefined;
     const clear = (action: () => void): void => {
@@ -288,7 +302,6 @@ export class GltfFrameBatchArena {
           lights: createSurfaceLightSetWorkspace(),
           localModelSignature: [],
           localModels: [],
-          localModelSlots: [],
           material: material.material,
           rootPositionSignature: [],
           rootRotationSignature: [],
@@ -341,20 +354,22 @@ export class GltfFrameBatchArena {
 
   #appendSubmission(batch: GltfFrameDrawBatch, index: number): void {
     const root = this.workspace.rootBindings[this.workspace.rootBindingIds[index]!]!;
-    const localModelIndex = batch.localModels.length;
-    let localModel = batch.localModelSlots[localModelIndex];
+    const localModelId = this.workspace.localModelIds[index]!;
+    const localModelSemanticId = packetLocalModelSemanticId(
+      this.#prepared.packetTopology.resources,
+      localModelId,
+    );
+    let localModel = this.#localModels[localModelId];
     if (localModel === undefined) {
       localModel = identityMat4();
-      batch.localModelSlots.push(localModel);
+      readPacketLocalModelInto(
+        this.#prepared.packetTopology.resources,
+        localModelId,
+        localModel,
+      );
+      this.#localModels[localModelId] = localModel;
     }
-    readPacketLocalModelInto(
-      this.#prepared.packetTopology.resources,
-      this.workspace.localModelIds[index]!,
-      localModel,
-    );
-    for (let component = 0; component < 16; component += 1) {
-      batch.localModelSignature.push(localModel[component]!);
-    }
+    batch.localModelSignature.push(localModelSemanticId);
     appendRootSignatures(
       batch.rootPositionSignature,
       batch.rootRotationSignature,

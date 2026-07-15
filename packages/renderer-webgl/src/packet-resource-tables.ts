@@ -57,6 +57,9 @@ interface PacketResourceTablesState {
   localModelDeterminants: Float64Array;
   localModelIds: WeakMap<Mat4, number>;
   localModels: Float64Array;
+  localModelSemanticIdCount: number;
+  localModelSemanticIds: WeakMap<Mat4, number>;
+  localModelSemanticIdsByRow: Uint32Array;
   materialCapacity: number;
   materialCount: number;
   materialIds: WeakMap<LoadedGltfMaterial, number>;
@@ -140,6 +143,9 @@ export const createPacketResourceTables = (capacity = 1): PacketResourceTables =
     localModelDeterminants: new Float64Array(normalized),
     localModelIds: new WeakMap(),
     localModels: new Float64Array(normalized * 16),
+    localModelSemanticIdCount: 0,
+    localModelSemanticIds: new WeakMap(),
+    localModelSemanticIdsByRow: new Uint32Array(normalized),
     materialCapacity: normalized,
     materialCount: 0,
     materialIds: new WeakMap(),
@@ -168,6 +174,7 @@ const reserveLocalModels = (state: PacketResourceTablesState, required: number):
   const capacity = nextCapacity(state.localModelCapacity, required);
   state.localModelDeterminants = grownFloat64(state.localModelDeterminants, capacity);
   state.localModels = grownFloat64(state.localModels, capacity * 16);
+  state.localModelSemanticIdsByRow = grownUint32(state.localModelSemanticIdsByRow, capacity);
   state.localModelCapacity = capacity;
 };
 
@@ -230,6 +237,13 @@ export const retainPacketLocalModel = (
   reserveLocalModels(state, id + 1);
   state.localModels.set(model, id * 16);
   state.localModelDeterminants[id] = determinant;
+  let semanticId = state.localModelSemanticIds.get(model);
+  if (semanticId === undefined) {
+    semanticId = nextId(state.localModelSemanticIdCount, "local-model semantic");
+    state.localModelSemanticIdCount = semanticId + 1;
+    state.localModelSemanticIds.set(model, semanticId);
+  }
+  state.localModelSemanticIdsByRow[id] = semanticId;
   state.localModelIds.set(model, id);
   state.localModelCount = id + 1;
   return id;
@@ -321,6 +335,15 @@ export const readPacketLocalModelInto = (
   return state.localModelDeterminants[index]!;
 };
 
+/** Stable identity of one immutable local-model object across plan rebuilds. */
+export const packetLocalModelSemanticId = (
+  tables: PacketResourceTables,
+  id: number,
+): number => {
+  const state = tables as unknown as PacketResourceTablesState;
+  return state.localModelSemanticIdsByRow[resourceIndex(id, state.localModelCount, "local-model")]!;
+};
+
 /** Diagnostic allocating resolver; hot paths should use `readPacketLocalModelInto`. */
 export const resolvePacketLocalModel = (
   tables: PacketResourceTables,
@@ -384,6 +407,10 @@ export const resetPacketResourceTablesForPlan = (tables: PacketResourceTables): 
   }
   state.planRevision += 1;
 };
+
+/** Generation governing the meaning of all resource IDs in this table. */
+export const packetResourceTablesPlanRevision = (tables: PacketResourceTables): number =>
+  (tables as unknown as PacketResourceTablesState).planRevision;
 
 const copyMaterial = (material: LoadedGltfMaterial): LoadedGltfMaterial => {
   const copySlot = (slot: LoadedGltfMaterialTextureSlot): LoadedGltfMaterialTextureSlot => ({
