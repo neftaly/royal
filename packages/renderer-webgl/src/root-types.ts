@@ -67,7 +67,6 @@ export interface WebGlDiagnosticLogSnapshot {
 export interface WebGlRootSnapshot {
   readonly context: WebGlContextSnapshot;
   readonly diagnosticLog: WebGlDiagnosticLogSnapshot;
-  readonly disposed: boolean;
   readonly frame: number;
   /** Renderer-owned glTF load timing, intended for tests, examples benchmarks, and host diagnostics. */
   readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
@@ -182,9 +181,6 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
 
 export interface WebGlGltfLoadDiagnosticsSnapshot {
   readonly assets: readonly WebGlGltfLoadDiagnosticsAssetSnapshot[];
-  readonly errorAssets: number;
-  readonly loadingAssets: number;
-  readonly sceneReadyAssets: number;
 }
 
 export type WebGlGltfLoadDiagnosticsPhaseKey = keyof WebGlGltfLoadDiagnosticsAssetSnapshot["phaseMs"];

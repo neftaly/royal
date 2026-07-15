@@ -60,15 +60,12 @@ describe("glTF load diagnostics core", () => {
         status: "sceneReady",
         variantNames: ["ruby", "mint"],
       }],
-      errorAssets: 0,
-      loadingAssets: 0,
-      sceneReadyAssets: 1,
     });
     expect(input.status).toBe("ready");
     expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.variantNames)).toBe(true);
   });
 
-  it("counts each status and omits unavailable phases", () => {
+  it("preserves each status and omits unavailable phases", () => {
     const loading = state("loading.glb", "loading", {
       load: { imageFailures: 0, imageLoaded: 0, imageRequests: 0, startedAt: 20 },
     });
@@ -85,7 +82,7 @@ describe("glTF load diagnostics core", () => {
 
     const snapshot = gltfLoadDiagnosticsSnapshot([loading, error]);
 
-    expect(snapshot).toMatchObject({ errorAssets: 1, loadingAssets: 1, sceneReadyAssets: 0 });
+    expect(snapshot.assets.map((asset) => asset.status)).toEqual(["loading", "error"]);
     expect(snapshot.assets[0]?.phaseMs).toEqual({});
     expect(snapshot.assets[1]).toMatchObject({
       error: "decode failed",

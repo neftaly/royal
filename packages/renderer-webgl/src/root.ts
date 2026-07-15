@@ -1279,7 +1279,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return {
       context: this.#context.snapshot(),
       diagnosticLog: diagnostics,
-      disposed: this.#disposed,
       frame: this.#framePublication.frame,
       gltfLoadDiagnostics: preparedGltfLoadDiagnosticsSnapshot(this.#preparedGltf),
       gltfInstancing: this.#gltfPacketSubmissions.snapshot(),

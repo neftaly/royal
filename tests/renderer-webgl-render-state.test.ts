@@ -145,8 +145,8 @@ describe("WebGL root render state contracts", () => {
     expect(drawCalls(calls)).toHaveLength(0);
     const snapshot = root.snapshot();
     expect(snapshot).not.toHaveProperty("latestScene");
+    expect(snapshot).not.toHaveProperty("disposed");
     expect(snapshot).toMatchObject({
-      disposed: false,
       frame: 1,
       resourcePressure: {
         frame: 1,

@@ -94,13 +94,6 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
 
 const copyGltfLoadDiagnosticsSnapshot = (value: unknown): GltfLoadDiagnosticsSnapshot | null => {
   if (!isRecord(value) || !Array.isArray(value.assets)) return null;
-  if (
-    typeof value.errorAssets !== 'number' ||
-    typeof value.loadingAssets !== 'number' ||
-    typeof value.sceneReadyAssets !== 'number'
-  ) {
-    return null;
-  }
   const assets: GltfLoadDiagnosticsAsset[] = [];
   for (const asset of value.assets) {
     const copied = copyGltfLoadDiagnosticsAsset(asset);
@@ -108,12 +101,7 @@ const copyGltfLoadDiagnosticsSnapshot = (value: unknown): GltfLoadDiagnosticsSna
     assets.push(copied);
   }
 
-  return {
-    assets,
-    errorAssets: value.errorAssets,
-    loadingAssets: value.loadingAssets,
-    sceneReadyAssets: value.sceneReadyAssets,
-  };
+  return { assets };
 };
 
 export const BenchmarkRendererSnapshot = (): ReactNode => {

@@ -29,9 +29,6 @@ export type GltfLoadDiagnosticsAsset = {
 
 export type GltfLoadDiagnosticsSnapshot = {
   readonly assets: readonly GltfLoadDiagnosticsAsset[];
-  readonly errorAssets: number;
-  readonly loadingAssets: number;
-  readonly sceneReadyAssets: number;
 };
 
 export type RendererLifecycleSnapshot = {

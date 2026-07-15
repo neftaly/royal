@@ -62,18 +62,9 @@ const gltfLoadDiagnosticsAssetSnapshot = (
 /** Pure public diagnostics projection from detached prepared-asset facts. */
 export const gltfLoadDiagnosticsSnapshot = (
   states: Iterable<GltfLoadDiagnosticsState>,
-): WebGlGltfLoadDiagnosticsSnapshot => {
-  const assets = [...states].map(gltfLoadDiagnosticsAssetSnapshot);
-  let errorAssets = 0;
-  let loadingAssets = 0;
-  let sceneReadyAssets = 0;
-  for (const asset of assets) {
-    if (asset.status === "error") errorAssets += 1;
-    else if (asset.status === "loading") loadingAssets += 1;
-    else sceneReadyAssets += 1;
-  }
-  return { assets, errorAssets, loadingAssets, sceneReadyAssets };
-};
+): WebGlGltfLoadDiagnosticsSnapshot => ({
+  assets: [...states].map(gltfLoadDiagnosticsAssetSnapshot),
+});
 
 /** Reads live prepared state into detached facts before applying the pure projection. */
 export const preparedGltfLoadDiagnosticsSnapshot = (

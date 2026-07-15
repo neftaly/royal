@@ -423,7 +423,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
 
     expect(pageUploads(calls)).toHaveLength(beforeDisposeUploads);
     expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(2);
-    expect(root.snapshot().disposed).toBe(true);
+    expect(root.snapshot().context.lifecycle).toBe("disposed");
   });
 
   it("retries retained VT image close ownership on repeated dispose", async () => {
@@ -452,7 +452,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(() => root.dispose()).toThrow(ControlledImage.closeError);
     expect(ControlledImage.closeCalls).toBeGreaterThan(closesBeforeDispose);
     const closesAfterFailedDispose = ControlledImage.closeCalls;
-    expect(root.snapshot().disposed).toBe(true);
+    expect(root.snapshot().context.lifecycle).toBe("disposed");
 
     ControlledImage.closeError = undefined;
     expect(() => root.dispose()).not.toThrow();
