@@ -601,6 +601,7 @@ const installBenchmarkHooks = async (session) => {
   };
   const xr = {
     activeSession: null,
+    callbackDurations: [],
     frameTimes: [],
     hz: config.fakeXrHz,
     sessions: 0,
@@ -651,7 +652,12 @@ const installBenchmarkHooks = async (session) => {
     xr.waiters = xr.waiters.filter((waiter) => {
       const sample = xr.frameTimes.slice(waiter.startIndex, waiter.startIndex + waiter.frameCount);
       if (sample.length < waiter.frameCount) return true;
-      waiter.resolve(statsFromTimes(sample));
+      waiter.resolve({
+        ...statsFromTimes(sample),
+        callbackDurationMs: statsFromDeltas(
+          xr.callbackDurations.slice(waiter.startIndex + 1, waiter.startIndex + waiter.frameCount),
+        ),
+      });
       return false;
     });
   };
@@ -660,8 +666,9 @@ const installBenchmarkHooks = async (session) => {
     xr.waiters = [];
     for (const waiter of waiters) waiter.resolve(failedFrameStats(reason, details));
   };
-  const recordXrFrame = (time) => {
+  const recordXrFrame = (time, callbackDuration) => {
     xr.frameTimes.push(time);
+    xr.callbackDurations.push(callbackDuration);
     while (pendingXrPulses.length > 0) {
       pendingXrPulses.shift().resolve(time);
     }
@@ -683,8 +690,12 @@ const installBenchmarkHooks = async (session) => {
         }, { once: true });
       }
       return originalXrRequestAnimationFrame.call(this, (time, frame) => {
-        recordXrFrame(time);
-        callback(time, frame);
+        const callbackStartedAt = performance.now();
+        try {
+          callback(time, frame);
+        } finally {
+          recordXrFrame(time, performance.now() - callbackStartedAt);
+        }
       });
     };
     Object.defineProperty(wrappedXrRequestAnimationFrame, '__royalBenchPatched', { value: true });
@@ -1004,8 +1015,12 @@ const installBenchmarkHooks = async (session) => {
             session: this,
             getViewerPose: () => ({ views: makeViews(canvas) }),
           };
-          recordXrFrame(time);
-          callback(time, frame);
+          const callbackStartedAt = performance.now();
+          try {
+            callback(time, frame);
+          } finally {
+            recordXrFrame(time, performance.now() - callbackStartedAt);
+          }
         }, delay);
         this.handles.set(handle, timeoutHandle);
         return handle;
@@ -1068,6 +1083,7 @@ const installBenchmarkHooks = async (session) => {
     },
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
+      xr.callbackDurations.length = 0;
       xr.frameTimes.length = 0;
     },
     sampleXrFrames,
@@ -1188,6 +1204,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const rendererBeforeFrames = await evaluate(session, `
 (() => {
   globalThis.__royalBench?.reset?.();
+  performance.mark('royal-bench-measure-start');
   return ${rendererSnapshotExpression};
 })()
 `);
@@ -1262,6 +1279,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   // numerator and denominator from different frame windows.
   const frameMeasurement = await evaluate(session, `
 (() => ({
+  mark: performance.mark('royal-bench-measure-end').startTime,
   gl: globalThis.__royalBench?.snapshot?.() ?? {},
   renderer: ${rendererSnapshotExpression},
 }))()
@@ -1898,6 +1916,9 @@ const routeSummary = (route) => {
     copyTexSubImage2DPerFrame: round(copyTexSubImage2DPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
     uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / sampledFrameCount),
+    ...(typeof route.xr?.frameStats?.callbackDurationMs?.p95Ms === 'number'
+      ? { xrCallbackP95Ms: round(route.xr.frameStats.callbackDurationMs.p95Ms) }
+      : {}),
     ...(route.virtualTextureClose === undefined
       ? {}
       : {
@@ -2211,6 +2232,7 @@ const main = async () => {
         typeof cameraDragFrameStats?.p95Ms === 'number' &&
         typeof cameraDragDrawCallsPerFrame === 'number';
       const xrP95 = result.xr?.frameStats?.p95Ms;
+      const xrCallbackP95 = result.xr?.frameStats?.callbackDurationMs?.p95Ms;
       const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
       const profile = result.profile?.kind === 'gltf-instancing'
         ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0}`
@@ -2246,6 +2268,7 @@ const main = async () => {
           : []),
         ...(cameraDragFailure === undefined ? [] : [`drag=${cameraDragFailure}`]),
         ...(typeof xrP95 === 'number' ? [`xrP95=${xrP95.toFixed(1)}ms`] : []),
+        ...(typeof xrCallbackP95 === 'number' ? [`xrCpuP95=${xrCallbackP95.toFixed(2)}ms`] : []),
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
