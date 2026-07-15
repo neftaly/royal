@@ -151,17 +151,29 @@ export interface SurfaceExecutionSignals {
   readonly wakeRequested: boolean;
 }
 
+type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
 type SurfaceBaseColorTextureBinding =
-  | { readonly kind: "none" }
+  | typeof NO_BASE_COLOR_TEXTURE_BINDING
   | {
       readonly kind: "ordinary";
-      readonly resource: Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
+      readonly resource: ReadyOrdinaryTexture;
     }
   | {
       readonly kind: "prepared-virtual";
       readonly ordinaryFallback?: TextureAssetUploadRef;
       readonly state: VirtualTextureRuntimeState;
     };
+type MutableOrdinaryBaseColorTextureBinding = {
+  kind: "ordinary";
+  resource: ReadyOrdinaryTexture;
+};
+type MutableVirtualBaseColorTextureBinding = {
+  kind: "prepared-virtual";
+  ordinaryFallback?: TextureAssetUploadRef;
+  state: VirtualTextureRuntimeState;
+};
+type SurfaceBaseColorBindingKind = SurfaceBaseColorTextureBinding["kind"];
+const NO_BASE_COLOR_TEXTURE_BINDING = { kind: "none" } as const;
 
 type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"> & {
   readonly baseColor: SurfaceBaseColorTextureBinding;
@@ -171,7 +183,6 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
   >>;
 };
 
-type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
 type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorTextureBinding;
   readonly features: PureSurfaceTextureBindingPlan["features"];
@@ -277,6 +288,8 @@ export class SurfaceExecutionArena {
     candidates: this.#textureCandidates,
   };
   readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
+  #ordinaryBaseColorBinding: MutableOrdinaryBaseColorTextureBinding | undefined;
+  #virtualBaseColorBinding: MutableVirtualBaseColorTextureBinding | undefined;
   readonly #signals: {
     diagnostics: readonly SurfaceExecutionDiagnostic[];
     wakeRequested: boolean;
@@ -406,13 +419,13 @@ export class SurfaceExecutionArena {
           this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
         }
       }
-      const baseColorBinding = this.#bindBaseColorTexture(program, plan);
-      uniform1i(this.#programs, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+      const baseColorBindingKind = this.#bindBaseColorTexture(program, plan);
+      uniform1i(this.#programs, program, "u_useTexture", baseColorBindingKind === "ordinary" ? 1 : 0);
       uniform1i(
         this.#programs,
         program,
         "u_useVirtualTexture",
-        baseColorBinding.kind === "prepared-virtual" ? 1 : 0,
+        baseColorBindingKind === "prepared-virtual" ? 1 : 0,
       );
       drawGeometry(
         this.#geometry,
@@ -472,13 +485,13 @@ export class SurfaceExecutionArena {
       } else {
         this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
       }
-      const baseColorBinding = this.#bindBaseColorTexture(program, plan);
-      uniform1i(this.#programs, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+      const baseColorBindingKind = this.#bindBaseColorTexture(program, plan);
+      uniform1i(this.#programs, program, "u_useTexture", baseColorBindingKind === "ordinary" ? 1 : 0);
       uniform1i(
         this.#programs,
         program,
         "u_useVirtualTexture",
-        baseColorBinding.kind === "prepared-virtual" ? 1 : 0,
+        baseColorBindingKind === "prepared-virtual" ? 1 : 0,
       );
       const allocation = this.#gltfFrames.bindInstanceBuffer(
         this.#gl,
@@ -648,17 +661,27 @@ export class SurfaceExecutionArena {
     readinessInput.baseColor = baseColor;
     const pure = resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
     this.#recordTextureBindingOmissions(pure);
-    const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
-      ? ordinaryBaseColor === undefined && virtualFallbackReady !== undefined
-        ? { kind: "ordinary", resource: virtualFallbackReady }
-        : ordinaryBaseColor === undefined ? { kind: "none" } : { kind: "ordinary", resource: ordinaryBaseColor }
-      : pure.baseColor.kind === "virtual" && baseColorResidency.kind === "prepared-virtual"
-        ? {
-            kind: "prepared-virtual",
-            ...(virtualFallbackTexture === undefined ? {} : { ordinaryFallback: virtualFallbackTexture }),
-            state: baseColorResidency.state,
-          }
-        : { kind: "none" };
+    let selectedBaseColor: SurfaceBaseColorTextureBinding = NO_BASE_COLOR_TEXTURE_BINDING;
+    if (pure.baseColor.kind === "ordinary") {
+      const resource = ordinaryBaseColor ?? virtualFallbackReady;
+      if (resource !== undefined) {
+        let binding = this.#ordinaryBaseColorBinding;
+        if (binding === undefined) {
+          binding = { kind: "ordinary", resource };
+          this.#ordinaryBaseColorBinding = binding;
+        } else binding.resource = resource;
+        selectedBaseColor = binding;
+      }
+    } else if (pure.baseColor.kind === "virtual" && baseColorResidency.kind === "prepared-virtual") {
+      let binding = this.#virtualBaseColorBinding;
+      if (binding === undefined) {
+        binding = { kind: "prepared-virtual", state: baseColorResidency.state };
+        this.#virtualBaseColorBinding = binding;
+      } else binding.state = baseColorResidency.state;
+      if (virtualFallbackTexture === undefined) delete binding.ordinaryFallback;
+      else binding.ordinaryFallback = virtualFallbackTexture;
+      selectedBaseColor = binding;
+    }
     this.#texturePlan.baseColor = selectedBaseColor;
     return this.#texturePlan;
   }
@@ -914,26 +937,25 @@ export class SurfaceExecutionArena {
   #bindBaseColorTexture(
     program: WebGLProgram,
     plan: SurfaceTextureBindingPlan | undefined,
-  ): SurfaceBaseColorTextureBinding {
-    if (plan === undefined) return { kind: "none" };
+  ): SurfaceBaseColorBindingKind {
+    if (plan === undefined) return "none";
     const binding = plan.baseColor;
     switch (binding.kind) {
       case "ordinary":
-        return this.#bindOrdinaryBaseColorTexture(program, binding, plan) ? binding : { kind: "none" };
+        return this.#bindOrdinaryBaseColorTexture(program, binding.resource, plan) ? "ordinary" : "none";
       case "prepared-virtual": {
         if (this.#bindVirtualTexture(program, binding.state, plan)) {
           if (binding.ordinaryFallback !== undefined) {
             this.#textureResidencyIntent.recordVirtualBind(textureCacheKey(binding.ordinaryFallback));
           }
-          return binding;
+          return "prepared-virtual";
         }
-        if (binding.ordinaryFallback === undefined) return { kind: "none" };
+        if (binding.ordinaryFallback === undefined) return "none";
         const resource = this.#requestOrdinaryTexture(binding.ordinaryFallback);
-        if (!resource.uploaded) return { kind: "none" };
-        const fallback = { kind: "ordinary" as const, resource };
-        return this.#bindOrdinaryBaseColorTexture(program, fallback, plan) ? fallback : { kind: "none" };
+        if (!resource.uploaded) return "none";
+        return this.#bindOrdinaryBaseColorTexture(program, resource, plan) ? "ordinary" : "none";
       }
-      case "none": return { kind: "none" };
+      case "none": return "none";
     }
   }
 
@@ -944,12 +966,12 @@ export class SurfaceExecutionArena {
 
   #bindOrdinaryBaseColorTexture(
     program: WebGLProgram,
-    binding: Extract<SurfaceBaseColorTextureBinding, { readonly kind: "ordinary" }>,
+    resource: ReadyOrdinaryTexture,
     plan: SurfaceTextureBindingPlan,
   ): boolean {
     const textureUnit = plan.textureUnits.get("baseColorTexture");
     if (textureUnit === undefined) return false;
-    this.#textureBindings.bindTexture2d(textureUnit, binding.resource.texture);
+    this.#textureBindings.bindTexture2d(textureUnit, resource.texture);
     uniform1i(this.#programs, program, "u_texture", textureUnit);
     return true;
   }
