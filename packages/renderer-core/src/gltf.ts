@@ -5,7 +5,7 @@ import {
 } from './primitives';
 import { frozenBounds3, identityScalar, nonEmptyString } from './descriptor-values';
 import type { WorldPosition3 } from './primitives';
-import type { PickingId } from './picking';
+import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 import type { Geometry } from './geometry';
 
@@ -95,12 +95,13 @@ export function gltf(options: GltfOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
   const asset = resolveGltfAsset(options);
+  const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const variant = validateGltfVariant(options.variant);
   const node = {
     kind: 'gltf',
     asset,
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
-    ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
+    ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
     ...(variant === undefined ? {} : { variant })
   } satisfies Omit<GltfNode, 'transform'>;

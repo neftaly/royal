@@ -55,7 +55,6 @@ const pickedInstance = (
   node: GltfInstancesNode,
   fallbackTarget: object,
   instanceIndex: number,
-  primitiveKey = "primitive",
   id?: string,
   instanceId?: string,
 ): CanvasPickedPointerTarget => {
@@ -70,7 +69,6 @@ const pickedInstance = (
       instanceIndex,
       kind: "gltf-instances",
       node,
-      primitiveKey,
     },
   };
 
@@ -196,12 +194,12 @@ describe("React canvas pointer interaction planner", () => {
     expect(result.state.hoveredTarget).toBe(nextTarget);
   });
 
-  it("distinguishes bulk instances and primitives within one pointer target", () => {
+  it("distinguishes bulk instances while keeping one node identity across primitives", () => {
     const node = { kind: "gltf-instances" } as GltfInstancesNode;
     const hostTarget = {};
-    const instance0 = pickedInstance(node, hostTarget, 0, "body", "pieces");
-    const instance1 = pickedInstance(node, hostTarget, 1, "body", "pieces");
-    const instance1Detail = pickedInstance(node, hostTarget, 1, "detail", "pieces");
+    const instance0 = pickedInstance(node, hostTarget, 0, "pieces");
+    const instance1 = pickedInstance(node, hostTarget, 1, "pieces");
+    const instance1Detail = pickedInstance(node, hostTarget, 1, "pieces");
     let state = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
       picked: instance0,
       type: "pointermove",
@@ -218,7 +216,7 @@ describe("React canvas pointer interaction planner", () => {
       picked: instance1Detail,
       type: "pointermove",
     });
-    expect(dispatchTypes(result)).toEqual(["pointerleave", "pointerenter", "pointermove"]);
+    expect(dispatchTypes(result)).toEqual(["pointermove"]);
 
     state = reduceCanvasPointerInteraction(state, {
       picked: instance1,
@@ -237,8 +235,8 @@ describe("React canvas pointer interaction planner", () => {
   it("keeps caller logical instance identity stable across packed index changes", () => {
     const node = { kind: "gltf-instances" } as GltfInstancesNode;
     const hostTarget = {};
-    const before = pickedInstance(node, hostTarget, 2, "body", "pieces", "card-17");
-    const after = pickedInstance(node, hostTarget, 9, "body", "pieces", "card-17");
+    const before = pickedInstance(node, hostTarget, 2, "pieces", "card-17");
+    const after = pickedInstance(node, hostTarget, 9, "pieces", "card-17");
     const hovered = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
       picked: before,
       type: "pointermove",

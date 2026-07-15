@@ -5,7 +5,7 @@ import {
   type GltfAssetRef,
   type GltfMaterialVariantSelection,
 } from './gltf';
-import type { PickingId } from './picking';
+import { resolvePickingId, type PickingId } from './picking';
 import type { Geometry } from './geometry';
 
 export interface GltfInstanceTransforms {
@@ -123,10 +123,8 @@ const logicalIdsFrom = (
   if (logicalIds.length !== count) {
     throw new Error(`glTF instance logicalIds must contain ${count} strings; received ${logicalIds.length}`);
   }
-  const copy = [...logicalIds];
-  if (copy.some((logicalId) => typeof logicalId !== 'string')) {
-    throw new Error('glTF instance logicalIds must contain only strings');
-  }
+  const copy = logicalIds.map((logicalId, index) =>
+    resolvePickingId(logicalId, `glTF instance logicalIds[${index}]`)!);
   const unique = new Set(copy);
   if (unique.size !== copy.length) throw new Error('glTF instance logicalIds must be unique');
   return Object.freeze(copy);
@@ -247,13 +245,14 @@ export interface GltfInstancesOptions {
 
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
   const asset = resolveGltfAsset(options);
+  const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
   const variant = validateGltfVariant(options.variant);
   return Object.freeze({
     asset,
     instances: options.instances,
     kind: 'gltf-instances',
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
-    ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
+    ...(pickingId === undefined ? {} : { pickingId }),
     ...(variant === undefined ? {} : { variant }),
   });
 };

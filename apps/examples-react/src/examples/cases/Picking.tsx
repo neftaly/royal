@@ -106,7 +106,6 @@ export const Picking = (): ReactNode => {
         aria-live="polite"
         className={`picking-readout${active ? ' picking-readout-active' : ''}`}
         data-royal-picking-hovered-id={hoveredId}
-        data-royal-picking-readout={readoutText}
       >
         {readoutText}
       </output>

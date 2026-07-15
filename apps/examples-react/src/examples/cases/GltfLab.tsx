@@ -96,7 +96,7 @@ export const GltfLab = (): ReactNode => {
   const entry = gltfLabCaseByName.get(name);
 
   return (
-    <div className="gltf-lab" data-gltf-lab-case={name}>
+    <div className="gltf-lab">
       <div className="gltf-lab-toolbar">
         <label>
           Khronos case

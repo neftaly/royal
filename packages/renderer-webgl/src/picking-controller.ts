@@ -44,11 +44,9 @@ type PickScratchCandidate = {
   readonly bounds: MutableBounds3;
   boundsDistance: number;
   geometry: PickingGeometry | undefined;
-  instanceIndex: number;
   localModel: Mat4 | undefined;
   ordinal: number;
   outerIndex: number;
-  primitive: LoadedGltfPrimitive | undefined;
   rootModel: Mat4 | undefined;
 };
 
@@ -216,11 +214,9 @@ export class PickingController {
         bounds,
         boundsDistance: 0,
         geometry: undefined,
-        instanceIndex: 0,
         localModel: undefined,
         ordinal: 0,
         outerIndex: 0,
-        primitive: undefined,
         rootModel: undefined,
       });
     }
@@ -272,9 +268,7 @@ export class PickingController {
           rootModel,
           localModels[instanceIndex]!,
           primitive,
-          primitive,
           -1,
-          instanceIndex,
           ray,
         );
       }
@@ -310,9 +304,7 @@ export class PickingController {
             rootModel,
             localModels[instanceIndex]!,
             primitive,
-            primitive,
             outerIndex,
-            instanceIndex,
             ray,
           );
         }
@@ -338,7 +330,7 @@ export class PickingController {
       const rootModel = transformMat4Into(this.#rootModel, this.#dependencies.renderObjectTransform(node));
       const rootViewProjection = multiplyMat4Into(this.#rootViewProjection, viewProjection, rootModel);
       if (isBoundsVisible(localBounds, rootViewProjection)) {
-        this.#addCandidate(localBounds, rootModel, this.#identityModel, geometry, undefined, -1, 0, ray);
+        this.#addCandidate(localBounds, rootModel, this.#identityModel, geometry, -1, ray);
       }
     } else {
       const rootModels = this.#dependencies.gltfInstanceRootModels(node);
@@ -351,9 +343,7 @@ export class PickingController {
           rootModel,
           this.#identityModel,
           geometry,
-          undefined,
           outerIndex,
-          0,
           ray,
         );
       }
@@ -371,9 +361,7 @@ export class PickingController {
     rootModel: Mat4,
     localModel: Mat4,
     geometry: PickingGeometry,
-    primitive: LoadedGltfPrimitive | undefined,
     outerIndex: number,
-    instanceIndex: number,
     ray: Ray,
   ): void {
     const index = this.#candidateCount;
@@ -383,11 +371,9 @@ export class PickingController {
         bounds: { max: [0, 0, 0], min: [0, 0, 0] },
         boundsDistance: 0,
         geometry: undefined,
-        instanceIndex: 0,
         localModel: undefined,
         ordinal: 0,
         outerIndex: 0,
-        primitive: undefined,
         rootModel: undefined,
       };
       this.#candidates.push(candidate);
@@ -401,11 +387,9 @@ export class PickingController {
     if (distance === undefined) return;
     candidate.boundsDistance = distance;
     candidate.geometry = geometry;
-    candidate.instanceIndex = instanceIndex;
     candidate.localModel = localModel;
     candidate.ordinal = index;
     candidate.outerIndex = outerIndex;
-    candidate.primitive = primitive;
     candidate.rootModel = rootModel;
     this.#candidateCount += 1;
     this.#candidatesThisPick += 1;
@@ -490,14 +474,6 @@ export class PickingController {
     }
     if (bestIndex < 0) return undefined;
     const best = this.#candidates[bestIndex]!;
-    const primitive = best.primitive;
-    const primitiveKey = primitive === undefined
-      ? undefined
-      : primitive.localModels.length === 1
-        ? primitive.key
-        : node.kind === "gltf"
-          ? `${primitive.key}:instance:${best.instanceIndex}`
-          : `${primitive.key}:asset-instance:${best.instanceIndex}`;
     return {
       clientX: input.clientX,
       clientY: input.clientY,
@@ -509,7 +485,6 @@ export class PickingController {
             ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
             kind: "gltf",
             node,
-            ...(primitiveKey === undefined ? {} : { primitiveKey }),
           }
         : {
           ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
@@ -519,7 +494,6 @@ export class PickingController {
           instanceIndex: best.outerIndex,
           kind: "gltf-instances",
           node,
-          ...(primitiveKey === undefined ? {} : { primitiveKey }),
         },
     };
   }

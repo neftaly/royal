@@ -9,15 +9,15 @@ type RouteLinkProps = {
   readonly className: string;
   readonly navigate: (path: string) => void;
   readonly path: string;
-} & Readonly<Record<`data-${string}`, string>>;
+};
 
-const RouteLink = ({ ariaCurrent, children, className, navigate, path, ...data }: RouteLinkProps): ReactNode => {
+const RouteLink = ({ ariaCurrent, children, className, navigate, path }: RouteLinkProps): ReactNode => {
   const follow = (event: MouseEvent<HTMLAnchorElement>): void => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     navigate(path);
   };
-  return <a {...data} aria-current={ariaCurrent} className={className} href={exampleHref(path)} onClick={follow}>{children}</a>;
+  return <a aria-current={ariaCurrent} className={className} href={exampleHref(path)} onClick={follow}>{children}</a>;
 };
 
 export const Shell = ({
@@ -41,9 +41,6 @@ export const Shell = ({
               <RouteLink
                 ariaCurrent={currentPath === example.path ? 'page' : undefined}
                 className={`examples-link${currentPath === example.path ? ' active' : ''}`}
-                data-example-id={example.id}
-                data-example-nav-link=""
-                data-example-route={example.path}
                 navigate={navigate}
                 path={example.path}
               >

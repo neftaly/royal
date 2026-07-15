@@ -47,7 +47,6 @@ const ExampleScreen = ({ example }: { readonly example: Example }): ReactNode =>
     <section
       className="example-page"
       data-example-id={example.id}
-      data-example-route={example.path}
       data-source-file={example.sourceFile}
     >
       <header className="example-heading">

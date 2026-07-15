@@ -12,7 +12,6 @@ export interface CanvasPointerInteractionIdentity {
   readonly targetKind: PickResult["target"]["kind"];
   readonly instanceIndex?: number;
   readonly instanceId?: string;
-  readonly primitiveKey?: string;
 }
 
 export interface CanvasPickedPointerTarget {
@@ -85,9 +84,6 @@ export const createCanvasPointerInteractionIdentity = (
         ...(target.instanceId === undefined ? { instanceIndex: target.instanceIndex } : {}),
       }
       : {}),
-    ...(target.kind === "mesh" || target.primitiveKey === undefined
-      ? {}
-      : { primitiveKey: target.primitiveKey }),
   };
 };
 
@@ -102,7 +98,6 @@ const samePointerInteractionIdentity = (
     && left.targetKind === right.targetKind
     && left.instanceIndex === right.instanceIndex
     && left.instanceId === right.instanceId
-    && left.primitiveKey === right.primitiveKey
   );
 
 const stateWith = (

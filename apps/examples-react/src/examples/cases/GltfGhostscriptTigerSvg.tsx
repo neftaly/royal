@@ -2,7 +2,6 @@ import {
   Canvas,
   OrbitControls,
   useOrbitCamera,
-  useOrbitCameraView,
 } from '@royal/react';
 import { gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
@@ -17,7 +16,6 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
     far: 10,
     near: 0.001,
   });
-  const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     toneMapping: 'linear-clamp',
@@ -34,7 +32,6 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF core SVG Ghostscript tiger card fixture"
-      data-camera-distance={orbitView.distance.toFixed(4)}
       rendererOptions={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
       scene={renderScene}

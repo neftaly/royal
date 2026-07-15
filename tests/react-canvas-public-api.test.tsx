@@ -126,7 +126,7 @@ describe('Canvas public scene boundary', () => {
       }
       if (target.kind === 'gltf') {
         const gltfTarget: GltfPickTarget = target;
-        return gltfTarget.primitiveKey === undefined ? -1 : 0;
+        return gltfTarget.node.kind === 'gltf' ? 0 : -1;
       }
       const meshTarget: MeshPickTarget = target;
       return meshTarget.node.kind === 'mesh' ? 0 : -1;

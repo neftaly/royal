@@ -5,7 +5,7 @@ import {
   type Transform,
   type TransformOptions
 } from './primitives';
-import type { PickingId } from './picking';
+import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 
 /** Geometry plus material, with an optional transform. */
@@ -34,12 +34,13 @@ export interface MeshOptions {
 }
 
 export const mesh = (options: MeshOptions): MeshNode => {
+  const pickingId = resolvePickingId(options.pickingId, 'mesh pickingId');
   const node = {
     kind: 'mesh',
     geometry: options.geometry,
     material: options.material,
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
-    ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
+    ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref })
   } satisfies Omit<MeshNode, 'transform'>;
 

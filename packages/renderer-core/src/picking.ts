@@ -2,8 +2,16 @@ import type { GltfNode } from './gltf';
 import type { GltfInstancesNode } from './gltf-instances';
 import type { MeshNode } from './mesh';
 import type { Metres, WorldPosition3 } from './primitives';
+import { nonEmptyString } from './descriptor-values';
 
+/** Stable, non-empty application identity for one interactive scene target. */
 export type PickingId = string;
+
+/** @internal Normalizes every picking identity at its descriptor boundary. */
+export const resolvePickingId = (
+  value: PickingId | undefined,
+  label: string,
+): PickingId | undefined => value === undefined ? undefined : nonEmptyString(value, label);
 
 export interface PickInput {
   /** CSS-pixel coordinate relative to the browser viewport. */
@@ -22,7 +30,6 @@ export interface GltfPickTarget {
   readonly id?: PickingId;
   readonly kind: 'gltf';
   readonly node: GltfNode;
-  readonly primitiveKey?: string;
 }
 
 export interface GltfInstancesPickTarget {
@@ -32,7 +39,6 @@ export interface GltfInstancesPickTarget {
   readonly instanceIndex: number;
   readonly kind: 'gltf-instances';
   readonly node: GltfInstancesNode;
-  readonly primitiveKey?: string;
 }
 
 export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;

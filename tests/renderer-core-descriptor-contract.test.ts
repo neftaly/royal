@@ -113,6 +113,25 @@ describe("renderer-core descriptor contract", () => {
       pickingGeometry,
       pickingId: "helmets",
     });
+
+    expect(() => mesh({
+      geometry: boxGeometry(1),
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      pickingId: "",
+    })).toThrow(/mesh pickingId must be a non-empty string/);
+    expect(() => gltf({
+      pickingId: 42 as unknown as string,
+      src: "/models/helmet.gltf",
+    })).toThrow(/glTF pickingId must be a non-empty string/);
+    expect(() => gltfInstances({
+      instances,
+      pickingId: "",
+      src: "/models/helmet.gltf",
+    })).toThrow(/glTF instances pickingId must be a non-empty string/);
+    expect(() => createGltfInstanceTransforms({
+      count: 1,
+      logicalIds: [""],
+    })).toThrow(/glTF instance logicalIds\[0\] must be a non-empty string/);
   });
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
