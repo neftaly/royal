@@ -425,6 +425,23 @@ const checkRealXrRoute = (route, routeLabel) => {
   checkFrameStats(route.xr.frameStats, `${routeLabel}.xr.frameStats`);
 };
 
+const checkXrGpuTimers = (route, routeLabel, enabled) => {
+  if (!enabled || route.id !== 'webxr-vr') return;
+  const timers = route.xr?.frameStats?.gpuDurationMs;
+  if (!requireObject(timers, `${routeLabel}.xr.frameStats.gpuDurationMs`)) return;
+  requireBoolean(timers.enabled, `${routeLabel}.xr.frameStats.gpuDurationMs.enabled`);
+  requireBoolean(timers.supported, `${routeLabel}.xr.frameStats.gpuDurationMs.supported`);
+  if (timers.enabled !== true) errors.push(`${routeLabel}.xr.frameStats.gpuDurationMs.enabled must be true`);
+  if (timers.supported !== true) {
+    warnings.push(`${routeLabel} did not expose EXT_disjoint_timer_query_webgl2`);
+    return;
+  }
+  checkFrameStats(timers, `${routeLabel}.xr.frameStats.gpuDurationMs`);
+  requireNonNegativeNumber(timers.disjointSamples, `${routeLabel}.xr.frameStats.gpuDurationMs.disjointSamples`);
+  requireNonNegativeNumber(timers.errors, `${routeLabel}.xr.frameStats.gpuDurationMs.errors`);
+  requireNonNegativeNumber(timers.pendingSamples, `${routeLabel}.xr.frameStats.gpuDurationMs.pendingSamples`);
+};
+
 const checkVirtualTextureClose = (route, routeLabel, enabled) => {
   if (!enabled && route.virtualTextureClose === undefined) return;
   const close = route.virtualTextureClose;
@@ -688,6 +705,7 @@ if (requireObject(report, 'report')) {
     checkBrowserDiagnostics(report.browserDiagnostics, 'report.browserDiagnostics');
     checkTrace(report.trace, 'report.trace');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
+    const gpuTimersEnabled = report.options?.gpuTimersEnabled === true;
     const realXrEnabled = report.options?.realXrEnabled === true;
     const virtualTextureCloseEnabled = report.options?.virtualTextureCloseEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
@@ -702,6 +720,7 @@ if (requireObject(report, 'report')) {
         }
         checkCameraDrag(route, routeLabel, cameraDragEnabled);
         checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
+        checkXrGpuTimers(route, routeLabel, gpuTimersEnabled);
         if (realXrEnabled) checkRealXrRoute(route, routeLabel);
         if (route.profile?.kind === 'gltf-instancing') {
           checkInstancingRoute(route, routeLabel);

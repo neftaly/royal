@@ -120,6 +120,7 @@ const fakeXrPrepareTimeoutMs = envInteger(
 );
 const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
+const gpuTimersEnabled = process.env.EXAMPLES_BENCH_GPU_TIMERS !== '0';
 
 if (fakeXrEnabled && realXrEnabled) {
   throw new Error('EXAMPLES_BENCH_FAKE_XR and EXAMPLES_BENCH_REAL_XR cannot both be enabled');
@@ -539,6 +540,7 @@ const installBenchmarkHooks = async (session) => {
     fakeXrHz,
     fakeXrSampleTimeoutMs,
     fakeXrViews,
+    gpuTimersEnabled,
   });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
     source: `
@@ -607,6 +609,15 @@ const installBenchmarkHooks = async (session) => {
     sessions: 0,
     waiters: [],
   };
+  const gpuTimers = {
+    attempted: false,
+    contexts: new WeakMap(),
+    disjointSamples: 0,
+    durations: [],
+    errors: 0,
+    generation: 0,
+    supported: false,
+  };
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
   const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
@@ -648,6 +659,83 @@ const installBenchmarkHooks = async (session) => {
     timeoutMs: 0,
     ...details,
   });
+  const gpuTimerState = (gl) => {
+    if (!config.gpuTimersEnabled || !(gl instanceof WebGL2RenderingContext)) return undefined;
+    if (gpuTimers.contexts.has(gl)) return gpuTimers.contexts.get(gl) ?? undefined;
+    gpuTimers.attempted = true;
+    const extension = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (extension === null) {
+      gpuTimers.contexts.set(gl, null);
+      return undefined;
+    }
+    gpuTimers.supported = true;
+    const state = { extension, freeQueries: [], gl, pending: [] };
+    gpuTimers.contexts.set(gl, state);
+    return state;
+  };
+  const pollGpuTimers = (state) => {
+    if (state === undefined || state.pending.length === 0) return;
+    const disjoint = state.gl.getParameter(state.extension.GPU_DISJOINT_EXT) === true;
+    if (disjoint) {
+      for (const sample of state.pending) sample.disjoint = true;
+    }
+    let completed = 0;
+    for (; completed < state.pending.length; completed += 1) {
+      const sample = state.pending[completed];
+      if (!state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT_AVAILABLE)) break;
+      if (sample.disjoint === true) gpuTimers.disjointSamples += 1;
+      else if (sample.generation === gpuTimers.generation) {
+        const nanoseconds = Number(state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT));
+        if (Number.isFinite(nanoseconds) && nanoseconds >= 0) gpuTimers.durations.push(nanoseconds / 1_000_000);
+      }
+      state.freeQueries.push(sample.query);
+    }
+    if (completed > 0) state.pending.splice(0, completed);
+  };
+  const xrGl = (session) => session?.renderState?.baseLayer?.context;
+  const beginGpuTimer = (session) => {
+    const state = gpuTimerState(xrGl(session));
+    if (state === undefined) return undefined;
+    pollGpuTimers(state);
+    const query = state.freeQueries.pop() ?? state.gl.createQuery();
+    if (query === null) return undefined;
+    try {
+      state.gl.beginQuery(state.extension.TIME_ELAPSED_EXT, query);
+      return { generation: gpuTimers.generation, query, state };
+    } catch {
+      gpuTimers.errors += 1;
+      state.freeQueries.push(query);
+      return undefined;
+    }
+  };
+  const endGpuTimer = (sample) => {
+    if (sample === undefined) return;
+    try {
+      sample.state.gl.endQuery(sample.state.extension.TIME_ELAPSED_EXT);
+      sample.state.pending.push(sample);
+    } catch {
+      gpuTimers.errors += 1;
+      sample.state.freeQueries.push(sample.query);
+    }
+  };
+  const gpuTimerStats = (startIndex, requestedSampleCount) => {
+    const state = gpuTimerState(xrGl(xr.activeSession));
+    pollGpuTimers(state);
+    if (!config.gpuTimersEnabled) return { enabled: false, supported: false };
+    if (!gpuTimers.supported) return { enabled: true, supported: false };
+    return {
+      ...statsFromDeltas(
+        gpuTimers.durations.slice(startIndex),
+        requestedSampleCount,
+        config.fakeXrSampleTimeoutMs,
+      ),
+      disjointSamples: gpuTimers.disjointSamples,
+      enabled: true,
+      errors: gpuTimers.errors,
+      pendingSamples: state?.pending.length ?? 0,
+      supported: true,
+    };
+  };
   const resolveXrWaiters = () => {
     xr.waiters = xr.waiters.filter((waiter) => {
       const sample = xr.frameTimes.slice(waiter.startIndex, waiter.startIndex + waiter.frameCount);
@@ -657,6 +745,7 @@ const installBenchmarkHooks = async (session) => {
         callbackDurationMs: statsFromDeltas(
           xr.callbackDurations.slice(waiter.startIndex + 1, waiter.startIndex + waiter.frameCount),
         ),
+        gpuDurationMs: gpuTimerStats(waiter.gpuStartIndex, waiter.frameCount - 1),
       });
       return false;
     });
@@ -691,9 +780,11 @@ const installBenchmarkHooks = async (session) => {
       }
       return originalXrRequestAnimationFrame.call(this, (time, frame) => {
         const callbackStartedAt = performance.now();
+        const gpuTimer = beginGpuTimer(this);
         try {
           callback(time, frame);
         } finally {
+          endGpuTimer(gpuTimer);
           recordXrFrame(time, performance.now() - callbackStartedAt);
         }
       });
@@ -792,6 +883,7 @@ const installBenchmarkHooks = async (session) => {
       let timeoutHandle;
       const waiter = {
         frameCount: requestedFrameCount,
+        gpuStartIndex: gpuTimers.durations.length,
         resolve(value) {
           if (settled) return;
           settled = true;
@@ -1016,9 +1108,11 @@ const installBenchmarkHooks = async (session) => {
             getViewerPose: () => ({ views: makeViews(canvas) }),
           };
           const callbackStartedAt = performance.now();
+          const gpuTimer = beginGpuTimer(this);
           try {
             callback(time, frame);
           } finally {
+            endGpuTimer(gpuTimer);
             recordXrFrame(time, performance.now() - callbackStartedAt);
           }
         }, delay);
@@ -1085,6 +1179,10 @@ const installBenchmarkHooks = async (session) => {
       for (const key of Object.keys(counters)) counters[key] = 0;
       xr.callbackDurations.length = 0;
       xr.frameTimes.length = 0;
+      gpuTimers.disjointSamples = 0;
+      gpuTimers.durations.length = 0;
+      gpuTimers.errors = 0;
+      gpuTimers.generation += 1;
     },
     sampleXrFrames,
     startFrameRecorder,
@@ -1106,6 +1204,13 @@ const installBenchmarkHooks = async (session) => {
         framebufferWidth: baseLayer?.framebufferWidth ?? null,
         frameRate: activeSession?.frameRate ?? null,
         frameCount: xr.frameTimes.length,
+        gpuTimers: {
+          attempted: gpuTimers.attempted,
+          disjointSamples: gpuTimers.disjointSamples,
+          errors: gpuTimers.errors,
+          sampleCount: gpuTimers.durations.length,
+          supported: gpuTimers.supported,
+        },
         hz: activeSession?.frameRate ?? xr.hz,
         sessions: xr.sessions,
         supportedFrameRates,
@@ -1919,6 +2024,13 @@ const routeSummary = (route) => {
     ...(typeof route.xr?.frameStats?.callbackDurationMs?.p95Ms === 'number'
       ? { xrCallbackP95Ms: round(route.xr.frameStats.callbackDurationMs.p95Ms) }
       : {}),
+    ...(route.xr?.frameStats?.gpuDurationMs?.supported === true
+      ? {
+        xrGpuP95Ms: round(route.xr.frameStats.gpuDurationMs.p95Ms),
+        xrGpuSampleCount: route.xr.frameStats.gpuDurationMs.sampleCount,
+        xrGpuSamplesMissing: route.xr.frameStats.gpuDurationMs.samplesMissing,
+      }
+      : {}),
     ...(route.virtualTextureClose === undefined
       ? {}
       : {
@@ -2233,6 +2345,7 @@ const main = async () => {
         typeof cameraDragDrawCallsPerFrame === 'number';
       const xrP95 = result.xr?.frameStats?.p95Ms;
       const xrCallbackP95 = result.xr?.frameStats?.callbackDurationMs?.p95Ms;
+      const xrGpu = result.xr?.frameStats?.gpuDurationMs;
       const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
       const profile = result.profile?.kind === 'gltf-instancing'
         ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0}`
@@ -2269,6 +2382,12 @@ const main = async () => {
         ...(cameraDragFailure === undefined ? [] : [`drag=${cameraDragFailure}`]),
         ...(typeof xrP95 === 'number' ? [`xrP95=${xrP95.toFixed(1)}ms`] : []),
         ...(typeof xrCallbackP95 === 'number' ? [`xrCpuP95=${xrCallbackP95.toFixed(2)}ms`] : []),
+        ...(xrGpu?.supported === true
+          ? [
+            `xrGpuP95=${xrGpu.p95Ms.toFixed(2)}ms`,
+            ...(xrGpu.samplesMissing > 0 ? [`xrGpuMiss=${xrGpu.samplesMissing}`] : []),
+          ]
+          : []),
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
@@ -2331,6 +2450,7 @@ const main = async () => {
         fakeXrPrepareTimeoutMs,
         fakeXrSampleTimeoutMs,
         fakeXrViews,
+        gpuTimersEnabled,
         realXrEnabled,
         virtualTextureCloseEnabled,
         virtualTextureCloseTarget,
