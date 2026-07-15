@@ -371,7 +371,6 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       "u_vtAtlas",
       "u_vtPageTable",
       "u_vtPageTableSize",
-      "u_vtAtlasGrid",
       "u_vtAtlasTexelSize",
       "u_vtBorderTexels",
       "u_vtPageSize",

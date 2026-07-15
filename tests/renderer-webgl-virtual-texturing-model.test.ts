@@ -771,12 +771,13 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
     const page = { mip: 0, x: 0, y: 0 };
 
-    expect(encodeVirtualTexturePageTableRgba8({ slot: 0 })).toEqual([1, 0, 0, 255]);
-    expect(encodeVirtualTexturePageTableRgba8({ residentMip: 2, slot: 256 })).toEqual([1, 1, 2, 255]);
-    expect(encodeVirtualTexturePageTableRgba8({})).toEqual([0, 0, 0, 0]);
-    expect(encodeVirtualTexturePageTableRgba8({ slot: 65_534 })).toEqual([255, 255, 0, 255]);
-    expect(() => encodeVirtualTexturePageTableRgba8({ slot: 65_535 })).toThrow(/0 through 65534/);
-    expect(() => encodeVirtualTexturePageTableRgba8({ slot: -1 })).toThrow(/0 through 65534/);
+    expect(encodeVirtualTexturePageTableRgba8({ slot: 0 }, 16)).toEqual([0, 0, 0, 255]);
+    expect(encodeVirtualTexturePageTableRgba8({ residentMip: 2, slot: 256 }, 16)).toEqual([0, 16, 2, 255]);
+    expect(encodeVirtualTexturePageTableRgba8({}, 16)).toEqual([0, 0, 0, 0]);
+    expect(encodeVirtualTexturePageTableRgba8({ slot: 65_534 }, 256)).toEqual([254, 255, 0, 255]);
+    expect(() => encodeVirtualTexturePageTableRgba8({ slot: 65_535 }, 256)).toThrow(/0 through 65534/);
+    expect(() => encodeVirtualTexturePageTableRgba8({ slot: -1 }, 256)).toThrow(/0 through 65534/);
+    expect(() => encodeVirtualTexturePageTableRgba8({ slot: 256 }, 1)).toThrow(/exceeds the encoded atlas grid/);
 
     table.ensureResident(page);
     expect(table.takeDirtyPageTableUpdates()).toEqual([

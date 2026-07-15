@@ -769,7 +769,6 @@ export class SurfaceExecutionArena {
     uniform1i(this.#programs, program, "u_vtAtlas", atlasTextureUnit);
     uniform1i(this.#programs, program, "u_vtPageTable", pageTableTextureUnit);
     uniform2f(this.#programs, program, "u_vtPageTableSize", binding.pageTableWidth, binding.pageTableHeight);
-    uniform2f(this.#programs, program, "u_vtAtlasGrid", binding.atlasGridColumns, binding.atlasGridRows);
     uniform2f(
       this.#programs,
       program,

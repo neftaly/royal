@@ -841,7 +841,7 @@ const flushNextPageTableUpdate = (
       const texel = encodeVirtualTexturePageTableRgba8({
         residentMip: region.residentMip,
         ...(update.slot === undefined ? {} : { slot: update.slot }),
-      });
+      }, allocation.atlasGridColumns);
       const scratch = allocation.pageTableUploadScratch;
       for (let index = 0; index < scratch.length; index += 4) scratch.set(texel, index);
       const maxCells = scratch.length / 4;

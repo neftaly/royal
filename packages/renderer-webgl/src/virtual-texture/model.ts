@@ -946,18 +946,22 @@ export class VirtualTextureAtlasPageTable {
 
 export const encodeVirtualTexturePageTableRgba8 = (
   update: Pick<VirtualTexturePageTableUpdate, "residentMip" | "slot">,
+  atlasGridColumns: number,
 ): readonly [number, number, number, number] => {
   if (update.slot === undefined) return [0, 0, 0, 0];
   if (!Number.isSafeInteger(update.slot) || update.slot < 0 || update.slot >= 65_535) {
     throw new Error("Virtual texture page-table slot must be an integer from 0 through 65534.");
   }
-  const encodedSlot = update.slot + 1;
-  // A is reserved for future page-table flags/addressing. Material data belongs in atlases.
-  const reservedAlpha = 0xff;
+  if (!Number.isSafeInteger(atlasGridColumns) || atlasGridColumns < 1 || atlasGridColumns > 256) {
+    throw new Error("Virtual texture atlas grid columns must be an integer from 1 through 256.");
+  }
+  const atlasX = update.slot % atlasGridColumns;
+  const atlasY = Math.floor(update.slot / atlasGridColumns);
+  if (atlasY > 255) throw new Error("Virtual texture page-table slot exceeds the encoded atlas grid.");
   return [
-    encodedSlot & 0xff,
-    (encodedSlot >> 8) & 0xff,
+    atlasX,
+    atlasY,
     update.residentMip ?? 0,
-    reservedAlpha,
+    0xff,
   ];
 };

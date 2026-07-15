@@ -129,7 +129,6 @@ const surfaceFeatureBlock = (
 const surfaceBaseColorVirtualTextureUniforms = (features: SurfaceShaderFeatures): string =>
   hasSurfaceShaderVirtualBaseColor(features)
     ? `uniform bool u_useVirtualTexture;
-uniform vec2 u_vtAtlasGrid;
 uniform vec2 u_vtAtlasTexelSize;
 uniform vec2 u_vtPageTableSize;
 uniform float u_vtBorderTexels;
@@ -176,16 +175,13 @@ vec4 sampleVirtualBaseColor(vec2 uv) {
     ivec2(u_vtPageTableSize) - ivec2(1)
   );
   uvec4 tableEntry = texelFetch(u_vtPageTable, pageCoord, 0);
-  uint encodedSlot = tableEntry.r + tableEntry.g * 256u;
   float residentMip = float(tableEntry.b);
-  // tableEntry.a is reserved for future page-table flags/addressing.
 
-  if (encodedSlot == 0u) {
+  if (tableEntry.a == 0u) {
     return u_color;
   }
 
-  float slot = float(encodedSlot - 1u);
-  vec2 atlasSlotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
+  vec2 atlasSlotCoord = vec2(tableEntry.rg);
   float residentCoverage = exp2(residentMip);
   vec2 residentPageMin = floor(vec2(pageCoord) / residentCoverage) * residentCoverage * u_vtPageSize;
   vec2 residentLocalTexel = (sourceTexel - residentPageMin) / residentCoverage;

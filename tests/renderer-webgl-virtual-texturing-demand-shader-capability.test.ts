@@ -239,7 +239,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     }));
   });
 
-  it("expands resident parent page-table updates over covered mip-0 cells with encoded fallback offsets", async () => {
+  it("expands resident parent page-table updates over covered mip-0 cells with direct atlas coordinates", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
@@ -254,7 +254,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
 
     const writes = pageTableUploads(calls).map(pageTableUploadSummary);
     expect(writes).toEqual([
-      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
+      [0, 0, 2, 1, [0, 0, 1, 255, 0, 0, 1, 255]],
     ]);
     expect(pageUploads(calls)).toHaveLength(1);
     expect(pageUploads(calls)[0]?.args[0]).toBe(gl.TEXTURE_2D);
@@ -277,8 +277,8 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
 
     const writes = pageTableUploads(calls).map(pageTableUploadSummary);
     expect(writes).toEqual([
-      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
-      [0, 0, 1, 1, [2, 0, 0, 255]],
+      [0, 0, 2, 1, [0, 0, 1, 255, 0, 0, 1, 255]],
+      [0, 0, 1, 1, [1, 0, 0, 255]],
     ]);
   });
 
@@ -300,8 +300,8 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(imageBySrc("m0-0-0")).toBeUndefined();
     const writes = pageTableUploads(calls).map(pageTableUploadSummary);
     expect(writes).toEqual([
-      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
-      [1, 0, 1, 1, [2, 0, 0, 255]],
+      [0, 0, 2, 1, [0, 0, 1, 255, 0, 0, 1, 255]],
+      [1, 0, 1, 1, [1, 0, 0, 255]],
     ]);
   });
 
@@ -325,7 +325,6 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       "u_vtAtlas",
       "u_vtPageTable",
       "u_vtPageTableSize",
-      "u_vtAtlasGrid",
       "u_vtAtlasTexelSize",
       "u_vtBorderTexels",
       "u_vtPageSize",

@@ -46,7 +46,6 @@ const virtualBaseColorFeaturePair = [
 
 const virtualBaseColorSourceInvariants = [
   "uniform bool u_useVirtualTexture;",
-  "uniform vec2 u_vtAtlasGrid;",
   "uniform vec2 u_vtAtlasTexelSize;",
   "uniform vec2 u_vtPageTableSize;",
   "uniform float u_vtBorderTexels;",
@@ -56,7 +55,7 @@ const virtualBaseColorSourceInvariants = [
   "uniform int u_vtWrapT;",
   "wrapVirtualTextureUv",
   "sampleVirtualBaseColor",
-  "tableEntry.g",
+  "vec2(tableEntry.rg)",
   "residentMip",
   "ivec2(floor(sourceTexel / u_vtPageSize))",
   "halfTexel",
@@ -66,7 +65,7 @@ const virtualBaseColorSourceInvariants = [
   "atlasCellSize",
   "atlasTexel",
   "atlasLocalUv",
-  "tableEntry.a is reserved",
+  "if (tableEntry.a == 0u)",
   "u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet",
 ] as const;
 
