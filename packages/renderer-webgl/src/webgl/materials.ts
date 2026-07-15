@@ -195,6 +195,30 @@ export const surfaceMaterialExtensionFactors = (
 ): SurfaceMaterialExtensionFactors =>
   material.extensionFactors ?? DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS;
 
+/** Pure shader-tier classification; inert extension metadata stays on core PBR. */
+export const surfaceMaterialUsesPbrExtensions = (material: SurfaceMaterial): boolean => {
+  if (material.kind !== "standard") return false;
+  const factors = surfaceMaterialExtensionFactors(material);
+  return material.specularTexture !== undefined
+    || material.specularColorTexture !== undefined
+    || factors.anisotropyStrength !== 0
+    || factors.specularFactor !== 1
+    || factors.specularColorFactor[0] !== 1
+    || factors.specularColorFactor[1] !== 1
+    || factors.specularColorFactor[2] !== 1
+    || factors.ior !== 1.5
+    || factors.clearcoatFactor !== 0
+    || factors.diffuseTransmissionFactor !== 0
+    || factors.sheenColorFactor[0] !== 0
+    || factors.sheenColorFactor[1] !== 0
+    || factors.sheenColorFactor[2] !== 0
+    || factors.iridescenceFactor !== 0
+    || factors.transmissionFactor !== 0;
+};
+
+export const surfaceMaterialUsesTransmission = (material: SurfaceMaterial): boolean =>
+  material.kind === "standard" && surfaceMaterialExtensionFactors(material).transmissionFactor !== 0;
+
 export const surfaceMaterialAlphaMode = (material: SurfaceMaterial): SurfaceMaterialAlphaMode =>
   material.alphaMode ?? "OPAQUE";
 

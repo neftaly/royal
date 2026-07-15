@@ -284,10 +284,9 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
     expect(uniform1iPayloads(readyFrameCalls, "u_transmissionScreenTexture")).toHaveLength(0);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor").map(roundVector))
-      .toContainEqual([1, 1, 1, 1]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
-      .toContainEqual([0, 0, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor")).toHaveLength(0);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors")).toHaveLength(0);
+    expect(shaderSources(calls).join("\n")).toContain("#define MATERIAL_EXTENDED 0");
   });
 
   it("renders required KHR materials dispersion through per-channel transmission sampling", async () => {
@@ -384,8 +383,8 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(2);
     expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
-    expect(dispersionPayloads).toContainEqual([0, 0, 0, 0]);
-    expect(transmissionVolumePayloads).toContainEqual([0, 0, 0, 0]);
+    expect(dispersionPayloads).toHaveLength(0);
+    expect(transmissionVolumePayloads).toHaveLength(0);
   });
 
   it("uploads and binds KHR materials transmission and volume texture multipliers", async () => {

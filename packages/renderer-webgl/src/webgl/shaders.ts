@@ -259,6 +259,7 @@ export const fragmentShaderSource = (
   kind: ProgramKind,
   surfaceFeatures: SurfaceShaderFeatures = ALL_SURFACE_SHADER_TEXTURE_FEATURES,
   clusteredLights = false,
+  extendedMaterial = true,
 ): string => {
   if (kind === "postprocess") return postprocessFragmentShaderSource;
   switch (kind) {
@@ -266,7 +267,7 @@ export const fragmentShaderSource = (
       return wireframeFragmentShaderSource;
     case "surface":
     case "surface-instanced-split":
-      return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights);
+      return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights, extendedMaterial);
     case "unlit":
     case "unlit-instanced-split":
       return unlitFragmentShaderSource(surfaceFeatures);
@@ -323,9 +324,14 @@ vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDire
   return result;
 }`;
 
-const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredLights: boolean): string =>
+const surfaceFragmentShaderSource = (
+  features: SurfaceShaderFeatures,
+  clusteredLights: boolean,
+  extendedMaterial: boolean,
+): string =>
   assertNoShaderTokens(replaceShaderTokens(surfaceFragmentTemplate, new Map([
     ["__MAX_SURFACE_LIGHTS__", String(MAX_SURFACE_LIGHTS)],
+    ["__MATERIAL_EXTENDED__", extendedMaterial ? "1" : "0"],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
     ["__SURFACE_TEXTURE_COORDINATE_UNIFORMS__", surfaceTextureCoordinateUniformDeclarations(features)],
     ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],

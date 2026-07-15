@@ -961,10 +961,13 @@ export const materialSheenIridescenceTextureDiagnosticTriangleDocument = () => {
       {
         extensions: {
           KHR_materials_iridescence: {
+            iridescenceFactor: 1,
             iridescenceTexture: { index: 2 },
             iridescenceThicknessTexture: { index: 3 },
           },
           KHR_materials_sheen: {
+            sheenColorFactor: [1, 1, 1],
+            sheenRoughnessFactor: 1,
             sheenColorTexture: { index: 0 },
             sheenRoughnessTexture: { index: 1 },
           },
@@ -1242,9 +1245,11 @@ export const materialTransmissionVolumeTextureDiagnosticTriangleDocument = () =>
       {
         extensions: {
           KHR_materials_transmission: {
+            transmissionFactor: 1,
             transmissionTexture: { index: 0 },
           },
           KHR_materials_volume: {
+            thicknessFactor: 1,
             thicknessTexture: { index: 1 },
           },
         },

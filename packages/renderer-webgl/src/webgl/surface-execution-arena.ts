@@ -36,6 +36,8 @@ import {
   surfaceMaterialMetallicFactor,
   surfaceMaterialOcclusionStrength,
   surfaceMaterialRoughnessFactor,
+  surfaceMaterialUsesPbrExtensions,
+  surfaceMaterialUsesTransmission,
   textureCacheKey,
   type SurfaceMaterial,
   type SurfaceMaterialTextureCoordinates,
@@ -149,8 +151,10 @@ const createSurfaceMaterialTextureCatalog = (
 ): SurfaceMaterialTextureCatalog => {
   const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
   const entries: SurfaceMaterialTextureCandidateEntry[] = [];
+  const extendedMaterial = surfaceMaterialUsesPbrExtensions(material);
   for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
     const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
+    if (!extendedMaterial && index >= 4) continue;
     const texture = descriptor.key === "emissiveTexture"
       ? material.emissiveTexture
       : material.kind === "standard" ? material[descriptor.key] : undefined;
@@ -424,6 +428,7 @@ export class SurfaceExecutionArena {
         programKind,
         plan?.features,
         (surfaceLights?.punctuals.length ?? 0) > 0,
+        surfaceMaterial?.kind === "standard" && surfaceMaterialUsesPbrExtensions(surfaceMaterial),
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -486,6 +491,7 @@ export class SurfaceExecutionArena {
         batch.material.kind === "standard" ? "surface-instanced-split" : "unlit-instanced-split",
         plan.features,
         surfaceLights.punctuals.length > 0,
+        batch.material.kind === "standard" && surfaceMaterialUsesPbrExtensions(batch.material),
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -536,8 +542,16 @@ export class SurfaceExecutionArena {
     kind: ProgramKind,
     features: PureSurfaceTextureBindingPlan["features"] | undefined,
     clusteredLights: boolean,
+    extendedMaterial: boolean,
   ): WebGLProgram | undefined {
-    const resource = requestProgram(this.#programs, frame, kind, features, clusteredLights);
+    const resource = requestProgram(
+      this.#programs,
+      frame,
+      kind,
+      features,
+      clusteredLights,
+      extendedMaterial,
+    );
     return resource?.program;
   }
 
@@ -555,7 +569,10 @@ export class SurfaceExecutionArena {
     for (let index = 0; index < entries.length; index += 1) {
       candidates[entries[index]!.descriptor.feature] = "ready";
     }
-    if (transmissionScreenColorTexture === undefined) delete candidates.transmissionScreenTexture;
+    if (
+      transmissionScreenColorTexture === undefined
+      || !surfaceMaterialUsesTransmission(material)
+    ) delete candidates.transmissionScreenTexture;
     else candidates.transmissionScreenTexture = "ready";
     if (lightSet.specular !== undefined) {
       candidates.iblSpecularCube = "ready";
@@ -646,7 +663,7 @@ export class SurfaceExecutionArena {
         break;
       }
     }
-    if (transmissionScreenColorTexture !== undefined) {
+    if (transmissionScreenColorTexture !== undefined && surfaceMaterialUsesTransmission(material)) {
       candidates.transmissionScreenTexture = transmissionScreenColorTexture.uploaded ? "ready" : "unavailable";
     }
     if (lightSet.specular !== undefined) {
@@ -706,33 +723,36 @@ export class SurfaceExecutionArena {
     plan: SurfaceTextureBindingPlan,
   ): void {
     const factors = surfaceMaterialExtensionFactors(material);
-    const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
+    const extendedMaterial = surfaceMaterialUsesPbrExtensions(material);
     this.#bindAlphaSettings(program, material);
     uniform4f(this.#programs, program, "u_materialPbrFactors",
       surfaceMaterialMetallicFactor(material), surfaceMaterialRoughnessFactor(material), 0, 0);
-    uniform4f(this.#programs, program, "u_specularColorFactor",
-      factors.specularColorFactor[0], factors.specularColorFactor[1], factors.specularColorFactor[2], 1);
-    uniform4f(this.#programs, program, "u_materialExtensionFactors",
-      factors.specularFactor, factors.ior, factors.clearcoatFactor, factors.clearcoatRoughnessFactor);
-    uniform4f(this.#programs, program, "u_anisotropyFactors",
-      factors.anisotropyStrength, factors.anisotropyRotation, 0, 0);
-    uniform4f(this.#programs, program, "u_diffuseTransmissionFactors",
-      factors.diffuseTransmissionColorFactor[0], factors.diffuseTransmissionColorFactor[1],
-      factors.diffuseTransmissionColorFactor[2], factors.diffuseTransmissionFactor);
-    uniform4f(this.#programs, program, "u_sheenColorFactor",
-      factors.sheenColorFactor[0], factors.sheenColorFactor[1], factors.sheenColorFactor[2],
-      factors.sheenRoughnessFactor);
-    uniform4f(this.#programs, program, "u_iridescenceFactors",
-      factors.iridescenceFactor, factors.iridescenceIor,
-      factors.iridescenceThicknessMinimum, factors.iridescenceThicknessMaximum);
-    uniform4f(this.#programs, program, "u_dispersionFactors", factors.dispersionFactor, 0, 0, 0);
-    uniform4f(this.#programs, program, "u_attenuationColorFactor",
-      factors.attenuationColor[0], factors.attenuationColor[1], factors.attenuationColor[2], 1);
-    uniform4f(this.#programs, program, "u_transmissionVolumeFactors",
-      factors.transmissionFactor, factors.thicknessFactor,
-      hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
-      hasFiniteAttenuationDistance ? 1 : 0);
-    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
+    if (extendedMaterial) {
+      const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
+      uniform4f(this.#programs, program, "u_specularColorFactor",
+        factors.specularColorFactor[0], factors.specularColorFactor[1], factors.specularColorFactor[2], 1);
+      uniform4f(this.#programs, program, "u_materialExtensionFactors",
+        factors.specularFactor, factors.ior, factors.clearcoatFactor, factors.clearcoatRoughnessFactor);
+      uniform4f(this.#programs, program, "u_anisotropyFactors",
+        factors.anisotropyStrength, factors.anisotropyRotation, 0, 0);
+      uniform4f(this.#programs, program, "u_diffuseTransmissionFactors",
+        factors.diffuseTransmissionColorFactor[0], factors.diffuseTransmissionColorFactor[1],
+        factors.diffuseTransmissionColorFactor[2], factors.diffuseTransmissionFactor);
+      uniform4f(this.#programs, program, "u_sheenColorFactor",
+        factors.sheenColorFactor[0], factors.sheenColorFactor[1], factors.sheenColorFactor[2],
+        factors.sheenRoughnessFactor);
+      uniform4f(this.#programs, program, "u_iridescenceFactors",
+        factors.iridescenceFactor, factors.iridescenceIor,
+        factors.iridescenceThicknessMinimum, factors.iridescenceThicknessMaximum);
+      uniform4f(this.#programs, program, "u_dispersionFactors", factors.dispersionFactor, 0, 0, 0);
+      uniform4f(this.#programs, program, "u_attenuationColorFactor",
+        factors.attenuationColor[0], factors.attenuationColor[1], factors.attenuationColor[2], 1);
+      uniform4f(this.#programs, program, "u_transmissionVolumeFactors",
+        factors.transmissionFactor, factors.thicknessFactor,
+        hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
+        hasFiniteAttenuationDistance ? 1 : 0);
+      this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
+    }
     this.#bindTextureCoordinates(program, material, plan);
     uniform4f(this.#programs, program, "u_normalTextureSettings",
       material.kind === "standard" ? material.normalScale ?? 1 : 1,

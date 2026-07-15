@@ -20,15 +20,18 @@ const PROGRAM_KIND_IDS: Readonly<Record<ProgramKind, number>> = {
 };
 const PROGRAM_KIND_SHIFT = 24;
 const PROGRAM_CLUSTERED_FLAG = 1 << 27;
+const PROGRAM_EXTENDED_MATERIAL_FLAG = 1 << 28;
 
 /** Pure, allocation-free identity for one linked program variant. */
 export const programVariantKey = (
   kind: ProgramKind,
   features: SurfaceShaderFeatures | undefined,
   clusteredLights: boolean,
+  extendedMaterial = false,
 ): number => (
   (PROGRAM_KIND_IDS[kind] << PROGRAM_KIND_SHIFT)
   | (clusteredLights ? PROGRAM_CLUSTERED_FLAG : 0)
+  | (extendedMaterial ? PROGRAM_EXTENDED_MATERIAL_FLAG : 0)
   | (features === undefined ? 0 : surfaceShaderFeatureMask(features))
 ) >>> 0;
 
@@ -63,6 +66,7 @@ type Resource = ProgramArenaResource & {
 
 type Request = {
   readonly clusteredLights: boolean;
+  readonly extendedMaterial: boolean;
   readonly features: SurfaceShaderFeatures | undefined;
   readonly key: number;
   readonly kind: ProgramKind;
@@ -170,6 +174,7 @@ const compileProgram = (
   kind: ProgramKind,
   features: SurfaceShaderFeatures | undefined,
   clusteredLights: boolean,
+  extendedMaterial: boolean,
 ): Resource => {
   const gl = state.gl;
   const program = gl.createProgram();
@@ -179,7 +184,11 @@ const compileProgram = (
   let fragmentShader: WebGLShader | undefined;
   try {
     vertexShader = compileShader(state, gl.VERTEX_SHADER, vertexShaderSource(kind));
-    fragmentShader = compileShader(state, gl.FRAGMENT_SHADER, fragmentShaderSource(kind, features, clusteredLights));
+    fragmentShader = compileShader(
+      state,
+      gl.FRAGMENT_SHADER,
+      fragmentShaderSource(kind, features, clusteredLights, extendedMaterial),
+    );
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
@@ -205,7 +214,13 @@ const startPendingPrograms = (state: State, frame: number): void => {
     if (state.requests.get(request.key) !== request || request.resource !== undefined) continue;
     state.startsThisFrame += 1;
     try {
-      request.resource = compileProgram(state, request.kind, request.features, request.clusteredLights);
+      request.resource = compileProgram(
+        state,
+        request.kind,
+        request.features,
+        request.clusteredLights,
+        request.extendedMaterial,
+      );
     } catch (error) {
       if (state.requests.get(request.key) === request) state.requests.delete(request.key);
       throw error;
@@ -259,15 +274,17 @@ export const requestProgram = (
   kind: ProgramKind,
   features?: SurfaceShaderFeatures,
   clusteredLights = false,
+  extendedMaterial = false,
 ): ProgramArenaResource | undefined => {
   const state = arena as unknown as State;
-  const key = programVariantKey(kind, features, clusteredLights);
+  const key = programVariantKey(kind, features, clusteredLights, extendedMaterial);
   let request = state.requests.get(key);
   if (request === undefined) {
     // Draw-time feature sets may come from a reusable planner workspace.
     // Retain a snapshot only for the lifetime of a newly compiled variant.
     request = {
       clusteredLights,
+      extendedMaterial,
       features: features === undefined ? undefined : new Set(features),
       key,
       kind,

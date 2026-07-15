@@ -1273,10 +1273,9 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_specularColorFactor").map(roundVector))
-      .toContainEqual([1, 1, 1, 1]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_materialExtensionFactors").map(roundVector))
-      .toContainEqual([1, 1.5, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_specularColorFactor")).toHaveLength(0);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_materialExtensionFactors")).toHaveLength(0);
+    expect(shaderSources(calls).join("\n")).toContain("#define MATERIAL_EXTENDED 0");
   });
 
   it("uploads and binds KHR material specular and clearcoat textures", async () => {
@@ -1459,10 +1458,9 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
-      .toContainEqual([0, 0, 0, 0]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors").map(roundVector))
-      .toContainEqual([0, 1.3, 100, 400]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor")).toHaveLength(0);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors")).toHaveLength(0);
+    expect(shaderSources(calls).join("\n")).toContain("#define MATERIAL_EXTENDED 0");
   });
 
   it("uploads and binds KHR material sheen and iridescence textures", async () => {
