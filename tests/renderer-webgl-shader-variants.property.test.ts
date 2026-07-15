@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fragmentShaderSource,
   surfaceShaderFeatureKey,
+  surfaceShaderFeatureMask,
   SURFACE_SHADER_TEXTURE_FEATURES,
   vertexShaderSource,
   type ProgramKind,
@@ -115,9 +116,14 @@ describe("surface shader variants", () => {
       const expectedKey = SURFACE_SHADER_TEXTURE_FEATURES
         .filter((feature) => features.has(feature))
         .join(",");
+      const expectedMask = SURFACE_SHADER_TEXTURE_FEATURES.reduce(
+        (mask, feature, index) => features.has(feature) ? mask | (1 << index) : mask,
+        0,
+      ) >>> 0;
       const hasVirtualBaseColor = hasVirtualBaseColorSource(features);
 
       expect(surfaceShaderFeatureKey(features), label).toBe(expectedKey);
+      expect(surfaceShaderFeatureMask(features), label).toBe(expectedMask);
       expect(source, label).not.toMatch(/__[A-Z0-9_]+__/u);
       expect(source, `${label} surface lighting path`).toContain("materialDiffuseColor(baseColor.rgb)");
       expect(source, `${label} specular occlusion`).toContain("iblSpecularOcclusion(NdotV, occlusion, roughness)");

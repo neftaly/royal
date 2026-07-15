@@ -66,6 +66,15 @@ export const surfaceShaderFeatureKey = (features: SurfaceShaderFeatures): string
   return key;
 };
 
+/** Allocation-free identity for the fixed surface sampler feature universe. */
+export const surfaceShaderFeatureMask = (features: SurfaceShaderFeatures): number => {
+  let mask = 0;
+  for (let index = 0; index < SURFACE_SHADER_TEXTURE_FEATURES.length; index += 1) {
+    if (features.has(SURFACE_SHADER_TEXTURE_FEATURES[index]!)) mask |= 1 << index;
+  }
+  return mask >>> 0;
+};
+
 const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): string =>
   [
     hasSurfaceShaderFeature(features, "iblSpecularCube") ? "uniform samplerCube u_iblSpecularCube;" : "",

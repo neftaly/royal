@@ -2,7 +2,7 @@ import type { LinearRgba } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
 import {
   fragmentShaderSource,
-  surfaceShaderFeatureKey,
+  surfaceShaderFeatureMask,
   vertexShaderSource,
   type ProgramKind,
   type SurfaceShaderFeatures,
@@ -10,6 +10,27 @@ import {
 
 const MAX_STARTS_PER_FRAME = 1;
 const MAX_LINKS_PER_FRAME = 1;
+const PROGRAM_KIND_IDS: Readonly<Record<ProgramKind, number>> = {
+  postprocess: 0,
+  surface: 1,
+  "surface-instanced-split": 2,
+  unlit: 3,
+  "unlit-instanced-split": 4,
+  wireframe: 5,
+};
+const PROGRAM_KIND_SHIFT = 24;
+const PROGRAM_CLUSTERED_FLAG = 1 << 27;
+
+/** Pure, allocation-free identity for one linked program variant. */
+export const programVariantKey = (
+  kind: ProgramKind,
+  features: SurfaceShaderFeatures | undefined,
+  clusteredLights: boolean,
+): number => (
+  (PROGRAM_KIND_IDS[kind] << PROGRAM_KIND_SHIFT)
+  | (clusteredLights ? PROGRAM_CLUSTERED_FLAG : 0)
+  | (features === undefined ? 0 : surfaceShaderFeatureMask(features))
+) >>> 0;
 
 export interface ParallelShaderCompileExtension {
   readonly COMPLETION_STATUS_KHR: number;
@@ -43,7 +64,7 @@ type Resource = ProgramArenaResource & {
 type Request = {
   readonly clusteredLights: boolean;
   readonly features: SurfaceShaderFeatures | undefined;
-  readonly key: string;
+  readonly key: number;
   readonly kind: ProgramKind;
   resource?: Resource;
 };
@@ -58,7 +79,7 @@ type State = {
   parallel?: ParallelShaderCompileExtension;
   pendingHead: number;
   readonly pendingRequests: Request[];
-  readonly requests: Map<string, Request>;
+  readonly requests: Map<number, Request>;
   startFrame: number;
   startsThisFrame: number;
   readonly uniformLocations: Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>;
@@ -240,9 +261,7 @@ export const requestProgram = (
   clusteredLights = false,
 ): ProgramArenaResource | undefined => {
   const state = arena as unknown as State;
-  const key = features === undefined
-    ? kind
-    : `${kind}:${surfaceShaderFeatureKey(features)}:${clusteredLights ? "clustered" : "global"}`;
+  const key = programVariantKey(kind, features, clusteredLights);
   let request = state.requests.get(key);
   if (request === undefined) {
     // Draw-time feature sets may come from a reusable planner workspace.

@@ -7,6 +7,7 @@ import {
   programArenaSnapshot,
   releaseProgramArenaContextHandles,
   requestProgram,
+  programVariantKey,
   uniform1f,
   uniform1i,
   uniform2f,
@@ -81,6 +82,18 @@ const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2R
 const count = (gl: FakeGl, name: string): number => gl.calls.filter((call) => call.name === name).length;
 
 describe("program arena", () => {
+  it("assigns distinct allocation-free identities to kind, feature, and clustered variants", () => {
+    const baseColor = new Set(["baseColorTexture"] as const);
+    const normal = new Set(["normalTexture"] as const);
+    const keys = new Set([
+      programVariantKey("surface", baseColor, false),
+      programVariantKey("surface", baseColor, true),
+      programVariantKey("surface", normal, false),
+      programVariantKey("unlit", baseColor, false),
+      programVariantKey("wireframe", undefined, false),
+    ]);
+    expect(keys.size).toBe(5);
+  });
   it("compiles, links, caches, and reuses a synchronous program", () => {
     const gl = new FakeGl();
     const arena = createProgramArena(context(gl));
