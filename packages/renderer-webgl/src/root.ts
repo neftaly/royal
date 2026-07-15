@@ -168,14 +168,6 @@ import {
 } from "./webgl/program-arena";
 import { rendererOwnedWebGl2Context, type RendererOwnedWebGl2Context } from "./webgl/context-lane";
 import type { SurfaceLightSet } from "./webgl/lights";
-import {
-  createIblTextureArena,
-  dropIblTextureContext,
-  releaseGltfIblSpecularTexture,
-  releaseIblTextureContextHandles,
-  type IblTextureArena,
-  wakeIblTextureDurablePressure,
-} from "./webgl/ibl-texture-arena";
 import { prepareFrameBaseline } from "./webgl/imperative-state";
 import {
   SurfaceExecutionArena,
@@ -193,7 +185,8 @@ import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
 import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
-import { IblRuntimeOwner } from "./ibl-runtime-owner";
+import { ImageBasedLightingFeatureOwner } from "./image-based-lighting-feature-owner";
+import type { ImageBasedLightingFeature } from "./image-based-lighting-feature";
 import { normalizeWebGlRootOptions } from "./root-options";
 import type {
   InternalWebGlRootOptions,
@@ -298,7 +291,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     },
     wakePersistentGpuCapacity: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeGpuCapacity();
-      const iblWake = wakeIblTextureDurablePressure(this.#iblTextures);
+      const iblWake = this.#ibl.wakeDurablePressure();
       this.#virtualTextures.scheduleGovernedAdmissionRetry();
       return ordinaryWake || iblWake;
     },
@@ -352,8 +345,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #textureHandles: TextureHandleArena;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  readonly #iblTextures: IblTextureArena;
-  readonly #iblRuntime: IblRuntimeOwner;
+  readonly #ibl: ImageBasedLightingFeature;
   readonly #lightResolver: SurfaceLightResolver;
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena({
     replace: (lease, cost) => {
@@ -519,45 +511,45 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       registerRollback(() => dropClusteredLightContext(this.#clusteredLights));
       registerRollback(() => releaseClusteredLightContextHandles(this.#clusteredLights));
-      this.#iblTextures = createIblTextureArena(gl, {
-        reserve: (cost) => {
-          const policy = requestedOptions.resourceGovernorPolicy;
-          if (cost.uploadBytes > policy.limits.uploadBytes) {
-            return {
-              permanent: true,
-              reason: `${cost.uploadBytes} upload bytes exceed the absolute limit ${policy.limits.uploadBytes}`,
-            };
-          }
-          const maximumPersistentBytes = maximumResourceGovernorClassDurableBytes(
-            policy,
-            "ordinary-texture",
-            "persistentGpuBytes",
-          );
-          if (cost.persistentGpuBytes > maximumPersistentBytes) {
-            return {
-              permanent: true,
-              reason: `${cost.persistentGpuBytes} persistent GPU bytes exceed the ordinary-texture maximum ${maximumPersistentBytes}`,
-            };
-          }
-          const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
-          return typeof reservation === "string"
-            ? { permanent: false, reason: reservation }
-            : reservation;
-        },
-      });
-      registerRollback(() => dropIblTextureContext(this.#iblTextures));
-      registerRollback(() => releaseIblTextureContextHandles(this.#iblTextures));
-      this.#iblRuntime = new IblRuntimeOwner({
+      this.#ibl = new ImageBasedLightingFeatureOwner({
         contextLifecycle: () => this.#context.lifecycle,
         decodedTextureSources: this.#decodedTextureSources,
-        diagnostics: (message, key) => this.#recordDiagnostic(message, key),
+        diagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        gl,
+        governor: {
+          reserve: (cost) => {
+            const policy = requestedOptions.resourceGovernorPolicy;
+            if (cost.uploadBytes > policy.limits.uploadBytes) {
+              return {
+                permanent: true,
+                reason: `${cost.uploadBytes} upload bytes exceed the absolute limit ${policy.limits.uploadBytes}`,
+              };
+            }
+            const maximumPersistentBytes = maximumResourceGovernorClassDurableBytes(
+              policy,
+              "ordinary-texture",
+              "persistentGpuBytes",
+            );
+            if (cost.persistentGpuBytes > maximumPersistentBytes) {
+              return {
+                permanent: true,
+                reason: `${cost.persistentGpuBytes} persistent GPU bytes exceed the ordinary-texture maximum ${maximumPersistentBytes}`,
+              };
+            }
+            const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
+            return typeof reservation === "string"
+              ? { permanent: false, reason: reservation }
+              : reservation;
+          },
+        },
         invalidate: () => this.invalidate(),
         resourceArena: this.#resourceArena,
-        textures: this.#iblTextures,
       });
+      registerRollback(() => this.#ibl.dropContext());
+      registerRollback(() => this.#ibl.releaseContextHandles());
       this.#lightResolver = new SurfaceLightResolver({
-        ensureGltfSpecular: (specular) => this.#iblRuntime.ensureSpecular(specular),
-        studioSpecular: () => this.#iblRuntime.studioSpecular(),
+        ensureGltfSpecular: (specular) => this.#ibl.ensureSpecular(specular),
+        studioSpecular: () => this.#ibl.studioSpecular(),
       });
       this.#gltfPacketSubmissions = new GltfPacketSubmissionOwner({
         geometryRecipes: this.#geometryRecipes,
@@ -626,7 +618,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       this.#readyGltfImages = new GltfReadyImagePublicationOwner({
         applyResourceChanges: (changes) => this.#applyResourceArenaChanges(changes),
-        ibl: this.#iblRuntime,
+        ibl: this.#ibl,
         materials: this.#gltfMaterials,
         ordinaryTextures: this.#ordinaryTextures,
         resourceArena: this.#resourceArena,
@@ -684,15 +676,25 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
       this.#surfaceExecution = new SurfaceExecutionArena({
+        bindIbl: (program, lightSet, specularTextureUnit, brdfLutTextureUnit) => {
+          this.#ibl.bindSurface(
+            this.#programArena,
+            program,
+            lightSet,
+            specularTextureUnit,
+            brdfLutTextureUnit,
+          );
+        },
         bindVirtualTexture: (key, atlasTextureUnit, pageTableTextureUnit) => (
           this.#virtualTextures.bindGpuResource(key, atlasTextureUnit, pageTableTextureUnit)
         ),
         clusteredLights: this.#clusteredLights,
+        consumeIblSignals: () => this.#ibl.consumeSurfaceSignals(),
         geometry: this.#geometryDrawArena,
         gl,
         gltfFrames: this.#gltfPacketSubmissions.frameBatches,
-        iblTextures: this.#iblTextures,
         ordinaryTextures: this.#ordinaryTextures,
+        prepareIblBrdfLut: () => this.#ibl.prepareBrdfLut(),
         programs: this.#programArena,
         renderTargets: this.#surfaceRenderTargets,
         textureResidencyIntent: this.#textureResidencyIntent,
@@ -1139,7 +1141,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseClusteredLightContextHandles(this.#clusteredLights);
       });
-      releaseFailure = captureFirstFailure(releaseFailure, () => releaseIblTextureContextHandles(this.#iblTextures));
+      releaseFailure = captureFirstFailure(releaseFailure, () => this.#ibl.releaseContextHandles());
       releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseTextureHandleContextHandles(this.#textureHandles);
       });
@@ -1156,7 +1158,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       releaseFailure = captureFirstFailure(releaseFailure, () => dropProgramArenaContext(this.#programArena));
       releaseFailure = captureFirstFailure(releaseFailure, () => dropClusteredLightContext(this.#clusteredLights));
     }
-    releaseFailure = captureFirstFailure(releaseFailure, () => dropIblTextureContext(this.#iblTextures));
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#ibl.dropContext());
     releaseFailure = captureFirstFailure(releaseFailure, () => dropTextureHandleContext(this.#textureHandles));
     releaseFailure = captureFirstFailure(releaseFailure, () => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     releaseFailure = captureFirstFailure(
@@ -1364,7 +1366,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       apply("release", () => this.#resourceReleases.releaseVirtualTexture(key));
     }
     for (const key of changes.releasedIblKeys) {
-      apply("release", () => releaseGltfIblSpecularTexture(this.#iblTextures, key));
+      apply("release", () => this.#ibl.releaseSpecular(key));
     }
     for (const source of changes.releasedSources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;

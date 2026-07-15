@@ -24,14 +24,6 @@ import {
   type GeometryDrawArena,
 } from "./geometry-draw-arena";
 import {
-  bindSurfaceIbl,
-  consumeIblTextureDiagnostics,
-  consumeIblTextureFrameWake,
-  IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-  prepareSurfaceIblBrdfLut,
-  type IblTextureArena,
-} from "./ibl-texture-arena";
-import {
   EMPTY_SURFACE_LIGHT_SET,
   MAX_SURFACE_LIGHTS,
   type SurfaceLightSet,
@@ -78,6 +70,7 @@ const TEXTURE_COLOR = [1, 1, 1, 1] as const;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
+const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
   drawCalls: number;
@@ -150,6 +143,12 @@ export interface SurfaceGltfBatchExecution {
 }
 
 export interface SurfaceExecutionArenaOptions {
+  readonly bindIbl: (
+    program: WebGLProgram,
+    lightSet: SurfaceLightSet,
+    specularTextureUnit: number | undefined,
+    brdfLutTextureUnit: number | undefined,
+  ) => void;
   readonly bindVirtualTexture: (
     key: string,
     atlasTextureUnit: number,
@@ -159,9 +158,10 @@ export interface SurfaceExecutionArenaOptions {
   readonly geometry: GeometryDrawArena;
   readonly gl: WebGL2RenderingContext;
   readonly gltfFrames: GltfFrameBatchArena;
-  readonly iblTextures: IblTextureArena;
+  readonly consumeIblSignals: () => SurfaceExecutionSignals;
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
   readonly programs: ProgramArena;
+  readonly prepareIblBrdfLut: () => boolean;
   readonly renderTargets: SurfaceRenderTargetArena;
   readonly textureResidencyIntent: FrameTextureResidencyIntent;
   readonly virtualTextureDrawable: (key: string) => boolean;
@@ -169,30 +169,34 @@ export interface SurfaceExecutionArenaOptions {
 
 /** Owns concrete WebGL surface planning, binding, state, and submission. */
 export class SurfaceExecutionArena {
+  readonly #bindIbl: SurfaceExecutionArenaOptions["bindIbl"];
   readonly #clusteredLights: ClusteredLightArena;
   readonly #bindVirtualTextureGpu: SurfaceExecutionArenaOptions["bindVirtualTexture"];
   readonly #diagnostics: SurfaceExecutionDiagnostic[] = [];
   readonly #geometry: GeometryDrawArena;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfFrames: GltfFrameBatchArena;
-  readonly #iblTextures: IblTextureArena;
+  readonly #consumeIblSignals: SurfaceExecutionArenaOptions["consumeIblSignals"];
   #maxTextureImageUnits = 0;
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #programs: ProgramArena;
+  readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #wakeRequested = false;
 
   constructor(options: SurfaceExecutionArenaOptions) {
+    this.#bindIbl = options.bindIbl;
     this.#bindVirtualTextureGpu = options.bindVirtualTexture;
     this.#clusteredLights = options.clusteredLights;
     this.#geometry = options.geometry;
     this.#gl = options.gl;
     this.#gltfFrames = options.gltfFrames;
-    this.#iblTextures = options.iblTextures;
+    this.#consumeIblSignals = options.consumeIblSignals;
     this.#ordinaryTextures = options.ordinaryTextures;
     this.#programs = options.programs;
+    this.#prepareIblBrdfLut = options.prepareIblBrdfLut;
     this.#renderTargets = options.renderTargets;
     this.#textureResidencyIntent = options.textureResidencyIntent;
     this.#virtualTextureDrawable = options.virtualTextureDrawable;
@@ -494,7 +498,7 @@ export class SurfaceExecutionArena {
       if (admission.features.has("iblBrdfLut")) {
         let ready = false;
         try {
-          ready = prepareSurfaceIblBrdfLut(this.#iblTextures);
+          ready = this.#prepareIblBrdfLut();
         } finally {
           this.#captureIblSignals();
         }
@@ -655,9 +659,7 @@ export class SurfaceExecutionArena {
     frame: number,
   ): void {
     try {
-      bindSurfaceIbl(
-        this.#iblTextures,
-        this.#programs,
+      this.#bindIbl(
         program,
         lightSet,
         plan.textureUnits.get("iblSpecularCube"),
@@ -799,11 +801,9 @@ export class SurfaceExecutionArena {
   }
 
   #captureIblSignals(): void {
-    for (const message of consumeIblTextureDiagnostics(this.#iblTextures)) {
-      this.#diagnostics.push({ key: `ibl-governor:${message}`, message });
-    }
-    const wakeRequested = consumeIblTextureFrameWake(this.#iblTextures);
-    this.#wakeRequested ||= wakeRequested;
+    const signals = this.#consumeIblSignals();
+    this.#diagnostics.push(...signals.diagnostics);
+    this.#wakeRequested ||= signals.wakeRequested;
   }
 
   #beginDirectDraw(material: Material): void {
