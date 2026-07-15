@@ -1,5 +1,4 @@
 import type { LinearRgba, TextureContentKey, TextureSampler, Vec3 } from "@royal/renderer-core";
-import { canvasSupportsImageMimeType } from "../capabilities";
 import {
   identityMat4,
   multiplyMat4,
@@ -149,6 +148,8 @@ export type ReadGltfSceneInput = {
   readonly document: GltfDocument;
   readonly dracoPrimitives: ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive>;
   readonly src: string;
+  /** Browser capability resolved by the preparation shell. */
+  readonly webpSupported: boolean;
 };
 
 type GltfTextureImageSelection = {
@@ -261,11 +262,12 @@ const gltfImageIsSvg = (image: GltfImage | undefined): boolean => {
 const gltfTextureImageSelection = (
   document: GltfDocument,
   texture: GltfTexture | undefined,
+  webpSupported: boolean,
 ): GltfTextureImageSelection | undefined => {
   const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
   if (basisuSource !== undefined) return { imageIndex: basisuSource, kind: "basisu" };
   const webpSource = texture?.extensions?.EXT_texture_webp?.source;
-  const imageIndex = webpSource !== undefined && canvasSupportsImageMimeType("image/webp")
+  const imageIndex = webpSource !== undefined && webpSupported
     ? webpSource
     : texture?.source;
   return imageIndex === undefined
@@ -278,11 +280,12 @@ const gltfMaterialTextureSlot = (
   assetKey: string,
   src: string,
   textureInfo: GltfTextureInfo | undefined,
+  webpSupported: boolean,
 ): LoadedGltfMaterialTextureSlot | undefined => {
   if (textureInfo === undefined) return undefined;
   const textureIndex = textureInfo.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-  const imageSelection = gltfTextureImageSelection(document, texture);
+  const imageSelection = gltfTextureImageSelection(document, texture, webpSupported);
   const imageIndex = imageSelection?.imageIndex;
   const imageKind = imageSelection?.kind ?? "image";
   const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
@@ -312,10 +315,11 @@ const gltfMaterialExtensionTextureSlots = (
   assetKey: string,
   src: string,
   material: GltfMaterial | undefined,
+  webpSupported: boolean,
 ): LoadedGltfMaterialExtensionTextures | undefined => {
   const slots: Partial<Record<keyof LoadedGltfMaterialExtensionTextures, LoadedGltfMaterialTextureSlot>> = {};
   for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-    const slot = gltfMaterialTextureSlot(document, assetKey, src, texture.textureInfo(material));
+    const slot = gltfMaterialTextureSlot(document, assetKey, src, texture.textureInfo(material), webpSupported);
     if (slot !== undefined) slots[texture.key] = slot;
   }
   return Object.keys(slots).length === 0 ? undefined : slots;
@@ -507,17 +511,18 @@ const readGltfMaterial = (
   src: string,
   assetKey: string,
   materialIndex: number | undefined,
+  webpSupported: boolean,
 ): LoadedGltfMaterial => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
-  const baseColorTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.baseColorTexture);
-  const metallicRoughnessTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.metallicRoughnessTexture);
-  const normalTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.normalTexture);
-  const emissiveTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.emissiveTexture);
-  const occlusionTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.occlusionTexture);
+  const baseColorTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.baseColorTexture, webpSupported);
+  const metallicRoughnessTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.metallicRoughnessTexture, webpSupported);
+  const normalTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.normalTexture, webpSupported);
+  const emissiveTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.emissiveTexture, webpSupported);
+  const occlusionTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.occlusionTexture, webpSupported);
   const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
   const emissive = gltfEmissiveColor(material);
   const extensionFactors = readGltfMaterialExtensionFactors(material);
-  const extensionTextures = gltfMaterialExtensionTextureSlots(document, assetKey, src, material);
+  const extensionTextures = gltfMaterialExtensionTextureSlots(document, assetKey, src, material, webpSupported);
   const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
   return {
     alphaMode,
@@ -546,13 +551,14 @@ const readGltfMaterialLod = (
   src: string,
   assetKey: string,
   materialIndex: number | undefined,
+  webpSupported: boolean,
 ): LodSet<LoadedGltfMaterial> | undefined => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
   const lodIds = material?.extensions?.MSFT_lod?.ids ?? [];
   if (materialIndex === undefined || lodIds.length === 0) return undefined;
   const levels = [
-    readGltfMaterial(document, src, assetKey, materialIndex),
-    ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id)),
+    readGltfMaterial(document, src, assetKey, materialIndex, webpSupported),
+    ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id, webpSupported)),
   ];
   return { levels, thresholds: normalizeLodThresholds(material?.extras?.MSFT_screencoverage, levels.length) };
 };
@@ -563,6 +569,7 @@ const readGltfMaterialVariants = (
   assetKey: string,
   primitive: GltfMeshPrimitive,
   variantCount: number,
+  webpSupported: boolean,
 ): readonly LoadedGltfMaterialVariant[] =>
   (primitive.extensions?.KHR_materials_variants?.mappings ?? [])
     .map((mapping): LoadedGltfMaterialVariant | undefined => {
@@ -571,8 +578,8 @@ const readGltfMaterialVariants = (
         .filter((variant) => Number.isInteger(variant) && variant >= 0 && variant < variantCount);
       if (materialIndex === undefined || !Number.isInteger(materialIndex) || materialIndex < 0
         || document.materials?.[materialIndex] === undefined || variants.length === 0) return undefined;
-      const material = readGltfMaterial(document, src, assetKey, materialIndex);
-      const materialLod = readGltfMaterialLod(document, src, assetKey, materialIndex);
+      const material = readGltfMaterial(document, src, assetKey, materialIndex, webpSupported);
+      const materialLod = readGltfMaterialLod(document, src, assetKey, materialIndex, webpSupported);
       return { material, ...(materialLod === undefined ? {} : { materialLod }), variants };
     })
     .filter((mapping): mapping is LoadedGltfMaterialVariant => mapping !== undefined);
@@ -749,14 +756,15 @@ const appendNodeTreePrimitives = (
     const indices = dracoPrimitive?.indices
       ?? (primitive.indices === undefined ? undefined : readGltfIndices(context.document, context.buffers, primitive.indices));
     const normals = baseNormals;
-    const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material);
-    const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material);
+    const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material, context.webpSupported);
+    const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material, context.webpSupported);
     const materialVariants = readGltfMaterialVariants(
       context.document,
       context.src,
       context.assetKey,
       primitive,
       context.variantCount,
+      context.webpSupported,
     );
     const baseMaterial: LoadedGltfPrimitiveMaterial = {
       material,

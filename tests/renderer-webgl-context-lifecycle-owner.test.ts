@@ -4,6 +4,11 @@ import type {
   WebGlContextSnapshot,
 } from "../packages/renderer-webgl/src/root-types";
 import { WebGlContextLifecycleOwner } from "../packages/renderer-webgl/src/context-lifecycle-owner";
+import {
+  initialWebGlContextSnapshot,
+  reduceWebGlContextLifecycle,
+  type WebGlContextLifecycleEvent,
+} from "../packages/renderer-webgl/src/context-lifecycle";
 import { forEachFuzzCase } from "./fuzz";
 
 describe("WebGL context lifecycle owner", () => {
@@ -177,20 +182,13 @@ describe("WebGL context lifecycle owner", () => {
 
   it("matches the legal lifecycle reducer across generated traces", () => {
     type Action = "begin" | "dispose" | "fail" | "finish" | "lose";
-    type Model = {
-      generation: number;
-      lastError?: string;
-      lifecycle: WebGlContextLifecycle;
-      losses: number;
-      restores: number;
-    };
 
     forEachFuzzCase({ cases: 64, seed: 0x1fe_c7c1e }, ({ label, random }) => {
       const owner = new WebGlContextLifecycleOwner();
       const delivered: WebGlContextSnapshot[] = [];
       owner.observe((value) => delivered.push(value));
-      let model: Model = { generation: 1, lifecycle: "active", losses: 0, restores: 0 };
-      const published: Model[] = [{ ...model }];
+      let expected = initialWebGlContextSnapshot();
+      const published: WebGlContextSnapshot[] = [expected];
 
       for (let step = 0; step < 96; step += 1) {
         const action = random.pick([
@@ -200,42 +198,30 @@ describe("WebGL context lifecycle owner", () => {
           "finish",
           "lose",
         ] as const satisfies readonly Action[]);
-        let accepted = false;
-        if (action === "lose") {
-          accepted = model.lifecycle !== "disposed" && model.lifecycle !== "lost";
-          expect(owner.lose(), `${label} ${step}:${action}`).toBe(accepted);
-          if (accepted) model = {
-            ...model,
-            generation: model.generation + 1,
-            lifecycle: "lost",
-            losses: model.losses + 1,
-          };
-        } else if (action === "begin") {
-          accepted = model.lifecycle === "lost";
-          expect(owner.beginRestore(), `${label} ${step}:${action}`).toBe(accepted);
-          if (accepted) model = { ...model, lifecycle: "restoring" };
-        } else if (action === "finish") {
-          accepted = model.lifecycle === "restoring";
-          expect(owner.finishRestore(), `${label} ${step}:${action}`).toBe(accepted);
-          if (accepted) {
-            const { lastError: _removed, ...withoutError } = model;
-            model = { ...withoutError, lifecycle: "active", restores: model.restores + 1 };
-          }
-        } else if (action === "fail") {
-          accepted = model.lifecycle === "restoring";
-          expect(owner.failRestore(`failure ${step}`), `${label} ${step}:${action}`).toBe(accepted);
-          if (accepted) model = { ...model, lastError: `failure ${step}`, lifecycle: "lost" };
-        } else if (action === "dispose") {
-          accepted = model.lifecycle !== "disposed";
-          expect(owner.dispose(), `${label} ${step}:${action}`).toBe(accepted);
-          if (accepted) model = {
-            ...model,
-            generation: model.generation + 1,
-            lifecycle: "disposed",
-          };
+        const event: WebGlContextLifecycleEvent = action === "begin"
+          ? { kind: "begin-restore" }
+          : action === "fail"
+            ? { kind: "fail-restore", lastError: `failure ${step}` }
+            : action === "finish"
+              ? { kind: "finish-restore" }
+              : { kind: action };
+        const next = reduceWebGlContextLifecycle(expected, event);
+        const accepted = next !== undefined;
+        const ownerAccepted = action === "begin"
+          ? owner.beginRestore()
+          : action === "fail"
+            ? owner.failRestore(`failure ${step}`)
+            : action === "finish"
+              ? owner.finishRestore()
+              : action === "lose"
+                ? owner.lose()
+                : owner.dispose();
+        expect(ownerAccepted, `${label} ${step}:${action}`).toBe(accepted);
+        if (next !== undefined) {
+          expected = next;
+          published.push(next);
         }
-        if (accepted) published.push({ ...model });
-        expect(owner.snapshot(), `${label} ${step}:${action} state`).toEqual(model);
+        expect(owner.snapshot(), `${label} ${step}:${action} state`).toEqual(expected);
         expect(Object.isFrozen(owner.snapshot()), `${label} ${step}:${action} frozen`).toBe(true);
       }
 

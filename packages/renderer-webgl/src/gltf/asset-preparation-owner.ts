@@ -1,3 +1,4 @@
+import { canvasSupportsImageMimeType } from "../capabilities";
 import { throwIfAborted } from "../resource-io";
 import { loadGltfBuffers, loadGltfDocument } from "./io";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
@@ -140,6 +141,9 @@ export class GltfAssetPreparationOwner {
         document: decodedDocument,
         dracoPrimitives,
         src,
+        webpSupported: decodedDocument.textures?.some(
+          (texture) => texture.extensions?.EXT_texture_webp?.source !== undefined,
+        ) === true && canvasSupportsImageMimeType("image/webp"),
       });
       load.sceneReadAt = nowMs();
       load.readyAt = nowMs();

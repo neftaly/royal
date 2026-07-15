@@ -3,6 +3,11 @@ import type {
   WebGlContextSnapshot,
 } from "./root-types";
 import type { CapturedFailure } from "./captured-failure";
+import {
+  initialWebGlContextSnapshot,
+  reduceWebGlContextLifecycle,
+  type WebGlContextLifecycleEvent,
+} from "./context-lifecycle";
 
 export type WebGlContextLifecycleObserver = (snapshot: WebGlContextSnapshot) => void;
 export type WebGlContextLifecycleObserverFailureReporter = (failure: unknown) => void;
@@ -28,35 +33,6 @@ type Publication = BroadcastPublication | {
   readonly snapshot: WebGlContextSnapshot;
 };
 
-const initialSnapshot = (): WebGlContextSnapshot => Object.freeze({
-  generation: 1,
-  lifecycle: "active",
-  losses: 0,
-  restores: 0,
-});
-
-const nextSnapshot = (
-  current: WebGlContextSnapshot,
-  lifecycle: WebGlContextLifecycle,
-  changes: {
-    readonly clearError?: boolean;
-    readonly generation?: number;
-    readonly lastError?: string;
-    readonly losses?: number;
-    readonly restores?: number;
-  } = {},
-): WebGlContextSnapshot => Object.freeze({
-  generation: changes.generation ?? current.generation,
-  ...(changes.lastError !== undefined
-    ? { lastError: changes.lastError }
-    : changes.clearError === true || current.lastError === undefined
-      ? {}
-      : { lastError: current.lastError }),
-  lifecycle,
-  losses: changes.losses ?? current.losses,
-  restores: changes.restores ?? current.restores,
-});
-
 const reportObserverFailure = (failure: unknown): void => {
   try {
     console.error("Royal WebGL context lifecycle observer failed", failure);
@@ -70,7 +46,7 @@ export class WebGlContextLifecycleOwner {
   readonly #observers = new Set<ObserverRecord>();
   readonly #publications: Publication[] = [];
   readonly #reportFailure: WebGlContextLifecycleObserverFailureReporter;
-  #current = initialSnapshot();
+  #current = initialWebGlContextSnapshot();
   #draining = false;
   #publicationHead = 0;
   #sequence = 0;
@@ -95,17 +71,12 @@ export class WebGlContextLifecycleOwner {
 
   /** Active/restoring -> lost. A repeated loss or terminal loss is ignored. */
   lose(beforePublish?: () => void): boolean {
-    if (this.lifecycle === "disposed" || this.lifecycle === "lost") return false;
-    return this.#transition(nextSnapshot(this.#current, "lost", {
-      generation: this.generation + 1,
-      losses: this.#current.losses + 1,
-    }), beforePublish);
+    return this.#apply({ kind: "lose" }, beforePublish);
   }
 
   /** Lost -> restoring. Observers run before the caller starts GPU restoration. */
   beginRestore(): boolean {
-    if (this.lifecycle !== "lost") return false;
-    return this.#transition(nextSnapshot(this.#current, "restoring"));
+    return this.#apply({ kind: "begin-restore" });
   }
 
   /**
@@ -113,25 +84,17 @@ export class WebGlContextLifecycleOwner {
    * before committing success so observers never see a rolled-back active state.
    */
   finishRestore(): boolean {
-    if (this.lifecycle !== "restoring") return false;
-    return this.#transition(nextSnapshot(this.#current, "active", {
-      clearError: true,
-      restores: this.#current.restores + 1,
-    }));
+    return this.#apply({ kind: "finish-restore" });
   }
 
   /** Restoring -> lost without changing generation or counters. */
   failRestore(lastError: string): boolean {
-    if (this.lifecycle !== "restoring") return false;
-    return this.#transition(nextSnapshot(this.#current, "lost", { lastError }));
+    return this.#apply({ kind: "fail-restore", lastError });
   }
 
   /** Any nonterminal state -> disposed, incrementing generation exactly once. */
   dispose(beforePublish?: () => void): boolean {
-    if (this.lifecycle === "disposed") return false;
-    return this.#transition(nextSnapshot(this.#current, "disposed", {
-      generation: this.generation + 1,
-    }), beforePublish);
+    return this.#apply({ kind: "dispose" }, beforePublish);
   }
 
   /**
@@ -156,10 +119,12 @@ export class WebGlContextLifecycleOwner {
     };
   }
 
-  #transition(
-    next: WebGlContextSnapshot,
+  #apply(
+    event: WebGlContextLifecycleEvent,
     beforePublish?: () => void,
   ): boolean {
+    const next = reduceWebGlContextLifecycle(this.#current, event);
+    if (next === undefined) return false;
     this.#sequence += 1;
     const sequence = this.#sequence;
     this.#current = next;
