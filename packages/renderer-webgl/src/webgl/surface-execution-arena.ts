@@ -60,7 +60,10 @@ import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
   planSurfaceTextureBindings,
   resolveAdmittedSurfaceTextureBindings,
+  type AdmittedSurfaceTextureReadiness,
+  type SurfaceBaseColorPlanInput,
   type SurfaceIndependentTextureFeature,
+  type SurfaceTextureBindingPlanInput,
   type SurfaceTextureBindingPlan as PureSurfaceTextureBindingPlan,
   type SurfaceTextureCandidate,
   type SurfaceTextureBindingWorkspace,
@@ -74,6 +77,64 @@ const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
+const BASE_COLOR_INPUT_NONE: SurfaceBaseColorPlanInput = { kind: "none" };
+const BASE_COLOR_INPUT_ORDINARY_READY: SurfaceBaseColorPlanInput = {
+  kind: "ordinary",
+  ordinary: "ready",
+};
+const BASE_COLOR_INPUT_ORDINARY_UNAVAILABLE: SurfaceBaseColorPlanInput = {
+  kind: "ordinary",
+  ordinary: "unavailable",
+};
+const BASE_COLOR_INPUT_VIRTUAL_READY: SurfaceBaseColorPlanInput = {
+  kind: "virtual",
+  virtual: "ready",
+};
+const BASE_COLOR_INPUT_VIRTUAL_READY_FALLBACK: SurfaceBaseColorPlanInput = {
+  fallback: "ready",
+  kind: "virtual",
+  virtual: "ready",
+};
+const BASE_COLOR_INPUT_VIRTUAL_READY_FALLBACK_UNAVAILABLE: SurfaceBaseColorPlanInput = {
+  fallback: "unavailable",
+  kind: "virtual",
+  virtual: "ready",
+};
+const BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE: SurfaceBaseColorPlanInput = {
+  kind: "virtual",
+  virtual: "unavailable",
+};
+const BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE_FALLBACK_READY: SurfaceBaseColorPlanInput = {
+  fallback: "ready",
+  kind: "virtual",
+  virtual: "unavailable",
+};
+const BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE_FALLBACK_UNAVAILABLE: SurfaceBaseColorPlanInput = {
+  fallback: "unavailable",
+  kind: "virtual",
+  virtual: "unavailable",
+};
+
+type MutableTextureBindingPlanInput = {
+  -readonly [Key in keyof SurfaceTextureBindingPlanInput]: SurfaceTextureBindingPlanInput[Key];
+};
+type MutableTextureReadiness = {
+  -readonly [Key in keyof AdmittedSurfaceTextureReadiness]: AdmittedSurfaceTextureReadiness[Key];
+};
+type TextureCoordinateUniformNames = Readonly<{
+  row0: string;
+  row1: string;
+  set: string;
+}>;
+const textureCoordinateUniformNames = (stem: string): TextureCoordinateUniformNames => ({
+  row0: `${stem}Row0`,
+  row1: `${stem}Row1`,
+  set: `${stem}Set`,
+});
+const BASE_COLOR_TEXTURE_COORDINATE_UNIFORMS = textureCoordinateUniformNames("u_baseColorUv");
+const SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS = SURFACE_MATERIAL_TEXTURE_BINDINGS.map(
+  (descriptor) => textureCoordinateUniformNames(descriptor.uvUniformStem),
+);
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
   drawCalls: number;
@@ -203,8 +264,19 @@ export class SurfaceExecutionArena {
   >> = {};
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
-  readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
   readonly #reservedTextureUnits = new Set<number>();
+  readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
+    baseColor: BASE_COLOR_INPUT_NONE,
+    brdfLutPreferredUnit: IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
+    candidates: this.#textureCandidates,
+    maxTextureUnits: 0,
+    reservedTextureUnits: this.#reservedTextureUnits,
+  };
+  readonly #textureReadinessInput: MutableTextureReadiness = {
+    baseColor: BASE_COLOR_INPUT_NONE,
+    candidates: this.#textureCandidates,
+  };
+  readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
   readonly #signals: {
     diagnostics: readonly SurfaceExecutionDiagnostic[];
     wakeRequested: boolean;
@@ -473,17 +545,13 @@ export class SurfaceExecutionArena {
       delete candidates.iblSpecularCube;
       delete candidates.iblBrdfLut;
     }
-    const declaredBaseColor = (() => {
-      switch (baseColorResidency.kind) {
-        case "none": return { kind: "none" } as const;
-        case "ordinary": return { kind: "ordinary", ordinary: "ready" } as const;
-        case "prepared-virtual": return {
-          ...(baseColorResidency.ordinaryFallback === undefined ? {} : { fallback: "ready" as const }),
-          kind: "virtual" as const,
-          virtual: "ready" as const,
-        };
-      }
-    })();
+    const declaredBaseColor = baseColorResidency.kind === "none"
+      ? BASE_COLOR_INPUT_NONE
+      : baseColorResidency.kind === "ordinary"
+        ? BASE_COLOR_INPUT_ORDINARY_READY
+        : baseColorResidency.ordinaryFallback === undefined
+          ? BASE_COLOR_INPUT_VIRTUAL_READY
+          : BASE_COLOR_INPUT_VIRTUAL_READY_FALLBACK;
     const clusterUnits = this.#clusteredLights.textureUnits();
     const reserveClusterUnits = lightSet.punctuals.length > 0;
     const reservedTextureUnits = this.#reservedTextureUnits;
@@ -493,15 +561,13 @@ export class SurfaceExecutionArena {
       if (clusterUnits.indices >= 0) reservedTextureUnits.add(clusterUnits.indices);
       if (clusterUnits.lights >= 0) reservedTextureUnits.add(clusterUnits.lights);
     }
-    const admission = planSurfaceTextureBindings({
-      baseColor: declaredBaseColor,
-      brdfLutPreferredUnit: reserveClusterUnits && clusterUnits.grid > 0
-        ? clusterUnits.grid - 1
-        : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-      candidates,
-      maxTextureUnits: this.#maxTextureImageUnits,
-      reservedTextureUnits,
-    }, this.#textureAdmissionWorkspace);
+    const admissionInput = this.#textureAdmissionInput;
+    admissionInput.baseColor = declaredBaseColor;
+    admissionInput.brdfLutPreferredUnit = reserveClusterUnits && clusterUnits.grid > 0
+      ? clusterUnits.grid - 1
+      : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT;
+    admissionInput.maxTextureUnits = this.#maxTextureImageUnits;
+    const admission = planSurfaceTextureBindings(admissionInput, this.#textureAdmissionWorkspace);
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
       if (!admission.features.has(descriptor.feature)) continue;
       const texture = descriptor.key === "emissiveTexture"
@@ -516,45 +582,53 @@ export class SurfaceExecutionArena {
     let ordinaryBaseColor: ReadyOrdinaryTexture | undefined;
     let virtualFallbackTexture: TextureAssetUploadRef | undefined;
     let virtualFallbackReady: ReadyOrdinaryTexture | undefined;
-    const baseColor = (() => {
-      switch (baseColorResidency.kind) {
-        case "none": return { kind: "none" } as const;
-        case "ordinary": {
-          if (admission.baseColor.kind === "ordinary") {
-            const resource = this.#requestOrdinaryTexture(baseColorResidency.texture);
-            ordinaryBaseColor = resource.uploaded ? resource : undefined;
-          }
-          return {
-            kind: "ordinary" as const,
-            ordinary: ordinaryBaseColor === undefined ? "unavailable" as const : "ready" as const,
-          };
+    let baseColor: SurfaceBaseColorPlanInput;
+    switch (baseColorResidency.kind) {
+      case "none":
+        baseColor = BASE_COLOR_INPUT_NONE;
+        break;
+      case "ordinary": {
+        if (admission.baseColor.kind === "ordinary") {
+          const resource = this.#requestOrdinaryTexture(baseColorResidency.texture);
+          ordinaryBaseColor = resource.uploaded ? resource : undefined;
         }
-        case "prepared-virtual": {
-          const drawable = this.#isVirtualTextureDrawable(baseColorResidency.state);
-          if (!drawable) {
-            if (baseColorResidency.state.status === "unsupported") baseColorResidency.state.stats.unsupportedDraws += 1;
-            else baseColorResidency.state.stats.unreadyDraws += 1;
-          }
-          virtualFallbackTexture = baseColorResidency.ordinaryFallback;
-          let fallbackResource = virtualFallbackTexture === undefined
-            ? undefined
-            : this.#ordinaryTextures.peekGpuResource(textureCacheKey(virtualFallbackTexture));
-          if (
-            virtualFallbackTexture !== undefined
-            && admission.baseColor.kind !== "none"
-            && (admission.baseColor.kind === "ordinary" || !drawable)
-          ) fallbackResource = this.#requestOrdinaryTexture(virtualFallbackTexture);
-          virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
-          return {
-            ...(virtualFallbackTexture === undefined || admission.baseColor.kind === "none"
-              ? {}
-              : { fallback: virtualFallbackReady === undefined ? "unavailable" as const : "ready" as const }),
-            kind: "virtual" as const,
-            virtual: admission.baseColor.kind === "virtual" && drawable ? "ready" as const : "unavailable" as const,
-          };
-        }
+        baseColor = ordinaryBaseColor === undefined
+          ? BASE_COLOR_INPUT_ORDINARY_UNAVAILABLE
+          : BASE_COLOR_INPUT_ORDINARY_READY;
+        break;
       }
-    })();
+      case "prepared-virtual": {
+        const drawable = this.#isVirtualTextureDrawable(baseColorResidency.state);
+        if (!drawable) {
+          if (baseColorResidency.state.status === "unsupported") baseColorResidency.state.stats.unsupportedDraws += 1;
+          else baseColorResidency.state.stats.unreadyDraws += 1;
+        }
+        virtualFallbackTexture = baseColorResidency.ordinaryFallback;
+        let fallbackResource = virtualFallbackTexture === undefined
+          ? undefined
+          : this.#ordinaryTextures.peekGpuResource(textureCacheKey(virtualFallbackTexture));
+        if (
+          virtualFallbackTexture !== undefined
+          && admission.baseColor.kind !== "none"
+          && (admission.baseColor.kind === "ordinary" || !drawable)
+        ) fallbackResource = this.#requestOrdinaryTexture(virtualFallbackTexture);
+        virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
+        const virtualReady = admission.baseColor.kind === "virtual" && drawable;
+        const fallbackAdmitted = virtualFallbackTexture !== undefined && admission.baseColor.kind !== "none";
+        baseColor = virtualReady
+          ? fallbackAdmitted && virtualFallbackReady !== undefined
+            ? BASE_COLOR_INPUT_VIRTUAL_READY_FALLBACK
+            : fallbackAdmitted
+              ? BASE_COLOR_INPUT_VIRTUAL_READY_FALLBACK_UNAVAILABLE
+              : BASE_COLOR_INPUT_VIRTUAL_READY
+          : !fallbackAdmitted
+            ? BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE
+            : virtualFallbackReady === undefined
+              ? BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE_FALLBACK_UNAVAILABLE
+              : BASE_COLOR_INPUT_VIRTUAL_UNAVAILABLE_FALLBACK_READY;
+        break;
+      }
+    }
     if (transmissionScreenColorTexture !== undefined) {
       candidates.transmissionScreenTexture = transmissionScreenColorTexture.uploaded ? "ready" : "unavailable";
     }
@@ -570,11 +644,9 @@ export class SurfaceExecutionArena {
         candidates.iblBrdfLut = ready ? "ready" : "unavailable";
       }
     }
-    const pure = resolveAdmittedSurfaceTextureBindings(
-      admission,
-      { baseColor, candidates },
-      this.#textureReadinessWorkspace,
-    );
+    const readinessInput = this.#textureReadinessInput;
+    readinessInput.baseColor = baseColor;
+    const pure = resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
     this.#recordTextureBindingOmissions(pure);
     const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
       ? ordinaryBaseColor === undefined && virtualFallbackReady !== undefined
@@ -700,29 +772,50 @@ export class SurfaceExecutionArena {
   }
 
   #bindTextureCoordinates(program: WebGLProgram, material: SurfaceMaterial, plan: SurfaceTextureBindingPlan): void {
-    const bind = (
-      feature: SurfaceShaderTextureFeature,
-      key: keyof SurfaceMaterialTextureCoordinates,
-      uniformStem: string,
-      virtualBaseColor = false,
-    ): void => {
-      const preparedCoordinates = material.textureCoordinates?.[key];
-      const active = preparedCoordinates !== undefined
-        || plan.features.has(feature)
-        || (virtualBaseColor && (
-          plan.features.has("baseColorVirtualTextureAtlas")
-          || plan.features.has("baseColorVirtualTexturePageTable")
-        ));
-      if (!active) return;
-      const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
-      uniform1i(this.#programs, program, `${uniformStem}Set`, coordinates.set);
-      uniformColor(this.#programs, program, `${uniformStem}Row0`, coordinates.row0);
-      uniformColor(this.#programs, program, `${uniformStem}Row1`, coordinates.row1);
-    };
-    bind("baseColorTexture", "baseColorTexture", "u_baseColorUv", true);
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      bind(descriptor.feature, descriptor.key, descriptor.uvUniformStem);
+    this.#bindTextureCoordinate(
+      program,
+      material,
+      plan,
+      "baseColorTexture",
+      "baseColorTexture",
+      BASE_COLOR_TEXTURE_COORDINATE_UNIFORMS,
+      true,
+    );
+    for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
+      const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
+      this.#bindTextureCoordinate(
+        program,
+        material,
+        plan,
+        descriptor.feature,
+        descriptor.key,
+        SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS[index]!,
+        false,
+      );
     }
+  }
+
+  #bindTextureCoordinate(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    plan: SurfaceTextureBindingPlan,
+    feature: SurfaceShaderTextureFeature,
+    key: keyof SurfaceMaterialTextureCoordinates,
+    uniforms: TextureCoordinateUniformNames,
+    virtualBaseColor: boolean,
+  ): void {
+    const preparedCoordinates = material.textureCoordinates?.[key];
+    const active = preparedCoordinates !== undefined
+      || plan.features.has(feature)
+      || (virtualBaseColor && (
+        plan.features.has("baseColorVirtualTextureAtlas")
+        || plan.features.has("baseColorVirtualTexturePageTable")
+      ));
+    if (!active) return;
+    const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
+    uniform1i(this.#programs, program, uniforms.set, coordinates.set);
+    uniformColor(this.#programs, program, uniforms.row0, coordinates.row0);
+    uniformColor(this.#programs, program, uniforms.row1, coordinates.row1);
   }
 
   #bindCachedTexture2d(
