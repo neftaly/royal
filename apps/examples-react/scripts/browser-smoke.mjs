@@ -97,7 +97,9 @@ const smokeExpectations = {
     minPaintedRatio: 0.0001,
   },
   'gltf-ghostscript-tiger-svg': {
-    minColorBuckets: 18,
+    // A flat parchment card previously reached 22 buckets while the decoded
+    // Tiger consistently contributes far more color variation.
+    minColorBuckets: 48,
     minPaintedRatio: 0.006,
     virtualTextureRecovery: true,
   },
