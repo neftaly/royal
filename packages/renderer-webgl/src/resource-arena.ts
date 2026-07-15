@@ -107,104 +107,71 @@ export interface ResourceArenaOrdinaryTextureResidencySnapshot {
   readonly activeReferences: number;
 }
 
-/** Cold diagnostic/property view. Every container and mutable row is detached. */
-export const resourceArenaSnapshot = (arena: ResourceArena) => {
-  const state = arena as unknown as ResourceArenaState;
-  const copyGeometryArray = <Array extends Float32Array | Uint8Array | Uint16Array | Uint32Array>(
-    value: Array | undefined,
-  ): Array | undefined => value?.slice() as Array | undefined;
-  const copyGeometry = (geometry: CpuGeometry): CpuGeometry => ({
-    ...geometry,
-    ...(geometry.colors === undefined ? {} : { colors: copyGeometryArray(geometry.colors)! }),
-    ...(geometry.indices === undefined ? {} : { indices: copyGeometryArray(geometry.indices)! }),
-    ...(geometry.normals === undefined ? {} : { normals: copyGeometryArray(geometry.normals)! }),
-    positions: geometry.positions.slice(),
-    ...(geometry.tangents === undefined ? {} : { tangents: copyGeometryArray(geometry.tangents)! }),
-    ...(geometry.texCoords0 === undefined ? {} : { texCoords0: copyGeometryArray(geometry.texCoords0)! }),
-    ...(geometry.texCoords1 === undefined ? {} : { texCoords1: copyGeometryArray(geometry.texCoords1)! }),
-  });
-  const copyTexture = <Texture extends TextureAssetRef | VirtualTextureAssetRef>(texture: Texture): Texture => ({
-    ...texture,
-    ...(texture.sampler === undefined ? {} : { sampler: { ...texture.sampler } }),
-  }) as Texture;
-  const copyGeometryDeclaration = (declaration: GeometryDeclaration): GeometryDeclaration => {
-    if (declaration.kind === "direct-geometry") {
-      return {
-        ...declaration,
-        geometry: {
-          ...declaration.geometry,
-          size: [...declaration.geometry.size],
-        },
-      } as GeometryDeclaration;
-    }
-    return {
-      ...declaration,
-      ...(declaration.colors === undefined ? {} : { colors: copyGeometryArray(declaration.colors)! }),
-      ...(declaration.indices === undefined ? {} : { indices: copyGeometryArray(declaration.indices)! }),
-      ...(declaration.normals === undefined ? {} : { normals: copyGeometryArray(declaration.normals)! }),
-      positions: declaration.positions.slice(),
-      ...(declaration.tangents === undefined ? {} : { tangents: copyGeometryArray(declaration.tangents)! }),
-      ...(declaration.texCoords0 === undefined ? {} : { texCoords0: copyGeometryArray(declaration.texCoords0)! }),
-      ...(declaration.texCoords1 === undefined ? {} : { texCoords1: copyGeometryArray(declaration.texCoords1)! }),
-    };
-  };
-  const copySources = (sources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>) =>
-    new Map([...sources].map(([key, rows]) => [key, new Map(rows)]));
+export interface ResourceArenaGeometrySnapshotRow {
+  readonly id: number;
+  readonly recipe: CpuGeometry;
+}
+
+export interface ResourceArenaGltfRequestSnapshot {
+  readonly count: number;
+  readonly dependencyRevision?: number;
+  readonly generation: number;
+  readonly ordinaryTextures?: readonly CountedTextureDeclaration<TextureAssetRef>[];
+}
+
+const copyGeometryArray = <Array extends Float32Array | Uint8Array | Uint16Array | Uint32Array>(
+  value: Array | undefined,
+): Array | undefined => value?.slice() as Array | undefined;
+
+const copyGeometry = (geometry: CpuGeometry): CpuGeometry => ({
+  ...geometry,
+  ...(geometry.colors === undefined ? {} : { colors: copyGeometryArray(geometry.colors)! }),
+  ...(geometry.indices === undefined ? {} : { indices: copyGeometryArray(geometry.indices)! }),
+  ...(geometry.normals === undefined ? {} : { normals: copyGeometryArray(geometry.normals)! }),
+  positions: geometry.positions.slice(),
+  ...(geometry.tangents === undefined ? {} : { tangents: copyGeometryArray(geometry.tangents)! }),
+  ...(geometry.texCoords0 === undefined ? {} : { texCoords0: copyGeometryArray(geometry.texCoords0)! }),
+  ...(geometry.texCoords1 === undefined ? {} : { texCoords1: copyGeometryArray(geometry.texCoords1)! }),
+});
+
+/** Detached geometry identity and CPU bytes for property diagnostics. */
+export const resourceArenaGeometrySnapshot = (
+  arena: ResourceArena,
+): ReadonlyMap<string, ResourceArenaGeometrySnapshotRow> => new Map(
+  [...(arena as unknown as ResourceArenaState).geometries].map(([key, row]) => [key, {
+    id: row.id,
+    recipe: copyGeometry(row.recipe),
+  }]),
+);
+
+/** Focused detached prepared-request facts for property diagnostics. */
+export const resourceArenaGltfRequestSnapshot = (
+  arena: ResourceArena,
+  key: string,
+): ResourceArenaGltfRequestSnapshot | undefined => {
+  const request = (arena as unknown as ResourceArenaState).gltfRequests.get(key);
+  if (request === undefined) return undefined;
   return {
-    contentKeysByAsset: new Map(
-      [...state.contentKeysByAsset].map(([key, rows]) => [key, new Map(rows)]),
-    ),
-    counters: { ...state.counters },
-    geometries: new Map([...state.geometries].map(([key, row]) => [key, {
-      ...row,
-      declaration: copyGeometryDeclaration(row.declaration),
-      recipe: copyGeometry(row.recipe),
-    }])),
-    gltfRequests: new Map([...state.gltfRequests].map(([key, row]) => [key, {
-      count: row.count,
-      generation: row.generation,
-      key: row.key,
-      plan: row.plan === undefined ? undefined : {
-        ...row.plan,
-        geometries: new Map([...row.plan.geometries].map(([entryKey, entry]) => [entryKey, {
-          ...entry,
-          declaration: copyGeometryDeclaration(entry.declaration),
-        }])),
-        iblKeys: row.plan.iblKeys.map((entry) => ({ ...entry })),
-        ordinaryTextures: new Map(
-          [...row.plan.ordinaryTextures].map(([entryKey, entry]) => [entryKey, {
-            ...entry,
-            texture: copyTexture(entry.texture),
-          }]),
-        ),
-        virtualTextures: row.plan.virtualTextures.map((entry) => ({
-          ...entry,
-          texture: copyTexture(entry.texture),
-        })),
-      },
-      sourceUri: row.sourceUri,
-    }])),
-    hdrReadyAssetCount: state.hdrReadyAssetCount,
-    iblReferences: new Map(state.iblReferences),
-    iblSources: copySources(state.iblSources),
-    ordinaryTextures: new Map([...state.ordinaryTextures].map(([key, row]) => [key, {
-      ...row,
-      texture: copyTexture(row.texture),
-    }])),
-    pendingAssetKeySet: new Set(state.pendingAssetKeySet),
-    preparedSources: new Map(
-      [...state.preparedSources].map(([key, row]) => [key, {
-        ...row,
-        texture: copyTexture(row.texture),
-      }]),
-    ),
-    sourceReferences: new Map(state.sourceReferences),
-    virtualTextures: new Map([...state.virtualTextures].map(([key, row]) => [key, {
-      ...row,
-      texture: copyTexture(row.texture),
-    }])),
+    count: request.count,
+    generation: request.generation,
+    ...(request.plan === undefined ? {} : {
+      dependencyRevision: request.plan.dependencyRevision,
+      ordinaryTextures: [...request.plan.ordinaryTextures.values()].map((entry) => ({
+        ...entry,
+        texture: {
+          ...entry.texture,
+          ...(entry.texture.sampler === undefined ? {} : { sampler: { ...entry.texture.sampler } }),
+        },
+      })),
+    }),
   };
 };
+
+export const resourceArenaGltfRequestCount = (arena: ResourceArena): number =>
+  (arena as unknown as ResourceArenaState).gltfRequests.size;
+
+export const resourceArenaSourceCount = (arena: ResourceArena): number =>
+  (arena as unknown as ResourceArenaState).sourceReferences.size;
 
 declare const resourceArenaAuthority: unique symbol;
 

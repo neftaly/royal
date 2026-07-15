@@ -18,10 +18,14 @@ import {
   disposeResourceArena,
   publishResourceArenaContentKey,
   rekeyPreparedAssetOrdinaryTextures,
+  resourceArenaCountersSnapshot,
   resourceArenaContentKeys,
+  resourceArenaGeometrySnapshot,
+  resourceArenaGltfRequestCount,
+  resourceArenaGltfRequestSnapshot,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
-  resourceArenaSnapshot,
+  resourceArenaSourceCount,
   resourceArenaSourceReferenceCount,
   releaseResourceArenaPreparedSource,
   retainResourceArenaSourceLease,
@@ -57,6 +61,28 @@ const emptyAsset = (): PreparedGltfAsset => ({
   nodeCount: 0,
   primitives: [],
   variants: [],
+});
+const resourceArenaSnapshot = (arena: ReturnType<typeof createResourceArena>) => ({
+  counters: { ...resourceArenaCountersSnapshot(arena) },
+  geometries: new Map(resourceArenaGeometrySnapshot(arena)),
+  gltfRequests: {
+    get: (key: string) => {
+      const request = resourceArenaGltfRequestSnapshot(arena, key);
+      return request === undefined ? undefined : {
+        count: request.count,
+        generation: request.generation,
+        plan: request.dependencyRevision === undefined ? undefined : {
+          dependencyRevision: request.dependencyRevision,
+          ordinaryTextures: new Map(
+            request.ordinaryTextures?.map((entry) => [entry.key, entry]) ?? [],
+          ),
+        },
+      };
+    },
+    get size() { return resourceArenaGltfRequestCount(arena); },
+  },
+  hdrReadyAssetCount: resourceArenaHasHdrReadyAsset(arena) ? 1 : 0,
+  sourceReferences: { get size() { return resourceArenaSourceCount(arena); } },
 });
 const replayGeometryChanges = (
   vertexInputs: ReturnType<typeof createVertexInputArena>,
