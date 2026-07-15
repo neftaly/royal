@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
   combineSurfaceLightSets,
+  createSurfaceLightTransformWorkspace,
   createSurfaceLightSetWorkspace,
   surfaceLightSet,
+  writeTransformedSurfaceLightSet,
   writeCombinedSurfaceLightSet,
   type SurfaceIblIrradiance,
   type SurfaceIblSpecular,
@@ -85,5 +87,24 @@ describe("WebGL surface light composition", () => {
 
     writeCombinedSurfaceLightSet(output, undefined, undefined);
     expect(output).toEqual({ directionals: [], lights: [], punctuals: [] });
+  });
+
+  it("reuses transformed light slots while updating their values", () => {
+    const workspace = createSurfaceLightTransformWorkspace();
+    const source = {
+      color: [1, 1, 1, 1] as const,
+      kind: "point" as const,
+      position: [1, 2, 3] as const,
+    };
+    const model = identityMat4();
+    const first = writeTransformedSurfaceLightSet(workspace, model, [source]);
+    const slot = first.lights[0];
+    expect(slot).toMatchObject({ position: [1, 2, 3] });
+
+    model[12] = 5;
+    const second = writeTransformedSurfaceLightSet(workspace, model, [source]);
+    expect(second).toBe(first);
+    expect(second.lights[0]).toBe(slot);
+    expect(second.lights[0]).toMatchObject({ position: [6, 2, 3] });
   });
 });

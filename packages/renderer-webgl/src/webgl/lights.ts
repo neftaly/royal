@@ -4,11 +4,14 @@ import type {
 } from "@royal/renderer-core";
 import {
   identityMat4,
-  inverseMat4,
-  multiplyMat4,
-  transformDirection,
-  transformPoint,
+  inverseMat4Into,
+  multiplyMat4Into,
+  transformDirectionInto,
+  transformMat4Into,
+  transformPointInto,
   type Mat4,
+  type MutableMat4,
+  type MutableVec3,
 } from "../math/mat4";
 
 export const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
@@ -87,6 +90,20 @@ export type SurfaceLightSetWorkspace = {
   specular?: SurfaceIblSpecular;
 };
 
+export type SurfaceLightTransformWorkspace = {
+  readonly lightSlots: SurfaceLight[];
+  readonly resolved: SurfaceLightSetWorkspace;
+};
+
+export type SurfaceIblIrradianceTransformWorkspace = {
+  readonly resolved: {
+    coefficients: readonly Vec3[];
+    intensity: number;
+    worldToIbl: MutableMat4;
+  };
+  readonly worldFromIbl: MutableMat4;
+};
+
 export const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   directionals: [],
   lights: [],
@@ -134,6 +151,21 @@ export const createSurfaceLightSetWorkspace = (): SurfaceLightSetWorkspace => ({
   punctuals: [],
 });
 
+export const createSurfaceLightTransformWorkspace = (): SurfaceLightTransformWorkspace => ({
+  lightSlots: [],
+  resolved: createSurfaceLightSetWorkspace(),
+});
+
+export const createSurfaceIblIrradianceTransformWorkspace =
+  (): SurfaceIblIrradianceTransformWorkspace => ({
+    resolved: {
+      coefficients: [],
+      intensity: 0,
+      worldToIbl: identityMat4(),
+    },
+    worldFromIbl: identityMat4(),
+  });
+
 const appendSurfaceLightSet = (
   output: SurfaceLightSetWorkspace,
   lightSet: SurfaceLightSet | undefined,
@@ -171,43 +203,119 @@ export const writeCombinedSurfaceLightSet = (
   return output;
 };
 
-export const transformSurfaceIblIrradiance = (
-  model: Mat4,
-  light: SurfaceImageBasedLight,
-): SurfaceIblIrradiance => {
-  const worldFromIbl = multiplyMat4(model, light.rotation);
-
-  return {
-    coefficients: light.coefficients,
-    intensity: light.intensity,
-    worldToIbl: inverseMat4(worldFromIbl) ?? identityMat4(),
-  };
+type MutableDirectionalLight = {
+  color: LinearRgba;
+  direction: MutableVec3;
+  kind: "directional";
 };
+type MutablePointLight = {
+  color: LinearRgba;
+  kind: "point";
+  position: MutableVec3;
+  range?: number;
+};
+type MutableSpotLight = {
+  color: LinearRgba;
+  direction: MutableVec3;
+  innerConeAngle: number;
+  kind: "spot";
+  outerConeAngle: number;
+  position: MutableVec3;
+  range?: number;
+};
+type MutableSurfaceLight = MutableDirectionalLight | MutablePointLight | MutableSpotLight;
 
-export const transformSurfaceLight = (model: Mat4, light: SurfaceLight): SurfaceLight => {
+const createSurfaceLightTransformSlot = (light: SurfaceLight): MutableSurfaceLight => {
   switch (light.kind) {
     case "directional":
-      return {
-        color: light.color,
-        direction: transformDirection(model, light.direction),
-        kind: "directional",
-      };
+      return { color: light.color, direction: [0, 0, -1], kind: "directional" };
     case "point":
-      return {
-        color: light.color,
-        kind: "point",
-        position: transformPoint(model, light.position),
-        ...(light.range === undefined ? {} : { range: light.range }),
-      };
+      return { color: light.color, kind: "point", position: [0, 0, 0] };
     case "spot":
       return {
         color: light.color,
-        direction: transformDirection(model, light.direction),
+        direction: [0, 0, -1],
         innerConeAngle: light.innerConeAngle,
         kind: "spot",
         outerConeAngle: light.outerConeAngle,
-        position: transformPoint(model, light.position),
-        ...(light.range === undefined ? {} : { range: light.range }),
+        position: [0, 0, 0],
       };
   }
+};
+
+const writeSurfaceLightTransformSlot = (
+  output: MutableSurfaceLight,
+  model: Mat4,
+  light: SurfaceLight,
+): void => {
+  if (output.kind !== light.kind) {
+    throw new Error("Royal surface light transform slot kind does not match its source");
+  }
+  output.color = light.color;
+  switch (light.kind) {
+    case "directional":
+      transformDirectionInto((output as MutableDirectionalLight).direction, model, light.direction);
+      return;
+    case "point": {
+      const point = output as MutablePointLight;
+      transformPointInto(point.position, model, light.position);
+      if (light.range === undefined) delete point.range;
+      else point.range = light.range;
+      return;
+    }
+    case "spot": {
+      const spot = output as MutableSpotLight;
+      transformDirectionInto(spot.direction, model, light.direction);
+      transformPointInto(spot.position, model, light.position);
+      spot.innerConeAngle = light.innerConeAngle;
+      spot.outerConeAngle = light.outerConeAngle;
+      if (light.range === undefined) delete spot.range;
+      else spot.range = light.range;
+    }
+  }
+};
+
+export const writeTransformedSurfaceLightSet = (
+  workspace: SurfaceLightTransformWorkspace,
+  model: Mat4,
+  lights: readonly SurfaceLight[],
+  irradiance?: SurfaceIblIrradiance,
+  specular?: SurfaceIblSpecular,
+): SurfaceLightSetWorkspace => {
+  const output = workspace.resolved;
+  output.directionals.length = 0;
+  output.lights.length = 0;
+  output.punctuals.length = 0;
+  for (let index = 0; index < lights.length; index += 1) {
+    const source = lights[index]!;
+    let slot = workspace.lightSlots[index] as MutableSurfaceLight | undefined;
+    if (slot === undefined || slot.kind !== source.kind) {
+      slot = createSurfaceLightTransformSlot(source);
+      workspace.lightSlots[index] = slot;
+    }
+    writeSurfaceLightTransformSlot(slot, model, source);
+    output.lights.push(slot);
+    if (slot.kind === "directional") output.directionals.push(slot);
+    else output.punctuals.push(slot);
+  }
+  workspace.lightSlots.length = lights.length;
+  if (irradiance === undefined) delete output.irradiance;
+  else output.irradiance = irradiance;
+  if (specular === undefined) delete output.specular;
+  else output.specular = specular;
+  return output;
+};
+
+export const writeTransformedSurfaceIblIrradiance = (
+  workspace: SurfaceIblIrradianceTransformWorkspace,
+  model: Mat4,
+  light: SurfaceImageBasedLight,
+): SurfaceIblIrradiance => {
+  multiplyMat4Into(workspace.worldFromIbl, model, light.rotation);
+  if (inverseMat4Into(workspace.resolved.worldToIbl, workspace.worldFromIbl) === undefined) {
+    transformMat4Into(workspace.resolved.worldToIbl, undefined);
+  }
+  workspace.resolved.coefficients = light.coefficients;
+  workspace.resolved.intensity = light.intensity;
+  return workspace.resolved;
 };

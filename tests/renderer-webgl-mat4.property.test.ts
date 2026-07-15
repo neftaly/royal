@@ -15,7 +15,11 @@ import {
   rotationYMat4,
   rotationZMat4,
   scaleMat4,
+  transformDirection,
+  transformDirectionInto,
   transformMat4,
+  transformPoint,
+  transformPointInto,
   translationMat4,
 } from "../packages/renderer-webgl/src/math/mat4";
 import { forEachFuzzCase } from "./fuzz";
@@ -31,7 +35,64 @@ const composedTransformMat4 = (transform: Transform) => multiplyMat4(
   ),
 );
 
+const referenceTransformVector = (
+  transform: Transform,
+  vector: readonly [number, number, number],
+  point: boolean,
+): [number, number, number] => {
+  let x = vector[0] * transform.scale[0];
+  let y = vector[1] * transform.scale[1];
+  let z = vector[2] * transform.scale[2];
+  const cosX = Math.cos(transform.rotation[0]);
+  const sinX = Math.sin(transform.rotation[0]);
+  [y, z] = [cosX * y - sinX * z, sinX * y + cosX * z];
+  const cosY = Math.cos(transform.rotation[1]);
+  const sinY = Math.sin(transform.rotation[1]);
+  [x, z] = [cosY * x + sinY * z, -sinY * x + cosY * z];
+  const cosZ = Math.cos(transform.rotation[2]);
+  const sinZ = Math.sin(transform.rotation[2]);
+  [x, y] = [cosZ * x - sinZ * y, sinZ * x + cosZ * y];
+  if (point) return [x + transform.position[0], y + transform.position[1], z + transform.position[2]];
+  const length = Math.hypot(x, y, z);
+  return length === 0 ? [0, 0, -1] : [x / length, y / length, z / length];
+};
+
 describe("renderer-webgl transform matrix properties", () => {
+  it("keeps write-into vector transforms equivalent to allocating wrappers", () => {
+    forEachFuzzCase({ cases: 64, seed: 0x1a11_0ca7 }, ({ label, random }) => {
+      const transform: Transform = {
+        position: random.array(3, () => random.number(-100, 100)) as [number, number, number],
+        rotation: random.array(3, () => random.number(-Math.PI, Math.PI)) as [number, number, number],
+        scale: random.array(3, () => random.number(-10, 10)) as [number, number, number],
+      };
+      const matrix = transformMat4(transform);
+      const vector = random.array(3, () => random.number(-100, 100)) as [number, number, number];
+      const pointOutput: [number, number, number] = [0, 0, 0];
+      const directionOutput: [number, number, number] = [0, 0, 0];
+
+      const expectedPoint = referenceTransformVector(transform, vector, true);
+      const expectedDirection = referenceTransformVector(transform, vector, false);
+
+      expect(transformPointInto(pointOutput, matrix, vector), label).toBe(pointOutput);
+      expect(pointOutput, label).toEqual(transformPoint(matrix, vector));
+      expect(pointOutput[0], label).toBeCloseTo(expectedPoint[0]!, 5);
+      expect(pointOutput[1], label).toBeCloseTo(expectedPoint[1]!, 5);
+      expect(pointOutput[2], label).toBeCloseTo(expectedPoint[2]!, 5);
+      expect(transformDirectionInto(directionOutput, matrix, vector), label).toBe(directionOutput);
+      expect(directionOutput, label).toEqual(transformDirection(matrix, vector));
+      expect(directionOutput[0], label).toBeCloseTo(expectedDirection[0]!, 5);
+      expect(directionOutput[1], label).toBeCloseTo(expectedDirection[1]!, 5);
+      expect(directionOutput[2], label).toBeCloseTo(expectedDirection[2]!, 5);
+
+      const aliasedPoint = vector.slice() as [number, number, number];
+      const aliasedDirection = vector.slice() as [number, number, number];
+      transformPointInto(aliasedPoint, matrix, aliasedPoint);
+      transformDirectionInto(aliasedDirection, matrix, aliasedDirection);
+      expect(aliasedPoint, label).toEqual(pointOutput);
+      expect(aliasedDirection, label).toEqual(directionOutput);
+    });
+  });
+
   it("matches the compositional TRS definition", () => {
     forEachFuzzCase({ cases: 64, seed: 0x7a5_4a71 }, ({ label, random }) => {
       const transform: Transform = {

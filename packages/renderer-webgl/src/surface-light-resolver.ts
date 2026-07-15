@@ -11,13 +11,17 @@ import type {
   StudioEnvironmentSpecularResource,
 } from "./webgl/ibl-texture-arena";
 import {
+  createSurfaceIblIrradianceTransformWorkspace,
+  createSurfaceLightTransformWorkspace,
   surfaceLightSet,
-  transformSurfaceIblIrradiance,
-  transformSurfaceLight,
+  writeTransformedSurfaceIblIrradiance,
+  writeTransformedSurfaceLightSet,
   type SurfaceImageBasedLightSpecular,
+  type SurfaceIblIrradianceTransformWorkspace,
   type SurfaceIblIrradiance,
   type SurfaceIblSpecular,
   type SurfaceLight,
+  type SurfaceLightTransformWorkspace,
   type SurfaceLightSet,
 } from "./webgl/lights";
 import { STUDIO_ENVIRONMENT_IRRADIANCE } from "./webgl/studio-environment-irradiance";
@@ -31,8 +35,24 @@ export interface SurfaceLightResolverOptions {
 
 export type GltfSurfaceLightSource = Pick<PreparedGltfState, "imageBasedLight" | "lights">;
 
+type MutableSurfaceIblSpecular = {
+  encoding: SurfaceIblSpecular["encoding"];
+  intensity: number;
+  key: string;
+  mipCount: number;
+  texture: WebGLTexture;
+  worldToIbl: Mat4;
+};
+
+type GltfAssetLightWorkspace = {
+  readonly irradiance: SurfaceIblIrradianceTransformWorkspace;
+  readonly lights: SurfaceLightTransformWorkspace;
+  specular?: MutableSurfaceIblSpecular;
+};
+
 /** Owns scene/asset light-set resolution and stable glTF light-scope identity. */
 export class SurfaceLightResolver {
+  #gltfAssetCache = new WeakMap<GltfSurfaceLightSource, WeakMap<Mat4, GltfAssetLightWorkspace>>();
   #gltfScopeIdCount = 0;
   readonly #gltfScopeIds = new Map<string, number>();
   readonly #options: SurfaceLightResolverOptions;
@@ -93,15 +113,18 @@ export class SurfaceLightResolver {
 
   resolveGltfAsset(state: GltfSurfaceLightSource, rootModel: Mat4): SurfaceLightSet | undefined {
     const imageBasedLight = state.imageBasedLight;
+    if (state.lights.length === 0 && imageBasedLight === undefined) return undefined;
+    const workspace = this.#gltfAssetWorkspace(state, rootModel);
     const irradiance = imageBasedLight === undefined
       ? undefined
-      : transformSurfaceIblIrradiance(rootModel, imageBasedLight);
+      : writeTransformedSurfaceIblIrradiance(workspace.irradiance, rootModel, imageBasedLight);
     const specular = imageBasedLight?.specular === undefined || irradiance === undefined
       ? undefined
-      : this.#resolveGltfSpecular(imageBasedLight.specular, irradiance);
-    if (state.lights.length === 0 && irradiance === undefined && specular === undefined) return undefined;
-    return surfaceLightSet(
-      state.lights.map((light) => transformSurfaceLight(rootModel, light)),
+      : this.#resolveGltfSpecular(workspace, imageBasedLight.specular, irradiance);
+    return writeTransformedSurfaceLightSet(
+      workspace.lights,
+      rootModel,
+      state.lights,
       irradiance,
       specular,
     );
@@ -120,24 +143,54 @@ export class SurfaceLightResolver {
   }
 
   clear(): void {
+    this.#gltfAssetCache = new WeakMap();
     this.#gltfScopeIds.clear();
     this.#gltfScopeIdCount = 0;
     this.#sceneCache = undefined;
   }
 
   #resolveGltfSpecular(
+    workspace: GltfAssetLightWorkspace,
     specular: SurfaceImageBasedLightSpecular,
     irradiance: SurfaceIblIrradiance,
   ): SurfaceIblSpecular | undefined {
     const resource = this.#options.ensureGltfSpecular(specular);
     if (!resource.uploaded) return undefined;
-    return {
-      encoding: specular.encoding,
-      intensity: irradiance.intensity,
-      key: specular.key,
-      mipCount: resource.mipCount,
-      texture: resource.texture,
-      worldToIbl: irradiance.worldToIbl,
+    let resolved = workspace.specular;
+    if (resolved === undefined) {
+      resolved = {
+        encoding: specular.encoding,
+        intensity: irradiance.intensity,
+        key: specular.key,
+        mipCount: resource.mipCount,
+        texture: resource.texture,
+        worldToIbl: irradiance.worldToIbl,
+      };
+      workspace.specular = resolved;
+      return resolved;
+    }
+    resolved.encoding = specular.encoding;
+    resolved.intensity = irradiance.intensity;
+    resolved.key = specular.key;
+    resolved.mipCount = resource.mipCount;
+    resolved.texture = resource.texture;
+    resolved.worldToIbl = irradiance.worldToIbl;
+    return resolved;
+  }
+
+  #gltfAssetWorkspace(state: GltfSurfaceLightSource, rootModel: Mat4): GltfAssetLightWorkspace {
+    let models = this.#gltfAssetCache.get(state);
+    if (models === undefined) {
+      models = new WeakMap();
+      this.#gltfAssetCache.set(state, models);
+    }
+    let workspace = models.get(rootModel);
+    if (workspace !== undefined) return workspace;
+    workspace = {
+      irradiance: createSurfaceIblIrradianceTransformWorkspace(),
+      lights: createSurfaceLightTransformWorkspace(),
     };
+    models.set(rootModel, workspace);
+    return workspace;
   }
 }

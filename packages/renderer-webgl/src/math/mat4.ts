@@ -20,7 +20,7 @@ export type MutableMat4 = [
   number, number, number, number,
 ];
 
-export type Vec4 = readonly [x: number, y: number, z: number, w: number];
+export type MutableVec3 = [x: number, y: number, z: number];
 
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
@@ -61,28 +61,51 @@ export const inverseMat4Into = (
 export const inverseMat4 = (matrix: Mat4): Mat4 | undefined =>
   inverseMat4Into(identityMat4(), matrix);
 
-const transformVec4 = (matrix: Mat4, [x, y, z, w]: Vec4): Vec4 => [
-  matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
-  matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
-  matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,
-  matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w,
-];
-
-export const transformPoint = (matrix: Mat4, point: Vec3): Vec3 => {
-  const [x, y, z, w] = transformVec4(matrix, [point[0], point[1], point[2], 1]);
+export const transformPointInto = (
+  out: MutableVec3,
+  matrix: Mat4,
+  point: Vec3,
+): MutableVec3 => {
+  const pointX = point[0];
+  const pointY = point[1];
+  const pointZ = point[2];
+  const x = matrix[0] * pointX + matrix[4] * pointY + matrix[8] * pointZ + matrix[12];
+  const y = matrix[1] * pointX + matrix[5] * pointY + matrix[9] * pointZ + matrix[13];
+  const z = matrix[2] * pointX + matrix[6] * pointY + matrix[10] * pointZ + matrix[14];
+  const w = matrix[3] * pointX + matrix[7] * pointY + matrix[11] * pointZ + matrix[15];
   const divisor = w === 0 ? 1 : w;
-  return [x / divisor, y / divisor, z / divisor];
+  out[0] = x / divisor;
+  out[1] = y / divisor;
+  out[2] = z / divisor;
+  return out;
 };
 
-export const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 => {
+export const transformPoint = (matrix: Mat4, point: Vec3): Vec3 =>
+  transformPointInto([0, 0, 0], matrix, point);
+
+export const transformDirectionInto = (
+  out: MutableVec3,
+  matrix: Mat4,
+  direction: Vec3,
+): MutableVec3 => {
   const x = matrix[0] * direction[0] + matrix[4] * direction[1] + matrix[8] * direction[2];
   const y = matrix[1] * direction[0] + matrix[5] * direction[1] + matrix[9] * direction[2];
   const z = matrix[2] * direction[0] + matrix[6] * direction[1] + matrix[10] * direction[2];
   const length = Math.hypot(x, y, z);
-  if (length === 0) return [0, 0, -1];
-
-  return [x / length, y / length, z / length];
+  if (length === 0) {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = -1;
+    return out;
+  }
+  out[0] = x / length;
+  out[1] = y / length;
+  out[2] = z / length;
+  return out;
 };
+
+export const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 =>
+  transformDirectionInto([0, 0, 0], matrix, direction);
 
 export const dotVec3 = (left: Vec3, right: Vec3): number =>
   left[0] * right[0] + left[1] * right[1] + left[2] * right[2];

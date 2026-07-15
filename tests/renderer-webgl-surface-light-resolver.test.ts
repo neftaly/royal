@@ -92,13 +92,20 @@ describe("SurfaceLightResolver", () => {
       ensureGltfSpecular,
       studioSpecular: vi.fn(),
     });
+    const source = state();
+    const rootModel = identityMat4();
 
-    const pending = resolver.resolveGltfAsset(state(), identityMat4());
+    const pending = resolver.resolveGltfAsset(source, rootModel);
     expect(pending).toMatchObject({ irradiance: { intensity: 2 }, lights: [directional] });
     expect(pending?.specular).toBeUndefined();
+    const transformedLight = pending?.lights[0];
+    const worldToIbl = pending?.irradiance?.worldToIbl;
 
     uploaded = true;
-    const ready = resolver.resolveGltfAsset(state(), identityMat4());
+    const ready = resolver.resolveGltfAsset(source, rootModel);
+    expect(ready).toBe(pending);
+    expect(ready?.lights[0]).toBe(transformedLight);
+    expect(ready?.irradiance?.worldToIbl).toBe(worldToIbl);
     expect(ready?.specular).toMatchObject({
       encoding: "rgbd",
       intensity: 2,
