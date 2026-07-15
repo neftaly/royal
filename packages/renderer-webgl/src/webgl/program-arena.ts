@@ -335,7 +335,8 @@ const cacheValue = (
   }
   let cached = values.get(name);
   if (cached === undefined || cached.length !== length) {
-    cached = new Array<number>(length);
+    cached = [];
+    cached.length = length;
     values.set(name, cached);
   }
   for (let index = 0; index < length; index += 1) cached[index] = value[index] as number;
@@ -358,7 +359,8 @@ const cacheScalars = (
   }
   let cached = values.get(name);
   if (cached === undefined || cached.length !== length) {
-    cached = new Array<number>(length);
+    cached = [];
+    cached.length = length;
     values.set(name, cached);
   }
   cached[0] = x;
