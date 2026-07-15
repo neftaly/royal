@@ -1,11 +1,5 @@
-import {
-  configureClusteredLightArena,
-  createClusteredLightArena,
-  dropClusteredLightContext,
-  endClusteredLightFrame,
-  releaseClusteredLightContextHandles,
-  type ClusteredLightArena,
-} from "./webgl/clustered-light-arena";
+import { ClusteredLightingFeatureOwner } from "./clustered-lighting-feature-owner";
+import type { ClusteredLightingFeature } from "./clustered-lighting-feature";
 import {
   type GltfAssetRef,
   type Material,
@@ -357,7 +351,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       return typeof reservation === "string" ? undefined : reservation;
     },
   });
-  readonly #clusteredLights: ClusteredLightArena;
+  readonly #clusteredLights: ClusteredLightingFeature;
   readonly #scenePlan = new ScenePlanTransactionOwner({
     rebuildTopology: (plan) => this.#gltfPacketOccurrences.rebuild(plan),
     reconcileBulkInstances: (changes) => this.#gltfInstanceTransforms.reconcile(changes),
@@ -401,7 +395,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       // later restoration to reuse either arena.
       releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, this.#gl);
       releaseProgramArenaContextHandles(this.#programArena);
-      releaseClusteredLightContextHandles(this.#clusteredLights);
+      this.#clusteredLights.releaseContextHandles();
       this.#configureContextCapabilities(this.#contextCapabilities.validateRestoreAndProbe());
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       this.#ordinaryTextures.restoreContext(this.#context.generation);
@@ -499,18 +493,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
         automaticVirtualTextures: requestedOptions.automaticVirtualTextures,
         ...this.#contextCapabilities.attributes,
       });
-      this.#clusteredLights = createClusteredLightArena(gl, {
-        replace: (lease, cost) => {
-          const reservation = replaceResourceGovernorLease(this.#resourceGovernor, lease, cost);
-          return typeof reservation === "string" ? undefined : reservation;
-        },
-        reserve: (cost) => {
-          const reservation = reserveResourceGovernor(this.#resourceGovernor, "render-target", cost);
-          return typeof reservation === "string" ? undefined : reservation;
+      this.#clusteredLights = new ClusteredLightingFeatureOwner({
+        gl,
+        governor: {
+          replace: (lease, cost) => {
+            const reservation = replaceResourceGovernorLease(this.#resourceGovernor, lease, cost);
+            return typeof reservation === "string" ? undefined : reservation;
+          },
+          reserve: (cost) => {
+            const reservation = reserveResourceGovernor(this.#resourceGovernor, "render-target", cost);
+            return typeof reservation === "string" ? undefined : reservation;
+          },
         },
       });
-      registerRollback(() => dropClusteredLightContext(this.#clusteredLights));
-      registerRollback(() => releaseClusteredLightContextHandles(this.#clusteredLights));
+      registerRollback(() => this.#clusteredLights.dropContext());
+      registerRollback(() => this.#clusteredLights.releaseContextHandles());
       this.#ibl = new LazyImageBasedLightingFeature({
         active: () => !this.#disposed && this.#context.lifecycle === "active",
         contextLifecycle: () => this.#context.lifecycle,
@@ -730,8 +727,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       capabilities.parallelShaderCompile,
     );
     this.#surfaceExecution.configureTextureUnits(capabilities.maxTextureImageUnits);
-    configureClusteredLightArena(
-      this.#clusteredLights,
+    this.#clusteredLights.configure(
       capabilities.maxTextureImageUnits,
       capabilities.maxTextureSize,
     );
@@ -1040,7 +1036,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     });
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => endClusteredLightFrame(this.#clusteredLights, this.#framePublication.frame),
+      () => this.#clusteredLights.endFrame(this.#framePublication.frame),
     );
     renderFailure = captureFirstFailure(
       renderFailure,
@@ -1140,9 +1136,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
         releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
       });
       releaseFailure = captureFirstFailure(releaseFailure, () => releaseProgramArenaContextHandles(this.#programArena));
-      releaseFailure = captureFirstFailure(releaseFailure, () => {
-        releaseClusteredLightContextHandles(this.#clusteredLights);
-      });
+      releaseFailure = captureFirstFailure(
+        releaseFailure,
+        () => this.#clusteredLights.releaseContextHandles(),
+      );
       releaseFailure = captureFirstFailure(releaseFailure, () => this.#ibl.releaseContextHandles());
       releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseTextureHandleContextHandles(this.#textureHandles);
@@ -1158,7 +1155,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
       });
       releaseFailure = captureFirstFailure(releaseFailure, () => dropProgramArenaContext(this.#programArena));
-      releaseFailure = captureFirstFailure(releaseFailure, () => dropClusteredLightContext(this.#clusteredLights));
+      releaseFailure = captureFirstFailure(releaseFailure, () => this.#clusteredLights.dropContext());
     }
     releaseFailure = captureFirstFailure(releaseFailure, () => this.#ibl.dropContext());
     releaseFailure = captureFirstFailure(releaseFailure, () => dropTextureHandleContext(this.#textureHandles));
@@ -1198,7 +1195,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         releaseProgramArenaContextHandles(this.#programArena);
       });
       retryFailure = captureFirstFailure(retryFailure, () => {
-        releaseClusteredLightContextHandles(this.#clusteredLights);
+        this.#clusteredLights.releaseContextHandles();
       });
       retryFailure = captureFirstFailure(retryFailure, () => this.#gltfInstanceTransforms.dispose());
       retryFailure = captureFirstFailure(retryFailure, () => this.#resourceArenaSideEffects.drain());

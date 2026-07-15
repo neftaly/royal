@@ -12,11 +12,7 @@ import {
 import type { BaseColorTextureResidency, ViewportSize, VirtualTextureRuntimeState } from "../virtual-texture-runtime";
 import type { VertexInputGeometry } from "../vertex-input-arena";
 import type { VirtualTextureGpuBinding } from "./virtual-texture-gpu-arena";
-import {
-  bindClusteredLights,
-  clusteredLightTextureUnits,
-  type ClusteredLightArena,
-} from "./clustered-light-arena";
+import type { ClusteredLightingFeature } from "../clustered-lighting-feature";
 import {
   drawGeometry,
   prepareGeometryInstancedDraw,
@@ -154,7 +150,7 @@ export interface SurfaceExecutionArenaOptions {
     atlasTextureUnit: number,
     pageTableTextureUnit: number,
   ) => VirtualTextureGpuBinding | undefined;
-  readonly clusteredLights: ClusteredLightArena;
+  readonly clusteredLights: ClusteredLightingFeature;
   readonly geometry: GeometryDrawArena;
   readonly gl: WebGL2RenderingContext;
   readonly gltfFrames: GltfFrameBatchArena;
@@ -170,7 +166,7 @@ export interface SurfaceExecutionArenaOptions {
 /** Owns concrete WebGL surface planning, binding, state, and submission. */
 export class SurfaceExecutionArena {
   readonly #bindIbl: SurfaceExecutionArenaOptions["bindIbl"];
-  readonly #clusteredLights: ClusteredLightArena;
+  readonly #clusteredLights: ClusteredLightingFeature;
   readonly #bindVirtualTextureGpu: SurfaceExecutionArenaOptions["bindVirtualTexture"];
   readonly #diagnostics: SurfaceExecutionDiagnostic[] = [];
   readonly #geometry: GeometryDrawArena;
@@ -423,7 +419,7 @@ export class SurfaceExecutionArena {
         };
       }
     })();
-    const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
+    const clusterUnits = this.#clusteredLights.textureUnits();
     const reserveClusterUnits = lightSet.punctuals.length > 0;
     const reservedTextureUnits = reserveClusterUnits
       ? new Set([clusterUnits.grid, clusterUnits.indices, clusterUnits.lights].filter((unit) => unit >= 0))
@@ -684,8 +680,7 @@ export class SurfaceExecutionArena {
       uniformColor(this.#programs, program, `u_surfaceLightPosition[${index}]`, [0, 0, 0, 0]);
       uniformColor(this.#programs, program, `u_surfaceLightCone[${index}]`, [1, 0, 0, 0]);
     }
-    bindClusteredLights(
-      this.#clusteredLights,
+    this.#clusteredLights.bind(
       this.#programs,
       program,
       lightSet.punctuals,
