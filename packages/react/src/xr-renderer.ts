@@ -5,6 +5,7 @@ import type {
   XrSessionRenderer,
   XrSessionRendererOptions,
 } from "./xr-renderer-model";
+import { validateXrSessionRendererOptions } from "./xr-renderer-model";
 
 export type {
   XrFrame,
@@ -25,5 +26,6 @@ export const createXrSessionRenderer = async (
   session: XrSession,
   options?: XrSessionRendererOptions,
 ): Promise<XrSessionRenderer> => {
+  validateXrSessionRendererOptions(options);
   return royalRendererCapabilitiesFor(root).createXrSessionRenderer(session, options);
 };

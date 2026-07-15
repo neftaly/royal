@@ -121,6 +121,28 @@ describe("React XR session runtime", () => {
       root,
       store,
       session,
+      {
+        mode: "immersive-vr",
+        rendererOptions: { referenceSpacePreference: [] },
+      },
+      createRenderer,
+    )).rejects.toThrow(/referenceSpacePreference must contain at least one/i);
+    await expect(createXrSessionRuntimeWithRenderer(
+      root,
+      store,
+      session,
+      {
+        mode: "immersive-vr",
+        rendererOptions: {
+          webGlLayer: { framebufferScaleFactor: 0 },
+        },
+      },
+      createRenderer,
+    )).rejects.toThrow(/framebufferScaleFactor must be positive and finite/i);
+    await expect(createXrSessionRuntimeWithRenderer(
+      root,
+      store,
+      session,
       { mode: "immersive-vr" },
       null as never,
     )).rejects.toThrow("XR session runtime createRenderer must be a function");

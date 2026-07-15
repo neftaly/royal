@@ -24,6 +24,18 @@ const xrSessionEventMethods = (target: EventTarget) => ({
 });
 
 describe("React XR renderer capability", () => {
+  it("rejects malformed options before consulting renderer capabilities", async () => {
+    const root = fakeRendererRoot();
+    const session = {} as XrSession;
+
+    await expect(createXrSessionRenderer(root, session, {
+      frameSnapshot: () => undefined,
+    } as never)).rejects.toThrow(/unsupported option.*frameSnapshot/i);
+    await expect(createXrSessionRenderer(root, session, {
+      webGlLayer: { antialias: "yes" as unknown as boolean },
+    })).rejects.toThrow("XR session renderer webGlLayer.antialias must be a boolean");
+  });
+
   it("renders XR frames without exposing the concrete WebGL root", async () => {
     const makeXRCompatible = vi.fn(async () => undefined);
     const { gl } = createStrictWebGl2Context({

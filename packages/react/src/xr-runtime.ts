@@ -6,13 +6,14 @@ import {
   type XrSessionRenderer,
   type XrSessionRendererOptions,
 } from "./xr-renderer";
+import { validateXrSessionRendererOptions } from "./xr-renderer-model";
 import type { XrSessionStore } from "./xr-store";
 import {
   isXrSessionMode,
   isXrSessionVisibilityState,
   type XrSessionMode,
 } from "./xr-session-model";
-import { objectRecord, recordWithAllowedFields } from "./validation";
+import { recordWithAllowedFields } from "./validation";
 
 const XR_RUNTIME_OPTION_FIELDS = ["mode", "rendererOptions"] as const;
 
@@ -47,9 +48,7 @@ const validateRuntimeOptions = (options: XrSessionRuntimeOptions): void => {
   if (!isXrSessionMode(options.mode)) {
     throw new TypeError("XR session runtime mode must be immersive-ar, immersive-vr, or inline");
   }
-  if (options.rendererOptions !== undefined) {
-    objectRecord(options.rendererOptions, "XR session runtime rendererOptions");
-  }
+  validateXrSessionRendererOptions(options.rendererOptions);
 };
 
 const sessionVisibilityState = (session: XrSession) => {
