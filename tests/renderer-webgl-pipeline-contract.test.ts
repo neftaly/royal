@@ -897,7 +897,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([0, 0.833333, 1, 0]);
+      .toContainEqual([2, 0.833333, 1, 0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
     expect(calls.some((call) =>
       call.name === "texStorage2D"

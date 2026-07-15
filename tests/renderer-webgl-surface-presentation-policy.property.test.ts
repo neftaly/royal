@@ -59,7 +59,7 @@ describe("surface presentation policy properties", () => {
     expect(resolveSurfaceToneMapping({ exposureEv100: undefined, toneMapping: undefined }, false)).toEqual({
       exposure: 1 / 1.2,
       hdrOutput: false,
-      toneMapping: "linear-clamp",
+      toneMapping: "pbr-neutral",
     });
   });
 });

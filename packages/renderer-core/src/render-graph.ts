@@ -30,7 +30,7 @@ export interface SceneOptions {
   readonly environment?: EnvironmentLight;
   /** Camera exposure value at ISO 100 in `[-128, 149]`. Higher values produce a darker image. */
   readonly exposureEv100?: number;
-  /** Display transform applied to scene-linear output. */
+  /** Display transform applied to scene-linear output. @defaultValue `"pbr-neutral"` */
   readonly toneMapping?: RenderToneMapping;
 }
 

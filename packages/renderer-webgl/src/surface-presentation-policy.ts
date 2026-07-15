@@ -14,7 +14,7 @@ export interface SurfaceToneMappingState {
 }
 
 const DEFAULT_EXPOSURE = 1 / 1.2;
-const DEFAULT_TONE_MAPPING: RenderToneMapping = "linear-clamp";
+const DEFAULT_TONE_MAPPING: RenderToneMapping = "pbr-neutral";
 const TONE_MAPPING_SHADER_MODES: Readonly<Record<RenderToneMapping, 0 | 1 | 2>> = {
   "linear-clamp": 0,
   "aces-fitted": 1,
