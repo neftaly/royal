@@ -889,8 +889,8 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain(
       "vec3 diffuse = diffuseColor * (1.0 - diffuseTransmissionFactor) * (lambert / PI) * lightColor",
     );
-    expect(sources).toContain("baseColor.rgb / max(u_toneMappingSettings.y, 0.000001)");
     expect(sources).toContain("? vec4(lit, baseColor.a)");
+    expect(sources).not.toContain("uniform bool u_unlit;");
     expect(sources).not.toContain("pow(roughness + 1.0, 2.0) / 8.0");
     expect(sources).not.toContain("pow(NdotH, 32.0)");
 

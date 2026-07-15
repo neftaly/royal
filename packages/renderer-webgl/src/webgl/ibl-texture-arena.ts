@@ -10,7 +10,7 @@ import { prepareTextureUpload } from "./imperative-state";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./lights";
 import {
   uniform1i,
-  uniformColor,
+  uniform4f,
   type ProgramArena,
 } from "./program-arena";
 import { bindSurfaceIblIrradiance } from "./surface-ibl-uniforms";
@@ -495,12 +495,9 @@ export const bindSurfaceIbl = (
     }
   }
   uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
-  uniformColor(programArena, program, "u_iblSpecularSettings", [
-    useSpecular ? 1 : 0,
-    specular?.intensity ?? 1,
-    specular?.mipCount ?? 1,
-    specular?.encoding === "rgbd" ? 1 : 0,
-  ]);
+  uniform4f(programArena, program, "u_iblSpecularSettings",
+    useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
+    specular?.encoding === "rgbd" ? 1 : 0);
   if (useSpecular) {
     state.gl.activeTexture(state.gl.TEXTURE0 + specularTextureUnit);
     state.gl.bindTexture(state.gl.TEXTURE_CUBE_MAP, specular.texture);

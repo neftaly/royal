@@ -347,6 +347,32 @@ export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: s
   cacheValue(state, program, name, value, 4);
 };
 
+/** Scalar hot-path form that allocates a vector only when the cached GPU value changes. */
+export const uniform4f = (
+  arena: ProgramArena,
+  program: WebGLProgram,
+  name: string,
+  x: number,
+  y: number,
+  z: number,
+  w: number,
+): void => {
+  const state = arena as unknown as State;
+  const cached = state.uniformValues.get(program)?.get(name);
+  if (
+    cached?.length === 4
+    && Object.is(cached[0], x)
+    && Object.is(cached[1], y)
+    && Object.is(cached[2], z)
+    && Object.is(cached[3], w)
+  ) return;
+  const location = uniformLocation(state, program, name);
+  if (location === null) return;
+  const value: LinearRgba = [x, y, z, w];
+  state.gl.uniform4fv(location, value);
+  cacheValue(state, program, name, value, 4);
+};
+
 export const uniform1i = (arena: ProgramArena, program: WebGLProgram, name: string, value: number): void => {
   const state = arena as unknown as State;
   const cached = state.uniformValues.get(program)?.get(name);

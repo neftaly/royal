@@ -28,7 +28,6 @@ import {
   lodStereoViews,
   bufferDataPayloads,
   roundVector,
-  uniformLocationName,
   uniform1iPayloads,
   waitForUniform1iPayload,
   uniform4fvPayloads,
@@ -565,8 +564,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.25, 0.5, 0.75, 1]);
-    expect(calls.some((call) => call.name === "uniform1i" && uniformLocationName(call.args[0]) === "u_unlit" && call.args[1] === 1))
-      .toBe(true);
+    const sources = shaderSources(calls).join("\n");
+    expect(sources).toContain("vec4(linearToSrgb(baseColor.rgb), baseColor.a)");
+    expect(sources).not.toContain("materialGgxDistribution");
   });
 
   it("renders glTF line primitives with line draw mode", async () => {

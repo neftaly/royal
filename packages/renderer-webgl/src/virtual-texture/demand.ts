@@ -1,4 +1,4 @@
-import { multiplyMat4 } from "../math/mat4";
+import { identityMat4, multiplyMat4Into, type MutableMat4 } from "../math/mat4";
 import type { TextureSamplerWrap } from "@royal/renderer-core";
 import {
   createVirtualTextureCoverageProvider,
@@ -72,7 +72,10 @@ export type VirtualTextureDemandPlanningWorkspace = {
   readonly finestRegionComponents: Float64Array;
   finestRegionCount: number;
   readonly finestRegionMips: Uint32Array;
+  readonly model: MutableMat4;
+  readonly modelViewProjection: MutableMat4;
   overflowed: boolean;
+  readonly projectionView: MutableMat4;
   readonly visiblePolygonComponents: Float64Array;
   visiblePolygonComponentCount: number;
   visiblePolygonCount: number;
@@ -87,7 +90,10 @@ export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDem
   finestRegionComponents: new Float64Array(FINEST_REGION_CAPACITY * FINEST_REGION_COMPONENTS),
   finestRegionCount: 0,
   finestRegionMips: new Uint32Array(FINEST_REGION_CAPACITY),
+  model: identityMat4(),
+  modelViewProjection: identityMat4(),
   overflowed: false,
+  projectionView: identityMat4(),
   visiblePolygonComponents: new Float64Array(RETAINED_POLYGON_COMPONENT_CAPACITY),
   visiblePolygonComponentCount: 0,
   visiblePolygonCount: 0,
@@ -120,6 +126,9 @@ export const virtualTextureDemandPlanningWorkspaceSnapshot = (
     + workspace.wrappedPolygon.byteLength
     + workspace.finestRegionComponents.byteLength
     + workspace.finestRegionMips.byteLength
+    + workspace.model.length * Float64Array.BYTES_PER_ELEMENT
+    + workspace.modelViewProjection.length * Float64Array.BYTES_PER_ELEMENT
+    + workspace.projectionView.length * Float64Array.BYTES_PER_ELEMENT
     + workspace.visiblePolygonComponents.byteLength
     + workspace.visiblePolygonOffsets.byteLength,
   conservativeAddressing: workspace.conservativeAddressing,
@@ -506,7 +515,7 @@ const projectExactVirtualTextureCoverage = (
   let clippedVertexCount = 0;
   let invalidGeometry = false;
   const { clippedPolygonA, clippedPolygonB } = workspace;
-  const projectionView = multiplyMat4(context.projection, context.view);
+  const projectionView = multiplyMat4Into(workspace.projectionView, context.projection, context.view);
   const triangleElementCount = geometry.indices?.length ?? vertexCount;
   if (triangleElementCount === 0) return { kind: "indeterminate" };
 
@@ -514,8 +523,8 @@ const projectExactVirtualTextureCoverage = (
     const source = context.modelSource;
     const model = source.kind === "single"
       ? source.model
-      : multiplyMat4(source.rootModels[modelIndex]!, source.localModels[modelIndex]!);
-    const mvp = multiplyMat4(projectionView, model);
+      : multiplyMat4Into(workspace.model, source.rootModels[modelIndex]!, source.localModels[modelIndex]!);
+    const mvp = multiplyMat4Into(workspace.modelViewProjection, projectionView, model);
     for (let element = 0; element < triangleElementCount; element += 3) {
       for (let corner = 0; corner < 3; corner += 1) {
         const vertexIndex = geometry.indices?.[element + corner] ?? element + corner;

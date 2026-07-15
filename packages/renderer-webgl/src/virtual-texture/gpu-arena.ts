@@ -36,6 +36,8 @@ const WEBGL_LINEAR = 0x2601;
 const WEBGL_NEAREST = 0x2600;
 const WEBGL_COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
 const WEBGL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
+const WEBGL_RGBA8UI = 0x8d7c;
+const WEBGL_RGBA_INTEGER = 0x8d99;
 const MAX_ENCODED_PHYSICAL_SLOTS = 65_535;
 
 declare const authority: unique symbol;
@@ -518,11 +520,11 @@ const allocate = (
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,
-      gl.RGBA8,
+      WEBGL_RGBA8UI,
       pageTableWidth,
       pageTableHeight,
       0,
-      gl.RGBA,
+      WEBGL_RGBA_INTEGER,
       gl.UNSIGNED_BYTE,
       null,
     );
@@ -859,7 +861,7 @@ const flushNextPageTableUpdate = (
             region.y + y,
             width,
             height,
-            gl.RGBA,
+            WEBGL_RGBA_INTEGER,
             gl.UNSIGNED_BYTE,
             byteLength === scratch.length ? scratch : scratch.subarray(0, byteLength),
           );

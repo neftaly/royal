@@ -130,7 +130,7 @@ describe("WebGL frame texture residency arbitration", () => {
     let canvas: FakeCanvas;
     const { calls, gl } = fakeGl({
       beforeUniform1i: (name) => {
-        if (!invalidateAfterPlan || name !== "u_unlit") return;
+        if (!invalidateAfterPlan || name !== "u_useIblIrradiance") return;
         invalidateAfterPlan = false;
         canvas.dispatchContextEvent("webglcontextlost");
       },

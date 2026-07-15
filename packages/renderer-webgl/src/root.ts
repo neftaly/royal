@@ -123,7 +123,6 @@ import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-o
 import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
 import {
   identityMat4,
-  multiplyMat4,
   multiplyMat4Into,
   projectionMat4Into,
   transformMat4Into,
@@ -248,6 +247,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #renderViewportSize: [number, number] = [0, 0];
   readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
+  readonly #singleGltfDemandModel = identityMat4();
   readonly #context = new WebGlContextLifecycleOwner();
   readonly #framePublication = new WebGlFramePublicationOwner();
   readonly #programArena: ProgramArena;
@@ -1514,7 +1514,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const modelSource: VirtualTextureDrawDemandModelSource = batch.localModels.length === 1
-      ? { kind: "single", model: multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!) }
+      ? { kind: "single", model: multiplyMat4Into(
+          this.#singleGltfDemandModel,
+          batch.rootModels[0]!,
+          batch.localModels[0]!,
+        ) }
       : { kind: "composed", localModels: batch.localModels, rootModels: batch.rootModels };
     const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
       batch.geometry,

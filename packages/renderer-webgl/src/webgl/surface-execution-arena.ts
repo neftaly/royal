@@ -6,7 +6,7 @@ import {
 } from "../surface-presentation-policy";
 import type { GltfFrameBatchArena, GltfFrameBatchCounters, GltfFrameDrawBatch } from "../gltf/frame-batch-arena";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
-import { multiplyMat4, type Mat4 } from "../math/mat4";
+import { identityMat4, multiplyMat4Into, type Mat4 } from "../math/mat4";
 import type { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
 import {
   copyTransmissionScreenColorTexture,
@@ -50,13 +50,13 @@ import {
   uniform1f,
   uniform1i,
   uniform2f,
-  uniform2fv,
   uniformColor,
+  uniform4f,
   uniformMatrix,
   useProgram,
   type ProgramArena,
 } from "./program-arena";
-import type { SurfaceShaderTextureFeature } from "./shaders";
+import type { ProgramKind, SurfaceShaderTextureFeature } from "./shaders";
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
   planSurfaceTextureBindings,
@@ -176,6 +176,7 @@ export class SurfaceExecutionArena {
   readonly #programs: ProgramArena;
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
+  readonly #singleGltfModel = identityMat4();
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #wakeRequested = false;
@@ -225,7 +226,9 @@ export class SurfaceExecutionArena {
   #executeSingle(input: SurfaceSingleExecution, manageState: boolean): void {
     if (manageState) this.#beginDirectDraw(input.material);
     try {
-      const programKind = input.material.kind === "wireframe" ? "wireframe" : "surface";
+      const programKind: ProgramKind = input.material.kind === "wireframe"
+        ? "wireframe"
+        : input.material.kind === "standard" ? "surface" : "unlit";
       const surfaceMaterial = input.material.kind !== "wireframe" ? input.material : undefined;
       const surfaceLights = surfaceMaterial?.kind === "standard"
         ? input.lights ?? EMPTY_SURFACE_LIGHT_SET
@@ -261,12 +264,15 @@ export class SurfaceExecutionArena {
           ? ("baseColorFactor" in input.material ? materialColor(input.material) : TEXTURE_COLOR)
           : materialColor(input.material),
       );
-      uniform1i(this.#programs, program, "u_unlit", input.material.kind === "standard" ? 0 : 1);
       if (plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
-        uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
-        this.#bindMaterialFactors(program, surfaceMaterial, input.transmissionScreenColorTexture, plan);
-        this.#bindToneMapping(program, input.toneMapping);
-        this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+        if (surfaceMaterial.kind === "standard") {
+          uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
+          this.#bindMaterialFactors(program, surfaceMaterial, input.transmissionScreenColorTexture, plan);
+          this.#bindToneMapping(program, input.toneMapping);
+          this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+        } else {
+          this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
+        }
       }
       const baseColorBinding = this.#bindBaseColorTexture(program, plan);
       uniform1i(this.#programs, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
@@ -300,7 +306,7 @@ export class SurfaceExecutionArena {
           geometryId: batch.geometryId,
           lights: batch.lights,
           material: batch.material,
-          model: multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!),
+          model: multiplyMat4Into(this.#singleGltfModel, batch.rootModels[0]!, batch.localModels[0]!),
           projection: input.projection,
           toneMapping: input.toneMapping,
           transmissionScreenColorTexture: input.transmissionScreenColorTexture,
@@ -319,7 +325,7 @@ export class SurfaceExecutionArena {
       );
       const program = this.#program(
         input.frame,
-        "surface-instanced-split",
+        batch.material.kind === "standard" ? "surface-instanced-split" : "unlit-instanced-split",
         plan.features,
         surfaceLights.punctuals.length > 0,
       );
@@ -335,11 +341,14 @@ export class SurfaceExecutionArena {
           ? ("baseColorFactor" in batch.material ? materialColor(batch.material) : TEXTURE_COLOR)
           : materialColor(batch.material),
       );
-      uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(batch.material));
-      uniform1i(this.#programs, program, "u_unlit", batch.material.kind === "standard" ? 0 : 1);
-      this.#bindMaterialFactors(program, batch.material, input.transmissionScreenColorTexture, plan);
-      this.#bindToneMapping(program, input.toneMapping);
-      this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+      if (batch.material.kind === "standard") {
+        uniformColor(this.#programs, program, "u_emissiveColor", materialEmissiveColor(batch.material));
+        this.#bindMaterialFactors(program, batch.material, input.transmissionScreenColorTexture, plan);
+        this.#bindToneMapping(program, input.toneMapping);
+        this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+      } else {
+        this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
+      }
       const baseColorBinding = this.#bindBaseColorTexture(program, plan);
       uniform1i(this.#programs, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
       uniform1i(
@@ -380,7 +389,7 @@ export class SurfaceExecutionArena {
 
   #program(
     frame: number,
-    kind: "surface" | "surface-instanced-split" | "wireframe",
+    kind: ProgramKind,
     features: PureSurfaceTextureBindingPlan["features"] | undefined,
     clusteredLights: boolean,
   ): WebGLProgram | undefined {
@@ -526,57 +535,58 @@ export class SurfaceExecutionArena {
     plan: SurfaceTextureBindingPlan,
   ): void {
     const factors = surfaceMaterialExtensionFactors(material);
-    const alphaMode = surfaceMaterialAlphaMode(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
-    uniformColor(this.#programs, program, "u_alphaSettings", [
-      alphaMode === "MASK" ? 1 : alphaMode === "BLEND" ? 2 : 0,
-      surfaceMaterialAlphaCutoff(material), 0, 0,
-    ]);
-    uniformColor(this.#programs, program, "u_materialPbrFactors", [
-      surfaceMaterialMetallicFactor(material), surfaceMaterialRoughnessFactor(material), 0, 0,
-    ]);
-    uniformColor(this.#programs, program, "u_specularColorFactor", [
-      factors.specularColorFactor[0], factors.specularColorFactor[1], factors.specularColorFactor[2], 1,
-    ]);
-    uniformColor(this.#programs, program, "u_materialExtensionFactors", [
-      factors.specularFactor, factors.ior, factors.clearcoatFactor, factors.clearcoatRoughnessFactor,
-    ]);
-    uniformColor(this.#programs, program, "u_anisotropyFactors", [
-      factors.anisotropyStrength, factors.anisotropyRotation, 0, 0,
-    ]);
-    uniformColor(this.#programs, program, "u_diffuseTransmissionFactors", [
+    this.#bindAlphaSettings(program, material);
+    uniform4f(this.#programs, program, "u_materialPbrFactors",
+      surfaceMaterialMetallicFactor(material), surfaceMaterialRoughnessFactor(material), 0, 0);
+    uniform4f(this.#programs, program, "u_specularColorFactor",
+      factors.specularColorFactor[0], factors.specularColorFactor[1], factors.specularColorFactor[2], 1);
+    uniform4f(this.#programs, program, "u_materialExtensionFactors",
+      factors.specularFactor, factors.ior, factors.clearcoatFactor, factors.clearcoatRoughnessFactor);
+    uniform4f(this.#programs, program, "u_anisotropyFactors",
+      factors.anisotropyStrength, factors.anisotropyRotation, 0, 0);
+    uniform4f(this.#programs, program, "u_diffuseTransmissionFactors",
       factors.diffuseTransmissionColorFactor[0], factors.diffuseTransmissionColorFactor[1],
-      factors.diffuseTransmissionColorFactor[2], factors.diffuseTransmissionFactor,
-    ]);
-    uniformColor(this.#programs, program, "u_sheenColorFactor", [
+      factors.diffuseTransmissionColorFactor[2], factors.diffuseTransmissionFactor);
+    uniform4f(this.#programs, program, "u_sheenColorFactor",
       factors.sheenColorFactor[0], factors.sheenColorFactor[1], factors.sheenColorFactor[2],
-      factors.sheenRoughnessFactor,
-    ]);
-    uniformColor(this.#programs, program, "u_iridescenceFactors", [
+      factors.sheenRoughnessFactor);
+    uniform4f(this.#programs, program, "u_iridescenceFactors",
       factors.iridescenceFactor, factors.iridescenceIor,
-      factors.iridescenceThicknessMinimum, factors.iridescenceThicknessMaximum,
-    ]);
-    uniformColor(this.#programs, program, "u_dispersionFactors", [factors.dispersionFactor, 0, 0, 0]);
-    uniformColor(this.#programs, program, "u_attenuationColorFactor", [
-      factors.attenuationColor[0], factors.attenuationColor[1], factors.attenuationColor[2], 1,
-    ]);
-    uniformColor(this.#programs, program, "u_transmissionVolumeFactors", [
+      factors.iridescenceThicknessMinimum, factors.iridescenceThicknessMaximum);
+    uniform4f(this.#programs, program, "u_dispersionFactors", factors.dispersionFactor, 0, 0, 0);
+    uniform4f(this.#programs, program, "u_attenuationColorFactor",
+      factors.attenuationColor[0], factors.attenuationColor[1], factors.attenuationColor[2], 1);
+    uniform4f(this.#programs, program, "u_transmissionVolumeFactors",
       factors.transmissionFactor, factors.thicknessFactor,
       hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
-      hasFiniteAttenuationDistance ? 1 : 0,
-    ]);
+      hasFiniteAttenuationDistance ? 1 : 0);
     this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
     this.#bindTextureCoordinates(program, material, plan);
-    uniformColor(this.#programs, program, "u_normalTextureSettings", [
+    uniform4f(this.#programs, program, "u_normalTextureSettings",
       material.kind === "standard" ? material.normalScale ?? 1 : 1,
-      factors.clearcoatNormalScale,
-      0,
-      0,
-    ]);
-    uniformColor(this.#programs, program, "u_occlusionSettings", [
-      surfaceMaterialOcclusionStrength(material), 0, 0, 0,
-    ]);
+      factors.clearcoatNormalScale, 0, 0);
+    uniform4f(this.#programs, program, "u_occlusionSettings",
+      surfaceMaterialOcclusionStrength(material), 0, 0, 0);
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) this.#bindCachedTexture2d(program, descriptor, plan);
+  }
+
+  #bindUnlitMaterial(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    plan: SurfaceTextureBindingPlan,
+    toneMapping: SurfaceToneMappingState,
+  ): void {
+    this.#bindAlphaSettings(program, material);
+    this.#bindTextureCoordinates(program, material, plan);
+    this.#bindToneMapping(program, toneMapping);
+  }
+
+  #bindAlphaSettings(program: WebGLProgram, material: SurfaceMaterial): void {
+    const alphaMode = surfaceMaterialAlphaMode(material);
+    uniform4f(this.#programs, program, "u_alphaSettings",
+      alphaMode === "MASK" ? 1 : alphaMode === "BLEND" ? 2 : 0,
+      surfaceMaterialAlphaCutoff(material), 0, 0);
   }
 
   #bindTextureCoordinates(program: WebGLProgram, material: SurfaceMaterial, plan: SurfaceTextureBindingPlan): void {
@@ -636,15 +646,14 @@ export class SurfaceExecutionArena {
     this.#gl.activeTexture(this.#gl.TEXTURE0 + textureUnit);
     this.#gl.bindTexture(this.#gl.TEXTURE_2D, resource.texture);
     uniform1i(this.#programs, program, "u_transmissionScreenTexture", textureUnit);
-    uniform2fv(this.#programs, program, "u_viewportOrigin", [resource.originX, resource.originY]);
-    uniform2fv(this.#programs, program, "u_viewportSize", [resource.width, resource.height]);
+    uniform2f(this.#programs, program, "u_viewportOrigin", resource.originX, resource.originY);
+    uniform2f(this.#programs, program, "u_viewportSize", resource.width, resource.height);
   }
 
   #bindToneMapping(program: WebGLProgram, toneMapping: SurfaceToneMappingState): void {
-    uniformColor(this.#programs, program, "u_toneMappingSettings", [
+    uniform4f(this.#programs, program, "u_toneMappingSettings",
       toneMappingShaderMode(toneMapping.toneMapping),
-      toneMapping.exposure, toneMapping.hdrOutput ? 1 : 0, 0,
-    ]);
+      toneMapping.exposure, toneMapping.hdrOutput ? 1 : 0, 0);
   }
 
   #bindLights(
@@ -676,11 +685,10 @@ export class SurfaceExecutionArena {
       if (light === undefined) continue;
       uniform1i(this.#programs, program, `u_surfaceLightKind[${index}]`, 0);
       uniformColor(this.#programs, program, `u_surfaceLightColor[${index}]`, light.color);
-      uniformColor(this.#programs, program, `u_surfaceLightDirection[${index}]`, [
-        light.direction[0], light.direction[1], light.direction[2], 0,
-      ]);
-      uniformColor(this.#programs, program, `u_surfaceLightPosition[${index}]`, [0, 0, 0, 0]);
-      uniformColor(this.#programs, program, `u_surfaceLightCone[${index}]`, [1, 0, 0, 0]);
+      uniform4f(this.#programs, program, `u_surfaceLightDirection[${index}]`,
+        light.direction[0], light.direction[1], light.direction[2], 0);
+      uniform4f(this.#programs, program, `u_surfaceLightPosition[${index}]`, 0, 0, 0, 0);
+      uniform4f(this.#programs, program, `u_surfaceLightCone[${index}]`, 1, 0, 0, 0);
     }
     this.#clusteredLights.bind(
       this.#programs,

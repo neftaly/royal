@@ -30,7 +30,6 @@ uniform bool u_useIridescenceTexture;
 uniform bool u_useIridescenceThicknessTexture;
 uniform bool u_useMaterialTransmissionTexture;
 uniform bool u_useThicknessTexture;
-uniform bool u_unlit;
 
 // Each authored glTF material slot selects one of the two retained raw UV sets
 // and applies its KHR_texture_transform affine rows in the fragment shader.
@@ -820,13 +819,6 @@ void main() {
 
   if (u_alphaSettings.x < 1.5) {
     baseColor.a = 1.0;
-  }
-
-  if (u_unlit) {
-    outColor = u_toneMappingSettings.z > 0.5
-      ? vec4(baseColor.rgb / max(u_toneMappingSettings.y, 0.000001), baseColor.a)
-      : outputLinearColor(baseColor.rgb, baseColor.a);
-    return;
   }
 
   // glTF double-sided surfaces keep their material response on the visible

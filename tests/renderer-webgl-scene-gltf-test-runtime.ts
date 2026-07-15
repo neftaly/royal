@@ -868,8 +868,10 @@ export const uniform2fvPayloads = (
   name: string,
 ): readonly (readonly number[])[] =>
   calls
-    .filter((call) => call.name === "uniform2fv" && uniformLocationName(call.args[0]) === name)
+    .filter((call) => (call.name === "uniform2fv" || call.name === "uniform2f")
+      && uniformLocationName(call.args[0]) === name)
     .map((call) => {
+      if (call.name === "uniform2f") return [Number(call.args[1]), Number(call.args[2])];
       const values = numericArray(call.args[1]);
       const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
       const length = typeof call.args[3] === "number" ? call.args[3] : 2;

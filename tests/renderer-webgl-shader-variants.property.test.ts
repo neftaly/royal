@@ -12,7 +12,7 @@ import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 const samplerDeclarations = {
   baseColorTexture: "uniform sampler2D u_texture;",
   baseColorVirtualTextureAtlas: "uniform sampler2D u_vtAtlas;",
-  baseColorVirtualTexturePageTable: "uniform sampler2D u_vtPageTable;",
+  baseColorVirtualTexturePageTable: "uniform highp usampler2D u_vtPageTable;",
   emissiveTexture: "uniform sampler2D u_emissiveTexture;",
   metallicRoughnessTexture: "uniform sampler2D u_metallicRoughnessTexture;",
   normalTexture: "uniform sampler2D u_normalTexture;",
@@ -37,7 +37,7 @@ const samplerDeclarations = {
 } as const satisfies Record<SurfaceShaderTextureFeature, string>;
 
 const samplerDeclarationCount = (source: string): number =>
-  source.match(/uniform sampler(?:2D|Cube) /gu)?.length ?? 0;
+  source.match(/uniform (?:highp )?[ui]?sampler(?:2D|Cube) /gu)?.length ?? 0;
 
 const virtualBaseColorFeaturePair = [
   "baseColorVirtualTextureAtlas",
@@ -58,7 +58,7 @@ const virtualBaseColorSourceInvariants = [
   "sampleVirtualBaseColor",
   "tableEntry.g",
   "residentMip",
-  "floor(sourceTexel / u_vtPageSize)",
+  "ivec2(floor(sourceTexel / u_vtPageSize))",
   "halfTexel",
   "reflected",
   "residentPageMin",

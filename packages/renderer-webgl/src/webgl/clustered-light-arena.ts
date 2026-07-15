@@ -12,8 +12,8 @@ import {
 import { DEFAULT_LIGHT_DIRECTION } from "./lights";
 import {
   uniform1i,
-  uniform2fv,
-  uniformColor,
+  uniform2f,
+  uniform4f,
   type ProgramArena,
 } from "./program-arena";
 
@@ -647,12 +647,11 @@ export const bindClusteredLights = (
   uniform1i(programArena, program, "u_clusterGrid", units.grid);
   uniform1i(programArena, program, "u_clusterLightIndices", units.indices);
   uniform1i(programArena, program, "u_clusterLightData", units.lights);
-  uniformColor(programArena, program, "u_clusterDimensions", [
-    grid.tileCountX, grid.tileCountY, grid.zSliceCount, grid.tileSize,
-  ]);
-  uniformColor(programArena, program, "u_clusterDepth", [grid.zSliceScale, grid.zSliceBias, near, 0]);
-  uniform2fv(programArena, program, "u_clusterProjection", [perspective ? 0 : 1, resource.indexTextureWidth]);
-  uniform2fv(programArena, program, "u_clusterViewportOrigin", [0, 0]);
+  uniform4f(programArena, program, "u_clusterDimensions",
+    grid.tileCountX, grid.tileCountY, grid.zSliceCount, grid.tileSize);
+  uniform4f(programArena, program, "u_clusterDepth", grid.zSliceScale, grid.zSliceBias, near, 0);
+  uniform2f(programArena, program, "u_clusterProjection", perspective ? 0 : 1, resource.indexTextureWidth);
+  uniform2f(programArena, program, "u_clusterViewportOrigin", 0, 0);
 };
 
 /** The sequential cache currently owns at most one triple; retain the frame hook as its eviction boundary. */

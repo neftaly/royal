@@ -77,6 +77,7 @@ class FakeGl {
   };
   uniform1i = (...args: readonly unknown[]): void => this.#record("uniform1i", ...args);
   uniform2fv = (...args: readonly unknown[]): void => this.#record("uniform2fv", ...args);
+  uniform2f = (...args: readonly unknown[]): void => this.#record("uniform2f", ...args);
   uniform4fv = (...args: readonly unknown[]): void => this.#record("uniform4fv", ...args);
 }
 

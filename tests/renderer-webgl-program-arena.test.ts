@@ -10,6 +10,7 @@ import {
   uniform1f,
   uniform1i,
   uniform2f,
+  uniform4f,
   useProgram,
 } from "../packages/renderer-webgl/src/webgl/program-arena";
 
@@ -126,6 +127,7 @@ describe("program arena", () => {
     uniform1f(arena, program, "u_nan", Number.NaN); uniform1f(arena, program, "u_nan", Number.NaN);
     uniform1f(arena, program, "u_zero", 0); uniform1f(arena, program, "u_zero", -0);
     uniform2f(arena, program, "u_pair", 1, 2); uniform2f(arena, program, "u_pair", 1, 2);
+    uniform4f(arena, program, "u_quad", 1, 2, 3, 4); uniform4f(arena, program, "u_quad", 1, 2, 3, 4);
     gl.nullUniforms.add("u_missing");
     uniform1i(arena, program, "u_missing", 1); uniform1i(arena, program, "u_missing", 1);
 
@@ -133,6 +135,7 @@ describe("program arena", () => {
     expect(count(gl, "uniform1i")).toBe(1);
     expect(count(gl, "uniform1f")).toBe(3);
     expect(count(gl, "uniform2f")).toBe(1);
+    expect(count(gl, "uniform4fv")).toBe(1);
     expect(gl.calls.filter((call) => call.name === "getUniformLocation" && call.args[0] === "u_missing"))
       .toHaveLength(1);
   });

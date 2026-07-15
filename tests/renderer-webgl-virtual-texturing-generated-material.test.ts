@@ -379,7 +379,6 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     ]));
     expect(uniform1i).toEqual(expect.objectContaining({
       u_surfaceLightCount: expect.arrayContaining([1]),
-      u_unlit: expect.arrayContaining([0]),
       u_useTexture: expect.arrayContaining([0]),
       u_useVirtualTexture: expect.arrayContaining([1]),
       u_vtAtlas: expect.arrayContaining([0]),
@@ -392,7 +391,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
       [gl.SRGB8_ALPHA8, 6, 6, 0, gl.RGBA],
-      [gl.RGBA8, 1, 1, 0, gl.RGBA],
+      [0x8d7c, 1, 1, 0, 0x8d99],
     ]));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });

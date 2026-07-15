@@ -1,5 +1,6 @@
 import { MAX_SURFACE_LIGHTS } from "./lights";
 import surfaceFragmentTemplate from "./shaders/surface.frag";
+import unlitFragmentTemplate from "./shaders/unlit.frag";
 import surfaceVertexShaderSource from "./shaders/surface.vert";
 import surfaceInstancedSplitVertexShaderSource from "./shaders/surface-instanced-split.vert";
 import wireframeFragmentShaderSource from "./shaders/wireframe.frag";
@@ -11,6 +12,8 @@ export type ProgramKind =
   | "surface"
   | "postprocess"
   | "surface-instanced-split"
+  | "unlit"
+  | "unlit-instanced-split"
   | "wireframe";
 
 export const SURFACE_SHADER_TEXTURE_FEATURES = [
@@ -65,7 +68,7 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
     hasSurfaceShaderFeature(features, "iblBrdfLut") ? "uniform sampler2D u_iblBrdfLut;" : "",
     hasSurfaceShaderFeature(features, "baseColorTexture") ? "uniform sampler2D u_texture;" : "",
     hasSurfaceShaderFeature(features, "baseColorVirtualTextureAtlas") ? "uniform sampler2D u_vtAtlas;" : "",
-    hasSurfaceShaderFeature(features, "baseColorVirtualTexturePageTable") ? "uniform sampler2D u_vtPageTable;" : "",
+    hasSurfaceShaderFeature(features, "baseColorVirtualTexturePageTable") ? "uniform highp usampler2D u_vtPageTable;" : "",
     hasSurfaceShaderFeature(features, "emissiveTexture") ? "uniform sampler2D u_emissiveTexture;" : "",
     hasSurfaceShaderFeature(features, "metallicRoughnessTexture")
       ? "uniform sampler2D u_metallicRoughnessTexture;"
@@ -168,27 +171,23 @@ vec2 wrapVirtualTextureUv(vec2 uv) {
 vec4 sampleVirtualBaseColor(vec2 uv) {
   vec2 wrappedUv = wrapVirtualTextureUv(uv);
   vec2 sourceTexel = wrappedUv * u_vtVirtualSize;
-  vec2 pageCoord = min(
-    floor(sourceTexel / u_vtPageSize),
-    u_vtPageTableSize - vec2(1.0)
+  ivec2 pageCoord = min(
+    ivec2(floor(sourceTexel / u_vtPageSize)),
+    ivec2(u_vtPageTableSize) - ivec2(1)
   );
-  vec4 tableEntry = texture(
-    u_vtPageTable,
-    (pageCoord + vec2(0.5)) / u_vtPageTableSize
-  );
-  float encodedSlot = floor(tableEntry.r * 255.0 + 0.5)
-    + floor(tableEntry.g * 255.0 + 0.5) * 256.0;
-  float residentMip = floor(tableEntry.b * 255.0 + 0.5);
+  uvec4 tableEntry = texelFetch(u_vtPageTable, pageCoord, 0);
+  uint encodedSlot = tableEntry.r + tableEntry.g * 256u;
+  float residentMip = float(tableEntry.b);
   // tableEntry.a is reserved for future page-table flags/addressing.
 
-  if (encodedSlot < 1.0) {
+  if (encodedSlot == 0u) {
     return u_color;
   }
 
-  float slot = encodedSlot - 1.0;
+  float slot = float(encodedSlot - 1u);
   vec2 atlasSlotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
   float residentCoverage = exp2(residentMip);
-  vec2 residentPageMin = floor(pageCoord / residentCoverage) * residentCoverage * u_vtPageSize;
+  vec2 residentPageMin = floor(vec2(pageCoord) / residentCoverage) * residentCoverage * u_vtPageSize;
   vec2 residentLocalTexel = (sourceTexel - residentPageMin) / residentCoverage;
   float atlasCellSize = u_vtPageSize + 2.0 * u_vtBorderTexels;
   vec2 atlasTexel = atlasSlotCoord * atlasCellSize
@@ -238,7 +237,9 @@ export const vertexShaderSource = (kind: ProgramKind): string => {
     case "wireframe":
       return wireframeVertexShaderSource;
     case "surface-instanced-split":
+    case "unlit-instanced-split":
       return surfaceInstancedSplitVertexShaderSource;
+    case "unlit":
     case "surface":
       return surfaceVertexShaderSource;
   }
@@ -256,8 +257,19 @@ export const fragmentShaderSource = (
     case "surface":
     case "surface-instanced-split":
       return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights);
+    case "unlit":
+    case "unlit-instanced-split":
+      return unlitFragmentShaderSource(surfaceFeatures);
   }
 };
+
+const unlitFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
+  assertNoShaderTokens(replaceShaderTokens(unlitFragmentTemplate, new Map([
+    ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
+    ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
+    ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
+    ["__BASE_COLOR_EXPR__", surfaceBaseColorExpression(features)],
+  ])));
 
 const clusteredLightUniforms = `uniform highp usampler2D u_clusterGrid;
 uniform highp usampler2D u_clusterLightIndices;
