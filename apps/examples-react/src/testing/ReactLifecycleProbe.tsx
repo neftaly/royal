@@ -147,11 +147,10 @@ export const ReactLifecycleProbe = (): ReactNode => {
         {mounted ? (
           <Canvas
             aria-label="React renderer lifecycle probe"
-            height={320}
             ref={observeCanvasRef}
             rendererOptions={{ antialias }}
             scene={mode === 'virtual-texture' ? virtualTextureScene : ordinaryScene}
-            width={480}
+            style={{ height: 320, width: 480 }}
           >
             <BenchmarkRendererSnapshot />
             <RendererObserverProbe />

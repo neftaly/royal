@@ -44,6 +44,7 @@ const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(un
  */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children" | "height" | "width"> {
+  readonly [dataAttribute: `data-${string}`]: string | number | boolean | null | undefined;
   /** Ordinary React controls and imperative controllers rendered under Canvas context. */
   readonly children?: ReactNode;
   /** React-owned pointer handlers keyed by stable `pickingId` values in the pure scene. */
