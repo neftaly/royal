@@ -45,6 +45,7 @@ class FakeGl {
   readonly TEXTURE_MIN_FILTER = 0x2801;
   readonly TEXTURE_WRAP_S = 0x2802;
   readonly TEXTURE_WRAP_T = 0x2803;
+  readonly TEXTURE_WRAP_R = 0x8072;
   readonly UNPACK_ALIGNMENT = 0x0cf5;
   readonly UNPACK_COLORSPACE_CONVERSION_WEBGL = 0x9243;
   readonly UNPACK_FLIP_Y_WEBGL = 0x9240;
@@ -337,7 +338,11 @@ describe("IBL texture arena", () => {
     const ready = ensureGltfIblSpecularTexture(arena, specular, completeSources());
     expect(ready.uploaded).toBe(true);
     expect(calls(gl, "texImage2D")).toHaveLength(6);
-    expect(calls(gl, "texParameteri")).toHaveLength(5);
+    expect(calls(gl, "texParameteri")).toHaveLength(6);
+    expect(calls(gl, "texParameteri")).toContainEqual({
+      args: [gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE],
+      name: "texParameteri",
+    });
   });
 
   it("reuploads the complete cubemap when one retained source identity is replaced", () => {
@@ -408,6 +413,10 @@ describe("IBL texture arena", () => {
     if (studio === undefined) throw new Error("Expected ungoverned studio texture admission");
     expect(ensureStudioEnvironmentSpecularTexture(arena)).toBe(studio);
     expect(calls(gl, "texImage2D")).toHaveLength(36);
+    expect(calls(gl, "texParameteri")).toContainEqual({
+      args: [gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE],
+      name: "texParameteri",
+    });
     const lightSet: SurfaceLightSet = {
       directionals: [], lights: [], punctuals: [],
       specular: { encoding: "linear", intensity: 1, key: studio.key, mipCount: studio.mipCount, texture: studio.texture, worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
