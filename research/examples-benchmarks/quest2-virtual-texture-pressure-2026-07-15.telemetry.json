@@ -1,0 +1,563 @@
+{
+  "schema": "royal-quest-telemetry",
+  "version": 1,
+  "available": true,
+  "run": {
+    "startedAt": "2026-07-15T04:21:24.053Z",
+    "endedAt": "2026-07-15T04:22:04.607Z",
+    "durationMs": 40554,
+    "commandExitCode": 0,
+    "commandSignal": null
+  },
+  "device": {
+    "androidRelease": "14",
+    "androidSdk": 34,
+    "buildFingerprint": "oculus/hollywood/hollywood:14/UP1A.231005.007.A1/52202280028100150:user/abl_signing_keys:release,amss_signing_keys:release,release-keys",
+    "buildIncremental": "52202280028100150",
+    "device": "hollywood",
+    "manufacturer": "Oculus",
+    "model": "Quest 2"
+  },
+  "before": {
+    "battery": {
+      "charging": true,
+      "levelPct": 73,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 39.7
+    },
+    "capturedAt": "2026-07-15T04:21:23.709Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 130782,
+        "rssKiB": 335034,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 2519480,
+        "cachedKiB": 2125124,
+        "freeKiB": 280112,
+        "swapFreeKiB": 3670008,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "cpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 62.472004
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 58.948
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 40.2
+        },
+        {
+          "name": "soc-iio-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 57.38
+        }
+      ]
+    }
+  },
+  "after": {
+    "battery": {
+      "charging": true,
+      "levelPct": 73,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 39.7
+    },
+    "capturedAt": "2026-07-15T04:22:04.784Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 132852,
+        "rssKiB": 337122,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 2370292,
+        "cachedKiB": 2138432,
+        "freeKiB": 191576,
+        "swapFreeKiB": 3670008,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "cpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 63.890003
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 59.484
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 40.2
+        },
+        {
+          "name": "rfpa-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 57.919003
+        }
+      ]
+    }
+  },
+  "events": {
+    "dropped": 0,
+    "entries": [
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.55ms,GD=0.00ms,CPU&GPU=5.25ms,LCnt=10(DR0,LM0),GPU%=0.40,CPU%=0.19(W0.27),CFL=12.06/16.64,ICFLp95=14.64,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=324,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089284.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "Explicit concurrent copying GC freed 99329(2827KB) AllocSpace objects, 38(760KB) LOS objects, 49% free, 3891KB/7783KB, paused 38us,23us total 21.633ms",
+        "pid": 6104,
+        "tag": ".oculus.browser",
+        "timestamp": 1784089284.741,
+        "tid": 6161
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.64ms,GD=0.00ms,CPU&GPU=5.75ms,LCnt=10(DR0,LM0),GPU%=0.40,CPU%=0.21(W0.31),CFL=12.02/16.61,ICFLp95=14.62,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=325,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089285.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=22584 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 6104,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784089286.025,
+        "tid": 6166
+      },
+      {
+        "level": "info",
+        "message": "[INFO:content/browser/web_contents/web_contents_impl.cc:10015] WebContentsImpl Loading begin: ID = 2",
+        "pid": 6104,
+        "tag": "chromium",
+        "timestamp": 1784089286.027,
+        "tid": 6104
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=22584 importance=3 visible=false old_activity=null new_activity=null",
+        "pid": 6104,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784089286.072,
+        "tid": 6166
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=22584 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 6104,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784089286.074,
+        "tid": 6166
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=22584 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 6104,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784089286.074,
+        "tid": 6166
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.79ms,GD=0.00ms,CPU&GPU=5.26ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.18(W0.27),CFL=12.02/16.61,ICFLp95=14.62,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=325,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089286.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=3,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.73ms,GD=0.00ms,CPU&GPU=5.68ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.35(W0.37),CFL=11.94/16.55,ICFLp95=14.65,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=338,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089287.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.72ms,GD=0.00ms,CPU&GPU=5.09ms,LCnt=10(DR0,LM0),GPU%=0.43,CPU%=0.32(W0.36),CFL=12.07/16.87,ICFLp95=14.72,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=377,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089288.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.76ms,GD=0.00ms,CPU&GPU=5.16ms,LCnt=10(DR0,LM0),GPU%=0.43,CPU%=0.27(W0.31),CFL=12.04/16.99,ICFLp95=14.81,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=401,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089289.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "RuntimeServiceSDKServer::SetAutoStationaryFloorHeight : RawFromFloor -1.163196",
+        "pid": 2493,
+        "tag": "VrRuntimeService",
+        "timestamp": 1784089289.544,
+        "tid": 2691
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.73ms,GD=0.00ms,CPU&GPU=5.18ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.19(W0.20),CFL=12.14/16.98,ICFLp95=14.80,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=391,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089290.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.77ms,GD=0.00ms,CPU&GPU=5.15ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.27(W0.30),CFL=12.08/16.72,ICFLp95=14.66,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=347,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089291.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.73ms,GD=0.00ms,CPU&GPU=5.09ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.26(W0.32),CFL=12.02/16.64,ICFLp95=14.65,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=346,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089292.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2446MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.67ms,GD=0.00ms,CPU&GPU=5.28ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.26(W0.35),CFL=12.15/16.59,ICFLp95=14.65,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=335,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089293.39,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.72ms,GD=0.00ms,CPU&GPU=5.29ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.26(W0.32),CFL=12.09/16.71,ICFLp95=14.61,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=328,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089294.405,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=3,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.77ms,GD=0.00ms,CPU&GPU=6.32ms,LCnt=10(DR0,LM0),GPU%=0.43,CPU%=0.23(W0.27),CFL=12.03/16.64,ICFLp95=14.61,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=332,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089295.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.73ms,GD=0.00ms,CPU&GPU=5.63ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.24(W0.27),CFL=12.16/16.99,ICFLp95=14.74,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=343,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089296.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.70ms,GD=0.00ms,CPU&GPU=5.10ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.29(W0.35),CFL=12.10/16.74,ICFLp95=14.67,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=332,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089297.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.67ms,GD=0.00ms,CPU&GPU=5.51ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.26(W0.37),CFL=12.05/16.68,ICFLp95=14.66,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=342,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089298.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.67ms,GD=0.00ms,CPU&GPU=5.43ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.25(W0.27),CFL=12.17/16.60,ICFLp95=14.66,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=332,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089299.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.72ms,GD=0.00ms,CPU&GPU=5.25ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.21(W0.26),CFL=12.11/16.54,ICFLp95=14.59,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=338,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089300.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=1,Stale2/5/10/max=0/0/0/1,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.69ms,GD=0.00ms,CPU&GPU=5.18ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.25(W0.26),CFL=12.07/16.63,ICFLp95=14.67,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=340,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089301.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "Shell Heartbeat activeFlowName: DesktopFlow isFlowRequestingActivation: 1 flowActivationReason: DesktopFlow focusedPanelTimeSpent: {\"6\":60009} visibleTimeSpent: {\"11\":60009,\"3\":60009,\"6\":60009,\"8\":60009} panelIdToComponentName: {\"11\":\"com.oculus.systemux/com.oculus.panelapp.notifications.NotificationsActivity\",\"3\":\"com.oculus.systemux/com.oculus.panelapp.anytimeui.AnytimeUIActivity\",\"6\":\"com.oculus.browser/com.oculus.browser.BrowserActivity\",\"8\":\"com.oculus.panelapp.settings/com.oculus.panelapp.quicksettings.QuickSettingsActivity\"} inputTimeSpent: {\"11\":\"{\\\"visible_gaze\\\":60009}\",\"3\":\"{\\\"visi…",
+        "pid": 2889,
+        "tag": "[SEO] ShellFrameAnalytics",
+        "timestamp": 1784089302.261,
+        "tid": 3192
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.68ms,GD=0.00ms,CPU&GPU=5.22ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.24(W0.33),CFL=12.00/16.78,ICFLp95=14.72,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=339,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089302.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.74ms,GD=0.00ms,CPU&GPU=5.47ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.25(W0.31),CFL=12.12/16.95,ICFLp95=14.66,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=337,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089303.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "[INFO:content/browser/web_contents/web_contents_impl.cc:10058] WebContentsImpl Loading end: ID = 2",
+        "pid": 6104,
+        "tag": "chromium",
+        "timestamp": 1784089304.205,
+        "tid": 6104
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.82ms,GD=0.00ms,CPU&GPU=6.22ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.32(W0.34),CFL=12.08/16.69,ICFLp95=14.70,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=342,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089304.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=1,Stale2/5/10/max=0/0/0/1,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.54ms,GD=0.00ms,CPU&GPU=5.71ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.36(W0.42),CFL=12.39/17.00,ICFLp95=14.91,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=337,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089305.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=1.54ms,GD=0.00ms,CPU&GPU=5.53ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.33(W0.34),CFL=12.13/16.75,ICFLp95=14.80,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=329,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089306.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "crcs::subscriber::app_pressure: AppPressureSubscriber: broadcasting pressure cpu=0.2 gpu=0.0 mem=0.0",
+        "pid": 994,
+        "tag": "crcs",
+        "timestamp": 1784089306.733,
+        "tid": 994
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.58ms,GD=0.00ms,CPU&GPU=5.37ms,LCnt=10(DR0,LM0),GPU%=0.40,CPU%=0.31(W0.33),CFL=12.07/16.68,ICFLp95=14.71,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=319,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089307.391,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.57ms,GD=0.00ms,CPU&GPU=5.87ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.37(W0.43),CFL=12.04/16.62,ICFLp95=14.67,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=321,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089308.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.82ms,GD=0.00ms,CPU&GPU=5.77ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.45(W0.48),CFL=12.14/16.72,ICFLp95=14.68,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=326,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089309.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=24ms,Tear=3,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.99ms,GD=0.00ms,CPU&GPU=5.59ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.40(W0.43),CFL=12.09/16.91,ICFLp95=14.81,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=342,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089310.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=24ms,Tear=3,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.63ms,GD=0.00ms,CPU&GPU=5.53ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.30(W0.34),CFL=12.23/17.05,ICFLp95=14.95,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=344,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089311.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.54ms,GD=0.00ms,CPU&GPU=5.45ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.31(W0.35),CFL=12.17/16.77,ICFLp95=14.94,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=349,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089312.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2458MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.62ms,GD=0.00ms,CPU&GPU=6.49ms,LCnt=10(DR0,LM0),GPU%=0.43,CPU%=0.31(W0.33),CFL=12.28/16.72,ICFLp95=14.83,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=336,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089313.392,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.56ms,GD=0.00ms,CPU&GPU=5.12ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.27(W0.29),CFL=12.22/16.85,ICFLp95=14.81,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=348,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089314.406,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.54ms,GD=0.00ms,CPU&GPU=5.25ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.22(W0.26),CFL=12.16/16.80,ICFLp95=14.73,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=330,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089315.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.59ms,GD=0.00ms,CPU&GPU=5.60ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.20(W0.28),CFL=12.09/17.10,ICFLp95=14.68,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=323,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089316.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=6,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.58ms,GD=0.00ms,CPU&GPU=5.16ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.20(W0.23),CFL=12.05/16.66,ICFLp95=14.64,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=329,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089317.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.54ms,GD=0.00ms,CPU&GPU=5.33ms,LCnt=10(DR0,LM0),GPU%=0.40,CPU%=0.19(W0.25),CFL=12.01/16.60,ICFLp95=14.65,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=327,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089318.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.59ms,GD=0.00ms,CPU&GPU=5.34ms,LCnt=10(DR0,LM0),GPU%=0.40,CPU%=0.20(W0.22),CFL=12.10/16.71,ICFLp95=14.63,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=325,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089319.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=23ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.55ms,GD=0.00ms,CPU&GPU=5.17ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.25(W0.28),CFL=12.04/16.67,ICFLp95=14.65,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=326,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089320.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.57ms,GD=0.00ms,CPU&GPU=5.63ms,LCnt=10(DR0,LM0),GPU%=0.41,CPU%=0.21(W0.25),CFL=12.03/16.78,ICFLp95=14.76,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=329,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089321.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=2.14ms,GD=0.00ms,CPU&GPU=5.72ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.32(W0.37),CFL=12.11/16.74,ICFLp95=14.76,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=329,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089322.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=24ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.65ms,App=2.04ms,GD=0.00ms,CPU&GPU=5.71ms,LCnt=10(DR0,LM0),GPU%=0.44,CPU%=0.32(W0.34),CFL=12.10/17.02,ICFLp95=14.81,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=349,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089323.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.67ms,App=1.56ms,GD=0.00ms,CPU&GPU=5.27ms,LCnt=10(DR0,LM0),GPU%=0.43,CPU%=0.31(W0.40),CFL=12.21/16.80,ICFLp95=14.87,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=380,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089324.393,
+        "tid": 4625
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=24ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2315MB,PLS=0,Temp=39.7C/0.0C,TW=2.66ms,App=1.94ms,GD=0.00ms,CPU&GPU=5.46ms,LCnt=10(DR0,LM0),GPU%=0.42,CPU%=0.24(W0.30),CFL=12.31/16.75,ICFLp95=14.83,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=2,ShrpR=0.000,SSLCnt=2/4,Preempt=327,PoseAgeP95=0.00",
+        "pid": 2889,
+        "tag": "VrApi",
+        "timestamp": 1784089325.393,
+        "tid": 4625
+      }
+    ]
+  },
+  "probeFailures": []
+}

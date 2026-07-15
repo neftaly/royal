@@ -87,8 +87,8 @@ CI runs both the built-entrypoint and packed-consumer gates.
 
 ## Validation
 
-1. Complete the remaining physical iPad Safari and Quest 2 checks; they do not
-   block desktop work. The July 14 pass now covers iPad VT convergence,
+1. Keep the physical iPad Safari and Quest 2 evidence current; it does not
+   block desktop work. The July 14 pass covers iPad VT convergence,
    animated instancing, and the SVG ordinary-texture fallback, plus Quest VT,
    instancing, SVG generated VT, camera drag, and real immersive WebXR. The XR
    report gate requires successful activation and physical session frames rather
@@ -98,6 +98,6 @@ CI runs both the built-entrypoint and packed-consumer gates.
    native-DPR CSS resize, and generated-VT/ordinary SVG raster parity through
    the shared browser smoke harness. A July 15 physical iPad pass now covers an
    in-place landscape-to-portrait resize on one retained renderer root, including
-   DPR-correct backing dimensions and VT reconvergence. Desktop/CI covers bounded
-   page-slot eviction under a fixed VT allocation while protecting an ordinary
-   texture; rerun that pressure gate with a foreground physical Quest panel.
+   DPR-correct backing dimensions and VT reconvergence. A foreground physical
+   Quest pass also covers bounded page-slot eviction under a fixed VT allocation,
+   governor parity, zero quarantine, and protection of an ordinary texture.

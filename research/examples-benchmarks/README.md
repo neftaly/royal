@@ -96,6 +96,14 @@ is true and `warnings` is empty or understood.
   trace attributes the long approach frames to renderer redraw/page-upload work,
   so close-view transition pacing remains a concrete optimization slice even
   though residency and rendering are correct.
+- `quest2-virtual-texture-pressure-2026-07-15.telemetry.json` records the
+  foreground Adreno 650 smoke that exercised overview/focus presets, close/far
+  zoom, cache reactivation, pan, native-DPR resize, and orientation changes.
+  The smoke passed fixed atlas allocation while more pages were uploaded than
+  its 24 physical slots could retain, exact VT governor accounting, zero
+  quarantined bytes, and stable residency for the protected ordinary texture.
+  The telemetry wrapper completed with exit code 0, no probe failures, no
+  thermal throttling, and the Quest charging at 73%.
 - `quest2-gltf-instancing-2026-07-14.json` keeps 4,096 animated instances near
   `35ms` p95. Camera-driven static grid redraws are about `33ms` p95 at grid 16,
   while grid 8 camera redraws are about `11ms` p95; constrained-device
