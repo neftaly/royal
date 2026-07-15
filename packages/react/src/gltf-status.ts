@@ -19,12 +19,20 @@ const IDLE: GltfAssetStatus = Object.freeze({ state: "idle" });
 const LOADING: GltfAssetStatus = Object.freeze({ state: "loading" });
 const READY: GltfAssetStatus = Object.freeze({ state: "ready" });
 const NO_VARIANTS: readonly string[] = Object.freeze([]);
-
-const sameStatus = (left: GltfAssetStatus, right: GltfAssetStatus): boolean =>
-  left.state === right.state && left.error === right.error;
+const IDLE_ASSET: RoyalRendererGltfAssetSnapshot = Object.freeze({
+  state: "idle",
+  variantNames: NO_VARIANTS,
+});
 
 const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((name, index) => name === right[index]);
+
+const sameAssetSnapshot = (
+  left: RoyalRendererGltfAssetSnapshot,
+  right: RoyalRendererGltfAssetSnapshot,
+): boolean => left.state === right.state
+  && left.error === right.error
+  && sameVariants(left.variantNames, right.variantNames);
 
 const statusFromAssetSnapshot = (snapshot: RoyalRendererGltfAssetSnapshot): GltfAssetStatus =>
   snapshot.state === "idle"
@@ -35,32 +43,37 @@ const statusFromAssetSnapshot = (snapshot: RoyalRendererGltfAssetSnapshot): Gltf
         ? READY
         : Object.freeze({ error: snapshot.error ?? "glTF asset failed to load", state: "error" as const });
 
+const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAssetSnapshot => {
+  validateGltfAssetStatusInput(input);
+  const root = useCanvasRoot();
+  const uri = typeof input === "string" ? input : input.uri;
+  const version = typeof input === "string" ? undefined : input.version;
+  const store = useMemo(() => {
+    if (root === null) {
+      return createObservedExternalStore(IDLE_ASSET, () => () => undefined, sameAssetSnapshot);
+    }
+    const asset: GltfAssetRef = {
+      uri,
+      ...(version === undefined ? {} : { version }),
+    };
+    return createObservedExternalStore(
+      root.gltfAssetSnapshot(asset),
+      (publish) => root.observeGltfAsset(asset, publish),
+      sameAssetSnapshot,
+    );
+  }, [root, uri, version]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => IDLE_ASSET);
+};
+
 /**
  * Observes one glTF asset retained by the surrounding Canvas without polling.
  * A string matches an unversioned source URI; pass the original `GltfAssetRef`
  * when the scene uses an explicit `version`.
  */
 export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus => {
-  validateGltfAssetStatusInput(input);
-  const root = useCanvasRoot();
-  const sourceUri = typeof input === "string" ? input : input.uri;
-  const sourceVersion = typeof input === "string" ? undefined : input.version;
-  const store = useMemo(() => {
-    if (root === null) {
-      return createObservedExternalStore(IDLE, () => () => undefined, sameStatus);
-    }
-    const asset: GltfAssetRef = {
-      uri: sourceUri,
-      ...(sourceVersion === undefined ? {} : { version: sourceVersion }),
-    };
-    return createObservedExternalStore(
-      statusFromAssetSnapshot(root.gltfAssetSnapshot(asset)),
-      (publish) => root.observeGltfAsset(asset, (snapshot) => publish(statusFromAssetSnapshot(snapshot))),
-      sameStatus,
-    );
-  }, [root, sourceUri, sourceVersion]);
-
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => IDLE);
+  const snapshot = useGltfAssetSnapshot(input);
+  return useMemo(() => statusFromAssetSnapshot(snapshot), [snapshot]);
 };
 
 /**
@@ -69,26 +82,6 @@ export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus
  * The names can be passed directly to the scene descriptor's `materialVariant` option.
  */
 export const useGltfAssetVariants = (input: GltfAssetStatusInput): readonly string[] => {
-  validateGltfAssetStatusInput(input);
-  const root = useCanvasRoot();
-  const sourceUri = typeof input === "string" ? input : input.uri;
-  const sourceVersion = typeof input === "string" ? undefined : input.version;
-  const store = useMemo(() => {
-    if (root === null) {
-      return createObservedExternalStore(NO_VARIANTS, () => () => undefined, sameVariants);
-    }
-    const asset: GltfAssetRef = {
-      uri: sourceUri,
-      ...(sourceVersion === undefined ? {} : { version: sourceVersion }),
-    };
-    const variants = (snapshot: RoyalRendererGltfAssetSnapshot): readonly string[] =>
-      snapshot.state === "ready" ? snapshot.variantNames : NO_VARIANTS;
-    return createObservedExternalStore(
-      variants(root.gltfAssetSnapshot(asset)),
-      (publish) => root.observeGltfAsset(asset, (snapshot) => publish(variants(snapshot))),
-      sameVariants,
-    );
-  }, [root, sourceUri, sourceVersion]);
-
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => NO_VARIANTS);
+  const snapshot = useGltfAssetSnapshot(input);
+  return snapshot.state === "ready" ? snapshot.variantNames : NO_VARIANTS;
 };
