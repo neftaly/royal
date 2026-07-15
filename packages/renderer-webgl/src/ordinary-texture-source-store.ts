@@ -2,6 +2,7 @@ import type { TextureContentKey, TextureVersion } from "@royal/renderer-core";
 import type { ResourceArenaSourceLease } from "./resource-arena";
 import type { LoadedTextureSource } from "./texture-sources";
 import { ResourceGovernorCpuCapacityError } from "./resource-governor";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 
 export interface OrdinaryTextureSourceRequest {
   readonly contentKey?: TextureContentKey;
@@ -79,11 +80,6 @@ type SourceJob = {
   settled: boolean;
   source?: LoadedTextureSource;
   started: boolean;
-};
-
-type CapturedError = {
-  error: unknown;
-  present: boolean;
 };
 
 const identityPart = (value: TextureContentKey | TextureVersion): readonly [string, string] =>
@@ -177,25 +173,21 @@ export class OrdinaryTextureSourceStore {
     this.#disposed = true;
     const jobs = [...this.#jobs.values()];
     this.#jobs.clear();
-    const firstError: CapturedError = { error: undefined, present: false };
+    let firstFailure: CapturedFailure | undefined;
     for (const job of jobs) {
       job.listeners.clear();
       if (!job.settled) {
-        try {
+        firstFailure = captureFirstFailure(firstFailure, () => {
           job.controller.abort();
-        } catch (error) {
-          this.#captureFirstError(firstError, error);
-        }
+        });
         this.#aborts += 1;
       } else {
-        try {
+        firstFailure = captureFirstFailure(firstFailure, () => {
           this.#releaseSource(job);
-        } catch (error) {
-          this.#captureFirstError(firstError, error);
-        }
+        });
       }
     }
-    if (firstError.present) throw firstError.error;
+    if (firstFailure !== undefined) throw firstFailure.value;
   }
 
   snapshot(): OrdinaryTextureSourceStoreSnapshot {
@@ -330,12 +322,6 @@ export class OrdinaryTextureSourceStore {
         // or leave the job marked as owning capacity.
       }
     });
-  }
-
-  #captureFirstError(captured: CapturedError, error: unknown): void {
-    if (captured.present) return;
-    captured.error = error;
-    captured.present = true;
   }
 
   #notify(job: SourceJob, result: OrdinaryTextureSourceResult): void {

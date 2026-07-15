@@ -1,4 +1,4 @@
-import type { CapturedFailure } from "./captured-failure";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 
 export type CanvasViewportSize = Readonly<{
   height: number;
@@ -33,17 +33,13 @@ export class WebGlCanvasViewportOwner {
     if (this.#disposed) return;
     this.#disposed = true;
     let firstFailure: CapturedFailure | undefined;
-    try {
+    firstFailure = captureFirstFailure(firstFailure, () => {
       this.#resizeObserver?.disconnect();
       this.#resizeObserver = undefined;
-    } catch (value) {
-      firstFailure = { value };
-    }
-    try {
+    });
+    firstFailure = captureFirstFailure(firstFailure, () => {
       this.#unwatchDevicePixelRatio();
-    } catch (value) {
-      firstFailure ??= { value };
-    }
+    });
     if (firstFailure !== undefined) throw firstFailure.value;
   }
 
