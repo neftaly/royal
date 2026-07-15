@@ -16,6 +16,7 @@ import {
   type RoyalRendererRoot,
   type RoyalRendererRootLifecycleSnapshot,
 } from "./root";
+import { resolveWebGlRootOptions } from "@royal/renderer-webgl";
 
 type CanvasElementRef = {
   readonly current: HTMLCanvasElement | null;
@@ -89,7 +90,10 @@ export const disposeCanvasRendererRoot = (
 /** @internal Identity for options browsers fix on a canvas's first WebGL context. */
 export const canvasContextOptionsSemanticKey = (
   rendererOptions: RendererOptions | undefined,
-): string => `${rendererOptions?.alpha ?? true}:${rendererOptions?.antialias ?? true}`;
+): string => {
+  const resolved = resolveWebGlRootOptions(rendererOptions);
+  return `${resolved.alpha}:${resolved.antialias}`;
+};
 
 /** Owns the renderer root and retained frame-loop lifetime for one React Canvas. */
 export const useRendererRootRuntime = (

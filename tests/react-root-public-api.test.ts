@@ -239,11 +239,11 @@ describe("React root public API", () => {
     const canvas = fakeCanvas();
     expect(() => createRendererRoot(canvas, {
       alpha: "yes" as unknown as boolean,
-    })).toThrow("RendererOptions alpha must be a boolean");
+    })).toThrow("WebGL root alpha must be a boolean");
     expect(() => createRendererRoot(
       canvas,
       null as unknown as Parameters<typeof createRendererRoot>[1],
-    )).toThrow("RendererOptions must be an object");
+    )).toThrow("WebGL root options must be an object");
     expect(() => createRendererRoot(canvas, {
       antiAlias: false,
     } as unknown as Parameters<typeof createRendererRoot>[1])).toThrow(/unsupported option.*antiAlias/i);

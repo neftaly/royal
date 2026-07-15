@@ -8,6 +8,8 @@ import type {
 } from "@royal/renderer-core";
 import {
   createWebGlRoot,
+  resolveWebGlRootOptions,
+  type ResolvedWebGlRootOptions,
   type WebGlContextSnapshot,
   type WebGlFramePlanningSnapshot,
   type WebGlGltfInstancingSnapshot,
@@ -17,6 +19,7 @@ import {
   type WebGlResourceLifetimeSnapshot,
   type WebGlResourcePressureSnapshot,
   type WebGlRoot,
+  type WebGlRootOptions,
   type WebGlTextureResidencySnapshot,
   type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
@@ -27,54 +30,23 @@ import {
 } from "./renderer-capabilities";
 import { validateGltfAssetRef } from "./gltf-asset-identity";
 import { validateTextureAssetRef } from "./texture-asset-identity";
-import { recordWithAllowedFields } from "./validation";
-
-const RENDERER_OPTION_FIELDS = ["alpha", "antialias", "automaticVirtualTextures"] as const;
 
 /** Immutable renderer creation options shared by `<Canvas>` and `createRendererRoot`. */
-export interface RendererOptions {
-  /** Request an alpha channel from the rendering context. @defaultValue `true` */
-  readonly alpha?: boolean;
-  /** Request browser context antialiasing. @defaultValue `true` */
-  readonly antialias?: boolean;
-  /**
-   * Generate demand-driven VTs for eligible ordinary base-color images. The
-   * ordinary texture remains active until generated coverage is ready.
-   * @defaultValue `false`
-   */
-  readonly automaticVirtualTextures?: boolean;
-}
+export interface RendererOptions extends WebGlRootOptions {}
 
 /** @internal Validates the product-level root creation boundary. */
 export const validateRendererOptions = (options: RendererOptions | undefined): void => {
-  if (options === undefined) return;
-  recordWithAllowedFields(options, RENDERER_OPTION_FIELDS, "RendererOptions", "option");
-  if (options.alpha !== undefined && typeof options.alpha !== "boolean") {
-    throw new TypeError("RendererOptions alpha must be a boolean");
-  }
-  if (options.antialias !== undefined && typeof options.antialias !== "boolean") {
-    throw new TypeError("RendererOptions antialias must be a boolean");
-  }
-  if (
-    options.automaticVirtualTextures !== undefined
-    && typeof options.automaticVirtualTextures !== "boolean"
-  ) {
-    throw new TypeError("RendererOptions automaticVirtualTextures must be a boolean");
-  }
+  resolveWebGlRootOptions(options);
 };
 
 /** @internal Canonical identity for the product-level options that own a React Canvas lifetime. */
 export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string => {
-  validateRendererOptions(options);
-  return `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.automaticVirtualTextures ?? false}`;
+  const resolved = resolveWebGlRootOptions(options);
+  return `${resolved.alpha}:${resolved.antialias}:${resolved.automaticVirtualTextures}`;
 };
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
-export interface ResolvedRendererOptions {
-  readonly alpha: boolean;
-  readonly antialias: boolean;
-  readonly automaticVirtualTextures: boolean;
-}
+export type ResolvedRendererOptions = ResolvedWebGlRootOptions;
 
 /** @internal Distinguishes malformed public pick input from a legitimate miss. */
 export const validatePickInput = (input: PickInput): void => {
@@ -315,19 +287,8 @@ export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RendererOptions,
 ): RoyalRendererRoot => {
-  validateRendererOptions(options);
-  const root = createWebGlRoot(canvas, options === undefined ? undefined : {
-    ...(options.alpha === undefined ? {} : { alpha: options.alpha }),
-    ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
-    ...(options.automaticVirtualTextures === undefined
-      ? {}
-      : { automaticVirtualTextures: options.automaticVirtualTextures }),
-  });
-  const normalizedOptions: ResolvedRendererOptions = Object.freeze({
-    alpha: root.options.alpha,
-    antialias: root.options.antialias,
-    automaticVirtualTextures: root.options.automaticVirtualTextures,
-  });
+  const normalizedOptions = resolveWebGlRootOptions(options);
+  const root = createWebGlRoot(canvas, normalizedOptions);
 
   const royalRoot: RoyalRendererRoot = {
     get canvas() {

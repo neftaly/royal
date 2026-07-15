@@ -227,6 +227,7 @@ describe("renderer-core public API", () => {
 
   it("keeps public facades narrow at package boundaries", () => {
     expect(webglApi).toHaveProperty("createWebGlRoot");
+    expect(webglApi).toHaveProperty("resolveWebGlRootOptions");
     expect(webglApi).not.toHaveProperty("WebGlRoot");
     expect(webglApi).not.toHaveProperty("DEFAULT_RESOURCE_GOVERNOR_POLICY");
     expect(webglApi).not.toHaveProperty("defineResourceGovernorPolicy");

@@ -1,4 +1,5 @@
 export { createWebGlRoot } from "./root";
+export { resolveWebGlRootOptions } from "./root-options";
 export type {
   WebGlContextSnapshot,
   WebGlContextLifecycle,
