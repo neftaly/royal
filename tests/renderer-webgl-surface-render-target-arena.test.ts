@@ -287,26 +287,6 @@ describe("surface render-target arena", () => {
     ]);
   });
 
-  it("cancels admitted transmission storage when copy bandwidth is denied before GL", () => {
-    const gl = new FakeGl();
-    let storageCancelled = 0;
-    const arena = createSurfaceRenderTargetArena({
-      replace: () => undefined,
-      reserve: (cost) => cost.uploadBytes !== undefined
-        ? undefined
-        : {
-            cancel: () => { storageCancelled += 1; return true; },
-            commit: () => { throw new Error("storage must not commit"); },
-          },
-    });
-
-    expect(() => copyTransmissionScreenColorTexture(
-      arena, context(gl), 20, 10, 0, 0, false,
-    )).toThrow("Render-target copy denied");
-    expect(storageCancelled).toBe(1);
-    expect(calls(gl, "createTexture")).toHaveLength(0);
-  });
-
   it("atomically replaces render-target leases on resize and releases them on teardown", () => {
     const recorded = recordingGovernor();
     const gl = new FakeGl();
@@ -317,11 +297,11 @@ describe("surface render-target arena", () => {
     copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 1, 1, false);
     copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, true);
     expect(recorded.replacements.value).toBe(2);
-    // Storage replacements release superseded leases; each framebuffer copy
-    // independently commits and releases its upload-only lease.
-    expect(recorded.released.value).toBe(5);
+    // Storage replacements release superseded leases. GPU-local framebuffer
+    // copies do not consume CPU-to-GPU upload admission.
+    expect(recorded.released.value).toBe(2);
     releaseSurfaceRenderTargetContextHandles(arena, context(gl));
-    expect(recorded.released.value).toBe(7);
+    expect(recorded.released.value).toBe(4);
   });
 
   it("settles failed storage conservatively and retains leases across failed deletion", () => {
@@ -348,16 +328,16 @@ describe("surface render-target arena", () => {
     const gl = new FakeGl();
     const arena = createSurfaceRenderTargetArena(recorded.governor);
     copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
-    expect(recorded.released.value).toBe(1); // upload-only lease
+    expect(recorded.released.value).toBe(0);
     gl.failTextureDeleteOnce = true;
 
     expect(() => releaseSurfaceRenderTargetContextHandles(arena, context(gl)))
       .toThrow("delete texture failed");
     dropSurfaceRenderTargetArenaContext(arena, false);
-    expect(recorded.released.value).toBe(1);
+    expect(recorded.released.value).toBe(0);
 
     dropSurfaceRenderTargetArenaContext(arena, true);
-    expect(recorded.released.value).toBe(2);
+    expect(recorded.released.value).toBe(1);
   });
 
   it("continues context-loss lease cleanup and retains only failures for retry", () => {
@@ -423,7 +403,7 @@ describe("surface render-target arena", () => {
     expect(recorded.released.value).toBe(2);
   });
 
-  it("preserves the larger transmission lease while charging an attempted failed shrink copy", () => {
+  it("preserves the larger transmission lease across an attempted failed shrink copy", () => {
     const recorded = recordingGovernor();
     const gl = new FakeGl();
     const arena = createSurfaceRenderTargetArena(recorded.governor);
@@ -436,16 +416,16 @@ describe("surface render-target arena", () => {
 
     expect(recorded.replacements.value).toBe(1);
     expect(recorded.cancelled.value).toBe(1);
-    // Initial and failed-attempt upload-only leases were spent and released;
-    // the original durable storage lease remains active.
-    expect(recorded.released.value).toBe(2);
+    // The original durable storage lease remains active. The GPU-local copy
+    // does not consume CPU-to-GPU upload admission.
+    expect(recorded.released.value).toBe(0);
     expect(recorded.costs.slice(-2)).toEqual([
+      { persistentGpuBytes: 3_200, transientPeakBytes: 3_200 },
       { persistentGpuBytes: 800, transientPeakBytes: 800 },
-      { uploadBytes: 800 },
     ]);
 
     copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
     expect(recorded.replacements.value).toBe(2);
-    expect(recorded.released.value).toBe(4);
+    expect(recorded.released.value).toBe(1);
   });
 });

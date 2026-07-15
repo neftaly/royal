@@ -71,6 +71,17 @@ is true and `warnings` is empty or understood.
   27 to 30 without a lifecycle interruption, and VT reconverged to zero pending
   pages with no Royal or WebGL errors.
 
+2026-07-15 iPad Safari advanced-material pass:
+
+- `ipad-safari/2026-07-15T04-09-09-061Z-gltf-lab.json` renders the official
+  Khronos `CompareDispersion` asset for 24/24 sampled frames at `29ms` p95.
+- `ipad-safari/2026-07-15T04-16-04-770Z-gltf-lab.json` renders the official
+  Khronos `CompareTransmission` asset for 24/24 sampled frames at `18ms` p95,
+  with one framebuffer-to-texture copy in the sampled frame, no resource
+  denials, no WebGL errors, and an available renderer lifecycle. This run
+  validates that GPU-local framebuffer copies are measured by the GL trace but
+  no longer consume the CPU-to-GPU upload governor budget.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at

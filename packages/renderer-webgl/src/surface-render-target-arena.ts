@@ -26,12 +26,11 @@ export interface SurfaceRenderTargetGpuReservation {
 export interface SurfaceRenderTargetGpuGovernor {
   replace(
     lease: SurfaceRenderTargetGpuLease,
-    cost: { readonly persistentGpuBytes: number; readonly transientPeakBytes: number; readonly uploadBytes?: number },
+    cost: { readonly persistentGpuBytes: number; readonly transientPeakBytes: number },
   ): SurfaceRenderTargetGpuReservation | undefined;
   reserve(cost: {
     readonly persistentGpuBytes?: number;
     readonly transientPeakBytes?: number;
-    readonly uploadBytes?: number;
   }): SurfaceRenderTargetGpuReservation | undefined;
 }
 
@@ -72,16 +71,6 @@ const reserveStorage = (
     ? state.governor.reserve(cost)
     : state.governor.replace(lease, cost);
   if (reservation === undefined) throw new Error("Render-target GPU allocation denied by root resource governor");
-  return reservation;
-};
-
-const reserveCopy = (
-  state: State,
-  bytes: number,
-): SurfaceRenderTargetGpuReservation | undefined => {
-  if (state.governor === undefined) return undefined;
-  const reservation = state.governor.reserve({ uploadBytes: bytes });
-  if (reservation === undefined) throw new Error("Render-target copy denied by root resource governor");
   return reservation;
 };
 
@@ -190,13 +179,6 @@ export const copyTransmissionScreenColorTexture = (
   const storageReservation = allocate
     ? reserveStorage(state, resource?.gpuLease, bytes)
     : undefined;
-  let copyReservation: SurfaceRenderTargetGpuReservation | undefined;
-  try {
-    copyReservation = reserveCopy(state, bytes);
-  } catch (error) {
-    storageReservation?.cancel();
-    throw error;
-  }
   if (resource === undefined) {
     try {
       const created = texture(state, gl);
@@ -212,12 +194,10 @@ export const copyTransmissionScreenColorTexture = (
       state.transmission = resource;
     } catch (error) {
       storageReservation?.cancel();
-      copyReservation?.cancel();
       throw error;
     }
   }
   let allocationStarted = false;
-  let copyStarted = false;
   try {
     gl.activeTexture(gl.TEXTURE0 + 1); gl.bindTexture(gl.TEXTURE_2D, resource.texture);
     if (allocate) {
@@ -227,10 +207,12 @@ export const copyTransmissionScreenColorTexture = (
         gl.RGBA, hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null,
       );
     }
-    copyStarted = true;
+    // This is a GPU-local framebuffer copy, not a CPU-to-GPU upload. Its
+    // durable target storage is governed above and its work remains visible to
+    // GL tracing; charging the upload budget here can reject otherwise valid
+    // transmission frames after unrelated texture uploads.
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, sourceX, sourceY, width, height);
     const lease = storageReservation?.commit();
-    copyReservation?.commit().release();
     if (allocate) {
       if (lease !== undefined) resource.gpuLease = lease;
       resource.gpuBytes = bytes;
@@ -252,8 +234,6 @@ export const copyTransmissionScreenColorTexture = (
     } else {
       storageReservation?.cancel();
     }
-    if (copyStarted) copyReservation?.commit().release();
-    else copyReservation?.cancel();
     throw error;
   }
 };
