@@ -81,7 +81,6 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
   const subscribers: FrameSubscriber[] = [];
   let animationFrame: number | undefined;
   let activeSubscriberCount = 0;
-  let frameIndex = 0;
   let lastTimestamp: number | undefined;
   let nextSubscriberOrder = 0;
   let paused = false;
@@ -117,7 +116,7 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
     }
 
     animationFrame = undefined;
-    frameIndex = 0;
+    frame.frameIndex = 0;
     lastTimestamp = undefined;
     startTimestamp = undefined;
   };
@@ -166,11 +165,10 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
       return;
     }
 
-    frameIndex += 1;
+    frame.frameIndex += 1;
     startTimestamp ??= timestamp;
     frame.deltaMs = lastTimestamp === undefined ? 0 : timestamp - lastTimestamp;
     frame.elapsedSeconds = (timestamp - startTimestamp) / 1000;
-    frame.frameIndex = frameIndex;
     frame.timestampMs = timestamp;
     lastTimestamp = timestamp;
 
