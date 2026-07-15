@@ -7,5 +7,5 @@ Source: https://commons.wikimedia.org/wiki/File:Ghostscript_Tiger.svg
 
 License: AGPL-3.0-or-later.
 
-The generated glTF card fixture wraps the SVG as a `GS_texture_svg` texture
-example and includes a JPEG raster compatibility fallback.
+The generated glTF card fixture references the SVG directly as its core texture
+source for Royal's optional SVG ingestion path.

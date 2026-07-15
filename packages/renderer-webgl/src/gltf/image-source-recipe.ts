@@ -101,12 +101,12 @@ const recipeSource = (
         contentKey: byteContentKey(bytes, "image/svg+xml;source"),
         kind: "svg-bytes",
         label: image.uri === undefined
-          ? `glTF GS_texture_svg bufferView ${image.bufferView ?? ""}`
-          : `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`,
+          ? `glTF SVG bufferView ${image.bufferView ?? ""}`
+          : `glTF SVG data URI ${image.uri.slice(0, 48)}`,
         ...(image.mimeType === undefined ? {} : { mimeType: image.mimeType }),
       };
     }
-    if (image.uri === undefined) throw new Error("glTF GS_texture_svg image has no URI or bufferView");
+    if (image.uri === undefined) throw new Error("glTF SVG image has no URI or bufferView");
     return { kind: "svg-uri", uri: resolveResourceUri(src, image.uri) };
   }
   if (kind === "basisu") {

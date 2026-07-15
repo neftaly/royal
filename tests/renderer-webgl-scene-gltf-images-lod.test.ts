@@ -285,7 +285,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
-  it("loads GS_texture_svg base-color texture sources through automatic image upload", async () => {
+  it("loads core SVG base-color texture sources through automatic image upload", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -299,12 +299,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ sampler: 0, source: 1 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -354,12 +353,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ sampler: 0, source: 1 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -391,7 +389,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(root.snapshot().diagnostics).toEqual([]);
   });
 
-  it("prefers optional GS_texture_svg sources over core raster fallbacks when supported", async () => {
+  it("uses a core SVG source without requesting unrelated raster images", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -405,12 +403,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ sampler: 0, source: 1 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -434,7 +431,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
-  it("rejects GS_texture_svg images without a finite viewBox or width and height", async () => {
+  it("rejects core SVG images without a finite viewBox or width and height", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -449,7 +446,6 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           {
@@ -457,7 +453,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
             uri: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3C%2Fsvg%3E",
           },
         ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ sampler: 0, source: 1 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -466,7 +462,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /GS_texture_svg .*requires a finite viewBox or finite width and height/i,
+      /glTF SVG .*requires a finite viewBox or finite width and height/i,
     ));
     expect(ControlledImage.instances).toHaveLength(0);
   });

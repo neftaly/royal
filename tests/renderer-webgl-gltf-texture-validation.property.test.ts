@@ -26,12 +26,6 @@ type ValidationCounters = {
   readonly validationOutcome: "accepted" | "rejected";
 };
 
-type GsSvgReplay = {
-  readonly document: GltfDocument;
-  readonly expectedMessage?: RegExp;
-  readonly expectedPass: boolean;
-};
-
 type TextureSourceConflictReplay = {
   readonly document: GltfDocument;
   readonly extension: TextureSourceExtension;
@@ -174,101 +168,6 @@ const randomSvgImage = (random: SeededRandom): GltfImage => {
   }
 };
 
-const isDataUri = (uri: string): boolean => /^data:/iu.test(uri);
-
-const dataUriMediaType = (uri: string): string | undefined => {
-  const match = /^data:([^,]*),/isu.exec(uri);
-  return match?.[1]?.split(";")[0]?.toLowerCase();
-};
-
-const isSvgMimeType = (value: string | undefined): boolean =>
-  value?.toLowerCase() === "image/svg+xml";
-
-const isSvgUri = (uri: string): boolean => /\.svg(?:$|[?#])/iu.test(uri);
-
-const imageLooksSvg = (image: GltfImage): boolean => {
-  if (isSvgMimeType(image.mimeType)) return true;
-  if (image.uri === undefined) return false;
-  if (isDataUri(image.uri)) return isSvgMimeType(dataUriMediaType(image.uri));
-  return isSvgUri(image.uri);
-};
-
-const gsSvgDocumentShouldPass = (document: GltfDocument): boolean => {
-  for (const texture of document.textures ?? []) {
-    const coreImage = texture.source === undefined ? undefined : document.images?.[texture.source];
-    if (coreImage !== undefined && imageLooksSvg(coreImage)) return false;
-  }
-  if (!document.textures?.some((texture) => texture.extensions?.GS_texture_svg !== undefined)) return true;
-  if (!document.extensionsUsed?.includes("GS_texture_svg")) return false;
-  if (document.extensionsRequired?.includes("GS_texture_svg")) return false;
-
-  for (const texture of document.textures) {
-    const extension = texture.extensions?.GS_texture_svg;
-    if (extension === undefined) continue;
-    if (texture.extensions?.EXT_texture_webp !== undefined || texture.extensions?.KHR_texture_basisu !== undefined) {
-      return false;
-    }
-    if (typeof texture.source !== "number" || !Number.isInteger(texture.source) || texture.source < 0) return false;
-    const source = extension.source;
-    if (typeof source !== "number" || !Number.isInteger(source) || source < 0) return false;
-
-    const fallbackImage = document.images?.[texture.source];
-    if (fallbackImage === undefined || texture.source === source || imageLooksSvg(fallbackImage)) return false;
-
-    const image = document.images?.[source];
-    if (image === undefined) return false;
-    if (image.bufferView !== undefined && !isSvgMimeType(image.mimeType)) return false;
-    if (image.uri !== undefined && isDataUri(image.uri) && !isSvgMimeType(dataUriMediaType(image.uri))) return false;
-    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType !== undefined && !isSvgMimeType(image.mimeType)) {
-      return false;
-    }
-    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType === undefined && !isSvgUri(image.uri)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const randomGsSvgDocument = (random: SeededRandom): GltfDocument => {
-  const imageCount = random.int(0, 7);
-  const textureCount = random.int(1, 6);
-  const images = random.array(imageCount, () => randomSvgImage(random));
-  const textures = random.array(textureCount, (): GltfTexture => {
-    if (random.boolean(0.35)) return {};
-    const sourceVariant = random.int(0, 6);
-    const source = sourceVariant === 0
-      ? undefined
-      : sourceVariant === 1
-        ? -1
-        : sourceVariant === 2
-        ? 0.5
-        : random.int(0, Math.max(1, imageCount + 2));
-    const fallbackVariant = random.int(0, 7);
-    const fallbackSource = fallbackVariant === 0
-      ? undefined
-      : fallbackVariant === 1
-        ? -1
-        : fallbackVariant === 2
-          ? 0.5
-          : random.int(0, Math.max(1, imageCount + 2));
-    return {
-      ...(fallbackSource === undefined ? {} : { source: fallbackSource }),
-      extensions: {
-        ...(random.boolean(0.16) ? { EXT_texture_webp: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
-        ...(random.boolean(0.16) ? { KHR_texture_basisu: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
-        GS_texture_svg: source === undefined ? {} : { source },
-      },
-    };
-  });
-
-  return {
-    extensionsRequired: random.boolean(0.22) ? ["GS_texture_svg"] : [],
-    extensionsUsed: random.boolean(0.82) ? ["GS_texture_svg"] : [],
-    images,
-    textures,
-  };
-};
-
 const validationCounters = (
   document: GltfDocument,
   validationOutcome: ValidationCounters["validationOutcome"],
@@ -306,140 +205,6 @@ const randomImageKind = (random: SeededRandom): GltfImageKind => {
   const kinds: readonly GltfImageKind[] = ["basisu", "image", "svg"];
   return random.pick(kinds);
 };
-
-const acceptedGsSvgDocument: GltfDocument = {
-  extensionsUsed: ["GS_texture_svg"],
-  images: [
-    { mimeType: "image/jpeg", uri: "label-fallback.jpg" },
-    { mimeType: "image/svg+xml", uri: "label.svg" },
-  ],
-  textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 0 }],
-};
-
-const gsSvgReplays: readonly FuzzReplay[] = [
-  {
-    label: "accepted core raster fallback",
-    value: { document: acceptedGsSvgDocument, expectedPass: true } satisfies GsSvgReplay,
-  },
-  {
-    label: "plain core SVG texture",
-    value: {
-      document: {
-        images: [{ mimeType: "image/svg+xml", uri: "label.svg" }],
-        textures: [{ source: 0 }],
-      },
-      expectedMessage: /core texture 0 .*SVG image 0.*GS_texture_svg.*PNG or JPEG fallback/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "unused SVG image",
-    value: {
-      document: {
-        images: [{ uri: "unused.svg" }, { uri: "label.png" }],
-        textures: [{ source: 1 }],
-      },
-      expectedPass: true,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "missing core fallback",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } } }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*core source fallback/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "listed as required",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        extensionsRequired: ["GS_texture_svg"],
-      },
-      expectedMessage: /GS_texture_svg .*must not be listed in extensionsRequired/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "extra source extension fallback",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        textures: [{
-          extensions: {
-            EXT_texture_webp: { source: 0 },
-            GS_texture_svg: { source: 1 },
-          },
-          source: 0,
-        }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*additional texture source fallbacks/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "extra webp and basisu source extension fallbacks",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu", "GS_texture_svg"],
-        images: [
-          { mimeType: "image/png", uri: "fallback.png" },
-          { mimeType: "image/webp", uri: "texture.webp" },
-          { mimeType: "image/ktx2", uri: "texture.ktx2" },
-          { mimeType: "image/svg+xml", uri: "texture.svg" },
-        ],
-        textures: [{
-          extensions: {
-            EXT_texture_webp: { source: 1 },
-            KHR_texture_basisu: { source: 2 },
-            GS_texture_svg: { source: 3 },
-          },
-          source: 0,
-        }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*additional texture source fallbacks/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "svg fallback image",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 1 }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*core source fallback must be a non-SVG image/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "missing raster fallback image ref",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 3 }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*references missing fallback image 3/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-  {
-    label: "missing svg source image ref",
-    value: {
-      document: {
-        ...acceptedGsSvgDocument,
-        textures: [{ extensions: { GS_texture_svg: { source: 4 } }, source: 0 }],
-      },
-      expectedMessage: /GS_texture_svg texture 0 .*references missing image 4/i,
-      expectedPass: false,
-    } satisfies GsSvgReplay,
-  },
-];
 
 const textureSourceConflictReplays: readonly FuzzReplay[] = [
   {
@@ -732,6 +497,16 @@ const randomMaterialTextureSlotDocument = (random: SeededRandom): GltfDocument =
 };
 
 describe("renderer-webgl glTF texture validation properties", () => {
+  it("treats the removed GS texture extension as unsupported while accepting core SVG sources", () => {
+    expect(unsupportedRequiredGltfExtensions({
+      extensionsRequired: ["GS_texture_svg"],
+    })).toEqual(["GS_texture_svg"]);
+    expect(() => assertSupportedRequiredGltfExtensions("core-svg.gltf", {
+      images: [{ mimeType: "image/svg+xml", uri: "label.svg" }],
+      textures: [{ source: 0 }],
+    })).not.toThrow();
+  });
+
   it("reports unsupported required extensions uniquely and in source order", () => {
     forEachFuzzCase({ cases: 32, seed: 0x7a9f5c31 }, ({ label, random }) => {
       const required = randomRequiredExtensions(random);
@@ -787,19 +562,6 @@ describe("renderer-webgl glTF texture validation properties", () => {
       expectValidationOutcome(
         document,
         replayValue?.expectedPass ?? true,
-        label,
-        replayValue?.expectedMessage,
-      );
-    });
-  });
-
-  it("validates GS_texture_svg extension usage and SVG image reference coherence", () => {
-    forEachFuzzCase({ cases: 48, replays: gsSvgReplays, seed: 0x56bd49e2 }, ({ label, random, replay }) => {
-      const replayValue = replay as GsSvgReplay | undefined;
-      const document = replayValue?.document ?? randomGsSvgDocument(random);
-      expectValidationOutcome(
-        document,
-        replayValue?.expectedPass ?? gsSvgDocumentShouldPass(document),
         label,
         replayValue?.expectedMessage,
       );

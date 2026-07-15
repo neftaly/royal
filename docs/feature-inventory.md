@@ -80,8 +80,8 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| Plain glTF `image/svg+xml` images | deleted | Nonconformant core glTF. Use optional `GS_texture_svg` with a core PNG or JPEG fallback. |
-| `GS_texture_svg` source selection with a core raster fallback | ingestion | Garbo Succus vendor extension. Keep tiny and register the `GS` prefix if assets leave the private pipeline; it must lower to an ordinary image source. |
+| Plain glTF SVG image sources | ingestion | Optional Royal image format selected through the core texture `source`; it lowers to the same SVG raster/VT path as direct SVG assets. |
+| `GS_texture_svg` | deleted | Unregistered imaginary extension removed; Royal does not advertise private schema as glTF compatibility. |
 | SVG viewport/viewBox normalization | ingestion | Required for deterministic raster dimensions. Keep. |
 | Regex script/event/unsafe-URL stripping | deleted | It is not a trustworthy sanitizer and creates a false security promise. Browser image decoding is the execution boundary. |
 | Runtime nested/external SVG image resolution | deleted | Canvas only rasterizes after decode; resolving dependency graphs is separate parser/IO complexity. Flatten or embed dependencies offline. |
@@ -134,7 +134,6 @@ Status meanings:
 | `KHR_materials_variants` | ingestion/product | Keep; canonical selection, React discovery API, LOD interaction tests, and an interactive workload are present. |
 | `EXT_lights_image_based` | ingestion | Real multi-vendor extension. Keep its existing adapter: imported IBL is asset-scoped fallback, scene environment wins, and no load-order authority exists. |
 | `MSFT_lod` | ingestion | Keep as declarations only; lower to canonical LOD. |
-| `GS_texture_svg` | ingestion | Garbo Succus vendor extension with core raster fallback. Keep minimal and format-only. |
 
 ## glTF material profile
 

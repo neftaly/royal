@@ -330,9 +330,6 @@ export type GltfTexture = {
     readonly KHR_texture_basisu?: {
       readonly source?: number;
     };
-    readonly GS_texture_svg?: {
-      readonly source?: number;
-    };
   };
   readonly sampler?: number;
   readonly source?: number;

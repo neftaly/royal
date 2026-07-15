@@ -19,7 +19,7 @@ sharing geometry while using high-resolution raster or SVG artwork.
 Royal must make these paths excellent:
 
 - glTF 2.0 metallic-roughness PBR;
-- SVG images referenced by glTF, including `GS_texture_svg`;
+- SVG images referenced directly by glTF core texture sources as a documented Royal ingestion extension;
 - automatic and explicit bulk instancing;
 - automatic virtual texturing for assets that benefit from it;
 - touch, pointer, and XR picking with stable logical identity;

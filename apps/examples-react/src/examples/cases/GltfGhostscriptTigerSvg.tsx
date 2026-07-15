@@ -33,7 +33,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
 
   return (
     <Canvas
-      aria-label="glTF GS_texture_svg Ghostscript tiger card fixture"
+      aria-label="glTF core SVG Ghostscript tiger card fixture"
       data-camera-distance={orbitView.distance.toFixed(4)}
       rendererOptions={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}

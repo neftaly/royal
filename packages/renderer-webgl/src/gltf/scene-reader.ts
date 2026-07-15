@@ -249,11 +249,19 @@ const gltfTextureContentKey = (
 const gltfImageSourceUri = (src: string, image: GltfImage | undefined): string | undefined =>
   image?.uri === undefined ? undefined : resolveResourceUri(src, image.uri);
 
+const gltfImageIsSvg = (image: GltfImage | undefined): boolean => {
+  if (image?.mimeType?.toLowerCase() === "image/svg+xml") return true;
+  if (image?.uri === undefined) return false;
+  if (/^data:/iu.test(image.uri)) {
+    return /^data:image\/svg\+xml(?:[;,])/iu.test(image.uri);
+  }
+  return /\.svg(?:$|[?#])/iu.test(image.uri);
+};
+
 const gltfTextureImageSelection = (
+  document: GltfDocument,
   texture: GltfTexture | undefined,
 ): GltfTextureImageSelection | undefined => {
-  const svgSource = texture?.extensions?.GS_texture_svg?.source;
-  if (svgSource !== undefined) return { imageIndex: svgSource, kind: "svg" };
   const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
   if (basisuSource !== undefined) return { imageIndex: basisuSource, kind: "basisu" };
   const webpSource = texture?.extensions?.EXT_texture_webp?.source;
@@ -262,7 +270,7 @@ const gltfTextureImageSelection = (
     : texture?.source;
   return imageIndex === undefined
     ? undefined
-    : { imageIndex, kind: "image" };
+    : { imageIndex, kind: gltfImageIsSvg(document.images?.[imageIndex]) ? "svg" : "image" };
 };
 
 const gltfMaterialTextureSlot = (
@@ -274,7 +282,7 @@ const gltfMaterialTextureSlot = (
   if (textureInfo === undefined) return undefined;
   const textureIndex = textureInfo.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-  const imageSelection = gltfTextureImageSelection(texture);
+  const imageSelection = gltfTextureImageSelection(document, texture);
   const imageIndex = imageSelection?.imageIndex;
   const imageKind = imageSelection?.kind ?? "image";
   const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
