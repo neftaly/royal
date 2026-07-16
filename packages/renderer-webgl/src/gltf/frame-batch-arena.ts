@@ -76,6 +76,7 @@ export interface GltfFrameDrawBatch {
   material: SurfaceMaterial;
   readonly rootModels: Mat4[];
   readonly rootInstanceViews: Array<GltfInstanceTransformView | undefined>;
+  rootLayoutDirty: boolean;
   readonly rootLogicalIndices: number[];
   readonly rootTransforms: Array<Transform | undefined>;
   sidedness: GltfFrameDrawSidedness;
@@ -170,12 +171,14 @@ export class GltfFrameBatchArena {
       batch.localModels,
       batch.localModelSignature,
       batch.localModelSignatureDirty,
+      batch.rootLayoutDirty,
       batch.rootTransforms,
       batch.rootInstanceViews,
       batch.rootLogicalIndices,
       counters,
     );
     batch.localModelSignatureDirty = false;
+    batch.rootLayoutDirty = false;
     return allocation;
   }
 
@@ -250,6 +253,7 @@ export class GltfFrameBatchArena {
           material: material.material,
           rootModels: [],
           rootInstanceViews: [],
+          rootLayoutDirty: true,
           rootLogicalIndices: [],
           rootTransforms: [],
           sidedness: {
@@ -268,6 +272,8 @@ export class GltfFrameBatchArena {
         counters.batchPlansBuilt += 1;
       }
       batch.localModelSignatureDirty ||= batch.localModelSignature.length !== memberCount;
+      batch.rootLayoutDirty ||= batch.rootInstanceViews.length !== memberCount
+        || batch.rootLogicalIndices.length !== memberCount;
       batch.localModelSignature.length = memberCount;
       batch.localModels.length = memberCount;
       batch.rootModels.length = memberCount;
@@ -316,6 +322,10 @@ export class GltfFrameBatchArena {
         }
         batch.localModels[memberOffset] = localModel!;
         batch.rootModels[memberOffset] = root.rootModel;
+        if (batch.rootInstanceViews[memberOffset] !== root.rootInstanceViews
+          || batch.rootLogicalIndices[memberOffset] !== root.rootLogicalIndex) {
+          batch.rootLayoutDirty = true;
+        }
         batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;
         batch.rootLogicalIndices[memberOffset] = root.rootLogicalIndex;
         batch.rootTransforms[memberOffset] = root.rootTransform;

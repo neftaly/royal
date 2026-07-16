@@ -73,6 +73,7 @@ const bindOne = (
   [identityMat4()],
   [1],
   true,
+  true,
   [{ position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }],
   [undefined],
   [0],
@@ -88,6 +89,7 @@ const bindValues = (
     readonly localModels?: readonly Mat4[];
     readonly localSignature?: readonly number[];
     readonly logicalIndices?: readonly number[];
+    readonly rootLayoutDirty?: boolean;
     readonly rootSources?: readonly (GltfInstanceBufferSource | undefined)[];
     readonly rootTransforms?: readonly ({
       readonly position: readonly [number, number, number];
@@ -106,6 +108,7 @@ const bindValues = (
     localModels,
     values.localSignature ?? new Array<number>(count).fill(1),
     true,
+    values.rootLayoutDirty ?? true,
     values.rootTransforms ?? new Array(count).fill(undefined),
     values.rootSources ?? new Array(count).fill(undefined),
     values.logicalIndices ?? new Array<number>(count).fill(-1),

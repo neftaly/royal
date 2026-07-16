@@ -47,6 +47,7 @@ export interface GltfInstanceBufferArena {
 
 type GltfInstanceBufferResource = {
   readonly allocation: VertexInputInstanceAllocation;
+  hasOrdinaryRoot: boolean;
   localSignature?: number[];
   instanceCount: number;
   packedLogicalIndices: Int32Array;
@@ -265,6 +266,7 @@ const gltfInstanceBufferResource = (
   packedLogicalIndices.fill(-1);
   const resource: GltfInstanceBufferResource = {
     allocation: createVertexInputInstanceAllocation(state.vertexInputs),
+    hasOrdinaryRoot: false,
     instanceCount: 0,
     packedLogicalIndices,
     packedSlotChanges: new Uint8Array(),
@@ -289,6 +291,7 @@ const bindGltfInstanceRootVectorBuffer = (
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
   packedSlotChanges: Uint8Array,
+  packedLayoutChanged: boolean,
   poseVersions: ReadonlyMap<GltfInstanceBufferSource, number>,
   previousInstanceCount: number,
   instanceCount: number,
@@ -360,7 +363,7 @@ const bindGltfInstanceRootVectorBuffer = (
             offset,
             (rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM)[channel],
           )
-        : packedSlotChanges[transformIndex] !== 0
+        : (packedLayoutChanged && packedSlotChanges[transformIndex] !== 0)
           || (sourceVersionChanged && sourceDirty !== undefined
             && isInstanceDirty(sourceDirty, logicalIndex)));
     if (!changed) {
@@ -414,6 +417,7 @@ const bindGltfInstanceRootScaleBuffer = (
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
   packedSlotChanges: Uint8Array,
+  packedLayoutChanged: boolean,
   scaleVersions: ReadonlyMap<GltfInstanceBufferSource, number>,
   previousInstanceCount: number,
   instanceCount: number,
@@ -445,7 +449,7 @@ const bindGltfInstanceRootScaleBuffer = (
             offset,
             rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM,
           )
-        : packedSlotChanges[transformIndex] !== 0
+        : (packedLayoutChanged && packedSlotChanges[transformIndex] !== 0)
           || (sourceVersionChanged && isInstanceDirty(sourceViews.changes.activeScale, logicalIndex)));
     if (!changed) {
       if (activeRangeStart >= 0) {
@@ -494,6 +498,7 @@ export const bindGltfInstanceBuffer = (
   localModels: readonly Mat4[],
   localModelSignature: readonly number[],
   localModelSignatureDirty: boolean,
+  rootLayoutDirty: boolean,
   rootTransforms: readonly (Transform | undefined)[],
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
@@ -596,19 +601,22 @@ export const bindGltfInstanceBuffer = (
     }
   }
   let packedLayoutChanged = previousInstanceCount !== instanceCount;
-  let hasOrdinaryRoot = false;
+  let hasOrdinaryRoot = resource.hasOrdinaryRoot;
   const packedSourceCount = Math.max(previousInstanceCount, instanceCount);
-  for (let index = 0; index < packedSourceCount; index += 1) {
-    const previousSource = resource.packedSources[index];
-    const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;
-    const slotChanged = index < instanceCount && (
-      previousSource !== nextSource
-      || resource.packedLogicalIndices[index] !== rootLogicalIndices[index]
-    );
-    if (index < instanceCount) {
-      resource.packedSlotChanges[index] = slotChanged ? 1 : 0;
-      packedLayoutChanged ||= slotChanged;
-      if (nextSource === undefined) hasOrdinaryRoot = true;
+  if (rootLayoutDirty || packedLayoutChanged) {
+    hasOrdinaryRoot = false;
+    for (let index = 0; index < packedSourceCount; index += 1) {
+      const previousSource = resource.packedSources[index];
+      const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;
+      const slotChanged = index < instanceCount && (
+        previousSource !== nextSource
+        || resource.packedLogicalIndices[index] !== rootLogicalIndices[index]
+      );
+      if (index < instanceCount) {
+        resource.packedSlotChanges[index] = slotChanged ? 1 : 0;
+        packedLayoutChanged ||= slotChanged;
+        if (nextSource === undefined) hasOrdinaryRoot = true;
+      }
     }
   }
   let positionDirty = false;
@@ -639,6 +647,7 @@ export const bindGltfInstanceBuffer = (
     rootInstanceViews,
     rootLogicalIndices,
     resource.packedSlotChanges,
+    packedLayoutChanged,
     resource.poseVersions,
     previousInstanceCount,
     instanceCount,
@@ -656,6 +665,7 @@ export const bindGltfInstanceBuffer = (
     rootInstanceViews,
     rootLogicalIndices,
     resource.packedSlotChanges,
+    packedLayoutChanged,
     resource.poseVersions,
     previousInstanceCount,
     instanceCount,
@@ -673,6 +683,7 @@ export const bindGltfInstanceBuffer = (
     rootInstanceViews,
     rootLogicalIndices,
     resource.packedSlotChanges,
+    packedLayoutChanged,
     resource.scaleVersions,
     previousInstanceCount,
     instanceCount,
@@ -703,6 +714,7 @@ export const bindGltfInstanceBuffer = (
       resource.packedLogicalIndices[index] = rootLogicalIndices[index]!;
     }
     resource.packedSources.length = instanceCount;
+    resource.hasOrdinaryRoot = hasOrdinaryRoot;
   }
   for (const sourceViews of resource.sourceCounts.keys()) {
     resource.poseVersions.set(sourceViews, sourceViews.framePoseVersion);
