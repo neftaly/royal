@@ -11,6 +11,10 @@ type BenchmarkReport = {
   readonly batches: number;
   readonly maxMs: number;
   readonly medianMs: number;
+  readonly pageTableMedianMs: number;
+  readonly pageTableMotions: number;
+  readonly pageTableP95Ms: number;
+  readonly pageTableUpdates: number;
   readonly p95Ms: number;
   readonly userAgent: string;
 };
@@ -107,11 +111,14 @@ try {
     throw new Error("VT page benchmark did not publish a report");
   }
   const report = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as BenchmarkReport;
-  if (report.batchPages !== 4 || report.batches !== 128) {
+  if (report.batchPages !== 4 || report.batches !== 128 || report.pageTableMotions !== 256) {
     throw new Error(`Invalid VT page benchmark workload: ${JSON.stringify(report)}`);
   }
   if (report.medianMs > 4 || report.p95Ms > 8) {
     throw new Error(`Generated VT page batch exceeded budget: ${JSON.stringify(report)}`);
+  }
+  if (report.pageTableMedianMs > 2 || report.pageTableP95Ms > 5) {
+    throw new Error(`VT page-table motion exceeded budget: ${JSON.stringify(report)}`);
   }
   process.stdout.write(`${JSON.stringify(report)}\n`);
 } finally {

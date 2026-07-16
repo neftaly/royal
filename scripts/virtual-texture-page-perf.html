@@ -7,6 +7,11 @@
     generatedRasterVirtualTextureManifest,
     generatedRasterVirtualTexturePageImage,
   } from "/packages/renderer-webgl/src/virtual-texture/automatic-source.ts";
+  import {
+    VirtualTextureAtlasPageTable,
+    parentVirtualTexturePage,
+    virtualTexturePageKey,
+  } from "/packages/renderer-webgl/src/virtual-texture/model.ts";
 
   const sourceCanvas = document.createElement("canvas");
   sourceCanvas.width = 4096;
@@ -55,11 +60,46 @@
   }
   samples.sort((left, right) => left - right);
 
+  const pageTable = new VirtualTextureAtlasPageTable({ slotCount: 1365 });
+  for (let mip = 5; mip >= 0; mip -= 1) {
+    const width = 32 / (2 ** mip);
+    for (let y = 0; y < width; y += 1) {
+      for (let x = 0; x < width; x += 1) pageTable.ensureResident({ mip, x, y });
+    }
+  }
+  pageTable.takeDirtyPageTableUpdates();
+  const pageTableSamples = [];
+  let pageTableUpdates = 0;
+  for (let motion = 0; motion < 256; motion += 1) {
+    const active = new Set();
+    const originX = motion % 25;
+    const originY = Math.floor(motion / 25) % 25;
+    for (let y = originY; y < originY + 8; y += 1) {
+      for (let x = originX; x < originX + 8; x += 1) {
+        let page = { mip: 0, x, y };
+        while (page.mip <= 5) {
+          active.add(virtualTexturePageKey(page));
+          page = parentVirtualTexturePage(page);
+        }
+      }
+    }
+    const started = performance.now();
+    pageTable.reconcileActivePageKeys(active);
+    pageTableUpdates += pageTable.dirtyPageTableUpdateCount;
+    while (pageTable.dirtyPageTableUpdateCount > 0) pageTable.commitDirtyPageTableUpdate();
+    pageTableSamples.push(performance.now() - started);
+  }
+  pageTableSamples.sort((left, right) => left - right);
+
   const report = {
     batchPages: 4,
     batches: samples.length,
     maxMs: samples.at(-1),
     medianMs: samples[Math.floor(samples.length * 0.5)],
+    pageTableMedianMs: pageTableSamples[Math.floor(pageTableSamples.length * 0.5)],
+    pageTableMotions: pageTableSamples.length,
+    pageTableP95Ms: pageTableSamples[Math.floor(pageTableSamples.length * 0.95)],
+    pageTableUpdates,
     p95Ms: samples[Math.floor(samples.length * 0.95)],
     userAgent: navigator.userAgent,
   };

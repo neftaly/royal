@@ -514,10 +514,15 @@ export const virtualTexturePageUri = (
 };
 
 export class VirtualTextureAtlasPageTable {
-  #activePageKeys: Set<string> | undefined;
+  #activePageKeys = new Set<string>();
+  #activePageKeysPublished = false;
+  #activePageKeysScratch = new Set<string>();
+  readonly #activeRecordsScratch: VirtualTextureResidentPage[] = [];
+  readonly #changedPageKeysScratch = new Set<string>();
   readonly #dirty: QueuedVirtualTexturePageTableUpdate[] = [];
   #dirtyHead = 0;
   readonly #freeSlots: number[];
+  readonly #inactiveRecordsScratch: VirtualTextureResidentPage[] = [];
   readonly #recordsByPage = new Map<string, VirtualTextureResidentPage>();
   readonly #recordsBySlot = new Map<number, VirtualTextureResidentPage>();
   #clockHand = 0;
@@ -536,7 +541,7 @@ export class VirtualTextureAtlasPageTable {
 
   /** Number of cached pages that participate in the current page-table mapping. */
   get activeResidentCount(): number {
-    if (this.#activePageKeys === undefined) return this.#recordsByPage.size;
+    if (!this.#activePageKeysPublished) return this.#recordsByPage.size;
     let count = 0;
     for (const pageKey of this.#activePageKeys) {
       if (this.#recordsByPage.has(pageKey)) count += 1;
@@ -555,10 +560,10 @@ export class VirtualTextureAtlasPageTable {
    */
   reconcileActivePageKeys(pageKeys: ReadonlySet<string>): boolean {
     const previous = this.#activePageKeys;
-    let identical = previous !== undefined && previous.size === pageKeys.size;
+    let identical = this.#activePageKeysPublished && previous.size === pageKeys.size;
     if (identical) {
       for (const pageKey of pageKeys) {
-        if (previous?.has(pageKey) !== true) {
+        if (!previous.has(pageKey)) {
           identical = false;
           break;
         }
@@ -566,8 +571,13 @@ export class VirtualTextureAtlasPageTable {
     }
     if (identical) return false;
 
-    const wasActive = (pageKey: string): boolean => previous?.has(pageKey) ?? true;
-    this.#activePageKeys = new Set(pageKeys);
+    const previouslyPublished = this.#activePageKeysPublished;
+    const next = this.#activePageKeysScratch;
+    next.clear();
+    for (const pageKey of pageKeys) next.add(pageKey);
+    this.#activePageKeys = next;
+    this.#activePageKeysScratch = previous;
+    this.#activePageKeysPublished = true;
     const supersededPendingReconciliation = this.#dropPendingReconciliationUpdates();
 
     if (supersededPendingReconciliation) {
@@ -576,8 +586,10 @@ export class VirtualTextureAtlasPageTable {
       // no longer depends on which part of that delta reached it. Every
       // resident contributes at most one update, bounding the replacement by
       // physical slot count. Transaction updates remain ahead of this snapshot.
-      const inactiveRecords: VirtualTextureResidentPage[] = [];
-      const activeRecords: VirtualTextureResidentPage[] = [];
+      const inactiveRecords = this.#inactiveRecordsScratch;
+      const activeRecords = this.#activeRecordsScratch;
+      inactiveRecords.length = 0;
+      activeRecords.length = 0;
       for (const record of this.#recordsByPage.values()) {
         if (this.#activePageKeys.has(record.pageKey)) activeRecords.push(record);
         else inactiveRecords.push(record);
@@ -604,13 +616,15 @@ export class VirtualTextureAtlasPageTable {
       return true;
     }
 
-    const changedPageKeys = new Set<string>();
+    const changedPageKeys = this.#changedPageKeysScratch;
+    changedPageKeys.clear();
     let maximumChangedMip = -1;
     // First withdraw records that ceased to be active. Their replacement may
     // only be an active cached ancestor; an inactive prewarm must never leak
     // back into the current page table as an eviction fallback.
     for (const record of this.#recordsByPage.values()) {
-      if (wasActive(record.pageKey) && !this.#activePageKeys.has(record.pageKey)) {
+      const wasActive = !previouslyPublished || previous.has(record.pageKey);
+      if (wasActive && !this.#activePageKeys.has(record.pageKey)) {
         changedPageKeys.add(record.pageKey);
         maximumChangedMip = Math.max(maximumChangedMip, record.page.mip);
         const fallback = this.#residentFallbackRecord(
@@ -619,7 +633,7 @@ export class VirtualTextureAtlasPageTable {
         );
         this.#queueReconciliationUpdate(this.#fallbackUpdate(record, fallback));
       }
-      else if (!wasActive(record.pageKey) && this.#activePageKeys.has(record.pageKey)) {
+      else if (!wasActive && this.#activePageKeys.has(record.pageKey)) {
         changedPageKeys.add(record.pageKey);
         maximumChangedMip = Math.max(maximumChangedMip, record.page.mip);
       }
@@ -629,15 +643,18 @@ export class VirtualTextureAtlasPageTable {
     // only newly active records and affected active descendants, coarse to
     // fine. This keeps ordinary camera motion proportional to changed regions
     // instead of rewriting the complete active set.
-    const activeRecords = [...this.#recordsByPage.values()]
-      .filter((record) => (
-        this.#activePageKeys?.has(record.pageKey) === true
+    const activeRecords = this.#activeRecordsScratch;
+    activeRecords.length = 0;
+    for (const record of this.#recordsByPage.values()) {
+      if (
+        this.#activePageKeys.has(record.pageKey)
         && (
-          !wasActive(record.pageKey)
+          (previouslyPublished && !previous.has(record.pageKey))
           || this.#hasChangedAncestor(record.page, changedPageKeys, maximumChangedMip)
         )
-      ))
-      .sort((left, right) => right.page.mip - left.page.mip);
+      ) activeRecords.push(record);
+    }
+    activeRecords.sort((left, right) => right.page.mip - left.page.mip);
     for (const record of activeRecords) {
       this.#queueReconciliationUpdate({
         page: record.page,
@@ -651,7 +668,7 @@ export class VirtualTextureAtlasPageTable {
   }
 
   isActivePageKey(pageKey: string): boolean {
-    return this.#activePageKeys?.has(pageKey) ?? true;
+    return !this.#activePageKeysPublished || this.#activePageKeys.has(pageKey);
   }
 
   residentPage(pageKey: string): VirtualTextureResidentPage | undefined {
