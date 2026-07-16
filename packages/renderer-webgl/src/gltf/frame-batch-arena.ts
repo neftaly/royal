@@ -262,12 +262,12 @@ export class GltfFrameBatchArena {
         this.#liveBatchCount += 1;
         counters.batchPlansBuilt += 1;
       }
-      batch.localModelSignature.length = 0;
-      batch.localModels.length = 0;
-      batch.rootModels.length = 0;
-      batch.rootInstanceViews.length = 0;
-      batch.rootLogicalIndices.length = 0;
-      batch.rootTransforms.length = 0;
+      batch.localModelSignature.length = memberCount;
+      batch.localModels.length = memberCount;
+      batch.rootModels.length = memberCount;
+      batch.rootInstanceViews.length = memberCount;
+      batch.rootLogicalIndices.length = memberCount;
+      batch.rootTransforms.length = memberCount;
       batch.cpuGeometry = geometry.source;
       batch.geometry = geometry;
       batch.geometryId = geometryId;
@@ -281,12 +281,16 @@ export class GltfFrameBatchArena {
       sidedness.frontFaceCcw =
         (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0;
       for (let memberOffset = 0; memberOffset < memberCount; memberOffset += 1) {
-        this.#appendSubmission(batch, groups.memberIndices[memberFirst + memberOffset]!);
+        this.#writeSubmission(
+          batch,
+          memberOffset,
+          groups.memberIndices[memberFirst + memberOffset]!,
+        );
       }
     }
   }
 
-  #appendSubmission(batch: GltfFrameDrawBatch, index: number): void {
+  #writeSubmission(batch: GltfFrameDrawBatch, memberIndex: number, index: number): void {
     const root = this.workspace.rootBindings[this.workspace.rootBindingIds[index]!]!;
     const localModelId = this.workspace.localModelIds[index]!;
     const localModelSemanticId = packetLocalModelSemanticId(
@@ -303,11 +307,11 @@ export class GltfFrameBatchArena {
       );
       this.#localModels[localModelId] = localModel;
     }
-    batch.localModelSignature.push(localModelSemanticId);
-    batch.localModels.push(localModel);
-    batch.rootModels.push(root.rootModel);
-    batch.rootInstanceViews.push(root.rootInstanceViews);
-    batch.rootLogicalIndices.push(root.rootLogicalIndex);
-    batch.rootTransforms.push(root.rootTransform);
+    batch.localModelSignature[memberIndex] = localModelSemanticId;
+    batch.localModels[memberIndex] = localModel;
+    batch.rootModels[memberIndex] = root.rootModel;
+    batch.rootInstanceViews[memberIndex] = root.rootInstanceViews;
+    batch.rootLogicalIndices[memberIndex] = root.rootLogicalIndex;
+    batch.rootTransforms[memberIndex] = root.rootTransform;
   }
 }
