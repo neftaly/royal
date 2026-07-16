@@ -206,6 +206,11 @@ export class GltfMaterialPreparationArena {
   readonly #batchClassIds = new Map<string, number>();
   #prepared = new WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>();
 
+  settled(loadedMaterial: LoadedGltfMaterial): GltfPreparedPrimitiveMaterial | undefined {
+    const prepared = this.#prepared.get(loadedMaterial);
+    return prepared?.material.basePending === true ? undefined : prepared;
+  }
+
   prepare(
     loadedMaterial: LoadedGltfMaterial,
     contentKeys: ReadonlyMap<string, TextureContentKey>,

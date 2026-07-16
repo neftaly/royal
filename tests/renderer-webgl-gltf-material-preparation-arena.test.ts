@@ -114,6 +114,7 @@ describe("glTF material preparation arena", () => {
 
     const pending = arena.prepare(loadedMaterial, contentKeys, new Set(), true);
     expect(arena.prepare(loadedMaterial, contentKeys, new Set(), true)).toBe(pending);
+    expect(arena.settled(loadedMaterial)).toBeUndefined();
     expect(pending.material.baseColor).toMatchObject({ kind: "solid" });
 
     arena.invalidate([loadedMaterial]);
@@ -128,8 +129,10 @@ describe("glTF material preparation arena", () => {
       src: "texture:base",
     });
     expect(otherPrimitiveReady.materialBatchClassId).toBe(ready.materialBatchClassId);
+    expect(arena.settled(loadedMaterial)).toBe(ready);
 
     arena.clear();
+    expect(arena.settled(loadedMaterial)).toBeUndefined();
     expect(arena.prepare(loadedMaterial, contentKeys, readyImages, false)).not.toBe(ready);
   });
 

@@ -230,14 +230,17 @@ export class GltfPacketSubmissionOwner {
       );
       if (materialBindingId === undefined) {
         const loadedMaterial = resolvePacketMaterial(topology.resources, materialId);
-        const basePending = this.#runtime.images.demandMaterial(state.key, loadedMaterial);
-        const prepared = this.#materials.prepare(
-          loadedMaterial,
-          contentKeys,
-          this.#runtime.images.readyKeys(state.key),
-          basePending,
-          this.#runtime.images.publication(state.key, loadedMaterial),
-        );
+        let prepared = this.#materials.settled(loadedMaterial);
+        if (prepared === undefined) {
+          const basePending = this.#runtime.images.demandMaterial(state.key, loadedMaterial);
+          prepared = this.#materials.prepare(
+            loadedMaterial,
+            contentKeys,
+            this.#runtime.images.readyKeys(state.key),
+            basePending,
+            this.#runtime.images.publication(state.key, loadedMaterial),
+          );
+        }
         let materialBinding = this.#materialBindings.get(prepared.material);
         if (materialBinding === undefined) {
           materialBinding = { material: prepared.material };
