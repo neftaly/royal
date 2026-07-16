@@ -5,6 +5,7 @@ import {
   clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
   preparedGltfPacketSubmissionMaterialBindingId,
+  preparedGltfPacketSubmissionRootBindingId,
   readGltfPacketSubmissionInto,
   resetGltfPacketSubmissionWorkspaceForFrame,
   resetGltfPacketSubmissionWorkspaceForSegment,
@@ -138,6 +139,7 @@ describe("glTF packet submission workspace", () => {
     );
 
     expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBe(materialId);
+    expect(preparedGltfPacketSubmissionRootBindingId(workspace, sparseSourceId)).toBe(rootId);
     expect(retainGltfPacketSubmissionRootBinding(
       workspace,
       7,
@@ -150,6 +152,7 @@ describe("glTF packet submission workspace", () => {
 
     resetGltfPacketSubmissionWorkspaceForFrame(workspace, 8, catalog);
     expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBeUndefined();
+    expect(preparedGltfPacketSubmissionRootBindingId(workspace, sparseSourceId)).toBeUndefined();
   });
 
   it("rejects stale plan, catalog identity, and catalog revision access", () => {

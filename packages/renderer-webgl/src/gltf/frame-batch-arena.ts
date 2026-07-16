@@ -55,11 +55,7 @@ export interface GltfFrameMaterialBinding {
 export interface GltfFrameRootBinding {
   readonly rootModel: Mat4;
   readonly rootInstanceViews?: GltfInstanceTransformView;
-  readonly rootPositionSignatureVersion?: number;
-  readonly rootRotationSignatureVersion?: number;
-  readonly rootScaleSignatureVersion?: number;
-  readonly rootSignatureInstanceIndex: number;
-  readonly rootSignatureRenderInstanceOrdinal: number;
+  readonly rootLogicalIndex: number;
   readonly rootTransform: Transform | undefined;
 }
 
@@ -77,9 +73,6 @@ export interface GltfFrameDrawBatch {
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
   material: SurfaceMaterial;
-  readonly rootPositionSignature: number[];
-  readonly rootRotationSignature: number[];
-  readonly rootScaleSignature: number[];
   readonly rootModels: Mat4[];
   readonly rootInstanceViews: Array<GltfInstanceTransformView | undefined>;
   readonly rootLogicalIndices: number[];
@@ -90,56 +83,6 @@ export interface GltfFrameDrawBatch {
 export interface GltfFrameBatchCounters extends GltfInstanceBufferUploadCounters {
   batchPlansBuilt: number;
 }
-
-const IDENTITY_TRANSFORM: Transform = {
-  position: [0, 0, 0],
-  rotation: [0, 0, 0],
-  scale: [1, 1, 1],
-};
-
-const appendTransformVectorSignatureValues = (
-  signature: number[],
-  transform: Transform | undefined,
-  field: keyof Transform,
-): void => {
-  const resolved = transform ?? IDENTITY_TRANSFORM;
-  signature.push(resolved[field][0], resolved[field][1], resolved[field][2]);
-};
-
-const appendRootSignatures = (
-  positionSignature: number[],
-  rotationSignature: number[],
-  scaleSignature: number[],
-  root: GltfFrameRootBinding,
-): void => {
-  if (root.rootPositionSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(positionSignature, root.rootTransform, "position");
-  } else {
-    positionSignature.push(
-      root.rootPositionSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
-  if (root.rootRotationSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(rotationSignature, root.rootTransform, "rotation");
-  } else {
-    rotationSignature.push(
-      root.rootRotationSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
-  if (root.rootScaleSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(scaleSignature, root.rootTransform, "scale");
-  } else {
-    scaleSignature.push(
-      root.rootScaleSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
-};
 
 export class GltfFrameBatchArena {
   readonly workspace: GltfPacketSubmissionWorkspace<
@@ -228,9 +171,6 @@ export class GltfFrameBatchArena {
       batch.rootTransforms,
       batch.rootInstanceViews,
       batch.rootLogicalIndices,
-      batch.rootPositionSignature,
-      batch.rootRotationSignature,
-      batch.rootScaleSignature,
       counters,
     );
   }
@@ -303,9 +243,6 @@ export class GltfFrameBatchArena {
           localModelSignature: [],
           localModels: [],
           material: material.material,
-          rootPositionSignature: [],
-          rootRotationSignature: [],
-          rootScaleSignature: [],
           rootModels: [],
           rootInstanceViews: [],
           rootLogicalIndices: [],
@@ -327,9 +264,6 @@ export class GltfFrameBatchArena {
       }
       batch.localModelSignature.length = 0;
       batch.localModels.length = 0;
-      batch.rootPositionSignature.length = 0;
-      batch.rootRotationSignature.length = 0;
-      batch.rootScaleSignature.length = 0;
       batch.rootModels.length = 0;
       batch.rootInstanceViews.length = 0;
       batch.rootLogicalIndices.length = 0;
@@ -370,16 +304,10 @@ export class GltfFrameBatchArena {
       this.#localModels[localModelId] = localModel;
     }
     batch.localModelSignature.push(localModelSemanticId);
-    appendRootSignatures(
-      batch.rootPositionSignature,
-      batch.rootRotationSignature,
-      batch.rootScaleSignature,
-      root,
-    );
     batch.localModels.push(localModel);
     batch.rootModels.push(root.rootModel);
     batch.rootInstanceViews.push(root.rootInstanceViews);
-    batch.rootLogicalIndices.push(root.rootSignatureInstanceIndex);
+    batch.rootLogicalIndices.push(root.rootLogicalIndex);
     batch.rootTransforms.push(root.rootTransform);
   }
 }

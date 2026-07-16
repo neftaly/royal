@@ -179,6 +179,26 @@ describe("glTF packet numeric batch registry", () => {
     )).toThrow(/stale/);
   });
 
+  it("reuses packet batch identities only while their exact tuple remains current", () => {
+    const registry = createGltfPacketBatchRegistry();
+    const groups = createGltfPacketBatchSegmentGroups();
+    const current = segment([tuple(10), tuple(20)]);
+    beginGltfPacketBatchRegistryFrame(registry);
+    groupGltfPacketSubmissionSegment(registry, groups, current.workspace, 7, current.catalog);
+    expect(Array.from(registry.packetBatchIds.subarray(0, 2))).toEqual([0, 1]);
+
+    beginGltfPacketBatchRegistryFrame(registry);
+    groupGltfPacketSubmissionSegment(registry, groups, current.workspace, 7, current.catalog);
+    expect(Array.from(current.workspace.batchIds.subarray(0, 2))).toEqual([0, 1]);
+    expect(registry.batchCount).toBe(2);
+
+    current.workspace.geometryIdentityIds[0] = 30;
+    groupGltfPacketSubmissionSegment(registry, groups, current.workspace, 7, current.catalog);
+    expect(Array.from(current.workspace.batchIds.subarray(0, 2))).toEqual([2, 1]);
+    expect(Array.from(registry.packetBatchIds.subarray(0, 2))).toEqual([2, 1]);
+    expect(registry.batchCount).toBe(3);
+  });
+
   it("retains first-seen global and per-class order with prefix/scatter ranges", () => {
     const blended = tuple(1, 1, 0, 0, FRAME_PACKET_RENDER_CLASS.blended);
     const opaqueA = tuple(2);

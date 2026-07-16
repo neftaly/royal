@@ -424,6 +424,19 @@ export const preparedGltfPacketSubmissionMaterialBindingId = <M, R, L>(
   );
 };
 
+/** Returns a root binding already retained from the authoritative source in this frame. */
+export const preparedGltfPacketSubmissionRootBindingId = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  rootSourceId: number,
+): number | undefined => {
+  const state = workspace as WorkspaceState<M, R, L>;
+  return retainedBindingId(
+    state.rootBindingIdsBySource,
+    state.rootBindingIdsBySparseSource,
+    rootSourceId,
+  );
+};
+
 export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   planRevision: number,

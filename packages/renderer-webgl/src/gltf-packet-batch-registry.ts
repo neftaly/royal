@@ -33,6 +33,9 @@ export interface GltfPacketBatchRegistry {
   batchTouchedEpochs: Uint32Array;
   frameEpoch: number;
   generation: number;
+  packetBatchCatalog: FramePacketCatalog | undefined;
+  packetBatchCatalogRevision: number;
+  packetBatchIds: Uint32Array;
   slotBatchIds: Uint32Array;
   slotCapacity: number;
   slotMask: number;
@@ -187,6 +190,9 @@ export const createGltfPacketBatchRegistry = (
     batchTouchedEpochs: new Uint32Array(batches),
     frameEpoch: initialFrameEpoch,
     generation: 1,
+    packetBatchCatalog: undefined,
+    packetBatchCatalogRevision: 0,
+    packetBatchIds: new Uint32Array(1).fill(EMPTY_SLOT),
     slotBatchIds: new Uint32Array(slots).fill(EMPTY_SLOT),
     slotCapacity: slots,
     slotMask: slots - 1,
@@ -427,6 +433,52 @@ const beginEpoch = (groups: GltfPacketBatchSegmentGroups): number => {
   return groups.epoch;
 };
 
+const preparePacketBatchIds = (
+  registry: GltfPacketBatchRegistry,
+  catalog: FramePacketCatalog,
+): void => {
+  if (registry.packetBatchCatalog === catalog
+    && registry.packetBatchCatalogRevision === catalog.revision) return;
+  if (registry.packetBatchIds.length < catalog.count) {
+    registry.packetBatchIds = new Uint32Array(powerOfTwo(Math.max(1, catalog.count)));
+  }
+  registry.packetBatchIds.fill(EMPTY_SLOT);
+  registry.packetBatchCatalog = catalog;
+  registry.packetBatchCatalogRevision = catalog.revision;
+};
+
+const batchForPreparedPacket = (
+  registry: GltfPacketBatchRegistry,
+  packetIndex: number,
+  geometryIdentityId: number,
+  materialBatchClassId: number,
+  lightScopeId: number,
+  sidedness: number,
+  renderClass: FramePacketRenderClass,
+): number => {
+  const cached = registry.packetBatchIds[packetIndex]!;
+  if (cached !== EMPTY_SLOT
+    && registry.batchRenderClasses[cached] === renderClass
+    && sameIdentity(
+      registry,
+      cached,
+      geometryIdentityId,
+      materialBatchClassId,
+      lightScopeId,
+      sidedness,
+    )) return cached;
+  const batchId = internBatch(
+    registry,
+    geometryIdentityId,
+    materialBatchClassId,
+    lightScopeId,
+    sidedness,
+    renderClass,
+  );
+  registry.packetBatchIds[packetIndex] = batchId;
+  return batchId;
+};
+
 const appendClassBatch = (
   groups: GltfPacketBatchSegmentGroups,
   renderClass: FramePacketRenderClass,
@@ -586,12 +638,14 @@ const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
   while ((registry.batchCount + workspace.count) * 2 > registry.slotCapacity) {
     rehash(registry, registry.slotCapacity * 2);
   }
+  preparePacketBatchIds(registry, catalog);
   const epoch = beginEpoch(groups);
 
   for (let memberIndex = 0; memberIndex < workspace.count; memberIndex += 1) {
     const renderClass = workspace.renderClasses[memberIndex]! as FramePacketRenderClass;
-    const batchId = internBatch(
+    const batchId = batchForPreparedPacket(
       registry,
+      workspace.packetIndices[memberIndex]!,
       workspace.geometryIdentityIds[memberIndex]!,
       workspace.materialBatchClassIds[memberIndex]!,
       workspace.lightScopeIds[memberIndex]!,
@@ -673,6 +727,9 @@ export const clearGltfPacketBatchRegistry = (registry: GltfPacketBatchRegistry):
   registry.batchTouchedEpochs.fill(0);
   registry.batchCount = 0;
   registry.frameEpoch = 0;
+  registry.packetBatchCatalog = undefined;
+  registry.packetBatchCatalogRevision = 0;
+  registry.packetBatchIds.fill(EMPTY_SLOT);
   registry.touchedBatchCount = 0;
 };
 

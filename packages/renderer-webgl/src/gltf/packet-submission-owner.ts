@@ -1,4 +1,4 @@
-import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
+import type { Transform } from "@royal/renderer-core";
 import {
   FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
@@ -8,6 +8,7 @@ import {
 import {
   appendPreparedGltfPacketSubmission,
   preparedGltfPacketSubmissionMaterialBindingId,
+  preparedGltfPacketSubmissionRootBindingId,
   resetGltfPacketSubmissionWorkspaceForFrame,
   resetGltfPacketSubmissionWorkspaceForSegment,
   resetGltfPacketSubmissionWorkspaceForView,
@@ -17,7 +18,6 @@ import {
   type GltfPacketSubmissionRow,
 } from "../gltf-packet-submission-workspace";
 import { GLTF_PACKET_ROOT_SOURCE_KIND } from "../gltf-packet-topology";
-import type { Mat4 } from "../math/mat4";
 import {
   packetLocalModelDeterminant,
   readPacketRootSourceInto,
@@ -82,10 +82,10 @@ const createCounters = (): GltfInstancingCounters => ({
   rootScaleUploadCalls: 0,
 });
 
-const orientationDeterminant = (matrix: Mat4): number =>
-  matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
-  - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
-  + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
+const transformOrientationDeterminant = (transform: Transform | undefined): number => {
+  const scale = transform?.scale;
+  return scale === undefined ? 1 : scale[0] * scale[1] * scale[2];
+};
 
 /** Owns selected glTF packet translation, binding identity, and frame batching. */
 export class GltfPacketSubmissionOwner {
@@ -220,9 +220,8 @@ export class GltfPacketSubmissionOwner {
     const instanceViews = node.kind === "gltf-instances"
       ? this.#instanceTransforms.views(node.instances)
       : undefined;
-    const rootHandle = node.kind === "gltf" ? this.#sceneBindings.handle(node) : undefined;
     const ordinaryRootTransform = node.kind === "gltf"
-      ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
+      ? this.#sceneBindings.transform(node)
       : undefined;
     const ordinaryRootModel = node.kind === "gltf"
       ? this.#sceneBindings.modelMatrix(node)
@@ -315,7 +314,7 @@ export class GltfPacketSubmissionOwner {
         throw new Error("Royal retained glTF packet root source has no current transform");
       }
       if (outerIndex !== determinantOuterIndex) {
-        rootDeterminant = orientationDeterminant(rootModel);
+        rootDeterminant = transformOrientationDeterminant(rootTransform);
         determinantOuterIndex = outerIndex;
       }
       const packetSidedness = catalog.sidedness[packetIndex]!;
@@ -335,44 +334,35 @@ export class GltfPacketSubmissionOwner {
         }
       }
       const rootSourceId = catalog.rootSourceIds[packetIndex]!;
-      let rootBinding = this.#rootBindings[rootSourceId];
-      if (rootBinding === undefined) {
-        rootBinding = {
-          rootModel,
-          rootSignatureInstanceIndex: -1,
-          rootSignatureRenderInstanceOrdinal: 0,
-          rootTransform,
-        };
-        this.#rootBindings[rootSourceId] = rootBinding;
-      }
-      rootBinding.rootModel = rootModel;
-      rootBinding.rootSignatureInstanceIndex = instanceViews === undefined ? -1 : outerIndex;
-      rootBinding.rootSignatureRenderInstanceOrdinal = renderInstanceOrdinal;
-      rootBinding.rootTransform = rootTransform;
-      if (instanceViews === undefined) delete rootBinding.rootInstanceViews;
-      else rootBinding.rootInstanceViews = instanceViews;
-      if (instanceViews !== undefined) {
-        rootBinding.rootPositionSignatureVersion = instanceViews.sourceKey;
-        rootBinding.rootRotationSignatureVersion = instanceViews.sourceKey;
-        rootBinding.rootScaleSignatureVersion = instanceViews.sourceKey;
-      } else if (rootHandle === undefined) {
-        delete rootBinding.rootPositionSignatureVersion;
-        delete rootBinding.rootRotationSignatureVersion;
-        delete rootBinding.rootScaleSignatureVersion;
-      } else {
-        rootBinding.rootPositionSignatureVersion = rootHandle.positionVersion;
-        rootBinding.rootRotationSignatureVersion = rootHandle.rotationVersion;
-        rootBinding.rootScaleSignatureVersion = rootHandle.scaleVersion;
-      }
-      const rootBindingId = retainGltfPacketSubmissionRootBinding(
+      let rootBindingId = preparedGltfPacketSubmissionRootBindingId(
         this.#batches.workspace,
-        planRevision,
-        catalog,
         rootSourceId,
-        outerIndex,
-        lightScopeId,
-        rootBinding,
       );
+      if (rootBindingId === undefined) {
+        let rootBinding = this.#rootBindings[rootSourceId];
+        if (rootBinding === undefined) {
+          rootBinding = {
+            rootModel,
+            rootLogicalIndex: -1,
+            rootTransform,
+          };
+          this.#rootBindings[rootSourceId] = rootBinding;
+        }
+        rootBinding.rootModel = rootModel;
+        rootBinding.rootLogicalIndex = instanceViews === undefined ? -1 : outerIndex;
+        rootBinding.rootTransform = rootTransform;
+        if (instanceViews === undefined) delete rootBinding.rootInstanceViews;
+        else rootBinding.rootInstanceViews = instanceViews;
+        rootBindingId = retainGltfPacketSubmissionRootBinding(
+          this.#batches.workspace,
+          planRevision,
+          catalog,
+          rootSourceId,
+          outerIndex,
+          lightScopeId,
+          rootBinding,
+        );
+      }
       const lightBindingId = assetLights === undefined
         ? NO_FRAME_PACKET_ID
         : retainGltfPacketSubmissionLightBinding(
