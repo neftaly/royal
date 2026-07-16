@@ -78,6 +78,8 @@ type UniformSlot = {
   readonly value: number[];
 };
 
+type UniformSlots = Record<string, UniformSlot | undefined>;
+
 type State = {
   activeProgram?: WebGLProgram;
   readonly gl: WebGL2RenderingContext;
@@ -91,7 +93,7 @@ type State = {
   readonly requests: Map<number, Request>;
   startFrame: number;
   startsThisFrame: number;
-  readonly uniforms: Map<WebGLProgram, Map<string, UniformSlot>>;
+  readonly uniforms: Map<WebGLProgram, UniformSlots>;
   wakeRequested: boolean;
 };
 
@@ -316,13 +318,13 @@ const uniformSlot = (
 ): UniformSlot => {
   let uniforms = state.uniforms.get(program);
   if (uniforms === undefined) {
-    uniforms = new Map();
+    uniforms = Object.create(null) as UniformSlots;
     state.uniforms.set(program, uniforms);
   }
-  let slot = uniforms.get(name);
+  let slot = uniforms[name];
   if (slot !== undefined) return slot;
   slot = { location: state.gl.getUniformLocation(program, name), value: [] };
-  uniforms.set(name, slot);
+  uniforms[name] = slot;
   return slot;
 };
 
@@ -333,7 +335,7 @@ const valueCached = (
 ): boolean => {
   if (cached.length !== length) return false;
   for (let index = 0; index < length; index += 1) {
-    if (!Object.is(cached[index], value[index])) return false;
+    if (cached[index] !== value[index]) return false;
   }
   return true;
 };
@@ -414,10 +416,10 @@ export const uniform4f = (
   const cached = slot.value;
   if (
     cached?.length === 4
-    && Object.is(cached[0], x)
-    && Object.is(cached[1], y)
-    && Object.is(cached[2], z)
-    && Object.is(cached[3], w)
+    && cached[0] === x
+    && cached[1] === y
+    && cached[2] === z
+    && cached[3] === w
   ) return;
   const location = slot.location;
   if (location === null) return;
@@ -432,7 +434,7 @@ export const uniform1i = (arena: ProgramArena, program: WebGLProgram, name: stri
   const state = arena as unknown as State;
   const slot = uniformSlot(state, program, name);
   const cached = slot.value;
-  if (cached?.length === 1 && Object.is(cached[0], value)) return;
+  if (cached?.length === 1 && cached[0] === value) return;
   const location = slot.location;
   if (location === null) return;
   state.gl.uniform1i(location, value);
@@ -443,7 +445,7 @@ export const uniform1f = (arena: ProgramArena, program: WebGLProgram, name: stri
   const state = arena as unknown as State;
   const slot = uniformSlot(state, program, name);
   const cached = slot.value;
-  if (cached?.length === 1 && Object.is(cached[0], value)) return;
+  if (cached?.length === 1 && cached[0] === value) return;
   const location = slot.location;
   if (location === null) return;
   state.gl.uniform1f(location, value);
@@ -473,7 +475,7 @@ export const uniform2f = (
   const state = arena as unknown as State;
   const slot = uniformSlot(state, program, name);
   const cached = slot.value;
-  if (cached?.length === 2 && Object.is(cached[0], x) && Object.is(cached[1], y)) return;
+  if (cached?.length === 2 && cached[0] === x && cached[1] === y) return;
   const location = slot.location;
   if (location === null) return;
   state.gl.uniform2f(location, x, y);
@@ -522,10 +524,11 @@ export const programArenaSnapshot = (arena: ProgramArena): ProgramArenaSnapshot 
     if (request.resource?.linked === true) linkedProgramCount += 1;
   }
   let uniformLocationCount = 0;
-  for (const uniforms of state.uniforms.values()) uniformLocationCount += uniforms.size;
+  for (const uniforms of state.uniforms.values()) uniformLocationCount += Object.keys(uniforms).length;
   let uniformValueCount = 0;
   for (const uniforms of state.uniforms.values()) {
-    for (const slot of uniforms.values()) {
+    for (const slot of Object.values(uniforms)) {
+      if (slot === undefined) continue;
       if (slot.value.length !== 0) uniformValueCount += 1;
     }
   }

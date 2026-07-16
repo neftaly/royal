@@ -133,7 +133,7 @@ describe("program arena", () => {
     expect(requestProgram(arena, 2, "postprocess")).toBeDefined();
   });
 
-  it("caches active programs, locations, scalar values, NaN, signed zero, and vec2 values", () => {
+  it("caches active programs, locations, finite scalar values, equivalent signed zero, and vec2 values", () => {
     const gl = new FakeGl();
     const arena = createProgramArena(context(gl));
     const program = requestProgram(arena, 0, "wireframe")!.program;
