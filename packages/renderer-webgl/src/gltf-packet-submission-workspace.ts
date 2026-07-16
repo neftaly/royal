@@ -587,7 +587,9 @@ const appendValidatedSubmission = <M, R, L>(
   workspace.rootBindingIds[index] = row.rootBindingId;
   workspace.sidedness[index] = row.sidedness;
   workspace.count = index + 1;
-  advanceSegmentRevision(workspace);
+  // One revision invalidates any grouping of the previously empty segment;
+  // later dense appends belong to the same unpublished construction epoch.
+  if (index === 0) advanceSegmentRevision(workspace);
   return index;
 };
 

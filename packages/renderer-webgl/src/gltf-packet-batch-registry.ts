@@ -595,6 +595,7 @@ export const assertGltfPacketBatchSegmentGroupsCurrent = <M, R, L>(
     || groups.registryGeneration !== registry.generation
     || groups.workspace !== workspace
     || groups.segmentRevision !== workspace.segmentRevision
+    || groups.memberCount !== workspace.count
     || groups.planRevision !== planRevision
     || groups.catalog !== catalog
     || groups.catalogRevision !== catalog.revision) {
