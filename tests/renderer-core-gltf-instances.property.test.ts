@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createGltfInstanceTransforms,
+  type GltfInstanceTransformChannel,
 } from "@royal/renderer-core";
 import { assertFuzzArrayEqual, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
@@ -19,7 +20,7 @@ describe("glTF instance transform properties", () => {
       let secondRootCalls = 0;
       let lastPoseCount = 0;
       let lastPoseVersion = 0;
-      const listener = (kind: "pose" | "scale", _start: number, committedCount: number, version: number): void => {
+      const listener = (kind: GltfInstanceTransformChannel, _start: number, committedCount: number, version: number): void => {
         calls += 1;
         if (kind === "pose") {
           lastPoseCount = committedCount;
@@ -57,6 +58,40 @@ describe("glTF instance transform properties", () => {
       assertFuzzEqual(secondRootCalls, 33, "remaining secondary listener calls");
       unsubscribeSecondRoot();
     });
+  });
+
+  it('reports the narrowest committed channel while sharing pose versions', () => {
+    const transforms = createGltfInstanceTransforms({ count: 2 });
+    const notifications: Array<[GltfInstanceTransformChannel, number, number, number]> = [];
+    transforms.subscribe((...notification) => notifications.push(notification));
+
+    transforms.positions[3] = 1;
+    transforms.commitPosition(1, 1);
+    transforms.rotations[0] = 0.5;
+    transforms.commitRotation(0, 1);
+    transforms.commitPose();
+    transforms.commitScale(1, 1);
+
+    expect(notifications).toEqual([
+      ['position', 1, 1, 2],
+      ['rotation', 0, 1, 3],
+      ['pose', 0, 2, 4],
+      ['scale', 1, 1, 2],
+    ]);
+    expect(transforms.poseVersion).toBe(4);
+    expect(transforms.scaleVersion).toBe(2);
+  });
+
+  it('validates only the channel named by narrow commits', () => {
+    const transforms = createGltfInstanceTransforms({ count: 1 });
+    transforms.rotations[0] = Number.NaN;
+    expect(() => transforms.commitPosition()).not.toThrow();
+    expect(() => transforms.commitRotation()).toThrow(/finite/);
+
+    transforms.rotations[0] = 0;
+    transforms.positions[0] = Number.NaN;
+    expect(() => transforms.commitRotation()).not.toThrow();
+    expect(() => transforms.commitPosition()).toThrow(/finite/);
   });
 
   it('rejects non-finite committed values and snapshots unique logical ids', () => {

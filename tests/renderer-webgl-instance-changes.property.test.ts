@@ -57,4 +57,27 @@ describe('bulk instance change tracking', () => {
     expect(isInstanceDirty(tracker.activePose, 42)).toBe(false);
     expect(isInstanceDirty(tracker.activePose, 77)).toBe(true);
   });
+
+  it('tracks position and rotation work at their narrowest shared layers', () => {
+    const tracker = new GltfInstanceChangeTracker(8);
+    tracker.beginFrame();
+    tracker.beginFrame();
+
+    tracker.commit('position', 1, 1);
+    tracker.commit('rotation', 3, 1);
+    tracker.commit('pose', 5, 1);
+    tracker.beginFrame();
+
+    expect(isInstanceDirty(tracker.activePose, 1)).toBe(true);
+    expect(isInstanceDirty(tracker.activeRotation, 1)).toBe(false);
+    expect(isInstanceDirty(tracker.activePose, 3)).toBe(true);
+    expect(isInstanceDirty(tracker.activeRotation, 3)).toBe(true);
+    expect(isInstanceDirty(tracker.activePose, 5)).toBe(true);
+    expect(isInstanceDirty(tracker.activeRotation, 5)).toBe(true);
+
+    tracker.abortFrame();
+    tracker.beginFrame();
+    expect(isInstanceDirty(tracker.activePose, 1)).toBe(true);
+    expect(isInstanceDirty(tracker.activeRotation, 3)).toBe(true);
+  });
 });

@@ -23,7 +23,9 @@ const trackedSource = (count: number, unsubscribeFailures = 0): TrackedSource =>
   let activeSubscriptions = 0;
   let unsubscribeAttempts = 0;
   const tracked: GltfInstanceTransforms = {
+    commitPosition: source.commitPosition,
     commitPose: source.commitPose,
+    commitRotation: source.commitRotation,
     commitScale: source.commitScale,
     count: source.count,
     ...(source.logicalIds === undefined ? {} : { logicalIds: source.logicalIds }),
@@ -144,7 +146,7 @@ describe("glTF instance transform registry", () => {
     registry.endFrame(true);
   });
 
-  it("preserves the matrix basis across position-only pose commits", () => {
+  it("preserves the matrix basis across position commits", () => {
     const tracked = trackedSource(1);
     tracked.source.rotations.set([0.3, -0.4, 0.5]);
     tracked.source.scales.set([2, 3, 4]);
@@ -154,7 +156,7 @@ describe("glTF instance transform registry", () => {
     const basis = initial.slice(0, 12);
 
     tracked.source.positions.set([7, 8, 9]);
-    tracked.source.commitPose();
+    tracked.source.commitPosition();
     registry.beginFrame();
     const translated = registry.views(tracked.source).rootModels[0]!;
     expect(translated.slice(0, 12)).toEqual(basis);

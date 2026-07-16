@@ -27,15 +27,19 @@ export interface GltfInstanceTransforms {
   readonly scaleVersion: number;
   /** Packed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales: Float32Array;
+  /** Notify attached renderer roots after mutating positions only. */
+  commitPosition(startIndex?: number, count?: number): void;
   /** Notify attached renderer roots after mutating positions or rotations. */
   commitPose(startIndex?: number, count?: number): void;
+  /** Notify attached renderer roots after mutating rotations only. */
+  commitRotation(startIndex?: number, count?: number): void;
   /** Notify attached renderer roots after mutating scales. Negative scales are unsupported. */
   commitScale(startIndex?: number, count?: number): void;
   /** Observe committed logical ranges. Each renderer owns its own consumption state. */
   subscribe(listener: GltfInstanceTransformsListener): () => void;
 }
 
-export type GltfInstanceTransformChannel = 'pose' | 'scale';
+export type GltfInstanceTransformChannel = 'position' | 'pose' | 'rotation' | 'scale';
 
 export type GltfInstanceTransformsListener = (
   channel: GltfInstanceTransformChannel,
@@ -89,7 +93,9 @@ const validateInstanceTransforms = (value: unknown): GltfInstanceTransforms => {
       throw new TypeError(`glTF instances instances.${field} must be a positive safe integer`);
     }
   }
-  for (const field of ['commitPose', 'commitScale', 'subscribe'] as const) {
+  for (const field of [
+    'commitPosition', 'commitPose', 'commitRotation', 'commitScale', 'subscribe',
+  ] as const) {
     if (typeof resource[field] !== 'function') {
       throw new TypeError(`glTF instances instances.${field} must be a function`);
     }
@@ -224,6 +230,15 @@ export const createGltfInstanceTransforms = (
   const transforms: GltfInstanceTransforms = {
     count,
     ...(logicalIds === undefined ? {} : { logicalIds }),
+    commitPosition: (startIndex, committedCount) => {
+      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
+      assertCommittedRange(count, startIndex, committedCount);
+      const start = startIndex ?? 0;
+      const rangeCount = committedCount ?? count - start;
+      validateFiniteChannel(positions, 'positions', start * 3, (start + rangeCount) * 3);
+      poseVersion += 1;
+      notify('position', start, rangeCount, poseVersion);
+    },
     commitPose: (startIndex, committedCount) => {
       if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
       assertCommittedRange(count, startIndex, committedCount);
@@ -235,6 +250,15 @@ export const createGltfInstanceTransforms = (
       validateFiniteChannel(rotations, 'rotations', startOffset, endOffset);
       poseVersion += 1;
       notify('pose', start, rangeCount, poseVersion);
+    },
+    commitRotation: (startIndex, committedCount) => {
+      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
+      assertCommittedRange(count, startIndex, committedCount);
+      const start = startIndex ?? 0;
+      const rangeCount = committedCount ?? count - start;
+      validateFiniteChannel(rotations, 'rotations', start * 3, (start + rangeCount) * 3);
+      poseVersion += 1;
+      notify('rotation', start, rangeCount, poseVersion);
     },
     commitScale: (startIndex, committedCount) => {
       if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');

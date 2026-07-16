@@ -319,7 +319,7 @@ function InstanceAnimation() {
     for (let index = 0; index < instances.count; index += 1) {
       instances.rotations[index * 3 + 1] = elapsedSeconds;
     }
-    instances.commitPose();
+    instances.commitRotation();
   });
   return null;
 }
@@ -327,12 +327,15 @@ function InstanceAnimation() {
 return <Canvas scene={renderScene}><InstanceAnimation /></Canvas>;
 ```
 
-`commitPose(start, count)` and `commitScale(start, count)` identify the exact
-logical rows changed. Royal coalesces adjacent packed uploads independently in
-every attached renderer root; commits never render React objects per instance.
-Pose values must be finite and scales must be finite and non-negative. Optional
-unique `logicalIds` remain stable picking identity when culling repacks GPU
-slots. Canvas coalesces commit invalidations at the end of the active frame.
+Use `commitPosition(start, count)`, `commitRotation(start, count)`, or
+`commitScale(start, count)` to identify the exact channel and logical rows
+changed. Use `commitPose(start, count)` after changing both positions and
+rotations. Royal coalesces adjacent packed uploads independently in every
+attached renderer root; commits never render React objects per instance.
+Position and rotation values must be finite, and scales must be finite and
+non-negative. Optional unique `logicalIds` remain stable picking identity when
+culling repacks GPU slots. Canvas coalesces commit invalidations at the end of
+the active frame.
 
 ## Workflows
 

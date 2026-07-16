@@ -588,7 +588,9 @@ describe("WebGL root context lifecycle contracts", () => {
     let activeSubscriptions = 0;
     let unsubscribeAttempts = 0;
     const instances: GltfInstanceTransforms = {
+      commitPosition: base.commitPosition,
       commitPose: base.commitPose,
+      commitRotation: base.commitRotation,
       commitScale: base.commitScale,
       count: base.count,
       get poseVersion() {

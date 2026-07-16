@@ -147,7 +147,7 @@ const InstancedCubeAnimation = ({
         positions[offset + 1] = instance.position[1] + lift;
         positions[offset + 2] = instance.position[2];
       }
-      group.instances.commitPose();
+      group.instances.commitPosition();
     }
   });
 

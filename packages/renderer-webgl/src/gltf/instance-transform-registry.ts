@@ -20,7 +20,10 @@ export interface GltfInstanceTransformReferenceChange {
 }
 
 export interface GltfInstanceTransformView {
-  readonly changes: Pick<GltfInstanceChangeTracker, "activePose" | "activeScale">;
+  readonly changes: Pick<
+    GltfInstanceChangeTracker,
+    "activePose" | "activeRotation" | "activeScale"
+  >;
   readonly framePoseVersion: number;
   readonly frameScaleVersion: number;
   /** One when the synchronized scale preserves mesh winding, zero when it reverses it. */
@@ -72,10 +75,11 @@ const applyInstanceMatrix = (
   views: GltfInstanceTransformViewState,
   index: number,
   poseDirty: boolean,
+  rotationDirty: boolean,
   scaleDirty: boolean,
 ): void => {
   const offset = index * 3;
-  const rotationChanged = poseDirty
+  const rotationChanged = rotationDirty
     && !sameVector3(views.matrixRotations, views.source.rotations, offset);
   const scaleChanged = scaleDirty
     && !sameVector3(views.matrixScales, views.source.scales, offset);
@@ -219,6 +223,7 @@ export class GltfInstanceTransformRegistry {
     }
     if (this.#frameActive && !views.activeApplied) {
       const pose = views.changes.activePose;
+      const rotation = views.changes.activeRotation;
       const scale = views.changes.activeScale;
       const firstWord = Math.min(pose.minDirtyWord, scale.minDirtyWord);
       const lastWord = Math.max(pose.maxDirtyWord, scale.maxDirtyWord);
@@ -233,6 +238,7 @@ export class GltfInstanceTransformRegistry {
               views,
               index,
               (pose.words[wordIndex]! & bitMask) !== 0,
+              (rotation.words[wordIndex]! & bitMask) !== 0,
               (scale.words[wordIndex]! & bitMask) !== 0,
             );
           }
@@ -250,7 +256,7 @@ export class GltfInstanceTransformRegistry {
       )
     ) {
       for (let index = 0; index < views.transforms.length; index += 1) {
-        applyInstanceMatrix(views, index, true, true);
+        applyInstanceMatrix(views, index, true, true, true);
       }
       views.matrixPoseVersion = source.poseVersion;
       views.matrixScaleVersion = source.scaleVersion;

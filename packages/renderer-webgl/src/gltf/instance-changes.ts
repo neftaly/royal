@@ -75,34 +75,50 @@ export const isPackedInstanceSlotDirty = (
 
 export class GltfInstanceChangeTracker {
   activePose: InstanceDirtyBits;
+  activeRotation: InstanceDirtyBits;
   activeScale: InstanceDirtyBits;
   pendingPose: InstanceDirtyBits;
+  pendingRotation: InstanceDirtyBits;
   pendingScale: InstanceDirtyBits;
 
   constructor(readonly count: number) {
     this.activePose = createInstanceDirtyBits(count);
+    this.activeRotation = createInstanceDirtyBits(count);
     this.activeScale = createInstanceDirtyBits(count);
     this.pendingPose = createInstanceDirtyBits(count, true);
+    this.pendingRotation = createInstanceDirtyBits(count, true);
     this.pendingScale = createInstanceDirtyBits(count, true);
   }
 
   beginFrame(): void {
     clearInstanceDirtyBits(this.activePose);
+    clearInstanceDirtyBits(this.activeRotation);
     clearInstanceDirtyBits(this.activeScale);
     const previousActivePose = this.activePose;
+    const previousActiveRotation = this.activeRotation;
     const previousActiveScale = this.activeScale;
     this.activePose = this.pendingPose;
+    this.activeRotation = this.pendingRotation;
     this.activeScale = this.pendingScale;
     this.pendingPose = previousActivePose;
+    this.pendingRotation = previousActiveRotation;
     this.pendingScale = previousActiveScale;
   }
 
   abortFrame(): void {
     mergeInstanceDirtyBits(this.pendingPose, this.activePose);
+    mergeInstanceDirtyBits(this.pendingRotation, this.activeRotation);
     mergeInstanceDirtyBits(this.pendingScale, this.activeScale);
   }
 
-  commit(channel: 'pose' | 'scale', startIndex: number, count: number): void {
-    markInstanceDirtyRange(channel === 'pose' ? this.pendingPose : this.pendingScale, startIndex, count);
+  commit(channel: 'position' | 'pose' | 'rotation' | 'scale', startIndex: number, count: number): void {
+    if (channel === 'scale') {
+      markInstanceDirtyRange(this.pendingScale, startIndex, count);
+      return;
+    }
+    markInstanceDirtyRange(this.pendingPose, startIndex, count);
+    if (channel === 'rotation' || channel === 'pose') {
+      markInstanceDirtyRange(this.pendingRotation, startIndex, count);
+    }
   }
 }
