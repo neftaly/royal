@@ -788,8 +788,10 @@ export const gltfInstancingSnapshotKeys = [
   "instancesDrawn",
   "localModelUploadBytes",
   "localModelUploadCalls",
-  "rootPoseUploadBytes",
-  "rootPoseUploadCalls",
+  "rootPositionUploadBytes",
+  "rootPositionUploadCalls",
+  "rootRotationUploadBytes",
+  "rootRotationUploadCalls",
   "rootScaleUploadBytes",
   "rootScaleUploadCalls",
 ] as const satisfies readonly (keyof WebGlGltfInstancingSnapshot)[];

@@ -25,6 +25,7 @@ class FakeGl {
   readonly ELEMENT_ARRAY_BUFFER = 0x8893;
   readonly DYNAMIC_DRAW = 0x88e8;
   readonly deletedBuffers: Handle[] = [];
+  bufferSubDataFailure?: Error;
   #serial = 1;
 
   createBuffer = (): WebGLBuffer => ({ serial: this.#serial++ } as unknown as WebGLBuffer);
@@ -39,7 +40,9 @@ class FakeGl {
     _data: AllowSharedBufferSource,
     _sourceOffset?: number,
     _length?: number,
-  ): void => {};
+  ): void => {
+    if (this.bufferSubDataFailure !== undefined) throw this.bufferSubDataFailure;
+  };
   bindVertexArray = (_vertexArray: WebGLVertexArrayObject | null): void => {};
 }
 
@@ -48,8 +51,10 @@ const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2R
 const counters = (): GltfInstanceBufferUploadCounters => ({
   localModelUploadBytes: 0,
   localModelUploadCalls: 0,
-  rootPoseUploadBytes: 0,
-  rootPoseUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
@@ -169,8 +174,10 @@ describe("glTF instance-buffer arena", () => {
     expect(firstCounters).toEqual({
       localModelUploadBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
       localModelUploadCalls: 1,
-      rootPoseUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootPoseUploadCalls: 1,
+      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
+      rootPositionUploadCalls: 1,
+      rootRotationUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
+      rootRotationUploadCalls: 1,
       rootScaleUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
       rootScaleUploadCalls: 1,
     });
@@ -196,11 +203,13 @@ describe("glTF instance-buffer arena", () => {
     expect(sink).toEqual(initial);
 
     bindValues(arena, gl, sink, { rootTransforms: [root(2, 1)] });
-    expect(sink.rootPoseUploadCalls).toBe(initial.rootPoseUploadCalls + 1);
+    expect(sink.rootPositionUploadCalls).toBe(initial.rootPositionUploadCalls + 1);
+    expect(sink.rootRotationUploadCalls).toBe(initial.rootRotationUploadCalls);
     expect(sink.rootScaleUploadCalls).toBe(initial.rootScaleUploadCalls);
 
     bindValues(arena, gl, sink, { rootTransforms: [root(2, 2)] });
-    expect(sink.rootPoseUploadCalls).toBe(initial.rootPoseUploadCalls + 1);
+    expect(sink.rootPositionUploadCalls).toBe(initial.rootPositionUploadCalls + 1);
+    expect(sink.rootRotationUploadCalls).toBe(initial.rootRotationUploadCalls);
     expect(sink.rootScaleUploadCalls).toBe(initial.rootScaleUploadCalls + 1);
 
     clearGltfInstanceBufferArena(arena);
@@ -214,7 +223,8 @@ describe("glTF instance-buffer arena", () => {
     const sink = counters();
     const source = (version: number): GltfInstanceBufferSource => ({
       changes: {
-        activePose: createInstanceDirtyBits(2),
+        activePosition: createInstanceDirtyBits(2),
+        activeRotation: createInstanceDirtyBits(2),
         activeScale: createInstanceDirtyBits(2),
       },
       framePoseVersion: version,
@@ -298,6 +308,48 @@ describe("glTF instance-buffer arena", () => {
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
+  it("publishes repacked membership only after every GPU lane succeeds", () => {
+    const gl = new FakeGl();
+    const vertexInputs = createVertexInputArena();
+    const arena = createGltfInstanceBufferArena(vertexInputs);
+    const sink = counters();
+    const source: GltfInstanceBufferSource = {
+      changes: {
+        activePosition: createInstanceDirtyBits(2),
+        activeRotation: createInstanceDirtyBits(2),
+        activeScale: createInstanceDirtyBits(2),
+      },
+      framePoseVersion: 1,
+      frameScaleVersion: 1,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0]),
+      rotations: new Float32Array(6),
+      scales: new Float32Array(6).fill(1),
+    };
+    const packedLogicalIndex = () => (arena as unknown as {
+      readonly resources: Map<number, { readonly packedLogicalIndices: Int32Array }>;
+    }).resources.get(1)!.packedLogicalIndices[0];
+
+    beginGltfInstanceBufferArenaFrame(arena);
+    bindValues(arena, gl, sink, { logicalIndices: [0], rootSources: [source] });
+    expect(packedLogicalIndex()).toBe(0);
+    const beforeRetry = { ...sink };
+
+    gl.bufferSubDataFailure = new Error("repack upload failed");
+    expect(() => bindValues(arena, gl, sink, { logicalIndices: [1], rootSources: [source] }))
+      .toThrow(gl.bufferSubDataFailure);
+    expect(packedLogicalIndex()).toBe(0);
+
+    delete gl.bufferSubDataFailure;
+    bindValues(arena, gl, sink, { logicalIndices: [1], rootSources: [source] });
+    expect(packedLogicalIndex()).toBe(1);
+    expect(sink.rootPositionUploadCalls).toBe(beforeRetry.rootPositionUploadCalls + 1);
+    expect(sink.rootRotationUploadCalls).toBe(beforeRetry.rootRotationUploadCalls + 1);
+    expect(sink.rootScaleUploadCalls).toBe(beforeRetry.rootScaleUploadCalls + 1);
+
+    clearGltfInstanceBufferArena(arena);
+    disposeVertexInputArena(vertexInputs, context(gl), 1);
+  });
+
   it("prunes independently active IDs and retains failed-frame creations for the next prune", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
@@ -337,7 +389,8 @@ describe("glTF instance-buffer arena", () => {
     beginGltfInstanceBufferArenaFrame(arena);
     expect(bindOne(arena, restoredGl, 2, 5, sink)).toBe(allocation);
     expect(sink.localModelUploadCalls).toBe(beforeRestore.localModelUploadCalls + 1);
-    expect(sink.rootPoseUploadCalls).toBe(beforeRestore.rootPoseUploadCalls + 1);
+    expect(sink.rootPositionUploadCalls).toBe(beforeRestore.rootPositionUploadCalls + 1);
+    expect(sink.rootRotationUploadCalls).toBe(beforeRestore.rootRotationUploadCalls + 1);
     expect(sink.rootScaleUploadCalls).toBe(beforeRestore.rootScaleUploadCalls + 1);
     expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(1);
     clearGltfInstanceBufferArena(arena);

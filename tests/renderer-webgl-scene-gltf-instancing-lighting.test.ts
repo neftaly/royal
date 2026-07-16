@@ -112,16 +112,18 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     for (let index = 477; index < 480; index += 1) {
       instances.positions[index * 3] = index * 0.000_01;
     }
-    instances.commitPose(477, 3);
+    instances.commitPosition(477, 3);
     await flushAnimationFrames(viewport.animationFrames);
     const frameCalls = fake.calls.slice(callsBeforeCommit);
     const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforeCommit);
 
     expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
-      { byteOffset: 477 * 6 * Float32Array.BYTES_PER_ELEMENT, floatLength: 18, floatOffset: 477 * 6 },
+      { byteOffset: 477 * 3 * Float32Array.BYTES_PER_ELEMENT, floatLength: 9, floatOffset: 477 * 3 },
     ]);
-    expect(counters.rootPoseUploadBytes).toBe(72);
-    expect(counters.rootPoseUploadCalls).toBe(1);
+    expect(counters.rootPositionUploadBytes).toBe(36);
+    expect(counters.rootPositionUploadCalls).toBe(1);
+    expect(counters.rootRotationUploadBytes).toBe(0);
+    expect(counters.rootRotationUploadCalls).toBe(0);
     expect(counters.rootScaleUploadBytes).toBe(0);
     expect(counters.rootScaleUploadCalls).toBe(0);
     renderRoot.dispose();
@@ -152,7 +154,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     renderRoot.render(renderGraph);
 
     instances.positions[3] = 0.75;
-    instances.commitPose(1, 1);
+    instances.commitPosition(1, 1);
     const uploadFailure = new Error("interrupted instance upload");
     vi.mocked(fake.gl.bufferSubData).mockImplementationOnce(() => {
       throw uploadFailure;
@@ -162,9 +164,9 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const callsBeforeRetry = fake.calls.length;
     renderRoot.render(renderGraph);
     const retryPose = bufferSubDataPayloads(fake.calls.slice(callsBeforeRetry))
-      .find((payload) => payload.length === 24);
+      .find((payload) => payload.length === 12);
     expect(retryPose).toBeDefined();
-    expect(roundVector(retryPose!.slice(6, 12))).toEqual([0.75, 0, 0, 0, 0, 0]);
+    expect(roundVector(retryPose!.slice(3, 6))).toEqual([0.75, 0, 0]);
     renderRoot.dispose();
   });
 
@@ -214,10 +216,13 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
       expect(instancedDrawCalls(frameCalls)).toHaveLength(1);
       expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
-        { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+        { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+        { byteOffset: 0, floatLength: 6, floatOffset: 0 },
       ]);
-      expect(counters.rootPoseUploadBytes).toBe(12 * Float32Array.BYTES_PER_ELEMENT);
-      expect(counters.rootPoseUploadCalls).toBe(1);
+      expect(counters.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
+      expect(counters.rootPositionUploadCalls).toBe(1);
+      expect(counters.rootRotationUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
+      expect(counters.rootRotationUploadCalls).toBe(1);
       expect(counters.rootScaleUploadBytes).toBe(0);
       expect(counters.rootScaleUploadCalls).toBe(0);
       expect(Array.from(instances.scales)).toEqual([0.5, 0.5, 0.5, 0.75, 0.75, 0.75]);
@@ -262,22 +267,26 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const countersBeforeSwap = renderRoot.snapshot().gltfInstancing;
     instances.positions[0] = 100;
     instances.positions[3] = -0.4;
-    instances.commitPose();
+    instances.commitPosition();
     await flushAnimationFrames(viewport.animationFrames);
     const swapCalls = fake.calls.slice(callsBeforeSwap);
     const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforeSwap);
 
     expect(instancedDrawCalls(swapCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(swapCalls)).toEqual([
-      { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
       { byteOffset: 0, floatLength: 3, floatOffset: 0 },
     ]);
     expect(bufferSubDataPayloads(swapCalls).map(roundVector)).toEqual([
-      [-0.4, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0],
+      [-0.4, 0, 0, 0.4, 0, 0],
+      [0, 0, 0],
       [1, 1, 1],
     ]);
-    expect(counters.rootPoseUploadBytes).toBe(12 * Float32Array.BYTES_PER_ELEMENT);
-    expect(counters.rootPoseUploadCalls).toBe(1);
+    expect(counters.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.rootPositionUploadCalls).toBe(1);
+    expect(counters.rootRotationUploadBytes).toBe(3 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.rootRotationUploadCalls).toBe(1);
     expect(counters.rootScaleUploadBytes).toBe(3 * Float32Array.BYTES_PER_ELEMENT);
     expect(counters.rootScaleUploadCalls).toBe(1);
 
@@ -372,12 +381,14 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(translatedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
     expect(translatedInstancing.batchPlansBuilt).toBe(0);
     expect(translatedInstancing.batchInstancesTotal).toBe(2);
-    expect(translatedInstancing.rootPoseUploadBytes).toBe(12 * Float32Array.BYTES_PER_ELEMENT);
-    expect(translatedInstancing.rootPoseUploadCalls).toBe(1);
+    expect(translatedInstancing.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
+    expect(translatedInstancing.rootPositionUploadCalls).toBe(1);
+    expect(translatedInstancing.rootRotationUploadBytes).toBe(0);
+    expect(translatedInstancing.rootRotationUploadCalls).toBe(0);
 
     const expandedRenderGraph = renderScene([
       directionalLight({
@@ -473,7 +484,8 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
     expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 32, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
       { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
 
@@ -563,14 +575,15 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const viewCalls = calls.slice(callsBeforeViews);
     const instancedDraws = instancedDrawCalls(viewCalls);
     const posePayloads = bufferSubDataPayloads(viewCalls)
-      .filter((payload) => payload.length === 12)
-      .map(roundVector);
+      .filter((payload) => payload.length === 6)
+      .map(roundVector)
+      .filter((payload) => payload.some((value) => value !== 0 && value !== 1));
 
     expect(instancedDraws).toHaveLength(2);
     expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
     expect(posePayloads).toEqual([
-      [-1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 1.5, 0, 0, 0, 0, 0],
+      [-1.5, 0, 0, 0, 0, 0],
+      [0, 0, 0, 1.5, 0, 0],
     ]);
     root.dispose();
   });

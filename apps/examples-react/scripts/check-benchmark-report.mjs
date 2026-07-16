@@ -69,8 +69,10 @@ const requiredGltfInstancingCounters = [
   'instancesDrawn',
   'localModelUploadBytes',
   'localModelUploadCalls',
-  'rootPoseUploadBytes',
-  'rootPoseUploadCalls',
+  'rootPositionUploadBytes',
+  'rootPositionUploadCalls',
+  'rootRotationUploadBytes',
+  'rootRotationUploadCalls',
   'rootScaleUploadBytes',
   'rootScaleUploadCalls',
 ];
@@ -141,7 +143,8 @@ const requireZero = (value, label) => {
 };
 
 const rootTransformUploadBytes = (counters) =>
-  (isNumber(counters?.rootPoseUploadBytes) ? counters.rootPoseUploadBytes : 0) +
+  (isNumber(counters?.rootPositionUploadBytes) ? counters.rootPositionUploadBytes : 0) +
+  (isNumber(counters?.rootRotationUploadBytes) ? counters.rootRotationUploadBytes : 0) +
   (isNumber(counters?.rootScaleUploadBytes) ? counters.rootScaleUploadBytes : 0);
 
 const instancedDrawCount = (counters) =>

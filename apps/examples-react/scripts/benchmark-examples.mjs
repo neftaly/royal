@@ -403,10 +403,10 @@ const gltfInstancingCounterDelta = (after, before) => {
 };
 
 const gltfInstancingRootTransformUploadBytes = (counters) =>
-  counters.rootPoseUploadBytes + counters.rootScaleUploadBytes;
+  counters.rootPositionUploadBytes + counters.rootRotationUploadBytes + counters.rootScaleUploadBytes;
 
 const gltfInstancingRootTransformUploadCalls = (counters) =>
-  counters.rootPoseUploadCalls + counters.rootScaleUploadCalls;
+  counters.rootPositionUploadCalls + counters.rootRotationUploadCalls + counters.rootScaleUploadCalls;
 
 const hasGltfInstancingCounters = (snapshot) =>
   snapshot?.gltfInstancing !== undefined &&

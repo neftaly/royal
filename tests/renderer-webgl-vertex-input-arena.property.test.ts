@@ -37,7 +37,8 @@ describe("vertex-input instance planning core", () => {
       const instanceCount = random.int(1, 2_048);
       const lane = random.pick([
         "localModels",
-        "rootPoses",
+        "rootPositions",
+        "rootRotations",
         "rootScales",
       ] as const satisfies readonly VertexInputInstanceLane[]);
       const start = random.int(0, instanceCount - 1);
@@ -49,7 +50,8 @@ describe("vertex-input instance planning core", () => {
         byteLength: instanceCount * 25 * Float32Array.BYTES_PER_ELEMENT,
         localModelElements: instanceCount * 16,
         rangeElements: instanceCount * 2,
-        rootPoseElements: instanceCount * 6,
+        rootPositionElements: instanceCount * 3,
+        rootRotationElements: instanceCount * 3,
         rootScaleElements: instanceCount * 3,
       });
       expect(vertexInputInstanceLaneUploadBytes(
@@ -251,7 +253,8 @@ const preparedInstanceAllocation = (
   const allocation = createVertexInputInstanceAllocation(arena);
   prepareVertexInputInstance(arena, glContext(gl), generation, allocation, 1);
   uploadVertexInputInstanceLane(arena, glContext(gl), generation, allocation, "localModels", 0);
-  uploadVertexInputInstanceLane(arena, glContext(gl), generation, allocation, "rootPoses", 0);
+  uploadVertexInputInstanceLane(arena, glContext(gl), generation, allocation, "rootPositions", 0);
+  uploadVertexInputInstanceLane(arena, glContext(gl), generation, allocation, "rootRotations", 0);
   uploadVertexInputInstanceLane(arena, glContext(gl), generation, allocation, "rootScales", 0);
   return allocation;
 };
@@ -465,21 +468,25 @@ describe("vertex-input arena", () => {
 
     const initial = prepareVertexInputInstance(arena, context, 4, first, 2);
     initial.localModels.fill(1);
-    initial.rootPoses.fill(2);
+    initial.rootPositions.fill(2);
+    initial.rootRotations.fill(2);
     initial.rootScales.fill(3);
     expect(initial.forceFull).toBe(true);
     expect(uploadVertexInputInstanceLane(arena, context, 4, first, "localModels", 0)).toEqual({
       bytes: 128, calls: 1,
     });
-    expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootPoses", 0)).toEqual({
-      bytes: 48, calls: 1,
+    expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootPositions", 0)).toEqual({
+      bytes: 24, calls: 1,
+    });
+    expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootRotations", 0)).toEqual({
+      bytes: 24, calls: 1,
     });
     expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootScales", 0)).toEqual({
       bytes: 24, calls: 1,
     });
     expect(initial.forceFull).toBe(false);
-    const handles = gl.allocations.slice(0, 3).map(({ buffer }) => buffer);
-    expect(gl.allocations.slice(0, 3).map(({ bytes }) => bytes)).toEqual([128, 48, 24]);
+    const handles = gl.allocations.slice(0, 4).map(({ buffer }) => buffer);
+    expect(gl.allocations.slice(0, 4).map(({ bytes }) => bytes)).toEqual([128, 24, 24, 24]);
 
     gl.subUploads.length = 0;
     const partial = prepareVertexInputInstance(arena, context, 4, first, 2);
@@ -490,7 +497,7 @@ describe("vertex-input arena", () => {
     expect(uploadVertexInputInstanceLane(arena, context, 4, first, "localModels", 1)).toEqual({
       bytes: 64, calls: 1,
     });
-    expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootPoses", 0)).toEqual({
+    expect(uploadVertexInputInstanceLane(arena, context, 4, first, "rootPositions", 0)).toEqual({
       bytes: 0, calls: 0,
     });
     partial.rootScales.fill(6);
@@ -501,21 +508,23 @@ describe("vertex-input arena", () => {
     });
     expect(gl.subUploads).toEqual([
       { buffer: handles[0], byteOffset: 64, floatCount: 16, sourceOffset: 16 },
-      { buffer: handles[2], byteOffset: 0, floatCount: 6, sourceOffset: 0 },
+      { buffer: handles[3], byteOffset: 0, floatCount: 6, sourceOffset: 0 },
     ]);
 
     gl.subUploads.length = 0;
     const grown = prepareVertexInputInstance(arena, context, 4, first, 3);
     grown.localModels.fill(7);
-    grown.rootPoses.fill(8);
+    grown.rootPositions.fill(8);
+    grown.rootRotations.fill(8);
     grown.rootScales.fill(9);
-    expect(gl.allocations.slice(3).map(({ buffer }) => buffer)).toEqual(handles);
+    expect(gl.allocations.slice(4).map(({ buffer }) => buffer)).toEqual(handles);
     const grownStats = [
       uploadVertexInputInstanceLane(arena, context, 4, first, "localModels", 0),
-      uploadVertexInputInstanceLane(arena, context, 4, first, "rootPoses", 0),
+      uploadVertexInputInstanceLane(arena, context, 4, first, "rootPositions", 0),
+      uploadVertexInputInstanceLane(arena, context, 4, first, "rootRotations", 0),
       uploadVertexInputInstanceLane(arena, context, 4, first, "rootScales", 0),
     ];
-    expect(grownStats.reduce((sum, stats) => sum + stats.calls, 0)).toBe(3);
+    expect(grownStats.reduce((sum, stats) => sum + stats.calls, 0)).toBe(4);
     expect(grownStats.reduce((sum, stats) => sum + stats.bytes, 0)).toBe(300);
     expect(gl.subUploads.map(({ buffer }) => buffer)).toEqual(handles);
   });
@@ -538,7 +547,7 @@ describe("vertex-input arena", () => {
     expect(gl.subUploads).toHaveLength(0);
     expect(uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0))
       .toEqual({ bytes: 12, calls: 1 });
-    expect(gl.subUploads[0]?.buffer).toBe(gl.allocations[2]?.buffer);
+    expect(gl.subUploads[0]?.buffer).toBe(gl.allocations[3]?.buffer);
   });
 
   it("resolves owned composite VAOs, deletes VAOs before buffers, and lazily restores full data", () => {
@@ -552,19 +561,21 @@ describe("vertex-input arena", () => {
     const allocation = createVertexInputInstanceAllocation(arena);
     const staging = prepareVertexInputInstance(arena, glContext(firstGl), 1, allocation, 1);
     staging.localModels.fill(1);
-    staging.rootPoses.fill(2);
+    staging.rootPositions.fill(2);
+    staging.rootRotations.fill(2);
     staging.rootScales.fill(3);
     vertexInputCompositeVertexArrayForInstance(arena, glContext(firstGl), 1, 91, allocation);
     firstGl.events.length = 0;
     releaseVertexInputInstanceAllocation(arena, glContext(firstGl), 1, allocation);
     expect(firstGl.events[0]).toMatch(/^vao:/);
-    expect(firstGl.events.slice(1)).toHaveLength(3);
+    expect(firstGl.events.slice(1)).toHaveLength(4);
     expect(firstGl.events.slice(1).every((event) => event.startsWith("buffer:"))).toBe(true);
 
     const restoredAllocation = createVertexInputInstanceAllocation(arena);
     const restoredStaging = prepareVertexInputInstance(arena, glContext(firstGl), 1, restoredAllocation, 2);
     restoredStaging.localModels.fill(4);
-    restoredStaging.rootPoses.fill(5);
+    restoredStaging.rootPositions.fill(5);
+    restoredStaging.rootRotations.fill(5);
     restoredStaging.rootScales.fill(6);
     vertexInputCompositeVertexArrayForInstance(arena, glContext(firstGl), 1, 91, restoredAllocation);
     dropVertexInputArenaContext(arena);
@@ -573,7 +584,7 @@ describe("vertex-input arena", () => {
     )).toThrow(/restore it explicitly/);
     restoreVertexInputArenaContext(arena, 2);
     vertexInputCompositeVertexArrayForInstance(arena, glContext(secondGl), 2, 91, restoredAllocation);
-    expect(secondGl.subUploads.map(({ floatCount }) => floatCount)).toEqual([32, 12, 6]);
+    expect(secondGl.subUploads.map(({ floatCount }) => floatCount)).toEqual([32, 6, 6, 6]);
     dropVertexInputArenaContext(arena);
     releaseLostVertexInputInstanceAllocation(arena, restoredAllocation);
     expect(vertexInputArenaSnapshot(arena).instanceAllocationCount).toBe(0);
@@ -581,11 +592,11 @@ describe("vertex-input arena", () => {
 
   it("cleans up earlier instance buffers when fixed-ABI creation fails", () => {
     const gl = new FakeGl();
-    gl.createBufferFailureAt = 3;
+    gl.createBufferFailureAt = 4;
     const arena = createVertexInputArena();
     const allocation = createVertexInputInstanceAllocation(arena);
     expect(() => prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 1)).toThrow(/creation failed/);
-    expect(gl.deletedBuffers).toHaveLength(2);
+    expect(gl.deletedBuffers).toHaveLength(3);
     expect(vertexInputArenaSnapshot(arena).instanceAllocationCount).toBe(1);
   });
 
@@ -596,22 +607,25 @@ describe("vertex-input arena", () => {
     const allocation = createVertexInputInstanceAllocation(arena);
     const first = prepareVertexInputInstance(arena, context, 1, allocation, 1);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "localModels", 0);
-    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPoses", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPositions", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootRotations", 0);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0);
-    gl.bufferDataFailureAt = 5;
+    gl.bufferDataFailureAt = 6;
     expect(() => prepareVertexInputInstance(arena, context, 1, allocation, 2)).toThrow(/bufferData failed/);
     expect(gl.arrayBufferBinding).toBeNull();
     const stillPublished = prepareVertexInputInstance(arena, context, 1, allocation, 1);
     expect(stillPublished).toBe(first);
     expect(stillPublished.localModels).toHaveLength(16);
-    expect(stillPublished.rootPoses).toHaveLength(6);
+    expect(stillPublished.rootPositions).toHaveLength(3);
+    expect(stillPublished.rootRotations).toHaveLength(3);
     expect(stillPublished.rootScales).toHaveLength(3);
     expect(stillPublished.forceFull).toBe(true);
     delete gl.bufferDataFailureAt;
     const grown = prepareVertexInputInstance(arena, context, 1, allocation, 2);
     expect(grown).toBe(first);
     expect(grown.localModels).toHaveLength(32);
-    expect(grown.rootPoses).toHaveLength(12);
+    expect(grown.rootPositions).toHaveLength(6);
+    expect(grown.rootRotations).toHaveLength(6);
     expect(grown.rootScales).toHaveLength(6);
     expect(grown.forceFull).toBe(true);
   });
@@ -623,7 +637,8 @@ describe("vertex-input arena", () => {
     const allocation = createVertexInputInstanceAllocation(arena);
     const staging = prepareVertexInputInstance(arena, context, 1, allocation, 3);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "localModels", 0);
-    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPoses", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPositions", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootRotations", 0);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0);
     staging.ranges.set([0, 1, 2, 3]);
     gl.bufferSubDataFailureAt = 5;
@@ -827,7 +842,7 @@ describe("vertex-input arena", () => {
     dropVertexInputArenaContext(arena);
     const dropped = vertexInputArenaSnapshot(arena);
     expect(dropped.abandonedVertexArrayCount).toBe(2);
-    expect(dropped.abandonedBufferCount).toBe(6);
+    expect(dropped.abandonedBufferCount).toBe(7);
     expect(dropped.pendingBufferDeleteCount).toBe(0);
     expect(dropped.pendingVertexArrayDeleteCount).toBe(0);
     disposeVertexInputArena(arena);
@@ -988,13 +1003,15 @@ describe("vertex-input arena", () => {
       readonly governedBufferCapacity: number;
       readonly instanceCount: number;
       readonly localModelsDirty: boolean;
-      readonly rootPosesDirty: boolean;
+      readonly rootPositionsDirty: boolean;
+      readonly rootRotationsDirty: boolean;
       readonly rootScalesDirty: boolean;
       readonly staging: {
         readonly forceFull: boolean;
         readonly localModels: Float32Array;
         readonly ranges: Int32Array;
-        readonly rootPoses: Float32Array;
+        readonly rootPositions: Float32Array;
+        readonly rootRotations: Float32Array;
         readonly rootScales: Float32Array;
       };
     };
@@ -1023,7 +1040,8 @@ describe("vertex-input arena", () => {
     const originalArrays = {
       localModels: staging.localModels,
       ranges: staging.ranges,
-      rootPoses: staging.rootPoses,
+      rootPositions: staging.rootPositions,
+      rootRotations: staging.rootRotations,
       rootScales: staging.rootScales,
     };
     const originalState = {
@@ -1033,7 +1051,8 @@ describe("vertex-input arena", () => {
       governedBufferCapacity: resource.governedBufferCapacity,
       instanceCount: resource.instanceCount,
       localModelsDirty: resource.localModelsDirty,
-      rootPosesDirty: resource.rootPosesDirty,
+      rootPositionsDirty: resource.rootPositionsDirty,
+      rootRotationsDirty: resource.rootRotationsDirty,
       rootScalesDirty: resource.rootScalesDirty,
     };
     const deniedCount = 2;
@@ -1048,7 +1067,8 @@ describe("vertex-input arena", () => {
     expect(resource.staging).toBe(staging);
     expect(resource.staging.localModels).toBe(originalArrays.localModels);
     expect(resource.staging.ranges).toBe(originalArrays.ranges);
-    expect(resource.staging.rootPoses).toBe(originalArrays.rootPoses);
+    expect(resource.staging.rootPositions).toBe(originalArrays.rootPositions);
+    expect(resource.staging.rootRotations).toBe(originalArrays.rootRotations);
     expect(resource.staging.rootScales).toBe(originalArrays.rootScales);
     expect({
       buffers: resource.buffers,
@@ -1057,7 +1077,8 @@ describe("vertex-input arena", () => {
       governedBufferCapacity: resource.governedBufferCapacity,
       instanceCount: resource.instanceCount,
       localModelsDirty: resource.localModelsDirty,
-      rootPosesDirty: resource.rootPosesDirty,
+      rootPositionsDirty: resource.rootPositionsDirty,
+      rootRotationsDirty: resource.rootRotationsDirty,
       rootScalesDirty: resource.rootScalesDirty,
     }).toEqual(originalState);
     expect(gl.allocations).toHaveLength(0);
@@ -1071,15 +1092,17 @@ describe("vertex-input arena", () => {
     const recovered = prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 2);
     expect(recovered).toBe(staging);
     expect(recovered.localModels).not.toBe(originalArrays.localModels);
-    expect(recovered.rootPoses).not.toBe(originalArrays.rootPoses);
+    expect(recovered.rootPositions).not.toBe(originalArrays.rootPositions);
+    expect(recovered.rootRotations).not.toBe(originalArrays.rootRotations);
     expect(recovered.rootScales).not.toBe(originalArrays.rootScales);
     expect(recovered.ranges).not.toBe(originalArrays.ranges);
     expect(recovered.localModels).toHaveLength(32);
-    expect(recovered.rootPoses).toHaveLength(12);
+    expect(recovered.rootPositions).toHaveLength(6);
+    expect(recovered.rootRotations).toHaveLength(6);
     expect(recovered.rootScales).toHaveLength(6);
     expect(recovered.ranges).toHaveLength(4);
     expect(recovered.forceFull).toBe(true);
-    expect(gl.allocations.map(({ bytes }) => bytes)).toEqual([128, 48, 24]);
+    expect(gl.allocations.map(({ bytes }) => bytes)).toEqual([128, 24, 24, 24]);
     expect(committed).toBe(1);
   });
 
@@ -1090,7 +1113,8 @@ describe("vertex-input arena", () => {
       readonly governedBufferCapacity: number;
       readonly instanceCount: number;
       readonly localModelsDirty: boolean;
-      readonly rootPosesDirty: boolean;
+      readonly rootPositionsDirty: boolean;
+      readonly rootRotationsDirty: boolean;
       readonly rootScalesDirty: boolean;
     };
     let denyPersistent = false;
@@ -1110,10 +1134,12 @@ describe("vertex-input arena", () => {
     const allocation = createVertexInputInstanceAllocation(arena);
     const staging = prepareVertexInputInstance(arena, context, 1, allocation, 1);
     staging.localModels.fill(11);
-    staging.rootPoses.fill(12);
+    staging.rootPositions.fill(12);
+    staging.rootRotations.fill(12);
     staging.rootScales.fill(13);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "localModels", 0);
-    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPoses", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPositions", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootRotations", 0);
     uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0);
     staging.ranges.set([7, 9]);
     expect(staging.forceFull).toBe(false);
@@ -1124,13 +1150,15 @@ describe("vertex-input arena", () => {
     const arrays = {
       localModels: staging.localModels,
       ranges: staging.ranges,
-      rootPoses: staging.rootPoses,
+      rootPositions: staging.rootPositions,
+      rootRotations: staging.rootRotations,
       rootScales: staging.rootScales,
     };
     const contents = {
       localModels: Array.from(staging.localModels),
       ranges: Array.from(staging.ranges),
-      rootPoses: Array.from(staging.rootPoses),
+      rootPositions: Array.from(staging.rootPositions),
+      rootRotations: Array.from(staging.rootRotations),
       rootScales: Array.from(staging.rootScales),
     };
     const before = {
@@ -1157,15 +1185,18 @@ describe("vertex-input arena", () => {
     });
     expect(staging.localModels).toBe(arrays.localModels);
     expect(staging.ranges).toBe(arrays.ranges);
-    expect(staging.rootPoses).toBe(arrays.rootPoses);
+    expect(staging.rootPositions).toBe(arrays.rootPositions);
+    expect(staging.rootRotations).toBe(arrays.rootRotations);
     expect(staging.rootScales).toBe(arrays.rootScales);
     expect(Array.from(staging.localModels)).toEqual(contents.localModels);
     expect(Array.from(staging.ranges)).toEqual(contents.ranges);
-    expect(Array.from(staging.rootPoses)).toEqual(contents.rootPoses);
+    expect(Array.from(staging.rootPositions)).toEqual(contents.rootPositions);
+    expect(Array.from(staging.rootRotations)).toEqual(contents.rootRotations);
     expect(Array.from(staging.rootScales)).toEqual(contents.rootScales);
     expect(staging.forceFull).toBe(false);
     expect(resource.localModelsDirty).toBe(false);
-    expect(resource.rootPosesDirty).toBe(false);
+    expect(resource.rootPositionsDirty).toBe(false);
+    expect(resource.rootRotationsDirty).toBe(false);
     expect(resource.rootScalesDirty).toBe(false);
     expect({
       allocations: gl.allocations.length,
@@ -1184,16 +1215,18 @@ describe("vertex-input arena", () => {
     const grown = prepareVertexInputInstance(arena, context, 1, allocation, 3);
     expect(grown).toBe(staging);
     expect(grown.localModels).not.toBe(arrays.localModels);
-    expect(grown.rootPoses).not.toBe(arrays.rootPoses);
+    expect(grown.rootPositions).not.toBe(arrays.rootPositions);
+    expect(grown.rootRotations).not.toBe(arrays.rootRotations);
     expect(grown.rootScales).not.toBe(arrays.rootScales);
     expect(grown.ranges).not.toBe(arrays.ranges);
     expect(Array.from(grown.localModels.subarray(0, 16))).toEqual(contents.localModels);
-    expect(Array.from(grown.rootPoses.subarray(0, 6))).toEqual(contents.rootPoses);
+    expect(Array.from(grown.rootPositions.subarray(0, 3))).toEqual(contents.rootPositions);
+    expect(Array.from(grown.rootRotations.subarray(0, 3))).toEqual(contents.rootRotations);
     expect(Array.from(grown.rootScales.subarray(0, 3))).toEqual(contents.rootScales);
     expect(grown.forceFull).toBe(true);
-    expect(gl.allocations.slice(-3).map(({ bytes }) => bytes)).toEqual([192, 72, 36]);
-    expect(gl.allocations.slice(-3).map(({ buffer }) => buffer))
-      .toEqual(gl.allocations.slice(0, 3).map(({ buffer }) => buffer));
+    expect(gl.allocations.slice(-4).map(({ bytes }) => bytes)).toEqual([192, 36, 36, 36]);
+    expect(gl.allocations.slice(-4).map(({ buffer }) => buffer))
+      .toEqual(gl.allocations.slice(0, 4).map(({ buffer }) => buffer));
   });
 
   it("reuses a retained failed-growth lease across smaller and later equal growth", () => {

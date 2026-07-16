@@ -22,7 +22,7 @@ export interface GltfInstanceTransformReferenceChange {
 export interface GltfInstanceTransformView {
   readonly changes: Pick<
     GltfInstanceChangeTracker,
-    "activePose" | "activeRotation" | "activeScale"
+    "activePosition" | "activeRotation" | "activeScale"
   >;
   readonly framePoseVersion: number;
   readonly frameScaleVersion: number;
@@ -222,13 +222,15 @@ export class GltfInstanceTransformRegistry {
       this.#views.set(source, views);
     }
     if (this.#frameActive && !views.activeApplied) {
-      const pose = views.changes.activePose;
+      const position = views.changes.activePosition;
       const rotation = views.changes.activeRotation;
       const scale = views.changes.activeScale;
-      const firstWord = Math.min(pose.minDirtyWord, scale.minDirtyWord);
-      const lastWord = Math.max(pose.maxDirtyWord, scale.maxDirtyWord);
+      const firstWord = Math.min(position.minDirtyWord, rotation.minDirtyWord, scale.minDirtyWord);
+      const lastWord = Math.max(position.maxDirtyWord, rotation.maxDirtyWord, scale.maxDirtyWord);
       for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
-        let word = pose.words[wordIndex]! | scale.words[wordIndex]!;
+        let word = position.words[wordIndex]!
+          | rotation.words[wordIndex]!
+          | scale.words[wordIndex]!;
         while (word !== 0) {
           const bitMask = word & -word;
           const bit = 31 - Math.clz32(bitMask);
@@ -237,7 +239,7 @@ export class GltfInstanceTransformRegistry {
             applyInstanceMatrix(
               views,
               index,
-              (pose.words[wordIndex]! & bitMask) !== 0,
+              ((position.words[wordIndex]! | rotation.words[wordIndex]!) & bitMask) !== 0,
               (rotation.words[wordIndex]! & bitMask) !== 0,
               (scale.words[wordIndex]! & bitMask) !== 0,
             );

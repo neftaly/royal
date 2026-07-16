@@ -69,8 +69,10 @@ const createCounters = (): GltfInstancingCounters => ({
   instancesDrawn: 0,
   localModelUploadBytes: 0,
   localModelUploadCalls: 0,
-  rootPoseUploadBytes: 0,
-  rootPoseUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });

@@ -74,39 +74,39 @@ export const isPackedInstanceSlotDirty = (
   || (dirty !== undefined && sourceVersionChanged && isInstanceDirty(dirty, logicalIndex));
 
 export class GltfInstanceChangeTracker {
-  activePose: InstanceDirtyBits;
+  activePosition: InstanceDirtyBits;
   activeRotation: InstanceDirtyBits;
   activeScale: InstanceDirtyBits;
-  pendingPose: InstanceDirtyBits;
+  pendingPosition: InstanceDirtyBits;
   pendingRotation: InstanceDirtyBits;
   pendingScale: InstanceDirtyBits;
 
   constructor(readonly count: number) {
-    this.activePose = createInstanceDirtyBits(count);
+    this.activePosition = createInstanceDirtyBits(count);
     this.activeRotation = createInstanceDirtyBits(count);
     this.activeScale = createInstanceDirtyBits(count);
-    this.pendingPose = createInstanceDirtyBits(count, true);
+    this.pendingPosition = createInstanceDirtyBits(count, true);
     this.pendingRotation = createInstanceDirtyBits(count, true);
     this.pendingScale = createInstanceDirtyBits(count, true);
   }
 
   beginFrame(): void {
-    clearInstanceDirtyBits(this.activePose);
+    clearInstanceDirtyBits(this.activePosition);
     clearInstanceDirtyBits(this.activeRotation);
     clearInstanceDirtyBits(this.activeScale);
-    const previousActivePose = this.activePose;
+    const previousActivePosition = this.activePosition;
     const previousActiveRotation = this.activeRotation;
     const previousActiveScale = this.activeScale;
-    this.activePose = this.pendingPose;
+    this.activePosition = this.pendingPosition;
     this.activeRotation = this.pendingRotation;
     this.activeScale = this.pendingScale;
-    this.pendingPose = previousActivePose;
+    this.pendingPosition = previousActivePosition;
     this.pendingRotation = previousActiveRotation;
     this.pendingScale = previousActiveScale;
   }
 
   abortFrame(): void {
-    mergeInstanceDirtyBits(this.pendingPose, this.activePose);
+    mergeInstanceDirtyBits(this.pendingPosition, this.activePosition);
     mergeInstanceDirtyBits(this.pendingRotation, this.activeRotation);
     mergeInstanceDirtyBits(this.pendingScale, this.activeScale);
   }
@@ -116,7 +116,9 @@ export class GltfInstanceChangeTracker {
       markInstanceDirtyRange(this.pendingScale, startIndex, count);
       return;
     }
-    markInstanceDirtyRange(this.pendingPose, startIndex, count);
+    if (channel === 'position' || channel === 'pose') {
+      markInstanceDirtyRange(this.pendingPosition, startIndex, count);
+    }
     if (channel === 'rotation' || channel === 'pose') {
       markInstanceDirtyRange(this.pendingRotation, startIndex, count);
     }

@@ -111,8 +111,9 @@ describe("glTF instance transform registry", () => {
 
     registry.beginFrame();
     const views = registry.views(tracked.source);
-    expect(isInstanceDirty(views.changes.activePose, 0)).toBe(false);
-    expect(isInstanceDirty(views.changes.activePose, 1)).toBe(true);
+    expect(isInstanceDirty(views.changes.activePosition, 0)).toBe(false);
+    expect(isInstanceDirty(views.changes.activePosition, 1)).toBe(true);
+    expect(isInstanceDirty(views.changes.activeRotation, 1)).toBe(true);
     expect(isInstanceDirty(views.changes.activeScale, 2)).toBe(true);
     expectMatricesCurrent(registry, tracked.source);
     registry.endFrame(true);
@@ -135,13 +136,13 @@ describe("glTF instance transform registry", () => {
 
     registry.beginFrame();
     const views = registry.views(tracked.source);
-    expect(isInstanceDirty(views.changes.activePose, 0)).toBe(true);
+    expect(isInstanceDirty(views.changes.activePosition, 0)).toBe(true);
     expect(isInstanceDirty(views.changes.activeScale, 3)).toBe(true);
     expectMatricesCurrent(registry, tracked.source);
     registry.endFrame(true);
 
     registry.beginFrame();
-    expect(isInstanceDirty(views.changes.activePose, 0)).toBe(false);
+    expect(isInstanceDirty(views.changes.activePosition, 0)).toBe(false);
     expect(isInstanceDirty(views.changes.activeScale, 3)).toBe(false);
     registry.endFrame(true);
   });

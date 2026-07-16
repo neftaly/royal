@@ -10,13 +10,16 @@ import {
   type VertexInputInstanceStaging,
 } from "./vertex-input/arena";
 import {
-  isPackedInstanceSlotDirty,
+  isInstanceDirty,
   type GltfInstanceChangeTracker,
 } from "./gltf/instance-changes";
 import type { Mat4 } from "./math/mat4";
 
 export interface GltfInstanceBufferSource {
-  readonly changes: Pick<GltfInstanceChangeTracker, "activePose" | "activeScale">;
+  readonly changes: Pick<
+    GltfInstanceChangeTracker,
+    "activePosition" | "activeRotation" | "activeScale"
+  >;
   readonly framePoseVersion: number;
   readonly frameScaleVersion: number;
   readonly positions: Float32Array;
@@ -27,8 +30,10 @@ export interface GltfInstanceBufferSource {
 export interface GltfInstanceBufferUploadCounters {
   localModelUploadBytes: number;
   localModelUploadCalls: number;
-  rootPoseUploadBytes: number;
-  rootPoseUploadCalls: number;
+  rootPositionUploadBytes: number;
+  rootPositionUploadCalls: number;
+  rootRotationUploadBytes: number;
+  rootRotationUploadCalls: number;
   rootScaleUploadBytes: number;
   rootScaleUploadCalls: number;
 }
@@ -44,6 +49,7 @@ type GltfInstanceBufferResource = {
   localSignature?: number[];
   instanceCount: number;
   packedLogicalIndices: Int32Array;
+  packedSlotChanges: Uint8Array;
   readonly packedSources: Array<GltfInstanceBufferSource | undefined>;
   readonly poseVersions: Map<GltfInstanceBufferSource, number>;
   readonly scaleVersions: Map<GltfInstanceBufferSource, number>;
@@ -92,17 +98,14 @@ const sameGltfModelSignatureRange = (
 const sameFloat32 = (current: number, next: number): boolean =>
   Object.is(current, Math.fround(next));
 
-const sameRootPose = (
+const sameRootVector = (
   staging: Float32Array,
   offset: number,
-  transform: Transform,
+  vector: readonly number[],
 ): boolean =>
-  sameFloat32(staging[offset]!, transform.position[0])
-  && sameFloat32(staging[offset + 1]!, transform.position[1])
-  && sameFloat32(staging[offset + 2]!, transform.position[2])
-  && sameFloat32(staging[offset + 3]!, transform.rotation[0])
-  && sameFloat32(staging[offset + 4]!, transform.rotation[1])
-  && sameFloat32(staging[offset + 5]!, transform.rotation[2]);
+  sameFloat32(staging[offset]!, vector[0]!)
+  && sameFloat32(staging[offset + 1]!, vector[1]!)
+  && sameFloat32(staging[offset + 2]!, vector[2]!);
 
 const sameRootScale = (
   staging: Float32Array,
@@ -131,12 +134,20 @@ const recordLocalUpload = (
   counters.localModelUploadBytes += stats.bytes;
 };
 
-const recordRootPoseUpload = (
+const recordRootPositionUpload = (
   counters: GltfInstanceBufferUploadCounters,
   stats: VertexInputInstanceLaneUploadStats,
 ): void => {
-  counters.rootPoseUploadCalls += stats.calls;
-  counters.rootPoseUploadBytes += stats.bytes;
+  counters.rootPositionUploadCalls += stats.calls;
+  counters.rootPositionUploadBytes += stats.bytes;
+};
+
+const recordRootRotationUpload = (
+  counters: GltfInstanceBufferUploadCounters,
+  stats: VertexInputInstanceLaneUploadStats,
+): void => {
+  counters.rootRotationUploadCalls += stats.calls;
+  counters.rootRotationUploadBytes += stats.bytes;
 };
 
 const recordRootScaleUpload = (
@@ -264,6 +275,7 @@ const gltfInstanceBufferResource = (
     allocation: createVertexInputInstanceAllocation(state.vertexInputs),
     instanceCount: 0,
     packedLogicalIndices,
+    packedSlotChanges: new Uint8Array(),
     packedSources: [],
     poseVersions: new Map(),
     scaleVersions: new Map(),
@@ -275,7 +287,7 @@ const gltfInstanceBufferResource = (
   return resource;
 };
 
-const bindGltfInstanceRootPoseBuffer = (
+const bindGltfInstanceRootVectorBuffer = (
   state: GltfInstanceBufferArenaState,
   gl: WebGL2RenderingContext,
   contextGeneration: number,
@@ -284,20 +296,25 @@ const bindGltfInstanceRootPoseBuffer = (
   rootTransforms: readonly (Transform | undefined)[],
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
-  packedSources: readonly (GltfInstanceBufferSource | undefined)[],
-  packedLogicalIndices: Int32Array,
+  packedSlotChanges: Uint8Array,
   poseVersions: ReadonlyMap<GltfInstanceBufferSource, number>,
   previousInstanceCount: number,
   instanceCount: number,
   counters: GltfInstanceBufferUploadCounters,
+  channel: "position" | "rotation",
+  skipUnchangedSourceLane: boolean,
 ): void => {
   const fullUpload = staging.forceFull || previousInstanceCount !== instanceCount;
+  if (!fullUpload && skipUnchangedSourceLane) return;
+  const values = channel === "position" ? staging.rootPositions : staging.rootRotations;
+  const lane = channel === "position" ? "rootPositions" : "rootRotations";
+  const isPosition = channel === "position";
   let changedRangeCount = 0;
   let activeRangeStart = -1;
   let versionSource: GltfInstanceBufferSource | undefined;
   let sourceVersionChanged = false;
-  let sourcePositions: Float32Array | undefined;
-  let sourceRotations: Float32Array | undefined;
+  let sourceDirty: GltfInstanceBufferSource["changes"]["activePosition"] | undefined;
+  let sourceValues: Float32Array | undefined;
 
   for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
     const sourceViews = rootInstanceViews[transformIndex];
@@ -305,25 +322,21 @@ const bindGltfInstanceRootPoseBuffer = (
       versionSource = sourceViews;
       sourceVersionChanged = sourceViews !== undefined
         && poseVersions.get(sourceViews) !== sourceViews.framePoseVersion;
-      sourcePositions = sourceViews?.positions;
-      sourceRotations = sourceViews?.rotations;
+      sourceValues = isPosition ? sourceViews?.positions : sourceViews?.rotations;
+      sourceDirty = sourceViews?.changes[isPosition ? "activePosition" : "activeRotation"];
     }
     const logicalIndex = rootLogicalIndices[transformIndex]!;
-    const offset = transformIndex * 6;
+    const offset = transformIndex * 3;
     const changed = fullUpload
       || (sourceViews === undefined
-        ? !sameRootPose(
-            staging.rootPoses,
+        ? !sameRootVector(
+            values,
             offset,
-            rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM,
+            (rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM)[channel],
           )
-        : isPackedInstanceSlotDirty(
-            sourceViews.changes.activePose,
-            logicalIndex,
-            packedSources[transformIndex] === sourceViews,
-            packedLogicalIndices[transformIndex]!,
-            sourceVersionChanged,
-          ));
+        : packedSlotChanges[transformIndex] !== 0
+          || (sourceVersionChanged && sourceDirty !== undefined
+            && isInstanceDirty(sourceDirty, logicalIndex)));
     if (!changed) {
       if (activeRangeStart >= 0) {
         staging.ranges[changedRangeCount * 2] = activeRangeStart;
@@ -334,21 +347,15 @@ const bindGltfInstanceRootPoseBuffer = (
       continue;
     }
     if (sourceViews === undefined) {
-      const transform = rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM;
-      staging.rootPoses[offset] = transform.position[0];
-      staging.rootPoses[offset + 1] = transform.position[1];
-      staging.rootPoses[offset + 2] = transform.position[2];
-      staging.rootPoses[offset + 3] = transform.rotation[0];
-      staging.rootPoses[offset + 4] = transform.rotation[1];
-      staging.rootPoses[offset + 5] = transform.rotation[2];
-    } else if (sourcePositions !== undefined && sourceRotations !== undefined) {
+      const vector = (rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM)[channel];
+      values[offset] = vector[0];
+      values[offset + 1] = vector[1];
+      values[offset + 2] = vector[2];
+    } else if (sourceValues !== undefined) {
       const sourceOffset = logicalIndex * 3;
-      staging.rootPoses[offset] = sourcePositions[sourceOffset]!;
-      staging.rootPoses[offset + 1] = sourcePositions[sourceOffset + 1]!;
-      staging.rootPoses[offset + 2] = sourcePositions[sourceOffset + 2]!;
-      staging.rootPoses[offset + 3] = sourceRotations[sourceOffset]!;
-      staging.rootPoses[offset + 4] = sourceRotations[sourceOffset + 1]!;
-      staging.rootPoses[offset + 5] = sourceRotations[sourceOffset + 2]!;
+      values[offset] = sourceValues[sourceOffset]!;
+      values[offset + 1] = sourceValues[sourceOffset + 1]!;
+      values[offset + 2] = sourceValues[sourceOffset + 2]!;
     }
     if (activeRangeStart < 0) activeRangeStart = transformIndex;
   }
@@ -358,14 +365,16 @@ const bindGltfInstanceRootPoseBuffer = (
     changedRangeCount += 1;
   }
   if (fullUpload || changedRangeCount > 0) {
-    recordRootPoseUpload(counters, uploadVertexInputInstanceLane(
+    const stats = uploadVertexInputInstanceLane(
       state.vertexInputs,
       gl,
       contextGeneration,
       allocation,
-      "rootPoses",
+      lane,
       changedRangeCount,
-    ));
+    );
+    if (isPosition) recordRootPositionUpload(counters, stats);
+    else recordRootRotationUpload(counters, stats);
   }
 };
 
@@ -378,14 +387,15 @@ const bindGltfInstanceRootScaleBuffer = (
   rootTransforms: readonly (Transform | undefined)[],
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
-  packedSources: readonly (GltfInstanceBufferSource | undefined)[],
-  packedLogicalIndices: Int32Array,
+  packedSlotChanges: Uint8Array,
   scaleVersions: ReadonlyMap<GltfInstanceBufferSource, number>,
   previousInstanceCount: number,
   instanceCount: number,
   counters: GltfInstanceBufferUploadCounters,
+  skipUnchangedSourceLane: boolean,
 ): void => {
   const fullUpload = staging.forceFull || previousInstanceCount !== instanceCount;
+  if (!fullUpload && skipUnchangedSourceLane) return;
   let changedRangeCount = 0;
   let activeRangeStart = -1;
   let versionSource: GltfInstanceBufferSource | undefined;
@@ -409,13 +419,8 @@ const bindGltfInstanceRootScaleBuffer = (
             offset,
             rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM,
           )
-        : isPackedInstanceSlotDirty(
-            sourceViews.changes.activeScale,
-            logicalIndex,
-            packedSources[transformIndex] === sourceViews,
-            packedLogicalIndices[transformIndex]!,
-            sourceVersionChanged,
-          ));
+        : packedSlotChanges[transformIndex] !== 0
+          || (sourceVersionChanged && isInstanceDirty(sourceViews.changes.activeScale, logicalIndex)));
     if (!changed) {
       if (activeRangeStart >= 0) {
         staging.ranges[changedRangeCount * 2] = activeRangeStart;
@@ -480,10 +485,12 @@ export const bindGltfInstanceBuffer = (
   const instanceCount = localModels.length;
   const resource = gltfInstanceBufferResource(state, key);
   let grownPackedLogicalIndices: Int32Array | undefined;
+  let grownPackedSlotChanges: Uint8Array | undefined;
   if (resource.packedLogicalIndices.length < instanceCount) {
     grownPackedLogicalIndices = new Int32Array(instanceCount);
     grownPackedLogicalIndices.fill(-1);
     grownPackedLogicalIndices.set(resource.packedLogicalIndices);
+    grownPackedSlotChanges = new Uint8Array(instanceCount);
   }
   const staging = prepareVertexInputInstance(
     state.vertexInputs,
@@ -494,6 +501,7 @@ export const bindGltfInstanceBuffer = (
   );
   if (grownPackedLogicalIndices !== undefined) {
     resource.packedLogicalIndices = grownPackedLogicalIndices;
+    resource.packedSlotChanges = grownPackedSlotChanges!;
   }
   const previousInstanceCount = resource.instanceCount;
   const previousLocalSignature = resource.localSignature;
@@ -558,7 +566,41 @@ export const bindGltfInstanceBuffer = (
     ));
     resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
   }
-  bindGltfInstanceRootPoseBuffer(
+  let packedLayoutChanged = previousInstanceCount !== instanceCount;
+  let hasOrdinaryRoot = false;
+  const packedSourceCount = Math.max(previousInstanceCount, instanceCount);
+  for (let index = 0; index < packedSourceCount; index += 1) {
+    const previousSource = resource.packedSources[index];
+    const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;
+    const slotChanged = index < instanceCount && (
+      previousSource !== nextSource
+      || resource.packedLogicalIndices[index] !== rootLogicalIndices[index]
+    );
+    if (index < instanceCount) {
+      resource.packedSlotChanges[index] = slotChanged ? 1 : 0;
+      packedLayoutChanged ||= slotChanged;
+      if (nextSource === undefined) hasOrdinaryRoot = true;
+    }
+  }
+  let positionDirty = false;
+  let rotationDirty = false;
+  let scaleDirty = false;
+  if (!packedLayoutChanged && !hasOrdinaryRoot) {
+    for (const source of resource.sourceCounts.keys()) {
+      if (resource.poseVersions.get(source) !== source.framePoseVersion) {
+        positionDirty ||= source.changes.activePosition.maxDirtyWord
+          >= source.changes.activePosition.minDirtyWord;
+        rotationDirty ||= source.changes.activeRotation.maxDirtyWord
+          >= source.changes.activeRotation.minDirtyWord;
+      }
+      if (resource.scaleVersions.get(source) !== source.frameScaleVersion) {
+        scaleDirty ||= source.changes.activeScale.maxDirtyWord
+          >= source.changes.activeScale.minDirtyWord;
+      }
+    }
+  }
+  const canSkipRetainedLane = !packedLayoutChanged && !hasOrdinaryRoot;
+  bindGltfInstanceRootVectorBuffer(
     state,
     gl,
     contextGeneration,
@@ -567,12 +609,30 @@ export const bindGltfInstanceBuffer = (
     rootTransforms,
     rootInstanceViews,
     rootLogicalIndices,
-    resource.packedSources,
-    resource.packedLogicalIndices,
+    resource.packedSlotChanges,
     resource.poseVersions,
     previousInstanceCount,
     instanceCount,
     counters,
+    "position",
+    canSkipRetainedLane && !positionDirty,
+  );
+  bindGltfInstanceRootVectorBuffer(
+    state,
+    gl,
+    contextGeneration,
+    resource.allocation,
+    staging,
+    rootTransforms,
+    rootInstanceViews,
+    rootLogicalIndices,
+    resource.packedSlotChanges,
+    resource.poseVersions,
+    previousInstanceCount,
+    instanceCount,
+    counters,
+    "rotation",
+    canSkipRetainedLane && !rotationDirty,
   );
   bindGltfInstanceRootScaleBuffer(
     state,
@@ -583,14 +643,13 @@ export const bindGltfInstanceBuffer = (
     rootTransforms,
     rootInstanceViews,
     rootLogicalIndices,
-    resource.packedSources,
-    resource.packedLogicalIndices,
+    resource.packedSlotChanges,
     resource.scaleVersions,
     previousInstanceCount,
     instanceCount,
     counters,
+    canSkipRetainedLane && !scaleDirty,
   );
-  const packedSourceCount = Math.max(previousInstanceCount, instanceCount);
   for (let index = 0; index < packedSourceCount; index += 1) {
     const previousSource = resource.packedSources[index];
     const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;

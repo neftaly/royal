@@ -46,16 +46,18 @@ describe('bulk instance change tracking', () => {
   it('keeps active and pending generations independent for commits during submit', () => {
     const tracker = new GltfInstanceChangeTracker(128);
     tracker.beginFrame();
-    expect(isInstanceDirty(tracker.activePose, 42)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 42)).toBe(true);
     tracker.beginFrame();
-    expect(isInstanceDirty(tracker.activePose, 42)).toBe(false);
+    expect(isInstanceDirty(tracker.activePosition, 42)).toBe(false);
     tracker.commit('pose', 77, 1);
-    expect(isInstanceDirty(tracker.activePose, 77)).toBe(false);
-    expect(isInstanceDirty(tracker.pendingPose, 77)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 77)).toBe(false);
+    expect(isInstanceDirty(tracker.pendingPosition, 77)).toBe(true);
+    expect(isInstanceDirty(tracker.pendingRotation, 77)).toBe(true);
 
     tracker.beginFrame();
-    expect(isInstanceDirty(tracker.activePose, 42)).toBe(false);
-    expect(isInstanceDirty(tracker.activePose, 77)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 42)).toBe(false);
+    expect(isInstanceDirty(tracker.activePosition, 77)).toBe(true);
+    expect(isInstanceDirty(tracker.activeRotation, 77)).toBe(true);
   });
 
   it('tracks position and rotation work at their narrowest shared layers', () => {
@@ -68,16 +70,16 @@ describe('bulk instance change tracking', () => {
     tracker.commit('pose', 5, 1);
     tracker.beginFrame();
 
-    expect(isInstanceDirty(tracker.activePose, 1)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 1)).toBe(true);
     expect(isInstanceDirty(tracker.activeRotation, 1)).toBe(false);
-    expect(isInstanceDirty(tracker.activePose, 3)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 3)).toBe(false);
     expect(isInstanceDirty(tracker.activeRotation, 3)).toBe(true);
-    expect(isInstanceDirty(tracker.activePose, 5)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 5)).toBe(true);
     expect(isInstanceDirty(tracker.activeRotation, 5)).toBe(true);
 
     tracker.abortFrame();
     tracker.beginFrame();
-    expect(isInstanceDirty(tracker.activePose, 1)).toBe(true);
+    expect(isInstanceDirty(tracker.activePosition, 1)).toBe(true);
     expect(isInstanceDirty(tracker.activeRotation, 3)).toBe(true);
   });
 });

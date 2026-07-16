@@ -193,8 +193,10 @@ export interface WebGlGltfInstancingSnapshot {
   readonly instancesDrawn: number;
   readonly localModelUploadBytes: number;
   readonly localModelUploadCalls: number;
-  readonly rootPoseUploadBytes: number;
-  readonly rootPoseUploadCalls: number;
+  readonly rootPositionUploadBytes: number;
+  readonly rootPositionUploadCalls: number;
+  readonly rootRotationUploadBytes: number;
+  readonly rootRotationUploadCalls: number;
   readonly rootScaleUploadBytes: number;
   readonly rootScaleUploadCalls: number;
 }
