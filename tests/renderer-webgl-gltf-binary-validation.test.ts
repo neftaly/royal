@@ -139,6 +139,33 @@ describe("glTF binary validation", () => {
     }, [new ArrayBuffer(24)], 0)).toThrow(/accessor 0 has invalid byteStride 10 for 8-byte elements/);
   });
 
+  it("uses native packed copies while converting authored encodings", () => {
+    const floatBuffer = new Float32Array([9, 1, 2, 3, 4]).buffer;
+    const packedFloat = readGltfFloatAccessor({
+      accessors: [{ bufferView: 0, componentType: 5126, count: 2, type: "VEC2" }],
+      bufferViews: [{ buffer: 0, byteLength: 16, byteOffset: 4 }],
+    }, [floatBuffer], 0);
+    const indexBuffer = new Uint16Array([7, 0, 2, 1]).buffer;
+    const packedIndices = readGltfIndices({
+      accessors: [{ bufferView: 0, componentType: 5123, count: 3, type: "SCALAR" }],
+      bufferViews: [{ buffer: 0, byteLength: 6, byteOffset: 2 }],
+    }, [indexBuffer], 0);
+    const normalizedBuffer = bytes(0, 127, 255);
+    const converted = readGltfFloatAccessor({
+      accessors: [{ bufferView: 0, componentType: 5121, count: 3, normalized: true, type: "SCALAR" }],
+      bufferViews: [{ buffer: 0, byteLength: 3 }],
+    }, [normalizedBuffer], 0);
+
+    expect(packedFloat.buffer).not.toBe(floatBuffer);
+    expect([...packedFloat]).toEqual([1, 2, 3, 4]);
+    expect(packedIndices.buffer).not.toBe(indexBuffer);
+    expect([...packedIndices]).toEqual([0, 2, 1]);
+    expect(converted.buffer).not.toBe(normalizedBuffer);
+    expect(converted[0]).toBe(0);
+    expect(converted[1]).toBeCloseTo(127 / 255);
+    expect(converted[2]).toBe(1);
+  });
+
   it("preserves zero initialization without a bufferView and applies sparse overlays", () => {
     const buffer = new ArrayBuffer(8);
     new Uint8Array(buffer)[0] = 1;

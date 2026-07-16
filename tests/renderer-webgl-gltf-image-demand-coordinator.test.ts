@@ -591,7 +591,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.dispose();
   });
 
-  it("loads visible base colors before material refinement maps", async () => {
+  it("loads two visible base colors concurrently before each material's refinement maps", async () => {
     const jobs = new Map([
       ["base-a", deferred<LoadedGltfImageSource>()],
       ["base-b", deferred<LoadedGltfImageSource>()],
@@ -614,14 +614,10 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.demandMaterial("asset", first);
     harness.coordinator.demandMaterial("asset", second);
     await flushMicrotasks();
-    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a"]);
-    expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 2, loading: 1, queued: 1 });
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a", "base-b"]);
+    expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 2, loading: 2, queued: 0 });
 
     jobs.get("base-a")!.resolve(loaded("base-a"));
-    await flushSchedulerTurn();
-    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a", "base-b"]);
-
-    jobs.get("base-b")!.resolve(loaded("base-b"));
     await flushSchedulerTurn();
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([
       "base-a",
@@ -629,7 +625,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       "emissive-a",
     ]);
 
-    jobs.get("emissive-a")!.resolve(loaded("emissive-a"));
+    jobs.get("base-b")!.resolve(loaded("base-b"));
     await flushSchedulerTurn();
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([
       "base-a",
@@ -638,6 +634,8 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       "emissive-b",
     ]);
 
+    jobs.get("emissive-a")!.resolve(loaded("emissive-a"));
+    await flushSchedulerTurn();
     jobs.get("emissive-b")!.resolve(loaded("emissive-b"));
     await flushSchedulerTurn();
     expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 0, loading: 0, queued: 0, ready: 4 });
@@ -689,14 +687,15 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       }
       expect(reserveTransportBytes.mock.calls.map(([size]) => size))
         .toEqual(transportOrder.map((key) => bytes.get(key)));
-      expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual([keys[0]]);
+      expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual(keys.slice(0, 2));
 
       for (const [index, key] of keys.entries()) {
         decodes.get(key)!.resolve(loaded(key));
         await flushSchedulerTurn();
         await flushSchedulerTurn();
         expect(transportReleases.get(bytes.get(key)!)).toHaveBeenCalledOnce();
-        expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual(keys.slice(0, index + 2));
+        expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key))
+          .toEqual(keys.slice(0, index + 3));
       }
       expect(harness.coordinator.snapshot()).toMatchObject({ loading: 0, queued: 0, ready: keys.length });
       for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();

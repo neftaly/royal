@@ -43,21 +43,26 @@ export type GeometryDeclaration = DirectGeometryDeclaration | GltfGeometryDeclar
 
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
+const geometryArrayHashes = new WeakMap<object, string>();
 
-const hashBytes = (bytes: Uint8Array): string => {
+const geometryArrayHash = (array: ArrayBufferView): string => {
+  const key = array as object;
+  const cached = geometryArrayHashes.get(key);
+  if (cached !== undefined) return cached;
   let hash = FNV_1A_32_OFFSET;
+  const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
   for (const byte of bytes) {
     hash ^= byte;
     hash = Math.imul(hash, FNV_1A_32_PRIME) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0");
+  const encoded = hash.toString(16).padStart(8, "0");
+  geometryArrayHashes.set(key, encoded);
+  return encoded;
 };
 
 export const geometryArrayBucketKey = (array: ArrayBufferView | undefined): string => {
   if (array === undefined) return "none";
-  return `${array.constructor.name}:${array.byteLength}:${hashBytes(
-    new Uint8Array(array.buffer, array.byteOffset, array.byteLength),
-  )}`;
+  return `${array.constructor.name}:${array.byteLength}:${geometryArrayHash(array)}`;
 };
 
 const geometryBucketKey = (geometry: GeometryByteLayout): string => [

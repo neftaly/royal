@@ -817,7 +817,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
 
-    expect(ControlledImage.instances, "the bounded image lane should start one material first").toHaveLength(1);
+    expect(ControlledImage.instances, "the bounded image lane should start both visible materials").toHaveLength(2);
     const readyCallsStart = calls.length;
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();

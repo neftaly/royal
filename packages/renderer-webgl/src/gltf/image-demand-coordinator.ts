@@ -141,7 +141,8 @@ type Asset = {
 
 const EMPTY_IMAGE_KEYS: ReadonlySet<string> = new Set();
 
-const GLTF_IMAGE_LANE_CONCURRENCY = 1;
+const GLTF_IBL_IMAGE_CONCURRENCY = 1;
+const GLTF_ORDINARY_IMAGE_CONCURRENCY = 2;
 const GLTF_IMAGE_TRANSPORT_CONCURRENCY = 4;
 
 export const gltfImageDemandKeys = (
@@ -203,10 +204,10 @@ export class GltfImageDemandCoordinator {
   }) {
     this.#closeSource = options.closeSource;
     this.#diagnostic = options.diagnostic;
-    this.#iblScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
+    this.#iblScheduler = new GltfPreparationScheduler(GLTF_IBL_IMAGE_CONCURRENCY, options.admit);
     this.#invalidate = options.invalidate;
     this.#now = options.now ?? monotonicNowMs;
-    this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
+    this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_ORDINARY_IMAGE_CONCURRENCY, options.admit);
     this.#decodeRecipe = options.decodeRecipe ?? decodePreparedGltfImageSourceRecipe;
     this.#prepareRecipe = options.prepareRecipe ?? prepareGltfImageSourceRecipe;
     this.#progress = options.progress ?? (() => undefined);

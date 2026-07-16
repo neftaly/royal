@@ -71,7 +71,12 @@ describe("WebGL geometry recipes", () => {
     const indices = new Uint16Array([0, 1, 2]);
     const declaration = gltfGeometryDeclaration({ indices, mode: "triangles", positions });
     const first = normalizeGeometryDeclaration(declaration);
-    const second = normalizeGeometryDeclaration(gltfGeometryDeclaration({
+    const shared = normalizeGeometryDeclaration(gltfGeometryDeclaration({
+      indices,
+      mode: "triangles",
+      positions,
+    }));
+    const copied = normalizeGeometryDeclaration(gltfGeometryDeclaration({
       indices: indices.slice(),
       mode: "triangles",
       positions: positions.slice(),
@@ -79,8 +84,9 @@ describe("WebGL geometry recipes", () => {
 
     expect(first.positions).toBe(positions);
     expect(first.indices).toBe(indices);
-    expect(first.bucketKey).toBe(second.bucketKey);
-    expect(sameGeometryBytes(first, second)).toBe(true);
+    expect(first.bucketKey).toBe(shared.bucketKey);
+    expect(first.bucketKey).toBe(copied.bucketKey);
+    expect(sameGeometryBytes(first, copied)).toBe(true);
     expect(geometryArrayBucketKey(positions)).not.toBe(geometryArrayBucketKey(backing));
 
     const changedPositions = positions.slice();

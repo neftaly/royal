@@ -16,6 +16,7 @@ import {
   wakeIblTextureDurablePressure,
 } from "../packages/renderer-webgl/src/webgl/ibl-texture-arena";
 import { IBL_BRDF_LUT_BYTES } from "../packages/renderer-webgl/src/webgl/ibl-brdf-lut";
+import { decodeIblBrdfLutRg8 } from "../packages/renderer-webgl/src/webgl/ibl-brdf-lut-data";
 import {
   STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
   STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
@@ -34,6 +35,8 @@ class FakeGl {
   readonly MAX_TEXTURE_IMAGE_UNITS = 0x8872;
   readonly RGB = 0x1907;
   readonly RGB9_E5 = 0x8c3d;
+  readonly RG = 0x8227;
+  readonly RG8 = 0x822b;
   readonly RGBA = 0x1908;
   readonly RGBA8 = 0x8058;
   readonly TEXTURE0 = 0x84c0;
@@ -144,6 +147,17 @@ const recordingGovernor = () => {
 };
 
 describe("IBL texture arena", () => {
+  it("keeps the offline BRDF integration oracle intact", () => {
+    const data = decodeIblBrdfLutRg8();
+    let hash = 0x811c9dc5;
+    for (const byte of data) {
+      hash ^= byte;
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    expect(data).toHaveLength(IBL_BRDF_LUT_BYTES);
+    expect(hash).toBe(0x9276de9d);
+  });
+
   it("does not bind or enable an available specular texture when its planned unit is omitted", () => {
     const gl = new FakeGl();
     const arena = createIblTextureArena(context(gl));
@@ -628,7 +642,7 @@ describe("IBL texture arena", () => {
     expect(calls(gl, "texImage2D")).toHaveLength(6);
   });
 
-  it("governs studio RGB9_E5 and BRDF RGBA8 allocations and retries denial lazily", () => {
+  it("governs studio RGB9_E5 and BRDF RG8 allocations and retries denial lazily", () => {
     const gl = new FakeGl();
     const recorded = recordingGovernor();
     recorded.state.denied = true;

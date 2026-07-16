@@ -294,8 +294,18 @@ export const readGltfFloatAccessor = (
   const accessor = checkedAccessor(document, accessorIndex);
   checkedSparse(accessor, accessorIndex);
   const componentCount = gltfComponentCount(accessor.type);
-  const output = new Float32Array(accessor.count * componentCount);
   const source = accessorDataView(document, buffers, accessor, accessorIndex);
+  const outputLength = accessor.count * componentCount;
+  if (
+    source !== undefined
+    && accessor.componentType === COMPONENT_FLOAT
+    && accessor.normalized !== true
+    && (accessor.sparse?.count ?? 0) === 0
+    && source.stride === componentCount * Float32Array.BYTES_PER_ELEMENT
+  ) {
+    return new Float32Array(source.dataView.buffer, source.accessorOffset, outputLength).slice();
+  }
+  const output = new Float32Array(outputLength);
   if (source !== undefined) {
     const step = componentSize(accessor.componentType, `glTF accessor ${accessorIndex}`);
     const layout = accessorLayout(accessor, step);
@@ -333,8 +343,23 @@ export const readGltfIndices = (
   const accessor = checkedAccessor(document, accessorIndex);
   checkedSparse(accessor, accessorIndex);
   if (accessor.type !== "SCALAR") throw new Error(`glTF index accessor ${accessorIndex} must have type SCALAR`);
-  const output = indexArray(accessor.componentType, accessor.count, accessorIndex);
   const source = accessorDataView(document, buffers, accessor, accessorIndex);
+  const elementStep = componentSize(accessor.componentType, `glTF index accessor ${accessorIndex}`);
+  if (
+    source !== undefined
+    && (accessor.sparse?.count ?? 0) === 0
+    && source.stride === elementStep
+  ) {
+    switch (accessor.componentType) {
+      case COMPONENT_UNSIGNED_BYTE:
+        return new Uint8Array(source.dataView.buffer, source.accessorOffset, accessor.count).slice();
+      case COMPONENT_UNSIGNED_SHORT:
+        return new Uint16Array(source.dataView.buffer, source.accessorOffset, accessor.count).slice();
+      case COMPONENT_UNSIGNED_INT:
+        return new Uint32Array(source.dataView.buffer, source.accessorOffset, accessor.count).slice();
+    }
+  }
+  const output = indexArray(accessor.componentType, accessor.count, accessorIndex);
   if (source !== undefined) {
     for (let element = 0; element < accessor.count; element += 1) {
       output[element] = componentValue(

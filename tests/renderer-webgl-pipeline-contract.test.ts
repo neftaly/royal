@@ -157,6 +157,8 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     MAX_TEXTURE_SIZE: 0x0D33,
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
+    RG: 0x8227,
+    RG8: 0x822B,
     RGBA: 0x1908,
     RGBA16F: 0x881A,
     RGBA8: 0x8058,
@@ -960,9 +962,11 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(calls.some((call) =>
       call.name === "texImage2D"
       && call.args[0] === gl.TEXTURE_2D
+      && call.args[2] === gl.RG8
       && call.args[3] === iblBrdfLutSize
       && call.args[4] === iblBrdfLutSize
-      && dataLength(call.args[8]) === iblBrdfLutSize * iblBrdfLutSize * 4)).toBe(true);
+      && call.args[6] === gl.RG
+      && dataLength(call.args[8]) === iblBrdfLutSize * iblBrdfLutSize * 2)).toBe(true);
     const brdfLutActiveIndex = calls.findIndex((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + brdfLutUnit);
