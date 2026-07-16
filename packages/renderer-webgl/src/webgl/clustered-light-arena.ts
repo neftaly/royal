@@ -164,6 +164,16 @@ const createResource = (state: State): ClusteredLightResource => {
   }
 };
 
+const configureTexture = (state: State, unit: number, texture: WebGLTexture): void => {
+  const gl = state.gl;
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+};
+
 const matrixMatches = (left: ArrayLike<number>, right: Mat4): boolean => {
   for (let index = 0; index < 16; index += 1) {
     if (!Object.is(left[index], right[index])) return false;
@@ -422,65 +432,42 @@ const upload = (
   let uploadStarted = false;
   let storageSettled = false;
   let uploadSettled = false;
-  const cancelStorage = (): void => {
-    if (storageSettled) return;
-    storageSettled = true;
-    storageReservation?.cancel();
-  };
-  const commitStorage = (): ClusteredLightGpuLease | undefined => {
-    if (storageSettled) return undefined;
-    storageSettled = true;
-    return storageReservation?.commit();
-  };
-  const cancelUpload = (): void => {
-    if (uploadSettled) return;
-    uploadSettled = true;
-    uploadReservation?.cancel();
-  };
-  const commitUpload = (): void => {
-    if (uploadSettled) return;
-    uploadSettled = true;
-    uploadReservation?.commit().release();
-  };
-  const configure = (unit: number, texture: WebGLTexture): void => {
-    gl.activeTexture(gl.TEXTURE0 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  };
-  const subImage = (action: () => void): void => { uploadStarted = true; action(); };
-  const image = (action: () => void): void => {
-    allocationStarted = true;
-    uploadStarted = true;
-    action();
-  };
   // From the first possible GL mutation onward, the three textures are one
   // poisoned generation until every upload completes successfully.
   resource.gpuValid = false;
   try {
-    configure(units.grid, resource.gridTexture);
+    configureTexture(state, units.grid, resource.gridTexture);
+    uploadStarted = true;
     if (!gridResized) {
-      subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
-        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
-    } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32UI, gridWidth, grid.zSliceCount, 0,
-      gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
-    configure(units.indices, resource.indexTexture);
-    if (!resizedIndexTexture) {
-      subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, indexTextureWidth, indexTextureHeight,
-        gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
-    } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32UI, indexTextureWidth, indexTextureHeight, 0,
-      gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
-    if (uploadLightData) {
-      configure(units.lights, resource.lightTexture);
-      if (!resizedLightTexture) {
-        subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, lightTextureHeight,
-          gl.RGBA, gl.FLOAT, lightData));
-      } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, lightTextureHeight, 0,
-        gl.RGBA, gl.FLOAT, lightData));
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
+        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts);
+    } else {
+      allocationStarted = true;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32UI, gridWidth, grid.zSliceCount, 0,
+        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts);
     }
-    const lease = commitStorage();
+    configureTexture(state, units.indices, resource.indexTexture);
+    if (!resizedIndexTexture) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, indexTextureWidth, indexTextureHeight,
+        gl.RED_INTEGER, gl.UNSIGNED_INT, indexData);
+    } else {
+      allocationStarted = true;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32UI, indexTextureWidth, indexTextureHeight, 0,
+        gl.RED_INTEGER, gl.UNSIGNED_INT, indexData);
+    }
+    if (uploadLightData) {
+      configureTexture(state, units.lights, resource.lightTexture);
+      if (!resizedLightTexture) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, lightTextureHeight,
+          gl.RGBA, gl.FLOAT, lightData);
+      } else {
+        allocationStarted = true;
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, lightTextureHeight, 0,
+          gl.RGBA, gl.FLOAT, lightData);
+      }
+    }
+    storageSettled = true;
+    const lease = storageReservation?.commit();
     if (storageChanged) {
       if (lease !== undefined) resource.gpuLease = lease;
       resource.gpuBytes = persistentGpuBytes;
@@ -493,17 +480,24 @@ const upload = (
       resource.lightCount = lights.length;
       resource.lightSnapshot = commitSnapshot(lights, resource.lightSnapshot);
     }
-    commitUpload();
+    uploadSettled = true;
+    uploadReservation?.commit().release();
     resource.gpuValid = true;
     return resource;
   } catch (error) {
-    if (uploadStarted) commitUpload();
-    else cancelUpload();
-    if (storageChanged && allocationStarted && persistentGpuBytes >= resource.gpuBytes) {
-      const lease = commitStorage();
-      if (lease !== undefined) resource.gpuLease = lease;
-      resource.gpuBytes = persistentGpuBytes;
-    } else cancelStorage();
+    if (!uploadSettled) {
+      uploadSettled = true;
+      if (uploadStarted) uploadReservation?.commit().release();
+      else uploadReservation?.cancel();
+    }
+    if (!storageSettled) {
+      storageSettled = true;
+      if (storageChanged && allocationStarted && persistentGpuBytes >= resource.gpuBytes) {
+        const lease = storageReservation?.commit();
+        if (lease !== undefined) resource.gpuLease = lease;
+        resource.gpuBytes = persistentGpuBytes;
+      } else storageReservation?.cancel();
+    }
     throw error;
   }
 };
