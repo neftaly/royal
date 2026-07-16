@@ -153,6 +153,8 @@ export type WebGlTextureAssetSnapshot =
 
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly error?: string;
+  /** Distinct relevant images, including those not demanded by a visible material yet. */
+  readonly imageCandidates: number;
   readonly imageFailures: number;
   readonly imagesLoaded: number;
   readonly imageRequests: number;

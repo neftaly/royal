@@ -219,16 +219,21 @@ glTF material variants from `KHR_materials_variants` can be selected with
 Unknown selections render the primitive's base material and emit one bounded
 diagnostic message. Inside the surrounding Canvas,
 `useGltfAssetStatus(src).variantNames` returns the ordered names once the exact
-asset is ready, so asset-driven controls do not need a second glTF parser or a
-duplicated manifest. The list is empty before readiness. Pass `node.asset`
+scene is prepared, so asset-driven controls do not need a second glTF parser or a
+duplicated manifest. The list is empty while the scene is loading. Pass `node.asset`
 when using an explicit asset `version`.
 
 `useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
-and returns a status discriminated by `state`, plus the immutable
-`variantNames` list. Prepared-asset transitions push
-focused snapshots; the hook neither waits for unrelated frames nor allocates
-the full renderer diagnostics payload. Pass the normalized `node.asset` instead
-of a string when using an explicit asset `version`. Imperative hosts can use
+and returns a status discriminated by `state`. `loading` is not renderable;
+`streaming` is renderable with images outstanding; `ready` has settled every
+relevant image; and `degraded` is renderable with at least one image failure.
+Non-idle snapshots include immutable `images`, `scene`, and `phaseMs` details,
+plus `variantNames`. Image progress includes dormant material images in `total`,
+so a large scene cannot report complete merely because those images have not
+been requested yet. Prepared-asset and image transitions push focused snapshots;
+the hook neither waits for unrelated frames nor allocates the full renderer
+diagnostics payload. Pass the normalized `node.asset` instead of a string when
+using an explicit asset `version`. Imperative hosts can use
 `root.gltfAssetSnapshot(asset)` and `root.observeGltfAsset(asset, callback)` for
 the same exact asset identity. The React hook validates source and version
 identity immediately, including before the Canvas root exists.

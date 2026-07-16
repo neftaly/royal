@@ -7,7 +7,7 @@ import type { RoyalRendererGltfAssetSnapshot } from "./root";
 
 export { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 
-/** glTF readiness and authored material variants for one exact asset identity. */
+/** Observable scene readiness, image progress, timings, and variants for one exact glTF asset. */
 export type GltfAssetStatus = RoyalRendererGltfAssetSnapshot;
 
 /** An unversioned source URI, or the exact asset ref used by the scene. */
@@ -27,7 +27,25 @@ const sameAssetSnapshot = (
   right: RoyalRendererGltfAssetSnapshot,
 ): boolean => left.state === right.state
   && left.error === right.error
-  && sameVariants(left.variantNames, right.variantNames);
+  && sameVariants(left.variantNames, right.variantNames)
+  && (left.state === "idle" || right.state === "idle" || (
+    left.images.failed === right.images.failed
+    && left.images.loaded === right.images.loaded
+    && left.images.pending === right.images.pending
+    && left.images.requested === right.images.requested
+    && left.images.total === right.images.total
+    && left.scene.lights === right.scene.lights
+    && left.scene.nodes === right.scene.nodes
+    && left.scene.primitives === right.scene.primitives
+    && left.phaseMs.buffers === right.phaseMs.buffers
+    && left.phaseMs.document === right.phaseMs.document
+    && left.phaseMs.draco === right.phaseMs.draco
+    && left.phaseMs.firstImageComplete === right.phaseMs.firstImageComplete
+    && left.phaseMs.imagesComplete === right.phaseMs.imagesComplete
+    && left.phaseMs.meshopt === right.phaseMs.meshopt
+    && left.phaseMs.scene === right.phaseMs.scene
+    && left.phaseMs.toSceneReady === right.phaseMs.toSceneReady
+  ));
 
 const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAssetSnapshot => {
   validateGltfAssetStatusInput(input);

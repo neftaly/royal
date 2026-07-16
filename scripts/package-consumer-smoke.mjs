@@ -146,8 +146,11 @@ const Status = (): ReactNode => {
   const assetStatus = useGltfAssetStatus(asset.asset);
   const lifecycle = useRendererLifecycle();
   const label = assetStatus.state === 'error' ? assetStatus.error : assetStatus.state;
+  const images = assetStatus.state === 'idle'
+    ? 'not retained'
+    : \`\${assetStatus.images.loaded}/\${assetStatus.images.total} images\`;
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: {label}</output>;
+  return <output>{renderer}: {label}, {images}</output>;
 };
 
 export const App = (): ReactNode => <Canvas scene={renderScene}><Status /></Canvas>;

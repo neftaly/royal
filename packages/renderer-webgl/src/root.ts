@@ -492,6 +492,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
         invalidate: () => this.invalidate(),
         now: this.#now,
+        progress: (assetKey) => this.#preparedGltf.publishStateChange(assetKey),
         retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
       }));
       registerRollback(() => this.#preparedGltf.disposeImages());

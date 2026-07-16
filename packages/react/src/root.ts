@@ -135,20 +135,68 @@ export interface RoyalRendererDiagnosticsSnapshot {
   readonly virtualTexturing: RoyalRendererVirtualTexturingDiagnosticsSnapshot;
 }
 
-/** Focused state for one exact glTF asset identity retained by the renderer. */
-export type RoyalRendererGltfAssetSnapshot = Readonly<{
-  /** Authored `KHR_materials_variants` names in declaration order; empty until ready. */
+/** Image preparation progress for one retained glTF asset. */
+export interface RoyalRendererGltfImageProgress {
+  /** Images whose decode or admission failed. */
+  readonly failed: number;
+  /** Images decoded and accepted for publication. */
+  readonly loaded: number;
+  /** Images not yet loaded or failed, including dormant material demand. */
+  readonly pending: number;
+  /** Images whose loading has been requested. */
+  readonly requested: number;
+  /** Distinct relevant images in the asset. */
+  readonly total: number;
+}
+
+/** Prepared scene resources for one retained glTF asset. */
+export interface RoyalRendererGltfSceneStatistics {
+  readonly lights: number;
+  readonly nodes: number;
+  readonly primitives: number;
+}
+
+export type RoyalRendererGltfPhaseTimings = WebGlGltfLoadDiagnosticsAssetSnapshot["phaseMs"];
+
+type RoyalRendererGltfAssetDetails = Readonly<{
+  readonly images: RoyalRendererGltfImageProgress;
+  readonly phaseMs: RoyalRendererGltfPhaseTimings;
+  readonly scene: RoyalRendererGltfSceneStatistics;
+  /** Authored `KHR_materials_variants` names in declaration order; empty until scene preparation. */
   readonly variantNames: readonly string[];
-}> & (
+}>;
+
+/** Focused, observable state for one exact glTF asset identity retained by the renderer. */
+export type RoyalRendererGltfAssetSnapshot =
   | Readonly<{
     readonly error?: never;
-    readonly state: "idle" | "loading" | "ready";
+    readonly state: "idle";
+    readonly variantNames: readonly string[];
   }>
-  | Readonly<{
+  | (RoyalRendererGltfAssetDetails & Readonly<{
+    readonly error?: never;
+    /** The scene graph is not renderable yet. */
+    readonly state: "loading";
+  }>)
+  | (RoyalRendererGltfAssetDetails & Readonly<{
+    readonly error?: never;
+    /** Scene geometry is renderable while relevant images continue preparing. */
+    readonly state: "streaming";
+  }>)
+  | (RoyalRendererGltfAssetDetails & Readonly<{
+    readonly error?: never;
+    /** Scene geometry and every relevant image source are prepared. */
+    readonly state: "ready";
+  }>)
+  | (RoyalRendererGltfAssetDetails & Readonly<{
+    readonly error?: never;
+    /** Scene geometry is renderable, but at least one image failed. */
+    readonly state: "degraded";
+  }>)
+  | (RoyalRendererGltfAssetDetails & Readonly<{
     readonly error: string;
     readonly state: "error";
-  }>
-);
+  }>);
 
 /** Focused readiness for one exact ordinary image or authored virtual texture. */
 export type RoyalRendererTextureAssetSnapshot =
@@ -246,21 +294,41 @@ const validateObserver = (callback: unknown, label: string): void => {
   if (typeof callback !== "function") throw new TypeError(`${label} must be a function`);
 };
 
-const royalGltfAssetSnapshot = (
+/** @internal Pure product-status projection from one backend asset snapshot. */
+export const royalGltfAssetSnapshotFrom = (
   snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined,
 ): RoyalRendererGltfAssetSnapshot => {
   if (snapshot === undefined) return Object.freeze({ state: "idle", variantNames: NO_GLTF_VARIANTS });
+  const settledImages = snapshot.imagesLoaded + snapshot.imageFailures;
+  const details: RoyalRendererGltfAssetDetails = {
+    images: Object.freeze({
+      failed: snapshot.imageFailures,
+      loaded: snapshot.imagesLoaded,
+      pending: Math.max(0, snapshot.imageCandidates - settledImages),
+      requested: snapshot.imageRequests,
+      total: snapshot.imageCandidates,
+    }),
+    phaseMs: Object.freeze({ ...snapshot.phaseMs }),
+    scene: Object.freeze({
+      lights: snapshot.lightCount,
+      nodes: snapshot.nodeCount,
+      primitives: snapshot.primitiveCount,
+    }),
+    variantNames: snapshot.variantNames,
+  };
   if (snapshot.status === "loading") {
-    return Object.freeze({ state: "loading", variantNames: NO_GLTF_VARIANTS });
+    return Object.freeze({ ...details, state: "loading" });
   }
   if (snapshot.status === "error") {
     return Object.freeze({
+      ...details,
       error: snapshot.error ?? "glTF asset failed to load",
       state: "error",
-      variantNames: NO_GLTF_VARIANTS,
     });
   }
-  return Object.freeze({ state: "ready", variantNames: snapshot.variantNames });
+  if (snapshot.imageFailures > 0) return Object.freeze({ ...details, state: "degraded" });
+  if (settledImages < snapshot.imageCandidates) return Object.freeze({ ...details, state: "streaming" });
+  return Object.freeze({ ...details, state: "ready" });
 };
 
 const royalTextureAssetSnapshot = (
@@ -319,7 +387,7 @@ export const createRendererRoot = (
     },
     gltfAssetSnapshot: (asset) => {
       validateGltfAssetRef(asset, "RoyalRendererRoot gltfAssetSnapshot asset");
-      return royalGltfAssetSnapshot(root.gltfAssetSnapshot(asset));
+      return royalGltfAssetSnapshotFrom(root.gltfAssetSnapshot(asset));
     },
     textureAssetSnapshot: (texture) => {
       validateTextureAssetRef(texture, "RoyalRendererRoot textureAssetSnapshot texture");
@@ -342,7 +410,7 @@ export const createRendererRoot = (
       validateGltfAssetRef(asset, "RoyalRendererRoot observeGltfAsset asset");
       validateObserver(callback, "RoyalRendererRoot observeGltfAsset callback");
       return root.observeGltfAsset(asset, (snapshot) => {
-        callback(royalGltfAssetSnapshot(snapshot));
+        callback(royalGltfAssetSnapshotFrom(snapshot));
       });
     },
     observeTextureAsset: (texture, callback) => {

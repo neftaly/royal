@@ -112,6 +112,8 @@ export type GltfLoadMetrics = {
   documentLoadedAt?: number;
   dracoDecodedAt?: number;
   firstImageSettledAt?: number;
+  /** Distinct image recipes retained for this asset, including dormant demand. */
+  imageCandidates?: number;
   imageFailures: number;
   imageLoaded: number;
   imageLoadStartedAt?: number;

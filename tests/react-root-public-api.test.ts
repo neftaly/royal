@@ -10,7 +10,10 @@ import {
   virtualTexture,
   type RenderRoot,
 } from "@royal/renderer-core";
-import { acquireExternalRenderClockForRoyalRoot } from "../packages/react/src/root";
+import {
+  acquireExternalRenderClockForRoyalRoot,
+  royalGltfAssetSnapshotFrom,
+} from "../packages/react/src/root";
 import { assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
 
@@ -31,6 +34,39 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("projects renderable glTF image progress without calling scene readiness complete", () => {
+    const snapshot = {
+      imageCandidates: 4,
+      imageFailures: 0,
+      imagesLoaded: 1,
+      imageRequests: 3,
+      lightCount: 2,
+      nodeCount: 20,
+      phaseMs: { document: 5, toSceneReady: 12 },
+      primitiveCount: 8,
+      src: "/bistro.glb",
+      status: "sceneReady" as const,
+      variantNames: ["night"],
+    };
+
+    expect(royalGltfAssetSnapshotFrom(snapshot)).toEqual({
+      images: { failed: 0, loaded: 1, pending: 3, requested: 3, total: 4 },
+      phaseMs: { document: 5, toSceneReady: 12 },
+      scene: { lights: 2, nodes: 20, primitives: 8 },
+      state: "streaming",
+      variantNames: ["night"],
+    });
+    expect(royalGltfAssetSnapshotFrom({
+      ...snapshot,
+      imageFailures: 1,
+    }).state).toBe("degraded");
+    expect(royalGltfAssetSnapshotFrom({
+      ...snapshot,
+      imagesLoaded: 4,
+      imageRequests: 4,
+    }).state).toBe("ready");
+  });
+
   it("accepts event-shaped picks and rejects malformed coordinates", () => {
     const root = createRendererRoot(fakeCanvas());
     const pointerEvent = {

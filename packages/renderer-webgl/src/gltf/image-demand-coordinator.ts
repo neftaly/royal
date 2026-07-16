@@ -160,6 +160,7 @@ export class GltfImageDemandCoordinator {
   readonly #now: MonotonicClock;
   readonly #ordinaryScheduler: GltfPreparationScheduler;
   readonly #pendingOutcomes: Row[] = [];
+  readonly #progress: (assetKey: string) => void;
   readonly #recipeCleanupDebt = new Set<RecipeOwnership>();
   readonly #registrationClaims = new Map<string, object>();
   readonly #retainSource: (source: LoadedTextureSource) => SourceLease;
@@ -173,6 +174,7 @@ export class GltfImageDemandCoordinator {
     readonly diagnostic: (message: string, key: string) => void;
     readonly invalidate: () => void;
     readonly now?: MonotonicClock;
+    readonly progress?: (assetKey: string) => void;
     readonly retainSource: (source: LoadedTextureSource) => SourceLease;
   }) {
     this.#closeSource = options.closeSource;
@@ -181,6 +183,7 @@ export class GltfImageDemandCoordinator {
     this.#invalidate = options.invalidate;
     this.#now = options.now ?? monotonicNowMs;
     this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
+    this.#progress = options.progress ?? (() => undefined);
     this.#retainSource = options.retainSource;
   }
 
@@ -274,6 +277,7 @@ export class GltfImageDemandCoordinator {
       throw new Error(`glTF image asset registration was superseded for ${input.key}`);
     }
     this.#bindMaterialRows(asset, input.materials);
+    asset.load.imageCandidates = asset.rows.size;
     this.#assets.set(input.key, asset);
     this.#registrationClaims.delete(input.key);
     // Lighting faces define the environment for every material and must be
@@ -600,6 +604,7 @@ export class GltfImageDemandCoordinator {
     if (asset.load.imageLoaded + asset.load.imageFailures >= asset.load.imageRequests) {
       asset.load.imagesSettledAt = this.#now();
     }
+    this.#requestProgress(asset.key);
   }
 
   #releaseRecipesIfUnused(ownership: RecipeOwnership): void {
@@ -782,6 +787,17 @@ export class GltfImageDemandCoordinator {
     } catch (error) {
       this.#diagnose(
         `glTF image invalidation observer failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        key,
+      );
+    }
+  }
+
+  #requestProgress(key: string): void {
+    try {
+      this.#progress(key);
+    } catch (error) {
+      this.#diagnose(
+        `glTF image progress observer failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
         key,
       );
     }

@@ -45,6 +45,7 @@ const gltfLoadDiagnosticsAssetSnapshot = (
 
   return {
     ...(state.error === undefined ? {} : { error: state.error }),
+    imageCandidates: load.imageCandidates ?? load.imageRequests,
     imageFailures: load.imageFailures,
     imagesLoaded: load.imageLoaded,
     imageRequests: load.imageRequests,

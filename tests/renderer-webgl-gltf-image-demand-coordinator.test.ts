@@ -110,11 +110,13 @@ const coordinatorHarness = (options: {
   readonly diagnostic?: (message: string, key: string) => void;
   readonly invalidate?: () => void;
   readonly now?: () => number;
+  readonly progress?: (assetKey: string) => void;
   readonly retainSource?: (value: LoadedTextureSource) => ResourceArenaSourceLease;
 } = {}) => {
   const closeSource = vi.fn(options.closeSource ?? ((_value: LoadedTextureSource) => undefined));
   const diagnostic = vi.fn(options.diagnostic ?? ((_message: string, _key: string) => undefined));
   const invalidate = vi.fn(options.invalidate ?? (() => undefined));
+  const progress = vi.fn(options.progress ?? ((_assetKey: string) => undefined));
   const leaseReleases = new Map<LoadedTextureSource, ReturnType<typeof vi.fn<() => boolean>>>();
   const retainSource = vi.fn(options.retainSource ?? ((value: LoadedTextureSource) => {
     const release = vi.fn(() => true);
@@ -126,6 +128,7 @@ const coordinatorHarness = (options: {
     diagnostic,
     invalidate,
     ...(options.now === undefined ? {} : { now: options.now }),
+    progress,
     retainSource,
   });
   return {
@@ -134,6 +137,7 @@ const coordinatorHarness = (options: {
     diagnostic,
     invalidate,
     leaseReleases,
+    progress,
     retainSource,
   };
 };
@@ -242,6 +246,9 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
+    expect(load.imageCandidates).toBe(1);
+    expect(harness.progress).toHaveBeenCalledOnce();
+    expect(harness.progress).toHaveBeenCalledWith("asset");
     expect(harness.coordinator.readyKeys("asset").has("invalidate-failure")).toBe(true);
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([
       expect.objectContaining({ key: "invalidate-failure" }),
