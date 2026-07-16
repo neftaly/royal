@@ -202,7 +202,13 @@ const routes = exampleContract.examples.flatMap(({ id, path }) => {
   if (id === 'gltf-lab') {
     return [gltfLabRoute(runnableGltfLabCases.find((entry) => entry.name === 'Box'))];
   }
-  return [{ id, path }];
+  return [{
+    id,
+    path,
+    // Keep the long Sponza camera sample inside the authored bounds. Its
+    // narrow cross-axis makes the generic seven-pixel orbit leave the model.
+    ...(id === 'gltf-scenes' ? { cameraDragStepPixels: 1 } : {}),
+  }];
 });
 
 const optInRoutes = [
@@ -1342,7 +1348,11 @@ const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(ses
 `);
 
 const collectPageMetrics = async (session, frames, options = {}) => {
-  const { sampleXr = true, xrOnly = false } = options;
+  const {
+    cameraDragStepPixels: routeCameraDragStepPixels = cameraDragStepPixels,
+    sampleXr = true,
+    xrOnly = false,
+  } = options;
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
   const setupRenderer = await evaluate(session, rendererSnapshotExpression);
   const xrStats = (value, requestedSampleCount, reason) => value ?? {
@@ -1483,7 +1493,10 @@ const collectPageMetrics = async (session, frames, options = {}) => {
         const dragRendererBefore = await evaluate(session, rendererSnapshotExpression);
         await evaluate(session, 'globalThis.__royalBench?.reset?.()');
         const frameStats = await evaluate(session, `
-(async () => globalThis.__royalBench?.cameraDragSample?.(${cameraDragFrameCount}, ${cameraDragStepPixels}) ?? null)()
+(async () => globalThis.__royalBench?.cameraDragSample?.(
+  ${cameraDragFrameCount},
+  ${routeCameraDragStepPixels}
+) ?? null)()
 `);
         const dragGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
         const dragRendererAfter = await evaluate(session, rendererSnapshotExpression);
@@ -2001,6 +2014,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
       );
     }
     const measured = await collectPageMetrics(session, frameSampleCount, {
+      cameraDragStepPixels: route.cameraDragStepPixels,
       sampleXr: prepared?.active !== false,
       xrOnly: (realXrEnabled || fakeXrEnabled) && prepared?.active === true,
     });

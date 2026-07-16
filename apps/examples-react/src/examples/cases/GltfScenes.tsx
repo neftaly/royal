@@ -45,7 +45,7 @@ const sceneShowcaseRendererOptions = {
 const sceneEntries = [
   {
     bytes: 52_686_624,
-    camera: { distance: 11.5, pitch: 0.04, target: [-0.48, 4, -0.31], yaw: -1.57 },
+    camera: { distance: 9.5, pitch: 0.28, target: [-0.48, 3.2, -0.31], yaw: -1.57 },
     credit: 'Crytek · Frank Meinl',
     description: 'Architectural core-glTF scene with 103 primitives, 25 materials, and 69 textures.',
     far: 160,
