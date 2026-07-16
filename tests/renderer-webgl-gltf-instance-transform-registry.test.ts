@@ -133,6 +133,25 @@ describe("glTF instance transform registry", () => {
     registry.endFrame(true);
   });
 
+  it("preserves the matrix basis across position-only pose commits", () => {
+    const tracked = trackedSource(1);
+    tracked.source.rotations.set([0.3, -0.4, 0.5]);
+    tracked.source.scales.set([2, 3, 4]);
+    const registry = new GltfInstanceTransformRegistry(() => undefined);
+    registry.reconcile([change(tracked.source, 0, 1)]);
+    const initial = registry.views(tracked.source).rootModels[0]!;
+    const basis = initial.slice(0, 12);
+
+    tracked.source.positions.set([7, 8, 9]);
+    tracked.source.commitPose();
+    registry.beginFrame();
+    const translated = registry.views(tracked.source).rootModels[0]!;
+    expect(translated.slice(0, 12)).toEqual(basis);
+    expect(translated.slice(12, 15)).toEqual([7, 8, 9]);
+    expectMatricesCurrent(registry, tracked.source);
+    registry.endFrame(true);
+  });
+
   it("retains failed release and dispose ownership for retry, including opaque failures", () => {
     const releaseTracked = trackedSource(1, 1);
     const opaqueTracked = trackedSource(1);

@@ -34,6 +34,8 @@ type GltfInstanceTransformViewState = {
   framePoseVersion: number;
   frameScaleVersion: number;
   matrixPoseVersion: number;
+  readonly matrixRotations: Float32Array;
+  readonly matrixScales: Float32Array;
   matrixScaleVersion: number;
   readonly rootModels: MutableMat4[];
   readonly source: GltfInstanceTransforms;
@@ -44,6 +46,36 @@ type GltfInstanceTransformViewState = {
 type GltfInstanceTransformSubscription = {
   readonly unsubscribe: () => void;
   readonly views: GltfInstanceTransformViewState;
+};
+
+const sameVector3 = (left: Float32Array, right: Float32Array, offset: number): boolean =>
+  Object.is(left[offset], right[offset])
+  && Object.is(left[offset + 1], right[offset + 1])
+  && Object.is(left[offset + 2], right[offset + 2]);
+
+const copyVector3 = (target: Float32Array, source: Float32Array, offset: number): void => {
+  target[offset] = source[offset]!;
+  target[offset + 1] = source[offset + 1]!;
+  target[offset + 2] = source[offset + 2]!;
+};
+
+const applyInstanceMatrix = (
+  views: GltfInstanceTransformViewState,
+  index: number,
+): void => {
+  const offset = index * 3;
+  const rotationChanged = !sameVector3(views.matrixRotations, views.source.rotations, offset);
+  const scaleChanged = !sameVector3(views.matrixScales, views.source.scales, offset);
+  if (rotationChanged || scaleChanged) {
+    transformMat4Into(views.rootModels[index]!, views.transforms[index]);
+    copyVector3(views.matrixRotations, views.source.rotations, offset);
+    copyVector3(views.matrixScales, views.source.scales, offset);
+    return;
+  }
+  const model = views.rootModels[index]!;
+  model[12] = views.source.positions[offset]!;
+  model[13] = views.source.positions[offset + 1]!;
+  model[14] = views.source.positions[offset + 2]!;
 };
 
 export class GltfInstanceTransformRegistry {
@@ -131,6 +163,10 @@ export class GltfInstanceTransformRegistry {
       }
       const transforms: Transform[] = [];
       const rootModels: MutableMat4[] = [];
+      const matrixRotations = new Float32Array(source.rotations.length);
+      const matrixScales = new Float32Array(source.scales.length);
+      matrixRotations.fill(NaN);
+      matrixScales.fill(NaN);
       for (let index = 0; index < source.count; index += 1) {
         const offset = index * 3;
         transforms.push({
@@ -146,6 +182,8 @@ export class GltfInstanceTransformRegistry {
         framePoseVersion: source.poseVersion,
         frameScaleVersion: source.scaleVersion,
         matrixPoseVersion: -1,
+        matrixRotations,
+        matrixScales,
         matrixScaleVersion: -1,
         rootModels,
         source,
@@ -166,7 +204,7 @@ export class GltfInstanceTransformRegistry {
           const bit = 31 - Math.clz32(word & -word);
           const index = wordIndex * 32 + bit;
           if (index < views.transforms.length) {
-            transformMat4Into(views.rootModels[index]!, views.transforms[index]);
+            applyInstanceMatrix(views, index);
           }
           word &= word - 1;
         }
@@ -182,7 +220,7 @@ export class GltfInstanceTransformRegistry {
       )
     ) {
       for (let index = 0; index < views.transforms.length; index += 1) {
-        transformMat4Into(views.rootModels[index]!, views.transforms[index]);
+        applyInstanceMatrix(views, index);
       }
       views.matrixPoseVersion = source.poseVersion;
       views.matrixScaleVersion = source.scaleVersion;

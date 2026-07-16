@@ -155,6 +155,34 @@ const expectBoundsClose = (actual: Bounds3 | undefined, expected: Bounds3 | unde
 };
 
 describe("renderer-webgl picking math", () => {
+  it("matches eight-corner clip-plane visibility for arbitrary AABBs", () => {
+    forEachFuzzCase({ cases: 256, seed: 0xaabb_c11f }, ({ label, random }) => {
+      const min = [
+        random.number(-20, 20),
+        random.number(-20, 20),
+        random.number(-20, 20),
+      ] as const;
+      const max = [
+        min[0] + random.number(0, 20),
+        min[1] + random.number(0, 20),
+        min[2] + random.number(0, 20),
+      ] as const;
+      const corners = new Float32Array(24);
+      for (let corner = 0; corner < 8; corner += 1) {
+        corners[corner * 3] = (corner & 1) === 0 ? min[0] : max[0];
+        corners[corner * 3 + 1] = (corner & 2) === 0 ? min[1] : max[1];
+        corners[corner * 3 + 2] = (corner & 4) === 0 ? min[2] : max[2];
+      }
+      const matrix = random.array(16, () => random.number(-4, 4)) as Mat4;
+      const floatBounds = { min: corners.slice(0, 3), max: corners.slice(21, 24) } as unknown as Bounds3;
+      expect(isBoundsVisible(floatBounds, matrix), label).toBe(verticesVisible(corners, matrix));
+    });
+
+    const identity = identityMat4();
+    expect(isBoundsVisible({ min: [-2, 0, 0], max: [-1, 0, 0] }, identity)).toBe(true);
+    expect(isBoundsVisible({ min: [-3, 0, 0], max: [-2, 0, 0] }, identity)).toBe(false);
+  });
+
   it("fuzzes cached local bounds against the previous vertex-plane visibility test", () => {
     forEachFuzzCase({ cases: 128, seed: 0xc011_1de5 }, ({ label, random }) => {
       const positions = new Float32Array(random.array(

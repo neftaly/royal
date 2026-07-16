@@ -16,43 +16,55 @@ export type MutableBounds3 = {
   readonly min: [number, number, number];
 };
 
+const isBoundsOutsideClipPlane = (
+  centerX: number,
+  centerY: number,
+  centerZ: number,
+  extentX: number,
+  extentY: number,
+  extentZ: number,
+  planeX: number,
+  planeY: number,
+  planeZ: number,
+  planeW: number,
+): boolean =>
+  planeX * centerX + planeY * centerY + planeZ * centerZ + planeW
+  + Math.abs(planeX) * extentX
+  + Math.abs(planeY) * extentY
+  + Math.abs(planeZ) * extentZ < 0;
+
 export const isBoundsVisible = (
   bounds: Bounds3 | undefined,
   viewProjectionModel: Mat4,
 ): boolean => {
   if (bounds === undefined) return false;
+  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+  const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
+  const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
+  const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+  const m = viewProjectionModel;
 
-  let left = true;
-  let right = true;
-  let bottom = true;
-  let top = true;
-  let near = true;
-  let far = true;
-  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
-    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
-    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
-      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
-      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
-        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
-        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
-          + viewProjectionModel[12];
-        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
-          + viewProjectionModel[13];
-        const clipZ = viewProjectionModel[2] * x + viewProjectionModel[6] * y + viewProjectionModel[10] * z
-          + viewProjectionModel[14];
-        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
-          + viewProjectionModel[15];
-        left &&= clipX < -clipW;
-        right &&= clipX > clipW;
-        bottom &&= clipY < -clipW;
-        top &&= clipY > clipW;
-        near &&= clipZ < -clipW;
-        far &&= clipZ > clipW;
-      }
-    }
-  }
-
-  return !(left || right || bottom || top || near || far);
+  return !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12],
+  ) && !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12],
+  ) && !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13],
+  ) && !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13],
+  ) && !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14],
+  ) && !isBoundsOutsideClipPlane(
+    centerX, centerY, centerZ, extentX, extentY, extentZ,
+    m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14],
+  );
 };
 
 /**
