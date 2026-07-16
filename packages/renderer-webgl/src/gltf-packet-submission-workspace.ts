@@ -165,6 +165,21 @@ const retainedBindingId = (
   return id === NO_FRAME_PACKET_ID ? undefined : id;
 };
 
+const clearBindingIdLookup = (
+  lookup: Uint32Array,
+  sourceIds: Uint32Array,
+  count: number,
+): void => {
+  if (count * 4 >= lookup.length) {
+    lookup.fill(NO_FRAME_PACKET_ID);
+    return;
+  }
+  for (let index = 0; index < count; index += 1) {
+    const sourceId = sourceIds[index]!;
+    if (sourceId < lookup.length) lookup[sourceId] = NO_FRAME_PACKET_ID;
+  }
+};
+
 const grownFloat64 = (source: Float64Array, capacity: number): Float64Array => {
   const target = new Float64Array(capacity);
   target.set(source);
@@ -239,23 +254,19 @@ export const assertGltfPacketSubmissionWorkspaceCurrent = <M, R, L>(
 };
 
 const clearBindings = <M, R, L>(workspace: WorkspaceState<M, R, L>): void => {
-  for (let index = 0; index < workspace.materialBindingCount; index += 1) {
-    workspace.materialBindings[index] = undefined;
-    const sourceId = workspace.materialBindingSourceIds[index]!;
-    if (sourceId < workspace.materialBindingIdsBySource.length) {
-      workspace.materialBindingIdsBySource[sourceId] = NO_FRAME_PACKET_ID;
-    }
-  }
-  for (let index = 0; index < workspace.rootBindingCount; index += 1) {
-    workspace.rootBindings[index] = undefined;
-    const sourceId = workspace.rootBindingSourceIds[index]!;
-    if (sourceId < workspace.rootBindingIdsBySource.length) {
-      workspace.rootBindingIdsBySource[sourceId] = NO_FRAME_PACKET_ID;
-    }
-  }
-  for (let index = 0; index < workspace.lightBindingCount; index += 1) {
-    workspace.lightBindings[index] = undefined;
-  }
+  workspace.materialBindings.fill(undefined, 0, workspace.materialBindingCount);
+  clearBindingIdLookup(
+    workspace.materialBindingIdsBySource,
+    workspace.materialBindingSourceIds,
+    workspace.materialBindingCount,
+  );
+  workspace.rootBindings.fill(undefined, 0, workspace.rootBindingCount);
+  clearBindingIdLookup(
+    workspace.rootBindingIdsBySource,
+    workspace.rootBindingSourceIds,
+    workspace.rootBindingCount,
+  );
+  workspace.lightBindings.fill(undefined, 0, workspace.lightBindingCount);
   workspace.materialBindingCount = 0;
   workspace.rootBindingCount = 0;
   workspace.lightBindingCount = 0;
