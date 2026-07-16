@@ -129,6 +129,7 @@ const fakeXrPrepareTimeoutMs = envInteger(
 const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
 const gpuTimersEnabled = process.env.EXAMPLES_BENCH_GPU_TIMERS !== '0';
+const gpuDrawProfileEnabled = process.env.EXAMPLES_BENCH_GPU_DRAW_PROFILE === '1';
 
 if (fakeXrEnabled && realXrEnabled) {
   throw new Error('EXAMPLES_BENCH_FAKE_XR and EXAMPLES_BENCH_REAL_XR cannot both be enabled');
@@ -572,6 +573,7 @@ const installBenchmarkHooks = async (session) => {
     fakeXrHz,
     fakeXrSampleTimeoutMs,
     fakeXrViews,
+    gpuDrawProfileEnabled,
     gpuTimersEnabled,
   });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
@@ -651,6 +653,23 @@ const installBenchmarkHooks = async (session) => {
     supported: false,
     windowEnabled: false,
   };
+  const gpuDrawProfile = {
+    active: false,
+    attempted: false,
+    records: [],
+  };
+  const glObjectIds = new WeakMap();
+  let nextGlObjectId = 1;
+  const drawState = { program: null, vertexArray: null };
+  const glObjectId = (value) => {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return 0;
+    let id = glObjectIds.get(value);
+    if (id !== undefined) return id;
+    id = nextGlObjectId;
+    nextGlObjectId += 1;
+    glObjectIds.set(value, id);
+    return id;
+  };
   let lastDrawGl;
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
@@ -718,9 +737,13 @@ const installBenchmarkHooks = async (session) => {
       const sample = state.pending[completed];
       if (!state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT_AVAILABLE)) break;
       if (sample.disjoint === true) gpuTimers.disjointSamples += 1;
-      else if (sample.generation === gpuTimers.generation && sample.record !== false) {
+      else if (sample.generation === gpuTimers.generation) {
         const nanoseconds = Number(state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT));
-        if (Number.isFinite(nanoseconds) && nanoseconds >= 0) gpuTimers.durations.push(nanoseconds / 1_000_000);
+        if (Number.isFinite(nanoseconds) && nanoseconds >= 0) {
+          const durationMs = nanoseconds / 1_000_000;
+          if (sample.drawRecord !== undefined) sample.drawRecord.durationMs = durationMs;
+          else if (sample.record !== false) gpuTimers.durations.push(durationMs);
+        }
       }
       state.freeQueries.push(sample.query);
     }
@@ -778,7 +801,9 @@ const installBenchmarkHooks = async (session) => {
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
       pollGpuTimers(state);
-      if (!state.pending.some((sample) => sample.generation === generation && sample.record !== false)) return;
+      if (!state.pending.some((sample) =>
+        sample.generation === generation
+        && (sample.record !== false || sample.drawRecord !== undefined))) return;
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     pollGpuTimers(state);
@@ -855,7 +880,9 @@ const installBenchmarkHooks = async (session) => {
     const wrappedWindowRequestAnimationFrame = (callback) =>
       originalWindowRequestAnimationFrame.call(globalThis, (time) => {
         const drawsBefore = drawCount();
-        const gpuTimer = gpuTimers.windowEnabled ? beginGpuTimerForGl(lastDrawGl) : undefined;
+        const gpuTimer = gpuTimers.windowEnabled && !gpuDrawProfile.active
+          ? beginGpuTimerForGl(lastDrawGl)
+          : undefined;
         try {
           callback(time);
         } finally {
@@ -910,20 +937,63 @@ const installBenchmarkHooks = async (session) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalBenchPatched === true) return;
     const wrapped = function (...args) {
-      handler(args, this);
-      return original.apply(this, args);
+      const after = handler(args, this);
+      try {
+        return original.apply(this, args);
+      } finally {
+        if (typeof after === 'function') after();
+      }
     };
     Object.defineProperty(wrapped, '__royalBenchPatched', { value: true });
     prototype[name] = wrapped;
   };
+  const profileDraw = (kind, args, gl) => {
+    if (!gpuDrawProfile.active) return undefined;
+    gpuDrawProfile.attempted = true;
+    const timer = beginGpuTimerForGl(gl);
+    if (timer === undefined) return undefined;
+    const record = {
+      count: Math.max(0, Number(args[kind.includes('Elements') ? 1 : 2]) || 0),
+      durationMs: null,
+      instances: kind === 'drawArraysInstanced'
+        ? Math.max(0, Number(args[3]) || 0)
+        : kind === 'drawElementsInstanced' ? Math.max(0, Number(args[4]) || 0) : 1,
+      kind,
+      ordinal: gpuDrawProfile.records.length,
+      programId: glObjectId(drawState.program),
+      vertexArrayId: glObjectId(drawState.vertexArray),
+    };
+    gpuDrawProfile.records.push(record);
+    timer.drawRecord = record;
+    return () => endGpuTimer(timer, false);
+  };
   const patchPrototype = (prototype) => {
     patch(prototype, 'bindBuffer', () => { counters.bindBuffer += 1; });
     patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
-    patch(prototype, 'bindVertexArray', () => { counters.bindVertexArray += 1; });
-    patch(prototype, 'drawArrays', (_args, gl) => { counters.drawArrays += 1; recordDraw(gl); });
-    patch(prototype, 'drawElements', (_args, gl) => { counters.drawElements += 1; recordDraw(gl); });
-    patch(prototype, 'drawArraysInstanced', (_args, gl) => { counters.drawArraysInstanced += 1; recordDraw(gl); });
-    patch(prototype, 'drawElementsInstanced', (_args, gl) => { counters.drawElementsInstanced += 1; recordDraw(gl); });
+    patch(prototype, 'bindVertexArray', (args) => {
+      counters.bindVertexArray += 1;
+      drawState.vertexArray = args[0] ?? null;
+    });
+    patch(prototype, 'drawArrays', (args, gl) => {
+      counters.drawArrays += 1;
+      recordDraw(gl);
+      return profileDraw('drawArrays', args, gl);
+    });
+    patch(prototype, 'drawElements', (args, gl) => {
+      counters.drawElements += 1;
+      recordDraw(gl);
+      return profileDraw('drawElements', args, gl);
+    });
+    patch(prototype, 'drawArraysInstanced', (args, gl) => {
+      counters.drawArraysInstanced += 1;
+      recordDraw(gl);
+      return profileDraw('drawArraysInstanced', args, gl);
+    });
+    patch(prototype, 'drawElementsInstanced', (args, gl) => {
+      counters.drawElementsInstanced += 1;
+      recordDraw(gl);
+      return profileDraw('drawElementsInstanced', args, gl);
+    });
     patch(prototype, 'bufferData', (args) => {
       counters.bufferDataCalls += 1;
       counters.bufferDataBytes += byteLengthOf(args[1]);
@@ -936,7 +1006,10 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'copyTexSubImage2D', () => { counters.copyTexSubImage2D += 1; });
     patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
     patch(prototype, 'texSubImage2D', () => { counters.texSubImage2D += 1; });
-    patch(prototype, 'useProgram', () => { counters.useProgram += 1; });
+    patch(prototype, 'useProgram', (args) => {
+      counters.useProgram += 1;
+      drawState.program = args[0] ?? null;
+    });
     for (const name of uniformCallNames) {
       patch(prototype, name, () => {
         counters.uniformCalls += 1;
@@ -1083,8 +1156,11 @@ const installBenchmarkHooks = async (session) => {
     const gpuStartIndex = gpuTimers.durations.length;
     const previousWindowGpuTimerEnabled = gpuTimers.windowEnabled;
     gpuTimers.windowEnabled = true;
+    gpuDrawProfile.records.length = 0;
+    gpuDrawProfile.attempted = false;
     try {
       for (let index = 0; index < requestedSampleCount; index += 1) {
+        gpuDrawProfile.active = config.gpuDrawProfileEnabled && index === 0;
         clientX += step;
         const drawPromise = nextObservedDraw(250);
         const rafPromise = nextRaf(250);
@@ -1092,14 +1168,19 @@ const installBenchmarkHooks = async (session) => {
         dispatchPointer('pointermove');
         handlerDeltas.push(performance.now() - eventAt);
         const [drawAt, rafAt] = await Promise.all([drawPromise, rafPromise]);
+        gpuDrawProfile.active = false;
         if (typeof drawAt === 'number') drawDeltas.push(drawAt - eventAt);
         if (typeof rafAt === 'number') rafDeltas.push(rafAt - eventAt);
       }
     } finally {
+      gpuDrawProfile.active = false;
       gpuTimers.windowEnabled = previousWindowGpuTimerEnabled;
       dispatchPointer('pointerup');
     }
     await settleGpuTimers(gpuGl, gpuGeneration, 250);
+    const completedGpuDraws = gpuDrawProfile.records
+      .filter((record) => typeof record.durationMs === 'number')
+      .sort((left, right) => right.durationMs - left.durationMs);
     const sampleTimeoutMs = 250;
     const draw = statsFromDeltas(drawDeltas, requestedSampleCount, sampleTimeoutMs);
     return {
@@ -1110,6 +1191,13 @@ const installBenchmarkHooks = async (session) => {
         handlerDurationMs: statsFromDeltas(handlerDeltas, requestedSampleCount, sampleTimeoutMs),
       },
       gpuDurationMs: gpuTimerStats(gpuGl, gpuStartIndex, requestedSampleCount),
+      gpuDrawProfile: {
+        attempted: gpuDrawProfile.attempted,
+        completedCount: completedGpuDraws.length,
+        enabled: config.gpuDrawProfileEnabled,
+        records: completedGpuDraws,
+        requestedCount: gpuDrawProfile.records.length,
+      },
       raf: statsFromDeltas(rafDeltas, requestedSampleCount, sampleTimeoutMs),
       ...(draw.failed ? { reason: 'draw-timeout' } : {}),
     };
@@ -2087,6 +2175,8 @@ const routeSummary = (route) => {
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
   const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
+  const gpuDrawProfile = cameraDragFrameStats?.gpuDrawProfile;
+  const topGpuDraw = gpuDrawProfile?.records?.[0];
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.drawCalls / cameraDragSampleCount;
@@ -2234,6 +2324,14 @@ const routeSummary = (route) => {
               cameraDragGpuP95Ms: round(cameraDragFrameStats.gpuDurationMs.p95Ms),
               cameraDragGpuSampleCount: cameraDragFrameStats.gpuDurationMs.sampleCount,
               cameraDragGpuSamplesMissing: cameraDragFrameStats.gpuDurationMs.samplesMissing,
+            }
+          : {}),
+        ...(typeof topGpuDraw?.durationMs === 'number'
+          ? {
+              cameraDragGpuDrawProfileCount: gpuDrawProfile.completedCount,
+              cameraDragGpuTopDrawCount: topGpuDraw.count,
+              cameraDragGpuTopDrawDurationMs: round(topGpuDraw.durationMs),
+              cameraDragGpuTopDrawProgramId: topGpuDraw.programId,
             }
           : {}),
         ...(typeof cameraInputHandlerStats?.p95Ms === 'number'
@@ -2505,6 +2603,7 @@ const main = async () => {
       const gltfInstancing = result.profile?.kind === 'gltf-instancing'
         ? result.renderer?.gltfInstancing
         : undefined;
+      const topGpuDraw = cameraDragFrameStats?.gpuDrawProfile?.records?.[0];
       const gltfRootTransformUploadKibPerFrame = gltfInstancing?.perFrame === undefined
         ? undefined
         : gltfInstancingRootTransformUploadBytes(gltfInstancing.perFrame) / 1024;
@@ -2521,6 +2620,9 @@ const main = async () => {
             `dragDrawP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
             ...(cameraDragFrameStats.gpuDurationMs?.supported === true
               ? [`dragGpuP95=${cameraDragFrameStats.gpuDurationMs.p95Ms.toFixed(2)}ms`]
+              : []),
+            ...(typeof topGpuDraw?.durationMs === 'number'
+              ? [`dragGpuTop=${topGpuDraw.durationMs.toFixed(2)}ms/${topGpuDraw.count}v/p${topGpuDraw.programId}`]
               : []),
             ...(typeof cameraDragFrameStats.cameraInput?.handlerDurationMs?.p95Ms === 'number'
               ? [`dragHandlerP95=${cameraDragFrameStats.cameraInput.handlerDurationMs.p95Ms.toFixed(2)}ms`]

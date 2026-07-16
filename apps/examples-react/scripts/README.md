@@ -40,6 +40,14 @@ The timer query is active only during the drag sample. Use
 when you need renderer/glTF churn beside the same input metric. Do not add
 route-specific fast paths to improve these numbers.
 
+For a one-frame, draw-by-draw GPU breakdown, add
+`EXAMPLES_BENCH_GPU_DRAW_PROFILE=1` to a camera-drag run. The opt-in profile
+records timer-query duration, element/vertex count, instance count, and stable
+program/VAO identities for each draw, sorted slowest first under
+`cameraDrag.frameStats.gpuDrawProfile.records`. Per-draw timer queries perturb
+that profiled frame, so use it to locate expensive coverage or shader variants;
+use the ordinary drag GPU p95 from a separate run for regression comparisons.
+
 Focused virtual-texture near-plane stress:
 
 ```sh
