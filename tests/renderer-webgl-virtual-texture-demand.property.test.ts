@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   createVirtualTextureDemandPlanningWorkspace,
+  createVirtualTextureFrameWorkingSetWorkspace,
   isVirtualTextureDemandPageAvailable,
   planVirtualTextureBootstrapDemand,
   planVirtualTextureCoarseToFineDemand,
@@ -1377,6 +1378,25 @@ describe("virtual texture pure demand planning", () => {
       { candidates: [parent, left], preferTargetMip: true },
       { candidates: [parent, right], preferTargetMip: true },
     ], 3)).toEqual([parent, left, right]);
+  });
+
+  it("reuses borrowed frame working-set storage and clears inactive queues", () => {
+    const workspace = createVirtualTextureFrameWorkingSetWorkspace();
+    const parent = { mip: 2, x: 0, y: 0 };
+    const first = selectVirtualTextureFrameWorkingSet([
+      { candidates: [parent, { mip: 0, x: 0, y: 0 }], preferTargetMip: true },
+      { candidates: [parent, { mip: 0, x: 1, y: 0 }], preferTargetMip: true },
+    ], 3, 0, workspace);
+    const firstQueue = workspace.queues[0];
+
+    const second = selectVirtualTextureFrameWorkingSet([
+      { candidates: [parent, { mip: 0, x: 2, y: 0 }], preferTargetMip: true },
+    ], 2, 0, workspace);
+
+    expect(second).toBe(first);
+    expect(workspace.queues[0]).toBe(firstQueue);
+    expect(second).toEqual([parent, { mip: 0, x: 2, y: 0 }]);
+    expect(workspace.queues.slice(1).every((queue) => queue.pages.length === 0)).toBe(true);
   });
 
   it("keeps frame selection bounded, deterministic, deduplicated, and fair under fuzz", () => {

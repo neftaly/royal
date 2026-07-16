@@ -1,4 +1,4 @@
-const EMPTY_SUPPRESSIONS: readonly string[] = Object.freeze([]);
+const EMPTY_SUPPRESSIONS: readonly string[] = [];
 
 /** Frame-wide arbitration between ordinary and generated-VT residency. */
 export class FrameTextureResidencyIntent {

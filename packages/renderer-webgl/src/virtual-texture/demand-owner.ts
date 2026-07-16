@@ -11,6 +11,7 @@ import {
 } from "./coverage-cache";
 import {
   createVirtualTextureDemandPlanningWorkspace,
+  createVirtualTextureFrameWorkingSetWorkspace,
   planVirtualTextureDrawDemand,
   selectVirtualTextureFrameWorkingSet,
   selectVirtualTextureWorkingSet,
@@ -89,6 +90,7 @@ export class VirtualTextureDemandOwner {
     state: VirtualTextureRuntimeState;
   } | undefined;
   readonly #publicationStates: VirtualTextureRuntimeState[] = [];
+  readonly #workingSet = createVirtualTextureFrameWorkingSetWorkspace();
 
   constructor(options: VirtualTextureDemandOwnerOptions) {
     this.#options = options;
@@ -176,6 +178,7 @@ export class VirtualTextureDemandOwner {
           submissions,
           this.#demandCapacity(state),
           entry?.startSubmission ?? 0,
+          this.#workingSet,
         );
         const prepared = this.#prepareDemand(state, pages);
         if (prepared === undefined) continue;
@@ -380,6 +383,8 @@ export class VirtualTextureDemandOwner {
               preferredCandidates: convergentPreferredCandidates,
             }],
             this.#demandCapacity(state),
+            0,
+            this.#workingSet,
           ),
       true,
     );

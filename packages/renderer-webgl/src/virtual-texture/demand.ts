@@ -1237,22 +1237,53 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
   };
 };
 
+const selectVirtualTextureWorkingSetInto = (
+  candidates: readonly VirtualTexturePageId[],
+  boundedCapacity: number,
+  preferTargetMip: boolean,
+  selected: VirtualTexturePageId[],
+): void => {
+  if (boundedCapacity === 0 || candidates.length === 0) return;
+  if (!preferTargetMip) {
+    selected.push(candidates[0]!);
+    return;
+  }
+  const targetMip = candidates.at(-1)!.mip;
+  let allTargetMip = true;
+  for (const page of candidates) {
+    if (page.mip !== targetMip) {
+      allTargetMip = false;
+      break;
+    }
+  }
+  if (allTargetMip) {
+    for (const page of candidates) {
+      if (selected.length >= boundedCapacity) break;
+      selected.push(page);
+    }
+    return;
+  }
+  selected.push(candidates[0]!);
+  if (boundedCapacity === 1) return;
+  for (const page of candidates) {
+    if (selected.length >= boundedCapacity) break;
+    if (page.mip === targetMip) selected.push(page);
+  }
+};
+
 export const selectVirtualTextureWorkingSet = (
   candidates: readonly VirtualTexturePageId[],
   capacity: number,
   preferTargetMip = false,
 ): readonly VirtualTexturePageId[] => {
-  const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
-  const targetMip = candidates.at(-1)?.mip;
-  const targetCandidates = targetMip === undefined
-    ? []
-    : candidates.filter((page) => page.mip === targetMip);
-  if (!preferTargetMip) return candidates.slice(0, Math.min(1, boundedCapacity));
-  if (targetCandidates.length === candidates.length) return targetCandidates.slice(0, boundedCapacity);
-  if (boundedCapacity <= 1) return candidates.slice(0, boundedCapacity);
-  return candidates.length === 0
-    ? []
-    : [candidates[0]!, ...targetCandidates.slice(0, boundedCapacity - 1)];
+  const selected: VirtualTexturePageId[] = [];
+  selectVirtualTextureWorkingSetInto(
+    candidates,
+    Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0,
+    preferTargetMip,
+    selected,
+  );
+  return selected;
 };
 
 export const stabilizeVirtualTextureDesiredPagesInto = (
@@ -1289,10 +1320,14 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
   // admission still has no physical residency. Re-rendering the same demand
   // before its load settles must preserve the overlap that is currently
   // providing coverage, rather than consuming it one frame at a time.
-  const awaitingPreviousAdmission = workingCandidates.some((page) => {
+  let awaitingPreviousAdmission = false;
+  for (const page of workingCandidates) {
     const key = virtualTexturePageKey(page);
-    return previousPageKeys.has(key) && !isResident(page) && canBecomeResident(page);
-  });
+    if (previousPageKeys.has(key) && !isResident(page) && canBecomeResident(page)) {
+      awaitingPreviousAdmission = true;
+      break;
+    }
+  }
   let freeAdmissions = 0;
   let replacementAdmissions = 0;
   for (const page of workingCandidates) {
@@ -1306,15 +1341,18 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
     if (freeAdmissions < freePhysicalSlots) freeAdmissions += 1;
     else replacementAdmissions += 1;
   }
-  const awaitingResidency = workingCandidates.some((page) => (
-    desiredPageKeys.has(virtualTexturePageKey(page))
-      && !isResident(page)
-      && canBecomeResident(page)
-  ));
-  const deferred = awaitingResidency
-    || workingCandidates.some((page) => (
-      canBecomeResident(page) && !desiredPageKeys.has(virtualTexturePageKey(page))
-    ));
+  let deferred = false;
+  for (const page of workingCandidates) {
+    const key = virtualTexturePageKey(page);
+    const available = canBecomeResident(page);
+    if (
+      available
+      && (!desiredPageKeys.has(key) || !isResident(page))
+    ) {
+      deferred = true;
+      break;
+    }
+  }
   // Previous pages are overlap for a bounded destructive replacement, not a
   // standing cache policy. Once every required-now candidate is physically
   // resident, publish that exact set and let the GPU arena retain any spare
@@ -1343,45 +1381,93 @@ export interface VirtualTextureDemandSubmission {
   readonly viewportDominant?: true;
 }
 
-const selectVirtualTextureSubmissionWorkingSet = (
+type VirtualTextureWorkingSetQueue = {
+  index: number;
+  readonly keys: Set<string>;
+  order: number;
+  readonly pages: VirtualTexturePageId[];
+};
+
+export type VirtualTextureFrameWorkingSetWorkspace = {
+  readonly keys: Set<string>;
+  readonly pages: VirtualTexturePageId[];
+  readonly queues: VirtualTextureWorkingSetQueue[];
+};
+
+export const createVirtualTextureFrameWorkingSetWorkspace = (
+): VirtualTextureFrameWorkingSetWorkspace => ({
+  keys: new Set(),
+  pages: [],
+  queues: [],
+});
+
+const selectVirtualTextureSubmissionWorkingSetInto = (
   submission: VirtualTextureDemandSubmission,
   capacity: number,
-): readonly VirtualTexturePageId[] => {
+  selected: VirtualTexturePageId[],
+  selectedKeys: Set<string>,
+): void => {
   if (submission.preferredCandidates === undefined) {
-    return selectVirtualTextureWorkingSet(
+    selectVirtualTextureWorkingSetInto(
       submission.candidates,
       capacity,
       submission.preferTargetMip,
+      selected,
     );
+    for (const page of selected) selectedKeys.add(virtualTexturePageKey(page));
+    return;
   }
-  const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
-  if (!submission.preferTargetMip || boundedCapacity <= 1) {
-    return submission.candidates.slice(0, boundedCapacity === 0 ? 0 : 1);
+  if (!submission.preferTargetMip || capacity <= 1) {
+    if (capacity > 0 && submission.candidates.length > 0) {
+      const fallback = submission.candidates[0]!;
+      selected.push(fallback);
+      selectedKeys.add(virtualTexturePageKey(fallback));
+    }
+    return;
   }
-  const selected = submission.candidates.length === 0 ? [] : [submission.candidates[0]!];
-  const selectedKeys = new Set(selected.map(virtualTexturePageKey));
+  if (submission.candidates.length > 0) {
+    const fallback = submission.candidates[0]!;
+    selected.push(fallback);
+    selectedKeys.add(virtualTexturePageKey(fallback));
+  }
   for (const page of submission.preferredCandidates) {
-    if (selected.length >= boundedCapacity) break;
+    if (selected.length >= capacity) break;
     const key = virtualTexturePageKey(page);
     if (selectedKeys.has(key)) continue;
     selectedKeys.add(key);
     selected.push(page);
   }
-  return selected;
 };
 
 const commonCoarsePage = (
-  queues: readonly (readonly VirtualTexturePageId[])[],
+  queues: readonly VirtualTextureWorkingSetQueue[],
+  queueCount: number,
 ): VirtualTexturePageId | undefined => {
-  if (queues.length < 2) return undefined;
-  const remainingKeys = queues.slice(1).map((queue) => new Set(queue.map(virtualTexturePageKey)));
   let common: VirtualTexturePageId | undefined;
-  for (const page of queues[0]!) {
+  for (const page of queues[0]!.pages) {
     const key = virtualTexturePageKey(page);
-    if (!remainingKeys.every((keys) => keys.has(key))) continue;
+    let shared = true;
+    for (let queueIndex = 1; queueIndex < queueCount; queueIndex += 1) {
+      if (!queues[queueIndex]!.keys.has(key)) {
+        shared = false;
+        break;
+      }
+    }
+    if (!shared) continue;
     if (common === undefined || page.mip > common.mip) common = page;
   }
   return common;
+};
+
+const addFrameWorkingSetPage = (
+  workspace: VirtualTextureFrameWorkingSetWorkspace,
+  page: VirtualTexturePageId,
+): boolean => {
+  const key = virtualTexturePageKey(page);
+  if (workspace.keys.has(key)) return false;
+  workspace.keys.add(key);
+  workspace.pages.push(page);
+  return true;
 };
 
 /**
@@ -1393,52 +1479,75 @@ export const selectVirtualTextureFrameWorkingSet = (
   submissions: readonly VirtualTextureDemandSubmission[],
   capacity: number,
   startSubmission = 0,
+  retainedWorkspace?: VirtualTextureFrameWorkingSetWorkspace,
 ): readonly VirtualTexturePageId[] => {
   const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
-  if (boundedCapacity === 0 || submissions.length === 0) return [];
+  const workspace = retainedWorkspace ?? createVirtualTextureFrameWorkingSetWorkspace();
+  const selected = workspace.pages;
+  selected.length = 0;
+  workspace.keys.clear();
+  for (const queue of workspace.queues) {
+    queue.keys.clear();
+    queue.pages.length = 0;
+  }
+  if (boundedCapacity === 0 || submissions.length === 0) return selected;
   if (submissions.length === 1) {
-    const submission = submissions[0]!;
-    return selectVirtualTextureSubmissionWorkingSet(submission, boundedCapacity);
+    selectVirtualTextureSubmissionWorkingSetInto(
+      submissions[0]!,
+      boundedCapacity,
+      selected,
+      workspace.keys,
+    );
+    return selected;
   }
 
-  const queues = submissions
-    .map((submission, submissionIndex) => ({
-      queue: selectVirtualTextureSubmissionWorkingSet(submission, boundedCapacity),
-      submissionIndex,
-    }))
-    .filter((entry) => entry.queue.length > 0);
-  if (queues.length === 0) return [];
-  if (queues.length === 1) return queues[0]!.queue.slice(0, boundedCapacity);
+  const queues = workspace.queues;
+  let queueCount = 0;
+  for (let submissionIndex = 0; submissionIndex < submissions.length; submissionIndex += 1) {
+    let queue = queues[queueCount];
+    if (queue === undefined) {
+      queue = { index: 0, keys: new Set(), order: submissionIndex, pages: [] };
+      queues.push(queue);
+    }
+    selectVirtualTextureSubmissionWorkingSetInto(
+      submissions[submissionIndex]!,
+      boundedCapacity,
+      queue.pages,
+      queue.keys,
+    );
+    if (queue.pages.length === 0) continue;
+    queue.index = 0;
+    queue.order = submissionIndex;
+    queueCount += 1;
+  }
+  if (queueCount === 0) return selected;
+  if (queueCount === 1) return queues[0]!.pages;
 
-  const selected: VirtualTexturePageId[] = [];
-  const selectedKeys = new Set<string>();
-  const add = (page: VirtualTexturePageId): boolean => {
-    const key = virtualTexturePageKey(page);
-    if (selectedKeys.has(key)) return false;
-    selectedKeys.add(key);
-    selected.push(page);
-    return true;
-  };
-  const common = commonCoarsePage(queues.map((entry) => entry.queue));
-  if (common !== undefined) add(common);
+  const common = commonCoarsePage(queues, queueCount);
+  if (common !== undefined) addFrameWorkingSetPage(workspace, common);
   if (selected.length >= boundedCapacity) return selected;
 
-  const indices = queues.map(() => 0);
   const normalizedStart = Number.isSafeInteger(startSubmission)
     ? Math.max(0, startSubmission) % submissions.length
     : 0;
-  const anchoredCursor = queues.findIndex((entry) => entry.submissionIndex >= normalizedStart);
+  let anchoredCursor = -1;
+  for (let queueIndex = 0; queueIndex < queueCount; queueIndex += 1) {
+    if (queues[queueIndex]!.order >= normalizedStart) {
+      anchoredCursor = queueIndex;
+      break;
+    }
+  }
   let cursor = anchoredCursor < 0 ? 0 : anchoredCursor;
   let scansWithoutAddition = 0;
-  while (selected.length < boundedCapacity && scansWithoutAddition < queues.length) {
+  while (selected.length < boundedCapacity && scansWithoutAddition < queueCount) {
     const queueIndex = cursor;
-    const queue = queues[queueIndex]!.queue;
-    cursor = (cursor + 1) % queues.length;
+    const queue = queues[queueIndex]!;
+    cursor = (cursor + 1) % queueCount;
     let added = false;
-    while (indices[queueIndex]! < queue.length) {
-      const page = queue[indices[queueIndex]!]!;
-      indices[queueIndex] = indices[queueIndex]! + 1;
-      if (add(page)) {
+    while (queue.index < queue.pages.length) {
+      const page = queue.pages[queue.index]!;
+      queue.index += 1;
+      if (addFrameWorkingSetPage(workspace, page)) {
         added = true;
         break;
       }

@@ -13,7 +13,7 @@ describe("WebGL resource-capacity wake owner", () => {
     let invalidations = 0;
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => { invalidations += 1; },
-      preparation: [],
+      preparation: [() => undefined],
       wakeCpu: () => {
         wakes += 1;
         return true;
@@ -38,7 +38,7 @@ describe("WebGL resource-capacity wake owner", () => {
     let invalidations = 0;
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => { invalidations += 1; },
-      preparation: [],
+      preparation: [() => undefined],
       wakeCpu: () => false,
       wakeGpu: () => {
         wakes += 1;
@@ -63,7 +63,7 @@ describe("WebGL resource-capacity wake owner", () => {
     const calls: string[] = [];
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => calls.push("invalidate"),
-      preparation: [],
+      preparation: [() => undefined],
       wakeCpu: () => {
         calls.push("cpu");
         return false;

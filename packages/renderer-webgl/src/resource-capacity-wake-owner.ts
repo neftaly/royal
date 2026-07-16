@@ -5,7 +5,7 @@ export type ResourceCapacityRelease = Readonly<{
 
 export type ResourceCapacityWakeOwnerOptions = Readonly<{
   invalidate: () => void;
-  preparation: readonly (() => void)[];
+  preparation: readonly [() => void, ...Array<() => void>];
   wakeCpu: () => boolean;
   wakeGpu: () => boolean;
 }>;
@@ -60,7 +60,7 @@ export class ResourceCapacityWakeOwner {
 
   wakePreparation(): void {
     const wakes = this.#options.preparation;
-    if (this.#disposed || wakes.length === 0) return;
+    if (this.#disposed) return;
     const start = this.#preparationWakeCursor % wakes.length;
     this.#preparationWakeCursor = (start + 1) % wakes.length;
     for (let offset = 0; offset < wakes.length; offset += 1) {
