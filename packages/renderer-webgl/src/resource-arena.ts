@@ -955,12 +955,12 @@ export const publishResourceArenaContentKey = (
   keys.set(textureUri, contentKey);
 };
 
-export const resourceArenaContentKeys = (
+/** Borrows the current asset-owned content-key table for synchronous read-only use. */
+export const resourceArenaContentKeyView = (
   arena: ResourceArena,
   assetKey: string,
-): ReadonlyMap<string, TextureContentKey> => new Map(
-  (arena as unknown as ResourceArenaState).contentKeysByAsset.get(assetKey) ?? EMPTY_CONTENT_KEYS,
-);
+): ReadonlyMap<string, TextureContentKey> =>
+  (arena as unknown as ResourceArenaState).contentKeysByAsset.get(assetKey) ?? EMPTY_CONTENT_KEYS;
 
 export const resourceArenaTextureReferenceCount = (arena: ResourceArena, key: string): number => {
   const ordinary = (arena as unknown as ResourceArenaState).ordinaryTextures.get(key);

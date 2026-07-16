@@ -19,7 +19,7 @@ import {
 import {
   resolvePacketMaterial,
 } from "../packet-resource-tables";
-import { resourceArenaContentKeys, type ResourceArena } from "../resource-arena";
+import { resourceArenaContentKeyView, type ResourceArena } from "../resource-arena";
 import type { WebGlGltfInstancingSnapshot } from "../root-types";
 import { SceneBindingRegistry } from "../scene-binding-registry";
 import {
@@ -190,7 +190,7 @@ export class GltfPacketSubmissionOwner {
     }
     const state = this.#runtime.stateForNode(node);
     const hasAssetLights = hasGltfAssetLights(state);
-    const contentKeys = resourceArenaContentKeys(this.#resourceArena, state.key);
+    const contentKeys = resourceArenaContentKeyView(this.#resourceArena, state.key);
     const instanceViews = node.kind === "gltf-instances"
       ? this.#instanceTransforms.views(node.instances)
       : undefined;

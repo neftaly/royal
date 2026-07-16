@@ -19,7 +19,7 @@ import {
   publishResourceArenaContentKey,
   rekeyPreparedAssetOrdinaryTextures,
   resourceArenaCountersSnapshot,
-  resourceArenaContentKeys,
+  resourceArenaContentKeyView,
   resourceArenaGeometrySnapshot,
   resourceArenaGltfRequestCount,
   resourceArenaGltfRequestSnapshot,
@@ -365,7 +365,7 @@ describe("semantic resource arena properties", () => {
               for (const slot of sourceSlots.values()) slot.lease.release();
               sourceSlots.clear();
               sourceCounts.clear();
-              expect(resourceArenaContentKeys(arena, key)).toEqual(new Map());
+              expect(resourceArenaContentKeyView(arena, key)).toEqual(new Map());
             }
           } else if (op.kind === "settle" && jobs.length > 0) {
             const job = jobs[op.index % jobs.length]!;
@@ -567,7 +567,9 @@ describe("semantic resource arena properties", () => {
     expect(resourceArenaSnapshot(arena).geometries.has(replacementGeometryKey)).toBe(true);
     expect(resourceArenaSnapshot(arena).geometries.get(replacementGeometryKey)!.id).toBeGreaterThan(retainedGeometryId!);
     publishResourceArenaContentKey(arena, request.key, "/texture.png", "decoded-texture");
-    expect(resourceArenaContentKeys(arena, request.key).get("/texture.png")).toBe("decoded-texture");
+    const contentKeys = resourceArenaContentKeyView(arena, request.key);
+    expect(contentKeys.get("/texture.png")).toBe("decoded-texture");
+    expect(resourceArenaContentKeyView(arena, request.key)).toBe(contentKeys);
     updatePreparedAssetManifest(arena, request.key, {
       geometries: [],
       iblKeys: [],
