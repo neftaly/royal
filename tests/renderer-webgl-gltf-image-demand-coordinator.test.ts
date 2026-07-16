@@ -144,6 +144,13 @@ const coordinatorHarness = (options: {
 
 const loadRecipeMock = vi.mocked(loadGltfImageSourceRecipe);
 
+const demandImages = (
+  coordinator: GltfImageDemandCoordinator,
+  assetKey: string,
+  baseColorImage: string,
+  emissiveImage?: string,
+): void => coordinator.demandMaterial(assetKey, material(baseColorImage, emissiveImage));
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -242,7 +249,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "invalidate-failure");
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
@@ -276,7 +283,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "decode-failure");
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 1, imageLoaded: 0, imageRequests: 1 });
@@ -302,7 +309,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "denied");
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 1, imageLoaded: 0, imageRequests: 1 });
@@ -341,7 +348,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "denied-close-retry");
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 1, imageLoaded: 0, imageRequests: 1 });
@@ -371,7 +378,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("slow")],
       stateInstanceKey: 3,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "slow");
 
     expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, loading: 1 });
     harness.coordinator.releaseAsset("asset");
@@ -407,7 +414,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("stale-close-retry")],
       stateInstanceKey: 1,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "stale-close-retry");
     harness.coordinator.releaseAsset("asset");
 
     const stale = loaded("stale-close-retry").image;
@@ -446,7 +453,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "retain-reentrant");
     await flushMicrotasks();
 
     expect(release).toHaveBeenCalledOnce();
@@ -467,7 +474,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("retry")],
       stateInstanceKey: 11,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "retry");
     await flushMicrotasks();
 
     let previousReferences = 1;
@@ -518,13 +525,13 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     });
     expect(ownership.resize.mock.calls).toEqual([[64]]);
 
-    harness.coordinator.demandImage("asset", "first");
+    demandImages(harness.coordinator, "asset", "first");
     await flushMicrotasks();
     expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 1, ready: 1 });
     expect(ownership.resize.mock.calls).toEqual([[64], [64]]);
     expect(ownership.release).not.toHaveBeenCalled();
 
-    harness.coordinator.demandImage("asset", "second");
+    demandImages(harness.coordinator, "asset", "second");
     await flushMicrotasks();
     expect(ownership.resize.mock.calls).toEqual([[64], [64], [0]]);
     expect(ownership.release).toHaveBeenCalledOnce();
@@ -550,7 +557,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       ],
       stateInstanceKey: 5,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "active", "queued");
     expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, loading: 1, queued: 1 });
 
     harness.coordinator.releaseAsset("asset");
@@ -585,7 +592,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("post-dispose")],
       stateInstanceKey: 1,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "post-dispose");
     harness.coordinator.dispose();
 
     expect(ownership.release).not.toHaveBeenCalled();
@@ -625,7 +632,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 6,
     });
 
-    harness.coordinator.demandImage("asset", "first");
+    demandImages(harness.coordinator, "asset", "first");
     await flushMicrotasks();
     expect(resize.mock.calls).toEqual([[24], [12]]);
     expect(harness.diagnostic).toHaveBeenCalledWith(
@@ -635,7 +642,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.wake();
     expect(resize.mock.calls).toEqual([[24], [12], [12]]);
 
-    harness.coordinator.demandImage("asset", "second");
+    demandImages(harness.coordinator, "asset", "second");
     await flushMicrotasks();
     expect(resize.mock.calls).toEqual([[24], [12], [12], [0]]);
     expect(release).toHaveBeenCalledOnce();
@@ -684,7 +691,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     expect(oldOwnership.release).toHaveBeenCalledTimes(2);
     expect(harness.coordinator.snapshot()).toMatchObject({ candidates: 1, dormant: 1 });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "replacement");
     await flushMicrotasks();
 
     expect(replacementLoad).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
@@ -756,7 +763,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     expect(replacementOwnership.release).not.toHaveBeenCalled();
     expect(harness.coordinator.snapshot()).toMatchObject({ candidates: 1, dormant: 1 });
 
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "replacement");
     await flushMicrotasks();
 
     expect(replacementLoad).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
@@ -831,7 +838,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("close-retry")],
       stateInstanceKey: 1,
     });
-    harness.coordinator.demandAll("asset");
+    demandImages(harness.coordinator, "asset", "close-retry");
     await flushMicrotasks();
 
     expect(() => harness.coordinator.releaseAsset("asset")).toThrow("decoded close failed");
@@ -895,9 +902,8 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipes: [recipe("dormant")],
       stateInstanceKey: 3,
     });
-    harness.coordinator.demandAll("first-asset");
+    demandImages(harness.coordinator, "first-asset", "first");
     await flushMicrotasks();
-    harness.coordinator.demandAll("second-asset");
     await flushMicrotasks();
     expect(harness.coordinator.pendingReadyOutcomes()).toHaveLength(2);
 

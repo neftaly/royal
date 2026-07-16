@@ -66,9 +66,19 @@ const buildRendererAttribution = async () => {
       bytesByModule.set(id, (bytesByModule.get(id) ?? 0) + (module.renderedLength ?? 0));
     }
   }
-  return Array.from(bytesByModule)
+  const initialModules = Array.from(bytesByModule)
     .filter(([id]) => id.startsWith(path.join(packageRoot, 'src')))
     .sort((left, right) => right[1] - left[1]);
+  const lazyChunks = Array.from(chunks.entries())
+    .filter(([, chunk]) => !initialChunks.has(chunk))
+    .map(([file, chunk]) => [
+      file,
+      Object.entries(chunk.modules)
+        .filter(([id]) => id.startsWith(path.join(packageRoot, 'src')))
+        .map(([id, module]) => [id, module.renderedLength ?? 0])
+        .sort((left, right) => right[1] - left[1]),
+    ]);
+  return { initialModules, lazyChunks };
 };
 
 const buildFixture = async (name) => {
@@ -135,6 +145,7 @@ const buildFixture = async (name) => {
       .filter((file) => file.endsWith('.js'))
       .reduce((sum, file) => sum + gzipBytes(path.join(outputDirectory, file)), 0),
     initialRenderedBytesByModule,
+    renderedModulesByFile,
   };
 };
 
@@ -167,9 +178,27 @@ try {
     for (const [id, bytes] of royalModules.slice(0, 30)) {
       console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
     }
+    console.log('Lazy Royal modules by rendered bytes:');
+    for (const [file] of lazyChunks) {
+      const modules = (gltf.renderedModulesByFile.get(`assets/${file}`) ?? [])
+        .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
+        .sort((left, right) => right[1] - left[1]);
+      console.log(`  ${file}`);
+      for (const [id, bytes] of modules.slice(0, 12)) {
+        console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
+      }
+    }
+    const rendererAttribution = await buildRendererAttribution();
     console.log('Initial renderer sources by rendered bytes:');
-    for (const [id, bytes] of (await buildRendererAttribution()).slice(0, 40)) {
+    for (const [id, bytes] of rendererAttribution.initialModules.slice(0, 40)) {
       console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
+    }
+    console.log('Lazy renderer sources by rendered bytes:');
+    for (const [file, modules] of rendererAttribution.lazyChunks) {
+      console.log(`  ${file}`);
+      for (const [id, bytes] of modules.slice(0, 16)) {
+        console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
+      }
     }
   }
 

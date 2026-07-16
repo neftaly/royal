@@ -18,10 +18,10 @@ describe("WebGL root option normalization", () => {
       resourceBudgets: defaults.resourceBudgets,
     });
     const customBudgets = resolveWebGlRootOptions({
-      resourceBudgets: { limits: { cpuDecodedBytes: 768 * 1024 * 1024 } },
+      resourceBudgets: { cpuDecodedBytes: 768 * 1024 * 1024 },
     }).resourceBudgets;
-    expect(customBudgets.limits.cpuDecodedBytes).toBe(768 * 1024 * 1024);
-    expect(customBudgets.limits.jobs).toBe(defaults.resourceBudgets.limits.jobs);
+    expect(customBudgets.cpuDecodedBytes).toBe(768 * 1024 * 1024);
+    expect(customBudgets.jobs).toBe(defaults.resourceBudgets.jobs);
     expect(Object.isFrozen(customBudgets)).toBe(true);
     expect(() => resolveWebGlRootOptions({
       automaticVirtualTexture: true,
@@ -29,5 +29,11 @@ describe("WebGL root option normalization", () => {
     expect(() => resolveWebGlRootOptions({
       alpha: 1,
     } as unknown as Parameters<typeof resolveWebGlRootOptions>[0])).toThrow(/alpha must be a boolean/);
+    expect(() => resolveWebGlRootOptions({
+      resourceBudgets: { decodedCpuBytes: 1 },
+    } as unknown as Parameters<typeof resolveWebGlRootOptions>[0])).toThrow(/unsupported option/);
+    expect(() => resolveWebGlRootOptions({
+      resourceBudgets: { jobs: 0 },
+    })).toThrow(/jobs capacity must be at least 1/);
   });
 });

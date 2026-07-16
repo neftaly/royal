@@ -103,10 +103,6 @@ export class ScenePlanTransactionOwner {
     return this.#plan?.scene;
   }
 
-  get pendingReconciliation(): boolean {
-    return this.#pendingDelta !== undefined;
-  }
-
   get plan(): FramePlan | undefined {
     return this.#plan;
   }

@@ -28,7 +28,7 @@ Status meanings:
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
 | Texture asset status hook | product | Exact ordinary/authored-VT readiness; VT page streaming remains a separate `pendingPages` fact. |
 | Cold operational diagnostics | product | Opt-in host/profiling surface, not a control model or per-frame subscription. The fixed-capacity message log exposes structured `{ key, message, occurrences }` entries; scene data and static policy ceiling tables remain omitted while measured limits, usage, high-water, admissions, and denials stay observable. |
-| Public resource-governor policy | deleted | Backend admission remains observable in diagnostics, but byte/job classes no longer leak into React or WebGL root options/exports. Constrained policies are injected only through an internal deterministic-test boundary while local caps replace the backend-wide policy. |
+| Public root resource budgets | product | Apps can raise root-wide decoded CPU, persistent GPU, transient GPU, per-frame upload, and concurrent-job caps. Per-resource classes, floors, and lending policy remain internal engine details. |
 
 ## Scene and camera
 
@@ -127,7 +127,7 @@ Status meanings:
 | `EXT_texture_webp` | ingestion | Cheap browser-supported source preference with core fallback. Keep unless KTX2 becomes the only compressed delivery format. |
 | `KHR_draco_mesh_compression` | ingestion | Widely used compatibility. Keep the isolated `minidraco` dependency; do not build a Royal decoder. |
 | `EXT_meshopt_compression` | ingestion | Efficient geometry delivery and aligned with LOD/offline preparation. Keep. |
-| `KHR_meshopt_compression` | ingestion/experimental | Real draft successor with a newer codec/filter profile, but not ratified or widely deployed. Keep its small shared-decoder adapter; continue producing EXT by default. |
+| `KHR_meshopt_compression` | deleted | Draft successor is not ratified or widely deployed. Required assets fail honestly; produce the supported `EXT_meshopt_compression` form. |
 | `KHR_mesh_quantization` | ingestion | Mostly accessor acceptance; useful and low runtime cost. Keep. |
 | `EXT_mesh_gpu_instancing` | ingestion | Correctly lowers into canonical instance transforms. Keep. |
 | `KHR_node_visibility` | deleted | Static filtering was not useful without animation-pointer support; required assets fail honestly instead of appearing partially supported. |
@@ -164,7 +164,7 @@ Status meanings:
 | React pointer enter/leave/move/down/up/click dispatch | product | Keep if Canvas is the normal interaction host. |
 | Touch/pointer orbit interactions | product | Keep. |
 | Imperative pick API | product | Keep for XR and non-DOM hosts. |
-| WebXR session runtime/store | product | Keep; physically exercised on Quest. The closed `status` is the sole lifecycle authority rather than duplicating an `active` boolean. |
+| WebXR session runtime/store | product | Keep in the dedicated `@royal/react/xr` entry; physically exercised on Quest. Importing that entry is the sole edge that makes WebXR code reachable. The closed `status` is the lifecycle authority rather than a duplicate `active` boolean. |
 | External XR frame clock and stereo views | product | Required consequence of WebXR support. |
 | Session lifecycle, visibility and interruption states | fallback/product | Required by real browser/XR behavior, not independent product scope. |
 

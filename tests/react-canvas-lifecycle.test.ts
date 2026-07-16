@@ -44,7 +44,7 @@ describe("Canvas renderer root cleanup", () => {
     const changedBudgets = rendererRootOptionsSemanticKey({
       alpha: true,
       antialias: false,
-      resourceBudgets: { limits: { cpuDecodedBytes: 768 * 1024 * 1024 } },
+      resourceBudgets: { cpuDecodedBytes: 768 * 1024 * 1024 },
     });
 
     expect(reordered).toBe(first);

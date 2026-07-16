@@ -19,45 +19,6 @@ const IDLE_ASSET: RoyalRendererGltfAssetSnapshot = Object.freeze({
   variantNames: NO_VARIANTS,
 });
 
-const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
-  left.length === right.length && left.every((name, index) => name === right[index]);
-
-const sameBounds = (
-  left: RoyalRendererGltfAssetSnapshot,
-  right: RoyalRendererGltfAssetSnapshot,
-): boolean => {
-  if (left.state === "idle" || right.state === "idle") return true;
-  if (left.bounds === undefined || right.bounds === undefined) return left.bounds === right.bounds;
-  return left.bounds.min.every((value, index) => value === right.bounds!.min[index])
-    && left.bounds.max.every((value, index) => value === right.bounds!.max[index]);
-};
-
-const sameAssetSnapshot = (
-  left: RoyalRendererGltfAssetSnapshot,
-  right: RoyalRendererGltfAssetSnapshot,
-): boolean => left.state === right.state
-  && left.error === right.error
-  && sameVariants(left.variantNames, right.variantNames)
-  && sameBounds(left, right)
-  && (left.state === "idle" || right.state === "idle" || (
-    left.images.failed === right.images.failed
-    && left.images.loaded === right.images.loaded
-    && left.images.pending === right.images.pending
-    && left.images.requested === right.images.requested
-    && left.images.total === right.images.total
-    && left.scene.lights === right.scene.lights
-    && left.scene.nodes === right.scene.nodes
-    && left.scene.primitives === right.scene.primitives
-    && left.phaseMs.buffers === right.phaseMs.buffers
-    && left.phaseMs.document === right.phaseMs.document
-    && left.phaseMs.draco === right.phaseMs.draco
-    && left.phaseMs.firstImageComplete === right.phaseMs.firstImageComplete
-    && left.phaseMs.imagesComplete === right.phaseMs.imagesComplete
-    && left.phaseMs.meshopt === right.phaseMs.meshopt
-    && left.phaseMs.scene === right.phaseMs.scene
-    && left.phaseMs.toSceneReady === right.phaseMs.toSceneReady
-  ));
-
 const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAssetSnapshot => {
   validateGltfAssetStatusInput(input);
   const root = useCanvasRoot();
@@ -65,7 +26,7 @@ const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAss
   const version = typeof input === "string" ? undefined : input.version;
   const store = useMemo(() => {
     if (root === null) {
-      return createObservedExternalStore(IDLE_ASSET, () => () => undefined, sameAssetSnapshot);
+      return createObservedExternalStore(IDLE_ASSET, () => () => undefined);
     }
     const asset: GltfAssetRef = {
       src,
@@ -74,7 +35,6 @@ const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAss
     return createObservedExternalStore(
       root.gltfAssetSnapshot(asset),
       (publish) => root.observeGltfAsset(asset, publish),
-      sameAssetSnapshot,
     );
   }, [root, src, version]);
 

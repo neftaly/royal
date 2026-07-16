@@ -250,10 +250,7 @@ export const estimateGltfPreparationCpu = (document: GltfDocument): GltfPreparat
   let meshoptBytes = 0;
   let largestMeshoptBytes = 0;
   for (const [index, bufferView] of (document.bufferViews ?? []).entries()) {
-    if (
-      bufferView.extensions?.EXT_meshopt_compression === undefined
-      && bufferView.extensions?.KHR_meshopt_compression === undefined
-    ) continue;
+    if (bufferView.extensions?.EXT_meshopt_compression === undefined) continue;
     if (!Number.isSafeInteger(bufferView.byteLength) || bufferView.byteLength < 0) {
       throw new Error(`glTF meshopt bufferView ${index} has invalid byteLength ${String(bufferView.byteLength)}`);
     }

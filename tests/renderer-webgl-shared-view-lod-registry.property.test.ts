@@ -89,8 +89,6 @@ describe("glTF shared-view LOD registry", () => {
     const lod = materialLod([0.4, 0.2, 0]);
     const selectionKeys = Array.from({ length: 12 }, (_, index) => `material:${index}`);
     let liveIds = selectionKeys.map((key) => registry.materialSelectionId("asset", key, lod));
-    const initialReserved = registry.snapshot().reservedSelections;
-    expect(initialReserved).toBe(selectionKeys.length);
 
     for (let generation = 0; generation < 256; generation += 1) {
       const replacement = registry.beginAssetReplacement("asset");
@@ -100,12 +98,8 @@ describe("glTF shared-view LOD registry", () => {
       expect(pendingIds.some((id) => liveIds.includes(id)), "live packet IDs cannot be recycled early").toBe(false);
       registry.commitAssetReplacement(replacement);
       liveIds = pendingIds;
-      const snapshot = registry.snapshot();
-      expect(snapshot.activeMetadata).toBe(1);
-      expect(snapshot.activeSelections).toBe(selectionKeys.length);
-      expect(snapshot.freeSelections).toBe(selectionKeys.length);
-      expect(snapshot.reservedSelections).toBe(initialReserved * 2);
-      expect(snapshot.capacity).toBe(32);
+      expect(new Set(pendingIds).size).toBe(selectionKeys.length);
+      expect(Math.max(...pendingIds)).toBeLessThan(selectionKeys.length * 2);
     }
   });
 
@@ -124,26 +118,19 @@ describe("glTF shared-view LOD registry", () => {
     }
     expect(() => registry.commitAssetReplacement(replacement)).toThrow(/token is not active/);
     expect(registry.materialSelectionId("asset", "material", lod)).toBe(liveId);
-    expect(registry.snapshot()).toMatchObject({
-      activeSelections: 1,
-      freeSelections: 1,
-      reservedSelections: 2,
-    });
+    const retry = registry.beginAssetReplacement("asset");
+    expect(registry.materialSelectionId("asset", "material", lod)).toBe(pendingId);
+    registry.rollbackAssetReplacement(retry);
   });
 
   it("commits an empty replacement after a no-occurrence publication", () => {
     const registry = new GltfSharedViewLodRegistry();
     const lod = materialLod([0.2, 0]);
-    registry.materialSelectionId("asset", "material", lod);
+    const releasedId = registry.materialSelectionId("asset", "material", lod);
     const replacement = registry.beginAssetReplacement("asset");
     registry.commitAssetReplacement(replacement);
     expect(registry.selectedLevel("asset", "material")).toBeUndefined();
-    expect(registry.snapshot()).toMatchObject({
-      activeMetadata: 0,
-      activeSelections: 0,
-      freeSelections: 1,
-      reservedSelections: 1,
-    });
+    expect(registry.materialSelectionId("asset", "replacement", lod)).toBe(releasedId);
   });
 
   it("resets IDs, retained selections, capacity, and epoch as one plan generation", () => {
@@ -151,19 +138,12 @@ describe("glTF shared-view LOD registry", () => {
     const lod = materialLod([0.2, 0]);
     const id = registry.materialSelectionId("asset", "material", lod);
     expect(observeMaterialFrame(registry, id, [0.8])).toBe(0);
-    expect(registry.snapshot().epoch).toBe(1);
+    expect(registry.packetSelections.epoch).toBe(1);
     registry.beginFrame();
-    expect(registry.snapshot().epoch).toBe(2);
+    expect(registry.packetSelections.epoch).toBe(2);
 
     registry.resetPlan();
-    expect(registry.snapshot()).toEqual({
-      activeMetadata: 0,
-      activeSelections: 0,
-      capacity: 1,
-      epoch: 0,
-      freeSelections: 0,
-      reservedSelections: 0,
-    });
+    expect(registry.packetSelections.epoch).toBe(0);
     expect(registry.selectedLevel("asset", "material")).toBeUndefined();
     expect(registry.materialSelectionId("asset", "material", lod)).toBe(0);
   });

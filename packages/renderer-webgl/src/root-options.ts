@@ -24,12 +24,26 @@ const WEBGL_ROOT_OPTION_FIELDS = [
   "resourceBudgets",
 ] as const;
 const INTERNAL_WEBGL_ROOT_OPTION_FIELDS = [...WEBGL_ROOT_OPTION_FIELDS, "resourceGovernorPolicy"] as const;
+const WEBGL_RESOURCE_BUDGET_FIELDS = [
+  "cpuDecodedBytes",
+  "jobs",
+  "persistentGpuBytes",
+  "transientPeakBytes",
+  "uploadBytes",
+] as const;
 
 const resolveOptions = (
   options: WebGlRootOptions,
   allowedFields: readonly string[],
 ): ResolvedWebGlRootOptions => {
   objectWithAllowedFields(options, allowedFields, "Renderer options");
+  if (options.resourceBudgets !== undefined) {
+    objectWithAllowedFields(
+      options.resourceBudgets,
+      WEBGL_RESOURCE_BUDGET_FIELDS,
+      "resourceBudgets",
+    );
+  }
   return Object.freeze({
     alpha: booleanOption(options.alpha, true, "Renderer alpha"),
     antialias: booleanOption(options.antialias, true, "Renderer antialias"),
@@ -38,7 +52,7 @@ const resolveOptions = (
       false,
       "Renderer automaticVirtualTextures",
     ),
-    resourceBudgets: defineResourceGovernorPolicy(options.resourceBudgets),
+    resourceBudgets: defineResourceGovernorPolicy(options.resourceBudgets).limits,
   });
 };
 
@@ -55,12 +69,11 @@ export const normalizeWebGlRootOptions = (
   if (options.resourceBudgets !== undefined && options.resourceGovernorPolicy !== undefined) {
     throw new TypeError("Renderer resourceBudgets and internal resourceGovernorPolicy cannot both be set");
   }
-  const resourceGovernorPolicy = defineResourceGovernorPolicy(
-    options.resourceBudgets ?? options.resourceGovernorPolicy,
-  );
+  const resourceGovernorPolicy = options.resourceGovernorPolicy
+    ?? defineResourceGovernorPolicy(options.resourceBudgets);
   return Object.freeze({
     ...resolved,
-    resourceBudgets: resourceGovernorPolicy,
+    resourceBudgets: resourceGovernorPolicy.limits,
     resourceGovernorPolicy,
   });
 };

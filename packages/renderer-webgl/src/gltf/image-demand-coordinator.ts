@@ -288,17 +288,6 @@ export class GltfImageDemandCoordinator {
     }
   }
 
-  demandAll(assetKey: string): void {
-    const asset = this.#assets.get(assetKey);
-    if (asset === undefined) return;
-    for (const row of asset.rows.values()) this.#demand(row);
-    if (asset.rows.size === 0) {
-      asset.load.imagesSettledAt = this.#now();
-      asset.recipeOwnership.releaseRequested = true;
-      this.#releaseRecipesIfUnused(asset.recipeOwnership);
-    }
-  }
-
   /** Demands only the ordinary images referenced by one selected material. */
   demandMaterial(assetKey: string, material: LoadedGltfMaterial): void {
     const asset = this.#assets.get(assetKey);
@@ -325,11 +314,6 @@ export class GltfImageDemandCoordinator {
     if (imageKey === undefined) return false;
     const status = this.#assets.get(assetKey)?.rows.get(imageKey)?.status;
     return status !== undefined && status !== "ready" && status !== "error";
-  }
-
-  demandImage(assetKey: string, imageKey: string): void {
-    const row = this.#assets.get(assetKey)?.rows.get(imageKey);
-    if (row !== undefined) this.#demand(row);
   }
 
   /** Borrows retryable outcomes; entries remain owned until explicitly acknowledged. */

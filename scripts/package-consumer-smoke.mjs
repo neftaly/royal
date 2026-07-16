@@ -141,7 +141,7 @@ import type { ReactNode } from 'react';
 
 const asset = gltf({ src: '/model.glb' });
 const largeAssetBudgets = {
-  limits: { cpuDecodedBytes: 1024 * 1024 * 1024 },
+  cpuDecodedBytes: 1024 * 1024 * 1024,
 } satisfies RendererResourceBudgetOptions;
 const renderScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),

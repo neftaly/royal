@@ -243,9 +243,7 @@ export const loadGltfBuffers = async (
       const requiredExtensions = new Set(document.extensionsRequired ?? []);
       const meshoptDecodeTarget = targetBufferViews.length > 0 && targetBufferViews.every((bufferView) =>
         (bufferView.extensions?.EXT_meshopt_compression !== undefined
-          && requiredExtensions.has("EXT_meshopt_compression"))
-        || (bufferView.extensions?.KHR_meshopt_compression !== undefined
-          && requiredExtensions.has("KHR_meshopt_compression")));
+          && requiredExtensions.has("EXT_meshopt_compression")));
       if (meshoptDecodeTarget === true && buffer.byteLength !== undefined) {
         if (!Number.isSafeInteger(buffer.byteLength) || buffer.byteLength < 0) {
           throw new Error(`${context} has invalid byteLength ${String(buffer.byteLength)}`);

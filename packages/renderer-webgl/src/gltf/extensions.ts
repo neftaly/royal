@@ -6,7 +6,6 @@ export const supportedGltfExtensions = new Set<string>([
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_draco_mesh_compression",
-  "KHR_meshopt_compression",
   "KHR_texture_basisu",
   "KHR_lights_punctual",
   "KHR_materials_anisotropy",

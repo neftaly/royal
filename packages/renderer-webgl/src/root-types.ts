@@ -9,7 +9,7 @@ import type {
 } from "@royal/renderer-core";
 import type {
   ResourceGovernorPolicy,
-  ResourceGovernorPolicyInput,
+  ResourceGovernorUsage,
 } from "./resource-governor";
 import type { WebGlResourcePressureSnapshot } from "./resource-pressure";
 export type { WebGlResourcePressureSnapshot } from "./resource-pressure";
@@ -31,7 +31,7 @@ export interface WebGlRootOptions {
    */
   readonly automaticVirtualTextures?: boolean;
   /**
-   * Deep partial overrides for root-wide CPU, GPU, upload, and job admission
+   * Partial overrides for root-wide CPU, GPU, upload, and job admission
    * budgets. Byte-named values are bytes. Omitted fields retain Royal's
    * conservative defaults.
    */
@@ -39,10 +39,10 @@ export interface WebGlRootOptions {
 }
 
 /** Concise overrides for renderer resource admission budgets. */
-export type WebGlResourceBudgetOptions = ResourceGovernorPolicyInput;
+export type WebGlResourceBudgetOptions = Readonly<Partial<ResourceGovernorUsage>>;
 
 /** Complete immutable resource budgets retained by a renderer root. */
-export type WebGlResourceBudgets = ResourceGovernorPolicy;
+export type WebGlResourceBudgets = ResourceGovernorUsage;
 
 export type ResolvedWebGlRootOptions = Omit<Required<WebGlRootOptions>, "resourceBudgets"> & {
   readonly resourceBudgets: WebGlResourceBudgets;
@@ -50,7 +50,7 @@ export type ResolvedWebGlRootOptions = Omit<Required<WebGlRootOptions>, "resourc
 
 /** @internal Budget injection retained for deterministic backend tests. */
 export interface InternalWebGlRootOptions extends WebGlRootOptions {
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
 }
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";

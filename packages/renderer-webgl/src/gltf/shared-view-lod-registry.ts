@@ -30,15 +30,6 @@ export type GltfSharedViewLodAssetReplacement = {
   readonly serial: number;
 };
 
-export type GltfSharedViewLodRegistrySnapshot = {
-  readonly activeMetadata: number;
-  readonly activeSelections: number;
-  readonly capacity: number;
-  readonly epoch: number;
-  readonly freeSelections: number;
-  readonly reservedSelections: number;
-};
-
 export type GltfSharedViewLodPacketSelections = {
   readonly epoch: number;
   readonly selectedLevels: Uint32Array;
@@ -240,23 +231,6 @@ export class GltfSharedViewLodRegistry {
   selectedLevel(assetKey: string, selectionKey: string): number | undefined {
     const id = this.#assets.get(assetKey)?.selectionIds.get(selectionKey);
     return id === undefined ? undefined : sharedViewLodSelectedLevel(this.#selections, id);
-  }
-
-  snapshot(): GltfSharedViewLodRegistrySnapshot {
-    let activeMetadata = 0;
-    let activeSelections = 0;
-    for (const asset of this.#assets.values()) {
-      activeMetadata += asset.materialMetadata.size + asset.nodeMetadata.size;
-      activeSelections += asset.ids.length;
-    }
-    return {
-      activeMetadata,
-      activeSelections,
-      capacity: this.#selections.capacity,
-      epoch: this.#selections.epoch,
-      freeSelections: this.#freeIds.length,
-      reservedSelections: this.#nextId,
-    };
   }
 
   #replacement(token: GltfSharedViewLodAssetReplacement): ActiveReplacement {

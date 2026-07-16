@@ -154,7 +154,7 @@ on `<Canvas>` recreates its renderer root.
   rendererOptions={{
     automaticVirtualTextures: true,
     resourceBudgets: {
-      limits: { cpuDecodedBytes: 1024 * 1024 * 1024 },
+      cpuDecodedBytes: 1024 * 1024 * 1024,
     },
   }}
   scene={renderScene}
@@ -181,11 +181,10 @@ The imperative root separates its two observational models:
   The ordinary texture remains active
   until generated coverage is ready. Authored `virtualTexture(...)` resources
   are unaffected.
-- `resourceBudgets` accepts deep partial overrides for root-wide CPU, GPU,
-  per-frame upload, transient-memory, and concurrent-job limits. Byte-named
-  fields are bytes. Per-class `mandatoryFloor` and optional `hardLimit` values
-  control protected capacity and borrowing. The normalized complete policy is
-  available as `root.options.resourceBudgets`.
+- `resourceBudgets` accepts root-wide CPU, GPU, per-frame upload,
+  transient-memory, and concurrent-job limits. Byte-named fields are bytes.
+  Royal keeps per-resource lending policy internal. The normalized complete
+  limits are available as `root.options.resourceBudgets`.
 - Manifest `physicalByteBudget` and `physicalSlots` remain the authored VT
   quality and footprint ceilings; renderer resource budgets do not rewrite them.
 
@@ -194,8 +193,7 @@ authored manifest. The string and the object form
 `virtualTexture({ manifestUri: '/terrain.vt.json' })` are equivalent. Object
 forms deliberately have one source field: image constructors use `src`, while
 the authored-VT constructor uses `manifestUri`. There are no `uri`/`src`
-compatibility aliases to guess between. See the
-[manifest, orientation, and fallback contract](../../docs/virtual-textures.md).
+compatibility aliases to guess between.
 
 For very close inspection, keep the perspective near plane below the closest
 camera-to-surface distance. For example,

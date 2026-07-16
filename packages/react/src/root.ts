@@ -48,7 +48,7 @@ export interface RendererOptions {
    */
   readonly automaticVirtualTextures?: boolean;
   /**
-   * Deep partial overrides for CPU, GPU, upload, and job admission budgets.
+   * Root-wide overrides for CPU, GPU, upload, and job admission budgets.
    * Byte-named values are bytes; omitted fields retain Royal's defaults.
    */
   readonly resourceBudgets?: RendererResourceBudgetOptions;
@@ -464,10 +464,7 @@ export const createRendererRoot = (
   };
   registerRoyalRendererCapabilities(royalRoot, {
     acquireExternalRenderClock: () => root.acquireExternalRenderClock(),
-    createXrSessionRenderer: async (session, xrOptions) => {
-      const { createWebXrSessionRenderer } = await import("@royal/renderer-webgl/webxr");
-      return createWebXrSessionRenderer(root, session, xrOptions);
-    },
+    webGlRoot: root,
   });
 
   return royalRoot;

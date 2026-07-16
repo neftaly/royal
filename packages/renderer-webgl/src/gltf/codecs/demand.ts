@@ -15,9 +15,7 @@ export const gltfCodecDemand = (document: GltfDocument): GltfCodecDemand => ({
       primitive.extensions?.KHR_draco_mesh_compression !== undefined)),
   meshopt:
     (document.bufferViews ?? []).some((bufferView) =>
-      bufferView.extensions?.EXT_meshopt_compression !== undefined
-      || bufferView.extensions?.KHR_meshopt_compression !== undefined)
+      bufferView.extensions?.EXT_meshopt_compression !== undefined)
     || (document.buffers ?? []).some((buffer) =>
-      buffer.extensions?.EXT_meshopt_compression !== undefined
-      || buffer.extensions?.KHR_meshopt_compression !== undefined),
+      buffer.extensions?.EXT_meshopt_compression !== undefined),
 });

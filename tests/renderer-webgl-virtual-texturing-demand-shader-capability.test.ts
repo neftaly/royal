@@ -14,7 +14,6 @@ import {
   renderScene,
   vtManifest,
   vtSinglePageManifest,
-  vtPersistentGpuHardLimitPolicy,
   vtParentFallbackManifest,
   vtDenseMipManifest,
   vtZoomCycleManifest,
@@ -537,7 +536,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
       automaticVirtualTextures: true,
-      resourceBudgets: vtPersistentGpuHardLimitPolicy(123_456),
+      resourceBudgets: { persistentGpuBytes: 768 * 1024 * 1024 },
     });
 
     expect(Object.isFrozen(root.options)).toBe(true);
@@ -548,11 +547,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       antialias: true,
       automaticVirtualTextures: true,
     });
-    expect(root.options.resourceBudgets.classes["virtual-texture"].persistentGpuBytes.hardLimit)
-      .toBe(123_456);
-    expect(root.snapshot()).toMatchObject({
-      virtualTexturing: { physicalBudgetBytes: 123_456 },
-    });
+    expect(root.options.resourceBudgets.persistentGpuBytes).toBe(768 * 1024 * 1024);
     root.dispose();
   });
 

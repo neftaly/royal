@@ -113,7 +113,6 @@ describe("WebGL scene-plan transaction owner", () => {
     });
 
     expect(() => owner.finishReconciliation()).toThrow("ref failed");
-    expect(owner.pendingReconciliation).toBe(true);
     expect(owner.latestScene).toBe(committedScene);
     const retained = owner.commit(committedScene, () => {
       resourceApplies += 1;
@@ -124,7 +123,6 @@ describe("WebGL scene-plan transaction owner", () => {
     expect(resourceApplies).toBe(1);
     expect(calls).toEqual(["topology", "refs", "bulk", "refs", "bulk"]);
     expect(commit.plan).toBe(owner.plan);
-    expect(owner.pendingReconciliation).toBe(false);
   });
 
   it("preserves an opaque initial failure while completing all reconciliation work", () => {
@@ -146,7 +144,6 @@ describe("WebGL scene-plan transaction owner", () => {
 
     expect(caught).toBe(true);
     expect(calls).toEqual(["topology", "refs", "bulk"]);
-    expect(owner.pendingReconciliation).toBe(true);
     owner.finishReconciliation();
     expect(calls).toEqual(["topology", "refs", "bulk", "refs", "bulk"]);
   });
@@ -172,7 +169,6 @@ describe("WebGL scene-plan transaction owner", () => {
       "Cannot render while Royal is reconciling render-object refs",
     );
     expect(owner.reconciling).toBe(false);
-    expect(owner.pendingReconciliation).toBe(true);
     expect(() => owner.finishReconciliation()).not.toThrow();
   });
 });

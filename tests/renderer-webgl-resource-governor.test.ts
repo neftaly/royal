@@ -66,40 +66,28 @@ describe("root resource governor", () => {
     expect(Object.isFrozen(DEFAULT_RESOURCE_GOVERNOR_POLICY.limits)).toBe(true);
   });
 
-  it("defines a complete immutable policy from concise nested overrides", () => {
+  it("defines a complete immutable policy from root-limit overrides", () => {
     const configured = defineResourceGovernorPolicy({
-      classes: {
-        "virtual-texture": {
-          persistentGpuBytes: { hardLimit: 96, mandatoryFloor: 80 },
-        },
-      },
-      limits: { jobs: 3, persistentGpuBytes: 128 },
+      jobs: 3,
+      persistentGpuBytes: 256 * 1024 * 1024,
     });
 
     expect(configured).toMatchObject({
-      classes: {
-        geometry: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes.geometry,
-        "virtual-texture": {
-          persistentGpuBytes: {
-            hardLimit: 96,
-            mandatoryFloor: 80,
-          },
-        },
-      },
+      classes: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes,
       limits: {
         ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
         jobs: 3,
-        persistentGpuBytes: 128,
+        persistentGpuBytes: 256 * 1024 * 1024,
       },
     });
     expect(Object.isFrozen(configured)).toBe(true);
-    expect(Object.isFrozen(configured.classes["virtual-texture"].persistentGpuBytes)).toBe(true);
     expect(Object.isFrozen(configured.limits)).toBe(true);
   });
 
   it("ignores unknown or undefined runtime limit overrides", () => {
     const noisy = {
-      limits: { ignored: 1, jobs: undefined },
+      ignored: 1,
+      jobs: undefined,
     } as unknown as Parameters<typeof defineResourceGovernorPolicy>[0];
     const configured = defineResourceGovernorPolicy(noisy);
 

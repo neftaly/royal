@@ -27,5 +27,10 @@ export const createXrSessionRenderer = async (
   options?: XrSessionRendererOptions,
 ): Promise<XrSessionRenderer> => {
   validateXrSessionRendererOptions(options);
-  return royalRendererCapabilitiesFor(root).createXrSessionRenderer(session, options);
+  const { createWebXrSessionRenderer } = await import("@royal/renderer-webgl/webxr");
+  return createWebXrSessionRenderer(
+    royalRendererCapabilitiesFor(root).webGlRoot,
+    session,
+    options,
+  );
 };

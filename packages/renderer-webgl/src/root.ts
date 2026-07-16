@@ -182,7 +182,6 @@ import {
   type WebGlContextCapabilities,
 } from "./context/capability-owner";
 import { WebGlFramePublicationOwner } from "./frame/publication-owner";
-import { WebGlFrameTeardownOwner } from "./frame/teardown-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
@@ -380,28 +379,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #viewport: WebGlCanvasViewportOwner;
   readonly #geometryDrawArena: GeometryDrawArena;
   readonly #surfaceExecution: SurfaceExecutionArena;
-  readonly #frameTeardown = new WebGlFrameTeardownOwner({
-    advanceFrame: () => {
-      this.#framePublication.advance();
-    },
-    bindDefaultFramebuffer: () => this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, null),
-    bindDefaultVertexArray: () => this.#gl.bindVertexArray(null),
-    clearArrayBuffer: () => this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, null),
-    clearElementArrayBuffer: () => this.#gl.bindBuffer(this.#gl.ELEMENT_ARRAY_BUFFER, null),
-    consumeSurfaceSignals: () => this.#consumeSurfaceExecutionSignals(),
-    disableScissor: () => this.#gl.disable(this.#gl.SCISSOR_TEST),
-    drainVirtualTextureRequests: () => this.#virtualTextures.drainRequests(),
-    endClusteredLights: (frame) => this.#clusteredLights.endFrame(frame),
-    endInstanceTransforms: (commit) => this.#gltfInstanceTransforms.endFrame(commit),
-    finalizeOrdinaryTextureIntent: (commit) => this.#ordinaryTextureGpu.finalizeResidencyIntent(commit),
-    finishVirtualTextures: (commit) => this.#virtualTextures.finishFrame(commit),
-    hasActionableVirtualTextureUploads: () => this.#virtualTextures.hasActionableUploads(),
-    invalidate: () => this.invalidate(),
-    processVirtualTextureUploads: () => this.#virtualTextures.processGpuUploads(),
-    releaseUnusedPackets: () => {
-      this.#gltfPacketSubmissions.releaseUnused(this.#gl, this.#context.generation);
-    },
-  });
   #surfaceGltfBatchExecution: Mutable<SurfaceGltfBatchExecution> | undefined;
   #surfaceSingleExecution: Mutable<SurfaceSingleExecution> | undefined;
   #unsupportedVirtualTextureDraws = 0;
@@ -531,7 +508,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#contextCapabilities = new WebGlContextCapabilityOwner(gl, options);
       this.#options = Object.freeze({
         automaticVirtualTextures: requestedOptions.automaticVirtualTextures,
-        resourceBudgets: requestedOptions.resourceGovernorPolicy,
+        resourceBudgets: requestedOptions.resourceBudgets,
         ...this.#contextCapabilities.attributes,
       });
       this.#clusteredLights = new LazyClusteredLightingFeature({
@@ -1088,14 +1065,50 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.invalidate();
       } else renderFailure = { value };
     }
+    renderFailure = captureFirstFailure(renderFailure, () => this.#consumeSurfaceExecutionSignals());
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined && !renderDeferred),
+    );
+    renderFailure = captureFirstFailure(renderFailure, () => {
+      this.#gltfPacketSubmissions.releaseUnused(this.#gl, this.#context.generation);
+    });
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#clusteredLights.endFrame(this.#framePublication.frame),
+    );
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#virtualTextures.finishFrame(renderFailure === undefined && !renderDeferred),
+    );
+    if (renderFailure === undefined && !renderDeferred) {
+      renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.processGpuUploads());
+    }
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined && !renderDeferred),
+    );
+    renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
+    renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.drainRequests());
+    renderFailure = captureFirstFailure(renderFailure, () => {
+      if (this.#virtualTextures.hasActionableUploads()) this.invalidate();
+    });
+
     // The renderer exclusively owns its context, but leaving vertex-input
     // bindings neutral makes frame teardown explicit. The EAB is VAO state,
-    // so the retained teardown shell selects the default VAO before clearing it.
-    renderFailure = this.#frameTeardown.finish(
+    // so select the default VAO before clearing it.
+    if (frameViews.scissor) {
+      renderFailure = captureFirstFailure(renderFailure, () => gl.disable(gl.SCISSOR_TEST));
+    }
+    renderFailure = captureFirstFailure(
       renderFailure,
-      renderDeferred,
-      this.#framePublication.frame,
-      frameViews.scissor,
+      () => gl.bindFramebuffer(gl.FRAMEBUFFER, null),
+    );
+    renderFailure = captureFirstFailure(renderFailure, () => gl.bindVertexArray(null));
+    renderFailure = captureFirstFailure(renderFailure, () => gl.bindBuffer(gl.ARRAY_BUFFER, null));
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null),
     );
     if (renderFailure !== undefined) throw renderFailure.value;
     if (renderDeferred) return;

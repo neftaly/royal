@@ -20,13 +20,6 @@ const virtualIdle: TextureAssetStatus = Object.freeze({
   state: "idle",
 });
 
-const sameStatus = (left: TextureAssetStatus, right: TextureAssetStatus): boolean =>
-  left.kind === right.kind
-  && left.state === right.state
-  && left.error === right.error
-  && (left.kind === "ordinary"
-    || (right.kind === "virtual" && left.pendingPages === right.pendingPages));
-
 /**
  * Observes the exact texture descriptor retained by the surrounding Canvas.
  * For authored VTs, `ready` means the manifest is accepted; `pendingPages`
@@ -38,11 +31,10 @@ export const useTextureAssetStatus = (texture: TextureAssetStatusInput): Texture
   const semanticKey = textureAssetSemanticKey(texture);
   const store = useMemo(() => {
     const idle = texture.kind === "asset" ? ordinaryIdle : virtualIdle;
-    if (root === null) return createObservedExternalStore(idle, () => () => undefined, sameStatus);
+    if (root === null) return createObservedExternalStore(idle, () => () => undefined);
     return createObservedExternalStore(
       root.textureAssetSnapshot(texture),
       (publish) => root.observeTextureAsset(texture, publish),
-      sameStatus,
     );
   }, [root, semanticKey]);
 

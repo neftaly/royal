@@ -58,20 +58,6 @@ export interface ResourceGovernorPolicy {
   readonly limits: ResourceGovernorUsage;
 }
 
-/**
- * Nested overrides applied to the renderer's complete default resource policy.
- * A lowered hard ceiling also clamps an inherited floor; explicit
- * dependent values remain authoritative. Lower root capacities may require
- * corresponding class-floor overrides.
- */
-export interface ResourceGovernorPolicyInput {
-  readonly classes?: Readonly<Partial<Record<ResourceGovernorClass, {
-    readonly cpuDecodedBytes?: Readonly<Partial<ResourceGovernorDurableBudget>>;
-    readonly persistentGpuBytes?: Readonly<Partial<ResourceGovernorDurableBudget>>;
-  }>>>;
-  readonly limits?: Readonly<Partial<ResourceGovernorUsage>>;
-}
-
 export type ResourceGovernorDenialReason = WebGlResourceDenialReason;
 
 export interface ResourceGovernorAdmission {
@@ -149,9 +135,12 @@ export const maximumResourceGovernorClassDurableBytes = (
   resourceClass: ResourceGovernorClass,
   dimension: "cpuDecodedBytes" | "persistentGpuBytes",
 ): number => {
-  const otherFloors = RESOURCE_GOVERNOR_CLASSES
-    .filter((candidate) => candidate !== resourceClass)
-    .reduce((sum, candidate) => sum + policy.classes[candidate][dimension].mandatoryFloor, 0);
+  let otherFloors = 0;
+  for (const candidate of RESOURCE_GOVERNOR_CLASSES) {
+    if (candidate !== resourceClass) {
+      otherFloors += policy.classes[candidate][dimension].mandatoryFloor;
+    }
+  }
   const borrowableMaximum = Math.max(0, policy.limits[dimension] - otherFloors);
   return Math.min(
     borrowableMaximum,
@@ -268,55 +257,26 @@ export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.f
 });
 
 /**
- * Resolves one deeply immutable, complete policy from concise nested overrides.
+ * Resolves one deeply immutable policy from concise root-limit overrides.
  * Structural validation occurs when a renderer root or governor is created.
  */
 export const defineResourceGovernorPolicy = (
-  input?: ResourceGovernorPolicyInput,
+  limits?: Readonly<Partial<ResourceGovernorUsage>>,
 ): ResourceGovernorPolicy => {
-  if (input === undefined) return DEFAULT_RESOURCE_GOVERNOR_POLICY;
-  const budget = (
-    fallback: ResourceGovernorDurableBudget,
-    overrides: Readonly<Partial<ResourceGovernorDurableBudget>> | undefined,
-  ): ResourceGovernorDurableBudget => {
-    const hardLimit = overrides !== undefined && "hardLimit" in overrides
-      ? overrides.hardLimit
-      : fallback.hardLimit;
-    const inheritedMandatoryFloor = hardLimit === undefined
-      ? fallback.mandatoryFloor
-      : Math.min(fallback.mandatoryFloor, hardLimit);
-    return Object.freeze({
-      ...(hardLimit === undefined ? {} : { hardLimit }),
-      mandatoryFloor: overrides?.mandatoryFloor ?? inheritedMandatoryFloor,
-    });
-  };
-  const resourceClass = (resourceClass: ResourceGovernorClass): ResourceGovernorClassPolicy => {
-    const fallback = DEFAULT_RESOURCE_GOVERNOR_POLICY.classes[resourceClass];
-    const overrides = input.classes?.[resourceClass];
-    return Object.freeze({
-      cpuDecodedBytes: budget(fallback.cpuDecodedBytes, overrides?.cpuDecodedBytes),
-      persistentGpuBytes: budget(fallback.persistentGpuBytes, overrides?.persistentGpuBytes),
-    });
-  };
-  return Object.freeze({
-    classes: Object.freeze({
-      "asset-decode": resourceClass("asset-decode"),
-      geometry: resourceClass("geometry"),
-      "ordinary-texture": resourceClass("ordinary-texture"),
-      "render-target": resourceClass("render-target"),
-      "virtual-texture": resourceClass("virtual-texture"),
-    }),
+  if (limits === undefined) return DEFAULT_RESOURCE_GOVERNOR_POLICY;
+  const defaults = DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
+  const policy = Object.freeze({
+    classes: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes,
     limits: Object.freeze({
-      cpuDecodedBytes: input.limits?.cpuDecodedBytes
-        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.cpuDecodedBytes,
-      jobs: input.limits?.jobs ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.jobs,
-      persistentGpuBytes: input.limits?.persistentGpuBytes
-        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
-      transientPeakBytes: input.limits?.transientPeakBytes
-        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.transientPeakBytes,
-      uploadBytes: input.limits?.uploadBytes ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.uploadBytes,
+      cpuDecodedBytes: limits.cpuDecodedBytes ?? defaults.cpuDecodedBytes,
+      jobs: limits.jobs ?? defaults.jobs,
+      persistentGpuBytes: limits.persistentGpuBytes ?? defaults.persistentGpuBytes,
+      transientPeakBytes: limits.transientPeakBytes ?? defaults.transientPeakBytes,
+      uploadBytes: limits.uploadBytes ?? defaults.uploadBytes,
     }),
   });
+  validatePolicy(policy);
+  return policy;
 };
 
 export type ResourceGovernorSnapshot = WebGlResourcePressureSnapshot;

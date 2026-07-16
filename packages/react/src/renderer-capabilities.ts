@@ -1,8 +1,4 @@
-import type {
-  XrSession,
-  XrSessionRenderer,
-  XrSessionRendererOptions,
-} from "./xr/renderer-model";
+import type { WebGlRoot } from "@royal/renderer-webgl";
 
 /** Ownership token for an external renderer frame clock. */
 export interface RoyalRendererFrameClock {
@@ -15,10 +11,7 @@ export interface RoyalRendererFrameClock {
 /** @internal Backend operations used by optional React renderer integrations. */
 export interface RoyalRendererCapabilities {
   acquireExternalRenderClock(): RoyalRendererFrameClock;
-  createXrSessionRenderer(
-    session: XrSession,
-    options?: XrSessionRendererOptions,
-  ): Promise<XrSessionRenderer>;
+  readonly webGlRoot: WebGlRoot;
 }
 
 const rendererCapabilities = new WeakMap<object, RoyalRendererCapabilities>();

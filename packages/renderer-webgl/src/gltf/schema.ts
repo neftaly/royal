@@ -59,7 +59,6 @@ export type GltfBufferView = {
   readonly byteStride?: number;
   readonly extensions?: {
     readonly EXT_meshopt_compression?: GltfMeshoptCompressionExtension;
-    readonly KHR_meshopt_compression?: GltfMeshoptCompressionExtension;
     readonly [name: string]: unknown;
   };
   readonly target?: number;
@@ -88,9 +87,6 @@ export type GltfBuffer = {
   readonly byteLength?: number;
   readonly extensions?: {
     readonly EXT_meshopt_compression?: {
-      readonly fallback?: boolean;
-    };
-    readonly KHR_meshopt_compression?: {
       readonly fallback?: boolean;
     };
     readonly [name: string]: unknown;
