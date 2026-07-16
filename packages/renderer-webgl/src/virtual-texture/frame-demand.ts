@@ -87,11 +87,14 @@ export const beginVirtualTextureFrameDemand = <K>(workspace: VirtualTextureFrame
   workspace.active = true;
 };
 
+const compareSignature = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
 const comparePreferredItems = (left: PreferredItem, right: PreferredItem): number =>
-  left.signature.localeCompare(right.signature) || left.index - right.index;
+  compareSignature(left.signature, right.signature) || left.index - right.index;
 
 const comparePreferredItemToCursor = (item: PreferredItem, cursor: PreferredCursor): number =>
-  item.signature.localeCompare(cursor.signature) || item.index - cursor.index;
+  compareSignature(item.signature, cursor.signature) || item.index - cursor.index;
 
 const retainBoundedPreferredItem = (
   target: Map<string, PreferredItem>,
