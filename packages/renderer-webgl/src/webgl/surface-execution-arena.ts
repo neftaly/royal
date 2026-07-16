@@ -147,6 +147,7 @@ type TextureCoordinateUniformNames = Readonly<{
 type SurfaceMaterialTextureCandidateEntry = Readonly<{
   descriptor: (typeof SURFACE_MATERIAL_TEXTURE_BINDINGS)[number];
   texture: TextureAssetUploadRef;
+  uniforms: TextureCoordinateUniformNames;
 }>;
 type SurfaceTextureAdmissionCacheEntry = Readonly<{
   readonly baseColor: SurfaceBaseColorPlanInput;
@@ -192,7 +193,11 @@ const createSurfaceMaterialTextureCatalog = (
       : material.kind === "standard" ? material[descriptor.key] : undefined;
     if (texture === undefined) continue;
     candidates[descriptor.feature] = "ready";
-    entries.push({ descriptor, texture });
+    entries.push({
+      descriptor,
+      texture,
+      uniforms: SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS[index]!,
+    });
   }
   return { admissions: [], candidates, entries, extendedMaterial, transmission };
 };
@@ -240,6 +245,7 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
   readonly baseColor: SurfaceBaseColorTextureBinding;
   readonly criticalPending: boolean;
   readonly extendedMaterial: boolean;
+  readonly materialTextures: readonly SurfaceMaterialTextureCandidateEntry[];
   readonly readyTextures: ReadonlyMap<SurfaceShaderTextureFeature, Extract<
     OrdinaryTextureGpuResource,
     { readonly uploaded: true }
@@ -251,6 +257,7 @@ type MutableSurfaceTextureBindingPlan = {
   criticalPending: boolean;
   extendedMaterial: boolean;
   features: PureSurfaceTextureBindingPlan["features"];
+  materialTextures: readonly SurfaceMaterialTextureCandidateEntry[];
   omissions: PureSurfaceTextureBindingPlan["omissions"];
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
   textureUnits: PureSurfaceTextureBindingPlan["textureUnits"];
@@ -363,6 +370,7 @@ export class SurfaceExecutionArena {
     criticalPending: false,
     extendedMaterial: false,
     features: this.#textureReadinessWorkspace.plan.features,
+    materialTextures: [],
     omissions: this.#textureReadinessWorkspace.plan.omissions,
     readyTextures: this.#readyTextures,
     textureUnits: this.#textureReadinessWorkspace.plan.textureUnits,
@@ -824,6 +832,7 @@ export class SurfaceExecutionArena {
     this.#texturePlan.criticalPending = criticalPending;
     this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
     this.#texturePlan.features = pure.features;
+    this.#texturePlan.materialTextures = entries;
     this.#texturePlan.omissions = pure.omissions;
     this.#texturePlan.textureUnits = pure.textureUnits;
     return this.#texturePlan;
@@ -952,7 +961,9 @@ export class SurfaceExecutionArena {
       factors.clearcoatNormalScale, 0, 0);
     uniform4f(this.#programs, program, "u_occlusionSettings",
       surfaceMaterialOcclusionStrength(material), 0, 0, 0);
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) this.#bindCachedTexture2d(program, descriptor, plan);
+    for (const entry of plan.materialTextures) {
+      this.#bindCachedTexture2d(program, entry.descriptor, plan);
+    }
   }
 
   #bindMaterialColor(
@@ -1030,15 +1041,15 @@ export class SurfaceExecutionArena {
       BASE_COLOR_TEXTURE_COORDINATE_UNIFORMS,
       true,
     );
-    for (let index = 0; index < SURFACE_MATERIAL_TEXTURE_BINDINGS.length; index += 1) {
-      const descriptor = SURFACE_MATERIAL_TEXTURE_BINDINGS[index]!;
+    for (const entry of plan.materialTextures) {
+      const descriptor = entry.descriptor;
       this.#bindTextureCoordinate(
         program,
         material,
         plan,
         descriptor.feature,
         descriptor.key,
-        SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS[index]!,
+        entry.uniforms,
         false,
       );
     }
