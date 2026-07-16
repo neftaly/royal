@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { TextureContentKey } from "@royal/renderer-core";
 import {
   planPreparedAssetDependencies,
 } from "../packages/renderer-webgl/src/gltf/prepared-asset-dependencies";
@@ -16,10 +15,11 @@ import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../packages/renderer-webgl/sr
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import { DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS } from "../packages/renderer-webgl/src/webgl/materials";
 
-const material = (textureUri: string): LoadedGltfMaterial => ({
+const material = (textureUri: string, contentKey?: string): LoadedGltfMaterial => ({
   alphaMode: "OPAQUE",
   baseColorTexture: {
     coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+    ...(contentKey === undefined ? {} : { contentKey }),
     textureUri,
   },
   doubleSided: false,
@@ -110,9 +110,9 @@ describe("prepared glTF asset dependency core", () => {
     const loadedPrimitive = primitive("primitive:0", shared, shared, shared, shared);
     const loadedAsset = asset([loadedPrimitive]);
 
-    const first = planPreparedAssetDependencies(loadedAsset, new Map(), "asset:a");
-    const repeated = planPreparedAssetDependencies(loadedAsset, new Map(), "asset:a");
-    const otherAsset = planPreparedAssetDependencies(loadedAsset, new Map(), "asset:b");
+    const first = planPreparedAssetDependencies(loadedAsset, "asset:a");
+    const repeated = planPreparedAssetDependencies(loadedAsset, "asset:a");
+    const otherAsset = planPreparedAssetDependencies(loadedAsset, "asset:b");
 
     expect(repeated.manifest.geometries[0]?.key).toBe(first.manifest.geometries[0]?.key);
     expect(first.geometryAssociations).toEqual([{
@@ -124,15 +124,14 @@ describe("prepared glTF asset dependency core", () => {
   });
 
   it("deduplicates texture cache identities while retaining material reference counts", () => {
-    const base = material("texture:shared");
-    const lod = material("texture:shared");
-    const variant = material("texture:shared");
-    const variantLod = material("texture:shared");
-    const contentKey = "content:shared" as TextureContentKey;
+    const contentKey = "content:shared";
+    const base = material("texture:shared", contentKey);
+    const lod = material("texture:shared", contentKey);
+    const variant = material("texture:shared", contentKey);
+    const variantLod = material("texture:shared", contentKey);
 
     const plan = planPreparedAssetDependencies(
       asset([primitive("primitive:0", base, lod, variant, variantLod)], true),
-      new Map([["texture:shared", contentKey]]),
       "asset:a",
     );
 
@@ -158,7 +157,6 @@ describe("prepared glTF asset dependency core", () => {
     };
     const plan = (value: LoadedGltfMaterial) => planPreparedAssetDependencies(
       asset([primitive("primitive:0", value, value, value, value)]),
-      new Map(),
       "asset:a",
     ).manifest.requiresHdrComposition;
 

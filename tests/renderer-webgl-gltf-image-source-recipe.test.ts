@@ -90,9 +90,37 @@ describe("glTF image source recipes", () => {
     });
     const decoded = await decodePreparedGltfImageSourceRecipe(prepared, controller.signal);
     expect(decoded.image).toBe(bitmap);
-    expect(decoded.contentKey).toBeUndefined();
+    expect(decoded).not.toHaveProperty("contentKey");
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(createBitmap).toHaveBeenCalledOnce();
+  });
+
+  it("keeps unannotated embedded byte recipes asset-scoped", async () => {
+    const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const document: GltfDocument = {
+      bufferViews: [{ buffer: 0, byteLength: 4 }],
+      buffers: [{ byteLength: 4 }],
+      images: [{ bufferView: 0, mimeType: "image/png" }],
+    };
+    const key = gltfImageLoadKey("asset", "/model.glb", 0, document.images![0]!, "image")!;
+
+    const [recipe] = createGltfImageSourceRecipes(
+      "asset",
+      "/model.glb",
+      document,
+      [new Uint8Array([1, 2, 3, 4]).buffer],
+      new Set([key]),
+      undefined,
+    );
+
+    expect(recipe?.source).not.toHaveProperty("contentKey");
+    const decoded = await decodePreparedGltfImageSourceRecipe(
+      await prepareGltfImageSourceRecipe(recipe!, new AbortController().signal),
+      new AbortController().signal,
+    );
+    expect(decoded.image).toBe(bitmap);
+    expect(decoded).not.toHaveProperty("contentKey");
   });
 
   it("passes the renderer-negotiated Basis target into the lazy codec", async () => {

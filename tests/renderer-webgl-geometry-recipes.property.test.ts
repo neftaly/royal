@@ -97,6 +97,7 @@ describe("WebGL geometry recipes", () => {
       mode: "triangles",
       positions: changedPositions,
     }));
-    expect(mutated.bucketKey).not.toBe(first.bucketKey);
+    expect(mutated.bucketKey).toBe(first.bucketKey);
+    expect(sameGeometryBytes(mutated, first)).toBe(false);
   });
 });

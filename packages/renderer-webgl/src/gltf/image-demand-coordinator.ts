@@ -52,14 +52,9 @@ export type GltfImageReadyOutcome = Readonly<{
   acknowledge(): void;
   assetKey: string;
   bindings: readonly GltfImageTextureBinding[];
-  contentKey?: TextureContentKey;
   iblSpecular?: SurfaceImageBasedLightSpecular;
   key: string;
-  /** Checkpoints the semantic arena rekey before any fallible publication side effects. */
-  markReferencesRekeyed(): void;
   materials: ReadonlySet<LoadedGltfMaterial>;
-  /** Live checkpoint state; remains true on every retry handle for this outcome. */
-  referencesRekeyed: boolean;
   source: LoadedTextureSource;
   stateInstanceKey: number;
 }>;
@@ -99,7 +94,6 @@ export interface GltfImageRecipeLease {
 type Row = {
   readonly asset: Asset;
   readonly bindings: GltfImageTextureBinding[];
-  contentKey?: TextureContentKey;
   cpuCapacityBlocked: boolean;
   error?: string;
   iblSpecular?: SurfaceImageBasedLightSpecular;
@@ -109,7 +103,6 @@ type Row = {
   pendingRefinements?: Set<LoadedGltfMaterial>;
   prepared?: PreparedGltfImageSourceRecipe;
   requested: boolean;
-  referencesRekeyed: boolean;
   recipe?: GltfImageSourceRecipe;
   source?: LoadedTextureSource;
   sourceLease?: SourceLease;
@@ -308,7 +301,6 @@ export class GltfImageDemandCoordinator {
         key,
         materials: new Set(),
         outcomeQueued: false,
-        referencesRekeyed: false,
         recipe,
         requested: false,
         status: "idle",
@@ -413,19 +405,9 @@ export class GltfImageDemandCoordinator {
         acknowledge: () => this.#acknowledge(row, source, lease),
         assetKey: asset.key,
         bindings: row.bindings,
-        ...(row.contentKey === undefined ? {} : { contentKey: row.contentKey }),
         ...(row.iblSpecular === undefined ? {} : { iblSpecular: row.iblSpecular }),
         key: row.key,
-        markReferencesRekeyed: () => {
-          if (
-            this.#assets.get(asset.key) === asset
-            && asset.rows.get(row.key) === row
-            && row.source === source
-            && row.sourceLease === lease
-          ) row.referencesRekeyed = true;
-        },
         materials: row.materials,
-        get referencesRekeyed() { return row.referencesRekeyed; },
         source,
         stateInstanceKey: asset.stateInstanceKey,
       });
@@ -735,8 +717,6 @@ export class GltfImageDemandCoordinator {
     row.sourceLease = sourceLease;
     row.source = loaded.image;
     asset.readyKeys.add(row.key);
-    if (loaded.contentKey === undefined) delete row.contentKey;
-    else row.contentKey = loaded.contentKey;
     row.status = "ready";
     this.#settleMaterialDemandRow(row);
     this.#demandSettledBaseRefinements(row);

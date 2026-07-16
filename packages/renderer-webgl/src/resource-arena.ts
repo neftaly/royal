@@ -1,4 +1,4 @@
-import type { TextureAssetRef, TextureContentKey, VirtualTextureAssetRef } from "@royal/renderer-core";
+import type { TextureAssetRef, VirtualTextureAssetRef } from "@royal/renderer-core";
 import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import type {
   CountedDirectGeometryDeclaration,
@@ -87,11 +87,6 @@ type MutableCountedTextureDeclaration<Texture> = {
   readonly key: string;
   readonly texture: Texture;
 };
-
-export interface PreparedAssetOrdinaryTextureRekey {
-  readonly next: CountedTextureDeclaration<TextureAssetRef>;
-  readonly previous: CountedTextureDeclaration<TextureAssetRef>;
-}
 
 export interface ResourceArenaCounters {
   assetPlanCompiles: number;
@@ -183,7 +178,6 @@ export interface ResourceArena {
 
 interface ResourceArenaState {
   readonly counters: ResourceArenaCounters;
-  readonly contentKeysByAsset: ReadonlyMap<string, ReadonlyMap<string, TextureContentKey>>;
   readonly gltfRequests: Map<string, GltfRequestDeclaration>;
   readonly geometries: Map<string, MutableResourceArenaGeometryRow>;
   hdrCompositionAssetCount: number;
@@ -251,9 +245,6 @@ const arenaSourceReferences = (arena: ResourceArena): Map<LoadedTextureSource, n
   (arena as unknown as ResourceArenaState).sourceReferences as Map<LoadedTextureSource, number>;
 const arenaIblSources = (arena: ResourceArena): Map<string, Map<string, LoadedTextureSource>> =>
   (arena as unknown as ResourceArenaState).iblSources as Map<string, Map<string, LoadedTextureSource>>;
-const arenaContentKeys = (arena: ResourceArena): Map<string, Map<string, TextureContentKey>> =>
-  (arena as unknown as ResourceArenaState).contentKeysByAsset as Map<string, Map<string, TextureContentKey>>;
-
 const retainSource = (arena: ResourceArena, source: LoadedTextureSource): void => {
   const references = arenaSourceReferences(arena);
   const previous = references.get(source) ?? 0;
@@ -422,7 +413,6 @@ export const createResourceArena = (
       sceneLeaseAcquires: 0,
       sceneLeaseReleases: 0,
     },
-    contentKeysByAsset: new Map(),
     gltfRequests: new Map(),
     geometries: new Map(),
     hdrCompositionAssetCount: 0,
@@ -606,7 +596,6 @@ export const applyResourceDelta = (
     releaseAssetPlan(arena, declaration, result);
     declaration.subscription.release();
     state.gltfRequests.delete(row.key);
-    arenaContentKeys(arena).delete(row.key);
     state.pendingAssetKeySet.delete(row.key);
     state.counters.preparedAssetReleases += 1;
     result.releasedGltfKeys.push(row.key);
@@ -744,34 +733,6 @@ const applyAssetGeometryDelta = (
   }
 };
 
-const applyAssetTextureReferenceDelta = <Texture extends TextureAssetRef | VirtualTextureAssetRef>(
-  declarations: Map<string, TextureDeclaration<Texture>>,
-  entry: CountedTextureDeclaration<Texture>,
-  delta: number,
-  released: string[],
-): void => {
-  const declaration = declarations.get(entry.key);
-  if (declaration === undefined) {
-    if (delta < 0) throw new Error(`resource arena asset texture ${entry.key} is missing`);
-    declarations.set(entry.key, {
-      assetReferences: delta,
-      key: entry.key,
-      sceneReferences: 0,
-      texture: entry.texture,
-    });
-    return;
-  }
-  declaration.assetReferences += delta;
-  declaration.texture = entry.texture;
-  if (declaration.assetReferences < 0) {
-    throw new Error(`resource arena texture ${entry.key} has negative asset references`);
-  }
-  if (declaration.assetReferences + declaration.sceneReferences === 0) {
-    declarations.delete(entry.key);
-    released.push(entry.key);
-  }
-};
-
 const applyAssetIblDelta = (
   arena: ResourceArena,
   previous: readonly { readonly count: number; readonly key: string }[],
@@ -823,7 +784,6 @@ export const applyPreparedAssetEvents = (
   arena: ResourceArena,
   compileManifest: (
     asset: PreparedGltfAsset,
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
     assetKey: string,
   ) => PreparedAssetDependencyManifest,
 ): { readonly changes: ResourceArenaChanges; readonly events: readonly PreparedAssetArenaEvent[] } => {
@@ -857,7 +817,7 @@ export const applyPreparedAssetEvents = (
       sourceRevisionUpdates.push({ declaration, revision: snapshot.revision });
       continue;
     }
-    const manifest = compileManifest(snapshot.asset, state.contentKeysByAsset.get(key) ?? EMPTY_CONTENT_KEYS, key);
+    const manifest = compileManifest(snapshot.asset, key);
     validateDependencyManifest(manifest, `prepared asset ${key}`);
     planUpdates.push({ declaration, manifest, snapshot });
   }
@@ -912,8 +872,6 @@ export const applyPreparedAssetEvents = (
   return { changes: finalizeChanges(arena, result), events };
 };
 
-const EMPTY_CONTENT_KEYS: ReadonlyMap<string, TextureContentKey> = new Map();
-
 export const resourceArenaHasPendingAssetEvents = (arena: ResourceArena): boolean =>
   (arena as unknown as ResourceArenaState).pendingAssetKeySet.size !== 0;
 
@@ -941,27 +899,6 @@ export const resourceArenaOrdinaryTextureResidencySnapshot = (
   }
   return { activeLeases: ordinaryTextures.size, activeReferences };
 };
-
-export const publishResourceArenaContentKey = (
-  arena: ResourceArena,
-  assetKey: string,
-  textureUri: string,
-  contentKey: TextureContentKey,
-): void => {
-  let keys = arenaContentKeys(arena).get(assetKey);
-  if (keys === undefined) {
-    keys = new Map();
-    arenaContentKeys(arena).set(assetKey, keys);
-  }
-  keys.set(textureUri, contentKey);
-};
-
-/** Borrows the current asset-owned content-key table for synchronous read-only use. */
-export const resourceArenaContentKeyView = (
-  arena: ResourceArena,
-  assetKey: string,
-): ReadonlyMap<string, TextureContentKey> =>
-  (arena as unknown as ResourceArenaState).contentKeysByAsset.get(assetKey) ?? EMPTY_CONTENT_KEYS;
 
 export const resourceArenaTextureReferenceCount = (arena: ResourceArena, key: string): number => {
   const ordinary = (arena as unknown as ResourceArenaState).ordinaryTextures.get(key);
@@ -1116,55 +1053,6 @@ export const updatePreparedAssetManifest = (
   return finalizeChanges(arena, result);
 };
 
-/** Applies a decoded-image cohort without recompiling every material texture slot in the asset. */
-export const rekeyPreparedAssetOrdinaryTextures = (
-  arena: ResourceArena,
-  key: string,
-  rekeys: readonly PreparedAssetOrdinaryTextureRekey[],
-): ResourceArenaChanges => {
-  if (rekeys.length === 0) return EMPTY_CHANGES;
-  const state = arena as unknown as ResourceArenaState;
-  const declaration = state.gltfRequests.get(key);
-  const plan = declaration?.plan;
-  if (plan === undefined) return EMPTY_CHANGES;
-
-  const released: string[] = [];
-  const previousCounts = new Map<string, number>();
-  for (const rekey of rekeys) {
-    if (
-      !Number.isSafeInteger(rekey.previous.count)
-      || rekey.previous.count <= 0
-      || rekey.next.count !== rekey.previous.count
-      || rekey.previous.key === rekey.next.key
-    ) throw new Error("resource arena texture rekey must have equal positive counts and distinct keys");
-    previousCounts.set(
-      rekey.previous.key,
-      (previousCounts.get(rekey.previous.key) ?? 0) + rekey.previous.count,
-    );
-  }
-  for (const [previousKey, count] of previousCounts) {
-    if ((plan.ordinaryTextures.get(previousKey)?.count ?? 0) < count) {
-      throw new Error(`resource arena asset texture ${previousKey} rekey exceeds retained references`);
-    }
-  }
-
-  for (const { next, previous } of rekeys) {
-    const previousEntry = plan.ordinaryTextures.get(previous.key)!;
-    const previousCount = previousEntry.count - previous.count;
-    if (previousCount === 0) plan.ordinaryTextures.delete(previous.key);
-    else previousEntry.count = previousCount;
-    const nextEntry = plan.ordinaryTextures.get(next.key);
-    if (nextEntry === undefined) plan.ordinaryTextures.set(next.key, { ...next });
-    else nextEntry.count += next.count;
-
-    applyAssetTextureReferenceDelta(state.ordinaryTextures, previous, -previous.count, released);
-    applyAssetTextureReferenceDelta(state.ordinaryTextures, next, next.count, released);
-  }
-  plan.dependencyRevision += 1;
-  state.counters.preparedAssetUpdates += 1;
-  return finalizeChanges(arena, { ...changes(), releasedOrdinaryTextureKeys: released });
-};
-
 export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposalResult => {
   const state = arena as unknown as ResourceArenaState;
   const result = changes();
@@ -1187,7 +1075,6 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
   }
   state.geometries.clear();
   state.gltfRequests.clear();
-  arenaContentKeys(arena).clear();
   state.hdrCompositionAssetCount = 0;
   const preparedSources = arenaPreparedSources(arena);
   for (const prepared of preparedSources.values()) {

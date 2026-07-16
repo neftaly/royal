@@ -910,7 +910,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThan(0);
   });
 
-  it("shares glTF texture uploads for simultaneously leased matching computed bufferView content", async () => {
+  it("keeps unannotated glTF bufferView texture identity asset-scoped", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     class CloseTrackedImageBitmap {
       readonly close = vi.fn();
@@ -974,7 +974,10 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(4);
     const firstBitmap = new CloseTrackedImageBitmap(4);
     loader.bitmapRequests[0]?.resolve(firstBitmap as unknown as ImageBitmap);
-    await flushMicrotasks();
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes === 0,
+    );
     expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
     await flushAnimationFrames(viewport.animationFrames);
     await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
@@ -994,15 +997,17 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(loader.bitmapRequests).toHaveLength(bitmapRequestsBeforeSecondGltf + 1);
     const secondBitmap = new CloseTrackedImageBitmap(4);
     loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(secondBitmap as unknown as ImageBitmap);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes === 0,
+    );
     root.render(secondGraph);
 
     expect(
       callCount(calls, "texImage2D"),
-      "different glTF bufferView images with identical encoded bytes should reuse the content-addressed upload",
-    ).toBe(uploadsBeforeSecondGltf);
-    expect(firstBitmap.close).toHaveBeenCalledTimes(1);
+      "different assets require an authored contentKey to share an upload",
+    ).toBe(uploadsBeforeSecondGltf + 1);
+    expect(firstBitmap.close.mock.calls.length + secondBitmap.close.mock.calls.length).toBe(0);
 
     root.render(renderScene([]));
     expect(firstBitmap.close).toHaveBeenCalledTimes(1);

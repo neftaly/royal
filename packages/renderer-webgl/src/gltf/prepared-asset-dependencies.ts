@@ -1,9 +1,5 @@
-import type { TextureContentKey } from "@royal/renderer-core";
 import type { CountedTextureDeclaration } from "../frame/plan";
-import {
-  geometryDeclarationBucketKey,
-  gltfGeometryDeclaration,
-} from "../geometry-recipes";
+import { gltfGeometryDeclaration } from "../geometry-recipes";
 import type { PreparedAssetDependencyManifest } from "../resource-arena";
 import { textureCacheKey, type TextureAssetUploadRef } from "../webgl/materials";
 import { gltfMaterialTextureRefs } from "./material-preparation-arena";
@@ -26,12 +22,11 @@ export type PreparedAssetDependencyPlan = {
 
 const materialDependencies = (
   materials: readonly LoadedGltfMaterial[],
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
 ): PreparedAssetDependencyManifest["ordinaryTextures"] => {
   const byKey = new Map<string, CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }>();
   const textures: Array<CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }> = [];
   for (const material of materials) {
-    for (const texture of gltfMaterialTextureRefs(material, contentKeys)) {
+    for (const texture of gltfMaterialTextureRefs(material)) {
       const key = textureCacheKey(texture);
       const existing = byKey.get(key);
       if (existing === undefined) {
@@ -47,12 +42,17 @@ const materialDependencies = (
 /** Pure dependency planning for a prepared glTF asset. */
 export const planPreparedAssetDependencies = (
   asset: PreparedGltfAsset,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
   assetKey: string,
 ): PreparedAssetDependencyPlan => {
   const materials = preparedAssetMaterials(asset);
   const geometryAssociations: PreparedAssetGeometryAssociation[] = [];
   const geometries = asset.primitives.map((primitive, index) => {
+    const key = JSON.stringify([
+      "gltf-geometry-owner-v2",
+      assetKey,
+      primitive.key,
+      index,
+    ]);
     const declaration = gltfGeometryDeclaration({
       ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
       ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
@@ -63,13 +63,6 @@ export const planPreparedAssetDependencies = (
       ...(primitive.texCoords0 === undefined ? {} : { texCoords0: primitive.texCoords0 }),
       ...(primitive.texCoords1 === undefined ? {} : { texCoords1: primitive.texCoords1 }),
     });
-    const key = JSON.stringify([
-      "gltf-geometry-owner-v1",
-      assetKey,
-      primitive.key,
-      index,
-      geometryDeclarationBucketKey(declaration),
-    ]);
     geometryAssociations.push({ key, primitive });
     return { count: 1, declaration, key };
   });
@@ -80,7 +73,7 @@ export const planPreparedAssetDependencies = (
       iblKeys: asset.imageBasedLight?.specular === undefined
         ? []
         : [{ count: 1, key: asset.imageBasedLight.specular.key }],
-      ordinaryTextures: materialDependencies(materials, contentKeys),
+      ordinaryTextures: materialDependencies(materials),
       virtualTextures: [],
       requiresHdrComposition: materials.some((material) =>
         material.alphaMode === "BLEND"

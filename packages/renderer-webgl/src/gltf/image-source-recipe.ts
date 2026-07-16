@@ -1,4 +1,3 @@
-import type { TextureContentKey } from "@royal/renderer-core";
 import { loadHtmlImage } from "../texture/browser-image-loader";
 import { closeDecodedTextureSource } from "../texture/decoded-source-lifetime";
 import {
@@ -19,7 +18,6 @@ type GltfBasisuCodecModule = typeof import("./codecs/basisu");
 
 type BytesRecipe = {
   readonly bytes: ArrayBuffer;
-  readonly contentKey?: TextureContentKey;
   readonly mimeType?: string;
 };
 
@@ -35,7 +33,6 @@ export type GltfImageSourceRecipe = Readonly<{
 }>;
 
 export type LoadedGltfImageSource = Readonly<{
-  readonly contentKey?: TextureContentKey;
   readonly image: LoadedTextureSource;
 }>;
 
@@ -77,28 +74,6 @@ export const preparedGltfImageSourceRecipeWithoutTransport = (
   return { recipe: { key: recipe.key, source }, transportBytes: 0 };
 };
 
-const FNV_1A_32_OFFSET = 0x811c9dc5;
-const FNV_1A_32_PRIME = 0x01000193;
-const DJB2_XOR_OFFSET = 5381;
-const textEncoder = new TextEncoder();
-
-const hex32 = (value: number): string => value.toString(16).padStart(8, "0");
-
-const hashBytes = (bytes: Uint8Array): string => {
-  let fnv = FNV_1A_32_OFFSET;
-  let djb = DJB2_XOR_OFFSET;
-  for (const byte of bytes) {
-    fnv ^= byte;
-    fnv = Math.imul(fnv, FNV_1A_32_PRIME) >>> 0;
-    djb = Math.imul(djb, 33) ^ byte;
-    djb >>>= 0;
-  }
-  return `${hex32(fnv)}${hex32(djb)}`;
-};
-
-const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
-  `royal-auto-bytes-v1:${kind}:${bytes.byteLength}:${hashBytes(new Uint8Array(bytes))}`;
-
 const ownedBytes = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
@@ -133,7 +108,6 @@ const recipeSource = (
     if (bytes !== undefined) {
       return {
         bytes,
-        contentKey: byteContentKey(bytes, "image/svg+xml;source"),
         kind: "svg-bytes",
         label: image.uri === undefined
           ? `glTF SVG bufferView ${image.bufferView ?? ""}`
@@ -150,7 +124,6 @@ const recipeSource = (
       return {
         bytes,
         codec: basisuCodec,
-        contentKey: byteContentKey(bytes, "KHR_texture_basisu"),
         kind: "basisu-bytes",
         label: image.uri ?? `bufferView ${image.bufferView ?? ""}`,
         ...(image.mimeType === undefined ? {} : { mimeType: image.mimeType }),
@@ -163,7 +136,6 @@ const recipeSource = (
     const mimeType = image.mimeType ?? (image.uri === undefined ? undefined : dataUriMediaType(image.uri));
     return {
       bytes,
-      contentKey: byteContentKey(bytes, mimeType || "application/octet-stream"),
       kind: "bitmap-bytes",
       ...(mimeType === undefined ? {} : { mimeType }),
     };
@@ -290,7 +262,6 @@ export const prepareGltfImageSourceRecipe = async (
           source: {
             bytes: loaded.bytes,
             codec: source.codec,
-            contentKey: byteContentKey(loaded.bytes, "KHR_texture_basisu"),
             kind: "basisu-bytes",
             label: source.uri,
             ...(loaded.mimeType === undefined ? {} : { mimeType: loaded.mimeType }),
@@ -312,29 +283,21 @@ export const decodePreparedGltfImageSourceRecipe = async (
   const source = prepared.recipe.source;
   switch (source.kind) {
     case "html-image": return { image: await loadHtmlImage(source.uri, { signal }) };
-    case "bitmap-bytes": return {
-      ...(source.contentKey === undefined ? {} : { contentKey: source.contentKey }),
-      image: await loadBitmap(source.bytes, source.mimeType, signal),
-    };
+    case "bitmap-bytes": return { image: await loadBitmap(source.bytes, source.mimeType, signal) };
     case "svg-bytes": {
       const { loadSvgTextureFromBytes } = await import("../texture/svg");
       const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, signal);
-      return {
-        contentKey: byteContentKey(textEncoder.encode(loaded.text).buffer, "image/svg+xml;prepared"),
-        image: loaded.image,
-      };
+      return { image: loaded.image };
     }
     case "basisu-bytes": {
       const codec = await source.codec;
       if (signal.aborted) throw abortError();
-      return {
-        contentKey: source.contentKey ?? byteContentKey(source.bytes, "KHR_texture_basisu"),
-        image: decodedUnlessAborted(await codec.decodeGltfBasisuTexture(
-          source.bytes,
-          source.label,
-          options?.basisuTarget,
-        ), signal),
-      };
+      const image = await codec.decodeGltfBasisuTexture(
+        source.bytes,
+        source.label,
+        options?.basisuTarget,
+      );
+      return { image: decodedUnlessAborted(image, signal) };
     }
   }
 };

@@ -1,4 +1,3 @@
-import type { TextureContentKey } from "@royal/renderer-core";
 import {
   GltfImageDemandCoordinator,
   type GltfImageRecipeLease,
@@ -50,7 +49,6 @@ const byteRecipe = (key: string, bytes: ArrayBuffer): GltfImageSourceRecipe => (
   key,
   source: {
     bytes,
-    contentKey: `bytes:${key}` as TextureContentKey,
     kind: "bitmap-bytes",
   },
 });
@@ -70,7 +68,6 @@ const source = (key: string): LoadedTextureSource => ({
 } as unknown as LoadedTextureSource);
 
 const loaded = (key: string): LoadedGltfImageSource => ({
-  contentKey: `content:${key}` as TextureContentKey,
   image: source(key),
 });
 
@@ -575,7 +572,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.dispose();
   });
 
-  it("retries publication after a committed rekey without releasing or applying the reference delta twice", async () => {
+  it("retains a ready source while publication retries", async () => {
     loadRecipeMock.mockResolvedValue(loaded("retry"));
     const harness = coordinatorHarness();
     harness.coordinator.registerAsset({
@@ -589,32 +586,21 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     demandImages(harness.coordinator, "asset", "retry");
     await flushMicrotasks();
 
-    let previousReferences = 1;
-    let nextReferences = 0;
-    const publish = (failAfterRekey: boolean): void => {
+    const publish = (fail: boolean): void => {
       const [outcome] = harness.coordinator.pendingReadyOutcomes();
       expect(outcome).toBeDefined();
-      if (!outcome!.referencesRekeyed) {
-        previousReferences -= 1;
-        nextReferences += 1;
-        outcome!.markReferencesRekeyed();
-        expect(outcome!.referencesRekeyed).toBe(true);
-      }
-      if (failAfterRekey) throw new Error("transient prepared texture publication failure");
+      if (fail) throw new Error("transient prepared texture publication failure");
       outcome!.acknowledge();
     };
 
     expect(() => publish(true)).toThrow("transient prepared texture publication failure");
     const retainedOutcome = harness.coordinator.pendingReadyOutcomes()[0]!;
     const release = harness.leaseReleases.get(retainedOutcome.source)!;
-    expect(retainedOutcome.referencesRekeyed).toBe(true);
-    expect({ nextReferences, previousReferences }).toEqual({ nextReferences: 1, previousReferences: 0 });
     expect(release).not.toHaveBeenCalled();
     expect(harness.closeSource).not.toHaveBeenCalled();
 
     publish(false);
 
-    expect({ nextReferences, previousReferences }).toEqual({ nextReferences: 1, previousReferences: 0 });
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([]);
     expect(release).toHaveBeenCalledOnce();
     expect(harness.closeSource).toHaveBeenCalledOnce();

@@ -1,4 +1,3 @@
-import type { TextureContentKey } from "@royal/renderer-core";
 import { monotonicNowMs, type MonotonicClock } from "../clock";
 import type { FramePlan } from "../frame/plan";
 import { GeometryRecipeRegistry } from "../geometry-recipe-registry";
@@ -54,7 +53,7 @@ export class PreparedAssetEventOwner {
     if (resourceArenaHasPendingAssetEvents(this.#options.resourceArena)) {
       const applied = applyPreparedAssetEvents(
         this.#options.resourceArena,
-        (asset, contentKeys, assetKey) => this.#dependencyManifest(asset, contentKeys, assetKey),
+        (asset, assetKey) => this.#dependencyManifest(asset, assetKey),
       );
       runtime.enqueueEvents(applied.events);
       this.#options.applyResourceChanges(applied.changes);
@@ -68,10 +67,9 @@ export class PreparedAssetEventOwner {
 
   #dependencyManifest(
     asset: PreparedGltfAsset,
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
     assetKey: string,
   ) {
-    const dependencyPlan = planPreparedAssetDependencies(asset, contentKeys, assetKey);
+    const dependencyPlan = planPreparedAssetDependencies(asset, assetKey);
     for (const association of dependencyPlan.geometryAssociations) {
       this.#options.geometryRecipes.associateGltfPrimitiveKey(
         association.primitive,

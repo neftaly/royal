@@ -41,42 +41,6 @@ export interface GltfGeometryDeclaration {
 
 export type GeometryDeclaration = DirectGeometryDeclaration | GltfGeometryDeclaration;
 
-const FNV_1A_32_OFFSET = 0x811c9dc5;
-const FNV_1A_32_PRIME = 0x01000193;
-const geometryArrayHashes = new WeakMap<object, string>();
-
-const geometryArrayHash = (array: ArrayBufferView): string => {
-  const key = array as object;
-  const cached = geometryArrayHashes.get(key);
-  if (cached !== undefined) return cached;
-  let hash = FNV_1A_32_OFFSET;
-  const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, FNV_1A_32_PRIME) >>> 0;
-  }
-  const encoded = hash.toString(16).padStart(8, "0");
-  geometryArrayHashes.set(key, encoded);
-  return encoded;
-};
-
-export const geometryArrayBucketKey = (array: ArrayBufferView | undefined): string => {
-  if (array === undefined) return "none";
-  return `${array.constructor.name}:${array.byteLength}:${geometryArrayHash(array)}`;
-};
-
-const geometryBucketKey = (geometry: GeometryByteLayout): string => [
-  "geometry-v1",
-  geometry.mode,
-  geometryArrayBucketKey(geometry.positions),
-  geometryArrayBucketKey(geometry.normals),
-  geometryArrayBucketKey(geometry.tangents),
-  geometryArrayBucketKey(geometry.colors),
-  geometryArrayBucketKey(geometry.texCoords0),
-  geometryArrayBucketKey(geometry.texCoords1),
-  geometryArrayBucketKey(geometry.indices),
-].join("|");
-
 const dimensions = (value: unknown, count: number, label: string): number[] => {
   if (
     !Array.isArray(value)
@@ -106,6 +70,21 @@ export const directGeometryKey = (
   geometry: Geometry,
   topology: DirectGeometryTopology,
 ): string => `direct:${topology}:${geometry.kind}:${geometry.size.join(",")}`;
+
+export const geometryArrayBucketKey = (array: ArrayBufferView | undefined): string =>
+  array === undefined ? "none" : `${array.constructor.name}:${array.byteLength}`;
+
+const geometryBucketKey = (geometry: GeometryByteLayout): string => [
+  "geometry-layout-v2",
+  geometry.mode,
+  geometryArrayBucketKey(geometry.positions),
+  geometryArrayBucketKey(geometry.normals),
+  geometryArrayBucketKey(geometry.tangents),
+  geometryArrayBucketKey(geometry.colors),
+  geometryArrayBucketKey(geometry.texCoords0),
+  geometryArrayBucketKey(geometry.texCoords1),
+  geometryArrayBucketKey(geometry.indices),
+].join("|");
 
 export const gltfGeometryDeclaration = (
   geometry: Omit<GltfGeometryDeclaration, "bucketKey" | "kind" | typeof preparedGltfGeometryDeclaration>,

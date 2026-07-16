@@ -1,7 +1,6 @@
 import type {
   LinearRgba,
   TextureColorSpace,
-  TextureContentKey,
   TextureRef,
 } from "@royal/renderer-core";
 import {
@@ -99,7 +98,6 @@ const loadedGltfSurfaceMaterial = (
 const textureSlotRef = (
   slot: LoadedGltfMaterialTextureSlot | undefined,
   colorSpace: TextureColorSpace,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
   readyImageKeys?: ReadonlySet<string>,
 ): TextureAssetUploadRef | undefined => {
   if (slot?.textureUri === undefined) return undefined;
@@ -114,15 +112,13 @@ const textureSlotRef = (
     ...(sourceUri === undefined ? {} : { releaseSourceAfterUpload: true }),
     src: sourceUri ?? slot.textureUri,
   };
-  const contentKey = slot.contentKey ?? contentKeys.get(slot.textureUri);
-  if (contentKey !== undefined) texture.contentKey = contentKey;
+  if (slot.contentKey !== undefined) texture.contentKey = slot.contentKey;
   if (slot.sampler !== undefined) texture.sampler = slot.sampler;
   return texture;
 };
 
 const surfaceTextures = (
   material: LoadedGltfMaterial,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
   readyImageKeys: ReadonlySet<string>,
 ): LoadedGltfSurfaceTextures => {
   const extensionTextures = material.extensionTextures;
@@ -151,12 +147,12 @@ const surfaceTextures = (
     const slot = material[key];
     setCoordinates(key, slot);
     if (key !== "baseColorTexture") {
-      setTexture(key, textureSlotRef(slot, colorSpace, contentKeys, readyImageKeys));
+      setTexture(key, textureSlotRef(slot, colorSpace, readyImageKeys));
     }
   }
   for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
     const slot = extensionTextures?.[texture.key];
-    setTexture(texture.key, textureSlotRef(slot, texture.colorSpace, contentKeys, readyImageKeys));
+    setTexture(texture.key, textureSlotRef(slot, texture.colorSpace, readyImageKeys));
     setCoordinates(texture.key, slot);
   }
 
@@ -166,14 +162,13 @@ const surfaceTextures = (
 
 export const gltfMaterialTextureRefs = (
   material: LoadedGltfMaterial,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
 ): readonly TextureAssetUploadRef[] => {
   const refs: (TextureAssetUploadRef | undefined)[] = [];
   for (const [key, colorSpace] of GLTF_CORE_MATERIAL_TEXTURES) {
-    refs.push(textureSlotRef(material[key], colorSpace, contentKeys));
+    refs.push(textureSlotRef(material[key], colorSpace));
   }
   for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-    refs.push(textureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace, contentKeys));
+    refs.push(textureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace));
   }
   return refs.filter((ref): ref is TextureAssetUploadRef => ref !== undefined);
 };
@@ -213,7 +208,6 @@ export class GltfMaterialPreparationArena {
 
   prepare(
     loadedMaterial: LoadedGltfMaterial,
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
     readyImageKeys: ReadonlySet<string>,
     criticalImagePending = false,
     publication?: SurfaceMaterialPublication,
@@ -224,7 +218,6 @@ export class GltfMaterialPreparationArena {
     const baseColor = textureSlotRef(
       loadedMaterial.baseColorTexture,
       "srgb",
-      contentKeys,
       readyImageKeys,
     );
     const material = loadedGltfSurfaceMaterial(
@@ -238,7 +231,7 @@ export class GltfMaterialPreparationArena {
               : DEFAULT_COLOR,
             kind: "solid",
           },
-      surfaceTextures(loadedMaterial, contentKeys, readyImageKeys),
+      surfaceTextures(loadedMaterial, readyImageKeys),
       criticalImagePending,
       publication,
     );

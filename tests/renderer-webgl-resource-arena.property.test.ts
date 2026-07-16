@@ -16,10 +16,7 @@ import {
   applyResourceDelta,
   createResourceArena,
   disposeResourceArena,
-  publishResourceArenaContentKey,
-  rekeyPreparedAssetOrdinaryTextures,
   resourceArenaCountersSnapshot,
-  resourceArenaContentKeyView,
   resourceArenaGeometrySnapshot,
   resourceArenaGltfRequestCount,
   resourceArenaGltfRequestSnapshot,
@@ -287,19 +284,17 @@ describe("semantic resource arena properties", () => {
       | { readonly index: number; readonly kind: "settle"; readonly ready: boolean }
       | { readonly kind: "drain" }
       | { readonly kind: "replace"; readonly revision: number }
-      | { readonly kind: "rekey"; readonly revision: number }
       | { readonly kind: "retain"; readonly slot: number; readonly token: number }
       | { readonly kind: "dispose" };
     await runFuzzTraces<Op>({
       cases: 12,
       operation: (random, step) => {
-        const action = random.int(0, 10);
+        const action = random.int(0, 9);
         if (action < 3) return { kind: "live", value: random.boolean() };
         if (action < 6) return { index: random.int(0, 16), kind: "settle", ready: random.boolean(0.75) };
         if (action === 6) return { kind: "drain" };
         if (action < 8) return { kind: "replace", revision: step };
-        if (action === 8) return { kind: "rekey", revision: step };
-        if (action === 9) return { kind: "retain", slot: random.int(0, 3), token: step };
+        if (action === 8) return { kind: "retain", slot: random.int(0, 3), token: step };
         return { kind: "dispose" };
       },
       replayEnvName: "ROYAL_RESOURCE_ARENA_REPLAY",
@@ -309,7 +304,7 @@ describe("semantic resource arena properties", () => {
           { kind: "live", value: true }, { kind: "live", value: false }, { kind: "live", value: true },
           { index: 0, kind: "settle", ready: true }, { kind: "drain" },
           { index: 1, kind: "settle", ready: true }, { kind: "drain" },
-          { kind: "replace", revision: 1 }, { kind: "rekey", revision: 2 },
+          { kind: "replace", revision: 1 },
           { kind: "retain", slot: 0, token: 1 },
           { kind: "retain", slot: 0, token: 2 }, { kind: "dispose" },
         ],
@@ -384,7 +379,6 @@ describe("semantic resource arena properties", () => {
               for (const slot of sourceSlots.values()) slot.lease.release();
               sourceSlots.clear();
               sourceCounts.clear();
-              expect(resourceArenaContentKeyView(arena, key)).toEqual(new Map());
             }
           } else if (op.kind === "settle" && jobs.length > 0) {
             const job = jobs[op.index % jobs.length]!;
@@ -404,19 +398,6 @@ describe("semantic resource arena properties", () => {
             dependencyKey = `ordinary:replacement-${op.revision}`;
             updatePreparedAssetManifest(arena, key, dependencies(`replacement-${op.revision}`));
             expect(resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!.dependencyRevision).toBe(previousRevision + 1);
-          } else if (op.kind === "rekey" && live && !disposed && dependencyKey !== undefined) {
-            const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
-            const previous = [...plan.ordinaryTextures.values()];
-            const merged = {
-              count: 1,
-              key: `ordinary:rekey-${op.revision}`,
-              texture: textureAsset({ contentKey: `rekey-${op.revision}`, src: `/rekey-${op.revision}.png` }),
-            };
-            rekeyPreparedAssetOrdinaryTextures(arena, key, previous.map((row) => ({
-              next: { ...merged, count: row.count },
-              previous: row,
-            })));
-            dependencyKey = merged.key;
           } else if (op.kind === "retain" && !disposed) {
             const source = { token: op.token } as unknown as LoadedTextureSource;
             const previous = sourceSlots.get(op.slot);
@@ -585,10 +566,6 @@ describe("semantic resource arena properties", () => {
     expect(resourceArenaSnapshot(arena).geometries.has(geometryOwnerKey)).toBe(false);
     expect(resourceArenaSnapshot(arena).geometries.has(replacementGeometryKey)).toBe(true);
     expect(resourceArenaSnapshot(arena).geometries.get(replacementGeometryKey)!.id).toBeGreaterThan(retainedGeometryId!);
-    publishResourceArenaContentKey(arena, request.key, "/texture.png", "decoded-texture");
-    const contentKeys = resourceArenaContentKeyView(arena, request.key);
-    expect(contentKeys.get("/texture.png")).toBe("decoded-texture");
-    expect(resourceArenaContentKeyView(arena, request.key)).toBe(contentKeys);
     updatePreparedAssetManifest(arena, request.key, {
       geometries: [],
       iblKeys: [],

@@ -19,7 +19,6 @@ import {
 import {
   resolvePacketMaterial,
 } from "../packet-resource-tables";
-import { resourceArenaContentKeyView, type ResourceArena } from "../resource-arena";
 import type { WebGlGltfInstancingSnapshot } from "../root-types";
 import { SceneBindingRegistry } from "../scene-binding-registry";
 import {
@@ -60,7 +59,6 @@ export interface GltfPacketSubmissionOwnerOptions {
   readonly instanceTransforms: GltfInstanceTransformRegistry;
   readonly lightResolver: SurfaceLightResolver;
   readonly materials: GltfMaterialPreparationArena;
-  readonly resourceArena: ResourceArena;
   readonly runtime: PreparedGltfRuntime;
   readonly sceneBindings: SceneBindingRegistry;
   readonly selection: GltfPacketSelectionOwner;
@@ -91,7 +89,6 @@ export class GltfPacketSubmissionOwner {
   readonly #lightResolver: SurfaceLightResolver;
   readonly #materials: GltfMaterialPreparationArena;
   readonly #materialBindings = new WeakMap<SurfaceMaterial, GltfFrameMaterialBinding>();
-  readonly #resourceArena: ResourceArena;
   readonly #rootBindings: Array<MutableGltfFrameRootBinding | undefined> = [];
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
@@ -108,7 +105,6 @@ export class GltfPacketSubmissionOwner {
     this.#instanceTransforms = options.instanceTransforms;
     this.#lightResolver = options.lightResolver;
     this.#materials = options.materials;
-    this.#resourceArena = options.resourceArena;
     this.#runtime = options.runtime;
     this.#sceneBindings = options.sceneBindings;
     this.#selection = options.selection;
@@ -190,7 +186,6 @@ export class GltfPacketSubmissionOwner {
     }
     const state = this.#runtime.stateForNode(node);
     const hasAssetLights = hasGltfAssetLights(state);
-    const contentKeys = resourceArenaContentKeyView(this.#resourceArena, state.key);
     const instanceViews = node.kind === "gltf-instances"
       ? this.#instanceTransforms.views(node.instances)
       : undefined;
@@ -235,7 +230,6 @@ export class GltfPacketSubmissionOwner {
           const basePending = this.#runtime.images.demandMaterial(state.key, loadedMaterial);
           prepared = this.#materials.prepare(
             loadedMaterial,
-            contentKeys,
             this.#runtime.images.readyKeys(state.key),
             basePending,
             this.#runtime.images.publication(state.key, loadedMaterial),

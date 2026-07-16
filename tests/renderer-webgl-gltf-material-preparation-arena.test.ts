@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { TextureContentKey } from "@royal/renderer-core";
 import {
   GltfMaterialPreparationArena,
   gltfMaterialTextureRefs,
@@ -58,11 +57,16 @@ const primitive = (
 
 describe("glTF material preparation arena", () => {
   it("normalizes every material texture dependency with stable upload semantics", () => {
-    const loadedMaterial = material();
-    const baseContentKey = "content:base" as TextureContentKey;
-    const refs = gltfMaterialTextureRefs(loadedMaterial, new Map([
-      ["texture:base", baseContentKey],
-    ]));
+    const baseContentKey = "content:base";
+    const original = material();
+    const loadedMaterial: LoadedGltfMaterial = {
+      ...original,
+      baseColorTexture: {
+        ...original.baseColorTexture!,
+        contentKey: baseContentKey,
+      },
+    };
+    const refs = gltfMaterialTextureRefs(loadedMaterial);
 
     expect(refs).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -97,11 +101,11 @@ describe("glTF material preparation arena", () => {
       },
     };
 
-    expect(gltfMaterialTextureRefs(external, new Map())).toContainEqual(expect.objectContaining({
+    expect(gltfMaterialTextureRefs(external)).toContainEqual(expect.objectContaining({
       releaseSourceAfterUpload: true,
       src: "https://example.test/base.ktx2",
     }));
-    expect(gltfMaterialTextureRefs(embedded, new Map())).toContainEqual(expect.objectContaining({
+    expect(gltfMaterialTextureRefs(embedded)).toContainEqual(expect.objectContaining({
       preparedOnly: true,
       src: "texture:base",
     }));
@@ -110,17 +114,15 @@ describe("glTF material preparation arena", () => {
   it("owns cache identity, reverse invalidation, and material batch classes", () => {
     const arena = new GltfMaterialPreparationArena();
     const loadedMaterial = material();
-    const contentKeys = new Map<string, TextureContentKey>();
-
-    const pending = arena.prepare(loadedMaterial, contentKeys, new Set(), true);
-    expect(arena.prepare(loadedMaterial, contentKeys, new Set(), true)).toBe(pending);
+    const pending = arena.prepare(loadedMaterial, new Set(), true);
+    expect(arena.prepare(loadedMaterial, new Set(), true)).toBe(pending);
     expect(arena.settled(loadedMaterial)).toBeUndefined();
     expect(pending.material.baseColor).toMatchObject({ kind: "solid" });
 
     arena.invalidate([loadedMaterial]);
     const readyImages = new Set(["image:base"]);
-    const ready = arena.prepare(loadedMaterial, contentKeys, readyImages, false);
-    const otherPrimitiveReady = arena.prepare(loadedMaterial, contentKeys, readyImages, false);
+    const ready = arena.prepare(loadedMaterial, readyImages, false);
+    const otherPrimitiveReady = arena.prepare(loadedMaterial, readyImages, false);
     expect(ready).not.toBe(pending);
     expect(ready.material.baseColor).toMatchObject({
       colorSpace: "srgb",
@@ -133,7 +135,7 @@ describe("glTF material preparation arena", () => {
 
     arena.clear();
     expect(arena.settled(loadedMaterial)).toBeUndefined();
-    expect(arena.prepare(loadedMaterial, contentKeys, readyImages, false)).not.toBe(ready);
+    expect(arena.prepare(loadedMaterial, readyImages, false)).not.toBe(ready);
   });
 
   it("publishes a gray degraded base with a ready normal after base-color failure", () => {
@@ -148,7 +150,6 @@ describe("glTF material preparation arena", () => {
     };
     const prepared = arena.prepare(
       loadedMaterial,
-      new Map(),
       new Set(["image:normal"]),
       false,
     );
@@ -167,12 +168,12 @@ describe("glTF material preparation arena", () => {
   it("rebuilds a cached pending material once its critical image fails", () => {
     const arena = new GltfMaterialPreparationArena();
     const loadedMaterial = material();
-    const pending = arena.prepare(loadedMaterial, new Map(), new Set(), true);
-    const degraded = arena.prepare(loadedMaterial, new Map(), new Set(), false);
+    const pending = arena.prepare(loadedMaterial, new Set(), true);
+    const degraded = arena.prepare(loadedMaterial, new Set(), false);
 
     expect(degraded).not.toBe(pending);
     expect(degraded.material.basePending).toBeUndefined();
-    expect(arena.prepare(loadedMaterial, new Map(), new Set(), false)).toBe(degraded);
+    expect(arena.prepare(loadedMaterial, new Set(), false)).toBe(degraded);
   });
 
   it("resolves named and numeric variants without accepting invalid selections", () => {

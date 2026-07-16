@@ -632,7 +632,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         instanceTransforms: this.#gltfInstanceTransforms,
         lightResolver: this.#lightResolver,
         materials: this.#gltfMaterials,
-        resourceArena: this.#resourceArena,
         runtime: this.#preparedGltf,
         sceneBindings: this.#sceneBindings,
         selection: this.#gltfPacketSelection,
@@ -694,11 +693,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         textures: this.#ordinaryTextures,
       });
       this.#readyGltfImages = new GltfReadyImagePublicationOwner({
-        applyResourceChanges: (changes) => this.#applyResourceArenaChanges(changes),
         ibl: this.#ibl,
         materials: this.#gltfMaterials,
         ordinaryTextures: this.#ordinaryTextures,
-        resourceArena: this.#resourceArena,
         runtime: this.#preparedGltf,
       });
       registerRollback(() => this.#ordinaryTextures.disposeSources());
