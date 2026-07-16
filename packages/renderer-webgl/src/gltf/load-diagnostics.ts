@@ -54,6 +54,10 @@ const gltfLoadDiagnosticsAssetSnapshot = (
     }),
     ...(state.error === undefined ? {} : { error: state.error }),
     imageCandidates: load.imageCandidates ?? load.imageRequests,
+    imageFailureDetails: Object.freeze((load.imageFailureDetails ?? []).map((failure) => Object.freeze({
+      key: failure.key,
+      message: failure.message,
+    }))),
     imageFailures: load.imageFailures,
     imagesLoaded: load.imageLoaded,
     imageRequests: load.imageRequests,

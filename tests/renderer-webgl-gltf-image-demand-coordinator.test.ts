@@ -338,6 +338,10 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 1, imageLoaded: 0, imageRequests: 1 });
+    expect(load.imageFailureDetails).toEqual([{
+      key: "decode-failure",
+      message: "decode failed",
+    }]);
     expect(harness.coordinator.snapshot()).toMatchObject({ errors: 1, loading: 0 });
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([]);
     harness.coordinator.dispose();

@@ -15,6 +15,7 @@ const state = (
     documentLoadedAt: 20,
     dracoDecodedAt: 45,
     firstImageSettledAt: 80,
+    imageFailureDetails: [{ key: "brick-normal.ktx2", message: "decode failed" }],
     imageFailures: 1,
     imageLoaded: 2,
     imageLoadStartedAt: 60,
@@ -44,6 +45,7 @@ describe("glTF load diagnostics core", () => {
       assets: [{
         bounds: { max: [4, 5, 6], min: [-1, -2, -3] },
         imageCandidates: 3,
+        imageFailureDetails: [{ key: "brick-normal.ktx2", message: "decode failed" }],
         imageFailures: 1,
         imagesLoaded: 2,
         imageRequests: 3,
@@ -68,6 +70,7 @@ describe("glTF load diagnostics core", () => {
     });
     expect(input.status).toBe("ready");
     expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.bounds?.min)).toBe(true);
+    expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.imageFailureDetails[0])).toBe(true);
     expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.variantNames)).toBe(true);
   });
 

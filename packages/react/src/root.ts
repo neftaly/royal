@@ -153,10 +153,20 @@ export interface RoyalRendererDiagnosticsSnapshot {
   readonly virtualTexturing: RoyalRendererVirtualTexturingDiagnosticsSnapshot;
 }
 
+/** One failed image preparation belonging to a retained glTF asset. */
+export interface RoyalRendererGltfImageFailure {
+  /** Stable image-demand identity, usually derived from the authored image URI. */
+  readonly key: string;
+  /** Transport, decode, or admission failure reported for this image. */
+  readonly message: string;
+}
+
 /** Image preparation progress for one retained glTF asset. */
 export interface RoyalRendererGltfImageProgress {
   /** Images whose decode or admission failed. */
   readonly failed: number;
+  /** Focused reasons for each failed image, in settlement order. */
+  readonly failures: readonly RoyalRendererGltfImageFailure[];
   /** Images decoded and accepted for publication. */
   readonly loaded: number;
   /** Images not yet loaded or failed, including dormant material demand. */
@@ -329,6 +339,7 @@ export const royalGltfAssetSnapshotFrom = (
     }),
     images: Object.freeze({
       failed: snapshot.imageFailures,
+      failures: Object.freeze(snapshot.imageFailureDetails.map((failure) => Object.freeze({ ...failure }))),
       loaded: snapshot.imagesLoaded,
       pending: Math.max(0, snapshot.imageCandidates - settledImages),
       requested: snapshot.imageRequests,

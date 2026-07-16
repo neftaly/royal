@@ -233,7 +233,10 @@ and returns a status discriminated by `state`. `loading` is not renderable;
 `streaming` is renderable with images outstanding; `ready` has settled every
 relevant image; and `degraded` is renderable with at least one image failure.
 Non-idle snapshots include immutable `images`, `scene`, and `phaseMs` details,
-plus `variantNames`. Once prepared, `bounds` is the aggregate loaded asset-space
+plus `variantNames`. `images.failures` contains the stable image-demand key and
+failure message for each failed transport, decode, or admission, so a degraded
+asset can explain itself without scanning root-wide renderer diagnostics. Once
+prepared, `bounds` is the aggregate loaded asset-space
 bound after authored node and instance transforms, so camera fitting and framing
 do not need to parse the glTF again. Pass it to renderer-core's pure
 `fitOrbitCameraView(bounds, { aspectRatio })` helper to produce a conservative

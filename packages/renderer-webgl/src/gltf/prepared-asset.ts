@@ -107,6 +107,13 @@ export type LoadedGltfPrimitive = {
   readonly texCoords1?: Float32Array;
 };
 
+export type GltfImageFailureDetail = Readonly<{
+  /** Stable image-demand identity, usually derived from the authored image URI. */
+  key: string;
+  /** Transport, decode, or admission failure reported for this image. */
+  message: string;
+}>;
+
 export type GltfLoadMetrics = {
   buffersLoadedAt?: number;
   documentLoadedAt?: number;
@@ -114,6 +121,7 @@ export type GltfLoadMetrics = {
   firstImageSettledAt?: number;
   /** Distinct image recipes retained for this asset, including dormant demand. */
   imageCandidates?: number;
+  imageFailureDetails?: GltfImageFailureDetail[];
   imageFailures: number;
   imageLoaded: number;
   imageLoadStartedAt?: number;

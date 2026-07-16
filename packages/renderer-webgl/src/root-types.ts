@@ -167,12 +167,21 @@ export type WebGlTextureAssetSnapshot =
     readonly state: "error" | "unsupported";
   }>;
 
+export interface WebGlGltfImageFailureDetail {
+  /** Stable image-demand identity, usually derived from the authored image URI. */
+  readonly key: string;
+  /** Transport, decode, or admission failure reported for this image. */
+  readonly message: string;
+}
+
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   /** Aggregate loaded asset-space bounds, including authored node and instance transforms. */
   readonly bounds?: GltfAssetBounds;
   readonly error?: string;
   /** Distinct relevant images, including those not demanded by a visible material yet. */
   readonly imageCandidates: number;
+  /** Per-image reasons corresponding to failed image preparation. */
+  readonly imageFailureDetails: readonly WebGlGltfImageFailureDetail[];
   readonly imageFailures: number;
   readonly imagesLoaded: number;
   readonly imageRequests: number;

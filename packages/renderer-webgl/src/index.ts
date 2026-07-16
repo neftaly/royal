@@ -15,6 +15,7 @@ export type {
   WebGlRenderViewport,
   WebGlRenderViewsOptions,
   WebGlGltfInstancingSnapshot,
+  WebGlGltfImageFailureDetail,
   WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,

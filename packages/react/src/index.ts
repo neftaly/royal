@@ -67,6 +67,7 @@ export type {
   RoyalRendererDiagnosticLog,
   RoyalRendererDiagnosticMessage,
   RoyalRendererGltfAssetSnapshot,
+  RoyalRendererGltfImageFailure,
   RoyalRendererGltfImageProgress,
   RoyalRendererGltfPhaseTimings,
   RoyalRendererGltfSceneStatistics,

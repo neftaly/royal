@@ -697,6 +697,7 @@ export class GltfImageDemandCoordinator {
     if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) return;
     row.error = error instanceof Error ? error.message : String(error);
     row.status = "error";
+    (asset.load.imageFailureDetails ??= []).push({ key: row.key, message: row.error });
     this.#settleMaterialDemandRow(row);
     asset.readyKeys.delete(row.key);
     this.#demandSettledBaseRefinements(row);
