@@ -31,7 +31,7 @@ export class OrdinaryTextureGpuOwner {
   finalizeResidencyIntent(commit: boolean): void {
     const suppressions = this.#options.residencyIntent.finishFrame(commit);
     if (suppressions.length === 0) return;
-    const releaseWakeSuppression = this.#options.capacityWakes.suppressPersistentGpuWake();
+    this.#options.capacityWakes.blockGpuWake(1);
     let capacityReleased = false;
     let firstFailure: CapturedFailure | undefined;
     try {
@@ -55,7 +55,7 @@ export class OrdinaryTextureGpuOwner {
         }
       }
     } finally {
-      releaseWakeSuppression();
+      this.#options.capacityWakes.blockGpuWake(-1);
     }
     if (capacityReleased) this.#options.capacityWakes.wakePersistentGpuCapacity();
     if (firstFailure !== undefined) throw firstFailure.value;
@@ -63,7 +63,7 @@ export class OrdinaryTextureGpuOwner {
 
   processUploads(): void {
     if (!this.#options.textures.hasPendingWork()) return;
-    const releaseWakeSuppression = this.#options.capacityWakes.suppressPersistentGpuWake();
+    this.#options.capacityWakes.blockGpuWake(1);
     let report!: ReturnType<OrdinaryTextureResidencyController["process"]>;
     let processFailure: CapturedFailure | undefined;
     try {
@@ -110,7 +110,7 @@ export class OrdinaryTextureGpuOwner {
         ? undefined
         : { value: report.operationFailure.error };
     } finally {
-      releaseWakeSuppression();
+      this.#options.capacityWakes.blockGpuWake(-1);
     }
     if (
       processFailure !== undefined

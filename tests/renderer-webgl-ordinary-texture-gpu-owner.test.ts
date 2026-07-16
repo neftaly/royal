@@ -3,28 +3,28 @@ import { OrdinaryTextureGpuOwner } from "../packages/renderer-webgl/src/texture/
 
 describe("ordinary texture GPU owner", () => {
   it("skips the complete upload transaction while residency is idle", () => {
-    const suppressPersistentGpuWake = vi.fn();
+    const blockGpuWake = vi.fn();
     const process = vi.fn();
     const owner = new OrdinaryTextureGpuOwner({
-      capacityWakes: { suppressPersistentGpuWake },
+      capacityWakes: { blockGpuWake },
       textures: { hasPendingWork: () => false, process },
     } as never);
 
     owner.processUploads();
 
     expect(process).not.toHaveBeenCalled();
-    expect(suppressPersistentGpuWake).not.toHaveBeenCalled();
+    expect(blockGpuWake).not.toHaveBeenCalled();
   });
 
   it("settles every suppression after preserving the first failure", () => {
     const firstFailure = new Error("first suppression failed");
     const suppressed: string[] = [];
     const settled: string[] = [];
-    const releaseWakeSuppression = vi.fn();
+    const blockGpuWake = vi.fn();
     const wakePersistentGpuCapacity = vi.fn();
     const owner = new OrdinaryTextureGpuOwner({
       capacityWakes: {
-        suppressPersistentGpuWake: () => releaseWakeSuppression,
+        blockGpuWake,
         wakePersistentGpuCapacity,
       },
       residencyIntent: {
@@ -50,6 +50,6 @@ describe("ordinary texture GPU owner", () => {
     expect(suppressed).toEqual(["first", "second"]);
     expect(settled).toEqual(["first", "second"]);
     expect(wakePersistentGpuCapacity).toHaveBeenCalledOnce();
-    expect(releaseWakeSuppression).toHaveBeenCalledOnce();
+    expect(blockGpuWake.mock.calls).toEqual([[1], [-1]]);
   });
 });

@@ -33,7 +33,7 @@ describe("WebGL resource-capacity wake owner", () => {
     expect(invalidations).toBe(1);
   });
 
-  it("makes persistent-GPU suppression nestable and idempotently releasable", () => {
+  it("makes persistent-GPU suppression balanced and nestable", () => {
     let wakes = 0;
     let invalidations = 0;
     const owner = new ResourceCapacityWakeOwner({
@@ -45,18 +45,18 @@ describe("WebGL resource-capacity wake owner", () => {
         return true;
       },
     });
-    const releaseOuter = owner.suppressPersistentGpuWake();
-    const releaseInner = owner.suppressPersistentGpuWake();
+    owner.blockGpuWake(1);
+    owner.blockGpuWake(1);
 
     owner.wakePersistentGpuCapacity();
-    releaseInner();
-    releaseInner();
+    owner.blockGpuWake(-1);
     owner.wakePersistentGpuCapacity();
-    releaseOuter();
+    owner.blockGpuWake(-1);
     owner.wakePersistentGpuCapacity();
 
     expect(wakes).toBe(1);
     expect(invalidations).toBe(1);
+    expect(owner.persistentGpuWakeSuppressed).toBe(false);
   });
 
   it("routes released dimensions and honors subsystem CPU suppression", () => {

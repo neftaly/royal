@@ -40,7 +40,7 @@ type VirtualTextureGpuAdmissionOwnerOptions = {
   readonly maximumUploadBytes: number;
   readonly resourceGovernor: ResourceGovernor;
   readonly runtime: VirtualTextureRuntimeShell;
-  readonly suppressPersistentGpuWake: () => () => void;
+  readonly blockGpuWake: (delta: 1 | -1) => void;
   readonly wakePersistentGpuCapacity: () => void;
 };
 
@@ -83,7 +83,7 @@ export class VirtualTextureGpuAdmissionOwner {
       releaseErrorPresent: false,
     };
     const hadLease = this.#options.runtime.hasGpuLease(state.key);
-    const releaseWakeSuppression = this.#options.suppressPersistentGpuWake();
+    this.#options.blockGpuWake(1);
     try {
       releaseFailure = captureFirstFailure(releaseFailure, () => {
         release = removeResource
@@ -99,7 +99,7 @@ export class VirtualTextureGpuAdmissionOwner {
         );
       }
     } finally {
-      releaseWakeSuppression();
+      this.#options.blockGpuWake(-1);
     }
     releaseFailure = captureFirstFailure(releaseFailure, this.#options.consumeGpuOutcomes);
     if (release.releaseErrorPresent) {
@@ -204,7 +204,7 @@ export class VirtualTextureGpuAdmissionOwner {
     let admissionFailure: CapturedFailure | undefined;
     let reservationCancelled = false;
     const quarantineBeforeAdmission = virtualTextureGpuArenaSnapshot(this.#options.gpu).quarantinedBytes;
-    const releaseWakeSuppression = this.#options.suppressPersistentGpuWake();
+    this.#options.blockGpuWake(1);
     try {
       try {
         result = admitVirtualTextureGpuResource(
@@ -233,7 +233,7 @@ export class VirtualTextureGpuAdmissionOwner {
         governorReservation = undefined;
       }
     } finally {
-      releaseWakeSuppression();
+      this.#options.blockGpuWake(-1);
     }
     if (reservationCancelled) this.#options.wakePersistentGpuCapacity();
     if (admissionFailure !== undefined) throw admissionFailure.value;

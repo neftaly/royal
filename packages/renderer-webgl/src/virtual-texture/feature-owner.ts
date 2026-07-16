@@ -88,7 +88,7 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
       maximumUploadBytes: options.maximumUploadBytes,
       resourceGovernor: options.resourceGovernor,
       runtime: this.#runtime,
-      suppressPersistentGpuWake: () => options.capacityWakes.suppressPersistentGpuWake(),
+      blockGpuWake: (delta) => options.capacityWakes.blockGpuWake(delta),
       wakePersistentGpuCapacity: () => options.capacityWakes.wakePersistentGpuCapacity(),
     });
     this.#demand = new VirtualTextureDemandOwner({

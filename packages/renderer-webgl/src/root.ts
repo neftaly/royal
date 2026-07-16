@@ -1163,7 +1163,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #dropGpuState(deleteResources: boolean, contextGeneration = this.#context.generation): void {
-    const releaseWakeSuppression = this.#capacityWakes.suppressPersistentGpuWake();
+    this.#capacityWakes.blockGpuWake(1);
     try {
     const ordinaryReport = this.#ordinaryTextures.dropContext();
     let releaseFailure = ordinaryReport.operationFailure === undefined
@@ -1220,7 +1220,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextures.loseContext());
     if (releaseFailure !== undefined) throw releaseFailure.value;
     } finally {
-      releaseWakeSuppression();
+      this.#capacityWakes.blockGpuWake(-1);
     }
   }
 

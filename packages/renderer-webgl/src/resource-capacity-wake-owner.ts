@@ -49,14 +49,8 @@ export class ResourceCapacityWakeOwner {
     }));
   }
 
-  suppressPersistentGpuWake(): () => void {
-    this.#persistentGpuSuppressionDepth += 1;
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      this.#persistentGpuSuppressionDepth -= 1;
-    };
+  blockGpuWake(delta: 1 | -1): void {
+    this.#persistentGpuSuppressionDepth += delta;
   }
 
   wakePersistentGpuCapacity(): void {

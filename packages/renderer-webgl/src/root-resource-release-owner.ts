@@ -20,7 +20,7 @@ export class RootResourceReleaseOwner {
   releaseOrdinaryTexture(key: string): void {
     let releaseFailure = captureFailure(() => this.#releaseAutomaticVirtualTextures(key));
     this.#options.virtualTextures.releaseAutoMetadata(key);
-    const releaseWakeSuppression = this.#options.capacityWakes.suppressPersistentGpuWake();
+    this.#options.capacityWakes.blockGpuWake(1);
     let report: ReturnType<OrdinaryTextureResidencyController["release"]> | undefined;
     try {
       report = this.#options.ordinaryTextures.release(key);
@@ -28,7 +28,7 @@ export class RootResourceReleaseOwner {
         releaseFailure ??= { value: report.operationFailure.error };
       }
     } finally {
-      releaseWakeSuppression();
+      this.#options.capacityWakes.blockGpuWake(-1);
     }
     if (report?.capacityReleased === true) this.#options.capacityWakes.wakePersistentGpuCapacity();
     if (report !== undefined) releaseFailure = captureFirstFailure(releaseFailure, () => {
