@@ -19,7 +19,10 @@ export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
 /** Mutable renderer state shared by one material or authored LOD continuity group. */
 export type SurfaceMaterialPublication = {
-  pending?: boolean;
+  /** @internal Last surface-execution frame that observed this group. */
+  executionEpoch?: number;
+  /** @internal Last surface-execution frame with a critical dependency pending. */
+  pendingEpoch?: number;
   ready: boolean;
 };
 

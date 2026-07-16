@@ -336,7 +336,8 @@ export class SurfaceExecutionArena {
   #maxTextureImageUnits = 0;
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #programs: ProgramArena;
-  readonly #publicationGroups = new Set<SurfaceMaterialPublication>();
+  readonly #publicationGroups: SurfaceMaterialPublication[] = [];
+  #publicationEpoch = 0;
   readonly #programViewRevisions = new WeakMap<WebGLProgram, number>();
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
@@ -404,12 +405,12 @@ export class SurfaceExecutionArena {
 
   /** Synchronizes the state cache with Royal's frame baseline. */
   beginFrame(): void {
-    for (const publication of this.#publicationGroups) publication.pending = false;
+    this.#publicationEpoch += 1;
     this.#blendEnabled = false;
     this.#cullEnabled = false;
     this.#depthWriteEnabled = true;
     this.#frontFaceCcw = undefined;
-    this.#publicationGroups.clear();
+    this.#publicationGroups.length = 0;
     this.#textureBindings.invalidate();
     this.#viewRevision += 1;
   }
@@ -610,7 +611,7 @@ export class SurfaceExecutionArena {
 
   drainSignals(): SurfaceExecutionSignals {
     for (const publication of this.#publicationGroups) {
-      if (publication.ready || publication.pending) continue;
+      if (publication.ready || publication.pendingEpoch === this.#publicationEpoch) continue;
       publication.ready = true;
       this.#wakeRequested = true;
     }
@@ -844,8 +845,11 @@ export class SurfaceExecutionArena {
   ): boolean {
     const publication = material.publication;
     if (publication === undefined) return criticalPending;
-    publication.pending ||= criticalPending;
-    this.#publicationGroups.add(publication);
+    if (criticalPending) publication.pendingEpoch = this.#publicationEpoch;
+    if (publication.executionEpoch !== this.#publicationEpoch) {
+      publication.executionEpoch = this.#publicationEpoch;
+      this.#publicationGroups.push(publication);
+    }
     // Secondary maps refine an already useful asset progressively. Loss or a
     // new demand for the base/alpha-critical texture returns only that material
     // to gray until the critical dependency is resident again.
