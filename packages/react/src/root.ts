@@ -1,4 +1,5 @@
 import type {
+  GltfAssetBounds,
   GltfAssetRef,
   PickInput,
   PickResult,
@@ -159,6 +160,8 @@ export interface RoyalRendererGltfSceneStatistics {
 export type RoyalRendererGltfPhaseTimings = WebGlGltfLoadDiagnosticsAssetSnapshot["phaseMs"];
 
 type RoyalRendererGltfAssetDetails = Readonly<{
+  /** Aggregate loaded asset-space bounds, including authored node and instance transforms. */
+  readonly bounds?: GltfAssetBounds;
   readonly images: RoyalRendererGltfImageProgress;
   readonly phaseMs: RoyalRendererGltfPhaseTimings;
   readonly scene: RoyalRendererGltfSceneStatistics;
@@ -301,6 +304,12 @@ export const royalGltfAssetSnapshotFrom = (
   if (snapshot === undefined) return Object.freeze({ state: "idle", variantNames: NO_GLTF_VARIANTS });
   const settledImages = snapshot.imagesLoaded + snapshot.imageFailures;
   const details: RoyalRendererGltfAssetDetails = {
+    ...(snapshot.bounds === undefined ? {} : {
+      bounds: Object.freeze({
+        max: Object.freeze([...snapshot.bounds.max] as [number, number, number]),
+        min: Object.freeze([...snapshot.bounds.min] as [number, number, number]),
+      }),
+    }),
     images: Object.freeze({
       failed: snapshot.imageFailures,
       loaded: snapshot.imagesLoaded,

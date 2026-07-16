@@ -126,6 +126,7 @@ export type GltfLoadMetrics = {
 };
 
 export type PreparedGltfAsset = {
+  readonly bounds?: Bounds3;
   readonly hasMaterialLod: boolean;
   readonly hasMaterialVariants: boolean;
   readonly hasNodeLod: boolean;

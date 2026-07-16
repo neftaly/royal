@@ -155,6 +155,7 @@ export class GltfAssetPreparationOwner {
         codecs.basisu,
       );
       const asset: PreparedGltfAsset = {
+        ...(scene.bounds === undefined ? {} : { bounds: scene.bounds }),
         hasMaterialLod: scene.hasMaterialLod,
         hasMaterialVariants: scene.hasMaterialVariants,
         hasNodeLod: scene.hasNodeLod,

@@ -1,4 +1,5 @@
 import type {
+  GltfAssetBounds,
   GltfAssetRef,
   PickInput,
   PickResult,
@@ -152,6 +153,8 @@ export type WebGlTextureAssetSnapshot =
   }>;
 
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
+  /** Aggregate loaded asset-space bounds, including authored node and instance transforms. */
+  readonly bounds?: GltfAssetBounds;
   readonly error?: string;
   /** Distinct relevant images, including those not demanded by a visible material yet. */
   readonly imageCandidates: number;

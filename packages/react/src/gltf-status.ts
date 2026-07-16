@@ -22,12 +22,23 @@ const IDLE_ASSET: RoyalRendererGltfAssetSnapshot = Object.freeze({
 const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((name, index) => name === right[index]);
 
+const sameBounds = (
+  left: RoyalRendererGltfAssetSnapshot,
+  right: RoyalRendererGltfAssetSnapshot,
+): boolean => {
+  if (left.state === "idle" || right.state === "idle") return true;
+  if (left.bounds === undefined || right.bounds === undefined) return left.bounds === right.bounds;
+  return left.bounds.min.every((value, index) => value === right.bounds!.min[index])
+    && left.bounds.max.every((value, index) => value === right.bounds!.max[index]);
+};
+
 const sameAssetSnapshot = (
   left: RoyalRendererGltfAssetSnapshot,
   right: RoyalRendererGltfAssetSnapshot,
 ): boolean => left.state === right.state
   && left.error === right.error
   && sameVariants(left.variantNames, right.variantNames)
+  && sameBounds(left, right)
   && (left.state === "idle" || right.state === "idle" || (
     left.images.failed === right.images.failed
     && left.images.loaded === right.images.loaded

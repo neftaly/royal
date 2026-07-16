@@ -98,6 +98,8 @@ export class PreparedAssetEventOwner {
     const asset = snapshot.asset;
     this.#releaseImageAssetForReplacement(snapshot.key);
     const replacesReadyAsset = state.status === "ready";
+    if (asset.bounds === undefined) delete state.bounds;
+    else state.bounds = asset.bounds;
     state.hasMaterialLod = asset.hasMaterialLod;
     state.hasMaterialVariants = asset.hasMaterialVariants;
     state.hasNodeLod = asset.hasNodeLod;

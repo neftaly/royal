@@ -228,7 +228,9 @@ and returns a status discriminated by `state`. `loading` is not renderable;
 `streaming` is renderable with images outstanding; `ready` has settled every
 relevant image; and `degraded` is renderable with at least one image failure.
 Non-idle snapshots include immutable `images`, `scene`, and `phaseMs` details,
-plus `variantNames`. Image progress includes dormant material images in `total`,
+plus `variantNames`. Once prepared, `bounds` is the aggregate loaded asset-space
+bound after authored node and instance transforms, so camera fitting and framing
+do not need to parse the glTF again. Image progress includes dormant material images in `total`,
 so a large scene cannot report complete merely because those images have not
 been requested yet. Prepared-asset and image transitions push focused snapshots;
 the hook neither waits for unrelated frames nor allocates the full renderer

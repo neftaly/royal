@@ -35,10 +35,14 @@ const state = (
 
 describe("glTF load diagnostics core", () => {
   it("projects phase durations and public ready status without mutating input", () => {
-    const input = state("model.glb", "ready", { sourceVersion: "revision-a" });
+    const input = state("model.glb", "ready", {
+      bounds: { max: [4, 5, 6], min: [-1, -2, -3] },
+      sourceVersion: "revision-a",
+    });
 
     expect(gltfLoadDiagnosticsSnapshot([input])).toEqual({
       assets: [{
+        bounds: { max: [4, 5, 6], min: [-1, -2, -3] },
         imageCandidates: 3,
         imageFailures: 1,
         imagesLoaded: 2,
@@ -63,6 +67,7 @@ describe("glTF load diagnostics core", () => {
       }],
     });
     expect(input.status).toBe("ready");
+    expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.bounds?.min)).toBe(true);
     expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.variantNames)).toBe(true);
   });
 

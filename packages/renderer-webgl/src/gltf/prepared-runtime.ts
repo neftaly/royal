@@ -1,5 +1,6 @@
 import type { GltfInstancesNode, GltfNode } from "@royal/renderer-core";
 import type { PreparedAssetArenaEvent } from "../resource-arena";
+import type { Bounds3 } from "../math/picking";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   maximumResourceGovernorClassDurableBytes,
@@ -45,6 +46,7 @@ import {
 export type AnyGltfNode = GltfNode | GltfInstancesNode;
 
 export type PreparedGltfState = {
+  bounds?: Bounds3;
   hasMaterialLod: boolean;
   hasMaterialVariants: boolean;
   hasNodeLod: boolean;

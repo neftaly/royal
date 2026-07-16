@@ -36,6 +36,7 @@ afterEach(() => {
 describe("React root public API", () => {
   it("projects renderable glTF image progress without calling scene readiness complete", () => {
     const snapshot = {
+      bounds: { max: [10, 3, 8], min: [-2, -1, -4] } as const,
       imageCandidates: 4,
       imageFailures: 0,
       imagesLoaded: 1,
@@ -50,6 +51,7 @@ describe("React root public API", () => {
     };
 
     expect(royalGltfAssetSnapshotFrom(snapshot)).toEqual({
+      bounds: { max: [10, 3, 8], min: [-2, -1, -4] },
       images: { failed: 0, loaded: 1, pending: 3, requested: 3, total: 4 },
       phaseMs: { document: 5, toSceneReady: 12 },
       scene: { lights: 2, nodes: 20, primitives: 8 },

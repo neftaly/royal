@@ -54,6 +54,7 @@ describe("glTF scene reader", () => {
     });
 
     expect(diagnostics).toEqual([]);
+    expect(scene.bounds).toEqual({ max: [1, 1, 0], min: [0, 0, 0] });
     expect(scene.lights).toEqual([{
       color: [1, 0.5, 2, 1],
       kind: "point",
@@ -94,6 +95,26 @@ describe("glTF scene reader", () => {
 
     expect(scene.primitives[0]?.material.baseColorTexture?.sourceUri)
       .toBe("https://example.test/models/preferred.webp");
+  });
+
+  it("reports aggregate asset bounds after authored hierarchy transforms", () => {
+    const scene = readGltfScene({
+      assetKey: "transformed",
+      buffers: [triangleBuffer()],
+      diagnostics: { recordDiagnostic: () => undefined },
+      document: {
+        ...triangleDocument(),
+        materials: [{}],
+        nodes: [
+          { children: [1], translation: [2, -3, 4] },
+          { mesh: 0, scale: [2, 3, 4] },
+        ],
+      },
+      dracoPrimitives: new Map(),
+      src: "transformed.gltf",
+    });
+
+    expect(scene.bounds).toEqual({ max: [4, 0, 4], min: [2, -3, 4] });
   });
 
   it("reads node LOD, material LOD, variants, and extension diagnostics as scene facts", () => {

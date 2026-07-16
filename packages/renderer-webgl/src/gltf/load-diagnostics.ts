@@ -5,8 +5,10 @@ import type {
 } from "../root-types";
 import type { GltfLoadMetrics } from "./prepared-asset";
 import type { PreparedGltfRuntime, PreparedGltfState } from "./prepared-runtime";
+import type { Bounds3 } from "../math/picking";
 
 export type GltfLoadDiagnosticsState = {
+  readonly bounds?: Bounds3;
   readonly error?: string;
   readonly lightCount: number;
   readonly load: GltfLoadMetrics;
@@ -44,6 +46,12 @@ const gltfLoadDiagnosticsAssetSnapshot = (
   addPhase("toSceneReady", load.startedAt, load.readyAt);
 
   return {
+    ...(state.bounds === undefined ? {} : {
+      bounds: Object.freeze({
+        max: Object.freeze([...state.bounds.max]) as [number, number, number],
+        min: Object.freeze([...state.bounds.min]) as [number, number, number],
+      }),
+    }),
     ...(state.error === undefined ? {} : { error: state.error }),
     imageCandidates: load.imageCandidates ?? load.imageRequests,
     imageFailures: load.imageFailures,
@@ -72,6 +80,7 @@ export const preparedGltfLoadDiagnosticsSnapshot = (
   runtime: PreparedGltfRuntime,
 ): WebGlGltfLoadDiagnosticsSnapshot => gltfLoadDiagnosticsSnapshot(
   [...runtime.states.values()].map((state) => ({
+    ...(state.bounds === undefined ? {} : { bounds: state.bounds }),
     ...(state.error === undefined ? {} : { error: state.error }),
     lightCount: state.lights.length,
     load: state.load,
@@ -90,6 +99,7 @@ export const preparedGltfLoadDiagnosticsAssetSnapshot = (
 ): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined => state === undefined
   ? undefined
   : gltfLoadDiagnosticsAssetSnapshot({
+    ...(state.bounds === undefined ? {} : { bounds: state.bounds }),
     ...(state.error === undefined ? {} : { error: state.error }),
     lightCount: state.lights.length,
     load: state.load,

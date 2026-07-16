@@ -6,7 +6,7 @@ import {
   transformPoint,
   type Mat4,
 } from "../math/mat4";
-import { worldBounds } from "../math/picking";
+import { worldBounds, type Bounds3, type MutableBounds3 } from "../math/picking";
 import { normalizeLodThresholds, type LodLevelMembership } from "../lod";
 import { resolveResourceUri } from "../resource-io";
 import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./accessors";
@@ -50,6 +50,8 @@ export type GltfSceneReaderDiagnosticSink = {
 };
 
 export type GltfSceneFacts = {
+  /** Aggregate asset-space bounds after authored node and instance transforms. */
+  readonly bounds?: Bounds3;
   readonly hasMaterialLod: boolean;
   readonly hasMaterialVariants: boolean;
   readonly hasNodeLod: boolean;
@@ -57,6 +59,31 @@ export type GltfSceneFacts = {
   readonly lights: readonly SurfaceLight[];
   readonly primitives: readonly LoadedGltfPrimitive[];
   readonly variants: readonly string[];
+};
+
+const aggregateSceneBounds = (
+  primitives: readonly LoadedGltfPrimitive[],
+): Bounds3 | undefined => {
+  let aggregate: MutableBounds3 | undefined;
+  for (const primitive of primitives) {
+    for (const bounds of primitive.localBounds) {
+      if (bounds === undefined) continue;
+      if (aggregate === undefined) {
+        aggregate = {
+          max: [...bounds.max] as [number, number, number],
+          min: [...bounds.min] as [number, number, number],
+        };
+        continue;
+      }
+      aggregate.max[0] = Math.max(aggregate.max[0], bounds.max[0]);
+      aggregate.max[1] = Math.max(aggregate.max[1], bounds.max[1]);
+      aggregate.max[2] = Math.max(aggregate.max[2], bounds.max[2]);
+      aggregate.min[0] = Math.min(aggregate.min[0], bounds.min[0]);
+      aggregate.min[1] = Math.min(aggregate.min[1], bounds.min[1]);
+      aggregate.min[2] = Math.min(aggregate.min[2], bounds.min[2]);
+    }
+  }
+  return aggregate;
 };
 
 export type ReadGltfSceneInput = {
@@ -531,7 +558,9 @@ export const readGltfScene = (input: ReadGltfSceneInput): GltfSceneFacts => {
   for (const nodeIndex of input.document.scenes?.[sceneIndex]?.nodes ?? []) {
     if (!referencedLodNodes.has(nodeIndex)) appendNodeTreePrimitives(context, nodeIndex, identityMat4(), []);
   }
+  const bounds = aggregateSceneBounds(primitives);
   return {
+    ...(bounds === undefined ? {} : { bounds }),
     hasMaterialLod: primitives.some((primitive) => primitive.materialLod !== undefined
       || primitive.materialVariants?.some((variant) => variant.materialLod !== undefined) === true),
     hasMaterialVariants: primitives.some((primitive) => primitive.materialVariants !== undefined),
