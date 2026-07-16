@@ -237,9 +237,9 @@ export type {
 type GeometryResource = VertexInputGeometry;
 type Mutable<Value> = { -readonly [Key in keyof Value]: Value[Key] };
 
-// Keep at most two frame upload budgets decoded beyond the ordinary class's
-// durable floor. This bounds latency-hiding work without retaining an asset's
-// entire texture set when persistent GPU admission is already saturated.
+// Keep at most two frame upload budgets decoded and waiting for GPU upload.
+// Uploaded embedded images may remain on CPU for context restoration; counting
+// those durable sources here would permanently stall the rest of a GLB.
 const GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS = 2;
 
 const getNodeKind = (node: RenderNode): string =>
@@ -345,19 +345,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
       },
     };
   };
-  readonly #gltfOrdinaryImageDecodedAheadBytes = () => {
-    const retainedAndDecodedBytes = resourceGovernorDurableUsage(
-      this.#resourceGovernor,
-      "ordinary-texture",
-      "cpuDecodedBytes",
-    );
-    const retainedFloor = this.#resourceGovernorPolicy.classes["ordinary-texture"]
-      .cpuDecodedBytes.mandatoryFloor;
-    return Math.max(0, retainedAndDecodedBytes - retainedFloor);
-  };
+  readonly #gltfOrdinaryImagePendingUploadBytes = () =>
+    this.#ordinaryTextures.pendingUploadBytes();
   readonly #admitGltfOrdinaryImageDecodeJob = () => {
     if (
-      this.#gltfOrdinaryImageDecodedAheadBytes()
+      this.#gltfOrdinaryImagePendingUploadBytes()
       >= this.#resourceGovernorPolicy.limits.uploadBytes
         * GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS
     ) return undefined;
@@ -370,7 +362,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       "cpuDecodedBytes",
     );
     if (
-      this.#gltfOrdinaryImageDecodedAheadBytes() + transportAheadBytes
+      this.#gltfOrdinaryImagePendingUploadBytes() + transportAheadBytes
       >= this.#resourceGovernorPolicy.limits.uploadBytes
         * GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS
     ) return undefined;

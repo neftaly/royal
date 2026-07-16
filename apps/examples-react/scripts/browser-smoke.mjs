@@ -102,6 +102,7 @@ const smokeExpectations = {
   },
   'gltf-scenes': {
     gltfReady: true,
+    ...(selectedGltfSceneId === 'a-beautiful-game' ? { minImagesLoaded: 15 } : {}),
     minColorBuckets: 12,
     minPaintedRatio: 0.01,
     resourceSubstrings: [selectedGltfSceneResource],
@@ -237,6 +238,7 @@ const smokeExpression = `
           : [],
         id: routeId,
         gltfReady: smoke?.gltfReady === true,
+        minImagesLoaded: smoke?.minImagesLoaded ?? 0,
         path: routePath,
         resourceSubstrings: selectedCasePath === undefined
           ? smoke?.resourceSubstrings ?? []
@@ -298,7 +300,9 @@ const smokeExpression = `
         Array.isArray(state.renderer?.gltfLoadDiagnostics?.assets) &&
         state.renderer.gltfLoadDiagnostics.assets.length > 0 &&
         state.renderer.gltfLoadDiagnostics.assets.some((asset) =>
-          asset.status === 'sceneReady' && typeof asset.phaseMs?.toSceneReady === 'number'
+          asset.status === 'sceneReady' &&
+          typeof asset.phaseMs?.toSceneReady === 'number' &&
+          asset.imagesLoaded >= state.route.minImagesLoaded
         )
       );
     return canvasReady && resourceReady && gltfDiagnosticsReady;
@@ -1007,6 +1011,8 @@ const assertRoute = (expected, state) => {
       failures.push('glTF load diagnostics did not report a scene-ready asset');
     } else if (!assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')) {
       failures.push('glTF load diagnostics missed toSceneReady phase timing');
+    } else if (!assets.some((asset) => asset.imagesLoaded >= (expected.minImagesLoaded ?? 0))) {
+      failures.push(`glTF load diagnostics did not reach ${expected.minImagesLoaded} loaded images`);
     }
   }
 

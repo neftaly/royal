@@ -29,6 +29,7 @@ import {
   ordinaryTextureGpuOutcomeCount,
   ordinaryTextureGpuHasPendingUploads,
   ordinaryTextureGpuPendingUpload,
+  ordinaryTextureGpuPendingUploadBytes,
   ordinaryTextureGpuQuarantinedBytes,
   ordinaryTextureGpuResource,
   ordinaryTextureGpuResourceCount,
@@ -200,6 +201,11 @@ export class OrdinaryTextureResidencyController {
     return ordinaryTextureGpuHasPendingUploads(this.#gpu)
       || ordinaryTextureGpuOutcomeCount(this.#gpu) > 0
       || this.#options.decodedSources.hasPendingOrdinary();
+  }
+
+  /** Decoded ordinary texture bytes that have not reached GPU residency yet. */
+  pendingUploadBytes(): number {
+    return ordinaryTextureGpuPendingUploadBytes(this.#gpu);
   }
 
   dropContext(): OrdinaryTextureResidencyGpuReport {

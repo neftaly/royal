@@ -12,6 +12,7 @@ import {
   ordinaryTextureGpuOutcome,
   ordinaryTextureGpuOutcomeCount,
   ordinaryTextureGpuPendingUpload,
+  ordinaryTextureGpuPendingUploadBytes,
   ordinaryTextureGpuQuarantinedBytes,
   ordinaryTextureGpuResourceCount,
   ordinaryTextureUploadCost,
@@ -166,6 +167,8 @@ const runOperationTrace = (trace: readonly Operation[], label: string): void => 
       uploaded.delete(operation.key);
     }
     expect(ordinaryTextureGpuResourceCount(arena), `${label} step=${step} resources`).toBe(live.size);
+    expect(ordinaryTextureGpuPendingUploadBytes(arena), `${label} step=${step} pending bytes`)
+      .toBe(pending.size * 4);
     expect(gl.uploads, `${label} step=${step} independent upload budget`).toHaveLength(uploads);
     for (const candidate of live) {
       const resource = actual.get(candidate)!;
@@ -299,6 +302,29 @@ describe("ordinary texture GPU arena", () => {
     processOrdinaryTextureUploads(arena, 2, 1);
     expect(resources[4]?.uploaded).toBe(true);
     expect(gl.uploads).toHaveLength(5);
+  });
+  it("counts only decoded bytes still waiting for upload", () => {
+    const { arena } = setup();
+    const first = ensureOrdinaryTextureGpuResource(arena, "first", 1);
+    const second = ensureOrdinaryTextureGpuResource(arena, "second", 1);
+    queueOrdinaryTextureUpload(arena, first, { source: source(1, 2, 2), texture });
+    queueOrdinaryTextureUpload(arena, second, { source: source(2), texture });
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(20);
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: ({ uploadBytes }) => uploadBytes === 16
+        ? {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        }
+        : { reason: "persistent-gpu-capacity" },
+    });
+
+    expect(first.uploaded).toBe(true);
+    expect(second.uploaded).toBe(false);
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(4);
+    releaseOrdinaryTextureGpuResource(arena, "second");
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(0);
   });
   it("requests a next-frame retry for frame-local upload-capacity denial", () => {
     const { arena } = setup();
