@@ -3,8 +3,10 @@ import {
   appendGltfPacketSubmission,
   appendPreparedGltfPacketSubmissionRootBinding,
   assertGltfPacketSubmissionWorkspaceCurrent,
+  beginPreparedGltfPacketSubmissionRun,
   clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
+  endPreparedGltfPacketSubmissionRun,
   preparedGltfPacketSubmissionMaterialBindingId,
   preparedGltfPacketSubmissionLightBindingId,
   preparedGltfPacketSubmissionRootBindingId,
@@ -83,6 +85,67 @@ const row = (
 });
 
 describe("glTF packet submission workspace", () => {
+  it("writes equivalent invariant lanes for scalar and bulk prepared runs", () => {
+    const workspace = createGltfPacketSubmissionWorkspace<object, object, object>();
+    const catalog = begin(workspace);
+    const materialId = retainGltfPacketSubmissionMaterialBinding(workspace, 7, catalog, 0, 17, {});
+
+    const scalarFirst = beginPreparedGltfPacketSubmissionRun(
+      workspace,
+      catalog,
+      0,
+      701,
+      materialId,
+      1,
+    );
+    endPreparedGltfPacketSubmissionRun(workspace, scalarFirst, 1);
+    expect({
+      batchId: workspace.batchIds[0],
+      geometryId: workspace.geometryIds[0],
+      geometryIdentityId: workspace.geometryIdentityIds[0],
+      localModelId: workspace.localModelIds[0],
+      materialBatchClassId: workspace.materialBatchClassIds[0],
+      materialBindingId: workspace.materialBindingIds[0],
+      orderingSegment: workspace.orderingSegments[0],
+      packetIndex: workspace.packetIndices[0],
+      renderClass: workspace.renderClasses[0],
+    }).toEqual({
+      batchId: NO_FRAME_PACKET_ID,
+      geometryId: 100,
+      geometryIdentityId: 701,
+      localModelId: 0,
+      materialBatchClassId: 17,
+      materialBindingId: materialId,
+      orderingSegment: 3,
+      packetIndex: 0,
+      renderClass: FRAME_PACKET_RENDER_CLASS.opaque,
+    });
+
+    resetGltfPacketSubmissionWorkspaceForSegment(workspace, 7, catalog, 4);
+    const bulkFirst = beginPreparedGltfPacketSubmissionRun(
+      workspace,
+      catalog,
+      0,
+      701,
+      materialId,
+      3,
+    );
+    endPreparedGltfPacketSubmissionRun(workspace, bulkFirst, 3);
+    expect(Array.from(workspace.batchIds.subarray(0, 3)))
+      .toEqual([NO_FRAME_PACKET_ID, NO_FRAME_PACKET_ID, NO_FRAME_PACKET_ID]);
+    expect(Array.from(workspace.geometryIds.subarray(0, 3))).toEqual([100, 100, 100]);
+    expect(Array.from(workspace.geometryIdentityIds.subarray(0, 3))).toEqual([701, 701, 701]);
+    expect(Array.from(workspace.localModelIds.subarray(0, 3))).toEqual([0, 0, 0]);
+    expect(Array.from(workspace.materialBatchClassIds.subarray(0, 3))).toEqual([17, 17, 17]);
+    expect(Array.from(workspace.materialBindingIds.subarray(0, 3)))
+      .toEqual([materialId, materialId, materialId]);
+    expect(Array.from(workspace.orderingSegments.subarray(0, 3))).toEqual([4, 4, 4]);
+    expect(Array.from(workspace.packetIndices.subarray(0, 3))).toEqual([0, 0, 0]);
+    expect(Array.from(workspace.renderClasses.subarray(0, 3)))
+      .toEqual([FRAME_PACKET_RENDER_CLASS.opaque, FRAME_PACKET_RENDER_CLASS.opaque,
+        FRAME_PACKET_RENDER_CLASS.opaque]);
+  });
+
   it("appends renderer-prepared roots after an authoritative lookup miss", () => {
     const workspace = createGltfPacketSubmissionWorkspace<object, object, object>();
     const catalog = begin(workspace);

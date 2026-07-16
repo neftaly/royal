@@ -656,19 +656,34 @@ export const beginPreparedGltfPacketSubmissionRun = <M, R, L>(
   const first = workspace.count;
   const end = first + count;
   reserveRows(workspace, end);
-  workspace.batchIds.fill(NO_FRAME_PACKET_ID, first, end);
-  workspace.geometryIds.fill(catalog.geometryIds[packetIndex]!, first, end);
-  workspace.geometryIdentityIds.fill(geometryIdentityId, first, end);
-  workspace.localModelIds.fill(catalog.localModelIds[packetIndex]!, first, end);
-  workspace.materialBatchClassIds.fill(
-    workspace.materialBindingBatchClassIds[materialBindingId]!,
-    first,
-    end,
-  );
-  workspace.materialBindingIds.fill(materialBindingId, first, end);
-  workspace.orderingSegments.fill(workspace.segment, first, end);
-  workspace.packetIndices.fill(packetIndex, first, end);
-  workspace.renderClasses.fill(catalog.renderClasses[packetIndex]!, first, end);
+  const geometryId = catalog.geometryIds[packetIndex]!;
+  const localModelId = catalog.localModelIds[packetIndex]!;
+  const materialBatchClassId = workspace.materialBindingBatchClassIds[materialBindingId]!;
+  const renderClass = catalog.renderClasses[packetIndex]!;
+  if (count === 1) {
+    // Most authored scenes submit one visible root for each packet. Scalar
+    // writes keep that common path monomorphic and avoid nine typed-array fill
+    // calls whose range contains only one element.
+    workspace.batchIds[first] = NO_FRAME_PACKET_ID;
+    workspace.geometryIds[first] = geometryId;
+    workspace.geometryIdentityIds[first] = geometryIdentityId;
+    workspace.localModelIds[first] = localModelId;
+    workspace.materialBatchClassIds[first] = materialBatchClassId;
+    workspace.materialBindingIds[first] = materialBindingId;
+    workspace.orderingSegments[first] = workspace.segment;
+    workspace.packetIndices[first] = packetIndex;
+    workspace.renderClasses[first] = renderClass;
+  } else {
+    workspace.batchIds.fill(NO_FRAME_PACKET_ID, first, end);
+    workspace.geometryIds.fill(geometryId, first, end);
+    workspace.geometryIdentityIds.fill(geometryIdentityId, first, end);
+    workspace.localModelIds.fill(localModelId, first, end);
+    workspace.materialBatchClassIds.fill(materialBatchClassId, first, end);
+    workspace.materialBindingIds.fill(materialBindingId, first, end);
+    workspace.orderingSegments.fill(workspace.segment, first, end);
+    workspace.packetIndices.fill(packetIndex, first, end);
+    workspace.renderClasses.fill(renderClass, first, end);
+  }
   return first;
 };
 
