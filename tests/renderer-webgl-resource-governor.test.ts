@@ -9,6 +9,7 @@ import {
   maximumResourceGovernorClassDurableBytes,
   reserveResourceGovernor,
   replaceResourceGovernorLease,
+  resourceGovernorDurableUsage,
   resourceGovernorImpossibleCostReason,
   resourceGovernorSnapshot,
   subscribeResourceGovernorDurableCapacityRelease,
@@ -193,6 +194,18 @@ describe("root resource governor", () => {
     }));
     expect(resourceGovernorSnapshot(governor).total.persistentGpuBytes).toBe(100);
     geometry.cancel();
+  });
+
+  it("reads one durable lane without allocating a diagnostic snapshot", () => {
+    const governor = createResourceGovernor(policy());
+    const lease = reservation(reserveResourceGovernor(governor, "ordinary-texture", {
+      cpuDecodedBytes: 17,
+      persistentGpuBytes: 29,
+    })).commit();
+
+    expect(resourceGovernorDurableUsage(governor, "ordinary-texture", "cpuDecodedBytes")).toBe(17);
+    expect(resourceGovernorDurableUsage(governor, "ordinary-texture", "persistentGpuBytes")).toBe(29);
+    lease.release();
   });
 
   it("uses optional per-class hard ceilings without disabling borrowing below them", () => {

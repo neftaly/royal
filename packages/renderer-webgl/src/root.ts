@@ -47,6 +47,7 @@ import {
   beginResourceGovernorFrame,
   createResourceGovernor,
   maximumResourceGovernorClassDurableBytes,
+  resourceGovernorDurableUsage,
   resourceGovernorImpossibleCostReason,
   ResourceGovernorCpuCapacityError,
   replaceResourceGovernorLease,
@@ -235,6 +236,11 @@ export type {
 type GeometryResource = VertexInputGeometry;
 type Mutable<Value> = { -readonly [Key in keyof Value]: Value[Key] };
 
+// Keep at most two frame upload budgets decoded beyond the ordinary class's
+// durable floor. This bounds latency-hiding work without retaining an asset's
+// entire texture set when persistent GPU admission is already saturated.
+const GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS = 2;
+
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
     ? node.kind
@@ -298,6 +304,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       () => this.#virtualTextures.drainRequests(),
     ],
     wakeCpu: () => {
+      this.#preparedGltf.wakeImages();
       const ordinaryWake = this.#ordinaryTextures.wakeCpuCapacity();
       const preparedAssetWake = wakeResourceArenaPreparedAssetCpuCapacity(this.#resourceArena);
       const preparedImageWake = this.#preparedGltf.wakeImageCpuCapacity();
@@ -336,6 +343,37 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#capacityWakes.wakePreparation();
       },
     };
+  };
+  readonly #gltfOrdinaryImageDecodedAheadBytes = () => {
+    const retainedAndDecodedBytes = resourceGovernorDurableUsage(
+      this.#resourceGovernor,
+      "ordinary-texture",
+      "cpuDecodedBytes",
+    );
+    const retainedFloor = this.#resourceGovernorPolicy.classes["ordinary-texture"]
+      .cpuDecodedBytes.mandatoryFloor;
+    return Math.max(0, retainedAndDecodedBytes - retainedFloor);
+  };
+  readonly #admitGltfOrdinaryImageDecodeJob = () => {
+    if (
+      this.#gltfOrdinaryImageDecodedAheadBytes()
+      >= this.#resourceGovernorPolicy.limits.uploadBytes
+        * GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS
+    ) return undefined;
+    return this.#admitGltfPreparationJob();
+  };
+  readonly #admitGltfOrdinaryImageTransportJob = () => {
+    const transportAheadBytes = resourceGovernorDurableUsage(
+      this.#resourceGovernor,
+      "asset-decode",
+      "cpuDecodedBytes",
+    );
+    if (
+      this.#gltfOrdinaryImageDecodedAheadBytes() + transportAheadBytes
+      >= this.#resourceGovernorPolicy.limits.uploadBytes
+        * GLTF_ORDINARY_IMAGE_DECODE_AHEAD_UPLOAD_WINDOWS
+    ) return undefined;
+    return this.#admitGltfPreparationJob();
   };
   readonly #preparedGltf = new PreparedGltfRuntime(
     2,
@@ -514,6 +552,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#basisuTarget = activateGltfBasisuTranscodeTarget(gl);
       this.#preparedGltf.configureImages(new GltfImageDemandCoordinator({
         admit: this.#admitGltfPreparationJob,
+        admitOrdinaryDecode: this.#admitGltfOrdinaryImageDecodeJob,
+        admitOrdinaryTransport: this.#admitGltfOrdinaryImageTransportJob,
         closeSource: (source) => this.#decodedTextureSources.closeOrdinary(source),
         decodeRecipe: (prepared, signal) => decodePreparedGltfImageSourceRecipe(
           prepared,

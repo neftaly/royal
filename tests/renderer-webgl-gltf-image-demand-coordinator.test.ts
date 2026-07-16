@@ -114,6 +114,8 @@ const metrics = (): GltfLoadMetrics => ({
 });
 
 const coordinatorHarness = (options: {
+  readonly admitOrdinaryDecode?: () => Readonly<{ release(): void }> | undefined;
+  readonly admitOrdinaryTransport?: () => Readonly<{ release(): void }> | undefined;
   readonly closeSource?: (value: LoadedTextureSource) => void;
   readonly diagnostic?: (message: string, key: string) => void;
   readonly decodeRecipe?: (
@@ -141,6 +143,12 @@ const coordinatorHarness = (options: {
     return { release };
   }));
   const coordinator = new GltfImageDemandCoordinator({
+    ...(options.admitOrdinaryDecode === undefined
+      ? {}
+      : { admitOrdinaryDecode: options.admitOrdinaryDecode }),
+    ...(options.admitOrdinaryTransport === undefined
+      ? {}
+      : { admitOrdinaryTransport: options.admitOrdinaryTransport }),
     closeSource,
     decodeRecipe: options.decodeRecipe
       ?? ((prepared, signal) => loadGltfImageSourceRecipe(prepared.recipe, signal)),
@@ -682,6 +690,51 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     jobs.get("emissive-b")!.resolve(loaded("emissive-b"));
     await flushSchedulerTurn();
     expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 0, loading: 0, queued: 0, ready: 4 });
+    for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();
+    harness.coordinator.dispose();
+  });
+
+  it("keeps ordinary transport and decode independently paused behind backpressure", async () => {
+    let transportAllowed = false;
+    let decodeAllowed = false;
+    const imageRecipe = recipe("bounded");
+    const prepareRecipe = vi.fn(async () => ({
+      ...preparedGltfImageSourceRecipeWithoutTransport(imageRecipe),
+      transportBytes: 4,
+    }));
+    const decodeRecipe = vi.fn(async () => loaded("bounded"));
+    const harness = coordinatorHarness({
+      admitOrdinaryDecode: () => decodeAllowed ? { release: vi.fn() } : undefined,
+      admitOrdinaryTransport: () => transportAllowed ? { release: vi.fn() } : undefined,
+      decodeRecipe,
+      prepareRecipe,
+      reserveTransportBytes: () => ({ release: vi.fn() }),
+    });
+    const boundedMaterial = material("bounded");
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load: metrics(),
+      materials: [boundedMaterial],
+      recipeLease: recipeLease(),
+      recipes: [imageRecipe],
+      stateInstanceKey: 1,
+    });
+
+    harness.coordinator.demandMaterial("asset", boundedMaterial);
+    await flushMicrotasks();
+    expect(prepareRecipe).not.toHaveBeenCalled();
+
+    transportAllowed = true;
+    harness.coordinator.wake();
+    await flushSchedulerTurn();
+    expect(prepareRecipe).toHaveBeenCalledOnce();
+    expect(decodeRecipe).not.toHaveBeenCalled();
+
+    decodeAllowed = true;
+    harness.coordinator.wake();
+    await flushSchedulerTurn();
+    expect(decodeRecipe).toHaveBeenCalledOnce();
+    expect(harness.coordinator.snapshot()).toMatchObject({ ready: 1 });
     for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();
     harness.coordinator.dispose();
   });

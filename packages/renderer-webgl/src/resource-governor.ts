@@ -682,3 +682,10 @@ export const resourceGovernorSnapshot = (governor: ResourceGovernor): ResourceGo
     total: { ...state.total },
   };
 };
+
+/** Allocation-free durable usage query for scheduler admission gates. */
+export const resourceGovernorDurableUsage = (
+  governor: ResourceGovernor,
+  resourceClass: ResourceGovernorClass,
+  dimension: "cpuDecodedBytes" | "persistentGpuBytes",
+): number => stateOf(governor).byClass[resourceClass][dimension];

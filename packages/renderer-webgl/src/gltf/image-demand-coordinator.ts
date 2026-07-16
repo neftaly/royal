@@ -173,9 +173,11 @@ export class GltfImageDemandCoordinator {
   readonly #closeSource: (source: LoadedTextureSource) => void;
   readonly #diagnostic: (message: string, key: string) => void;
   readonly #iblScheduler: GltfPreparationScheduler;
+  readonly #iblTransportScheduler: GltfPreparationScheduler;
   readonly #invalidate: () => void;
   readonly #now: MonotonicClock;
   readonly #ordinaryScheduler: GltfPreparationScheduler;
+  readonly #ordinaryTransportScheduler: GltfPreparationScheduler;
   readonly #ordinaryTransport: TransportLane = { head: 0, queue: [] };
   readonly #pendingOutcomes: Row[] = [];
   readonly #prepareRecipe: typeof prepareGltfImageSourceRecipe;
@@ -186,7 +188,6 @@ export class GltfImageDemandCoordinator {
   readonly #reserveTransportBytes: ((bytes: number) => TransportLease) | undefined;
   readonly #requiresTransport: (recipe: GltfImageSourceRecipe) => boolean;
   readonly #sourceCleanupDebt = new Set<SourceCleanupDebt>();
-  readonly #transportScheduler = new GltfPreparationScheduler(GLTF_IMAGE_TRANSPORT_CONCURRENCY);
   readonly #decodeRecipe: typeof decodePreparedGltfImageSourceRecipe;
   readonly #iblTransport: TransportLane = { head: 0, queue: [] };
   #cleanupRetryScheduled = false;
@@ -194,6 +195,8 @@ export class GltfImageDemandCoordinator {
 
   constructor(options: {
     readonly admit?: GltfPreparationJobAdmitter;
+    readonly admitOrdinaryDecode?: GltfPreparationJobAdmitter;
+    readonly admitOrdinaryTransport?: GltfPreparationJobAdmitter;
     readonly closeSource: (source: LoadedTextureSource) => void;
     readonly diagnostic: (message: string, key: string) => void;
     readonly invalidate: () => void;
@@ -208,9 +211,20 @@ export class GltfImageDemandCoordinator {
     this.#closeSource = options.closeSource;
     this.#diagnostic = options.diagnostic;
     this.#iblScheduler = new GltfPreparationScheduler(GLTF_IBL_IMAGE_CONCURRENCY, options.admit);
+    this.#iblTransportScheduler = new GltfPreparationScheduler(
+      GLTF_IMAGE_TRANSPORT_CONCURRENCY,
+      options.admit,
+    );
     this.#invalidate = options.invalidate;
     this.#now = options.now ?? monotonicNowMs;
-    this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_ORDINARY_IMAGE_CONCURRENCY, options.admit);
+    this.#ordinaryScheduler = new GltfPreparationScheduler(
+      GLTF_ORDINARY_IMAGE_CONCURRENCY,
+      options.admitOrdinaryDecode ?? options.admit,
+    );
+    this.#ordinaryTransportScheduler = new GltfPreparationScheduler(
+      GLTF_IMAGE_TRANSPORT_CONCURRENCY,
+      options.admitOrdinaryTransport ?? options.admit,
+    );
     this.#decodeRecipe = options.decodeRecipe ?? decodePreparedGltfImageSourceRecipe;
     this.#prepareRecipe = options.prepareRecipe ?? prepareGltfImageSourceRecipe;
     this.#progress = options.progress ?? (() => undefined);
@@ -465,7 +479,8 @@ export class GltfImageDemandCoordinator {
     }
     cleanup(() => this.#ordinaryScheduler.dispose());
     cleanup(() => this.#iblScheduler.dispose());
-    cleanup(() => this.#transportScheduler.dispose());
+    cleanup(() => this.#ordinaryTransportScheduler.dispose());
+    cleanup(() => this.#iblTransportScheduler.dispose());
     this.#pendingOutcomes.length = 0;
     if (failure !== undefined) throw failure.value;
   }
@@ -474,7 +489,8 @@ export class GltfImageDemandCoordinator {
     if (!this.#disposed) {
       this.#ordinaryScheduler.wake();
       this.#iblScheduler.wake();
-      this.#transportScheduler.wake();
+      this.#ordinaryTransportScheduler.wake();
+      this.#iblTransportScheduler.wake();
     }
     for (const asset of this.#assets.values()) {
       try {
@@ -529,16 +545,18 @@ export class GltfImageDemandCoordinator {
     }
     const ordinary = this.#ordinaryScheduler.snapshot();
     const ibl = this.#iblScheduler.snapshot();
-    const transport = this.#transportScheduler.snapshot();
+    const ordinaryTransport = this.#ordinaryTransportScheduler.snapshot();
+    const iblTransport = this.#iblTransportScheduler.snapshot();
     return {
-      active: ordinary.active + ibl.active + transport.active,
+      active: ordinary.active + ibl.active + ordinaryTransport.active + iblTransport.active,
       candidates,
       dormant,
       errors,
-      iblQueueHighWater: ibl.queueHighWater,
+      iblQueueHighWater: ibl.queueHighWater + iblTransport.queueHighWater,
       loading,
-      ordinaryQueueHighWater: ordinary.queueHighWater + transport.queueHighWater,
-      queueHighWater: ordinary.queueHighWater + ibl.queueHighWater + transport.queueHighWater,
+      ordinaryQueueHighWater: ordinary.queueHighWater + ordinaryTransport.queueHighWater,
+      queueHighWater: ordinary.queueHighWater + ibl.queueHighWater
+        + ordinaryTransport.queueHighWater + iblTransport.queueHighWater,
       queued,
       ready,
     };
@@ -622,7 +640,10 @@ export class GltfImageDemandCoordinator {
       this.#pumpTransportQueue(transport);
       return;
     }
-    void this.#transportScheduler.run(asset.controller.signal, () => {
+    const transportScheduler = row.iblSpecular === undefined
+      ? this.#ordinaryTransportScheduler
+      : this.#iblTransportScheduler;
+    void transportScheduler.run(asset.controller.signal, () => {
       row.status = "loading";
       return this.#prepareRecipe(recipe, asset.controller.signal);
     }).then((prepared) => {
