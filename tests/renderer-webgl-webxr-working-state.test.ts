@@ -80,12 +80,20 @@ describe("WebGL root WebXR working state contracts", () => {
       0, 0, 1, 0,
       0.25, -0.5, -2, 1,
     ];
+    const rightProjection = [...projection];
+    rightProjection[0] = 4;
+    const rightView = [...view];
+    rightView[12] = -0.25;
 
     root.renderViews(drawableScene([0, 0, 0, 0]), {
       framebuffer,
       views: [
         { projectionMatrix: projection, viewMatrix: view, viewport: { height: 80, width: 100, x: 0, y: 0 } },
-        { projectionMatrix: projection, viewMatrix: view, viewport: { height: 80, width: 100, x: 100, y: 0 } },
+        {
+          projectionMatrix: rightProjection,
+          viewMatrix: rightView,
+          viewport: { height: 80, width: 100, x: 100, y: 0 },
+        },
       ],
     });
 
@@ -106,6 +114,8 @@ describe("WebGL root WebXR working state contracts", () => {
       .map((call) => Array.from(call.args[2] as ArrayLike<number>));
     expectMatricesToContainClose(uniformMatrices, projection);
     expectMatricesToContainClose(uniformMatrices, view);
+    expectMatricesToContainClose(uniformMatrices, rightProjection);
+    expectMatricesToContainClose(uniformMatrices, rightView);
   });
 
   it("rejects a public WebGlRoot-shaped value without private XR capabilities", async () => {

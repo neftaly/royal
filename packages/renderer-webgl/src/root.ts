@@ -1017,6 +1017,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
+        if (viewIndex > 0) this.#surfaceExecution.beginView();
         this.#virtualTextures.beginView(viewIndex);
         if (!depthTestEnabled) {
           gl.enable(gl.DEPTH_TEST);

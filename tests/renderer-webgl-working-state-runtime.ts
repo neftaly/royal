@@ -116,6 +116,15 @@ export const fakeGl = (): FakeGl => {
     calls.push({ name, args });
     return implementation?.(...args);
   });
+  const recordUniformMatrix = vi.fn((
+    location: WebGLUniformLocation | null,
+    transpose: boolean,
+    value: Float32List,
+  ) => {
+    // WebGL consumes the matrix synchronously. Snapshot mutable renderer
+    // workspaces so later view writes do not rewrite call history.
+    calls.push({ name: "uniformMatrix4fv", args: [location, transpose, Array.from(value)] });
+  });
 
   const gl = {
     ACTIVE_TEXTURE: 0x84E0,
@@ -240,7 +249,7 @@ export const fakeGl = (): FakeGl => {
     uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform4fv: record("uniform4fv"),
-    uniformMatrix4fv: record("uniformMatrix4fv"),
+    uniformMatrix4fv: recordUniformMatrix,
     useProgram: record("useProgram"),
     vertexAttrib2f: record("vertexAttrib2f"),
     vertexAttrib4f: record("vertexAttrib4f"),

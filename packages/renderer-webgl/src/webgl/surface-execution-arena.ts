@@ -330,6 +330,7 @@ export class SurfaceExecutionArena {
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #programs: ProgramArena;
   readonly #publicationGroups = new Set<SurfaceMaterialPublication>();
+  readonly #programViewRevisions = new WeakMap<WebGLProgram, number>();
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
@@ -369,6 +370,7 @@ export class SurfaceExecutionArena {
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
   readonly #textureBindings: WebGlTextureBindingShell;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
+  #viewRevision = 0;
   #wakeRequested = false;
 
   constructor(options: SurfaceExecutionArenaOptions) {
@@ -401,6 +403,12 @@ export class SurfaceExecutionArena {
     this.#frontFaceCcw = undefined;
     this.#publicationGroups.clear();
     this.#textureBindings.invalidate();
+    this.#viewRevision += 1;
+  }
+
+  /** Advances camera-invariant state when a frame renders another view. */
+  beginView(): void {
+    this.#viewRevision += 1;
   }
 
   /** Invalidates retained bindings after a raw pass owned outside this shell. */
@@ -480,8 +488,7 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      uniformMatrix(this.#programs, program, "u_projection", input.projection);
-      uniformMatrix(this.#programs, program, "u_view", input.view);
+      this.#bindViewMatrices(program, input.projection, input.view);
       uniformMatrix(this.#programs, program, "u_model", input.model);
       if (!loading && surfaceMaterial?.kind === "standard") {
         uniformMatrix(
@@ -559,8 +566,7 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      uniformMatrix(this.#programs, program, "u_projection", input.projection);
-      uniformMatrix(this.#programs, program, "u_view", input.view);
+      this.#bindViewMatrices(program, input.projection, input.view);
       if (!loading && batch.material.kind === "standard") {
         this.#bindCameraWorldPosition(program, input.view);
       }
@@ -626,6 +632,13 @@ export class SurfaceExecutionArena {
       extendedMaterial,
     );
     return resource?.program;
+  }
+
+  #bindViewMatrices(program: WebGLProgram, projection: Mat4, view: Mat4): void {
+    if (this.#programViewRevisions.get(program) === this.#viewRevision) return;
+    uniformMatrix(this.#programs, program, "u_projection", projection);
+    uniformMatrix(this.#programs, program, "u_view", view);
+    this.#programViewRevisions.set(program, this.#viewRevision);
   }
 
   #textureBindingPlan(
