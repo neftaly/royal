@@ -32,7 +32,6 @@ export interface ClusteredLightingFeature {
   ): void;
   configure(maxTextureImageUnits: number, maxTextureSize: number): void;
   dropContext(): void;
-  endFrame(frame: number): void;
   /** Returns false while a demanded optional implementation is still loading. */
   prepare(lights: readonly (SurfacePointLight | SurfaceSpotLight)[]): boolean;
   releaseContextHandles(): void;

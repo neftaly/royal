@@ -236,7 +236,14 @@ describe("clustered light arena", () => {
     const gl = new FakeGl();
     const arena = createClusteredLightArena(context(gl));
     configureClusteredLightArena(arena, 8, 1024);
-    for (let draw = 0; draw < 256; draw += 1) {
+    bindLights(gl, arena, [{ color: [1, 2, 3, 1], kind: "point", position: [0, 0, -3] }], 7);
+    const scratch = scratchOf(arena);
+    const resource = (arena as unknown as { readonly resource: {
+      readonly indexData: Uint32Array;
+      readonly lightData: Float32Array;
+      readonly lightSnapshot: Float64Array;
+    } }).resource;
+    for (let draw = 1; draw < 256; draw += 1) {
       bindLights(gl, arena, [{
         color: [draw + 1, 2, 3, 1],
         kind: "point",
@@ -244,6 +251,11 @@ describe("clustered light arena", () => {
       }], 7);
     }
     expect(calls(gl, "createTexture")).toHaveLength(3);
+    expect(scratchOf(arena)).toBe(scratch);
+    const retained = (arena as unknown as { readonly resource: typeof resource }).resource;
+    expect(retained.indexData).toBe(resource.indexData);
+    expect(retained.lightData).toBe(resource.lightData);
+    expect(retained.lightSnapshot).toBe(resource.lightSnapshot);
     expect(clusteredLightArenaSnapshot(arena)).toMatchObject({ ownedTextureCount: 3, resourceCount: 1 });
   });
 

@@ -9,7 +9,6 @@ import {
   configureClusteredLightArena,
   createClusteredLightArena,
   dropClusteredLightContext,
-  endClusteredLightFrame,
   releaseClusteredLightContextHandles,
   type ClusteredLightArena,
   type ClusteredLightTextureUnits,
@@ -54,10 +53,6 @@ export class ClusteredLightingFeatureOwner implements ClusteredLightingFeature {
 
   dropContext(): void {
     dropClusteredLightContext(this.#arena);
-  }
-
-  endFrame(frame: number): void {
-    endClusteredLightFrame(this.#arena, frame);
   }
 
   prepare(): boolean {

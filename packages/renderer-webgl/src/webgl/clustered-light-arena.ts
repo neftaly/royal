@@ -203,8 +203,10 @@ const snapshotMatches = (
 
 const commitSnapshot = (
   lights: readonly ClusteredPunctualLight[],
+  current: Float64Array,
 ): Float64Array => {
-  const values = new Float64Array(lights.length * 14);
+  const length = lights.length * 14;
+  const values = current.length === length ? current : new Float64Array(length);
   for (let index = 0; index < lights.length; index += 1) {
     const light = lights[index]!;
     const offset = index * 14;
@@ -267,7 +269,7 @@ const retainedCpuBytesAfterUpload = (
   return scratchBytes(scratch)
     + indexLength * Uint32Array.BYTES_PER_ELEMENT
     + lightHeight * 16 * Float32Array.BYTES_PER_ELEMENT
-    + lightCount * 14 * Float64Array.BYTES_PER_ELEMENT
+    + Math.max(current?.lightSnapshot.length ?? 0, lightCount * 14) * Float64Array.BYTES_PER_ELEMENT
     + 32 * Float64Array.BYTES_PER_ELEMENT;
 };
 
@@ -291,7 +293,7 @@ const conservativeRetainedCpuBytes = (
   return scratch
     + indexLength * Uint32Array.BYTES_PER_ELEMENT
     + lightHeight * 16 * Float32Array.BYTES_PER_ELEMENT
-    + lightCount * 14 * Float64Array.BYTES_PER_ELEMENT
+    + Math.max(current?.lightSnapshot.length ?? 0, lightCount * 14) * Float64Array.BYTES_PER_ELEMENT
     + 32 * Float64Array.BYTES_PER_ELEMENT;
 };
 
@@ -327,12 +329,11 @@ const upload = (
     }
     indexData = new Uint32Array(indexTextureWidth * indexTextureHeight);
   } else {
-    indexData = new Uint32Array(current?.indexData.length ?? 0);
+    indexData = current!.indexData;
   }
   if (indexTextureHeight > state.maxTextureSize) {
     throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${state.maxTextureSize}`);
   }
-  indexData.fill(0);
   for (let index = 0; index < grid.indexCount; index += 1) indexData[index] = grid.indices[index]!;
   const requiredLightCount = Math.max(lights.length, 1);
   const resizedLightTexture = (current?.lightTextureHeight ?? 0) < requiredLightCount;
@@ -344,10 +345,8 @@ const upload = (
       2 ** Math.ceil(Math.log2(requiredLightCount)),
     );
     lightData = new Float32Array(lightTextureHeight * 16);
-  } else if (uploadLightData) {
-    lightData = new Float32Array(current?.lightData.length ?? 0);
   } else {
-    lightData = current?.lightData ?? new Float32Array(0);
+    lightData = current!.lightData;
   }
   for (let index = 0; uploadLightData && index < lights.length; index += 1) {
     const light = lights[index]!;
@@ -492,7 +491,7 @@ const upload = (
     resource.lightTextureHeight = lightTextureHeight; resource.lightData = lightData;
     if (uploadLightData) {
       resource.lightCount = lights.length;
-      resource.lightSnapshot = commitSnapshot(lights);
+      resource.lightSnapshot = commitSnapshot(lights, resource.lightSnapshot);
     }
     commitUpload();
     resource.gpuValid = true;
@@ -571,7 +570,14 @@ export const bindClusteredLights = (
     let nextScratch: ClusterBuildScratch;
     let builtGrid: ClusterGrid;
     try {
-      nextScratch = createClusterBuildScratchWithCapacity(capacity);
+      const scratch = state.buildScratch;
+      nextScratch = scratch.bounds.length >= capacity.bounds
+        && scratch.counts.length >= capacity.counts
+        && scratch.cursors.length >= capacity.cursors
+        && scratch.indices.length >= capacity.indices
+        && scratch.offsetsAndCounts.length >= capacity.offsetsAndCounts
+        ? scratch
+        : createClusterBuildScratchWithCapacity(capacity);
       builtGrid = buildClusterGrid({
         camera: { far, kind: perspective ? "perspective-camera" : "orthographic-camera", near },
         height, lights, projection, view, width,
@@ -653,9 +659,6 @@ export const bindClusteredLights = (
   uniform2f(programArena, program, "u_clusterProjection", perspective ? 0 : 1, resource.indexTextureWidth);
   uniform2f(programArena, program, "u_clusterViewportOrigin", 0, 0);
 };
-
-/** The sequential cache currently owns at most one triple; retain the frame hook as its eviction boundary. */
-export const endClusteredLightFrame = (_arena: ClusteredLightArena, _frame: number): void => {};
 
 const clear = (state: State): void => {
   state.resource?.gpuLease?.release();

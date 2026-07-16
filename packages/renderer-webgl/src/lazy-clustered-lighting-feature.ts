@@ -66,10 +66,6 @@ export class LazyClusteredLightingFeature implements ClusteredLightingFeature {
     this.#feature?.dropContext();
   }
 
-  endFrame(frame: number): void {
-    this.#feature?.endFrame(frame);
-  }
-
   prepare(lights: readonly (SurfacePointLight | SurfaceSpotLight)[]): boolean {
     if (lights.length === 0) return true;
     this.#request();

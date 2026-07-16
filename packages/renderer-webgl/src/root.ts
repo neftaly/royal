@@ -1086,7 +1086,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       renderFailure = retainFirstFailure(renderFailure, value);
     }
     try {
-      this.#clusteredLights.endFrame(this.#framePublication.frame);
     } catch (value) {
       renderFailure = retainFirstFailure(renderFailure, value);
     }
