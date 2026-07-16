@@ -5,6 +5,7 @@ import {
   clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
   preparedGltfPacketSubmissionMaterialBindingId,
+  preparedGltfPacketSubmissionLightBindingId,
   preparedGltfPacketSubmissionRootBindingId,
   readGltfPacketSubmissionInto,
   resetGltfPacketSubmissionWorkspaceForFrame,
@@ -137,9 +138,17 @@ describe("glTF packet submission workspace", () => {
       0,
       {},
     );
+    const lightId = retainGltfPacketSubmissionLightBinding(
+      workspace,
+      7,
+      catalog,
+      sparseSourceId,
+      {},
+    );
 
     expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBe(materialId);
     expect(preparedGltfPacketSubmissionRootBindingId(workspace, sparseSourceId)).toBe(rootId);
+    expect(preparedGltfPacketSubmissionLightBindingId(workspace, sparseSourceId)).toBe(lightId);
     expect(retainGltfPacketSubmissionRootBinding(
       workspace,
       7,
@@ -153,6 +162,7 @@ describe("glTF packet submission workspace", () => {
     resetGltfPacketSubmissionWorkspaceForFrame(workspace, 8, catalog);
     expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBeUndefined();
     expect(preparedGltfPacketSubmissionRootBindingId(workspace, sparseSourceId)).toBeUndefined();
+    expect(preparedGltfPacketSubmissionLightBindingId(workspace, sparseSourceId)).toBeUndefined();
   });
 
   it("rejects stale plan, catalog identity, and catalog revision access", () => {

@@ -522,6 +522,13 @@ export const retainGltfPacketSubmissionLightBinding = <M, R, L>(
   return id;
 };
 
+/** Returns a light binding already retained from the authoritative scope in this frame. */
+export const preparedGltfPacketSubmissionLightBindingId = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  lightScopeId: number,
+): number | undefined => (workspace as WorkspaceState<M, R, L>)
+  .lightBindingIdsByScope.get(lightScopeId);
+
 const reserveRows = <M, R, L>(workspace: GltfPacketSubmissionWorkspace<M, R, L>, required: number): void => {
   if (required <= workspace.capacity) return;
   const capacity = nextCapacity(workspace.capacity, required);

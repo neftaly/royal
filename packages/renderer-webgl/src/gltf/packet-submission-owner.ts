@@ -7,6 +7,7 @@ import {
 } from "../frame/packets";
 import {
   appendPreparedGltfPacketSubmission,
+  preparedGltfPacketSubmissionLightBindingId,
   preparedGltfPacketSubmissionMaterialBindingId,
   preparedGltfPacketSubmissionRootBindingId,
   resetGltfPacketSubmissionWorkspaceForFrame,
@@ -106,8 +107,6 @@ export class GltfPacketSubmissionOwner {
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
   readonly #selection: GltfPacketSelectionOwner;
-  readonly #instanceAssetLights = new Map<number, SurfaceLightSet | undefined>();
-  readonly #instanceAssetLightScopeIds = new Map<number, number>();
   readonly #submissionRow: GltfPacketSubmissionRow = {
     geometryId: 0,
     geometryIdentityId: 0,
@@ -232,10 +231,6 @@ export class GltfPacketSubmissionOwner {
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
       ? 0
       : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
-    const instanceAssetLights = instanceViews === undefined ? undefined : this.#instanceAssetLights;
-    const instanceAssetLightScopeIds = this.#instanceAssetLightScopeIds;
-    instanceAssetLights?.clear();
-    instanceAssetLightScopeIds.clear();
     const expectedKind = node.kind === "gltf"
       ? GLTF_PACKET_ROOT_SOURCE_KIND.gltf
       : GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances;
@@ -318,27 +313,31 @@ export class GltfPacketSubmissionOwner {
         determinantOuterIndex = outerIndex;
       }
       const packetSidedness = catalog.sidedness[packetIndex]!;
-      let assetLights = ordinaryAssetLights;
-      let lightScopeId = ordinaryLightScopeId;
-      if (instanceAssetLights !== undefined) {
-        if (instanceAssetLights.has(outerIndex)) {
-          assetLights = instanceAssetLights.get(outerIndex);
-          lightScopeId = instanceAssetLightScopeIds.get(outerIndex)!;
-        } else {
-          assetLights = this.#lightResolver.resolveGltfAsset(state, rootModel);
-          lightScopeId = assetLights === undefined
-            ? 0
-            : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
-          instanceAssetLights.set(outerIndex, assetLights);
-          instanceAssetLightScopeIds.set(outerIndex, lightScopeId);
-        }
-      }
       const rootSourceId = catalog.rootSourceIds[packetIndex]!;
       let rootBindingId = preparedGltfPacketSubmissionRootBindingId(
         this.#batches.workspace,
         rootSourceId,
       );
+      let lightBindingId = NO_FRAME_PACKET_ID;
+      let lightScopeId: number;
       if (rootBindingId === undefined) {
+        const assetLights = instanceViews === undefined
+          ? ordinaryAssetLights
+          : this.#lightResolver.resolveGltfAsset(state, rootModel);
+        lightScopeId = assetLights === undefined
+          ? 0
+          : instanceViews === undefined
+            ? ordinaryLightScopeId
+            : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
+        lightBindingId = assetLights === undefined
+          ? NO_FRAME_PACKET_ID
+          : retainGltfPacketSubmissionLightBinding(
+              this.#batches.workspace,
+              planRevision,
+              catalog,
+              lightScopeId,
+              assetLights,
+            );
         let rootBinding = this.#rootBindings[rootSourceId];
         if (rootBinding === undefined) {
           rootBinding = {
@@ -362,16 +361,19 @@ export class GltfPacketSubmissionOwner {
           lightScopeId,
           rootBinding,
         );
-      }
-      const lightBindingId = assetLights === undefined
-        ? NO_FRAME_PACKET_ID
-        : retainGltfPacketSubmissionLightBinding(
+      } else {
+        lightScopeId = this.#batches.workspace.rootBindingLightScopeIds[rootBindingId]!;
+        if (lightScopeId !== 0) {
+          const retainedLightBindingId = preparedGltfPacketSubmissionLightBindingId(
             this.#batches.workspace,
-            planRevision,
-            catalog,
             lightScopeId,
-            assetLights,
           );
+          if (retainedLightBindingId === undefined) {
+            throw new Error("Royal retained glTF root binding has no asset-local light binding");
+          }
+          lightBindingId = retainedLightBindingId;
+        }
+      }
       const submissionRow = this.#submissionRow as {
         -readonly [Key in keyof GltfPacketSubmissionRow]: GltfPacketSubmissionRow[Key];
       };
