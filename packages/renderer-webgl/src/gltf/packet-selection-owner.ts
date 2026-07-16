@@ -53,6 +53,8 @@ export class GltfPacketSelectionOwner {
   readonly #rootViewProjection = identityMat4();
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
+  #selectedOuterIndices = new Uint32Array(1);
+  #selectedPlanNodeIndices = new Uint32Array(1);
   readonly #viewProjection = identityMat4();
   readonly selected: SelectedFramePackets;
 
@@ -65,6 +67,16 @@ export class GltfPacketSelectionOwner {
     this.#instanceTransforms = instanceTransforms;
     this.#sceneBindings = sceneBindings;
     this.selected = createSelectedFramePackets(runtime.packetTopology.catalog);
+  }
+
+  /** Plan-node authority parallel to `selected.orderedPacketIndices`. */
+  get selectedPlanNodeIndices(): Uint32Array {
+    return this.#selectedPlanNodeIndices;
+  }
+
+  /** Root-instance authority parallel to `selected.orderedPacketIndices`. */
+  get selectedOuterIndices(): Uint32Array {
+    return this.#selectedOuterIndices;
   }
 
   prepareFrame(plan: FramePlan, frameViews: FrameViews): void {
@@ -115,6 +127,31 @@ export class GltfPacketSelectionOwner {
             packetSelections.epoch,
           )) continue;
           const outerIndex = topology.catalog.instanceFirsts[packetIndex]!;
+          const outerCount = topology.catalog.instanceCounts[packetIndex]!;
+          if (outerCount > 1) {
+            const outerEnd = outerIndex + outerCount;
+            const hasBounds = readPacketBoundsInto(
+              topology.resources,
+              topology.catalog.boundsIds[packetIndex]!,
+              this.#boundsScratch,
+            );
+            for (let selectedOuterIndex = outerIndex; selectedOuterIndex < outerEnd; selectedOuterIndex += 1) {
+              const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
+              if (rootModel === undefined) continue;
+              multiplyMat4Into(this.#rootViewProjection, this.#viewProjection, rootModel);
+              if (!isBoundsVisible(
+                hasBounds ? this.#boundsScratch : undefined,
+                this.#rootViewProjection,
+              )) continue;
+              this.#appendSelectedPacket(
+                topology.catalog,
+                packetIndex,
+                requestRow.nodeIndex,
+                selectedOuterIndex,
+              );
+            }
+            continue;
+          }
           const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
           if (rootModel === undefined) continue;
           if (outerIndex !== projectedOuterIndex) {
@@ -130,11 +167,31 @@ export class GltfPacketSelectionOwner {
             hasBounds ? this.#boundsScratch : undefined,
             this.#rootViewProjection,
           )) continue;
-          appendSelectedFramePacket(this.selected, topology.catalog, packetIndex);
+          this.#appendSelectedPacket(topology.catalog, packetIndex, requestRow.nodeIndex, outerIndex);
         }
       }
       endSelectedFramePacketView(this.selected, topology.catalog, viewIndex);
     }
+  }
+
+  #appendSelectedPacket(
+    catalog: Parameters<typeof appendSelectedFramePacket>[1],
+    packetIndex: number,
+    planNodeIndex: number,
+    outerIndex: number,
+  ): void {
+    const selectedIndex = this.selected.count;
+    appendSelectedFramePacket(this.selected, catalog, packetIndex);
+    if (this.#selectedPlanNodeIndices.length < this.selected.capacity) {
+      const planNodeIndices = new Uint32Array(this.selected.capacity);
+      planNodeIndices.set(this.#selectedPlanNodeIndices);
+      this.#selectedPlanNodeIndices = planNodeIndices;
+      const outerIndices = new Uint32Array(this.selected.capacity);
+      outerIndices.set(this.#selectedOuterIndices);
+      this.#selectedOuterIndices = outerIndices;
+    }
+    this.#selectedPlanNodeIndices[selectedIndex] = planNodeIndex;
+    this.#selectedOuterIndices[selectedIndex] = outerIndex;
   }
 
   #visitLodRoots(plan: FramePlan, viewProjection: Mat4, phase: 1 | 2): void {

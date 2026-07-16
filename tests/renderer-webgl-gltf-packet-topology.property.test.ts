@@ -106,7 +106,7 @@ describe("pure retained glTF packet topology", () => {
     );
   });
 
-  it("keeps primitive, outer, local, then material order and singleton physical-free rows", () => {
+  it("keeps LOD packet order and retains predicate-free outer ranges", () => {
     const first = {
       ...primitive(101, [material(), material("OPAQUE", false, 0.5)], 2),
       materialLodSelectionIds: [10, 11, 12, 13],
@@ -116,24 +116,24 @@ describe("pure retained glTF packet topology", () => {
 
     rebuildGltfPacketTopology(topology, 12, [occurrence(0, 9, [first, second], 2, 47)]);
 
-    expect(topology.catalog.count).toBe(10);
-    expect(Array.from(topology.catalog.geometryIds.subarray(0, 10))).toEqual([
-      101, 101, 101, 101, 101, 101, 101, 101, 202, 202,
+    expect(topology.catalog.count).toBe(9);
+    expect(Array.from(topology.catalog.geometryIds.subarray(0, 9))).toEqual([
+      101, 101, 101, 101, 101, 101, 101, 101, 202,
     ]);
-    expect(Array.from(topology.catalog.instanceFirsts.subarray(0, 10))).toEqual([
-      0, 0, 0, 0, 1, 1, 1, 1, 0, 1,
+    expect(Array.from(topology.catalog.instanceFirsts.subarray(0, 9))).toEqual([
+      0, 0, 0, 0, 1, 1, 1, 1, 0,
     ]);
-    expect(Array.from(topology.catalog.instanceCounts.subarray(0, 10))).toEqual(
-      Array.from({ length: 10 }, () => 1),
+    expect(Array.from(topology.catalog.instanceCounts.subarray(0, 9))).toEqual([
+      1, 1, 1, 1, 1, 1, 1, 1, 2,
+    ]);
+    expect(Array.from(topology.catalog.instanceStreamIds.subarray(0, 9))).toEqual(
+      Array.from({ length: 9 }, () => NO_FRAME_PACKET_ID),
     );
-    expect(Array.from(topology.catalog.instanceStreamIds.subarray(0, 10))).toEqual(
-      Array.from({ length: 10 }, () => NO_FRAME_PACKET_ID),
+    expect(Array.from(topology.catalog.orderingSegments.subarray(0, 9))).toEqual(
+      Array.from({ length: 9 }, () => 9),
     );
-    expect(Array.from(topology.catalog.orderingSegments.subarray(0, 10))).toEqual(
-      Array.from({ length: 10 }, () => 9),
-    );
-    expect(Array.from(topology.catalog.renderClasses.subarray(0, 10))).toEqual([
-      0, 1, 0, 1, 0, 1, 0, 1, 2, 2,
+    expect(Array.from(topology.catalog.renderClasses.subarray(0, 9))).toEqual([
+      0, 1, 0, 1, 0, 1, 0, 1, 2,
     ]);
     expect(Array.from(topology.catalog.sidedness.subarray(0, 8))).toEqual([
       FRAME_PACKET_SIDEDNESS.frontFaceCcw,
@@ -156,7 +156,11 @@ describe("pure retained glTF packet topology", () => {
       planOccurrenceIndex: 47,
     });
     expect(topology.catalog.rootSourceIds[0]).toBe(topology.catalog.rootSourceIds[8]);
-    expect(topology.catalog.rootSourceIds[4]).toBe(topology.catalog.rootSourceIds[9]);
+    expect(resolvePacketRootSource(topology.resources, topology.catalog.rootSourceIds[8]! + 1)).toEqual({
+      kind: GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances,
+      outerIndex: 1,
+      planOccurrenceIndex: 47,
+    });
   });
 
   it("retains hidden and loading empty ranges and appends async readiness without compaction", () => {

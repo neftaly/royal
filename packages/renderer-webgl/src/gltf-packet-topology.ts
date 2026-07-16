@@ -260,6 +260,41 @@ const appendReadyOccurrenceRows = (
     }
   }
   for (const primitive of occurrence.primitives) {
+    const retainedOuterRange = outerCount > 1
+      && primitive.nodeLod === undefined
+      && primitive.materialLodSelectionIds === undefined;
+    if (retainedOuterRange) {
+      for (let localIndex = 0; localIndex < primitive.localModels.length; localIndex += 1) {
+        const boundsId = retainPacketBounds(topology.resources, primitive.localBounds[localIndex]);
+        const localDeterminant = primitive.localModelDeterminants[localIndex]!;
+        const localModelId = retainPacketLocalModel(
+          topology.resources,
+          primitive.localModels[localIndex]!,
+          localDeterminant,
+        );
+        for (const alternative of primitive.materialAlternatives) {
+          let sidedness = localDeterminant >= 0
+            ? FRAME_PACKET_SIDEDNESS.frontFaceCcw
+            : 0;
+          if (alternative.material.doubleSided) sidedness |= FRAME_PACKET_SIDEDNESS.doubleSided;
+          appendFramePacket(topology.catalog, {
+            boundsId,
+            geometryId: primitive.geometryId,
+            instanceCount: outerCount,
+            instanceFirst: 0,
+            localModelId,
+            lodRequirementCount: 0,
+            lodRequirementFirst: topology.requirements.count,
+            materialId: retainPacketMaterial(topology.resources, alternative.material),
+            orderingSegment: occurrence.orderingSegment,
+            renderClass: materialRenderClass(alternative.material),
+            rootSourceId: rootSourceIds[0]!,
+            sidedness,
+          });
+        }
+      }
+      continue;
+    }
     for (let outerIndex = 0; outerIndex < outerCount; outerIndex += 1) {
       const rootSourceId = rootSourceIds[outerIndex]!;
       for (let localIndex = 0; localIndex < primitive.localModels.length; localIndex += 1) {
