@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareVirtualTextureAdmissionTickets,
   maximumVirtualTexturePageTableUploadBytes,
   selectColdVirtualTextureAllocation,
   type VirtualTextureAllocationCandidate,
 } from "../packages/renderer-webgl/src/virtual-texture/allocation-policy";
 import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
+
+describe("virtual-texture admission order", () => {
+  it("sorts from the retry ticket and wraps lower tickets last", () => {
+    const tickets = [5, 2, 4, 1, 3];
+    expect(tickets.sort((left, right) => (
+      compareVirtualTextureAdmissionTickets(left, right, 4)
+    ))).toEqual([4, 5, 1, 2, 3]);
+  });
+
+  it("retains ascending order when every ticket is on the same side", () => {
+    expect([3, 1, 2].sort((left, right) => (
+      compareVirtualTextureAdmissionTickets(left, right, 9)
+    ))).toEqual([1, 2, 3]);
+  });
+});
 
 const candidate = (
   state: string,

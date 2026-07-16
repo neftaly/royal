@@ -2,6 +2,18 @@ import type { VirtualTextureManifestModel } from "./model";
 
 const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
+/** Orders admission tickets from a retry cursor, wrapping lower tickets last. */
+export const compareVirtualTextureAdmissionTickets = (
+  left: number,
+  right: number,
+  retryTicket: number,
+): number => {
+  const leftWrapped = left < retryTicket;
+  const rightWrapped = right < retryTicket;
+  if (leftWrapped !== rightWrapped) return leftWrapped ? 1 : -1;
+  return left - right;
+};
+
 /** Largest page-table write that admission must fit into one upload chunk. */
 export const maximumVirtualTexturePageTableUploadBytes = (
   manifest: VirtualTextureManifestModel,

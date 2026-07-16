@@ -48,6 +48,7 @@ import {
 import { textureCacheKey, type TextureAssetUploadRef } from "../webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "../resource-governor";
 import { captureFailure, type CapturedFailure } from "../captured-failure";
+import { compareVirtualTextureAdmissionTickets } from "./allocation-policy";
 
 export type VirtualTextureRuntimeShellOptions = Omit<
   VirtualTextureRequestCoordinatorOptions,
@@ -84,6 +85,14 @@ export type VirtualTextureAssetSnapshot =
  */
 export class VirtualTextureRuntimeShell {
   readonly #admissions: VirtualTextureRuntimeState[] = [];
+  readonly #compareAdmission = (
+    left: VirtualTextureRuntimeState,
+    right: VirtualTextureRuntimeState,
+  ): number => compareVirtualTextureAdmissionTickets(
+    left.admissionTicket,
+    right.admissionTicket,
+    this.#retryTicket,
+  );
   readonly #commits = new Map<
     VirtualTextureRuntimeState,
     VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
@@ -443,17 +452,7 @@ export class VirtualTextureRuntimeShell {
     for (const state of this.#demanded) {
       if (state.status === "ready" && state.manifest !== undefined) this.#admissions.push(state);
     }
-    this.#admissions.sort((left, right) => left.admissionTicket - right.admissionTicket);
-    let admissionStart = -1;
-    for (let index = 0; index < this.#admissions.length; index += 1) {
-      if (this.#admissions[index]!.admissionTicket < this.#retryTicket) continue;
-      admissionStart = index;
-      break;
-    }
-    if (admissionStart < 0) admissionStart = 0;
-    for (let index = 0; index < admissionStart; index += 1) {
-      this.#admissions.push(this.#admissions.shift()!);
-    }
+    this.#admissions.sort(this.#compareAdmission);
     if (this.#admissions.length > 0) {
       this.#retryTicket = this.#admissions[1 % this.#admissions.length]!.admissionTicket;
     }

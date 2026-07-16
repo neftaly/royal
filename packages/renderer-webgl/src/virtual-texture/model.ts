@@ -532,21 +532,14 @@ export class VirtualTextureAtlasPageTable {
     if (!isPositiveInteger(options.slotCount)) {
       throw new Error("Virtual texture atlas slot count must be a positive integer.");
     }
-    this.#freeSlots = Array.from({ length: options.slotCount }, (_unused, index) => index);
+    this.#freeSlots = Array.from(
+      { length: options.slotCount },
+      (_unused, index) => options.slotCount - index - 1,
+    );
   }
 
   get residentCount(): number {
     return this.#recordsByPage.size;
-  }
-
-  /** Number of cached pages that participate in the current page-table mapping. */
-  get activeResidentCount(): number {
-    if (!this.#activePageKeysPublished) return this.#recordsByPage.size;
-    let count = 0;
-    for (const pageKey of this.#activePageKeys) {
-      if (this.#recordsByPage.has(pageKey)) count += 1;
-    }
-    return count;
   }
 
   get slotCount(): number {
@@ -679,15 +672,6 @@ export class VirtualTextureAtlasPageTable {
     return this.#recordsByPage.values();
   }
 
-  ensureResident(
-    page: VirtualTexturePageId,
-    options: { readonly protectedPages?: ProtectedVirtualTexturePageKeys } = {},
-  ): VirtualTextureAtlasAssignment {
-    const transaction = this.planResident(page, options);
-    this.commitResident(transaction);
-    return transaction.assignment;
-  }
-
   planResident(
     page: VirtualTexturePageId,
     options: { readonly protectedPages?: ProtectedVirtualTexturePageKeys } = {},
@@ -744,8 +728,8 @@ export class VirtualTextureAtlasPageTable {
       return;
     }
     if (mutable.freeSlot !== undefined) {
-      const shifted = this.#freeSlots.shift();
-      if (shifted !== mutable.freeSlot) throw new Error("Virtual texture resident transaction free slot changed");
+      const freeSlot = this.#freeSlots.pop();
+      if (freeSlot !== mutable.freeSlot) throw new Error("Virtual texture resident transaction free slot changed");
     }
     for (const slot of mutable.clearedReferenceSlots) {
       const current = this.#recordsBySlot.get(slot);
@@ -789,13 +773,6 @@ export class VirtualTextureAtlasPageTable {
       page = parentVirtualTexturePage(page);
     }
     return undefined;
-  }
-
-  takeDirtyPageTableUpdates(): readonly VirtualTexturePageTableUpdate[] {
-    const updates = this.#dirty.slice(this.#dirtyHead).map(({ update }) => update);
-    this.#dirty.length = 0;
-    this.#dirtyHead = 0;
-    return updates;
   }
 
   get dirtyPageTableUpdateCount(): number {
@@ -862,7 +839,7 @@ export class VirtualTextureAtlasPageTable {
     readonly freeSlot?: number;
     readonly slot: number;
   } {
-    const freeSlot = this.#freeSlots[0];
+    const freeSlot = this.#freeSlots[this.#freeSlots.length - 1];
     if (freeSlot !== undefined) {
       return { clearedReferenceSlots: EMPTY_TEXTURE_SLOT_SET, clockHand: this.#clockHand, freeSlot, slot: freeSlot };
     }

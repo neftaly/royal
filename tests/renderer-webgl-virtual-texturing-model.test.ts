@@ -14,6 +14,8 @@ import {
   virtualTexturePageUri,
   virtualTextureStoredPageBytes,
   virtualTextureStoredPageSize,
+  type VirtualTextureAtlasAssignment,
+  type VirtualTexturePageTableUpdate,
 } from "../packages/renderer-webgl/src/virtual-texture/model";
 import { assertFuzz, assertFuzzArrayEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
 
@@ -29,8 +31,38 @@ const fuzzPage = (random: SeededRandom): FuzzPage => ({
   y: random.int(0, 8),
 });
 
-type ResidentAssignment = ReturnType<VirtualTextureAtlasPageTable["ensureResident"]>;
-type PageTableUpdate = ReturnType<VirtualTextureAtlasPageTable["takeDirtyPageTableUpdates"]>[number];
+const ensureResident = (
+  table: VirtualTextureAtlasPageTable,
+  ...input: Parameters<VirtualTextureAtlasPageTable["planResident"]>
+): VirtualTextureAtlasAssignment => {
+  const transaction = table.planResident(...input);
+  table.commitResident(transaction);
+  return transaction.assignment;
+};
+
+const takeDirtyPageTableUpdates = (
+  table: VirtualTextureAtlasPageTable,
+): readonly VirtualTexturePageTableUpdate[] => {
+  const updates: VirtualTexturePageTableUpdate[] = [];
+  let update = table.dirtyPageTableUpdate(0);
+  while (update !== undefined) {
+    updates.push(update);
+    table.commitDirtyPageTableUpdate();
+    update = table.dirtyPageTableUpdate(0);
+  }
+  return updates;
+};
+
+const activeResidentCount = (table: VirtualTextureAtlasPageTable): number => {
+  let count = 0;
+  for (const record of table.residentPageValues()) {
+    if (table.isActivePageKey(record.pageKey)) count += 1;
+  }
+  return count;
+};
+
+type ResidentAssignment = VirtualTextureAtlasAssignment;
+type PageTableUpdate = VirtualTexturePageTableUpdate;
 
 const applyPageTableUpdates = (
   target: Array<number | undefined>,
@@ -339,18 +371,18 @@ describe("WebGL virtual texturing runtime model", () => {
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
 
-    expect(table.ensureResident(first)).toEqual(expect.objectContaining({ pageKey: "0/0/0", slot: 0 }));
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(ensureResident(table, first)).toEqual(expect.objectContaining({ pageKey: "0/0/0", slot: 0 }));
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page: first, pageKey: "0/0/0", slot: 0 },
     ]);
 
-    table.ensureResident(first);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([]);
+    ensureResident(table, first);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([]);
 
-    expect(table.ensureResident(second)).toEqual(expect.objectContaining({ pageKey: "0/1/0", slot: 1 }));
+    expect(ensureResident(table, second)).toEqual(expect.objectContaining({ pageKey: "0/1/0", slot: 1 }));
     expect(table.residentSlot(first)).toBe(0);
     expect(table.residentSlot(second)).toBe(1);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page: second, pageKey: "0/1/0", slot: 1 },
     ]);
   });
@@ -377,24 +409,24 @@ describe("WebGL virtual texturing runtime model", () => {
     const pageKey = virtualTexturePageKey(page);
 
     table.reconcileActivePageKeys(new Set());
-    const assignment = table.ensureResident(page);
+    const assignment = ensureResident(table, page);
     expect(table.residentCount).toBe(1);
-    expect(table.activeResidentCount).toBe(0);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([]);
+    expect(activeResidentCount(table)).toBe(0);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([]);
 
     table.reconcileActivePageKeys(new Set([pageKey]));
-    expect(table.activeResidentCount).toBe(1);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(activeResidentCount(table)).toBe(1);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page, pageKey, residentMip: 0, slot: assignment.slot },
     ]);
 
     table.reconcileActivePageKeys(new Set());
     expect(table.residentCount).toBe(1);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([{ page, pageKey }]);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([{ page, pageKey }]);
 
     table.reconcileActivePageKeys(new Set([pageKey]));
     expect(table.residentSlot(page)).toBe(assignment.slot);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page, pageKey, residentMip: 0, slot: assignment.slot },
     ]);
   });
@@ -404,7 +436,7 @@ describe("WebGL virtual texturing runtime model", () => {
     const parent = { mip: 2, x: 0, y: 0 };
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 3, y: 3 };
-    const records = [parent, first, second].map((page) => table.ensureResident(page));
+    const records = [parent, first, second].map((page) => ensureResident(table, page));
     const gpuSlots = new Array<number | undefined>(16);
     const apply = (update: NonNullable<ReturnType<typeof table.dirtyPageTableUpdate>>): void => {
       const coverage = 2 ** update.page.mip;
@@ -415,7 +447,7 @@ describe("WebGL virtual texturing runtime model", () => {
       }
     };
 
-    for (const update of table.takeDirtyPageTableUpdates()) apply(update);
+    for (const update of takeDirtyPageTableUpdates(table)) apply(update);
     table.reconcileActivePageKeys(new Set([records[1]?.pageKey ?? ""]));
     const partiallyFlushed = table.dirtyPageTableUpdate(0);
     expect(partiallyFlushed).toBeDefined();
@@ -431,7 +463,7 @@ describe("WebGL virtual texturing runtime model", () => {
       expect(table.dirtyPageTableUpdateCount).toBeLessThanOrEqual(table.residentCount);
     }
     table.reconcileActivePageKeys(new Set([records[2]?.pageKey ?? ""]));
-    for (const update of table.takeDirtyPageTableUpdates()) apply(update);
+    for (const update of takeDirtyPageTableUpdates(table)) apply(update);
 
     expect(gpuSlots).toEqual(Array.from({ length: 16 }, (_unused, index) => (
       index === 15 ? records[2]?.slot : undefined
@@ -450,13 +482,13 @@ describe("WebGL virtual texturing runtime model", () => {
         const gridWidth = width / (2 ** mip);
         for (let y = 0; y < gridWidth; y += 1) {
           for (let x = 0; x < gridWidth; x += 1) {
-            assignments.push(table.ensureResident({ mip, x, y }));
+            assignments.push(ensureResident(table, { mip, x, y }));
           }
         }
       }
 
       const gpuSlots = new Array<number | undefined>(width * width);
-      applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+      applyPageTableUpdates(gpuSlots, width, takeDirtyPageTableUpdates(table));
       let activePageKeys = new Set(assignments.map(({ pageKey }) => pageKey));
       assertFuzzArrayEqual(gpuSlots,
         referencePageTableSlots(width, assignments, activePageKeys),
@@ -474,7 +506,7 @@ describe("WebGL virtual texturing runtime model", () => {
           table.dirtyPageTableUpdateCount <= table.residentCount,
           `step=${step} dirty updates exceed residents`,
         );
-        applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+        applyPageTableUpdates(gpuSlots, width, takeDirtyPageTableUpdates(table));
         assertFuzzArrayEqual(gpuSlots,
           referencePageTableSlots(width, assignments, activePageKeys),
           `step=${step} mapping`,
@@ -488,10 +520,10 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: width * width });
     const assignments: ResidentAssignment[] = [];
     for (let y = 0; y < width; y += 1) {
-      for (let x = 0; x < width; x += 1) assignments.push(table.ensureResident({ mip: 0, x, y }));
+      for (let x = 0; x < width; x += 1) assignments.push(ensureResident(table, { mip: 0, x, y }));
     }
     const gpuSlots = new Array<number | undefined>(width * width);
-    applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+    applyPageTableUpdates(gpuSlots, width, takeDirtyPageTableUpdates(table));
 
     const stable = assignments.filter((_assignment, index) => index % 3 === 0);
     const left = assignments.filter((_assignment, index) => index % 3 === 1);
@@ -502,7 +534,7 @@ describe("WebGL virtual texturing runtime model", () => {
       );
       table.reconcileActivePageKeys(activePageKeys);
       expect(table.dirtyPageTableUpdateCount).toBeLessThanOrEqual(table.residentCount);
-      applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+      applyPageTableUpdates(gpuSlots, width, takeDirtyPageTableUpdates(table));
       expect(gpuSlots).toEqual(assignments.map((assignment) => (
         activePageKeys.has(assignment.pageKey) ? assignment.slot : undefined
       )));
@@ -513,13 +545,13 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
-    const firstAssignment = table.ensureResident(first);
-    const secondAssignment = table.ensureResident(second);
+    const firstAssignment = ensureResident(table, first);
+    const secondAssignment = ensureResident(table, second);
 
     table.reconcileActivePageKeys(new Set([firstAssignment.pageKey]));
     table.reconcileActivePageKeys(new Set([secondAssignment.pageKey]));
 
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page: first, pageKey: firstAssignment.pageKey, slot: firstAssignment.slot },
       { page: second, pageKey: secondAssignment.pageKey, slot: secondAssignment.slot },
       { page: first, pageKey: firstAssignment.pageKey },
@@ -537,18 +569,18 @@ describe("WebGL virtual texturing runtime model", () => {
     const parent = { mip: 1, x: 0, y: 0 };
     const child = { mip: 0, x: 0, y: 0 };
     const replacement = { mip: 0, x: 1, y: 0 };
-    table.ensureResident(parent);
-    table.ensureResident(child);
-    table.takeDirtyPageTableUpdates();
+    ensureResident(table, parent);
+    ensureResident(table, child);
+    takeDirtyPageTableUpdates(table);
 
     table.reconcileActivePageKeys(new Set([virtualTexturePageKey(child), virtualTexturePageKey(replacement)]));
-    table.takeDirtyPageTableUpdates();
-    const assignment = table.ensureResident(replacement, {
+    takeDirtyPageTableUpdates(table);
+    const assignment = ensureResident(table, replacement, {
       protectedPages: new Set([virtualTexturePageKey(parent)]),
     });
 
     expect(assignment.evicted?.pageKey).toBe(virtualTexturePageKey(child));
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page: child, pageKey: virtualTexturePageKey(child) },
       { page: replacement, pageKey: virtualTexturePageKey(replacement), slot: assignment.slot },
     ]);
@@ -558,8 +590,8 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 1 });
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
-    table.ensureResident(first);
-    table.takeDirtyPageTableUpdates();
+    ensureResident(table, first);
+    takeDirtyPageTableUpdates(table);
 
     const failedUpload = table.planResident(second);
     expect(failedUpload.assignment.evicted?.pageKey).toBe("0/0/0");
@@ -582,8 +614,8 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
-    table.ensureResident(first);
-    table.ensureResident(second);
+    ensureResident(table, first);
+    ensureResident(table, second);
 
     const firstUpdate = table.dirtyPageTableUpdate(0);
     expect(firstUpdate).toEqual({ page: first, pageKey: "0/0/0", slot: 0 });
@@ -607,7 +639,7 @@ describe("WebGL virtual texturing runtime model", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
-    table.ensureResident(first);
+    ensureResident(table, first);
 
     const transaction = table.planResident(second);
     table.commitDirtyPageTableUpdate();
@@ -632,11 +664,11 @@ describe("WebGL virtual texturing runtime model", () => {
     const first = { mip: 0, x: 0, y: 0 };
     const second = { mip: 0, x: 1, y: 0 };
     const third = { mip: 0, x: 2, y: 0 };
-    table.ensureResident(first);
-    table.ensureResident(second);
-    table.takeDirtyPageTableUpdates();
-    table.ensureResident(third);
-    table.takeDirtyPageTableUpdates();
+    ensureResident(table, first);
+    ensureResident(table, second);
+    takeDirtyPageTableUpdates(table);
+    ensureResident(table, third);
+    takeDirtyPageTableUpdates(table);
 
     const touch = table.planResident(second);
     expect(touch.assignment).toEqual(expect.objectContaining({
@@ -645,14 +677,14 @@ describe("WebGL virtual texturing runtime model", () => {
       slot: 1,
     }));
     table.commitResident(touch);
-    expect(table.ensureResident(second)).toEqual(expect.objectContaining({ referenceBit: true, slot: 1 }));
+    expect(ensureResident(table, second)).toEqual(expect.objectContaining({ referenceBit: true, slot: 1 }));
   });
 
   it("selects the nearest resident parent fallback for missing pages", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 4 });
     const parent = { mip: 1, x: 1, y: 1 };
-    table.ensureResident(parent);
-    table.takeDirtyPageTableUpdates();
+    ensureResident(table, parent);
+    takeDirtyPageTableUpdates(table);
 
     expect(table.resolveResidentFallback({ mip: 0, x: 3, y: 2 }, { maxMip: 3 })).toEqual(
       expect.objectContaining({ page: parent, pageKey: "1/1/1", slot: 0 }),
@@ -667,21 +699,21 @@ describe("WebGL virtual texturing runtime model", () => {
     const third = { mip: 0, x: 2, y: 0 };
     const fourth = { mip: 0, x: 3, y: 0 };
 
-    table.ensureResident(first);
-    table.ensureResident(second);
-    table.takeDirtyPageTableUpdates();
+    ensureResident(table, first);
+    ensureResident(table, second);
+    takeDirtyPageTableUpdates(table);
 
-    expect(table.ensureResident(third)).toEqual(expect.objectContaining({
+    expect(ensureResident(table, third)).toEqual(expect.objectContaining({
       evicted: expect.objectContaining({ page: first, slot: 0 }),
       page: third,
       slot: 0,
     }));
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page: first, pageKey: "0/0/0" },
       { page: third, pageKey: "0/2/0", slot: 0 },
     ]);
 
-    expect(table.ensureResident(fourth)).toEqual(expect.objectContaining({
+    expect(ensureResident(table, fourth)).toEqual(expect.objectContaining({
       evicted: expect.objectContaining({ page: second, slot: 1 }),
       page: fourth,
       slot: 1,
@@ -699,15 +731,15 @@ describe("WebGL virtual texturing runtime model", () => {
     const secondChild = { mip: 0, x: 1, y: 0 };
     const protectedPages = new Set([virtualTexturePageKey(parent)]);
 
-    table.ensureResident(parent);
-    table.takeDirtyPageTableUpdates();
-    table.ensureResident(firstChild);
-    table.takeDirtyPageTableUpdates();
-    const assignment = table.ensureResident(secondChild, { protectedPages });
+    ensureResident(table, parent);
+    takeDirtyPageTableUpdates(table);
+    ensureResident(table, firstChild);
+    takeDirtyPageTableUpdates(table);
+    const assignment = ensureResident(table, secondChild, { protectedPages });
 
     expect(assignment.evicted).toEqual(expect.objectContaining({ pageKey: "0/0/0" }));
     expect(table.residentSlot(parent)).toBe(0);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       expect.objectContaining({
         fallbackPageKey: "1/0/0",
         pageKey: "0/0/0",
@@ -740,7 +772,7 @@ describe("WebGL virtual texturing runtime model", () => {
             .map(([key]) => key),
         );
         const hadUnprotectedResident = residentBefore.some(([key]) => !protectedKeys.has(key));
-        const assignment = table.ensureResident(page, { protectedPages: protectedKeys });
+        const assignment = ensureResident(table, page, { protectedPages: protectedKeys });
 
         expect(table.residentCount, `${label} step=${step} resident count`).toBeLessThanOrEqual(slotCount);
         expect(table.residentSlot(page), `${label} step=${step} resident slot`).toBe(assignment.slot);
@@ -763,10 +795,10 @@ describe("WebGL virtual texturing runtime model", () => {
           `${label} step=${step} unique resident slots`,
         ).toBe(residentSlots.length);
 
-        table.takeDirtyPageTableUpdates();
-        const repeat = table.ensureResident(page);
+        takeDirtyPageTableUpdates(table);
+        const repeat = ensureResident(table, page);
         expect(repeat.slot, `${label} step=${step} repeat slot`).toBe(assignment.slot);
-        expect(table.takeDirtyPageTableUpdates(), `${label} step=${step} repeat dirty`).toEqual([]);
+        expect(takeDirtyPageTableUpdates(table), `${label} step=${step} repeat dirty`).toEqual([]);
       }
     });
   });
@@ -783,11 +815,11 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(() => encodeVirtualTexturePageTableRgba8({ slot: -1 }, 256)).toThrow(/0 through 65534/);
     expect(() => encodeVirtualTexturePageTableRgba8({ slot: 256 }, 1)).toThrow(/exceeds the encoded atlas grid/);
 
-    table.ensureResident(page);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([
+    ensureResident(table, page);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([
       { page, pageKey: "0/0/0", slot: 0 },
     ]);
-    table.ensureResident(page);
-    expect(table.takeDirtyPageTableUpdates()).toEqual([]);
+    ensureResident(table, page);
+    expect(takeDirtyPageTableUpdates(table)).toEqual([]);
   });
 });
