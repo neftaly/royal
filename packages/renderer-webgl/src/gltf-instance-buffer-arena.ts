@@ -10,6 +10,7 @@ import {
   type VertexInputInstanceStaging,
 } from "./vertex-input/arena";
 import {
+  areAllInstancesDirty,
   isInstanceDirty,
   type GltfInstanceChangeTracker,
 } from "./gltf/instance-changes";
@@ -309,6 +310,40 @@ const bindGltfInstanceRootVectorBuffer = (
   const values = channel === "position" ? staging.rootPositions : staging.rootRotations;
   const lane = channel === "position" ? "rootPositions" : "rootRotations";
   const isPosition = channel === "position";
+  const contiguousSource = rootInstanceViews[0];
+  const contiguousValues = isPosition ? contiguousSource?.positions : contiguousSource?.rotations;
+  const contiguousDirty = contiguousSource?.changes[isPosition ? "activePosition" : "activeRotation"];
+  const contiguousVersionChanged = contiguousSource !== undefined
+    && poseVersions.get(contiguousSource) !== contiguousSource.framePoseVersion;
+  if (contiguousSource !== undefined
+    && contiguousValues !== undefined
+    && contiguousDirty !== undefined
+    && rootTransforms.length * 3 === contiguousValues.length
+    && (fullUpload || (contiguousVersionChanged
+      && areAllInstancesDirty(contiguousDirty, contiguousValues.length / 3)))) {
+    const firstLogicalIndex = rootLogicalIndices[0]!;
+    let contiguous = firstLogicalIndex === 0;
+    for (let index = 1; contiguous && index < rootTransforms.length; index += 1) {
+      contiguous = rootInstanceViews[index] === contiguousSource
+        && rootLogicalIndices[index] === firstLogicalIndex + index;
+    }
+    if (contiguous) {
+      values.set(contiguousValues);
+      staging.ranges[0] = 0;
+      staging.ranges[1] = rootTransforms.length;
+      const stats = uploadVertexInputInstanceLane(
+        state.vertexInputs,
+        gl,
+        contextGeneration,
+        allocation,
+        lane,
+        1,
+      );
+      if (isPosition) recordRootPositionUpload(counters, stats);
+      else recordRootRotationUpload(counters, stats);
+      return;
+    }
+  }
   let changedRangeCount = 0;
   let activeRangeStart = -1;
   let versionSource: GltfInstanceBufferSource | undefined;
