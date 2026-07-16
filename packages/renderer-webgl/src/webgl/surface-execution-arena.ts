@@ -84,6 +84,10 @@ const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
+const DIRECTIONAL_LIGHT_UNIFORMS = Array.from({ length: MAX_SURFACE_LIGHTS }, (_, index) => [
+  `u_surfaceLightColor[${index}]`,
+  `u_surfaceLightDirection[${index}]`,
+] as const);
 const BASE_COLOR_INPUT_NONE: SurfaceBaseColorPlanInput = { kind: "none" };
 const BASE_COLOR_INPUT_ORDINARY_READY: SurfaceBaseColorPlanInput = {
   kind: "ordinary",
@@ -1021,8 +1025,9 @@ export class SurfaceExecutionArena {
     uniform1i(this.#programs, program, "u_surfaceLightCount", lights.length);
     for (let index = 0; index < lights.length; index += 1) {
       const light = lights[index]!;
-      uniformColor(this.#programs, program, `u_surfaceLightColor[${index}]`, light.color);
-      uniform4f(this.#programs, program, `u_surfaceLightDirection[${index}]`,
+      const uniforms = DIRECTIONAL_LIGHT_UNIFORMS[index]!;
+      uniformColor(this.#programs, program, uniforms[0], light.color);
+      uniform4f(this.#programs, program, uniforms[1],
         light.direction[0], light.direction[1], light.direction[2], 0);
     }
     if (lightSet.punctuals.length > 0) {
