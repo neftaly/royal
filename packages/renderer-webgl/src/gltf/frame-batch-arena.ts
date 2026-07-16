@@ -70,6 +70,7 @@ export interface GltfFrameDrawBatch {
   geometryId: number;
   readonly key: number;
   readonly lights: SurfaceLightSetWorkspace;
+  localModelSignatureDirty: boolean;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
   material: SurfaceMaterial;
@@ -161,18 +162,21 @@ export class GltfFrameBatchArena {
     batch: GltfFrameDrawBatch,
     counters: GltfFrameBatchCounters,
   ): VertexInputInstanceAllocation {
-    return bindGltfInstanceBuffer(
+    const allocation = bindGltfInstanceBuffer(
       this.#instanceBuffers,
       gl,
       contextGeneration,
       batch.key,
       batch.localModels,
       batch.localModelSignature,
+      batch.localModelSignatureDirty,
       batch.rootTransforms,
       batch.rootInstanceViews,
       batch.rootLogicalIndices,
       counters,
     );
+    batch.localModelSignatureDirty = false;
+    return allocation;
   }
 
   releaseUnused(gl: WebGL2RenderingContext, contextGeneration: number): void {
@@ -240,6 +244,7 @@ export class GltfFrameBatchArena {
           geometryId,
           key: batchId,
           lights: createSurfaceLightSetWorkspace(),
+          localModelSignatureDirty: true,
           localModelSignature: [],
           localModels: [],
           material: material.material,
@@ -262,6 +267,7 @@ export class GltfFrameBatchArena {
         this.#liveBatchCount += 1;
         counters.batchPlansBuilt += 1;
       }
+      batch.localModelSignatureDirty ||= batch.localModelSignature.length !== memberCount;
       batch.localModelSignature.length = memberCount;
       batch.localModels.length = memberCount;
       batch.rootModels.length = memberCount;
@@ -304,7 +310,10 @@ export class GltfFrameBatchArena {
           }
         }
         const root = workspace.rootBindings[workspace.rootBindingIds[index]!]!;
-        batch.localModelSignature[memberOffset] = localModelSemanticId;
+        if (batch.localModelSignature[memberOffset] !== localModelSemanticId) {
+          batch.localModelSignatureDirty = true;
+          batch.localModelSignature[memberOffset] = localModelSemanticId;
+        }
         batch.localModels[memberOffset] = localModel!;
         batch.rootModels[memberOffset] = root.rootModel;
         batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;

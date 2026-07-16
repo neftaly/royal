@@ -493,6 +493,7 @@ export const bindGltfInstanceBuffer = (
   key: number,
   localModels: readonly Mat4[],
   localModelSignature: readonly number[],
+  localModelSignatureDirty: boolean,
   rootTransforms: readonly (Transform | undefined)[],
   rootInstanceViews: readonly (GltfInstanceBufferSource | undefined)[],
   rootLogicalIndices: readonly number[],
@@ -545,52 +546,54 @@ export const bindGltfInstanceBuffer = (
   let localChangedRangeCount = 0;
   let activeLocalRangeStart = -1;
 
-  for (let modelIndex = 0; modelIndex < localModels.length; modelIndex += 1) {
-    const signatureOffset = modelIndex * (nextLocalStride ?? 0);
-    const changed = localFullUpload
-      || previousLocalSignature === undefined
-      || nextLocalStride === undefined
-      || !sameGltfModelSignatureRange(
-        previousLocalSignature,
-        localModelSignature,
-        signatureOffset,
-        nextLocalStride,
+  if (localFullUpload || localModelSignatureDirty) {
+    for (let modelIndex = 0; modelIndex < localModels.length; modelIndex += 1) {
+      const signatureOffset = modelIndex * (nextLocalStride ?? 0);
+      const changed = localFullUpload
+        || previousLocalSignature === undefined
+        || nextLocalStride === undefined
+        || !sameGltfModelSignatureRange(
+          previousLocalSignature,
+          localModelSignature,
+          signatureOffset,
+          nextLocalStride,
+        );
+      if (!changed) continue;
+      const model = localModels[modelIndex]!;
+      const offset = modelIndex * 16;
+      for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
+        staging.localModels[offset + elementIndex] = model[elementIndex]!;
+      }
+      if (activeLocalRangeStart < 0) activeLocalRangeStart = modelIndex;
+      const nextChanged = modelIndex + 1 < localModels.length && (
+        localFullUpload
+        || previousLocalSignature === undefined
+        || nextLocalStride === undefined
+        || !sameGltfModelSignatureRange(
+          previousLocalSignature,
+          localModelSignature,
+          (modelIndex + 1) * (nextLocalStride ?? 0),
+          nextLocalStride ?? 0,
+        )
       );
-    if (!changed) continue;
-    const model = localModels[modelIndex]!;
-    const offset = modelIndex * 16;
-    for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
-      staging.localModels[offset + elementIndex] = model[elementIndex]!;
+      if (!nextChanged) {
+        staging.ranges[localChangedRangeCount * 2] = activeLocalRangeStart;
+        staging.ranges[localChangedRangeCount * 2 + 1] = modelIndex + 1;
+        localChangedRangeCount += 1;
+        activeLocalRangeStart = -1;
+      }
     }
-    if (activeLocalRangeStart < 0) activeLocalRangeStart = modelIndex;
-    const nextChanged = modelIndex + 1 < localModels.length && (
-      localFullUpload
-      || previousLocalSignature === undefined
-      || nextLocalStride === undefined
-      || !sameGltfModelSignatureRange(
-        previousLocalSignature,
-        localModelSignature,
-        (modelIndex + 1) * (nextLocalStride ?? 0),
-        nextLocalStride ?? 0,
-      )
-    );
-    if (!nextChanged) {
-      staging.ranges[localChangedRangeCount * 2] = activeLocalRangeStart;
-      staging.ranges[localChangedRangeCount * 2 + 1] = modelIndex + 1;
-      localChangedRangeCount += 1;
-      activeLocalRangeStart = -1;
+    if (localFullUpload || localChangedRangeCount > 0) {
+      recordLocalUpload(counters, uploadVertexInputInstanceLane(
+        state.vertexInputs,
+        gl,
+        contextGeneration,
+        resource.allocation,
+        "localModels",
+        localChangedRangeCount,
+      ));
+      resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
     }
-  }
-  if (localFullUpload || localChangedRangeCount > 0) {
-    recordLocalUpload(counters, uploadVertexInputInstanceLane(
-      state.vertexInputs,
-      gl,
-      contextGeneration,
-      resource.allocation,
-      "localModels",
-      localChangedRangeCount,
-    ));
-    resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
   }
   let packedLayoutChanged = previousInstanceCount !== instanceCount;
   let hasOrdinaryRoot = false;
