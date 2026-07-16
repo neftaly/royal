@@ -37,6 +37,7 @@ type CubeInstance = {
 };
 
 type InstancingConfig = {
+  readonly animation: 'pose' | 'position' | 'rotation';
   readonly animate: boolean;
   readonly gridSize: number;
   readonly redraw: boolean;
@@ -60,7 +61,12 @@ const finiteIntegerParam = (
 const instancingConfigFromLocation = (): InstancingConfig => {
   const params = new URL(globalThis.location.href).searchParams;
   const animate = params.get('animate') !== '0';
+  const requestedAnimation = params.get('animation');
+  const animation = requestedAnimation === 'rotation' || requestedAnimation === 'pose'
+    ? requestedAnimation
+    : 'position';
   return {
+    animation,
     animate,
     gridSize: finiteIntegerParam(params, 'grid', defaultGridSize, 1, maxBenchmarkGridSize),
     redraw: params.get('redraw') === '1',
@@ -129,8 +135,10 @@ const createCubeInstanceGroups = (
 });
 
 const InstancedCubeAnimation = ({
+  animation,
   groups,
 }: {
+  readonly animation: InstancingConfig['animation'];
   readonly groups: readonly CubeInstanceGroup[];
 }): null => {
   useFrame(({ elapsedSeconds }) => {
@@ -138,16 +146,26 @@ const InstancedCubeAnimation = ({
 
     for (const group of groups) {
       const positions = group.instances.positions;
+      const rotations = group.instances.rotations;
       for (let index = 0; index < group.cubeInstances.length; index += 1) {
         const instance = group.cubeInstances[index]!;
         const offset = index * 3;
         const lift = Math.sin(pulse + instance.phase) * 0.18;
         const sway = Math.cos(pulse * 0.62 + instance.phase) * 0.045;
-        positions[offset] = instance.position[0] + sway;
-        positions[offset + 1] = instance.position[1] + lift;
-        positions[offset + 2] = instance.position[2];
+        if (animation !== 'rotation') {
+          positions[offset] = instance.position[0] + sway;
+          positions[offset + 1] = instance.position[1] + lift;
+          positions[offset + 2] = instance.position[2];
+        }
+        if (animation !== 'position') {
+          rotations[offset] = instance.rotation[0] + lift;
+          rotations[offset + 1] = instance.rotation[1] + sway;
+          rotations[offset + 2] = instance.rotation[2];
+        }
       }
-      group.instances.commitPosition();
+      if (animation === 'position') group.instances.commitPosition();
+      else if (animation === 'rotation') group.instances.commitRotation();
+      else group.instances.commitPose();
     }
   });
 
@@ -192,7 +210,9 @@ export const GltfInstancing = (): ReactNode => {
       scene={renderScene}
     >
       <BenchmarkRendererSnapshot />
-      {instancingConfig.animate ? <InstancedCubeAnimation groups={groups} /> : null}
+      {instancingConfig.animate
+        ? <InstancedCubeAnimation animation={instancingConfig.animation} groups={groups} />
+        : null}
       {!instancingConfig.animate && instancingConfig.redraw ? <ForcedRedraw /> : null}
       <OrbitControls orbit={orbit} maxDistance={24} minDistance={0.1} />
     </Canvas>

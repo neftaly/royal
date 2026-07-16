@@ -347,6 +347,10 @@ const checkRendererCounterBridge = (route, routeLabel) => {
 
 const checkInstancingRoute = (route, routeLabel) => {
   const animated = route.profile?.animate === true;
+  if (!requireString(route.profile?.animation, `${routeLabel}.profile.animation`)
+    || !['none', 'pose', 'position', 'rotation'].includes(route.profile.animation)) {
+    errors.push(`${routeLabel}.profile.animation must be none, pose, position, or rotation`);
+  }
   requireBoolean(route.profile?.animate, `${routeLabel}.profile.animate`);
   requireNumber(route.profile?.instanceCount, `${routeLabel}.profile.instanceCount`);
   if (!requireObject(route.renderer, `${routeLabel}.renderer`)) return;

@@ -150,10 +150,11 @@ if (!new Set(['0', 'quick', 'default', 'full']).has(instancingSweepMode)) {
   );
 }
 
-const instancingRoute = ({ animate, grid, id, seed, sweep }) => ({
+const instancingRoute = ({ animate, animation = 'position', grid, id, seed, sweep }) => ({
   id,
-  path: `/gltf-instancing?animate=${animate ? 1 : 0}&grid=${grid}&redraw=${animate ? 0 : 1}&seed=${seed}`,
+  path: `/gltf-instancing?animate=${animate ? 1 : 0}&animation=${animation}&grid=${grid}&redraw=${animate ? 0 : 1}&seed=${seed}`,
   profile: {
+    animation: animate ? animation : 'none',
     animate,
     grid,
     instanceCount: grid ** 3,
@@ -168,6 +169,7 @@ const defaultInstancingRoute = () => ({
   id: 'gltf-instancing',
   path: '/gltf-instancing',
   profile: {
+    animation: 'position',
     animate: true,
     grid: defaultInstancingGrid,
     instanceCount: defaultInstancingGrid ** 3,
@@ -207,6 +209,22 @@ const optInRoutes = [
   { id: 'forward-plus-8', path: '/standard-lighting?lights=8' },
   { id: 'forward-plus-100', path: '/standard-lighting?lights=100' },
   { id: 'forward-plus-1000', path: '/standard-lighting?lights=1000' },
+  instancingRoute({
+    animate: true,
+    animation: 'rotation',
+    grid: 16,
+    id: 'gltf-instancing-rotation',
+    seed: 0,
+    sweep: 'profile',
+  }),
+  instancingRoute({
+    animate: true,
+    animation: 'pose',
+    grid: 16,
+    id: 'gltf-instancing-pose',
+    seed: 0,
+    sweep: 'profile',
+  }),
 ];
 
 const gltfLabSweepRoutes = () =>
@@ -2200,6 +2218,7 @@ const instancingComparisons = (summaries) => {
 
       return {
         animatedId: animated.id,
+        animation: animated.profile.animation,
         staticId: staticRoute.id,
         grid: animated.profile.grid,
         instanceCount: animated.profile.instanceCount,
@@ -2400,7 +2419,7 @@ const main = async () => {
       const xrGpu = result.xr?.frameStats?.gpuDurationMs;
       const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
       const profile = result.profile?.kind === 'gltf-instancing'
-        ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0}`
+        ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0} animation=${result.profile.animation}`
         : undefined;
       const gltfInstancing = result.profile?.kind === 'gltf-instancing'
         ? result.renderer?.gltfInstancing
