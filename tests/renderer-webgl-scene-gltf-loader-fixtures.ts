@@ -14,26 +14,38 @@ import {
   type FetchRequest,
 } from "./renderer-webgl-scene-gltf-test-runtime";
 
-export const settleKhronosEnvironmentTestIblBitmaps = async (
+export const settleKhronosEnvironmentTestImages = async (
   loader: ReturnType<typeof installStagedGltfLoader>,
 ): Promise<void> => {
+  const expectedImages = 32;
   const mipSizes = [256, 128, 64, 32, 16] as const;
-  let settled = 0;
+  let settledRequests = 0;
+  let settledIbl = 0;
   let settledImages = 0;
-  for (let attempt = 0; attempt < 80 && settled < 30; attempt += 1) {
+  for (let attempt = 0; attempt < 80 && settledRequests < expectedImages; attempt += 1) {
     await flushMicrotasks();
     await flushAnimationFrames(latestAnimationFrames);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    while (loader.resolvePendingFetch(/roughness_metallic_\d+\.png(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, Uint8Array.of(0).buffer))) {
+      // Resolve both ordinary material images transported alongside the 30
+      // embedded environment faces.
+    }
     while (settledImages < ControlledImage.instances.length) {
       ControlledImage.instances[settledImages]?.settleLoad();
       settledImages += 1;
     }
-    while (settled < loader.bitmapRequests.length) {
-      loader.bitmapRequests[settled]?.resolve(fakeImageBitmap(mipSizes[settled % mipSizes.length] ?? 16));
-      settled += 1;
+    while (settledRequests < loader.bitmapRequests.length) {
+      const request = loader.bitmapRequests[settledRequests];
+      const ordinaryTransport = request?.source instanceof Blob && request.source.size === 1;
+      const size = ordinaryTransport ? 1 : (mipSizes[settledIbl % mipSizes.length] ?? 16);
+      request?.resolve(fakeImageBitmap(size));
+      settledRequests += 1;
+      if (!ordinaryTransport) settledIbl += 1;
     }
   }
-  expect(loader.bitmapRequests).toHaveLength(30);
+  expect(loader.bitmapRequests).toHaveLength(expectedImages);
+  expect(settledIbl).toBe(30);
   await flushMicrotasks();
 };
 
@@ -79,7 +91,9 @@ export const requestUrl = (input: RequestInfo | URL): string => {
   return Object.prototype.toString.call(input);
 };
 
-export const installStagedGltfLoader = () => {
+export const installStagedGltfLoader = (
+  { bitmapDecode = false }: Readonly<{ bitmapDecode?: boolean }> = {},
+) => {
   const bitmapRequests: BitmapRequest[] = [];
   const fetchRequests: FetchRequest[] = [];
   const objectUrlBlobs: Blob[] = [];
@@ -103,10 +117,16 @@ export const installStagedGltfLoader = () => {
         url: requestUrl(input),
       });
     })));
-  vi.stubGlobal("createImageBitmap", vi.fn(() =>
-    new Promise<ImageBitmap>((resolve, reject) => {
-      bitmapRequests.push({ reject, resolve });
-    })));
+  if (bitmapDecode) {
+    vi.stubGlobal("createImageBitmap", vi.fn((source: ImageBitmapSource) =>
+      new Promise<ImageBitmap>((resolve, reject) => {
+        bitmapRequests.push({ reject, resolve, source });
+      })));
+  } else {
+    // Keep compatibility-path tests deterministic even when another test or
+    // future test runtime supplies createImageBitmap.
+    vi.stubGlobal("createImageBitmap", undefined);
+  }
 
   return {
     bitmapRequests,

@@ -25,9 +25,14 @@ import {
   GLTF_MATERIAL_EXTENSION_TEXTURES,
 } from "./material-texture-definitions";
 import {
+  decodePreparedGltfImageSourceRecipe,
+  gltfImageSourceRecipeRequiresTransport,
   gltfImageSourceRecipeBytes,
-  loadGltfImageSourceRecipe,
+  prepareGltfImageSourceRecipe,
+  preparedGltfImageSourceRecipeWithoutTransport,
   type GltfImageSourceRecipe,
+  type LoadedGltfImageSource,
+  type PreparedGltfImageSourceRecipe,
 } from "./image-source-recipe";
 
 export type GltfImageTextureBinding = Readonly<{
@@ -73,6 +78,8 @@ export type GltfImageDemandCoordinatorSnapshot = Readonly<{
 
 type RowStatus = "error" | "idle" | "loading" | "queued" | "ready";
 type SourceLease = Readonly<{ release(): boolean }>;
+type TransportLease = Readonly<{ release(): void }>;
+type TransportLane = { head: number; readonly queue: Row[] };
 
 type SourceCleanupDebt = {
   closePending: boolean;
@@ -98,11 +105,15 @@ type Row = {
   readonly materials: Set<LoadedGltfMaterial>;
   outcomeQueued: boolean;
   pendingRefinements?: Set<LoadedGltfMaterial>;
+  prepared?: PreparedGltfImageSourceRecipe;
   referencesRekeyed: boolean;
   recipe?: GltfImageSourceRecipe;
   source?: LoadedTextureSource;
   sourceLease?: SourceLease;
   status: RowStatus;
+  transportError?: unknown;
+  transportLease?: TransportLease;
+  transportSettled: boolean;
 };
 
 type RecipeOwnership = {
@@ -131,6 +142,7 @@ type Asset = {
 const EMPTY_IMAGE_KEYS: ReadonlySet<string> = new Set();
 
 const GLTF_IMAGE_LANE_CONCURRENCY = 1;
+const GLTF_IMAGE_TRANSPORT_CONCURRENCY = 4;
 
 export const gltfImageDemandKeys = (
   materials: readonly LoadedGltfMaterial[],
@@ -160,12 +172,19 @@ export class GltfImageDemandCoordinator {
   readonly #invalidate: () => void;
   readonly #now: MonotonicClock;
   readonly #ordinaryScheduler: GltfPreparationScheduler;
+  readonly #ordinaryTransport: TransportLane = { head: 0, queue: [] };
   readonly #pendingOutcomes: Row[] = [];
+  readonly #prepareRecipe: typeof prepareGltfImageSourceRecipe;
   readonly #progress: (assetKey: string) => void;
   readonly #recipeCleanupDebt = new Set<RecipeOwnership>();
   readonly #registrationClaims = new Map<string, object>();
   readonly #retainSource: (source: LoadedTextureSource) => SourceLease;
+  readonly #reserveTransportBytes: ((bytes: number) => TransportLease) | undefined;
+  readonly #requiresTransport: (recipe: GltfImageSourceRecipe) => boolean;
   readonly #sourceCleanupDebt = new Set<SourceCleanupDebt>();
+  readonly #transportScheduler = new GltfPreparationScheduler(GLTF_IMAGE_TRANSPORT_CONCURRENCY);
+  readonly #decodeRecipe: typeof decodePreparedGltfImageSourceRecipe;
+  readonly #iblTransport: TransportLane = { head: 0, queue: [] };
   #cleanupRetryScheduled = false;
   #disposed = false;
 
@@ -175,8 +194,12 @@ export class GltfImageDemandCoordinator {
     readonly diagnostic: (message: string, key: string) => void;
     readonly invalidate: () => void;
     readonly now?: MonotonicClock;
+    readonly decodeRecipe?: typeof decodePreparedGltfImageSourceRecipe;
+    readonly prepareRecipe?: typeof prepareGltfImageSourceRecipe;
     readonly progress?: (assetKey: string) => void;
     readonly retainSource: (source: LoadedTextureSource) => SourceLease;
+    readonly reserveTransportBytes?: (bytes: number) => TransportLease;
+    readonly requiresTransport?: (recipe: GltfImageSourceRecipe) => boolean;
   }) {
     this.#closeSource = options.closeSource;
     this.#diagnostic = options.diagnostic;
@@ -184,8 +207,13 @@ export class GltfImageDemandCoordinator {
     this.#invalidate = options.invalidate;
     this.#now = options.now ?? monotonicNowMs;
     this.#ordinaryScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY, options.admit);
+    this.#decodeRecipe = options.decodeRecipe ?? decodePreparedGltfImageSourceRecipe;
+    this.#prepareRecipe = options.prepareRecipe ?? prepareGltfImageSourceRecipe;
     this.#progress = options.progress ?? (() => undefined);
     this.#retainSource = options.retainSource;
+    this.#reserveTransportBytes = options.reserveTransportBytes;
+    this.#requiresTransport = options.requiresTransport
+      ?? (options.prepareRecipe === undefined ? gltfImageSourceRecipeRequiresTransport : () => true);
   }
 
   registerAsset(input: {
@@ -262,6 +290,7 @@ export class GltfImageDemandCoordinator {
         referencesRekeyed: false,
         recipe,
         status: "idle",
+        transportSettled: false,
       };
       asset.rows.set(key, row);
       asset.recipeOwnership.retainedRecipes.add(recipe);
@@ -430,6 +459,7 @@ export class GltfImageDemandCoordinator {
     }
     cleanup(() => this.#ordinaryScheduler.dispose());
     cleanup(() => this.#iblScheduler.dispose());
+    cleanup(() => this.#transportScheduler.dispose());
     this.#pendingOutcomes.length = 0;
     if (failure !== undefined) throw failure.value;
   }
@@ -438,6 +468,7 @@ export class GltfImageDemandCoordinator {
     if (!this.#disposed) {
       this.#ordinaryScheduler.wake();
       this.#iblScheduler.wake();
+      this.#transportScheduler.wake();
     }
     for (const asset of this.#assets.values()) {
       try {
@@ -477,15 +508,16 @@ export class GltfImageDemandCoordinator {
     }
     const ordinary = this.#ordinaryScheduler.snapshot();
     const ibl = this.#iblScheduler.snapshot();
+    const transport = this.#transportScheduler.snapshot();
     return {
-      active: ordinary.active + ibl.active,
+      active: ordinary.active + ibl.active + transport.active,
       candidates,
       dormant,
       errors,
       iblQueueHighWater: ibl.queueHighWater,
       loading,
-      ordinaryQueueHighWater: ordinary.queueHighWater,
-      queueHighWater: ordinary.queueHighWater + ibl.queueHighWater,
+      ordinaryQueueHighWater: ordinary.queueHighWater + transport.queueHighWater,
+      queueHighWater: ordinary.queueHighWater + ibl.queueHighWater + transport.queueHighWater,
       queued,
       ready,
     };
@@ -558,65 +590,138 @@ export class GltfImageDemandCoordinator {
     ownership.activeRecipes.add(recipe);
     asset.load.imageLoadStartedAt ??= this.#now();
     asset.load.imageRequests += 1;
+    const transport = row.iblSpecular === undefined ? this.#ordinaryTransport : this.#iblTransport;
+    transport.queue.push(row);
+    if (!this.#requiresTransport(recipe)) {
+      row.prepared = preparedGltfImageSourceRecipeWithoutTransport(recipe);
+      row.transportSettled = true;
+      this.#pumpTransportQueue(transport);
+      return;
+    }
+    void this.#transportScheduler.run(asset.controller.signal, () => {
+      row.status = "loading";
+      return this.#prepareRecipe(recipe, asset.controller.signal);
+    }).then((prepared) => {
+      if (prepared.transportBytes > 0) {
+        const lease = this.#reserveTransportBytes?.(prepared.transportBytes);
+        if (lease !== undefined) row.transportLease = lease;
+      }
+      row.prepared = prepared;
+    }).catch((error: unknown) => { row.transportError = error; }).finally(() => {
+      row.transportSettled = true;
+      this.#pumpTransportQueue(transport);
+    });
+  }
+
+  #pumpTransportQueue(lane: TransportLane): void {
+    while (lane.head < lane.queue.length && lane.queue[lane.head]!.transportSettled) {
+      const row = lane.queue[lane.head++]!;
+      this.#beginDecode(row);
+    }
+    if (lane.head === lane.queue.length) {
+      lane.queue.length = 0;
+      lane.head = 0;
+    }
+  }
+
+  #beginDecode(row: Row): void {
+    const asset = row.asset;
+    const recipe = row.recipe;
+    const prepared = row.prepared;
+    const transportError = row.transportError;
+    delete row.prepared;
+    delete row.transportError;
+    if (recipe === undefined) return;
+    if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) {
+      this.#finishImageJob(row, recipe);
+      return;
+    }
+    if (transportError !== undefined || prepared === undefined) {
+      if (!asset.controller.signal.aborted) {
+        this.#settleImageFailure(row, transportError ?? new Error("glTF image transport produced no recipe"));
+      }
+      this.#finishImageJob(row, recipe);
+      return;
+    }
+    row.status = "queued";
     const scheduler = row.iblSpecular === undefined ? this.#ordinaryScheduler : this.#iblScheduler;
     void scheduler.run(asset.controller.signal, () => {
       row.status = "loading";
-      return loadGltfImageSourceRecipe(recipe, asset.controller.signal);
-    }).then((loaded) => {
-      if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) {
+      return this.#decodeRecipe(prepared, asset.controller.signal);
+    }).then((loaded) => this.#settleImageReady(row, loaded)).catch((error: unknown) => {
+      if (!asset.controller.signal.aborted) this.#settleImageFailure(row, error);
+    }).finally(() => this.#finishImageJob(row, recipe));
+  }
+
+  #settleImageReady(row: Row, loaded: LoadedGltfImageSource): void {
+    const asset = row.asset;
+    if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) {
+      this.#releaseSource(loaded.image);
+      return;
+    }
+    let sourceLease: SourceLease;
+    try {
+      sourceLease = this.#retainSource(loaded.image);
+    } catch (error) {
+      try {
         this.#releaseSource(loaded.image);
-        return;
+      } catch {
+        // Preserve the retention failure. The detached source debt owns the
+        // failed close and wake()/dispose() will retry it.
       }
-      let sourceLease: SourceLease;
-      try {
-        sourceLease = this.#retainSource(loaded.image);
-      } catch (error) {
-        try {
-          this.#releaseSource(loaded.image);
-        } catch {
-          // Preserve the retention failure. The detached source debt owns the
-          // failed close and wake()/dispose() will retry it.
-        }
-        throw error;
-      }
-      if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) {
-        this.#releaseSource(loaded.image, sourceLease);
-        return;
-      }
-      row.sourceLease = sourceLease;
-      row.source = loaded.image;
-      asset.readyKeys.add(row.key);
-      if (loaded.contentKey === undefined) delete row.contentKey;
-      else row.contentKey = loaded.contentKey;
-      row.status = "ready";
-      this.#settleMaterialDemandRow(row);
-      this.#demandSettledBaseRefinements(row);
-      this.#recordSettled(asset, false);
-      if (!row.outcomeQueued) {
-        row.outcomeQueued = true;
-        this.#pendingOutcomes.push(row);
-      }
-      this.#requestInvalidate(row.key);
-    }).catch((error: unknown) => {
-      if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) return;
-      if (asset.controller.signal.aborted) return;
-      row.error = error instanceof Error ? error.message : String(error);
-      row.status = "error";
-      this.#settleMaterialDemandRow(row);
-      asset.readyKeys.delete(row.key);
-      this.#demandSettledBaseRefinements(row);
-      this.#recordSettled(asset, true);
-      this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
-      this.#requestInvalidate(row.key);
-    }).finally(() => {
-      ownership.activeRecipes.delete(recipe);
-      try {
-        this.#releaseSettledRecipes(asset, [recipe]);
-      } catch (error) {
-        this.#diagnoseRecipeReleaseFailure(asset, error);
-      }
-      this.#scheduleCleanupRetry();
-    });
+      throw error;
+    }
+    if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) {
+      this.#releaseSource(loaded.image, sourceLease);
+      return;
+    }
+    row.sourceLease = sourceLease;
+    row.source = loaded.image;
+    asset.readyKeys.add(row.key);
+    if (loaded.contentKey === undefined) delete row.contentKey;
+    else row.contentKey = loaded.contentKey;
+    row.status = "ready";
+    this.#settleMaterialDemandRow(row);
+    this.#demandSettledBaseRefinements(row);
+    this.#recordSettled(asset, false);
+    if (!row.outcomeQueued) {
+      row.outcomeQueued = true;
+      this.#pendingOutcomes.push(row);
+    }
+    this.#requestInvalidate(row.key);
+  }
+
+  #settleImageFailure(row: Row, error: unknown): void {
+    const asset = row.asset;
+    if (this.#assets.get(asset.key) !== asset || asset.rows.get(row.key) !== row) return;
+    row.error = error instanceof Error ? error.message : String(error);
+    row.status = "error";
+    this.#settleMaterialDemandRow(row);
+    asset.readyKeys.delete(row.key);
+    this.#demandSettledBaseRefinements(row);
+    this.#recordSettled(asset, true);
+    this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
+    this.#requestInvalidate(row.key);
+  }
+
+  #finishImageJob(row: Row, recipe: GltfImageSourceRecipe): void {
+    try {
+      row.transportLease?.release();
+    } catch (error) {
+      this.#diagnose(
+        `glTF image transport byte release failed for ${row.key}: ${error instanceof Error ? error.message : String(error)}`,
+        row.key,
+      );
+    }
+    delete row.transportLease;
+    const asset = row.asset;
+    asset.recipeOwnership.activeRecipes.delete(recipe);
+    try {
+      this.#releaseSettledRecipes(asset, [recipe]);
+    } catch (error) {
+      this.#diagnoseRecipeReleaseFailure(asset, error);
+    }
+    this.#scheduleCleanupRetry();
   }
 
   #recordSettled(asset: Asset, failed: boolean): void {

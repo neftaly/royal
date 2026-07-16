@@ -924,7 +924,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     }
     vi.stubGlobal("ImageBitmap", CloseTrackedImageBitmap);
     const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const matchingTriangleBinUri = "matching-triangle.bin";
@@ -1018,7 +1018,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
   it("keeps explicit glTF extras.contentKey ahead of computed image content keys", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const explicitContentKey = "royal-test:explicit-content-key-wins";

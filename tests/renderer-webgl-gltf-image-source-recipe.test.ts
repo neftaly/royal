@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGltfImageSourceRecipes,
+  decodePreparedGltfImageSourceRecipe,
   gltfImageSourceRecipeBytes,
+  prepareGltfImageSourceRecipe,
 } from "../packages/renderer-webgl/src/gltf/image-source-recipe";
 import { estimateGltfPreparationCpu } from "../packages/renderer-webgl/src/gltf/preparation-admission";
 import { gltfImageLoadKey } from "../packages/renderer-webgl/src/gltf/image-keys";
 import type { GltfDocument } from "../packages/renderer-webgl/src/gltf/schema";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("glTF image source recipes", () => {
   it("shares one owned data-URI buffer across image kinds and accounts it once", () => {
@@ -54,5 +60,38 @@ describe("glTF image source recipes", () => {
 
     expect(recipes).toHaveLength(1);
     expect(gltfImageSourceRecipeBytes(recipes)).toBe(3);
+  });
+
+  it("transports an external ordinary image to an identified byte recipe before decode", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
+    const fetchMock = vi.fn(async (_uri: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return new Response(bytes, { headers: { "content-type": "image/png; charset=binary" } });
+    });
+    const createBitmap = vi.fn(async (blob: Blob) => {
+      expect(blob.type).toBe("image/png");
+      expect(blob.size).toBe(4);
+      return bitmap;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("createImageBitmap", createBitmap);
+    const controller = new AbortController();
+
+    const prepared = await prepareGltfImageSourceRecipe({
+      key: "external",
+      source: { kind: "html-image", uri: "https://example.test/image.png" },
+    }, controller.signal);
+
+    expect(prepared.transportBytes).toBe(4);
+    expect(prepared.recipe.source).toMatchObject({
+      kind: "bitmap-bytes",
+      mimeType: "image/png",
+    });
+    const decoded = await decodePreparedGltfImageSourceRecipe(prepared, controller.signal);
+    expect(decoded.image).toBe(bitmap);
+    expect(decoded.contentKey).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(createBitmap).toHaveBeenCalledOnce();
   });
 });

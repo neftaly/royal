@@ -5,8 +5,10 @@ import {
 } from "../packages/renderer-webgl/src/gltf/image-demand-coordinator";
 import {
   loadGltfImageSourceRecipe,
+  preparedGltfImageSourceRecipeWithoutTransport,
   type GltfImageSourceRecipe,
   type LoadedGltfImageSource,
+  type PreparedGltfImageSourceRecipe,
 } from "../packages/renderer-webgl/src/gltf/image-source-recipe";
 import type {
   GltfLoadMetrics,
@@ -23,6 +25,7 @@ import {
   deferred,
   flushMicrotasks as flushTestMicrotasks,
 } from "./async-test-fixtures";
+import { forEachFuzzCaseAsync } from "./fuzz";
 
 vi.mock("../packages/renderer-webgl/src/gltf/image-source-recipe", async (importOriginal) => {
   const actual = await importOriginal<
@@ -112,10 +115,19 @@ const metrics = (): GltfLoadMetrics => ({
 const coordinatorHarness = (options: {
   readonly closeSource?: (value: LoadedTextureSource) => void;
   readonly diagnostic?: (message: string, key: string) => void;
+  readonly decodeRecipe?: (
+    prepared: PreparedGltfImageSourceRecipe,
+    signal: AbortSignal,
+  ) => Promise<LoadedGltfImageSource>;
   readonly invalidate?: () => void;
   readonly now?: () => number;
   readonly progress?: (assetKey: string) => void;
+  readonly prepareRecipe?: (
+    recipe: GltfImageSourceRecipe,
+    signal: AbortSignal,
+  ) => Promise<PreparedGltfImageSourceRecipe>;
   readonly retainSource?: (value: LoadedTextureSource) => ResourceArenaSourceLease;
+  readonly reserveTransportBytes?: (bytes: number) => Readonly<{ release(): void }>;
 } = {}) => {
   const closeSource = vi.fn(options.closeSource ?? ((_value: LoadedTextureSource) => undefined));
   const diagnostic = vi.fn(options.diagnostic ?? ((_message: string, _key: string) => undefined));
@@ -129,11 +141,17 @@ const coordinatorHarness = (options: {
   }));
   const coordinator = new GltfImageDemandCoordinator({
     closeSource,
+    decodeRecipe: options.decodeRecipe
+      ?? ((prepared, signal) => loadGltfImageSourceRecipe(prepared.recipe, signal)),
     diagnostic,
     invalidate,
     ...(options.now === undefined ? {} : { now: options.now }),
     progress,
+    ...(options.prepareRecipe === undefined ? {} : { prepareRecipe: options.prepareRecipe }),
     retainSource,
+    ...(options.reserveTransportBytes === undefined
+      ? {}
+      : { reserveTransportBytes: options.reserveTransportBytes }),
   });
   return {
     closeSource,
@@ -219,9 +237,11 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     });
     expect(load.imageRequests).toBe(1);
     expect(load.imageLoadStartedAt).toBe(10);
+    await flushMicrotasks();
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([iblKey]);
 
     harness.coordinator.demandMaterial("asset", ordinaryMaterial);
+    await flushMicrotasks();
 
     expect(load.imageRequests).toBe(2);
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key).sort()).toEqual([iblKey, ordinaryKey]);
@@ -410,6 +430,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 3,
     });
     demandImages(harness.coordinator, "asset", "slow");
+    await flushMicrotasks();
 
     expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, loading: 1 });
     harness.coordinator.releaseAsset("asset");
@@ -446,6 +467,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 1,
     });
     demandImages(harness.coordinator, "asset", "stale-close-retry");
+    await flushMicrotasks();
     harness.coordinator.releaseAsset("asset");
 
     const stale = loaded("stale-close-retry").image;
@@ -591,6 +613,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
 
     harness.coordinator.demandMaterial("asset", first);
     harness.coordinator.demandMaterial("asset", second);
+    await flushMicrotasks();
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a"]);
     expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 2, loading: 1, queued: 1 });
 
@@ -622,6 +645,102 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.dispose();
   });
 
+  it("overlaps transport while preserving demand-ordered decode and exact byte leases", async () => {
+    await forEachFuzzCaseAsync({ cases: 8, seed: 0x1a6e_7a4e }, async ({ random }) => {
+      const keys = ["first", "second", "third", "fourth"];
+      const transportOrder = [...keys];
+      for (let index = transportOrder.length - 1; index > 0; index -= 1) {
+        const swap = random.int(0, index + 1);
+        [transportOrder[index], transportOrder[swap]] = [transportOrder[swap]!, transportOrder[index]!];
+      }
+      const recipes = new Map(keys.map((key) => [key, recipe(key)]));
+      const transports = new Map(keys.map((key) => [key, deferred<PreparedGltfImageSourceRecipe>()]));
+      const decodes = new Map(keys.map((key) => [key, deferred<LoadedGltfImageSource>()]));
+      const bytes = new Map(keys.map((key, index) => [key, (index + 1) * 10]));
+      const prepareRecipe = vi.fn((value: GltfImageSourceRecipe) => transports.get(value.key)!.promise);
+      const decodeRecipe = vi.fn((value: PreparedGltfImageSourceRecipe) =>
+        decodes.get(value.recipe.key)!.promise);
+      const transportReleases = new Map<number, ReturnType<typeof vi.fn<() => void>>>();
+      const reserveTransportBytes = vi.fn((size: number) => {
+        const release = vi.fn<() => void>();
+        transportReleases.set(size, release);
+        return { release };
+      });
+      const harness = coordinatorHarness({ decodeRecipe, prepareRecipe, reserveTransportBytes });
+      const materials = keys.map((key) => material(key));
+      harness.coordinator.registerAsset({
+        key: "asset",
+        load: metrics(),
+        materials,
+        recipeLease: recipeLease(),
+        recipes: keys.map((key) => recipes.get(key)!),
+        stateInstanceKey: 1,
+      });
+
+      for (const imageMaterial of materials) harness.coordinator.demandMaterial("asset", imageMaterial);
+      expect(prepareRecipe.mock.calls.map(([value]) => value.key)).toEqual(keys);
+
+      for (const key of transportOrder) {
+        transports.get(key)!.resolve({
+          ...preparedGltfImageSourceRecipeWithoutTransport(recipes.get(key)!),
+          transportBytes: bytes.get(key)!,
+        });
+        await flushMicrotasks();
+      }
+      expect(reserveTransportBytes.mock.calls.map(([size]) => size))
+        .toEqual(transportOrder.map((key) => bytes.get(key)));
+      expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual([keys[0]]);
+
+      for (const [index, key] of keys.entries()) {
+        decodes.get(key)!.resolve(loaded(key));
+        await flushSchedulerTurn();
+        await flushSchedulerTurn();
+        expect(transportReleases.get(bytes.get(key)!)).toHaveBeenCalledOnce();
+        expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual(keys.slice(0, index + 2));
+      }
+      expect(harness.coordinator.snapshot()).toMatchObject({ loading: 0, queued: 0, ready: keys.length });
+      for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();
+      harness.coordinator.dispose();
+    });
+  });
+
+  it("settles byte-admission denial without entering decode or leaking recipe ownership", async () => {
+    const deniedMaterial = material("denied-transport");
+    const deniedRecipe = recipe("denied-transport");
+    const ownership = recipeLease();
+    const decodeRecipe = vi.fn(async () => loaded("must-not-decode"));
+    const harness = coordinatorHarness({
+      decodeRecipe,
+      prepareRecipe: async () => ({
+        ...preparedGltfImageSourceRecipeWithoutTransport(deniedRecipe),
+        transportBytes: 32,
+      }),
+      reserveTransportBytes: () => { throw new Error("transport bytes denied"); },
+    });
+    const load = metrics();
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load,
+      materials: [deniedMaterial],
+      recipeLease: ownership,
+      recipes: [deniedRecipe],
+      stateInstanceKey: 1,
+    });
+
+    harness.coordinator.demandMaterial("asset", deniedMaterial);
+    await flushMicrotasks();
+
+    expect(decodeRecipe).not.toHaveBeenCalled();
+    expect(load).toMatchObject({ imageFailures: 1, imageLoaded: 0, imageRequests: 1 });
+    expect(harness.coordinator.snapshot()).toMatchObject({ active: 0, errors: 1, loading: 0 });
+    expect(harness.diagnostic).toHaveBeenCalledWith(
+      expect.stringContaining("transport bytes denied"),
+      "denied-transport",
+    );
+    expect(ownership.release).toHaveBeenCalledOnce();
+    harness.coordinator.dispose();
+  });
+
   it("keeps queued and active recipe bytes charged until cancellation settles each job", async () => {
     const active = deferred<LoadedGltfImageSource>();
     loadRecipeMock.mockImplementation((value) => {
@@ -642,6 +761,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 5,
     });
     demandImages(harness.coordinator, "asset", "active", "queued");
+    await flushMicrotasks();
     expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, dormant: 1, loading: 1, queued: 0 });
 
     harness.coordinator.releaseAsset("asset");

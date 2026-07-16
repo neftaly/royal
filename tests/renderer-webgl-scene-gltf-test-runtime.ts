@@ -53,6 +53,7 @@ export type FetchRequest = {
 export type BitmapRequest = {
   readonly reject: (reason?: unknown) => void;
   readonly resolve: (bitmap: ImageBitmap) => void;
+  readonly source?: ImageBitmapSource;
 };
 
 export const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };

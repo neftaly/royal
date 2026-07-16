@@ -469,19 +469,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       this.#decodedTextureSources = new DecodedTextureSourceLifetime({
         ordinaryReferenceCount: (source) => resourceArenaSourceReferenceCount(this.#resourceArena, source),
-        reserveOrdinaryDecodedBytes: (decodedBytes) => {
-          const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", {
-            cpuDecodedBytes: decodedBytes,
-          });
-          if (typeof reservation === "string") {
-            const maximum = this.#maximumResourceClassCpuBytes("ordinary-texture");
-            throw new ResourceGovernorCpuCapacityError(
-              `Decoded texture source retention denied by root resource governor: ${reservation}`,
-              decodedBytes > maximum,
-            );
-          }
-          return reservation.commit();
-        },
+        reserveOrdinaryDecodedBytes: (bytes) => this.#reserveDecodedCpuBytes(
+          "ordinary-texture",
+          bytes,
+          "Decoded texture source retention denied by root resource governor",
+        ),
         scheduleRetry: () => this.invalidate(),
       });
       this.#resourceArena = createResourceArena(
@@ -499,6 +491,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         now: this.#now,
         progress: (assetKey) => this.#preparedGltf.publishStateChange(assetKey),
         retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
+        reserveTransportBytes: (bytes) => this.#reserveDecodedCpuBytes(
+          "asset-decode",
+          bytes,
+          "glTF image transport byte retention denied by root resource governor",
+        ),
       }));
       registerRollback(() => this.#preparedGltf.disposeImages());
       const gl = canvas.getContext("webgl2", {
@@ -1698,6 +1695,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {
     const policy = this.#resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
+  }
+
+  #reserveDecodedCpuBytes(
+    resourceClass: ResourceGovernorClass,
+    bytes: number,
+    failureMessage: string,
+  ) {
+    const reservation = reserveResourceGovernor(this.#resourceGovernor, resourceClass, {
+      cpuDecodedBytes: bytes,
+    });
+    if (typeof reservation === "string") {
+      throw new ResourceGovernorCpuCapacityError(
+        `${failureMessage}: ${reservation}`,
+        bytes > this.#maximumResourceClassCpuBytes(resourceClass),
+      );
+    }
+    return reservation.commit();
   }
 
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {

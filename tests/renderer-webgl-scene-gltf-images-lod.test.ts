@@ -119,7 +119,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
   it("loads glTF bufferView base-color images on primitives without normals", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
@@ -278,6 +278,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => ControlledImage.instances.length === 1);
 
     expect(ControlledImage.instances).toHaveLength(1);
     expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);
@@ -335,6 +336,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithText(url, wrapperSvgTexture, "image/svg+xml"))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => loader.objectUrlBlobs.length === 1);
 
     expect(loader.objectUrlBlobs).toHaveLength(1);
     const normalizedSvg = await loader.objectUrlBlobs[0]?.text();
@@ -388,6 +390,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForModuleLoad(() => ControlledImage.instances.length === 1);
 
     expect(ControlledImage.instances).toHaveLength(1);
     expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);

@@ -43,7 +43,7 @@ import {
   retainVertexInputGeometry,
   vertexInputArenaSnapshot,
 } from "../packages/renderer-webgl/src/vertex-input/arena";
-import { fuzzCaseCount, runFuzzTraces, SeededRandom } from "./fuzz";
+import { runFuzzTraces } from "./fuzz";
 const emptyManifest = (): FramePlanResourceManifest => ({
   bulkInstances: [],
   directGeometries: [],
@@ -231,36 +231,55 @@ describe("semantic resource arena properties", () => {
     expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBe(0);
     expect(resourceArenaHasPendingAssetEvents(arena)).toBe(true);
   });
-  it("fuzzes counted geometry changes replayed into the vertex-input semantic boundary", () => {
-    const arena = createResourceArena(async () => emptyAsset(), () => undefined);
-    const vertexInputs = createVertexInputArena();
-    const scratch = createResourceManifestDiffScratch();
-    const random = new SeededRandom(0x4e11_cafe);
-    let current = emptyManifest();
-    for (let step = 0; step < fuzzCaseCount(256); step += 1) {
-      const dimensions = [1, 2, 3, 4].filter(() => random.boolean(0.55));
-      const directGeometries = dimensions.map((dimension) => {
-        const declaration = directGeometryDeclaration(boxGeometry([dimension, dimension + 1, 1]), "surface");
+  it("fuzzes counted geometry changes replayed into the vertex-input semantic boundary", async () => {
+    type Op = Readonly<{
+      counts: readonly number[];
+      dimensions: readonly number[];
+    }>;
+    await runFuzzTraces<Op>({
+      cases: 12,
+      operation: (random) => {
+        const dimensions = [1, 2, 3, 4].filter(() => random.boolean(0.55));
         return {
-          count: random.int(1, 5),
-          declaration,
-          key: directGeometryKey(declaration.geometry, declaration.topology),
+          counts: dimensions.map(() => random.int(1, 5)),
+          dimensions,
         };
-      });
-      const next = { ...emptyManifest(), directGeometries };
-      const changes = applyResourceDelta(arena, diffResourceManifests(current, next, scratch));
-      replayGeometryChanges(vertexInputs, changes);
-      current = next;
-      expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(resourceArenaSnapshot(arena).geometries.size);
-      expect(new Set([...resourceArenaSnapshot(arena).geometries.values()].map((row) => row.id))).toEqual(
-        vertexInputArenaSnapshot(vertexInputs).semanticGeometryIds,
-      );
-    }
-    replayGeometryChanges(vertexInputs, applyResourceDelta(
-      arena,
-      diffResourceManifests(current, emptyManifest(), scratch),
-    ));
-    expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(0);
+      },
+      run: (trace) => {
+        const arena = createResourceArena(async () => emptyAsset(), () => undefined);
+        const vertexInputs = createVertexInputArena();
+        const scratch = createResourceManifestDiffScratch();
+        let current = emptyManifest();
+        for (const operation of trace) {
+          const directGeometries = operation.dimensions.map((dimension, index) => {
+            const declaration = directGeometryDeclaration(boxGeometry([dimension, dimension + 1, 1]), "surface");
+            return {
+              count: operation.counts[index] ?? 1,
+              declaration,
+              key: directGeometryKey(declaration.geometry, declaration.topology),
+            };
+          });
+          const next = { ...emptyManifest(), directGeometries };
+          replayGeometryChanges(vertexInputs, applyResourceDelta(
+            arena,
+            diffResourceManifests(current, next, scratch),
+          ));
+          current = next;
+          expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount)
+            .toBe(resourceArenaSnapshot(arena).geometries.size);
+          expect(new Set([...resourceArenaSnapshot(arena).geometries.values()].map((row) => row.id))).toEqual(
+            vertexInputArenaSnapshot(vertexInputs).semanticGeometryIds,
+          );
+        }
+        replayGeometryChanges(vertexInputs, applyResourceDelta(
+          arena,
+          diffResourceManifests(current, emptyManifest(), scratch),
+        ));
+        expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(0);
+      },
+      seed: 0x4e11_cafe,
+      steps: 32,
+    });
   });
   it("fuzzes generation, dependency, source, and disposal lifecycles from replayable traces", async () => {
     type Op =

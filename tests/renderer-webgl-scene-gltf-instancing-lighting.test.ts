@@ -67,7 +67,7 @@ import {
   responseWithJson,
   responseWithBuffer,
   installStagedGltfLoader,
-  settleKhronosEnvironmentTestIblBitmaps,
+  settleKhronosEnvironmentTestImages,
 } from "./renderer-webgl-scene-gltf-loader-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGltfInstanceTransforms, directionalLight, gltf, gltfInstances } from "@royal/renderer-core";
@@ -628,7 +628,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   it("uses optional EXT_lights_image_based diffuse and specular cubemap irradiance", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const document = khronosEnvironmentTestDocument();
@@ -649,7 +649,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     await flushMicrotasks();
 
     const callsBeforeSpecularImagesSettle = calls.length;
-    await settleKhronosEnvironmentTestIblBitmaps(loader);
+    await settleKhronosEnvironmentTestImages(loader);
 
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeSpecularImagesSettle);
@@ -702,7 +702,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   it("treats non-PNG EXT_lights_image_based specular images as LDR", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const document = khronosEnvironmentTestLdrSpecularDocument();
@@ -723,7 +723,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     await flushMicrotasks();
 
     const callsBeforeSpecularImagesSettle = calls.length;
-    await settleKhronosEnvironmentTestIblBitmaps(loader);
+    await settleKhronosEnvironmentTestImages(loader);
 
     root.render(renderGraph);
     const specularReadyCalls = calls.slice(callsBeforeSpecularImagesSettle);
@@ -810,7 +810,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   it("accepts required EXT_lights_image_based with specular cubemap support", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
+    const loader = installStagedGltfLoader({ bitmapDecode: true });
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const document = {
@@ -836,7 +836,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(loader.fetchRequests.some((request) => /EnvironmentTest_binary\.bin(?:$|[?#])/.test(request.url)))
       .toBe(true);
-    await settleKhronosEnvironmentTestIblBitmaps(loader);
+    await settleKhronosEnvironmentTestImages(loader);
     expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).some((message) =>
       /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(false);
 
