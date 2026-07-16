@@ -219,6 +219,9 @@ describe("glTF instance-buffer arena", () => {
       },
       framePoseVersion: version,
       frameScaleVersion: version,
+      positions: new Float32Array(6),
+      rotations: new Float32Array(6),
+      scales: new Float32Array(6).fill(1),
     });
     const firstSource = source(1);
     const secondSource = source(2);

@@ -25,7 +25,10 @@ export interface GltfInstanceTransformView {
   readonly frameScaleVersion: number;
   /** One when the synchronized scale preserves mesh winding, zero when it reverses it. */
   readonly orientationPreserving: Uint8Array;
+  readonly positions: Float32Array;
+  readonly rotations: Float32Array;
   readonly rootModels: readonly Mat4[];
+  readonly scales: Float32Array;
   readonly sourceKey: number;
   readonly transforms: readonly Transform[];
 }
@@ -40,7 +43,10 @@ type GltfInstanceTransformViewState = {
   readonly matrixScales: Float32Array;
   matrixScaleVersion: number;
   readonly orientationPreserving: Uint8Array;
+  readonly positions: Float32Array;
+  readonly rotations: Float32Array;
   readonly rootModels: MutableMat4[];
+  readonly scales: Float32Array;
   readonly source: GltfInstanceTransforms;
   readonly sourceKey: number;
   readonly transforms: Transform[];
@@ -200,7 +206,10 @@ export class GltfInstanceTransformRegistry {
         matrixScales,
         matrixScaleVersion: -1,
         orientationPreserving,
+        positions: source.positions,
+        rotations: source.rotations,
         rootModels,
+        scales: source.scales,
         source,
         sourceKey: this.#sourceKey,
         transforms,

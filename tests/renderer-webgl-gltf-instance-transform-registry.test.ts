@@ -92,6 +92,9 @@ describe("glTF instance transform registry", () => {
     const initial = registry.views(tracked.source);
     expect(tracked.activeSubscriptions()).toBe(1);
     expect(registry.views(tracked.source)).toBe(initial);
+    expect(initial.positions).toBe(tracked.source.positions);
+    expect(initial.rotations).toBe(tracked.source.rotations);
+    expect(initial.scales).toBe(tracked.source.scales);
     expectMatricesCurrent(registry, tracked.source);
     registry.beginFrame();
     registry.views(tracked.source);
