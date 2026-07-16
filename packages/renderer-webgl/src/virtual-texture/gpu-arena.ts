@@ -836,6 +836,23 @@ const pageTableRegion = (
   };
 };
 
+const fillRgba8 = (
+  target: Uint8Array,
+  texel: readonly [number, number, number, number],
+  byteLength: number,
+): void => {
+  target[0] = texel[0];
+  target[1] = texel[1];
+  target[2] = texel[2];
+  target[3] = texel[3];
+  let filled = 4;
+  while (filled < byteLength) {
+    const copied = Math.min(filled, byteLength - filled);
+    target.copyWithin(filled, 0, copied);
+    filled += copied;
+  }
+};
+
 const flushNextPageTableUpdate = (
   state: State,
   resource: MutableResource,
@@ -872,10 +889,14 @@ const flushNextPageTableUpdate = (
         ...(update.slot === undefined ? {} : { slot: update.slot }),
       }, allocation.atlasGridColumns);
       const scratch = allocation.pageTableUploadScratch;
-      for (let index = 0; index < scratch.length; index += 4) scratch.set(texel, index);
       const maxCells = scratch.length / 4;
       const chunkWidth = Math.min(region.width, maxCells);
       const chunkHeight = Math.max(1, Math.floor(maxCells / chunkWidth));
+      fillRgba8(
+        scratch,
+        texel,
+        chunkWidth * Math.min(chunkHeight, region.height) * 4,
+      );
       for (let y = 0; y < region.height; y += chunkHeight) {
         const height = Math.min(chunkHeight, region.height - y);
         for (let x = 0; x < region.width; x += chunkWidth) {
