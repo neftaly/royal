@@ -641,19 +641,34 @@ const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
   }
   preparePacketBatchIds(registry, catalog);
   const epoch = beginEpoch(groups);
-
-  for (let memberIndex = 0; memberIndex < workspace.count; memberIndex += 1) {
+  let memberIndex = 0;
+  while (memberIndex < workspace.count) {
+    const packetIndex = workspace.packetIndices[memberIndex]!;
+    const geometryIdentityId = workspace.geometryIdentityIds[memberIndex]!;
+    const materialBatchClassId = workspace.materialBatchClassIds[memberIndex]!;
+    const lightScopeId = workspace.lightScopeIds[memberIndex]!;
+    const sidedness = workspace.sidedness[memberIndex]!;
     const renderClass = workspace.renderClasses[memberIndex]! as FramePacketRenderClass;
+    let runEnd = memberIndex + 1;
+    while (runEnd < workspace.count
+      && workspace.packetIndices[runEnd] === packetIndex
+      && workspace.geometryIdentityIds[runEnd] === geometryIdentityId
+      && workspace.materialBatchClassIds[runEnd] === materialBatchClassId
+      && workspace.lightScopeIds[runEnd] === lightScopeId
+      && workspace.sidedness[runEnd] === sidedness
+      && workspace.renderClasses[runEnd] === renderClass) {
+      runEnd += 1;
+    }
     const batchId = batchForPreparedPacket(
       registry,
-      workspace.packetIndices[memberIndex]!,
-      workspace.geometryIdentityIds[memberIndex]!,
-      workspace.materialBatchClassIds[memberIndex]!,
-      workspace.lightScopeIds[memberIndex]!,
-      workspace.sidedness[memberIndex]!,
+      packetIndex,
+      geometryIdentityId,
+      materialBatchClassId,
+      lightScopeId,
+      sidedness,
       renderClass,
     );
-    workspace.batchIds[memberIndex] = batchId;
+    workspace.batchIds.fill(batchId, memberIndex, runEnd);
     if (registry.batchTouchedEpochs[batchId] !== registry.frameEpoch) {
       registry.batchTouchedEpochs[batchId] = registry.frameEpoch;
       registry.touchedBatchIds[registry.touchedBatchCount] = batchId;
@@ -666,7 +681,8 @@ const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
       groups.activeBatchCount += 1;
       appendClassBatch(groups, renderClass, batchId);
     }
-    groups.batchCounts[batchId] = groups.batchCounts[batchId]! + 1;
+    groups.batchCounts[batchId] = groups.batchCounts[batchId]! + runEnd - memberIndex;
+    memberIndex = runEnd;
   }
 
   let memberFirst = 0;
