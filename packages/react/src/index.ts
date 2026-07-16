@@ -32,6 +32,7 @@ export type {
 } from './texture-status';
 
 export { useRendererLifecycle } from './renderer-lifecycle';
+export { useRendererDiagnostics } from './renderer-diagnostics';
 
 export {
   OrbitControls,

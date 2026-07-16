@@ -125,6 +125,7 @@ try {
 import {
   Canvas,
   useGltfAssetStatus,
+  useRendererDiagnostics,
   useRendererLifecycle,
   type RendererResourceBudgetOptions,
   type RoyalRendererRoot,
@@ -149,6 +150,7 @@ const renderScene = scene({
 
 const Status = (): ReactNode => {
   const assetStatus = useGltfAssetStatus(asset.asset);
+  const diagnostics = useRendererDiagnostics();
   const lifecycle = useRendererLifecycle();
   const label = assetStatus.state === 'error' ? assetStatus.error : assetStatus.state;
   const images = assetStatus.state === 'idle'
@@ -158,7 +160,8 @@ const Status = (): ReactNode => {
     ? fitOrbitCameraView(assetStatus.bounds, { aspectRatio: 16 / 9 }).distance
     : 'unavailable';
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: {label}, {images}, fit {framing}</output>;
+  const warnings = diagnostics?.messageLog.entries.length ?? 0;
+  return <output>{renderer}: {label}, {images}, fit {framing}, {warnings} warnings</output>;
 };
 
 export const App = (): ReactNode => (

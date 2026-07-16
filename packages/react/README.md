@@ -275,6 +275,20 @@ function RendererStatus() {
 }
 ```
 
+`useRendererDiagnostics()` subscribes to the root-wide bounded message log,
+resource pressure, texture residency, glTF load counters, and other operational
+diagnostics after completed frames. It returns `undefined` until the Canvas root
+exists, so diagnostic UI does not need a polling timer:
+
+```tsx
+import { useRendererDiagnostics } from '@royal/react';
+
+function RendererWarnings() {
+  const diagnostics = useRendererDiagnostics();
+  return <output>{diagnostics?.messageLog.entries.at(-1)?.message ?? 'No warnings'}</output>;
+}
+```
+
 Interactive nodes provide an explicit `pickingId`; React handlers live in the
 separate `Canvas.scenePointerEvents` map under that ID. The ID is the logical gesture
 identity, so handler-only changes do not resubmit the scene and pointer-down/up
