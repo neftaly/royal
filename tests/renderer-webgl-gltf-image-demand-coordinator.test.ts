@@ -32,6 +32,10 @@ vi.mock("../packages/renderer-webgl/src/gltf/image-source-recipe", async (import
 });
 
 const flushMicrotasks = (): Promise<void> => flushTestMicrotasks(12);
+const flushSchedulerTurn = async (): Promise<void> => {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
+};
 
 const recipe = (key: string): GltfImageSourceRecipe => ({
   key,
@@ -149,7 +153,7 @@ const demandImages = (
   assetKey: string,
   baseColorImage: string,
   emissiveImage?: string,
-): void => coordinator.demandMaterial(assetKey, material(baseColorImage, emissiveImage));
+): void => { coordinator.demandMaterial(assetKey, material(baseColorImage, emissiveImage)); };
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -565,6 +569,59 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.dispose();
   });
 
+  it("loads visible base colors before material refinement maps", async () => {
+    const jobs = new Map([
+      ["base-a", deferred<LoadedGltfImageSource>()],
+      ["base-b", deferred<LoadedGltfImageSource>()],
+      ["emissive-a", deferred<LoadedGltfImageSource>()],
+      ["emissive-b", deferred<LoadedGltfImageSource>()],
+    ]);
+    loadRecipeMock.mockImplementation((value) => jobs.get(value.key)!.promise);
+    const first = material("base-a", "emissive-a");
+    const second = material("base-b", "emissive-b");
+    const harness = coordinatorHarness();
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load: metrics(),
+      materials: [first, second],
+      recipeLease: recipeLease(),
+      recipes: [...jobs.keys()].map(recipe),
+      stateInstanceKey: 1,
+    });
+
+    harness.coordinator.demandMaterial("asset", first);
+    harness.coordinator.demandMaterial("asset", second);
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a"]);
+    expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 2, loading: 1, queued: 1 });
+
+    jobs.get("base-a")!.resolve(loaded("base-a"));
+    await flushSchedulerTurn();
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["base-a", "base-b"]);
+
+    jobs.get("base-b")!.resolve(loaded("base-b"));
+    await flushSchedulerTurn();
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([
+      "base-a",
+      "base-b",
+      "emissive-a",
+    ]);
+
+    jobs.get("emissive-a")!.resolve(loaded("emissive-a"));
+    await flushSchedulerTurn();
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([
+      "base-a",
+      "base-b",
+      "emissive-a",
+      "emissive-b",
+    ]);
+
+    jobs.get("emissive-b")!.resolve(loaded("emissive-b"));
+    await flushSchedulerTurn();
+    expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 0, loading: 0, queued: 0, ready: 4 });
+    for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();
+    harness.coordinator.dispose();
+  });
+
   it("keeps queued and active recipe bytes charged until cancellation settles each job", async () => {
     const active = deferred<LoadedGltfImageSource>();
     loadRecipeMock.mockImplementation((value) => {
@@ -585,10 +642,10 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       stateInstanceKey: 5,
     });
     demandImages(harness.coordinator, "asset", "active", "queued");
-    expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, loading: 1, queued: 1 });
+    expect(harness.coordinator.snapshot()).toMatchObject({ active: 1, dormant: 1, loading: 1, queued: 0 });
 
     harness.coordinator.releaseAsset("asset");
-    expect(ownership.resize.mock.calls).toEqual([[30]]);
+    expect(ownership.resize.mock.calls).toEqual([[30], [10]]);
     expect(ownership.release).not.toHaveBeenCalled();
     await flushMicrotasks();
     expect(ownership.resize.mock.calls).toEqual([[30], [10]]);
@@ -708,7 +765,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
 
     expect(oldOwnership.release).toHaveBeenCalledOnce();
     expect(harness.diagnostic).toHaveBeenCalledWith(
-      "glTF image asset replacement cleanup failed for asset: old recipe cleanup failed",
+      "glTF image replacement failed for asset: old recipe cleanup failed",
       "asset",
     );
     expect(harness.coordinator.snapshot()).toMatchObject({ candidates: 1, dormant: 1 });
@@ -741,7 +798,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipeLease: ownership,
       recipes: [recipe("disposed-during-resize")],
       stateInstanceKey: 1,
-    })).toThrow("glTF image asset registration was superseded for asset");
+    })).toThrow("glTF image registration superseded for asset");
 
     expect(ownership.resize).toHaveBeenCalledOnce();
     expect(ownership.release).toHaveBeenCalledOnce();
@@ -782,7 +839,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipeLease: outerOwnership,
       recipes: [recipe("outer")],
       stateInstanceKey: 1,
-    })).toThrow("glTF image asset registration was superseded for asset");
+    })).toThrow("glTF image registration superseded for asset");
 
     expect(outerOwnership.resize).toHaveBeenCalledOnce();
     expect(outerOwnership.release).toHaveBeenCalledOnce();
@@ -958,7 +1015,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       recipeLease: recipeLease(),
       recipes: [],
       stateInstanceKey: 4,
-    })).toThrow("glTF image demand coordinator is disposed");
+    })).toThrow("glTF image coordinator disposed");
 
     expect(() => harness.coordinator.dispose()).not.toThrow();
     expect(firstSourceRelease).toHaveBeenCalledTimes(2);

@@ -97,6 +97,7 @@ type Row = {
   readonly key: string;
   readonly materials: Set<LoadedGltfMaterial>;
   outcomeQueued: boolean;
+  pendingRefinements?: Set<LoadedGltfMaterial>;
   referencesRekeyed: boolean;
   recipe?: GltfImageSourceRecipe;
   source?: LoadedTextureSource;
@@ -129,7 +130,7 @@ const EMPTY_IMAGE_KEYS: ReadonlySet<string> = new Set();
 
 const GLTF_IMAGE_LANE_CONCURRENCY = 1;
 
-const imageDemandKeys = (
+export const gltfImageDemandKeys = (
   materials: readonly LoadedGltfMaterial[],
   imageBasedLight: SurfaceImageBasedLight | undefined,
 ): ReadonlySet<string> => {
@@ -148,8 +149,6 @@ const imageDemandKeys = (
   }
   return keys;
 };
-
-export const gltfImageDemandKeys = imageDemandKeys;
 
 export class GltfImageDemandCoordinator {
   readonly #assets = new Map<string, Asset>();
@@ -197,7 +196,7 @@ export class GltfImageDemandCoordinator {
     readonly recipes: readonly GltfImageSourceRecipe[];
     readonly stateInstanceKey: number;
   }): void {
-    if (this.#disposed) throw new Error("glTF image demand coordinator is disposed");
+    if (this.#disposed) throw new Error("glTF image coordinator disposed");
     try {
       this.releaseAsset(input.key);
     } catch (error) {
@@ -205,7 +204,7 @@ export class GltfImageDemandCoordinator {
       // exhaustive cleanup. Cleanup failure must not strand an otherwise
       // admissible replacement outside the coordinator.
       this.#diagnose(
-        `glTF image asset replacement cleanup failed for ${input.key}: ${error instanceof Error ? error.message : String(error)}`,
+        `glTF image replacement failed for ${input.key}: ${error instanceof Error ? error.message : String(error)}`,
         input.key,
       );
     }
@@ -245,10 +244,9 @@ export class GltfImageDemandCoordinator {
         for (const key of mip) iblRows.set(key, specular);
       }
     }
-    const demandedKeys = imageDemandKeys(input.materials, input.imageBasedLight);
     for (const recipe of input.recipes) {
       const { key } = recipe;
-      if (!demandedKeys.has(key) || asset.rows.has(key)) continue;
+      if (asset.rows.has(key)) continue;
       const iblSpecular = iblRows.get(key);
       const row: Row = {
         asset,
@@ -267,9 +265,7 @@ export class GltfImageDemandCoordinator {
     // Ownership transfers only after the initial exact-size shrink succeeds.
     // A failed resize leaves the caller's original lease untouched.
     try {
-      input.recipeLease.resize(gltfImageSourceRecipeBytes([
-        ...asset.recipeOwnership.retainedRecipes,
-      ]));
+      input.recipeLease.resize(gltfImageSourceRecipeBytes(asset.recipeOwnership.retainedRecipes));
     } catch (error) {
       if (this.#registrationClaims.get(input.key) === registrationClaim) {
         this.#registrationClaims.delete(input.key);
@@ -281,7 +277,7 @@ export class GltfImageDemandCoordinator {
       || this.#registrationClaims.get(input.key) !== registrationClaim
     ) {
       input.recipeLease.release();
-      throw new Error(`glTF image asset registration was superseded for ${input.key}`);
+      throw new Error(`glTF image registration superseded for ${input.key}`);
     }
     this.#bindMaterialRows(asset, input.materials);
     asset.load.imageCandidates = asset.rows.size;
@@ -296,16 +292,39 @@ export class GltfImageDemandCoordinator {
   }
 
   /** Demands only the ordinary images referenced by one selected material. */
-  demandMaterial(assetKey: string, material: LoadedGltfMaterial): void {
+  demandMaterial(assetKey: string, material: LoadedGltfMaterial): boolean {
     const asset = this.#assets.get(assetKey);
-    if (asset === undefined) return;
+    if (asset === undefined) return false;
+    const baseKey = material.baseColorTexture?.imageUri;
+    if (baseKey !== undefined) {
+      const base = asset.rows.get(baseKey);
+      this.#demand(base);
+      if (base?.status === "loading" || base?.status === "queued") {
+        (base.pendingRefinements ??= new Set()).add(material);
+        return true;
+      }
+    }
+    this.#demandMaterialRefinements(asset, material);
+    return false;
+  }
+
+  #demandMaterialRefinements(asset: Asset, material: LoadedGltfMaterial): void {
     const demand = (slot: LoadedGltfMaterialTextureSlot | undefined): void => {
       if (slot?.imageUri !== undefined) this.#demand(asset.rows.get(slot.imageUri));
     };
-    for (const [key] of GLTF_CORE_MATERIAL_TEXTURES) demand(material[key]);
+    for (const [key] of GLTF_CORE_MATERIAL_TEXTURES) {
+      if (key !== "baseColorTexture") demand(material[key]);
+    }
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       demand(material.extensionTextures?.[texture.key]);
     }
+  }
+
+  #demandSettledBaseRefinements(row: Row): void {
+    const materials = row.pendingRefinements;
+    if (materials === undefined) return;
+    delete row.pendingRefinements;
+    for (const material of materials) this.#demandMaterialRefinements(row.asset, material);
   }
 
   readyKeys(assetKey: string): ReadonlySet<string> {
@@ -314,13 +333,6 @@ export class GltfImageDemandCoordinator {
 
   publication(assetKey: string, material: LoadedGltfMaterial): SurfaceMaterialPublication | undefined {
     return this.#assets.get(assetKey)?.publications.get(material);
-  }
-
-  materialBasePending(assetKey: string, material: LoadedGltfMaterial): boolean {
-    const imageKey = material.baseColorTexture?.imageUri;
-    if (imageKey === undefined) return false;
-    const status = this.#assets.get(assetKey)?.rows.get(imageKey)?.status;
-    return status !== undefined && status !== "ready" && status !== "error";
   }
 
   /** Borrows retryable outcomes; entries remain owned until explicitly acknowledged. */
@@ -429,7 +441,7 @@ export class GltfImageDemandCoordinator {
       this.#retryCleanupDebt();
     } catch (error) {
       this.#diagnose(
-        `glTF image detached cleanup retry failed: ${error instanceof Error ? error.message : String(error)}`,
+        `glTF image cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
         "detached-cleanup",
       );
     }
@@ -562,6 +574,7 @@ export class GltfImageDemandCoordinator {
       if (loaded.contentKey === undefined) delete row.contentKey;
       else row.contentKey = loaded.contentKey;
       row.status = "ready";
+      this.#demandSettledBaseRefinements(row);
       this.#recordSettled(asset, false);
       if (!row.outcomeQueued) {
         row.outcomeQueued = true;
@@ -574,6 +587,7 @@ export class GltfImageDemandCoordinator {
       row.error = error instanceof Error ? error.message : String(error);
       row.status = "error";
       asset.readyKeys.delete(row.key);
+      this.#demandSettledBaseRefinements(row);
       this.#recordSettled(asset, true);
       this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
       this.#requestInvalidate(row.key);
@@ -629,37 +643,39 @@ export class GltfImageDemandCoordinator {
         && (row.status === "error" || row.status === "ready")
       ) settledRecipes.add(row.recipe);
     }
-    this.#forgetRecipes(ownership, [...settledRecipes], asset.rows.values());
+    this.#forgetRecipes(ownership, settledRecipes, asset.rows.values());
     this.#releaseRecipesIfUnused(ownership);
   }
 
   #diagnoseRecipeReleaseFailure(asset: Asset, error: unknown): void {
     this.#diagnose(
-      `glTF image recipe lease release failed for ${asset.key}: ${error instanceof Error ? error.message : String(error)}`,
+      `glTF image recipe release failed for ${asset.key}: ${error instanceof Error ? error.message : String(error)}`,
       asset.key,
     );
   }
 
   #forgetRecipes(
     ownership: RecipeOwnership,
-    recipes: readonly GltfImageSourceRecipe[],
-    rows: Iterable<Row> = [],
+    recipes: Iterable<GltfImageSourceRecipe>,
+    rows?: Iterable<Row>,
   ): void {
-    if (ownership.released || ownership.operationInProgress || recipes.length === 0) return;
+    if (ownership.released || ownership.operationInProgress) return;
     const next = new Set(ownership.retainedRecipes);
     for (const recipe of recipes) next.delete(recipe);
     if (next.size === ownership.retainedRecipes.size) return;
     ownership.operationInProgress = true;
     try {
-      ownership.lease.resize(gltfImageSourceRecipeBytes([...next]));
+      ownership.lease.resize(gltfImageSourceRecipeBytes(next));
     } finally {
       ownership.operationInProgress = false;
     }
     for (const recipe of recipes) {
       if (!next.has(recipe)) ownership.retainedRecipes.delete(recipe);
     }
-    for (const row of rows) {
-      if (row.recipe !== undefined && !ownership.retainedRecipes.has(row.recipe)) delete row.recipe;
+    if (rows !== undefined) {
+      for (const row of rows) {
+        if (row.recipe !== undefined && !ownership.retainedRecipes.has(row.recipe)) delete row.recipe;
+      }
     }
   }
 
@@ -757,7 +773,7 @@ export class GltfImageDemandCoordinator {
         this.#retryCleanupDebt();
       } catch (error) {
         this.#diagnose(
-          `glTF image detached cleanup retry failed: ${error instanceof Error ? error.message : String(error)}`,
+          `glTF image cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
           "detached-cleanup",
         );
       }
@@ -777,7 +793,7 @@ export class GltfImageDemandCoordinator {
       this.#invalidate();
     } catch (error) {
       this.#diagnose(
-        `glTF image invalidation observer failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        `glTF image invalidation failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
         key,
       );
     }
@@ -788,7 +804,7 @@ export class GltfImageDemandCoordinator {
       this.#progress(key);
     } catch (error) {
       this.#diagnose(
-        `glTF image progress observer failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        `glTF image progress failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
         key,
       );
     }

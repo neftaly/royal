@@ -161,16 +161,14 @@ export const createGltfImageSourceRecipes = (
   return recipes;
 };
 
-export const gltfImageSourceRecipeBytes = (recipes: readonly GltfImageSourceRecipe[]): number => {
+export const gltfImageSourceRecipeBytes = (recipes: Iterable<GltfImageSourceRecipe>): number => {
   const buffers = new Set<ArrayBuffer>();
   for (const recipe of recipes) {
     if ("bytes" in recipe.source) buffers.add(recipe.source.bytes);
   }
   let bytes = 0;
-  for (const buffer of buffers) {
-    bytes += buffer.byteLength;
-    if (!Number.isSafeInteger(bytes)) throw new RangeError("glTF image recipe byte size exceeds safe integer range");
-  }
+  for (const buffer of buffers) bytes += buffer.byteLength;
+  if (!Number.isSafeInteger(bytes)) throw new RangeError("glTF recipe byte overflow");
   return bytes;
 };
 
