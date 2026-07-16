@@ -1,5 +1,6 @@
 import type { PerspectiveCamera, PerspectiveCameraOptions } from './camera';
 import { perspectiveCamera } from './camera';
+import type { GltfAssetBounds } from './gltf';
 import {
   finiteNumber,
   frozenVec3,
@@ -33,6 +34,19 @@ export type OrbitCameraViewConstraints = {
   readonly minPitch?: Rads | undefined;
 };
 
+export type OrbitCameraFitOptions = {
+  /** Viewport width divided by height. */
+  readonly aspectRatio: number;
+  /** Vertical field of view in radians. @defaultValue `Math.PI / 4` */
+  readonly fovY?: Rads | undefined;
+  /** Lower distance clamp in metres. Point-sized bounds otherwise fit at one metre. */
+  readonly minDistance?: Metres | undefined;
+  /** Multiplicative clearance around the conservative bounding sphere. @defaultValue `1` */
+  readonly padding?: number | undefined;
+  readonly pitch?: Rads | undefined;
+  readonly yaw?: Rads | undefined;
+};
+
 export type OrbitCameraBasis = {
   readonly right: Direction3;
   readonly up: Direction3;
@@ -51,6 +65,7 @@ export type OrbitPerspectiveCameraOptions =
 const defaultTarget = frozenVec3([0, 0, 0], 'orbit target');
 const ORBIT_VIEW_FIELDS = ['distance', 'pitch', 'target', 'yaw'] as const;
 const ORBIT_CONSTRAINT_FIELDS = ['maxDistance', 'maxPitch', 'minDistance', 'minPitch'] as const;
+const ORBIT_FIT_FIELDS = ['aspectRatio', 'fovY', 'minDistance', 'padding', 'pitch', 'yaw'] as const;
 const ORBIT_PERSPECTIVE_CAMERA_FIELDS = ['far', 'fovY', 'near', 'view'] as const;
 
 const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 => {
@@ -109,6 +124,53 @@ export const clampOrbitCameraView = (
     ...resolvedView,
     distance: clamp(resolvedView.distance, constraints.minDistance, constraints.maxDistance),
     pitch: clamp(resolvedView.pitch, constraints.minPitch, constraints.maxPitch)
+  });
+};
+
+/** Conservatively fits an orbit view to bounds in the same coordinate space as the returned target. */
+export const fitOrbitCameraView = (
+  bounds: GltfAssetBounds,
+  options: OrbitCameraFitOptions,
+): OrbitCameraView => {
+  objectWithAllowedFields(options, ORBIT_FIT_FIELDS, 'orbit camera fit');
+  const aspectRatio = positiveFiniteNumber(options.aspectRatio, 'orbit camera fit aspectRatio');
+  const fovY = finiteNumber(options.fovY ?? Math.PI / 4, 'orbit camera fit fovY');
+  if (!(fovY > 0 && fovY < Math.PI)) {
+    throw new Error('orbit camera fit fovY must be within (0, PI)');
+  }
+  const padding = finiteNumber(options.padding ?? 1, 'orbit camera fit padding');
+  if (padding < 1) throw new Error('orbit camera fit padding must be at least 1');
+  const minDistance = options.minDistance === undefined
+    ? undefined
+    : positiveFiniteNumber(options.minDistance, 'orbit camera fit minDistance');
+
+  const min = bounds.min;
+  const max = bounds.max;
+  for (let axis = 0; axis < 3; axis += 1) {
+    finiteNumber(min[axis]!, `orbit camera fit bounds.min[${axis}]`);
+    finiteNumber(max[axis]!, `orbit camera fit bounds.max[${axis}]`);
+    if (min[axis]! > max[axis]!) {
+      throw new Error(`orbit camera fit bounds.min[${axis}] must not exceed bounds.max[${axis}]`);
+    }
+  }
+  const halfX = (max[0] - min[0]) / 2;
+  const halfY = (max[1] - min[1]) / 2;
+  const halfZ = (max[2] - min[2]) / 2;
+  const radius = Math.hypot(halfX, halfY, halfZ);
+  const verticalHalfFov = fovY / 2;
+  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * aspectRatio);
+  const limitingHalfFov = Math.min(verticalHalfFov, horizontalHalfFov);
+  const fittedDistance = radius === 0 ? 1 : radius * padding / Math.sin(limitingHalfFov);
+
+  return resolveOrbitCameraView({
+    distance: Math.max(minDistance ?? 0, fittedDistance),
+    pitch: options.pitch,
+    target: [
+      min[0] + halfX,
+      min[1] + halfY,
+      min[2] + halfZ,
+    ],
+    yaw: options.yaw,
   });
 };
 

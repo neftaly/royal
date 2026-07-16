@@ -134,6 +134,7 @@ import {
   createXrSessionStore,
   type XrSession,
 } from '@royal/react/xr';
+import { fitOrbitCameraView } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
 const asset = gltf({ src: '/model.glb' });
@@ -149,8 +150,11 @@ const Status = (): ReactNode => {
   const images = assetStatus.state === 'idle'
     ? 'not retained'
     : \`\${assetStatus.images.loaded}/\${assetStatus.images.total} images\`;
+  const framing = assetStatus.state !== 'idle' && assetStatus.bounds !== undefined
+    ? fitOrbitCameraView(assetStatus.bounds, { aspectRatio: 16 / 9 }).distance
+    : 'unavailable';
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: {label}, {images}</output>;
+  return <output>{renderer}: {label}, {images}, fit {framing}</output>;
 };
 
 export const App = (): ReactNode => <Canvas scene={renderScene}><Status /></Canvas>;

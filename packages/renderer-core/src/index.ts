@@ -17,6 +17,7 @@ export type {
 export { createCameraViewResource } from './camera-resource';
 export type {
   OrbitCameraBasis,
+  OrbitCameraFitOptions,
   OrbitCameraTransform,
   OrbitCameraView,
   OrbitCameraViewConstraints,
@@ -25,6 +26,7 @@ export type {
 } from './orbit';
 export {
   clampOrbitCameraView,
+  fitOrbitCameraView,
   orbitCameraBasis,
   orbitCameraTransform,
   orbitPerspectiveCamera,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampOrbitCameraView,
+  fitOrbitCameraView,
   orbitCameraBasis,
   orbitCameraTransform,
   orbitPerspectiveCamera,
@@ -124,6 +125,43 @@ describe("renderer-core orbit camera API", () => {
     });
   });
 
+  it("fits asset bounds against the limiting viewport field of view", () => {
+    const bounds = { max: [3, 2, 5], min: [-1, -2, -3] } as const;
+    const radius = Math.sqrt(24);
+
+    expect(fitOrbitCameraView(bounds, {
+      aspectRatio: 2,
+      fovY: Math.PI / 2,
+      pitch: 0.2,
+      yaw: -0.3,
+    })).toEqual({
+      distance: radius / Math.sin(Math.PI / 4),
+      pitch: 0.2,
+      target: [1, 0, 1],
+      yaw: -0.3,
+    });
+    expect(fitOrbitCameraView(bounds, {
+      aspectRatio: 0.5,
+      fovY: Math.PI / 2,
+    }).distance).toBeCloseTo(radius * Math.sqrt(5));
+  });
+
+  it("uses minDistance for degenerate and deliberately clamped fits", () => {
+    expect(fitOrbitCameraView({ max: [2, 3, 4], min: [2, 3, 4] }, {
+      aspectRatio: 1,
+      minDistance: 3,
+    })).toEqual({
+      distance: 3,
+      pitch: 0,
+      target: [2, 3, 4],
+      yaw: 0,
+    });
+    expect(fitOrbitCameraView({ max: [0.01, 0.01, 0.01], min: [0, 0, 0] }, {
+      aspectRatio: 1,
+      minDistance: 2,
+    }).distance).toBe(2);
+  });
+
   it("rotates, zooms, and pans views without mutating the starting view", () => {
     const rotated = rotateOrbitCameraView(defaultView, 10, -5, 0.006);
     const zoomed = zoomOrbitCameraView(defaultView, -120, 0.0018);
@@ -232,6 +270,16 @@ describe("renderer-core orbit camera API", () => {
       expect(() => rotateOrbitCameraView(defaultView, invalid, 0, 1), `${label} rotate`).toThrow(/finite/);
       expect(() => zoomOrbitCameraView(defaultView, 1, invalid), `${label} zoom`).toThrow(/finite/);
       expect(() => panOrbitCameraView(defaultView, 0, invalid, 1), `${label} pan`).toThrow(/finite/);
+      expect(() => fitOrbitCameraView({ max: [1, 1, 1], min: [0, 0, 0] }, {
+        aspectRatio: invalid,
+      }), `${label} fit`).toThrow(/finite/);
     });
+    expect(() => fitOrbitCameraView({ max: [0, 1, 1], min: [1, 0, 0] }, {
+      aspectRatio: 1,
+    })).toThrow(/must not exceed/);
+    expect(() => fitOrbitCameraView({ max: [1, 1, 1], min: [0, 0, 0] }, {
+      aspectRatio: 1,
+      padding: 0.9,
+    })).toThrow(/at least 1/);
   });
 });

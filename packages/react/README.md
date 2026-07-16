@@ -230,7 +230,9 @@ relevant image; and `degraded` is renderable with at least one image failure.
 Non-idle snapshots include immutable `images`, `scene`, and `phaseMs` details,
 plus `variantNames`. Once prepared, `bounds` is the aggregate loaded asset-space
 bound after authored node and instance transforms, so camera fitting and framing
-do not need to parse the glTF again. Image progress includes dormant material images in `total`,
+do not need to parse the glTF again. Pass it to renderer-core's pure
+`fitOrbitCameraView(bounds, { aspectRatio })` helper to produce a conservative
+orbit target and distance. Image progress includes dormant material images in `total`,
 so a large scene cannot report complete merely because those images have not
 been requested yet. Prepared-asset and image transitions push focused snapshots;
 the hook neither waits for unrelated frames nor allocates the full renderer
