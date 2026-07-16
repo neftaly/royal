@@ -77,6 +77,7 @@ describe('Canvas public scene boundary', () => {
   it('keeps Canvas renderer options at product-level creation choices', () => {
     const rendererOptions = {
       automaticVirtualTextures: true,
+      resourceBudgets: { limits: { cpuDecodedBytes: 768 * 1024 * 1024 } },
     } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;

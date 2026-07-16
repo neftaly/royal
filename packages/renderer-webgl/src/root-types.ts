@@ -8,6 +8,7 @@ import type {
   VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type {
+  ResourceGovernorPolicy,
   ResourceGovernorPolicyInput,
 } from "./resource-governor";
 import type { WebGlResourcePressureSnapshot } from "./resource-pressure";
@@ -29,9 +30,23 @@ export interface WebGlRootOptions {
    * @defaultValue `false`
    */
   readonly automaticVirtualTextures?: boolean;
+  /**
+   * Deep partial overrides for root-wide CPU, GPU, upload, and job admission
+   * budgets. Byte-named values are bytes. Omitted fields retain Royal's
+   * conservative defaults.
+   */
+  readonly resourceBudgets?: WebGlResourceBudgetOptions;
 }
 
-export type ResolvedWebGlRootOptions = Required<WebGlRootOptions>;
+/** Concise overrides for renderer resource admission budgets. */
+export type WebGlResourceBudgetOptions = ResourceGovernorPolicyInput;
+
+/** Complete immutable resource budgets retained by a renderer root. */
+export type WebGlResourceBudgets = ResourceGovernorPolicy;
+
+export type ResolvedWebGlRootOptions = Omit<Required<WebGlRootOptions>, "resourceBudgets"> & {
+  readonly resourceBudgets: WebGlResourceBudgets;
+};
 
 /** @internal Budget injection retained for deterministic backend tests. */
 export interface InternalWebGlRootOptions extends WebGlRootOptions {

@@ -537,17 +537,19 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
       automaticVirtualTextures: true,
-      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(123_456),
+      resourceBudgets: vtPersistentGpuHardLimitPolicy(123_456),
     });
 
     expect(Object.isFrozen(root.options)).toBe(true);
     expect(root.snapshot().options).toBe(root.options);
     expect(Object.isFrozen(root.snapshot().options)).toBe(true);
-    expect(root.options).toEqual({
+    expect(root.options).toMatchObject({
       alpha: true,
       antialias: true,
       automaticVirtualTextures: true,
     });
+    expect(root.options.resourceBudgets.classes["virtual-texture"].persistentGpuBytes.hardLimit)
+      .toBe(123_456);
     expect(root.snapshot()).toMatchObject({
       virtualTexturing: { physicalBudgetBytes: 123_456 },
     });

@@ -41,9 +41,15 @@ describe("Canvas renderer root cleanup", () => {
       alpha: true,
       antialias: true,
     });
+    const changedBudgets = rendererRootOptionsSemanticKey({
+      alpha: true,
+      antialias: false,
+      resourceBudgets: { limits: { cpuDecodedBytes: 768 * 1024 * 1024 } },
+    });
 
     expect(reordered).toBe(first);
     expect(changed).not.toBe(first);
+    expect(changedBudgets).not.toBe(first);
   });
 
   it("gives omitted and explicit renderer defaults one semantic identity", () => {

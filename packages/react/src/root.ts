@@ -19,6 +19,8 @@ import {
   type WebGlGltfLoadDiagnosticsSnapshot,
   type WebGlPickingSnapshot,
   type WebGlResourceLifetimeSnapshot,
+  type WebGlResourceBudgetOptions,
+  type WebGlResourceBudgets,
   type WebGlResourcePressureSnapshot,
   type WebGlRoot,
   type WebGlTextureResidencySnapshot,
@@ -45,7 +47,18 @@ export interface RendererOptions {
    * @defaultValue `false`
    */
   readonly automaticVirtualTextures?: boolean;
+  /**
+   * Deep partial overrides for CPU, GPU, upload, and job admission budgets.
+   * Byte-named values are bytes; omitted fields retain Royal's defaults.
+   */
+  readonly resourceBudgets?: RendererResourceBudgetOptions;
 }
+
+/** Concise overrides for renderer resource admission budgets. */
+export type RendererResourceBudgetOptions = WebGlResourceBudgetOptions;
+
+/** Complete immutable resource budgets retained by a renderer root. */
+export type RendererResourceBudgets = WebGlResourceBudgets;
 
 /** @internal Validates the product-level root creation boundary. */
 export const validateRendererOptions = (options: RendererOptions | undefined): void => {
@@ -55,11 +68,15 @@ export const validateRendererOptions = (options: RendererOptions | undefined): v
 /** @internal Canonical identity for the product-level options that own a React Canvas lifetime. */
 export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string => {
   const resolved = resolveWebGlRootOptions(options);
-  return `${resolved.alpha}:${resolved.antialias}:${resolved.automaticVirtualTextures}`;
+  return `${resolved.alpha}:${resolved.antialias}:${resolved.automaticVirtualTextures}:${
+    JSON.stringify(resolved.resourceBudgets)
+  }`;
 };
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
-export type ResolvedRendererOptions = Required<RendererOptions>;
+export type ResolvedRendererOptions = Omit<Required<RendererOptions>, "resourceBudgets"> & {
+  readonly resourceBudgets: RendererResourceBudgets;
+};
 
 /** Availability states for the renderer owned by a Canvas. */
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";

@@ -157,12 +157,14 @@ describe("React root public API", () => {
         recoveries: 0,
         state: "available",
       },
-      options: {
-        alpha: false,
-        antialias: true,
-        automaticVirtualTextures: true,
-      },
+      options: root.options,
     });
+    expect(root.options).toMatchObject({
+      alpha: false,
+      antialias: true,
+      automaticVirtualTextures: true,
+    });
+    expect(Object.isFrozen(root.options.resourceBudgets)).toBe(true);
     const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
     expect(Object.keys(diagnostics)).toEqual([
       "gltfInstancing",
@@ -216,7 +218,7 @@ describe("React root public API", () => {
 
     root.render(renderRoot);
 
-    expect(root.options).toEqual({
+    expect(root.options).toMatchObject({
       alpha: false,
       antialias: true,
       automaticVirtualTextures: true,

@@ -19,6 +19,8 @@ export type {
   WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,
   WebGlResourcePressureSnapshot,
+  WebGlResourceBudgetOptions,
+  WebGlResourceBudgets,
   ResolvedWebGlRootOptions,
   WebGlRootSnapshot,
   WebGlTextureResidencySnapshot,

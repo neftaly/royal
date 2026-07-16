@@ -126,6 +126,7 @@ import {
   Canvas,
   useGltfAssetStatus,
   useRendererLifecycle,
+  type RendererResourceBudgetOptions,
   type RoyalRendererRoot,
 } from '@royal/react';
 import { gltf, perspectiveCamera, scene } from '@royal/react/scene';
@@ -138,6 +139,9 @@ import { fitOrbitCameraView } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
 const asset = gltf({ src: '/model.glb' });
+const largeAssetBudgets = {
+  limits: { cpuDecodedBytes: 1024 * 1024 * 1024 },
+} satisfies RendererResourceBudgetOptions;
 const renderScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
   nodes: [asset],
@@ -157,7 +161,11 @@ const Status = (): ReactNode => {
   return <output>{renderer}: {label}, {images}, fit {framing}</output>;
 };
 
-export const App = (): ReactNode => <Canvas scene={renderScene}><Status /></Canvas>;
+export const App = (): ReactNode => (
+  <Canvas rendererOptions={{ resourceBudgets: largeAssetBudgets }} scene={renderScene}>
+    <Status />
+  </Canvas>
+);
 
 const xrStore = createXrSessionStore<XrSession>();
 export const startXr = (root: RoyalRendererRoot, session: XrSession) =>

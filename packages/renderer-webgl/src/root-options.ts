@@ -17,7 +17,12 @@ const booleanOption = (value: unknown, fallback: boolean, label: string): boolea
   return value;
 };
 
-const WEBGL_ROOT_OPTION_FIELDS = ["alpha", "antialias", "automaticVirtualTextures"] as const;
+const WEBGL_ROOT_OPTION_FIELDS = [
+  "alpha",
+  "antialias",
+  "automaticVirtualTextures",
+  "resourceBudgets",
+] as const;
 const INTERNAL_WEBGL_ROOT_OPTION_FIELDS = [...WEBGL_ROOT_OPTION_FIELDS, "resourceGovernorPolicy"] as const;
 
 const resolveOptions = (
@@ -33,6 +38,7 @@ const resolveOptions = (
       false,
       "Renderer automaticVirtualTextures",
     ),
+    resourceBudgets: defineResourceGovernorPolicy(options.resourceBudgets),
   });
 };
 
@@ -46,8 +52,15 @@ export const normalizeWebGlRootOptions = (
   options: InternalWebGlRootOptions = {},
 ): NormalizedInternalWebGlRootOptions => {
   const resolved = resolveOptions(options, INTERNAL_WEBGL_ROOT_OPTION_FIELDS);
+  if (options.resourceBudgets !== undefined && options.resourceGovernorPolicy !== undefined) {
+    throw new TypeError("Renderer resourceBudgets and internal resourceGovernorPolicy cannot both be set");
+  }
+  const resourceGovernorPolicy = defineResourceGovernorPolicy(
+    options.resourceBudgets ?? options.resourceGovernorPolicy,
+  );
   return Object.freeze({
     ...resolved,
-    resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
+    resourceBudgets: resourceGovernorPolicy,
+    resourceGovernorPolicy,
   });
 };

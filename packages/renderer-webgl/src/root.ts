@@ -531,6 +531,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#contextCapabilities = new WebGlContextCapabilityOwner(gl, options);
       this.#options = Object.freeze({
         automaticVirtualTextures: requestedOptions.automaticVirtualTextures,
+        resourceBudgets: requestedOptions.resourceGovernorPolicy,
         ...this.#contextCapabilities.attributes,
       });
       this.#clusteredLights = new LazyClusteredLightingFeature({

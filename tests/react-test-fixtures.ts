@@ -5,6 +5,7 @@ import type {
   RenderRoot,
 } from "@royal/renderer-core";
 import type { RoyalRendererRoot } from "../packages/react/src/root";
+import { resolveWebGlRootOptions } from "../packages/renderer-webgl/src/root-options";
 import {
   createStrictWebGl2Context,
   createWebGlTestCanvas,
@@ -26,6 +27,7 @@ export const fakeRendererRoot = ({
     alpha: true,
     antialias: true,
     automaticVirtualTextures: false,
+    resourceBudgets: resolveWebGlRootOptions().resourceBudgets,
   },
   diagnostics = {},
   pick = () => undefined,

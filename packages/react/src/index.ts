@@ -82,6 +82,8 @@ export type {
   RoyalRendererTextureAssetSnapshot,
   RoyalRendererVirtualTexturingDiagnosticsSnapshot,
   RendererOptions,
+  RendererResourceBudgetOptions,
+  RendererResourceBudgets,
   ResolvedRendererOptions,
   RoyalRendererRootSnapshot,
 } from './root';
