@@ -62,16 +62,21 @@ const copyVector3 = (target: Float32Array, source: Float32Array, offset: number)
 const applyInstanceMatrix = (
   views: GltfInstanceTransformViewState,
   index: number,
+  poseDirty: boolean,
+  scaleDirty: boolean,
 ): void => {
   const offset = index * 3;
-  const rotationChanged = !sameVector3(views.matrixRotations, views.source.rotations, offset);
-  const scaleChanged = !sameVector3(views.matrixScales, views.source.scales, offset);
+  const rotationChanged = poseDirty
+    && !sameVector3(views.matrixRotations, views.source.rotations, offset);
+  const scaleChanged = scaleDirty
+    && !sameVector3(views.matrixScales, views.source.scales, offset);
   if (rotationChanged || scaleChanged) {
     transformMat4Into(views.rootModels[index]!, views.transforms[index]);
-    copyVector3(views.matrixRotations, views.source.rotations, offset);
-    copyVector3(views.matrixScales, views.source.scales, offset);
+    if (rotationChanged) copyVector3(views.matrixRotations, views.source.rotations, offset);
+    if (scaleChanged) copyVector3(views.matrixScales, views.source.scales, offset);
     return;
   }
+  if (!poseDirty) return;
   const model = views.rootModels[index]!;
   model[12] = views.source.positions[offset]!;
   model[13] = views.source.positions[offset + 1]!;
@@ -201,10 +206,16 @@ export class GltfInstanceTransformRegistry {
       for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
         let word = pose.words[wordIndex]! | scale.words[wordIndex]!;
         while (word !== 0) {
-          const bit = 31 - Math.clz32(word & -word);
+          const bitMask = word & -word;
+          const bit = 31 - Math.clz32(bitMask);
           const index = wordIndex * 32 + bit;
           if (index < views.transforms.length) {
-            applyInstanceMatrix(views, index);
+            applyInstanceMatrix(
+              views,
+              index,
+              (pose.words[wordIndex]! & bitMask) !== 0,
+              (scale.words[wordIndex]! & bitMask) !== 0,
+            );
           }
           word &= word - 1;
         }
@@ -220,7 +231,7 @@ export class GltfInstanceTransformRegistry {
       )
     ) {
       for (let index = 0; index < views.transforms.length; index += 1) {
-        applyInstanceMatrix(views, index);
+        applyInstanceMatrix(views, index, true, true);
       }
       views.matrixPoseVersion = source.poseVersion;
       views.matrixScaleVersion = source.scaleVersion;
