@@ -574,7 +574,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         studioSpecular: () => this.#ibl.studioSpecular(),
       });
       this.#gltfPacketSubmissions = new GltfPacketSubmissionOwner({
-        geometryRecipes: this.#geometryRecipes,
         instanceTransforms: this.#gltfInstanceTransforms,
         lightResolver: this.#lightResolver,
         materials: this.#gltfMaterials,

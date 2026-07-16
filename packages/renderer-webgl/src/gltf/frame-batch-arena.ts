@@ -15,7 +15,7 @@ import {
   clearGltfPacketBatchSegmentGroups,
   createGltfPacketBatchRegistry,
   createGltfPacketBatchSegmentGroups,
-  groupGltfPacketSubmissionSegment,
+  groupPreparedGltfPacketSubmissionSegment,
   type GltfPacketBatchRegistry,
   type GltfPacketBatchSegmentGroups,
 } from "../gltf-packet-batch-registry";
@@ -188,7 +188,7 @@ export class GltfFrameBatchArena {
       this.#localModels.length = 0;
       this.#localModelResourceRevision = localModelResourceRevision;
     }
-    groupGltfPacketSubmissionSegment(
+    groupPreparedGltfPacketSubmissionSegment(
       this.#registry,
       this.#groups,
       this.workspace,

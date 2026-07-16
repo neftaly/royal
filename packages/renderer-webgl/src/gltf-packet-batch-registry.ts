@@ -550,10 +550,8 @@ export const assertGltfPacketBatchSegmentGroupsCurrent = <M, R, L>(
   }
 };
 
-/** Interns numeric batch tuples, then counts/prefixes/scatters current segment members. */
-export const groupGltfPacketSubmissionSegment = <M, R, L>(
+const requireActiveGrouping = <M, R, L>(
   registry: GltfPacketBatchRegistry,
-  groups: GltfPacketBatchSegmentGroups,
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   planRevision: number,
   catalog: FramePacketCatalog,
@@ -565,7 +563,15 @@ export const groupGltfPacketSubmissionSegment = <M, R, L>(
   if (registry.frameEpoch === 0) {
     throw new Error("Royal glTF packet batch registry requires an active frame");
   }
-  validateWorkspaceSegment(registry, groups, workspace, catalog);
+};
+
+const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
+  registry: GltfPacketBatchRegistry,
+  groups: GltfPacketBatchSegmentGroups,
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  planRevision: number,
+  catalog: FramePacketCatalog,
+): void => {
   if (workspace.count > MAX_POWER_OF_TWO_CAPACITY / 2 - registry.batchCount) {
     throw new Error("Royal glTF packet batch registry capacity exceeds the supported hash range");
   }
@@ -630,6 +636,31 @@ export const groupGltfPacketSubmissionSegment = <M, R, L>(
   groups.registryGeneration = registry.generation;
   groups.segmentRevision = workspace.segmentRevision;
   groups.workspace = workspace;
+};
+
+/** Validates externally assembled rows, then interns and groups their numeric batch tuples. */
+export const groupGltfPacketSubmissionSegment = <M, R, L>(
+  registry: GltfPacketBatchRegistry,
+  groups: GltfPacketBatchSegmentGroups,
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  planRevision: number,
+  catalog: FramePacketCatalog,
+): void => {
+  requireActiveGrouping(registry, workspace, planRevision, catalog);
+  validateWorkspaceSegment(registry, groups, workspace, catalog);
+  groupCurrentGltfPacketSubmissionSegment(registry, groups, workspace, planRevision, catalog);
+};
+
+/** Groups rows already assembled from their authoritative packet catalog and bindings. */
+export const groupPreparedGltfPacketSubmissionSegment = <M, R, L>(
+  registry: GltfPacketBatchRegistry,
+  groups: GltfPacketBatchSegmentGroups,
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  planRevision: number,
+  catalog: FramePacketCatalog,
+): void => {
+  requireActiveGrouping(registry, workspace, planRevision, catalog);
+  groupCurrentGltfPacketSubmissionSegment(registry, groups, workspace, planRevision, catalog);
 };
 
 /** Clears persistent tuple identity and active grouping state while retaining capacity. */

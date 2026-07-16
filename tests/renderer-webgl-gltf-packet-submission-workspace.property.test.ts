@@ -4,6 +4,7 @@ import {
   assertGltfPacketSubmissionWorkspaceCurrent,
   clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
+  preparedGltfPacketSubmissionMaterialBindingId,
   readGltfPacketSubmissionInto,
   resetGltfPacketSubmissionWorkspaceForFrame,
   resetGltfPacketSubmissionWorkspaceForSegment,
@@ -112,6 +113,43 @@ describe("glTF packet submission workspace", () => {
       expect(workspace.materialBindingCount).toBe(count);
       expect(workspace.capacity).toBe(capacity);
     });
+  });
+
+  it("retains sparse source IDs without requiring a source-sized dense allocation", () => {
+    const workspace = createGltfPacketSubmissionWorkspace<object, object, object>();
+    const catalog = begin(workspace);
+    const sparseSourceId = 1 << 20;
+    const materialId = retainGltfPacketSubmissionMaterialBinding(
+      workspace,
+      7,
+      catalog,
+      sparseSourceId,
+      10,
+      {},
+    );
+    const rootId = retainGltfPacketSubmissionRootBinding(
+      workspace,
+      7,
+      catalog,
+      sparseSourceId,
+      0,
+      0,
+      {},
+    );
+
+    expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBe(materialId);
+    expect(retainGltfPacketSubmissionRootBinding(
+      workspace,
+      7,
+      catalog,
+      sparseSourceId,
+      0,
+      0,
+      {},
+    )).toBe(rootId);
+
+    resetGltfPacketSubmissionWorkspaceForFrame(workspace, 8, catalog);
+    expect(preparedGltfPacketSubmissionMaterialBindingId(workspace, sparseSourceId)).toBeUndefined();
   });
 
   it("rejects stale plan, catalog identity, and catalog revision access", () => {

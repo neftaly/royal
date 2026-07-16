@@ -82,9 +82,15 @@ export interface GltfPacketSubmissionWorkspace<MaterialBinding, RootBinding, Lig
 type WorkspaceState<MaterialBinding, RootBinding, LightBinding> =
   GltfPacketSubmissionWorkspace<MaterialBinding, RootBinding, LightBinding> & {
     lightBindingIdsByScope: Map<number, number>;
-    materialBindingIdsBySource: Map<number, number>;
-    rootBindingIdsBySource: Map<number, number>;
+    materialBindingIdsBySource: Uint32Array;
+    materialBindingIdsBySparseSource: Map<number, number>;
+    rootBindingIdsBySource: Uint32Array;
+    rootBindingIdsBySparseSource: Map<number, number>;
   };
+
+// Packet resource tables assign dense IDs. Keep their frame lookup allocation-free,
+// but retain a sparse fallback for checked callers rather than sizing from arbitrary IDs.
+const MAX_DENSE_SOURCE_LOOKUP_CAPACITY = 1 << 20;
 
 const positiveCapacity = (value: number, label: string): number => {
   if (!Number.isSafeInteger(value) || value < 1) {
@@ -140,6 +146,25 @@ const grownUint32 = (source: Uint32Array, capacity: number): Uint32Array => {
   return target;
 };
 
+const emptyBindingIdLookup = (capacity: number): Uint32Array =>
+  new Uint32Array(capacity).fill(NO_FRAME_PACKET_ID);
+
+const grownBindingIdLookup = (source: Uint32Array, required: number): Uint32Array => {
+  const target = emptyBindingIdLookup(nextCapacity(source.length, required));
+  target.set(source);
+  return target;
+};
+
+const retainedBindingId = (
+  dense: Uint32Array,
+  sparse: ReadonlyMap<number, number>,
+  sourceId: number,
+): number | undefined => {
+  if (sourceId >= dense.length) return sparse.get(sourceId);
+  const id = dense[sourceId]!;
+  return id === NO_FRAME_PACKET_ID ? undefined : id;
+};
+
 const grownFloat64 = (source: Float64Array, capacity: number): Float64Array => {
   const target = new Float64Array(capacity);
   target.set(source);
@@ -173,7 +198,8 @@ export const createGltfPacketSubmissionWorkspace = <MaterialBinding, RootBinding
     materialBindingCount: 0,
     materialBindingIds: new Uint32Array(rows),
     materialBindingBatchClassIds: new Float64Array(bindings),
-    materialBindingIdsBySource: new Map(),
+    materialBindingIdsBySource: emptyBindingIdLookup(bindings),
+    materialBindingIdsBySparseSource: new Map(),
     materialBindingSourceIds: new Uint32Array(bindings),
     materialBindings: Array.from<MaterialBinding | undefined>({ length: bindings }),
     materialBatchClassIds: new Float64Array(rows),
@@ -185,7 +211,8 @@ export const createGltfPacketSubmissionWorkspace = <MaterialBinding, RootBinding
     rootBindingCapacity: bindings,
     rootBindingCount: 0,
     rootBindingIds: new Uint32Array(rows),
-    rootBindingIdsBySource: new Map(),
+    rootBindingIdsBySource: emptyBindingIdLookup(bindings),
+    rootBindingIdsBySparseSource: new Map(),
     rootBindingLightScopeIds: new Float64Array(bindings),
     rootBindingOuterIndices: new Uint32Array(bindings),
     rootBindingSourceIds: new Uint32Array(bindings),
@@ -214,9 +241,17 @@ export const assertGltfPacketSubmissionWorkspaceCurrent = <M, R, L>(
 const clearBindings = <M, R, L>(workspace: WorkspaceState<M, R, L>): void => {
   for (let index = 0; index < workspace.materialBindingCount; index += 1) {
     workspace.materialBindings[index] = undefined;
+    const sourceId = workspace.materialBindingSourceIds[index]!;
+    if (sourceId < workspace.materialBindingIdsBySource.length) {
+      workspace.materialBindingIdsBySource[sourceId] = NO_FRAME_PACKET_ID;
+    }
   }
   for (let index = 0; index < workspace.rootBindingCount; index += 1) {
     workspace.rootBindings[index] = undefined;
+    const sourceId = workspace.rootBindingSourceIds[index]!;
+    if (sourceId < workspace.rootBindingIdsBySource.length) {
+      workspace.rootBindingIdsBySource[sourceId] = NO_FRAME_PACKET_ID;
+    }
   }
   for (let index = 0; index < workspace.lightBindingCount; index += 1) {
     workspace.lightBindings[index] = undefined;
@@ -224,8 +259,8 @@ const clearBindings = <M, R, L>(workspace: WorkspaceState<M, R, L>): void => {
   workspace.materialBindingCount = 0;
   workspace.rootBindingCount = 0;
   workspace.lightBindingCount = 0;
-  workspace.materialBindingIdsBySource.clear();
-  workspace.rootBindingIdsBySource.clear();
+  workspace.materialBindingIdsBySparseSource.clear();
+  workspace.rootBindingIdsBySparseSource.clear();
   workspace.lightBindingIdsByScope.clear();
 };
 
@@ -338,7 +373,11 @@ export const retainGltfPacketSubmissionMaterialBinding = <M, R, L>(
     throw new Error("Royal glTF packet submission material batch-class ID must be positive");
   }
   const value = definedBinding(binding, "material");
-  const existing = state.materialBindingIdsBySource.get(sourceId);
+  const existing = retainedBindingId(
+    state.materialBindingIdsBySource,
+    state.materialBindingIdsBySparseSource,
+    sourceId,
+  );
   if (existing !== undefined) {
     if (state.materialBindingBatchClassIds[existing] !== batchClassId) {
       throw new Error("Royal glTF packet submission material source has conflicting frame bindings");
@@ -357,9 +396,32 @@ export const retainGltfPacketSubmissionMaterialBinding = <M, R, L>(
   state.materialBindings[id] = value;
   state.materialBindingBatchClassIds[id] = batchClassId;
   state.materialBindingSourceIds[id] = sourceId;
-  state.materialBindingIdsBySource.set(sourceId, id);
+  if (sourceId < MAX_DENSE_SOURCE_LOOKUP_CAPACITY) {
+    if (sourceId >= state.materialBindingIdsBySource.length) {
+      state.materialBindingIdsBySource = grownBindingIdLookup(
+        state.materialBindingIdsBySource,
+        sourceId + 1,
+      );
+    }
+    state.materialBindingIdsBySource[sourceId] = id;
+  } else {
+    state.materialBindingIdsBySparseSource.set(sourceId, id);
+  }
   state.materialBindingCount = count;
   return id;
+};
+
+/** Returns a material binding already retained from the authoritative source in this view. */
+export const preparedGltfPacketSubmissionMaterialBindingId = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  materialSourceId: number,
+): number | undefined => {
+  const state = workspace as WorkspaceState<M, R, L>;
+  return retainedBindingId(
+    state.materialBindingIdsBySource,
+    state.materialBindingIdsBySparseSource,
+    materialSourceId,
+  );
 };
 
 export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
@@ -376,7 +438,11 @@ export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
   const normalizedOuterIndex = uint32(outerIndex, "root outer index");
   const normalizedLightScopeId = safeId(lightScopeId, "root light-scope ID");
   const value = definedBinding(binding, "root");
-  const existing = state.rootBindingIdsBySource.get(sourceId);
+  const existing = retainedBindingId(
+    state.rootBindingIdsBySource,
+    state.rootBindingIdsBySparseSource,
+    sourceId,
+  );
   if (existing !== undefined) {
     if (state.rootBindingOuterIndices[existing] !== normalizedOuterIndex
       || state.rootBindingLightScopeIds[existing] !== normalizedLightScopeId) {
@@ -398,7 +464,17 @@ export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
   state.rootBindingLightScopeIds[id] = normalizedLightScopeId;
   state.rootBindingOuterIndices[id] = normalizedOuterIndex;
   state.rootBindingSourceIds[id] = sourceId;
-  state.rootBindingIdsBySource.set(sourceId, id);
+  if (sourceId < MAX_DENSE_SOURCE_LOOKUP_CAPACITY) {
+    if (sourceId >= state.rootBindingIdsBySource.length) {
+      state.rootBindingIdsBySource = grownBindingIdLookup(
+        state.rootBindingIdsBySource,
+        sourceId + 1,
+      );
+    }
+    state.rootBindingIdsBySource[sourceId] = id;
+  } else {
+    state.rootBindingIdsBySparseSource.set(sourceId, id);
+  }
   state.rootBindingCount = count;
   return id;
 };
@@ -470,6 +546,41 @@ const renderClass = (value: number): FramePacketRenderClass => {
   return value;
 };
 
+const appendValidatedSubmission = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  row: GltfPacketSubmissionRow,
+  materialBatchClassId: number,
+): number => {
+  const index = workspace.count;
+  reserveRows(workspace, index + 1);
+  workspace.batchIds[index] = NO_FRAME_PACKET_ID;
+  workspace.geometryIds[index] = row.geometryId;
+  workspace.geometryIdentityIds[index] = row.geometryIdentityId;
+  workspace.lightBindingIds[index] = row.lightBindingId;
+  workspace.lightScopeIds[index] = row.lightScopeId;
+  workspace.localModelIds[index] = row.localModelId;
+  workspace.materialBatchClassIds[index] = materialBatchClassId;
+  workspace.materialBindingIds[index] = row.materialBindingId;
+  workspace.orderingSegments[index] = workspace.segment;
+  workspace.packetIndices[index] = row.packetIndex;
+  workspace.renderClasses[index] = row.renderClass;
+  workspace.rootBindingIds[index] = row.rootBindingId;
+  workspace.sidedness[index] = row.sidedness;
+  workspace.count = index + 1;
+  advanceSegmentRevision(workspace);
+  return index;
+};
+
+/** Appends a row assembled from this workspace's authoritative packet catalog and bindings. */
+export const appendPreparedGltfPacketSubmission = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  row: GltfPacketSubmissionRow,
+): number => appendValidatedSubmission(
+  workspace,
+  row,
+  workspace.materialBindingBatchClassIds[row.materialBindingId]!,
+);
+
 export const appendGltfPacketSubmission = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   planRevision: number,
@@ -522,24 +633,18 @@ export const appendGltfPacketSubmission = <M, R, L>(
   }
   const materialBatchClassId = workspace.materialBindingBatchClassIds[materialBindingId]!;
 
-  const index = workspace.count;
-  reserveRows(workspace, index + 1);
-  workspace.batchIds[index] = NO_FRAME_PACKET_ID;
-  workspace.geometryIds[index] = geometryId;
-  workspace.geometryIdentityIds[index] = geometryIdentityId;
-  workspace.lightBindingIds[index] = lightBindingId;
-  workspace.lightScopeIds[index] = lightScopeId;
-  workspace.localModelIds[index] = localModelId;
-  workspace.materialBatchClassIds[index] = materialBatchClassId;
-  workspace.materialBindingIds[index] = materialBindingId;
-  workspace.orderingSegments[index] = workspace.segment;
-  workspace.packetIndices[index] = packetIndex;
-  workspace.renderClasses[index] = normalizedRenderClass;
-  workspace.rootBindingIds[index] = rootBindingId;
-  workspace.sidedness[index] = normalizedSidedness;
-  workspace.count = index + 1;
-  advanceSegmentRevision(workspace);
-  return index;
+  return appendValidatedSubmission(workspace, {
+    geometryId,
+    geometryIdentityId,
+    lightBindingId,
+    lightScopeId,
+    localModelId,
+    materialBindingId,
+    packetIndex,
+    renderClass: normalizedRenderClass,
+    rootBindingId,
+    sidedness: normalizedSidedness,
+  }, materialBatchClassId);
 };
 
 const submissionIndex = <M, R, L>(workspace: GltfPacketSubmissionWorkspace<M, R, L>, index: number): number => {
