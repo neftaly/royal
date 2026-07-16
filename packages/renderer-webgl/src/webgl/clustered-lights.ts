@@ -19,7 +19,6 @@ export type ClusterGrid = {
 export type ClusterBuildScratch = {
   bounds: Int32Array;
   counts: Uint32Array;
-  cursors: Uint32Array;
   indices: Uint32Array;
   offsetsAndCounts: Uint32Array;
 };
@@ -27,7 +26,6 @@ export type ClusterBuildScratch = {
 export const createClusterBuildScratch = (): ClusterBuildScratch => ({
   bounds: new Int32Array(0),
   counts: new Uint32Array(0),
-  cursors: new Uint32Array(0),
   indices: new Uint32Array(0),
   offsetsAndCounts: new Uint32Array(0),
 });
@@ -60,7 +58,6 @@ const MAX_CLUSTER_INDEX_BYTES = 64 * 1024 * 1024;
 export interface ClusterBuildScratchCapacity {
   readonly bounds: number;
   readonly counts: number;
-  readonly cursors: number;
   readonly indices: number;
   readonly offsetsAndCounts: number;
 }
@@ -79,7 +76,6 @@ export const clusterBuildScratchCapacity = (
   return {
     bounds: capacity(lightCount * 6),
     counts: capacity(clusterCount),
-    cursors: capacity(clusterCount),
     indices: capacity(indexUpperBound),
     offsetsAndCounts: capacity(clusterCount * 2),
   };
@@ -90,7 +86,6 @@ export const createClusterBuildScratchWithCapacity = (
 ): ClusterBuildScratch => ({
   bounds: new Int32Array(value.bounds),
   counts: new Uint32Array(value.counts),
-  cursors: new Uint32Array(value.cursors),
   indices: new Uint32Array(value.indices),
   offsetsAndCounts: new Uint32Array(value.offsetsAndCounts),
 });
@@ -139,15 +134,12 @@ export const buildClusterGrid = ({
   const zSliceBias = logarithmicDepth ? -Math.log2(near) * zSliceScale : -near * zSliceScale;
   scratch.bounds = ensureInt32(scratch.bounds, lights.length * 6);
   scratch.counts = ensureUint32(scratch.counts, clusterCount);
-  scratch.cursors = ensureUint32(scratch.cursors, clusterCount);
   scratch.offsetsAndCounts = ensureUint32(scratch.offsetsAndCounts, clusterCount * 2);
   const bounds = scratch.bounds;
   const counts = scratch.counts;
-  const cursors = scratch.cursors;
   const offsetsAndCounts = scratch.offsetsAndCounts;
   bounds.fill(-1, 0, lights.length * 6);
   counts.fill(0, 0, clusterCount);
-  cursors.fill(0, 0, clusterCount);
 
   for (let lightIndex = 0; lightIndex < lights.length; lightIndex += 1) {
     const light = lights[lightIndex]!;
@@ -208,6 +200,7 @@ export const buildClusterGrid = ({
   }
   scratch.indices = ensureUint32(scratch.indices, indexCount);
   const indices = scratch.indices;
+  counts.fill(0, 0, clusterCount);
   for (let lightIndex = 0; lightIndex < lights.length; lightIndex += 1) {
     const offset = lightIndex * 6;
     const minX = bounds[offset]!;
@@ -220,8 +213,8 @@ export const buildClusterGrid = ({
     for (let z = minZ; z <= maxZ; z += 1) for (let y = minY; y <= maxY; y += 1) {
       for (let x = minX; x <= maxX; x += 1) {
         const cluster = x + y * tileCountX + z * tileCountX * tileCountY;
-        indices[offsetsAndCounts[cluster * 2]! + cursors[cluster]!] = lightIndex;
-        cursors[cluster]! += 1;
+        indices[offsetsAndCounts[cluster * 2]! + counts[cluster]!] = lightIndex;
+        counts[cluster]! += 1;
       }
     }
   }

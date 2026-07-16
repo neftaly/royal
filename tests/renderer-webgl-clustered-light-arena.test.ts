@@ -111,7 +111,6 @@ const bindLights = (
 type ScratchView = {
   readonly bounds: Int32Array;
   readonly counts: Uint32Array;
-  readonly cursors: Uint32Array;
   readonly indices: Uint32Array;
   readonly offsetsAndCounts: Uint32Array;
 };
@@ -120,7 +119,6 @@ const scratchOf = (arena: ReturnType<typeof createClusteredLightArena>): Scratch
 const copiedScratch = (scratch: ScratchView): ScratchView => ({
   bounds: scratch.bounds.slice(),
   counts: scratch.counts.slice(),
-  cursors: scratch.cursors.slice(),
   indices: scratch.indices.slice(),
   offsetsAndCounts: scratch.offsetsAndCounts.slice(),
 });
@@ -346,7 +344,6 @@ describe("clustered light arena", () => {
     expect(scratchOf(arena)).toMatchObject({
       bounds: { byteLength: 0 },
       counts: { byteLength: 0 },
-      cursors: { byteLength: 0 },
       indices: { byteLength: 0 },
       offsetsAndCounts: { byteLength: 0 },
     });

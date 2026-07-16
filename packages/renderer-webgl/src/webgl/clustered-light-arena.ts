@@ -240,7 +240,7 @@ const commitSnapshot = (
 };
 
 const scratchBytes = (scratch: ClusterBuildScratch): number =>
-  scratch.bounds.byteLength + scratch.counts.byteLength + scratch.cursors.byteLength
+  scratch.bounds.byteLength + scratch.counts.byteLength
   + scratch.indices.byteLength + scratch.offsetsAndCounts.byteLength;
 
 const powerOfTwoCapacity = (required: number): number =>
@@ -289,7 +289,7 @@ const conservativeRetainedCpuBytes = (
   lightCount: number,
   maxTextureSize: number,
 ): number => {
-  const scratch = (capacity.bounds + capacity.counts + capacity.cursors
+  const scratch = (capacity.bounds + capacity.counts
     + capacity.indices + capacity.offsetsAndCounts) * Uint32Array.BYTES_PER_ELEMENT;
   const indexLength = paddedIndexElementLength(
     Math.max(capacity.indices, 1),
@@ -567,7 +567,6 @@ export const bindClusteredLights = (
       const scratch = state.buildScratch;
       nextScratch = scratch.bounds.length >= capacity.bounds
         && scratch.counts.length >= capacity.counts
-        && scratch.cursors.length >= capacity.cursors
         && scratch.indices.length >= capacity.indices
         && scratch.offsetsAndCounts.length >= capacity.offsetsAndCounts
         ? scratch
