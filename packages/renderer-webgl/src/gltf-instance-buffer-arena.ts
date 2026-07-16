@@ -679,29 +679,31 @@ export const bindGltfInstanceBuffer = (
     counters,
     canSkipRetainedLane && !scaleDirty,
   );
-  for (let index = 0; index < packedSourceCount; index += 1) {
-    const previousSource = resource.packedSources[index];
-    const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;
-    if (previousSource !== nextSource) {
-      if (previousSource !== undefined) {
-        const count = resource.sourceCounts.get(previousSource)! - 1;
-        if (count === 0) {
-          resource.sourceCounts.delete(previousSource);
-          resource.poseVersions.delete(previousSource);
-          resource.scaleVersions.delete(previousSource);
-        } else {
-          resource.sourceCounts.set(previousSource, count);
+  if (packedLayoutChanged) {
+    for (let index = 0; index < packedSourceCount; index += 1) {
+      const previousSource = resource.packedSources[index];
+      const nextSource = index < instanceCount ? rootInstanceViews[index] : undefined;
+      if (previousSource !== nextSource) {
+        if (previousSource !== undefined) {
+          const count = resource.sourceCounts.get(previousSource)! - 1;
+          if (count === 0) {
+            resource.sourceCounts.delete(previousSource);
+            resource.poseVersions.delete(previousSource);
+            resource.scaleVersions.delete(previousSource);
+          } else {
+            resource.sourceCounts.set(previousSource, count);
+          }
+        }
+        if (nextSource !== undefined) {
+          resource.sourceCounts.set(nextSource, (resource.sourceCounts.get(nextSource) ?? 0) + 1);
         }
       }
-      if (nextSource !== undefined) {
-        resource.sourceCounts.set(nextSource, (resource.sourceCounts.get(nextSource) ?? 0) + 1);
-      }
+      if (index >= instanceCount) continue;
+      resource.packedSources[index] = nextSource;
+      resource.packedLogicalIndices[index] = rootLogicalIndices[index]!;
     }
-    if (index >= instanceCount) continue;
-    resource.packedSources[index] = nextSource;
-    resource.packedLogicalIndices[index] = rootLogicalIndices[index]!;
+    resource.packedSources.length = instanceCount;
   }
-  resource.packedSources.length = instanceCount;
   for (const sourceViews of resource.sourceCounts.keys()) {
     resource.poseVersions.set(sourceViews, sourceViews.framePoseVersion);
     resource.scaleVersions.set(sourceViews, sourceViews.frameScaleVersion);
