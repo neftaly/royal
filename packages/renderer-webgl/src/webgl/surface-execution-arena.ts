@@ -6,7 +6,13 @@ import {
 } from "../surface-presentation-policy";
 import type { GltfFrameBatchArena, GltfFrameBatchCounters, GltfFrameDrawBatch } from "../gltf/frame-batch-arena";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
-import { identityMat4, multiplyMat4Into, type Mat4 } from "../math/mat4";
+import {
+  cameraWorldPositionFromViewInto,
+  identityMat4,
+  multiplyMat4Into,
+  type Mat4,
+  type MutableVec3,
+} from "../math/mat4";
 import type { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
 import {
   copyTransmissionScreenColorTexture,
@@ -326,6 +332,7 @@ export class SurfaceExecutionArena {
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
+  readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
@@ -474,6 +481,9 @@ export class SurfaceExecutionArena {
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
       uniformMatrix(this.#programs, program, "u_model", input.model);
+      if (!loading && surfaceMaterial?.kind === "standard") {
+        this.#bindCameraWorldPosition(program, input.view);
+      }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);
       else this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
       if (!loading && plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
@@ -543,6 +553,9 @@ export class SurfaceExecutionArena {
       useProgram(this.#programs, program);
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
+      if (!loading && batch.material.kind === "standard") {
+        this.#bindCameraWorldPosition(program, input.view);
+      }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);
       else this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
       if (!loading && batch.material.kind === "standard") {
@@ -1225,6 +1238,19 @@ export class SurfaceExecutionArena {
       case "clamp-to-edge":
       default: return VT_WRAP_CLAMP_TO_EDGE;
     }
+  }
+
+  #bindCameraWorldPosition(program: WebGLProgram, view: Mat4): void {
+    const position = cameraWorldPositionFromViewInto(this.#cameraWorldPosition, view);
+    uniform4f(
+      this.#programs,
+      program,
+      "u_cameraWorldPosition",
+      position[0],
+      position[1],
+      position[2],
+      1,
+    );
   }
 
   #recordTextureBindingOmissions(plan: PureSurfaceTextureBindingPlan): void {

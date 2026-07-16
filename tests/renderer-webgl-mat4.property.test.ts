@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Transform } from "@royal/renderer-core";
+import { perspectiveCamera, type Transform } from "@royal/renderer-core";
 import {
   gltfImageBasedLightHasValidRotation,
   gltfImageBasedLightRotation,
@@ -10,6 +10,7 @@ import type {
 } from "../packages/renderer-webgl/src/gltf/schema";
 import { gltfNodeMat4 } from "../packages/renderer-webgl/src/gltf/transforms";
 import {
+  cameraWorldPositionFromViewInto,
   multiplyMat4,
   rotationXMat4,
   rotationYMat4,
@@ -21,6 +22,7 @@ import {
   transformPoint,
   transformPointInto,
   translationMat4,
+  viewMat4,
 } from "../packages/renderer-webgl/src/math/mat4";
 import { forEachFuzzCase } from "./fuzz";
 
@@ -58,6 +60,25 @@ const referenceTransformVector = (
 };
 
 describe("renderer-webgl transform matrix properties", () => {
+  it("recovers camera world positions into reusable storage", () => {
+    forEachFuzzCase({ cases: 64, seed: 0xca6e_a123 }, ({ label, random }) => {
+      const position = random.array(3, () => random.number(-1_000, 1_000)) as [number, number, number];
+      const camera = perspectiveCamera({
+        far: 1_000,
+        fovY: 1,
+        near: 0.1,
+        position,
+        rotation: random.array(3, () => random.number(-Math.PI, Math.PI)) as [number, number, number],
+      });
+      const output: [number, number, number] = [0, 0, 0];
+
+      expect(cameraWorldPositionFromViewInto(output, viewMat4(camera)), label).toBe(output);
+      for (let axis = 0; axis < 3; axis += 1) {
+        expect(output[axis], `${label} axis=${axis}`).toBeCloseTo(position[axis]!, 8);
+      }
+    });
+  });
+
   it("keeps write-into vector transforms equivalent to allocating wrappers", () => {
     forEachFuzzCase({ cases: 64, seed: 0x1a11_0ca7 }, ({ label, random }) => {
       const transform: Transform = {

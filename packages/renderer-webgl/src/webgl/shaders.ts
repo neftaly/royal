@@ -301,7 +301,17 @@ const clusteredLightFunctions = `uint clusteredLightIndex(uint linearIndex) {
   ).r;
 }
 
-vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
+vec3 clusteredLightContribution(
+  vec3 normal,
+  vec3 clearcoatNormal,
+  vec3 viewDirection,
+  vec3 worldPosition,
+  vec3 baseColor,
+  float metallic,
+  float roughness,
+  vec3 f0,
+  vec3 f90
+) {
   ivec2 tile = ivec2(floor((gl_FragCoord.xy - u_clusterViewportOrigin) / max(u_clusterDimensions.w, 1.0)));
   tile = clamp(tile, ivec2(0), ivec2(u_clusterDimensions.xy) - ivec2(1));
   float viewDepth = max(-(u_view * vec4(worldPosition, 1.0)).z, u_clusterDepth.z);
@@ -319,7 +329,8 @@ vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDire
     result += lightContributionData(
       int(colorAndKind.w + 0.5), colorAndKind.rgb, directionAndInner.xyz,
       positionAndRange.xyz, positionAndRange.w, directionAndInner.w, outer.x,
-      normal, clearcoatNormal, viewDirection, worldPosition, baseColor
+      normal, clearcoatNormal, viewDirection, worldPosition, baseColor,
+      metallic, roughness, f0, f90
     );
   }
   return result;
@@ -338,7 +349,17 @@ const surfaceFragmentShaderSource = (
     ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],
     ["__CLUSTERED_LIGHT_FUNCTIONS__", clusteredLights
       ? clusteredLightFunctions
-      : "vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) { return vec3(0.0); }"],
+      : `vec3 clusteredLightContribution(
+  vec3 normal,
+  vec3 clearcoatNormal,
+  vec3 viewDirection,
+  vec3 worldPosition,
+  vec3 baseColor,
+  float metallic,
+  float roughness,
+  vec3 f0,
+  vec3 f90
+) { return vec3(0.0); }`],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
     ["__ANISOTROPY_TEXTURE_EXPR__", surfaceTextureExpression(
@@ -434,17 +455,11 @@ return materialTangentNormal(geometricNormal, textureNormal, normalUv);`,
       "texture(u_thicknessTexture, materialTextureUv(u_thicknessUvSet, u_thicknessUvRow0, u_thicknessUvRow1)).g",
       "1.0",
     )],
-    ["__METALLIC_TEXTURE_EXPR__", surfaceTextureExpression(
+    ["__METALLIC_ROUGHNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "metallicRoughnessTexture",
-      "texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet, u_metallicRoughnessUvRow0, u_metallicRoughnessUvRow1)).b",
-      "1.0",
-    )],
-    ["__ROUGHNESS_TEXTURE_EXPR__", surfaceTextureExpression(
-      features,
-      "metallicRoughnessTexture",
-      "texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet, u_metallicRoughnessUvRow0, u_metallicRoughnessUvRow1)).g",
-      "1.0",
+      "texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet, u_metallicRoughnessUvRow0, u_metallicRoughnessUvRow1)).bg",
+      "vec2(1.0)",
     )],
     ["__EMISSIVE_TEXTURE_EXPR__", surfaceTextureExpression(
       features,

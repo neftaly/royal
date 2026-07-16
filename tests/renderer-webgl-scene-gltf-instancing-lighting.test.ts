@@ -675,7 +675,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(sources).toContain("return radiance * u_iblSpecularSettings.y;");
     expect(sources).toContain("+ cosineWeightedIrradiance * scattering.multi;");
     expect(sources).toContain("iblClearcoatRadiance");
-    expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * cosineWeightedIrradiance");
+    expect(sources).toContain("baseColor.rgb * (1.0 - metallic) * cosineWeightedIrradiance");
     expect(diagnostics).not.toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
     const cubeFaceTargets = readyFrameCalls
       .filter((call) => call.name === "texImage2D")

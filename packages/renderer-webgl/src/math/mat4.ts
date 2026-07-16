@@ -61,6 +61,20 @@ export const inverseMat4Into = (
 export const inverseMat4 = (matrix: Mat4): Mat4 | undefined =>
   inverseMat4Into(identityMat4(), matrix);
 
+/** Writes the world-space origin of an orthonormal world-to-view matrix. */
+export const cameraWorldPositionFromViewInto = (
+  out: MutableVec3,
+  view: Mat4,
+): MutableVec3 => {
+  const translationX = view[12];
+  const translationY = view[13];
+  const translationZ = view[14];
+  out[0] = -(view[0] * translationX + view[1] * translationY + view[2] * translationZ);
+  out[1] = -(view[4] * translationX + view[5] * translationY + view[6] * translationZ);
+  out[2] = -(view[8] * translationX + view[9] * translationY + view[10] * translationZ);
+  return out;
+};
+
 export const transformPointInto = (
   out: MutableVec3,
   matrix: Mat4,

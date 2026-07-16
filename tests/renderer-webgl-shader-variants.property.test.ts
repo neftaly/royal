@@ -147,10 +147,20 @@ describe("surface shader variants", () => {
       expect(source, `${label} sampler readiness is specialized`).not.toMatch(
         /uniform bool u_use(?:Texture|VirtualTexture|EmissiveTexture|MetallicRoughnessTexture|NormalTexture|OcclusionTexture|AnisotropyTexture|SpecularTexture|SpecularColorTexture|ClearcoatTexture|ClearcoatRoughnessTexture|ClearcoatNormalTexture|DiffuseTransmissionTexture|DiffuseTransmissionColorTexture|SheenColorTexture|SheenRoughnessTexture|IridescenceTexture|IridescenceThicknessTexture|MaterialTransmissionTexture|ThicknessTexture|TransmissionTexture);/u,
       );
-      expect(source, `${label} surface lighting path`).toContain("materialDiffuseColor(baseColor.rgb)");
+      expect(source, `${label} shared PBR sample`).toContain(
+        "vec2 metallicRoughness = materialMetallicRoughness();",
+      );
+      expect(source, `${label} camera position uniform`).toContain(
+        "u_cameraWorldPosition.xyz - v_worldPosition",
+      );
+      expect(source, `${label} per-fragment camera recovery`).not.toContain(
+        "transpose(mat3(u_view))",
+      );
+      expect(source.match(/texture\(u_metallicRoughnessTexture/gu)?.length ?? 0, `${label} PBR sample count`)
+        .toBe(features.has("metallicRoughnessTexture") ? 1 : 0);
       expect(source, `${label} specular occlusion`).toContain("iblSpecularOcclusion(NdotV, occlusion, roughness)");
       expect(source, `${label} single DFG evaluation`).toContain(
-        "IblGgxScattering scattering = iblGgxScattering(baseColor.rgb, environmentBrdf, NdotV);",
+        "IblGgxScattering scattering = iblGgxScattering(f0, f90, environmentBrdf, NdotV);",
       );
       expect(source.match(/iblEnvironmentBrdf\(roughness, NdotV\)/gu)?.length, label).toBe(2);
       expect(source, `${label} energy-conserving diffuse`).toContain(

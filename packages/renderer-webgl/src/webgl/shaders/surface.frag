@@ -12,6 +12,7 @@ in vec4 v_color;
 #define MATERIAL_EXTENDED __MATERIAL_EXTENDED__
 
 uniform highp mat4 u_view;
+uniform highp vec4 u_cameraWorldPosition;
 
 // Each admitted material sampler selects a retained raw UV set and applies its
 // KHR_texture_transform affine rows. Unused slots are absent from the variant.
@@ -278,20 +279,13 @@ float materialIor() {
 #endif
 }
 
-float materialMetallicFactor() {
-  float textureMetallic = __METALLIC_TEXTURE_EXPR__;
+vec2 materialMetallicRoughness() {
+  vec2 textureMetallicRoughness = __METALLIC_ROUGHNESS_TEXTURE_EXPR__;
 
-  return clamp(u_materialPbrFactors.x * textureMetallic, 0.0, 1.0);
-}
-
-float materialRoughnessFactor() {
-  float textureRoughness = __ROUGHNESS_TEXTURE_EXPR__;
-
-  return clamp(u_materialPbrFactors.y * textureRoughness, 0.04, 1.0);
-}
-
-vec3 materialDiffuseColor(vec3 baseColor) {
-  return baseColor * (1.0 - materialMetallicFactor());
+  return vec2(
+    clamp(u_materialPbrFactors.x * textureMetallicRoughness.x, 0.0, 1.0),
+    clamp(u_materialPbrFactors.y * textureMetallicRoughness.y, 0.04, 1.0)
+  );
 }
 
 vec3 materialEmissiveColor() {
@@ -377,23 +371,6 @@ vec3 materialNormal(vec3 geometricNormal) {
 
 vec3 materialClearcoatNormal(vec3 geometricNormal) {
   __MATERIAL_CLEARCOAT_NORMAL_BODY__
-}
-
-vec3 materialDielectricF0() {
-  float specular = materialSpecularFactor();
-  vec3 specularColor = materialSpecularColorFactor();
-
-  return min(vec3(iorF0(materialIor())) * specularColor, vec3(1.0)) * specular;
-}
-
-vec3 materialF0(vec3 baseColor) {
-  return mix(materialDielectricF0(), baseColor, materialMetallicFactor());
-}
-
-vec3 materialF90() {
-  float specular = materialSpecularFactor();
-
-  return mix(vec3(specular), vec3(1.0), materialMetallicFactor());
 }
 
 float materialGgxDistribution(float NdotH, float roughness) {
@@ -590,10 +567,6 @@ vec3 materialTransmissionScreenColor(vec3 baseColor, vec3 normal, vec3 viewDirec
   __MATERIAL_TRANSMISSION_SCREEN_BODY__
 }
 
-vec3 cameraWorldPosition() {
-  return -transpose(mat3(u_view)) * u_view[3].xyz;
-}
-
 float rangeAttenuation(float distanceToLight, float range) {
   if (range <= 0.0) {
     return 1.0 / max(distanceToLight * distanceToLight, 0.0001);
@@ -662,9 +635,7 @@ struct IblGgxScattering {
   vec3 multi;
 };
 
-IblGgxScattering iblGgxScattering(vec3 baseColor, vec2 brdf, float NdotV) {
-  vec3 f0 = materialF0(baseColor);
-  vec3 f90 = materialF90();
+IblGgxScattering iblGgxScattering(vec3 f0, vec3 f90, vec2 brdf, float NdotV) {
   vec3 single = (f0 * brdf.x + f90 * brdf.y) * materialIridescenceTint(NdotV);
   float singleEnergy = clamp(brdf.x + brdf.y, 0.0, 1.0);
   float missingEnergy = 1.0 - singleEnergy;
@@ -705,7 +676,11 @@ vec3 lightContributionData(
   vec3 clearcoatNormal,
   vec3 viewDirection,
   vec3 worldPosition,
-  vec3 baseColor
+  vec3 baseColor,
+  float metallic,
+  float roughness,
+  vec3 f0,
+  vec3 f90
 ) {
   vec3 lightVector;
   float attenuation = 1.0;
@@ -733,7 +708,6 @@ vec3 lightContributionData(
   float lambert = max(dot(normal, lightVector), 0.0);
   float diffuseTransmissionLambert = max(dot(-normal, lightVector), 0.0);
   vec3 lightColor = sourceColor * attenuation;
-  float metallic = materialMetallicFactor();
   vec3 diffuseColor = baseColor * (1.0 - metallic);
   float diffuseTransmissionFactor = materialDiffuseTransmissionFactor();
   vec3 diffuseTransmissionColor = materialDiffuseTransmissionColor();
@@ -752,13 +726,7 @@ vec3 lightContributionData(
   vec3 halfVectorInput = lightVector + viewDirection;
   vec3 halfVector = length(halfVectorInput) <= 0.0001 ? normal : normalize(halfVectorInput);
   float NdotV = max(dot(normal, viewDirection), 0.0);
-  float roughness = materialRoughnessFactor();
   float VdotH = max(dot(viewDirection, halfVector), 0.0);
-  float specularFactor = materialSpecularFactor();
-  vec3 specularColorFactor = materialSpecularColorFactor();
-  vec3 dielectricF0 = min(vec3(iorF0(materialIor())) * specularColorFactor, vec3(1.0)) * specularFactor;
-  vec3 f0 = mix(dielectricF0, baseColor, metallic);
-  vec3 f90 = mix(vec3(specularFactor), vec3(1.0), metallic);
   vec3 fresnel = mix(f0, f90, fresnelPow(VdotH)) * materialIridescenceTint(VdotH);
   vec2 ggxTerms = materialGgxTerms(normal, halfVector, lightVector, viewDirection, roughness);
   float distribution = ggxTerms.x;
@@ -781,7 +749,17 @@ vec3 lightContributionData(
   return mix(lighting, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 
-vec3 directionalLightContribution(int index, vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 baseColor) {
+vec3 directionalLightContribution(
+  int index,
+  vec3 normal,
+  vec3 clearcoatNormal,
+  vec3 viewDirection,
+  vec3 baseColor,
+  float metallic,
+  float roughness,
+  vec3 f0,
+  vec3 f90
+) {
   return lightContributionData(
     0,
     u_surfaceLightColor[index].rgb,
@@ -794,7 +772,11 @@ vec3 directionalLightContribution(int index, vec3 normal, vec3 clearcoatNormal, 
     clearcoatNormal,
     viewDirection,
     vec3(0.0),
-    baseColor
+    baseColor,
+    metallic,
+    roughness,
+    f0,
+    f90
   );
 }
 
@@ -816,8 +798,18 @@ void main() {
   vec3 geometricNormal = materialGeometricNormal();
   vec3 normal = materialNormal(geometricNormal);
   vec3 clearcoatNormal = materialClearcoatNormal(geometricNormal);
-  vec3 viewVector = cameraWorldPosition() - v_worldPosition;
+  vec3 viewVector = u_cameraWorldPosition.xyz - v_worldPosition;
   vec3 viewDirection = length(viewVector) <= 0.0001 ? normal : normalize(viewVector);
+  vec2 metallicRoughness = materialMetallicRoughness();
+  float metallic = metallicRoughness.x;
+  float roughness = metallicRoughness.y;
+  float specularFactor = materialSpecularFactor();
+  vec3 dielectricF0 = min(
+    vec3(iorF0(materialIor())) * materialSpecularColorFactor(),
+    vec3(1.0)
+  ) * specularFactor;
+  vec3 f0 = mix(dielectricF0, baseColor.rgb, metallic);
+  vec3 f90 = mix(vec3(specularFactor), vec3(1.0), metallic);
   float occlusion = materialOcclusion();
   float viewClearcoat = materialClearcoatFresnel(clearcoatNormal, viewDirection);
   vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
@@ -825,19 +817,18 @@ void main() {
   float diffuseTransmission = materialDiffuseTransmissionFactor();
   vec3 diffuseTransmissionColor = materialDiffuseTransmissionColor();
   vec3 transmittedIrradiance = iblDiffuseIrradiance(-normal) / PI;
-  float roughness = materialRoughnessFactor();
   float NdotV = max(dot(normal, viewDirection), 0.0);
   vec2 environmentBrdf = iblEnvironmentBrdf(roughness, NdotV);
-  IblGgxScattering scattering = iblGgxScattering(baseColor.rgb, environmentBrdf, NdotV);
+  IblGgxScattering scattering = iblGgxScattering(f0, f90, environmentBrdf, NdotV);
   vec3 totalScattering = scattering.single + scattering.multi;
   float diffuseEnergy = 1.0 - clamp(maxComponent(totalScattering), 0.0, 1.0);
-  vec3 lit = materialDiffuseColor(baseColor.rgb) * cosineWeightedIrradiance
+  vec3 lit = baseColor.rgb * (1.0 - metallic) * cosineWeightedIrradiance
     * (1.0 - diffuseTransmission)
     * diffuseEnergy
     * occlusion
     * (1.0 - viewClearcoat);
   lit += diffuseTransmissionColor
-    * (1.0 - materialMetallicFactor())
+    * (1.0 - metallic)
     * transmittedIrradiance
     * diffuseTransmission
     * diffuseEnergy
@@ -856,9 +847,29 @@ void main() {
       break;
     }
 
-    lit += directionalLightContribution(index, normal, clearcoatNormal, viewDirection, baseColor.rgb);
+    lit += directionalLightContribution(
+      index,
+      normal,
+      clearcoatNormal,
+      viewDirection,
+      baseColor.rgb,
+      metallic,
+      roughness,
+      f0,
+      f90
+    );
   }
-  lit += clusteredLightContribution(normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
+  lit += clusteredLightContribution(
+    normal,
+    clearcoatNormal,
+    viewDirection,
+    v_worldPosition,
+    baseColor.rgb,
+    metallic,
+    roughness,
+    f0,
+    f90
+  );
 
   // Keep glTF's relative emissive scale anchored to the same scene-referred
   // display white in both paths. The HDR path is mapped by the presentation
@@ -869,7 +880,7 @@ void main() {
   if (__MATERIAL_TRANSMISSION_SCREEN_CONDITION__) {
     vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);
     float NdotV = max(dot(normal, viewDirection), 0.0);
-    vec3 fresnel = mix(materialF0(baseColor.rgb), materialF90(), fresnelPow(NdotV));
+    vec3 fresnel = mix(f0, f90, fresnelPow(NdotV));
     // Transmission replaces the diffuse/body response, not the reflected lobe.
     // Retaining a Fresnel-weighted share also avoids black glass when a
     // transparent framebuffer has no backdrop to refract.
