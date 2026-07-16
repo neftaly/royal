@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { readGltfFloatAccessor, readGltfIndices } from "../packages/renderer-webgl/src/gltf/accessors";
+import {
+  createGltfAccessorReader,
+  readGltfFloatAccessor,
+  readGltfIndices,
+} from "../packages/renderer-webgl/src/gltf/accessors";
 import { gltfBufferViewBytes, loadGltfBuffers, parseGltfDocumentBytes } from "../packages/renderer-webgl/src/gltf/io";
 import type { GltfDocument } from "../packages/renderer-webgl/src/gltf/schema";
 
@@ -164,6 +168,19 @@ describe("glTF binary validation", () => {
     expect(converted[0]).toBe(0);
     expect(converted[1]).toBeCloseTo(127 / 255);
     expect(converted[2]).toBe(1);
+  });
+
+  it("materializes each immutable accessor once per asset reader", () => {
+    const buffer = new Float32Array([1, 2, 3, 4]).buffer;
+    const reader = createGltfAccessorReader({
+      accessors: [{ bufferView: 0, componentType: 5126, count: 2, type: "VEC2" }],
+      bufferViews: [{ buffer: 0, byteLength: 16 }],
+    }, [buffer]);
+
+    const first = reader.float(0);
+    expect(reader.float(0)).toBe(first);
+    expect(first.buffer).not.toBe(buffer);
+    expect([...first]).toEqual([1, 2, 3, 4]);
   });
 
   it("preserves zero initialization without a bufferView and applies sparse overlays", () => {

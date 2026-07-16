@@ -100,8 +100,6 @@ describe("prepared glTF asset dependency core", () => {
     ])).toEqual([
       [base, lod],
       [variant, variantLod],
-      [base, lod],
-      [variant, variantLod],
     ]);
   });
 

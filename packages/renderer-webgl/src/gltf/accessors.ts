@@ -395,3 +395,33 @@ export const readGltfIndices = (
 
   return output;
 };
+
+export type GltfAccessorReader = Readonly<{
+  float(accessorIndex: number): Float32Array;
+  indices(accessorIndex: number): GltfIndexArray;
+}>;
+
+/** Asset-local shell: immutable accessor results are materialized at most once. */
+export const createGltfAccessorReader = (
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+): GltfAccessorReader => {
+  const floats = new Map<number, Float32Array>();
+  const indices = new Map<number, GltfIndexArray>();
+  return {
+    float: (accessorIndex) => {
+      const cached = floats.get(accessorIndex);
+      if (cached !== undefined) return cached;
+      const loaded = readGltfFloatAccessor(document, buffers, accessorIndex);
+      floats.set(accessorIndex, loaded);
+      return loaded;
+    },
+    indices: (accessorIndex) => {
+      const cached = indices.get(accessorIndex);
+      if (cached !== undefined) return cached;
+      const loaded = readGltfIndices(document, buffers, accessorIndex);
+      indices.set(accessorIndex, loaded);
+      return loaded;
+    },
+  };
+};

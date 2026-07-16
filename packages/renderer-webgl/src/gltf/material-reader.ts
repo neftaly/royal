@@ -22,6 +22,7 @@ import {
 
 export type GltfMaterialReader = Readonly<{
   document: GltfDocument;
+  material: (materialIndex: number | undefined) => LoadedGltfMaterial;
   textureSlot: (textureInfo: GltfTextureInfo | undefined) => LoadedGltfMaterialTextureSlot | undefined;
 }>;
 
@@ -145,7 +146,7 @@ const emissiveColor = (material: GltfMaterial | undefined): LinearRgba | undefin
   return emissive[0] === 0 && emissive[1] === 0 && emissive[2] === 0 ? undefined : emissive;
 };
 
-export const readGltfMaterial = (
+const parseGltfMaterial = (
   reader: GltfMaterialReader,
   materialIndex: number | undefined,
 ): LoadedGltfMaterial => {
@@ -181,6 +182,32 @@ export const readGltfMaterial = (
     ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
   };
 };
+
+/** Asset-local shell: normalized authored materials are immutable and shared by index. */
+export const createGltfMaterialReader = (
+  document: GltfDocument,
+  textureSlot: GltfMaterialReader["textureSlot"],
+): GltfMaterialReader => {
+  const materials = new Map<number | undefined, LoadedGltfMaterial>();
+  let reader!: GltfMaterialReader;
+  reader = {
+    document,
+    material: (materialIndex) => {
+      const cached = materials.get(materialIndex);
+      if (cached !== undefined) return cached;
+      const loaded = parseGltfMaterial(reader, materialIndex);
+      materials.set(materialIndex, loaded);
+      return loaded;
+    },
+    textureSlot,
+  };
+  return reader;
+};
+
+export const readGltfMaterial = (
+  reader: GltfMaterialReader,
+  materialIndex: number | undefined,
+): LoadedGltfMaterial => reader.material(materialIndex);
 
 export const readGltfMaterialLod = (
   reader: GltfMaterialReader,

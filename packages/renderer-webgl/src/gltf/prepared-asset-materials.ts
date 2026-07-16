@@ -12,14 +12,21 @@ import type {
 export const preparedGltfMaterialPublicationGroups = (
   primitives: readonly LoadedGltfPrimitive[],
 ): readonly (readonly LoadedGltfMaterial[])[] => {
-  const groups: Array<readonly LoadedGltfMaterial[]> = [];
+  const components = new Map<LoadedGltfMaterial, Set<LoadedGltfMaterial>>();
+  const merge = (group: readonly LoadedGltfMaterial[]): void => {
+    const component = new Set(group);
+    for (const material of group) {
+      for (const member of components.get(material) ?? []) component.add(member);
+    }
+    for (const material of component) components.set(material, component);
+  };
   for (const primitive of primitives) {
-    groups.push(primitive.baseMaterial.materialLod?.levels ?? [primitive.baseMaterial.material]);
+    merge(primitive.baseMaterial.materialLod?.levels ?? [primitive.baseMaterial.material]);
     for (const variant of primitive.materialVariants ?? []) {
-      groups.push(variant.materialLod?.levels ?? [variant.material]);
+      merge(variant.materialLod?.levels ?? [variant.material]);
     }
   }
-  return groups;
+  return [...new Set(components.values())].map((component) => [...component]);
 };
 
 /** Collects every material reachable through base, LOD, and variant paths once by identity. */

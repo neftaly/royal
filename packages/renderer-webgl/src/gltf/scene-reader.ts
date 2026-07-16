@@ -9,7 +9,11 @@ import {
 import { worldBounds, type Bounds3, type MutableBounds3 } from "../math/picking";
 import { normalizeLodThresholds, type LodLevelMembership } from "../lod";
 import { resolveResourceUri } from "../resource-io";
-import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./accessors";
+import {
+  createGltfAccessorReader,
+  gltfComponentCount,
+  type GltfAccessorReader,
+} from "./accessors";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
 import { readGltfSceneImageBasedLight } from "./image-based-light";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
@@ -37,6 +41,7 @@ import type {
   LoadedGltfPrimitiveMaterial,
 } from "./prepared-asset";
 import {
+  createGltfMaterialReader,
   readGltfMaterial,
   readGltfMaterialLod,
   readGltfMaterialVariants,
@@ -263,8 +268,7 @@ const gltfPrimitiveMode = (mode: number | undefined): GltfGeometryDrawMode | und
 };
 
 const gltfPrimitiveTexCoords = (
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
+  accessors: GltfAccessorReader,
   primitive: GltfMeshPrimitive,
   set: 0 | 1,
   decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
@@ -273,19 +277,19 @@ const gltfPrimitiveTexCoords = (
   const decodedTexCoords = decodedAttributes?.get(semantic);
   if (decodedTexCoords !== undefined) return decodedTexCoords;
   const accessor = primitive.attributes?.[semantic];
-  return accessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, accessor);
+  return accessor === undefined ? undefined : accessors.float(accessor);
 };
 
 const gltfVertexColors = (
   document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
+  accessors: GltfAccessorReader,
   primitive: GltfMeshPrimitive,
   positions: Float32Array,
   decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
 ): Float32Array | undefined => {
   const colorAccessor = primitive.attributes?.COLOR_0;
   const colors = decodedAttributes?.get("COLOR_0")
-    ?? (colorAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, colorAccessor));
+    ?? (colorAccessor === undefined ? undefined : accessors.float(colorAccessor));
   if (colors === undefined) return undefined;
   const vertexCount = positions.length / 3;
   const accessorComponentCount = colorAccessor === undefined
@@ -308,7 +312,7 @@ const mat4OrientationDeterminant = (matrix: Mat4): number =>
 
 const gltfNodeInstanceTransforms = (
   document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
+  accessors: GltfAccessorReader,
   sceneNode: GltfSceneNode,
   nodeIndex: number,
   diagnostics: GltfSceneReaderDiagnosticSink,
@@ -343,9 +347,9 @@ const gltfNodeInstanceTransforms = (
   validate("TRANSLATION");
   validate("ROTATION");
   validate("SCALE");
-  const translations = attributes.TRANSLATION === undefined ? undefined : readGltfFloatAccessor(document, buffers, attributes.TRANSLATION);
-  const rotations = attributes.ROTATION === undefined ? undefined : readGltfFloatAccessor(document, buffers, attributes.ROTATION);
-  const scales = attributes.SCALE === undefined ? undefined : readGltfFloatAccessor(document, buffers, attributes.SCALE);
+  const translations = attributes.TRANSLATION === undefined ? undefined : accessors.float(attributes.TRANSLATION);
+  const rotations = attributes.ROTATION === undefined ? undefined : accessors.float(attributes.ROTATION);
+  const scales = attributes.SCALE === undefined ? undefined : accessors.float(attributes.SCALE);
   for (const [semantic, values] of [["TRANSLATION", translations], ["ROTATION", rotations], ["SCALE", scales]] as const) {
     if (values?.some((value) => !Number.isFinite(value)) === true) {
       throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ${semantic} contains non-finite values`);
@@ -363,6 +367,7 @@ const gltfNodeInstanceTransforms = (
 };
 
 type TraversalContext = ReadGltfSceneInput & {
+  readonly accessors: GltfAccessorReader;
   readonly lights: SurfaceLight[];
   readonly materialReader: GltfMaterialReader;
   readonly primitives: LoadedGltfPrimitive[];
@@ -447,7 +452,7 @@ const appendNodeTreePrimitives = (
   const nodePath = [...parentPath, nodeIndex];
   const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
   appendNodeLight(context, sceneNode, nodeIndex, nodeModel);
-  const instanceTransforms = gltfNodeInstanceTransforms(context.document, context.buffers, sceneNode, nodeIndex, context.diagnostics);
+  const instanceTransforms = gltfNodeInstanceTransforms(context.document, context.accessors, sceneNode, nodeIndex, context.diagnostics);
   const localModels = instanceTransforms.map((transform) => multiplyMat4(nodeModel, transform));
   const localModelDeterminants = localModels.map(mat4OrientationDeterminant);
   const mesh = sceneNode.mesh === undefined ? undefined : context.document.meshes?.[sceneNode.mesh];
@@ -456,7 +461,7 @@ const appendNodeTreePrimitives = (
     const decodedAttributes = dracoPrimitive?.attributes;
     const positionAccessor = primitive.attributes?.POSITION;
     const positions = decodedAttributes?.get("POSITION")
-      ?? (positionAccessor === undefined ? undefined : readGltfFloatAccessor(context.document, context.buffers, positionAccessor));
+      ?? (positionAccessor === undefined ? undefined : context.accessors.float(positionAccessor));
     if (positions === undefined) continue;
     const mode = gltfPrimitiveMode(primitive.mode);
     if (mode === undefined) {
@@ -470,14 +475,14 @@ const appendNodeTreePrimitives = (
     const normalAccessor = primitive.attributes?.NORMAL;
     const tangentAccessor = primitive.attributes?.TANGENT;
     const baseNormals = decodedAttributes?.get("NORMAL")
-      ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(context.document, context.buffers, normalAccessor));
+      ?? (normalAccessor === undefined ? undefined : context.accessors.float(normalAccessor));
     const tangents = decodedAttributes?.get("TANGENT")
-      ?? (tangentAccessor === undefined ? undefined : readGltfFloatAccessor(context.document, context.buffers, tangentAccessor));
-    const colors = gltfVertexColors(context.document, context.buffers, primitive, positions, decodedAttributes);
-    const texCoords0 = gltfPrimitiveTexCoords(context.document, context.buffers, primitive, 0, decodedAttributes);
-    const texCoords1 = gltfPrimitiveTexCoords(context.document, context.buffers, primitive, 1, decodedAttributes);
+      ?? (tangentAccessor === undefined ? undefined : context.accessors.float(tangentAccessor));
+    const colors = gltfVertexColors(context.document, context.accessors, primitive, positions, decodedAttributes);
+    const texCoords0 = gltfPrimitiveTexCoords(context.accessors, primitive, 0, decodedAttributes);
+    const texCoords1 = gltfPrimitiveTexCoords(context.accessors, primitive, 1, decodedAttributes);
     const indices = dracoPrimitive?.indices
-      ?? (primitive.indices === undefined ? undefined : readGltfIndices(context.document, context.buffers, primitive.indices));
+      ?? (primitive.indices === undefined ? undefined : context.accessors.indices(primitive.indices));
     const normals = baseNormals;
     const material = readGltfMaterial(context.materialReader, primitive.material);
     const materialLod = readGltfMaterialLod(context.materialReader, primitive.material);
@@ -541,16 +546,17 @@ export const readGltfScene = (input: ReadGltfSceneInput): GltfSceneFacts => {
   }
   const context: TraversalContext = {
     ...input,
+    accessors: createGltfAccessorReader(input.document, input.buffers),
     lights,
-    materialReader: {
-      document: input.document,
-      textureSlot: (textureInfo) => gltfMaterialTextureSlot(
+    materialReader: createGltfMaterialReader(
+      input.document,
+      (textureInfo) => gltfMaterialTextureSlot(
         input.document,
         input.assetKey,
         input.src,
         textureInfo,
       ),
-    },
+    ),
     primitives,
     referencedLodNodes,
     variantCount: variants.length,
