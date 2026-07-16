@@ -58,10 +58,11 @@ class FakeGl {
   readonly UNSIGNED_BYTE = 0x1401;
   readonly calls: Call[] = [];
   readonly deleteFailures = new Set<number>();
+  readonly maxTextureImageUnits: number;
   failCreateOnce = false;
   failTexImageOnce = false;
   #serial = 1;
-  constructor(readonly maxTextureImageUnits = 16) {}
+  constructor(maxTextureImageUnits = 16) { this.maxTextureImageUnits = maxTextureImageUnits; }
   #record(name: string, ...args: readonly unknown[]): void { this.calls.push({ args, name }); }
   activeTexture = (...args: readonly unknown[]): void => this.#record("activeTexture", ...args);
   bindTexture = (...args: readonly unknown[]): void => this.#record("bindTexture", ...args);

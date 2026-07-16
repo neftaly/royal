@@ -86,6 +86,7 @@ export const isPackedInstanceSlotDirty = (
   || (dirty !== undefined && sourceVersionChanged && isInstanceDirty(dirty, logicalIndex));
 
 export class GltfInstanceChangeTracker {
+  declare readonly count: number;
   activePosition: InstanceDirtyBits;
   activeRotation: InstanceDirtyBits;
   activeScale: InstanceDirtyBits;
@@ -93,7 +94,8 @@ export class GltfInstanceChangeTracker {
   pendingRotation: InstanceDirtyBits;
   pendingScale: InstanceDirtyBits;
 
-  constructor(readonly count: number, initiallyDirty = true) {
+  constructor(count: number, initiallyDirty = true) {
+    this.count = count;
     this.activePosition = createInstanceDirtyBits(count);
     this.activeRotation = createInstanceDirtyBits(count);
     this.activeScale = createInstanceDirtyBits(count);

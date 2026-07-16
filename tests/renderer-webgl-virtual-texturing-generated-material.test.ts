@@ -114,11 +114,11 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const objectUrlBlobs: Blob[] = [];
     let nextObjectUrl = 0;
     class TestURL extends URL {
-      static createObjectURL = vi.fn((blob: Blob) => {
+      static override createObjectURL = vi.fn((blob: Blob) => {
         objectUrlBlobs.push(blob);
         return `blob:royal-svg-texture-${nextObjectUrl += 1}`;
       });
-      static revokeObjectURL = vi.fn();
+      static override revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
     const { contexts } = installCanvas2d();
@@ -199,11 +199,11 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const objectUrlBlobs: Blob[] = [];
     let nextObjectUrl = 0;
     class TestURL extends URL {
-      static createObjectURL = vi.fn((blob: Blob) => {
+      static override createObjectURL = vi.fn((blob: Blob) => {
         objectUrlBlobs.push(blob);
         return `blob:royal-svg-data-texture-${nextObjectUrl += 1}`;
       });
-      static revokeObjectURL = vi.fn();
+      static override revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
     const { contexts } = installCanvas2d();
@@ -248,8 +248,8 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     class TestURL extends URL {
-      static createObjectURL = vi.fn(() => "blob:royal-svg-webkit");
-      static revokeObjectURL = vi.fn();
+      static override createObjectURL = vi.fn(() => "blob:royal-svg-webkit");
+      static override revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
     const { contexts } = installCanvas2d();

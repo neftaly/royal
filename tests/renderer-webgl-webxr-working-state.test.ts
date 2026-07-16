@@ -162,12 +162,18 @@ describe("WebGL root WebXR working state contracts", () => {
     let layerContext: WebGL2RenderingContext | undefined;
     let layerOptions: unknown;
     const xrWebGLLayerConstructor: WebGlXrLayerConstructor = class {
+      readonly context: WebGL2RenderingContext;
       readonly framebuffer = framebuffer;
+      readonly options: unknown | undefined;
+      readonly session: WebGlXrSession;
       constructor(
-        readonly session: WebGlXrSession,
-        readonly context: WebGL2RenderingContext,
-        readonly options?: unknown,
+        session: WebGlXrSession,
+        context: WebGL2RenderingContext,
+        options?: unknown,
       ) {
+        this.context = context;
+        this.options = options;
+        this.session = session;
         layerContext = context;
         layerOptions = options;
       }

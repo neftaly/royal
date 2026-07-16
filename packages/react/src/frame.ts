@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, type Context } from "react";
 import { useCommittedRef } from "./committed-ref";
 import {
   validateUseFrameCallback,
@@ -21,7 +21,7 @@ export type {
   UseFrameOptions,
 } from "./frame-loop";
 
-export const FrameLoopContext = createContext<FrameLoop | null>(null);
+export const FrameLoopContext: Context<FrameLoop | null> = createContext<FrameLoop | null>(null);
 
 const useCanvasFrameLoop = (): FrameLoop => {
   const frameLoop = useContext(FrameLoopContext);

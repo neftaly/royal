@@ -88,11 +88,11 @@ export const installStagedGltfLoader = () => {
 
   vi.stubGlobal("Image", ControlledImage);
   class TestURL extends URL {
-    static createObjectURL = vi.fn((blob: Blob) => {
+    static override createObjectURL = vi.fn((blob: Blob) => {
       objectUrlBlobs.push(blob);
       return `blob:royal-test-${nextObjectUrl += 1}`;
     });
-    static revokeObjectURL = vi.fn();
+    static override revokeObjectURL = vi.fn();
   }
   vi.stubGlobal("URL", TestURL);
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>

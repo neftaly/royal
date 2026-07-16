@@ -79,8 +79,8 @@ describe("SVG texture reference lifecycle", () => {
       }
     }
     class TestUrl extends URL {
-      static createObjectURL = vi.fn(() => "blob:royal-svg-abort");
-      static revokeObjectURL = vi.fn();
+      static override createObjectURL = vi.fn(() => "blob:royal-svg-abort");
+      static override revokeObjectURL = vi.fn();
     }
     let observedSignal: AbortSignal | undefined;
     vi.stubGlobal("Image", ControlledImage);
@@ -113,11 +113,11 @@ describe("SVG texture reference lifecycle", () => {
   it("loads one browser-decoded SVG with optional generic VT source metadata", async () => {
     const objectUrlBlobs: Blob[] = [];
     class TestUrl extends URL {
-      static createObjectURL = vi.fn((blob: Blob) => {
+      static override createObjectURL = vi.fn((blob: Blob) => {
         objectUrlBlobs.push(blob);
         return `blob:royal-svg-${objectUrlBlobs.length}`;
       });
-      static revokeObjectURL = vi.fn();
+      static override revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("Image", AutoLoadingImage);
     vi.stubGlobal("URL", TestUrl);
