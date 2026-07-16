@@ -643,7 +643,9 @@ const installBenchmarkHooks = async (session) => {
     errors: 0,
     generation: 0,
     supported: false,
+    windowEnabled: false,
   };
+  let lastDrawGl;
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
   const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
@@ -710,7 +712,7 @@ const installBenchmarkHooks = async (session) => {
       const sample = state.pending[completed];
       if (!state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT_AVAILABLE)) break;
       if (sample.disjoint === true) gpuTimers.disjointSamples += 1;
-      else if (sample.generation === gpuTimers.generation) {
+      else if (sample.generation === gpuTimers.generation && sample.record !== false) {
         const nanoseconds = Number(state.gl.getQueryParameter(sample.query, state.gl.QUERY_RESULT));
         if (Number.isFinite(nanoseconds) && nanoseconds >= 0) gpuTimers.durations.push(nanoseconds / 1_000_000);
       }
@@ -719,8 +721,8 @@ const installBenchmarkHooks = async (session) => {
     if (completed > 0) state.pending.splice(0, completed);
   };
   const xrGl = (session) => session?.renderState?.baseLayer?.context;
-  const beginGpuTimer = (session) => {
-    const state = gpuTimerState(xrGl(session));
+  const beginGpuTimerForGl = (gl) => {
+    const state = gpuTimerState(gl);
     if (state === undefined) return undefined;
     pollGpuTimers(state);
     const query = state.freeQueries.pop() ?? state.gl.createQuery();
@@ -734,9 +736,11 @@ const installBenchmarkHooks = async (session) => {
       return undefined;
     }
   };
-  const endGpuTimer = (sample) => {
+  const beginGpuTimer = (session) => beginGpuTimerForGl(xrGl(session));
+  const endGpuTimer = (sample, record = true) => {
     if (sample === undefined) return;
     try {
+      sample.record = record;
       sample.state.gl.endQuery(sample.state.extension.TIME_ELAPSED_EXT);
       sample.state.pending.push(sample);
     } catch {
@@ -744,11 +748,11 @@ const installBenchmarkHooks = async (session) => {
       sample.state.freeQueries.push(sample.query);
     }
   };
-  const gpuTimerStats = (startIndex, requestedSampleCount) => {
-    const state = gpuTimerState(xrGl(xr.activeSession));
+  const gpuTimerStats = (gl, startIndex, requestedSampleCount) => {
+    const state = gpuTimerState(gl);
     pollGpuTimers(state);
     if (!config.gpuTimersEnabled) return { enabled: false, supported: false };
-    if (!gpuTimers.supported) return { enabled: true, supported: false };
+    if (state === undefined) return { enabled: true, supported: false };
     return {
       ...statsFromDeltas(
         gpuTimers.durations.slice(startIndex),
@@ -762,6 +766,17 @@ const installBenchmarkHooks = async (session) => {
       supported: true,
     };
   };
+  const settleGpuTimers = async (gl, generation, timeoutMs) => {
+    const state = gpuTimerState(gl);
+    if (state === undefined) return;
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      pollGpuTimers(state);
+      if (!state.pending.some((sample) => sample.generation === generation && sample.record !== false)) return;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    pollGpuTimers(state);
+  };
   const resolveXrWaiters = () => {
     xr.waiters = xr.waiters.filter((waiter) => {
       const sample = xr.frameTimes.slice(waiter.startIndex, waiter.startIndex + waiter.frameCount);
@@ -771,7 +786,11 @@ const installBenchmarkHooks = async (session) => {
         callbackDurationMs: statsFromDeltas(
           xr.callbackDurations.slice(waiter.startIndex + 1, waiter.startIndex + waiter.frameCount),
         ),
-        gpuDurationMs: gpuTimerStats(waiter.gpuStartIndex, waiter.frameCount - 1),
+        gpuDurationMs: gpuTimerStats(
+          xrGl(xr.activeSession),
+          waiter.gpuStartIndex,
+          waiter.frameCount - 1,
+        ),
       });
       return false;
     });
@@ -818,7 +837,30 @@ const installBenchmarkHooks = async (session) => {
     Object.defineProperty(wrappedXrRequestAnimationFrame, '__royalBenchPatched', { value: true });
     xrSessionPrototype.requestAnimationFrame = wrappedXrRequestAnimationFrame;
   }
-  const recordDraw = () => {
+  const drawCount = () => counters.drawArrays
+    + counters.drawArraysInstanced
+    + counters.drawElements
+    + counters.drawElementsInstanced;
+  const originalWindowRequestAnimationFrame = globalThis.requestAnimationFrame;
+  if (
+    typeof originalWindowRequestAnimationFrame === 'function'
+    && originalWindowRequestAnimationFrame.__royalBenchPatched !== true
+  ) {
+    const wrappedWindowRequestAnimationFrame = (callback) =>
+      originalWindowRequestAnimationFrame.call(globalThis, (time) => {
+        const drawsBefore = drawCount();
+        const gpuTimer = gpuTimers.windowEnabled ? beginGpuTimerForGl(lastDrawGl) : undefined;
+        try {
+          callback(time);
+        } finally {
+          endGpuTimer(gpuTimer, drawCount() > drawsBefore);
+        }
+      });
+    Object.defineProperty(wrappedWindowRequestAnimationFrame, '__royalBenchPatched', { value: true });
+    globalThis.requestAnimationFrame = wrappedWindowRequestAnimationFrame;
+  }
+  const recordDraw = (gl) => {
+    lastDrawGl = gl;
     const now = performance.now();
     while (pendingDrawPulses.length > 0) {
       pendingDrawPulses.shift().resolve(now);
@@ -862,7 +904,7 @@ const installBenchmarkHooks = async (session) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalBenchPatched === true) return;
     const wrapped = function (...args) {
-      handler(args);
+      handler(args, this);
       return original.apply(this, args);
     };
     Object.defineProperty(wrapped, '__royalBenchPatched', { value: true });
@@ -872,10 +914,10 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'bindBuffer', () => { counters.bindBuffer += 1; });
     patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
     patch(prototype, 'bindVertexArray', () => { counters.bindVertexArray += 1; });
-    patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; recordDraw(); });
-    patch(prototype, 'drawElements', () => { counters.drawElements += 1; recordDraw(); });
-    patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; recordDraw(); });
-    patch(prototype, 'drawElementsInstanced', () => { counters.drawElementsInstanced += 1; recordDraw(); });
+    patch(prototype, 'drawArrays', (_args, gl) => { counters.drawArrays += 1; recordDraw(gl); });
+    patch(prototype, 'drawElements', (_args, gl) => { counters.drawElements += 1; recordDraw(gl); });
+    patch(prototype, 'drawArraysInstanced', (_args, gl) => { counters.drawArraysInstanced += 1; recordDraw(gl); });
+    patch(prototype, 'drawElementsInstanced', (_args, gl) => { counters.drawElementsInstanced += 1; recordDraw(gl); });
     patch(prototype, 'bufferData', (args) => {
       counters.bufferDataCalls += 1;
       counters.bufferDataBytes += byteLengthOf(args[1]);
@@ -1030,6 +1072,11 @@ const installBenchmarkHooks = async (session) => {
       requestAnimationFrame((time) => finish(time));
     });
     dispatchPointer('pointerdown');
+    const gpuGl = lastDrawGl;
+    const gpuGeneration = gpuTimers.generation;
+    const gpuStartIndex = gpuTimers.durations.length;
+    const previousWindowGpuTimerEnabled = gpuTimers.windowEnabled;
+    gpuTimers.windowEnabled = true;
     try {
       for (let index = 0; index < requestedSampleCount; index += 1) {
         clientX += step;
@@ -1043,8 +1090,10 @@ const installBenchmarkHooks = async (session) => {
         if (typeof rafAt === 'number') rafDeltas.push(rafAt - eventAt);
       }
     } finally {
+      gpuTimers.windowEnabled = previousWindowGpuTimerEnabled;
       dispatchPointer('pointerup');
     }
+    await settleGpuTimers(gpuGl, gpuGeneration, 250);
     const sampleTimeoutMs = 250;
     const draw = statsFromDeltas(drawDeltas, requestedSampleCount, sampleTimeoutMs);
     return {
@@ -1054,6 +1103,7 @@ const installBenchmarkHooks = async (session) => {
       cameraInput: {
         handlerDurationMs: statsFromDeltas(handlerDeltas, requestedSampleCount, sampleTimeoutMs),
       },
+      gpuDurationMs: gpuTimerStats(gpuGl, gpuStartIndex, requestedSampleCount),
       raf: statsFromDeltas(rafDeltas, requestedSampleCount, sampleTimeoutMs),
       ...(draw.failed ? { reason: 'draw-timeout' } : {}),
     };
@@ -2165,6 +2215,13 @@ const routeSummary = (route) => {
           : {}),
         cameraDragDrawP95Ms: round(cameraDragFrameStats.p95Ms),
         cameraDragDrawP99Ms: round(cameraDragFrameStats.p99Ms),
+        ...(cameraDragFrameStats.gpuDurationMs?.supported === true
+          ? {
+              cameraDragGpuP95Ms: round(cameraDragFrameStats.gpuDurationMs.p95Ms),
+              cameraDragGpuSampleCount: cameraDragFrameStats.gpuDurationMs.sampleCount,
+              cameraDragGpuSamplesMissing: cameraDragFrameStats.gpuDurationMs.samplesMissing,
+            }
+          : {}),
         ...(typeof cameraInputHandlerStats?.p95Ms === 'number'
           ? {
               cameraInputHandlerMaxMs: round(cameraInputHandlerStats.maxMs),
@@ -2448,6 +2505,9 @@ const main = async () => {
         ...(hasCameraDragStats
           ? [
             `dragDrawP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
+            ...(cameraDragFrameStats.gpuDurationMs?.supported === true
+              ? [`dragGpuP95=${cameraDragFrameStats.gpuDurationMs.p95Ms.toFixed(2)}ms`]
+              : []),
             ...(typeof cameraDragFrameStats.cameraInput?.handlerDurationMs?.p95Ms === 'number'
               ? [`dragHandlerP95=${cameraDragFrameStats.cameraInput.handlerDurationMs.p95Ms.toFixed(2)}ms`]
               : []),

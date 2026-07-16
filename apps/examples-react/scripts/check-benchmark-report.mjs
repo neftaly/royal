@@ -391,7 +391,23 @@ const checkInstancingRoute = (route, routeLabel) => {
   }
 };
 
-const checkCameraDrag = (route, routeLabel, cameraDragEnabled) => {
+const checkGpuTimerStats = (timers, label, enabled) => {
+  if (!enabled) return;
+  if (!requireObject(timers, label)) return;
+  requireBoolean(timers.enabled, `${label}.enabled`);
+  requireBoolean(timers.supported, `${label}.supported`);
+  if (timers.enabled !== true) errors.push(`${label}.enabled must be true`);
+  if (timers.supported !== true) {
+    warnings.push(`${label} did not expose EXT_disjoint_timer_query_webgl2`);
+    return;
+  }
+  checkFrameStats(timers, label);
+  requireNonNegativeNumber(timers.disjointSamples, `${label}.disjointSamples`);
+  requireNonNegativeNumber(timers.errors, `${label}.errors`);
+  requireNonNegativeNumber(timers.pendingSamples, `${label}.pendingSamples`);
+};
+
+const checkCameraDrag = (route, routeLabel, cameraDragEnabled, gpuTimersEnabled) => {
   if (!cameraDragEnabled && route.cameraDrag === undefined) return;
   if (!requireObject(route.cameraDrag, `${routeLabel}.cameraDrag`)) return;
   checkFrameStats(route.cameraDrag.frameStats, `${routeLabel}.cameraDrag.frameStats`);
@@ -406,6 +422,11 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled) => {
       `${routeLabel}.cameraDrag.frameStats.cameraInput.handlerDurationMs`,
     );
   }
+  checkGpuTimerStats(
+    route.cameraDrag.frameStats?.gpuDurationMs,
+    `${routeLabel}.cameraDrag.frameStats.gpuDurationMs`,
+    gpuTimersEnabled,
+  );
   requireGlCounters(route.cameraDrag.gl, `${routeLabel}.cameraDrag.gl`);
   if (route.profile?.kind === 'gltf-instancing') {
     checkGltfSampleEvidence(
@@ -434,19 +455,11 @@ const checkRealXrRoute = (route, routeLabel) => {
 
 const checkXrGpuTimers = (route, routeLabel, enabled) => {
   if (!enabled || route.id !== 'webxr-vr') return;
-  const timers = route.xr?.frameStats?.gpuDurationMs;
-  if (!requireObject(timers, `${routeLabel}.xr.frameStats.gpuDurationMs`)) return;
-  requireBoolean(timers.enabled, `${routeLabel}.xr.frameStats.gpuDurationMs.enabled`);
-  requireBoolean(timers.supported, `${routeLabel}.xr.frameStats.gpuDurationMs.supported`);
-  if (timers.enabled !== true) errors.push(`${routeLabel}.xr.frameStats.gpuDurationMs.enabled must be true`);
-  if (timers.supported !== true) {
-    warnings.push(`${routeLabel} did not expose EXT_disjoint_timer_query_webgl2`);
-    return;
-  }
-  checkFrameStats(timers, `${routeLabel}.xr.frameStats.gpuDurationMs`);
-  requireNonNegativeNumber(timers.disjointSamples, `${routeLabel}.xr.frameStats.gpuDurationMs.disjointSamples`);
-  requireNonNegativeNumber(timers.errors, `${routeLabel}.xr.frameStats.gpuDurationMs.errors`);
-  requireNonNegativeNumber(timers.pendingSamples, `${routeLabel}.xr.frameStats.gpuDurationMs.pendingSamples`);
+  checkGpuTimerStats(
+    route.xr?.frameStats?.gpuDurationMs,
+    `${routeLabel}.xr.frameStats.gpuDurationMs`,
+    enabled,
+  );
 };
 
 const checkVirtualTextureClose = (route, routeLabel, enabled) => {
@@ -725,7 +738,7 @@ if (requireObject(report, 'report')) {
         if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
         }
-        checkCameraDrag(route, routeLabel, cameraDragEnabled);
+        checkCameraDrag(route, routeLabel, cameraDragEnabled, gpuTimersEnabled);
         checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
         checkXrGpuTimers(route, routeLabel, gpuTimersEnabled);
         if (realXrEnabled) checkRealXrRoute(route, routeLabel);

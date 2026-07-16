@@ -32,7 +32,9 @@ pnpm --filter @royal/examples-react bench:examples:input
 This runs the existing route benchmark on `/cube` with scripted camera drag
 enabled and reports pointermove-to-next-WebGL-draw latency as
 `cameraDragDrawP95Ms`, direct synchronous handler self-time as
-`cameraInputHandlerP95Ms`, plus RAF context as `cameraDragRafP95Ms`. Use
+`cameraInputHandlerP95Ms`, RAF context as `cameraDragRafP95Ms`, and hardware
+timer-query duration for draw-producing RAF callbacks as `cameraDragGpuP95Ms`.
+The timer query is active only during the drag sample. Use
 `EXAMPLES_BENCH_ROUTE=gltf-helmet` or `gltf-instancing` with
 `EXAMPLES_BENCH_CAMERA_DRAG=1 pnpm --filter @royal/examples-react bench:examples`
 when you need renderer/glTF churn beside the same input metric. Do not add
