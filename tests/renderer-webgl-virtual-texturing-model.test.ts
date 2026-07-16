@@ -17,7 +17,13 @@ import {
   type VirtualTextureAtlasAssignment,
   type VirtualTexturePageTableUpdate,
 } from "../packages/renderer-webgl/src/virtual-texture/model";
-import { assertFuzz, assertFuzzArrayEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
+import {
+  assertFuzz,
+  assertFuzzArrayEqual,
+  assertFuzzEqual,
+  forEachFuzzCase,
+  type SeededRandom,
+} from "./fuzz";
 
 type FuzzPage = {
   readonly mip: number;
@@ -83,23 +89,21 @@ const referencePageTableSlots = (
   width: number,
   assignments: readonly ResidentAssignment[],
   activePageKeys: ReadonlySet<string>,
-): Array<number | undefined> => Array.from({ length: width * width }, (_unused, index) => {
-  const x = index % width;
-  const y = Math.floor(index / width);
-  let selected: ResidentAssignment | undefined;
-  for (const assignment of assignments) {
-    if (!activePageKeys.has(assignment.pageKey)) continue;
+): Array<number | undefined> => {
+  const slots = new Array<number | undefined>(width * width);
+  const active = assignments
+    .filter(({ pageKey }) => activePageKeys.has(pageKey))
+    .sort((left, right) => right.page.mip - left.page.mip);
+  for (const assignment of active) {
     const coverage = 2 ** assignment.page.mip;
-    if (
-      x < assignment.page.x * coverage
-      || x >= (assignment.page.x + 1) * coverage
-      || y < assignment.page.y * coverage
-      || y >= (assignment.page.y + 1) * coverage
-    ) continue;
-    if (selected === undefined || assignment.page.mip < selected.page.mip) selected = assignment;
+    for (let y = assignment.page.y * coverage; y < (assignment.page.y + 1) * coverage; y += 1) {
+      for (let x = assignment.page.x * coverage; x < (assignment.page.x + 1) * coverage; x += 1) {
+        slots[y * width + x] = assignment.slot;
+      }
+    }
   }
-  return selected?.slot;
-});
+  return slots;
+};
 
 describe("WebGL virtual texturing runtime model", () => {
   it("rounds generated raster address space while keeping bounded physical policy", () => {
@@ -533,11 +537,16 @@ describe("WebGL virtual texturing runtime model", () => {
         [...stable, ...(step % 2 === 0 ? left : right)].map(({ pageKey }) => pageKey),
       );
       table.reconcileActivePageKeys(activePageKeys);
-      expect(table.dirtyPageTableUpdateCount).toBeLessThanOrEqual(table.residentCount);
+      assertFuzz(
+        table.dirtyPageTableUpdateCount <= table.residentCount,
+        `step=${step} dirty updates exceed residents`,
+      );
       applyPageTableUpdates(gpuSlots, width, takeDirtyPageTableUpdates(table));
-      expect(gpuSlots).toEqual(assignments.map((assignment) => (
-        activePageKeys.has(assignment.pageKey) ? assignment.slot : undefined
-      )));
+      assertFuzzArrayEqual(
+        gpuSlots,
+        assignments.map((assignment) => activePageKeys.has(assignment.pageKey) ? assignment.slot : undefined),
+        `step=${step} mapping`,
+      );
     }
   });
 
@@ -774,31 +783,37 @@ describe("WebGL virtual texturing runtime model", () => {
         const hadUnprotectedResident = residentBefore.some(([key]) => !protectedKeys.has(key));
         const assignment = ensureResident(table, page, { protectedPages: protectedKeys });
 
-        expect(table.residentCount, `${label} step=${step} resident count`).toBeLessThanOrEqual(slotCount);
-        expect(table.residentSlot(page), `${label} step=${step} resident slot`).toBe(assignment.slot);
+        assertFuzz(table.residentCount <= slotCount, `${label} step=${step} resident count`);
+        assertFuzzEqual(table.residentSlot(page), assignment.slot, `${label} step=${step} resident slot`);
         if (assignment.evicted !== undefined) {
-          expect(
-            protectedKeys.has(assignment.evicted.pageKey) && hadUnprotectedResident,
+          assertFuzz(
+            !(protectedKeys.has(assignment.evicted.pageKey) && hadUnprotectedResident),
             `${label} step=${step} protected eviction`,
-          ).toBe(false);
-          expect(
+          );
+          assertFuzzEqual(
             table.residentSlot(assignment.evicted.page),
+            undefined,
             `${label} step=${step} evicted page cleared`,
-          ).toBeUndefined();
+          );
         }
 
         const residentSlots = [...seenPages.values()]
           .map((candidate) => table.residentSlot(candidate))
           .filter((slot): slot is number => slot !== undefined);
-        expect(
+        assertFuzzEqual(
           new Set(residentSlots).size,
+          residentSlots.length,
           `${label} step=${step} unique resident slots`,
-        ).toBe(residentSlots.length);
+        );
 
         takeDirtyPageTableUpdates(table);
         const repeat = ensureResident(table, page);
-        expect(repeat.slot, `${label} step=${step} repeat slot`).toBe(assignment.slot);
-        expect(takeDirtyPageTableUpdates(table), `${label} step=${step} repeat dirty`).toEqual([]);
+        assertFuzzEqual(repeat.slot, assignment.slot, `${label} step=${step} repeat slot`);
+        assertFuzzEqual(
+          takeDirtyPageTableUpdates(table).length,
+          0,
+          `${label} step=${step} repeat dirty count`,
+        );
       }
     });
   });

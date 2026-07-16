@@ -10,7 +10,7 @@ import {
 } from "../packages/renderer-webgl/src/gltf/instance-transform-registry";
 import { isInstanceDirty } from "../packages/renderer-webgl/src/gltf/instance-changes";
 import { transformMat4 } from "../packages/renderer-webgl/src/math/mat4";
-import { assertFuzzArrayEqual, forEachFuzzCase } from "./fuzz";
+import { assertFuzzArrayEqual, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 type TrackedSource = {
   readonly activeSubscriptions: () => number;
@@ -77,8 +77,10 @@ const expectMatricesCurrent = (
       `root model ${index}`,
     );
     const offset = index * 3;
-    expect(views.orientationPreserving[index], `orientation ${index}`).toBe(
+    assertFuzzEqual(
+      views.orientationPreserving[index],
       source.scales[offset]! * source.scales[offset + 1]! * source.scales[offset + 2]! >= 0 ? 1 : 0,
+      `orientation ${index}`,
     );
   }
 };
