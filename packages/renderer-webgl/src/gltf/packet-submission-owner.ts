@@ -236,7 +236,7 @@ export class GltfPacketSubmissionOwner {
           contentKeys,
           this.#runtime.images.readyKeys(state.key),
           this.#runtime.images.materialBasePending(state.key, loadedMaterial),
-          this.#runtime.images.publication(state.key),
+          this.#runtime.images.publication(state.key, loadedMaterial),
         );
         let materialBinding = this.#materialBindings.get(prepared.material);
         if (materialBinding === undefined) {

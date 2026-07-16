@@ -156,6 +156,33 @@ afterEach(() => {
 });
 
 describe("GltfImageDemandCoordinator lifecycle", () => {
+  it("owns an independent initial publication barrier for each material", () => {
+    const harness = coordinatorHarness();
+    const first = material("first");
+    const second = material("second");
+    const solid = {} as LoadedGltfMaterial;
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load: metrics(),
+      materials: [first, second, solid],
+      publicationGroups: [[first], [second], [solid]],
+      recipeLease: recipeLease(),
+      recipes: [recipe("first"), recipe("second")],
+      stateInstanceKey: 1,
+    });
+
+    const firstPublication = harness.coordinator.publication("asset", first);
+    const secondPublication = harness.coordinator.publication("asset", second);
+    expect(firstPublication).toEqual({ ready: false });
+    expect(secondPublication).toEqual({ ready: false });
+    expect(firstPublication).not.toBe(secondPublication);
+    expect(harness.coordinator.publication("asset", solid)).toEqual({ ready: true });
+
+    firstPublication!.ready = true;
+    expect(secondPublication?.ready).toBe(false);
+    harness.coordinator.dispose();
+  });
+
   it("keeps material recipes dormant while eagerly demanding IBL on its independent lane", async () => {
     let now = 10;
     const ordinaryKey = "ordinary";

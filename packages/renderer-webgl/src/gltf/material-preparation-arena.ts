@@ -212,7 +212,7 @@ export class GltfMaterialPreparationArena {
     publication?: SurfaceMaterialPublication,
   ): GltfPreparedPrimitiveMaterial {
     const cached = this.#prepared.get(loadedMaterial);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined && (cached.material.basePending !== true || criticalImagePending)) return cached;
 
     const baseColor = textureSlotRef(
       loadedMaterial.baseColorTexture,

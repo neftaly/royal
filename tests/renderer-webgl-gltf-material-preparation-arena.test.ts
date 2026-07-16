@@ -141,6 +141,17 @@ describe("glTF material preparation arena", () => {
     expect(prepared.material.basePending).toBeUndefined();
   });
 
+  it("rebuilds a cached pending material once its critical image fails", () => {
+    const arena = new GltfMaterialPreparationArena();
+    const loadedMaterial = material();
+    const pending = arena.prepare(loadedMaterial, new Map(), new Set(), true);
+    const degraded = arena.prepare(loadedMaterial, new Map(), new Set(), false);
+
+    expect(degraded).not.toBe(pending);
+    expect(degraded.material.basePending).toBeUndefined();
+    expect(arena.prepare(loadedMaterial, new Map(), new Set(), false)).toBe(degraded);
+  });
+
   it("resolves named and numeric variants without accepting invalid selections", () => {
     const base = material("texture:base");
     const red = material("texture:red");

@@ -15,9 +15,9 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
-/** Mutable renderer-owned state shared by every material from one glTF asset. */
+/** Mutable renderer state shared by one material or authored LOD continuity group. */
 export type SurfaceMaterialPublication = {
-  pending: boolean;
+  pending?: boolean;
   ready: boolean;
 };
 
@@ -25,7 +25,7 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly anisotropyTexture?: TextureAssetUploadRef;
   /** Internal glTF base/alpha publication barrier; never authored through the public API. */
   readonly basePending?: true;
-  /** Internal asset-wide glTF publication state; never authored through the public API. */
+  /** Internal material-continuity publication state; never authored through the public API. */
   readonly publication?: SurfaceMaterialPublication;
   readonly baseColorFactor?: LinearRgba;
   readonly alphaCutoff?: number;

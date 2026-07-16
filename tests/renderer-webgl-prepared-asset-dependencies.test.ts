@@ -3,7 +3,10 @@ import type { TextureContentKey } from "@royal/renderer-core";
 import {
   planPreparedAssetDependencies,
 } from "../packages/renderer-webgl/src/gltf/prepared-asset-dependencies";
-import { preparedAssetMaterials } from "../packages/renderer-webgl/src/gltf/prepared-asset-materials";
+import {
+  preparedAssetMaterials,
+  preparedGltfMaterialPublicationGroups,
+} from "../packages/renderer-webgl/src/gltf/prepared-asset-materials";
 import type {
   LoadedGltfMaterial,
   LoadedGltfPrimitive,
@@ -29,17 +32,21 @@ const primitive = (
   variant: LoadedGltfMaterial,
   variantLod: LoadedGltfMaterial,
 ): LoadedGltfPrimitive => ({
-  baseMaterial: { material: base, selectionKey: "base" },
+  baseMaterial: {
+    material: base,
+    materialLod: { levels: [base, lod], thresholds: [1, 2] },
+    selectionKey: "base",
+  },
   instanceTransforms: [],
   key,
   localBounds: [],
   localModelDeterminants: [],
   localModels: [],
   material: base,
-  materialLod: { levels: [lod, base], thresholds: [1, 2] },
+  materialLod: { levels: [base, lod], thresholds: [1, 2] },
   materialVariants: [{
     material: variant,
-    materialLod: { levels: [variantLod, base], thresholds: [1, 2] },
+    materialLod: { levels: [variant, variantLod], thresholds: [1, 2] },
     variants: [0],
   }],
   mode: "triangles",
@@ -87,6 +94,15 @@ describe("prepared glTF asset dependency core", () => {
       primitive("primitive:0", base, lod, variant, variantLod),
       primitive("primitive:1", base, lod, variant, variantLod),
     ]))).toEqual([base, lod, variant, variantLod]);
+    expect(preparedGltfMaterialPublicationGroups([
+      primitive("primitive:0", base, lod, variant, variantLod),
+      primitive("primitive:1", base, lod, variant, variantLod),
+    ])).toEqual([
+      [base, lod],
+      [variant, variantLod],
+      [base, lod],
+      [variant, variantLod],
+    ]);
   });
 
   it("returns deterministic geometry associations without mutating the asset", () => {

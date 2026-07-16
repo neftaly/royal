@@ -780,6 +780,59 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(uniform1iPayloads(imageReadyCalls, "u_texture")).toContain(0);
   });
 
+  it("publishes a settled material while another asset material is still loading", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "progressive-material-publication" }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) => {
+      const document = triangleDocument();
+      const primitive = document.meshes[0]!.primitives[0]!;
+      return responseWithJson(url, {
+        ...document,
+        images: [{ uri: "first.png" }, { uri: "second.png" }],
+        materials: [
+          { pbrMetallicRoughness: { baseColorTexture: { index: 0 } } },
+          { pbrMetallicRoughness: { baseColorTexture: { index: 1 } } },
+        ],
+        meshes: [{
+          primitives: [primitive, { ...primitive, material: 1 }],
+        }],
+        textures: [
+          { sampler: 0, source: 0 },
+          { sampler: 0, source: 1 },
+        ],
+      });
+    })).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances, "the bounded image lane should start one material first").toHaveLength(1);
+    const readyCallsStart = calls.length;
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_texture", 0);
+
+    const readyCalls = calls.slice(readyCallsStart);
+    expect(ControlledImage.instances, "the second material should continue streaming").toHaveLength(2);
+    expect(uniform1iPayloads(readyCalls, "u_texture")).toContain(0);
+    expect(
+      uniform4fvPayloads(readyCalls, "u_color").map(roundVector),
+      "the pending material should retain its own neutral loading surface",
+    ).toContainEqual([0.214041, 0.214041, 0.214041, 1]);
+    expect(drawCalls(readyCalls).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("uses opted-in generated VT for glTF raster baseColorTexture without manifest probing", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const { contexts } = installCanvas2d();

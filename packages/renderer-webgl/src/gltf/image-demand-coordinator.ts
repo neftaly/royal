@@ -118,7 +118,7 @@ type Asset = {
   readonly controller: AbortController;
   readonly key: string;
   readonly load: GltfLoadMetrics;
-  readonly publication: SurfaceMaterialPublication;
+  readonly publications: WeakMap<LoadedGltfMaterial, SurfaceMaterialPublication>;
   readonly recipeOwnership: RecipeOwnership;
   readonly readyKeys: Set<string>;
   readonly rows: Map<string, Row>;
@@ -192,6 +192,7 @@ export class GltfImageDemandCoordinator {
     readonly key: string;
     readonly load: GltfLoadMetrics;
     readonly materials: readonly LoadedGltfMaterial[];
+    readonly publicationGroups?: readonly (readonly LoadedGltfMaterial[])[];
     readonly recipeLease: GltfImageRecipeLease;
     readonly recipes: readonly GltfImageSourceRecipe[];
     readonly stateInstanceKey: number;
@@ -210,14 +211,20 @@ export class GltfImageDemandCoordinator {
     }
     const registrationClaim = {};
     this.#registrationClaims.set(input.key, registrationClaim);
+    const publications = new WeakMap<LoadedGltfMaterial, SurfaceMaterialPublication>();
+    for (const group of input.publicationGroups ?? []) {
+      const publication = {
+        ready: group.every((material) => material.baseColorTexture?.imageUri === undefined),
+      };
+      for (const material of group) {
+        publications.set(material, publication);
+      }
+    }
     const asset: Asset = {
       controller: new AbortController(),
       key: input.key,
       load: input.load,
-      publication: {
-        pending: false,
-        ready: input.materials.every((material) => material.baseColorTexture?.imageUri === undefined),
-      },
+      publications,
       recipeOwnership: {
         activeRecipes: new Set(),
         assetKey: input.key,
@@ -305,8 +312,8 @@ export class GltfImageDemandCoordinator {
     return this.#assets.get(assetKey)?.readyKeys ?? EMPTY_IMAGE_KEYS;
   }
 
-  publication(assetKey: string): SurfaceMaterialPublication | undefined {
-    return this.#assets.get(assetKey)?.publication;
+  publication(assetKey: string, material: LoadedGltfMaterial): SurfaceMaterialPublication | undefined {
+    return this.#assets.get(assetKey)?.publications.get(material);
   }
 
   materialBasePending(assetKey: string, material: LoadedGltfMaterial): boolean {

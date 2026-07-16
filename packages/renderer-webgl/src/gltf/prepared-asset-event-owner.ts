@@ -14,7 +14,10 @@ import type { GltfImageRecipeLease } from "./image-demand-coordinator";
 import type { GltfPacketOccurrence } from "../gltf-packet-topology";
 import type { PreparedGltfAsset } from "./prepared-asset";
 import { planPreparedAssetDependencies } from "./prepared-asset-dependencies";
-import { preparedAssetMaterials } from "./prepared-asset-materials";
+import {
+  preparedAssetMaterials,
+  preparedGltfMaterialPublicationGroups,
+} from "./prepared-asset-materials";
 import { PreparedGltfRuntime } from "./prepared-runtime";
 
 type PreparedAssetEventOwnerOptions = {
@@ -153,6 +156,7 @@ export class PreparedAssetEventOwner {
         key: state.key,
         load: state.load,
         materials: state.materials,
+        publicationGroups: preparedGltfMaterialPublicationGroups(asset.primitives),
         recipeLease,
         recipes: images.recipes,
         stateInstanceKey: state.instanceKey,
