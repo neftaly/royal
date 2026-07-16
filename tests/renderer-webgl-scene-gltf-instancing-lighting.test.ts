@@ -616,7 +616,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_useClusteredLights")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[0]")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[0]")).toEqual([]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightColor[0]").map(roundVector)).toContainEqual([1, 1, 2, 1]);
     const clusteredData = readyFrameCalls.find((call) =>
       call.name === "texImage2D" && call.args[3] === 4 && call.args[4] === 2);

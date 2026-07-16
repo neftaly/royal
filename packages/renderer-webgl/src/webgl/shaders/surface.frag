@@ -24,11 +24,8 @@ uniform vec4 u_emissiveColor;
 
 // Direct lights.
 uniform int u_surfaceLightCount;
-uniform int u_surfaceLightKind[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightColor[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
-uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
-uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
 __CLUSTERED_LIGHT_UNIFORMS__
 
 // Image-based lighting.
@@ -784,19 +781,19 @@ vec3 lightContributionData(
   return mix(lighting, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 
-vec3 lightContribution(int index, vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
+vec3 directionalLightContribution(int index, vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 baseColor) {
   return lightContributionData(
-    u_surfaceLightKind[index],
+    0,
     u_surfaceLightColor[index].rgb,
     u_surfaceLightDirection[index].xyz,
-    u_surfaceLightPosition[index].xyz,
-    u_surfaceLightDirection[index].w,
-    u_surfaceLightCone[index].x,
-    u_surfaceLightCone[index].y,
+    vec3(0.0),
+    0.0,
+    1.0,
+    0.0,
     normal,
     clearcoatNormal,
     viewDirection,
-    worldPosition,
+    vec3(0.0),
     baseColor
   );
 }
@@ -859,7 +856,7 @@ void main() {
       break;
     }
 
-    lit += lightContribution(index, normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
+    lit += directionalLightContribution(index, normal, clearcoatNormal, viewDirection, baseColor.rgb);
   }
   lit += clusteredLightContribution(normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
 

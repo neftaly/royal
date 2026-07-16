@@ -1021,12 +1021,9 @@ export class SurfaceExecutionArena {
     uniform1i(this.#programs, program, "u_surfaceLightCount", lights.length);
     for (let index = 0; index < lights.length; index += 1) {
       const light = lights[index]!;
-      uniform1i(this.#programs, program, `u_surfaceLightKind[${index}]`, 0);
       uniformColor(this.#programs, program, `u_surfaceLightColor[${index}]`, light.color);
       uniform4f(this.#programs, program, `u_surfaceLightDirection[${index}]`,
         light.direction[0], light.direction[1], light.direction[2], 0);
-      uniform4f(this.#programs, program, `u_surfaceLightPosition[${index}]`, 0, 0, 0, 0);
-      uniform4f(this.#programs, program, `u_surfaceLightCone[${index}]`, 1, 0, 0, 0);
     }
     if (lightSet.punctuals.length > 0) {
       this.#textureBindings.invalidate();
