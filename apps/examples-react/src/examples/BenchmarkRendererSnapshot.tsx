@@ -59,6 +59,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
   if (!isRecord(value)) return null;
   const phaseMs = copyNumberCounters(value.phaseMs);
   if (
+    typeof value.imageCandidates !== 'number' ||
     typeof value.imageFailures !== 'number' ||
     typeof value.imagesLoaded !== 'number' ||
     typeof value.imageRequests !== 'number' ||
@@ -76,6 +77,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
 
   return {
     ...(typeof value.error === 'string' ? { error: value.error } : {}),
+    imageCandidates: value.imageCandidates,
     imageFailures: value.imageFailures,
     imagesLoaded: value.imagesLoaded,
     imageRequests: value.imageRequests,

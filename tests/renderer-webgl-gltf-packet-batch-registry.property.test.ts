@@ -29,6 +29,7 @@ import {
   type FramePacketRenderClass,
 } from "../packages/renderer-webgl/src/frame/packets";
 import { forEachFuzzCase } from "./fuzz";
+import { gltfFrameBatchIsRetained } from "../packages/renderer-webgl/src/gltf/frame-batch-arena";
 
 type TupleSpec = GltfPacketBatchTuple;
 
@@ -96,6 +97,14 @@ const activeIds = (groups: ReturnType<typeof createGltfPacketBatchSegmentGroups>
   Array.from(groups.activeBatchIds.subarray(0, groups.activeBatchCount));
 
 describe("glTF packet numeric batch registry", () => {
+  it("retains recently culled batch plans across frame-epoch wrap safely", () => {
+    expect(gltfFrameBatchIsRetained(10, 10)).toBe(true);
+    expect(gltfFrameBatchIsRetained(70, 10)).toBe(true);
+    expect(gltfFrameBatchIsRetained(71, 10)).toBe(false);
+    expect(gltfFrameBatchIsRetained(1, 0)).toBe(false);
+    expect(gltfFrameBatchIsRetained(1, 0xffff_ffff)).toBe(true);
+  });
+
   it("resolves open-address collisions with exact tuple comparisons", () => {
     const first = tuple(1);
     let second = tuple(2);
@@ -215,6 +224,26 @@ describe("glTF packet numeric batch registry", () => {
     expect(Array.from(groups.blendedBatchIds.subarray(0, groups.blendedBatchCount))).toEqual([0]);
     expect(Array.from(groups.memberIndices.subarray(0, groups.memberCount))).toEqual([0, 3, 1, 5, 2, 4]);
     expect([0, 1, 2, 3].map((id) => groups.batchMemberFirsts[id])).toEqual([0, 2, 4, 5]);
+  });
+
+  it("clusters opaque batches by material state without reordering composited classes", () => {
+    const blendedA = tuple(1, 9, 0, 0, FRAME_PACKET_RENDER_CLASS.blended);
+    const opaqueB = tuple(2, 20);
+    const transmissiveB = tuple(3, 20, 0, 0, FRAME_PACKET_RENDER_CLASS.transmissive);
+    const opaqueA = tuple(4, 10);
+    const blendedB = tuple(5, 8, 0, 0, FRAME_PACKET_RENDER_CLASS.blended);
+    const transmissiveA = tuple(6, 10, 0, 0, FRAME_PACKET_RENDER_CLASS.transmissive);
+    const { catalog, workspace } = segment([
+      blendedA, opaqueB, transmissiveB, opaqueA, blendedB, transmissiveA,
+    ]);
+    const registry = createGltfPacketBatchRegistry();
+    const groups = createGltfPacketBatchSegmentGroups();
+    beginGltfPacketBatchRegistryFrame(registry);
+    groupGltfPacketSubmissionSegment(registry, groups, workspace, 7, catalog);
+
+    expect(Array.from(groups.opaqueBatchIds.subarray(0, groups.opaqueBatchCount))).toEqual([3, 1]);
+    expect(Array.from(groups.transmissiveBatchIds.subarray(0, groups.transmissiveBatchCount))).toEqual([2, 5]);
+    expect(Array.from(groups.blendedBatchIds.subarray(0, groups.blendedBatchCount))).toEqual([0, 4]);
   });
 
   it("handles injected epoch wrap and retains grown capacity across segment resets", () => {

@@ -63,6 +63,8 @@ export interface GltfPacketBatchSegmentGroups {
   memberIndices: Uint32Array;
   opaqueBatchCount: number;
   opaqueBatchIds: Uint32Array;
+  /** Reused merge lane for opaque state ordering. */
+  opaqueSortScratch: Uint32Array;
   planRevision: number;
   registry: GltfPacketBatchRegistry | undefined;
   registryFrameEpoch: number;
@@ -234,6 +236,7 @@ export const createGltfPacketBatchSegmentGroups = (
     memberIndices: new Uint32Array(members),
     opaqueBatchCount: 0,
     opaqueBatchIds: new Uint32Array(batches),
+    opaqueSortScratch: new Uint32Array(batches),
     planRevision: 0,
     registry: undefined,
     registryFrameEpoch: 0,
@@ -287,6 +290,7 @@ const reserveActive = (groups: GltfPacketBatchSegmentGroups, required: number): 
   const capacity = powerOfTwo(required);
   groups.activeBatchIds = grownUint32(groups.activeBatchIds, capacity);
   groups.opaqueBatchIds = grownUint32(groups.opaqueBatchIds, capacity);
+  groups.opaqueSortScratch = grownUint32(groups.opaqueSortScratch, capacity);
   groups.transmissiveBatchIds = grownUint32(groups.transmissiveBatchIds, capacity);
   groups.blendedBatchIds = grownUint32(groups.blendedBatchIds, capacity);
   groups.activeBatchCapacity = capacity;
@@ -496,6 +500,67 @@ const appendClassBatch = (
   }
 };
 
+const compareOpaqueBatchState = (
+  registry: GltfPacketBatchRegistry,
+  left: number,
+  right: number,
+): number => {
+  const material = registry.batchMaterialBatchClassIds[left]! - registry.batchMaterialBatchClassIds[right]!;
+  if (material !== 0) return material;
+  const lights = registry.batchLightScopeIds[left]! - registry.batchLightScopeIds[right]!;
+  if (lights !== 0) return lights;
+  const sidedness = registry.batchSidedness[left]! - registry.batchSidedness[right]!;
+  return sidedness !== 0 ? sidedness : left - right;
+};
+
+/** Allocation-free stable ordering for opaque batches, whose draw order has no compositing meaning. */
+const orderOpaqueBatchesByState = (
+  registry: GltfPacketBatchRegistry,
+  groups: GltfPacketBatchSegmentGroups,
+): void => {
+  const count = groups.opaqueBatchCount;
+  if (count < 2) return;
+  let source = groups.opaqueBatchIds;
+  let target = groups.opaqueSortScratch;
+  for (let width = 1; width < count; width *= 2) {
+    for (let first = 0; first < count; first += width * 2) {
+      const middle = Math.min(first + width, count);
+      const end = Math.min(first + width * 2, count);
+      let left = first;
+      let right = middle;
+      let write = first;
+      while (left < middle && right < end) {
+        const leftBatch = source[left]!;
+        const rightBatch = source[right]!;
+        if (compareOpaqueBatchState(registry, leftBatch, rightBatch) <= 0) {
+          target[write] = leftBatch;
+          left += 1;
+        } else {
+          target[write] = rightBatch;
+          right += 1;
+        }
+        write += 1;
+      }
+      while (left < middle) {
+        target[write] = source[left]!;
+        left += 1;
+        write += 1;
+      }
+      while (right < end) {
+        target[write] = source[right]!;
+        right += 1;
+        write += 1;
+      }
+    }
+    const previous = source;
+    source = target;
+    target = previous;
+  }
+  if (source !== groups.opaqueBatchIds) {
+    groups.opaqueBatchIds.set(source.subarray(0, count), 0);
+  }
+};
+
 const validateWorkspaceSegment = <M, R, L>(
   registry: GltfPacketBatchRegistry,
   groups: GltfPacketBatchSegmentGroups,
@@ -699,6 +764,7 @@ const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
     groups.memberIndices[cursor] = memberIndex;
     groups.batchWriteCursors[batchId] = cursor + 1;
   }
+  orderOpaqueBatchesByState(registry, groups);
   groups.catalog = catalog;
   groups.catalogRevision = catalog.revision;
   groups.planRevision = planRevision;

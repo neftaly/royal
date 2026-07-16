@@ -86,6 +86,17 @@ export interface GltfFrameBatchCounters extends GltfInstanceBufferUploadCounters
   batchPlansBuilt: number;
 }
 
+// Camera-edge visibility should not churn retained batch work. Sixty rendered
+// frames is bounded even for continuously animated roots and costs no wall-time
+// retention in an idle demand-driven root.
+const GLTF_BATCH_RETENTION_FRAMES = 60;
+
+export const gltfFrameBatchIsRetained = (
+  frameEpoch: number,
+  touchedEpoch: number,
+  retentionFrames = GLTF_BATCH_RETENTION_FRAMES,
+): boolean => touchedEpoch !== 0 && ((frameEpoch - touchedEpoch) >>> 0) <= retentionFrames;
+
 export class GltfFrameBatchArena {
   readonly workspace: GltfPacketSubmissionWorkspace<
     GltfFrameMaterialBinding,
@@ -100,8 +111,6 @@ export class GltfFrameBatchArena {
   readonly #groups: GltfPacketBatchSegmentGroups = createGltfPacketBatchSegmentGroups();
   readonly #localModels: Array<MutableMat4 | undefined> = [];
   readonly #vertexInputs: VertexInputArena;
-  #liveBatchIds = new Uint32Array(1);
-  #liveBatchCount = 0;
   #localModelResourceRevision = -1;
 
   constructor(
@@ -183,24 +192,19 @@ export class GltfFrameBatchArena {
   }
 
   releaseUnused(gl: WebGL2RenderingContext, contextGeneration: number): void {
-    for (let index = 0; index < this.#liveBatchCount; index += 1) {
-      const batchId = this.#liveBatchIds[index]!;
-      if (this.#registry.batchTouchedEpochs[batchId] === this.#registry.frameEpoch) continue;
+    for (let batchId = 0; batchId < this.#batches.length; batchId += 1) {
+      if (this.#batches[batchId] === undefined) continue;
+      if (gltfFrameBatchIsRetained(
+        this.#registry.frameEpoch,
+        this.#registry.batchTouchedEpochs[batchId]!,
+      )) continue;
       this.#batches[batchId] = undefined;
     }
     releaseUnusedGltfInstanceBuffers(this.#instanceBuffers, gl, contextGeneration);
-    if (this.#liveBatchIds.length < this.#registry.touchedBatchCount) {
-      let capacity = this.#liveBatchIds.length;
-      while (capacity < this.#registry.touchedBatchCount) capacity *= 2;
-      this.#liveBatchIds = new Uint32Array(capacity);
-    }
-    this.#liveBatchIds.set(this.#registry.touchedBatchIds.subarray(0, this.#registry.touchedBatchCount));
-    this.#liveBatchCount = this.#registry.touchedBatchCount;
   }
 
   dropContext(): void {
     this.#batches.length = 0;
-    this.#liveBatchCount = 0;
     clearGltfPacketBatchSegmentGroups(this.#groups);
   }
 
@@ -208,7 +212,6 @@ export class GltfFrameBatchArena {
     this.#batches.length = 0;
     this.#localModels.length = 0;
     this.#localModelResourceRevision = -1;
-    this.#liveBatchCount = 0;
     let failure: CapturedFailure | undefined;
     const clear = (action: () => void): void => {
       failure = captureFirstFailure(failure, action);
@@ -261,14 +264,7 @@ export class GltfFrameBatchArena {
             frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
           },
         };
-        if (this.#liveBatchIds.length <= this.#liveBatchCount) {
-          const ids = new Uint32Array(this.#liveBatchIds.length * 2);
-          ids.set(this.#liveBatchIds);
-          this.#liveBatchIds = ids;
-        }
         this.#batches[batchId] = batch;
-        this.#liveBatchIds[this.#liveBatchCount] = batchId;
-        this.#liveBatchCount += 1;
         counters.batchPlansBuilt += 1;
       }
       batch.localModelSignatureDirty ||= batch.localModelSignature.length !== memberCount;

@@ -14,6 +14,7 @@ export type GltfInstancingCounters = Readonly<Record<string, number>>;
 
 export type GltfLoadDiagnosticsAsset = {
   readonly error?: string;
+  readonly imageCandidates: number;
   readonly imageFailures: number;
   readonly imagesLoaded: number;
   readonly imageRequests: number;
@@ -77,6 +78,18 @@ export const readRendererBenchmarkSnapshot = (
   return typeof candidate === 'function'
     ? (candidate as () => RendererBenchmarkSnapshot | null)()
     : null;
+};
+
+/** True once every retained glTF has left scene preparation and settled its candidate images. */
+export const rendererBenchmarkSnapshotReady = (
+  snapshot: RendererBenchmarkSnapshot | null,
+): boolean => {
+  if (snapshot === null) return false;
+  const assets = snapshot.gltfLoadDiagnostics?.assets ?? [];
+  return assets.every((asset) => asset.status !== 'loading' && (
+    asset.status === 'error'
+    || asset.imagesLoaded + asset.imageFailures >= asset.imageCandidates
+  ));
 };
 
 export const installRendererBenchmarkBridge = (

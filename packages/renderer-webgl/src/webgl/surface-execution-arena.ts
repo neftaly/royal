@@ -141,7 +141,20 @@ type SurfaceMaterialTextureCandidateEntry = Readonly<{
   descriptor: (typeof SURFACE_MATERIAL_TEXTURE_BINDINGS)[number];
   texture: TextureAssetUploadRef;
 }>;
+type SurfaceTextureAdmissionCacheEntry = Readonly<{
+  readonly baseColor: SurfaceBaseColorPlanInput;
+  readonly brdfLutPreferredUnit: number;
+  readonly clusterGridUnit: number;
+  readonly clusterIndicesUnit: number;
+  readonly clusterLightsUnit: number;
+  readonly ibl: boolean;
+  readonly maxTextureUnits: number;
+  readonly plan: PureSurfaceTextureBindingPlan;
+  readonly punctual: boolean;
+  readonly transmission: boolean;
+}>;
 type SurfaceMaterialTextureCatalog = Readonly<{
+  admissions: SurfaceTextureAdmissionCacheEntry[];
   candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>>;
   entries: readonly SurfaceMaterialTextureCandidateEntry[];
   extendedMaterial: boolean;
@@ -174,7 +187,7 @@ const createSurfaceMaterialTextureCatalog = (
     candidates[descriptor.feature] = "ready";
     entries.push({ descriptor, texture });
   }
-  return { candidates, entries, extendedMaterial, transmission };
+  return { admissions: [], candidates, entries, extendedMaterial, transmission };
 };
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
@@ -230,10 +243,10 @@ type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorTextureBinding;
   criticalPending: boolean;
   extendedMaterial: boolean;
-  readonly features: PureSurfaceTextureBindingPlan["features"];
-  readonly omissions: PureSurfaceTextureBindingPlan["omissions"];
+  features: PureSurfaceTextureBindingPlan["features"];
+  omissions: PureSurfaceTextureBindingPlan["omissions"];
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
-  readonly textureUnits: PureSurfaceTextureBindingPlan["textureUnits"];
+  textureUnits: PureSurfaceTextureBindingPlan["textureUnits"];
 };
 
 export interface SurfaceSingleExecution {
@@ -314,8 +327,6 @@ export class SurfaceExecutionArena {
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
-  readonly #textureAdmissionWorkspace: SurfaceTextureBindingWorkspace =
-    createSurfaceTextureBindingWorkspace();
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
   readonly #reservedTextureUnits = new Set<number>();
@@ -645,7 +656,13 @@ export class SurfaceExecutionArena {
       : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT;
     admissionInput.candidates = candidates;
     admissionInput.maxTextureUnits = this.#maxTextureImageUnits;
-    const admission = planSurfaceTextureBindings(admissionInput, this.#textureAdmissionWorkspace);
+    const admission = this.#textureAdmission(
+      textureCatalog,
+      declaredBaseColor,
+      reserveClusterUnits,
+      clusterUnits,
+    );
+    let admittedResourcesReady = true;
     let criticalPending = material.basePending === true;
     // Queue the authored base color before secondary maps. GPU residency uses
     // request order, so this preserves the planner's semantic priority and
@@ -664,6 +681,7 @@ export class SurfaceExecutionArena {
       const ready = resource.uploaded ? resource : undefined;
       candidates[descriptor.feature] = ready === undefined ? "unavailable" : "ready";
       if (ready !== undefined) readyTextures.set(descriptor.feature, ready);
+      else admittedResourcesReady = false;
     }
     let virtualFallbackTexture: TextureAssetUploadRef | undefined;
     let virtualFallbackReady: ReadyOrdinaryTexture | undefined;
@@ -723,6 +741,7 @@ export class SurfaceExecutionArena {
     }
     if (transmissionScreenColorTexture !== undefined && textureCatalog.transmission) {
       candidates.transmissionScreenTexture = transmissionScreenColorTexture.uploaded ? "ready" : "unavailable";
+      if (!transmissionScreenColorTexture.uploaded) admittedResourcesReady = false;
     }
     if (lightSet.specular !== undefined) {
       candidates.iblSpecularCube = "ready";
@@ -734,12 +753,17 @@ export class SurfaceExecutionArena {
           this.#captureIblSignals();
         }
         candidates.iblBrdfLut = ready ? "ready" : "unavailable";
+        if (!ready) admittedResourcesReady = false;
       }
     }
     const readinessInput = this.#textureReadinessInput;
     readinessInput.baseColor = baseColor;
     readinessInput.candidates = candidates;
-    const pure = resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
+    // Admission already is the exact resolved plan when every admitted source
+    // is resident. Avoid rebuilding the same Maps/Sets for every steady draw.
+    const pure = admittedResourcesReady && baseColor === declaredBaseColor
+      ? admission
+      : resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
     this.#recordTextureBindingOmissions(pure);
     let selectedBaseColor: SurfaceBaseColorTextureBinding = NO_BASE_COLOR_TEXTURE_BINDING;
     if (pure.baseColor.kind === "ordinary") {
@@ -765,6 +789,9 @@ export class SurfaceExecutionArena {
     this.#texturePlan.baseColor = selectedBaseColor;
     this.#texturePlan.criticalPending = criticalPending;
     this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
+    this.#texturePlan.features = pure.features;
+    this.#texturePlan.omissions = pure.omissions;
+    this.#texturePlan.textureUnits = pure.textureUnits;
     return this.#texturePlan;
   }
 
@@ -780,6 +807,50 @@ export class SurfaceExecutionArena {
     // new demand for the base/alpha-critical texture returns only that material
     // to gray until the critical dependency is resident again.
     return !publication.ready || criticalPending;
+  }
+
+  #textureAdmission(
+    catalog: SurfaceMaterialTextureCatalog,
+    baseColor: SurfaceBaseColorPlanInput,
+    punctual: boolean,
+    clusterUnits: Readonly<{ grid: number; indices: number; lights: number }>,
+  ): PureSurfaceTextureBindingPlan {
+    const input = this.#textureAdmissionInput;
+    const ibl = input.candidates.iblSpecularCube === "ready";
+    const transmission = input.candidates.transmissionScreenTexture === "ready";
+    const grid = punctual ? clusterUnits.grid : -1;
+    const indices = punctual ? clusterUnits.indices : -1;
+    const lights = punctual ? clusterUnits.lights : -1;
+    for (let index = 0; index < catalog.admissions.length; index += 1) {
+      const cached = catalog.admissions[index]!;
+      if (
+        cached.baseColor === baseColor
+        && cached.brdfLutPreferredUnit === input.brdfLutPreferredUnit
+        && cached.clusterGridUnit === grid
+        && cached.clusterIndicesUnit === indices
+        && cached.clusterLightsUnit === lights
+        && cached.ibl === ibl
+        && cached.maxTextureUnits === input.maxTextureUnits
+        && cached.punctual === punctual
+        && cached.transmission === transmission
+      ) return cached.plan;
+    }
+    // A dedicated planner workspace makes the result immutable for the
+    // material-lifetime cache; draw-time readiness never mutates admission.
+    const plan = planSurfaceTextureBindings(input);
+    catalog.admissions.push({
+      baseColor,
+      brdfLutPreferredUnit: input.brdfLutPreferredUnit,
+      clusterGridUnit: grid,
+      clusterIndicesUnit: indices,
+      clusterLightsUnit: lights,
+      ibl,
+      maxTextureUnits: input.maxTextureUnits,
+      plan,
+      punctual,
+      transmission,
+    });
+    return plan;
   }
 
   #bindLoadingSurface(program: WebGLProgram, toneMapping: SurfaceToneMappingState): void {

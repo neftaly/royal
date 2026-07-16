@@ -119,10 +119,12 @@ type Asset = {
   readonly controller: AbortController;
   readonly key: string;
   readonly load: GltfLoadMetrics;
+  readonly pendingMaterialRows: WeakMap<LoadedGltfMaterial, number>;
   readonly publications: WeakMap<LoadedGltfMaterial, SurfaceMaterialPublication>;
   readonly recipeOwnership: RecipeOwnership;
   readonly readyKeys: Set<string>;
   readonly rows: Map<string, Row>;
+  readonly settledMaterials: WeakSet<LoadedGltfMaterial>;
   readonly stateInstanceKey: number;
 };
 
@@ -223,6 +225,7 @@ export class GltfImageDemandCoordinator {
       controller: new AbortController(),
       key: input.key,
       load: input.load,
+      pendingMaterialRows: new WeakMap(),
       publications,
       recipeOwnership: {
         activeRecipes: new Set(),
@@ -235,6 +238,7 @@ export class GltfImageDemandCoordinator {
       },
       readyKeys: new Set(),
       rows: new Map(),
+      settledMaterials: new WeakSet(),
       stateInstanceKey: input.stateInstanceKey,
     };
     const iblRows = new Map<string, SurfaceImageBasedLightSpecular>();
@@ -280,6 +284,11 @@ export class GltfImageDemandCoordinator {
       throw new Error(`glTF image registration superseded for ${input.key}`);
     }
     this.#bindMaterialRows(asset, input.materials);
+    for (const material of input.materials) {
+      if ((asset.pendingMaterialRows.get(material) ?? 0) === 0) {
+        asset.settledMaterials.add(material);
+      }
+    }
     asset.load.imageCandidates = asset.rows.size;
     this.#assets.set(input.key, asset);
     this.#registrationClaims.delete(input.key);
@@ -294,7 +303,7 @@ export class GltfImageDemandCoordinator {
   /** Demands only the ordinary images referenced by one selected material. */
   demandMaterial(assetKey: string, material: LoadedGltfMaterial): boolean {
     const asset = this.#assets.get(assetKey);
-    if (asset === undefined) return false;
+    if (asset === undefined || asset.settledMaterials.has(material)) return false;
     const baseKey = material.baseColorTexture?.imageUri;
     if (baseKey !== undefined) {
       const base = asset.rows.get(baseKey);
@@ -491,7 +500,13 @@ export class GltfImageDemandCoordinator {
       if (slot?.imageUri === undefined || slot.textureUri === undefined) return;
       const row = asset.rows.get(slot.imageUri);
       if (row === undefined) return;
-      row.materials.add(material);
+      if (!row.materials.has(material)) {
+        row.materials.add(material);
+        asset.pendingMaterialRows.set(
+          material,
+          (asset.pendingMaterialRows.get(material) ?? 0) + 1,
+        );
+      }
       row.bindings.push({
         ...binding,
         ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
@@ -574,6 +589,7 @@ export class GltfImageDemandCoordinator {
       if (loaded.contentKey === undefined) delete row.contentKey;
       else row.contentKey = loaded.contentKey;
       row.status = "ready";
+      this.#settleMaterialDemandRow(row);
       this.#demandSettledBaseRefinements(row);
       this.#recordSettled(asset, false);
       if (!row.outcomeQueued) {
@@ -586,6 +602,7 @@ export class GltfImageDemandCoordinator {
       if (asset.controller.signal.aborted) return;
       row.error = error instanceof Error ? error.message : String(error);
       row.status = "error";
+      this.#settleMaterialDemandRow(row);
       asset.readyKeys.delete(row.key);
       this.#demandSettledBaseRefinements(row);
       this.#recordSettled(asset, true);
@@ -610,6 +627,19 @@ export class GltfImageDemandCoordinator {
       asset.load.imagesSettledAt = this.#now();
     }
     this.#requestProgress(asset.key);
+  }
+
+  #settleMaterialDemandRow(row: Row): void {
+    const asset = row.asset;
+    for (const material of row.materials) {
+      const pending = asset.pendingMaterialRows.get(material);
+      if (pending === undefined || pending <= 1) {
+        asset.pendingMaterialRows.delete(material);
+        asset.settledMaterials.add(material);
+      } else {
+        asset.pendingMaterialRows.set(material, pending - 1);
+      }
+    }
   }
 
   #releaseRecipesIfUnused(ownership: RecipeOwnership): void {

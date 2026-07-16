@@ -4,6 +4,7 @@ import type { Example } from '../examples';
 import {
   exampleContract,
   readRendererBenchmarkSnapshot,
+  rendererBenchmarkSnapshotReady,
   type RendererBenchmarkSnapshot,
 } from '../example-contract';
 
@@ -374,7 +375,12 @@ const waitForReady = async (timeoutMs: number): Promise<boolean> => {
       stableResourceCount = resourceCount;
       stableSince = performance.now();
     }
-    if (document.readyState === 'complete' && canvas !== null && performance.now() - stableSince > 350) {
+    if (
+      document.readyState === 'complete'
+      && canvas !== null
+      && rendererBenchmarkSnapshotReady(rendererSnapshot())
+      && performance.now() - stableSince > 350
+    ) {
       return await nextRaf(deadline) !== null && await nextRaf(deadline) !== null;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));

@@ -4,6 +4,7 @@ import {
   exampleRoutes,
   installRendererBenchmarkBridge,
   readRendererBenchmarkSnapshot,
+  rendererBenchmarkSnapshotReady,
   type RendererBenchmarkSnapshot,
 } from './example-contract';
 import { examples } from './examples';
@@ -32,5 +33,41 @@ describe('examples contract', () => {
     cleanup();
     expect(target[exampleContract.benchmark.bridge.rendererSnapshotGlobal]).toBeTypeOf('function');
     expect(target[exampleContract.benchmark.bridge.renderNowGlobal]).toBeUndefined();
+  });
+
+  it('waits for every glTF candidate image to settle', () => {
+    type Asset = NonNullable<RendererBenchmarkSnapshot['gltfLoadDiagnostics']>['assets'][number];
+    const snapshot = (asset: Partial<Asset>) => ({
+      frame: 1,
+      gltfInstancing: null,
+      gltfLoadDiagnostics: {
+        assets: [{
+          imageCandidates: 3,
+          imageFailures: 0,
+          imagesLoaded: 2,
+          imageRequests: 3,
+          lightCount: 0,
+          nodeCount: 1,
+          phaseMs: {},
+          primitiveCount: 1,
+          src: '/scene.gltf',
+          status: 'sceneReady',
+          variantNames: [],
+          ...asset,
+        }],
+      },
+      lifecycle: null,
+      planning: null,
+      resourceLifetime: null,
+      resourcePressure: null,
+      virtualTexturing: null,
+    }) satisfies RendererBenchmarkSnapshot;
+
+    expect(rendererBenchmarkSnapshotReady(null)).toBe(false);
+    expect(rendererBenchmarkSnapshotReady(snapshot({}))).toBe(false);
+    expect(rendererBenchmarkSnapshotReady(snapshot({ imagesLoaded: 3 }))).toBe(true);
+    expect(rendererBenchmarkSnapshotReady(snapshot({ imageFailures: 1 }))).toBe(true);
+    expect(rendererBenchmarkSnapshotReady(snapshot({ status: 'loading' }))).toBe(false);
+    expect(rendererBenchmarkSnapshotReady(snapshot({ error: 'bad asset', status: 'error' }))).toBe(true);
   });
 });

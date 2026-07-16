@@ -73,6 +73,11 @@ type Request = {
   resource?: Resource;
 };
 
+type UniformSlot = {
+  readonly location: WebGLUniformLocation | null;
+  readonly value: number[];
+};
+
 type State = {
   activeProgram?: WebGLProgram;
   readonly gl: WebGL2RenderingContext;
@@ -86,8 +91,7 @@ type State = {
   readonly requests: Map<number, Request>;
   startFrame: number;
   startsThisFrame: number;
-  readonly uniformLocations: Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>;
-  readonly uniformValues: Map<WebGLProgram, Map<string, number[]>>;
+  readonly uniforms: Map<WebGLProgram, Map<string, UniformSlot>>;
   wakeRequested: boolean;
 };
 
@@ -102,8 +106,7 @@ export const createProgramArena = (gl: WebGL2RenderingContext): ProgramArena => 
   requests: new Map(),
   startFrame: -1,
   startsThisFrame: 0,
-  uniformLocations: new Map(),
-  uniformValues: new Map(),
+  uniforms: new Map(),
   wakeRequested: false,
 } as unknown as ProgramArena);
 
@@ -138,8 +141,7 @@ const deleteProgram = (state: State, program: WebGLProgram): void => {
   state.gl.deleteProgram(program);
   state.ownedPrograms.delete(program);
   if (state.activeProgram === program) delete state.activeProgram;
-  state.uniformLocations.delete(program);
-  state.uniformValues.delete(program);
+  state.uniforms.delete(program);
 };
 
 const releaseProgramShaders = (state: State, resource: Resource): void => {
@@ -307,31 +309,29 @@ export const requestProgram = (
   }
 };
 
-const uniformLocation = (
+const uniformSlot = (
   state: State,
   program: WebGLProgram,
   name: string,
-): WebGLUniformLocation | null => {
-  let locations = state.uniformLocations.get(program);
-  if (locations === undefined) {
-    locations = new Map();
-    state.uniformLocations.set(program, locations);
+): UniformSlot => {
+  let uniforms = state.uniforms.get(program);
+  if (uniforms === undefined) {
+    uniforms = new Map();
+    state.uniforms.set(program, uniforms);
   }
-  if (locations.has(name)) return locations.get(name) ?? null;
-  const location = state.gl.getUniformLocation(program, name);
-  locations.set(name, location);
-  return location;
+  let slot = uniforms.get(name);
+  if (slot !== undefined) return slot;
+  slot = { location: state.gl.getUniformLocation(program, name), value: [] };
+  uniforms.set(name, slot);
+  return slot;
 };
 
 const valueCached = (
-  state: State,
-  program: WebGLProgram,
-  name: string,
+  cached: readonly number[],
   value: ArrayLike<number>,
   length: number,
 ): boolean => {
-  const cached = state.uniformValues.get(program)?.get(name);
-  if (cached === undefined || cached.length !== length) return false;
+  if (cached.length !== length) return false;
   for (let index = 0; index < length; index += 1) {
     if (!Object.is(cached[index], value[index])) return false;
   }
@@ -339,47 +339,23 @@ const valueCached = (
 };
 
 const cacheValue = (
-  state: State,
-  program: WebGLProgram,
-  name: string,
+  cached: number[],
   value: ArrayLike<number>,
   length: number,
 ): void => {
-  let values = state.uniformValues.get(program);
-  if (values === undefined) {
-    values = new Map();
-    state.uniformValues.set(program, values);
-  }
-  let cached = values.get(name);
-  if (cached === undefined || cached.length !== length) {
-    cached = [];
-    cached.length = length;
-    values.set(name, cached);
-  }
+  if (cached.length !== length) cached.length = length;
   for (let index = 0; index < length; index += 1) cached[index] = value[index] as number;
 };
 
 const cacheScalars = (
-  state: State,
-  program: WebGLProgram,
-  name: string,
+  cached: number[],
   length: 1 | 2 | 4,
   x: number,
   y = 0,
   z = 0,
   w = 0,
 ): void => {
-  let values = state.uniformValues.get(program);
-  if (values === undefined) {
-    values = new Map();
-    state.uniformValues.set(program, values);
-  }
-  let cached = values.get(name);
-  if (cached === undefined || cached.length !== length) {
-    cached = [];
-    cached.length = length;
-    values.set(name, cached);
-  }
+  if (cached.length !== length) cached.length = length;
   cached[0] = x;
   if (length >= 2) cached[1] = y;
   if (length === 4) {
@@ -394,10 +370,10 @@ const prepareVectorUniform = (
   name: string,
   value: ArrayLike<number>,
   length: number,
-): WebGLUniformLocation | undefined => {
-  if (valueCached(state, program, name, value, length)) return undefined;
-  const location = uniformLocation(state, program, name);
-  return location ?? undefined;
+): UniformSlot | undefined => {
+  const slot = uniformSlot(state, program, name);
+  if (valueCached(slot.value, value, length)) return undefined;
+  return slot.location === null ? undefined : slot;
 };
 
 export const useProgram = (arena: ProgramArena, program: WebGLProgram): void => {
@@ -409,18 +385,18 @@ export const useProgram = (arena: ProgramArena, program: WebGLProgram): void => 
 
 export const uniformMatrix = (arena: ProgramArena, program: WebGLProgram, name: string, value: Mat4): void => {
   const state = arena as unknown as State;
-  const location = prepareVectorUniform(state, program, name, value, 16);
-  if (location === undefined) return;
-  state.gl.uniformMatrix4fv(location, false, value);
-  cacheValue(state, program, name, value, 16);
+  const slot = prepareVectorUniform(state, program, name, value, 16);
+  if (slot === undefined) return;
+  state.gl.uniformMatrix4fv(slot.location, false, value);
+  cacheValue(slot.value, value, 16);
 };
 
 export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: string, value: LinearRgba): void => {
   const state = arena as unknown as State;
-  const location = prepareVectorUniform(state, program, name, value, 4);
-  if (location === undefined) return;
-  state.gl.uniform4fv(location, value);
-  cacheValue(state, program, name, value, 4);
+  const slot = prepareVectorUniform(state, program, name, value, 4);
+  if (slot === undefined) return;
+  state.gl.uniform4fv(slot.location, value);
+  cacheValue(slot.value, value, 4);
 };
 
 /** Scalar hot-path form that does not allocate an intermediate vector. */
@@ -434,7 +410,8 @@ export const uniform4f = (
   w: number,
 ): void => {
   const state = arena as unknown as State;
-  const cached = state.uniformValues.get(program)?.get(name);
+  const slot = uniformSlot(state, program, name);
+  const cached = slot.value;
   if (
     cached?.length === 4
     && Object.is(cached[0], x)
@@ -442,33 +419,35 @@ export const uniform4f = (
     && Object.is(cached[2], z)
     && Object.is(cached[3], w)
   ) return;
-  const location = uniformLocation(state, program, name);
+  const location = slot.location;
   if (location === null) return;
   // WebGL2 always supplies the scalar form. Keep the vector fallback for
   // intentionally minimal structural test contexts.
   if (typeof state.gl.uniform4f === "function") state.gl.uniform4f(location, x, y, z, w);
   else state.gl.uniform4fv(location, [x, y, z, w]);
-  cacheScalars(state, program, name, 4, x, y, z, w);
+  cacheScalars(cached, 4, x, y, z, w);
 };
 
 export const uniform1i = (arena: ProgramArena, program: WebGLProgram, name: string, value: number): void => {
   const state = arena as unknown as State;
-  const cached = state.uniformValues.get(program)?.get(name);
+  const slot = uniformSlot(state, program, name);
+  const cached = slot.value;
   if (cached?.length === 1 && Object.is(cached[0], value)) return;
-  const location = uniformLocation(state, program, name);
+  const location = slot.location;
   if (location === null) return;
   state.gl.uniform1i(location, value);
-  cacheScalars(state, program, name, 1, value);
+  cacheScalars(cached, 1, value);
 };
 
 export const uniform1f = (arena: ProgramArena, program: WebGLProgram, name: string, value: number): void => {
   const state = arena as unknown as State;
-  const cached = state.uniformValues.get(program)?.get(name);
+  const slot = uniformSlot(state, program, name);
+  const cached = slot.value;
   if (cached?.length === 1 && Object.is(cached[0], value)) return;
-  const location = uniformLocation(state, program, name);
+  const location = slot.location;
   if (location === null) return;
   state.gl.uniform1f(location, value);
-  cacheScalars(state, program, name, 1, value);
+  cacheScalars(cached, 1, value);
 };
 
 export const uniform2fv = (
@@ -478,10 +457,10 @@ export const uniform2fv = (
   value: readonly [number, number],
 ): void => {
   const state = arena as unknown as State;
-  const location = prepareVectorUniform(state, program, name, value, 2);
-  if (location === undefined) return;
-  state.gl.uniform2fv(location, value);
-  cacheValue(state, program, name, value, 2);
+  const slot = prepareVectorUniform(state, program, name, value, 2);
+  if (slot === undefined) return;
+  state.gl.uniform2fv(slot.location, value);
+  cacheValue(slot.value, value, 2);
 };
 
 export const uniform2f = (
@@ -492,12 +471,13 @@ export const uniform2f = (
   y: number,
 ): void => {
   const state = arena as unknown as State;
-  const cached = state.uniformValues.get(program)?.get(name);
+  const slot = uniformSlot(state, program, name);
+  const cached = slot.value;
   if (cached?.length === 2 && Object.is(cached[0], x) && Object.is(cached[1], y)) return;
-  const location = uniformLocation(state, program, name);
+  const location = slot.location;
   if (location === null) return;
   state.gl.uniform2f(location, x, y);
-  cacheScalars(state, program, name, 2, x, y);
+  cacheScalars(cached, 2, x, y);
 };
 
 const clearState = (state: State): void => {
@@ -506,8 +486,7 @@ const clearState = (state: State): void => {
   state.requests.clear();
   state.pendingRequests.length = 0;
   state.pendingHead = 0;
-  state.uniformLocations.clear();
-  state.uniformValues.clear();
+  state.uniforms.clear();
   state.startFrame = -1;
   state.startsThisFrame = 0;
   state.linkFrame = -1;
@@ -543,9 +522,13 @@ export const programArenaSnapshot = (arena: ProgramArena): ProgramArenaSnapshot 
     if (request.resource?.linked === true) linkedProgramCount += 1;
   }
   let uniformLocationCount = 0;
-  for (const locations of state.uniformLocations.values()) uniformLocationCount += locations.size;
+  for (const uniforms of state.uniforms.values()) uniformLocationCount += uniforms.size;
   let uniformValueCount = 0;
-  for (const values of state.uniformValues.values()) uniformValueCount += values.size;
+  for (const uniforms of state.uniforms.values()) {
+    for (const slot of uniforms.values()) {
+      if (slot.value.length !== 0) uniformValueCount += 1;
+    }
+  }
   return {
     activeProgram: state.activeProgram !== undefined,
     linkedProgramCount,

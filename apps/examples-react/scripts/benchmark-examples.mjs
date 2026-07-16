@@ -1273,7 +1273,17 @@ const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(ses
       stableSince = performance.now();
     }
     if (document.readyState === 'complete' && canvas !== null && performance.now() - stableSince > 350) {
-      return ${requireWindowRaf ? 'await rafOrTimeout(1000) && await rafOrTimeout(1000)' : 'true'};
+      const snapshot = globalThis[${JSON.stringify(exampleContract.benchmark.bridge.rendererSnapshotGlobal)}]?.() ?? null;
+      const assets = snapshot?.gltfLoadDiagnostics?.assets ?? [];
+      const rendererReady = snapshot !== null && assets.every((asset) => (
+        asset.status !== 'loading' && (
+          asset.status === 'error'
+          || asset.imagesLoaded + asset.imageFailures >= asset.imageCandidates
+        )
+      ));
+      if (rendererReady) {
+        return ${requireWindowRaf ? 'await rafOrTimeout(1000) && await rafOrTimeout(1000)' : 'true'};
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
