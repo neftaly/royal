@@ -5,7 +5,7 @@ import {
   RoyalEnvironmentRepackError,
 } from "../scripts/repack-royal-environment";
 import { parseRoyalEnvironmentKtx1 } from "../packages/renderer-webgl/src/gltf/royal-environment-ktx1";
-import { forEachFuzzCase, SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase, SeededRandom } from "./fuzz";
 
 const IDENTIFIER = new Uint8Array([
   0xab, 0x4b, 0x54, 0x58, 0x20, 0x31, 0x31, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -115,33 +115,35 @@ const malformed = (value: NativeFixture, mutation: number, random: SeededRandom)
 
 describe("Royal environment cmgen repacker", () => {
   it("is deterministic, preserves every face payload, and rejects seeded malformed native input", () => {
-    forEachFuzzCase({ cases: 24, seed: 0x8b2e_51c7 }, ({ caseIndex, label, random }) => {
+    forEachFuzzCase({ cases: 24, seed: 0x8b2e_51c7 }, ({ caseIndex, random }) => {
       const native = fixture(random);
       const provenance = `source-sha256=${random.int(0, 0x7fff_ffff).toString(16)};tool=cmgen-pinned`;
       const first = repackRoyalEnvironmentKtx1(native.source, provenance);
       const second = repackRoyalEnvironmentKtx1(native.source, provenance);
-      expect(Buffer.compare(Buffer.from(first), Buffer.from(second)), label).toBe(0);
+      assertFuzzEqual(Buffer.compare(Buffer.from(first), Buffer.from(second)), 0, "deterministic output");
 
       const prepared = parseRoyalEnvironmentKtx1(first);
-      expect(prepared.metadata.provenance, label).toBe(provenance);
-      expect(prepared.levels, label).toHaveLength(LEVELS);
+      assertFuzzEqual(prepared.metadata.provenance, provenance, "provenance");
+      assertFuzzEqual(prepared.levels.length, LEVELS, "level count");
       let range = 0;
       for (const level of prepared.levels) {
         for (const face of level.faces) {
           const nativeFace = native.faceRanges[range]!;
-          expect(Buffer.compare(
+          assertFuzzEqual(Buffer.compare(
             Buffer.from(first, face.byteOffset, face.byteLength),
             Buffer.from(native.source, nativeFace.byteOffset, nativeFace.byteLength),
-          ), label).toBe(0);
+          ), 0, `face payload ${range}`);
           range += 1;
         }
       }
-      expect(range, label).toBe(LEVELS * FACES);
+      assertFuzzEqual(range, LEVELS * FACES, "face range count");
 
-      expect(
-        () => repackRoyalEnvironmentKtx1(malformed(native, caseIndex % 9, random), provenance),
-        label,
-      ).toThrow(RoyalEnvironmentRepackError);
+      try {
+        repackRoyalEnvironmentKtx1(malformed(native, caseIndex % 9, random), provenance);
+        throw new Error("malformed environment was accepted");
+      } catch (error) {
+        assertFuzz(error instanceof RoyalEnvironmentRepackError, "malformed environment raised wrong error");
+      }
     });
 
     expect(() => repackRoyalEnvironmentKtx1(

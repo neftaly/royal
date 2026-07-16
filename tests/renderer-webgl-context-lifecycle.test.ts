@@ -21,7 +21,7 @@ import {
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { preloadClusteredLightingFeature } from "../packages/renderer-webgl/src/lazy-clustered-lighting-feature";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 import {
   camera,
   clusteredScene,
@@ -407,7 +407,7 @@ describe("WebGL root context lifecycle contracts", () => {
         const action = random.int(0, 6);
         if (action === 0 && lifecycle === "active") {
           const event = canvas.dispatchContextEvent("webglcontextlost");
-          expect(event.defaultPrevented).toBe(true);
+          assertFuzzEqual(event.defaultPrevented, true, `step ${step} loss prevention`);
           lifecycle = "lost";
         } else if (action === 1 && lifecycle === "lost") {
           canvas.dispatchContextEvent("webglcontextrestored");
@@ -415,27 +415,27 @@ describe("WebGL root context lifecycle contracts", () => {
         } else if (action === 2) {
           const before = calls.length;
           root.render(renderScene);
-          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+          if (lifecycle === "lost") assertFuzzEqual(calls.length, before, `step ${step} lost render calls`);
         } else if (action === 3) {
           root.invalidate();
         } else if (action === 4 && scheduled.length > 0) {
           const before = calls.length;
           scheduled.shift()?.(step * 16);
-          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+          if (lifecycle === "lost") assertFuzzEqual(calls.length, before, `step ${step} stale frame calls`);
         } else if (action === 5) {
           const before = calls.length;
           root.pick({ clientX: 2, clientY: 2 });
-          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+          if (lifecycle === "lost") assertFuzzEqual(calls.length, before, `step ${step} lost pick calls`);
         }
-        expect(root.contextLifecycle).toBe(lifecycle);
+        assertFuzzEqual(root.contextLifecycle, lifecycle, `step ${step} lifecycle`);
       }
 
       const callsBeforeDispose = calls.length;
       root.dispose();
-      if (lifecycle === "lost") expect(calls).toHaveLength(callsBeforeDispose);
+      if (lifecycle === "lost") assertFuzzEqual(calls.length, callsBeforeDispose, "lost dispose calls");
       canvas.dispatchContextEvent("webglcontextrestored");
       for (const callback of scheduled) callback(2_000);
-      expect(root.snapshot().context.lifecycle).toBe("disposed");
+      assertFuzzEqual(root.snapshot().context.lifecycle, "disposed", "final lifecycle");
     });
   });
 

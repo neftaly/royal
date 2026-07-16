@@ -19,6 +19,10 @@ import type {
   SurfaceImageBasedLightSpecular,
 } from "../packages/renderer-webgl/src/webgl/lights";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  deferred,
+  flushMicrotasks as flushTestMicrotasks,
+} from "./async-test-fixtures";
 
 vi.mock("../packages/renderer-webgl/src/gltf/image-source-recipe", async (importOriginal) => {
   const actual = await importOriginal<
@@ -27,25 +31,7 @@ vi.mock("../packages/renderer-webgl/src/gltf/image-source-recipe", async (import
   return { ...actual, loadGltfImageSourceRecipe: vi.fn() };
 });
 
-type Deferred<Value> = Readonly<{
-  promise: Promise<Value>;
-  reject(reason: unknown): void;
-  resolve(value: Value): void;
-}>;
-
-const deferred = <Value>(): Deferred<Value> => {
-  let resolve!: (value: Value) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<Value>((accept, decline) => {
-    resolve = accept;
-    reject = decline;
-  });
-  return { promise, reject, resolve };
-};
-
-const flushMicrotasks = async (): Promise<void> => {
-  for (let index = 0; index < 12; index += 1) await Promise.resolve();
-};
+const flushMicrotasks = (): Promise<void> => flushTestMicrotasks(12);
 
 const recipe = (key: string): GltfImageSourceRecipe => ({
   key,

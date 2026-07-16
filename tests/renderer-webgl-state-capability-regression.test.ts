@@ -17,6 +17,7 @@ import {
   type RendererCapabilityProbeRow,
   type WebGlCapabilityProbeContext,
 } from "@royal/renderer-webgl/capabilities";
+import { flushAnimationFrames, flushMicrotasks } from "./async-test-fixtures";
 
 type GlCall = {
   readonly name: string;
@@ -358,16 +359,6 @@ const installAnimationFrameQueue = (): FrameRequestCallback[] => {
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
 
   return callbacks;
-};
-
-const flushMicrotasks = async (): Promise<void> => {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
-};
-
-const flushAnimationFrames = async (frames: FrameRequestCallback[]): Promise<void> => {
-  const queued = frames.splice(0);
-  for (const [index, callback] of queued.entries()) callback(16 + index);
-  await flushMicrotasks();
 };
 
 const settleTextureLoads = async (

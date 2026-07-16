@@ -6,7 +6,7 @@ import {
   isPackedInstanceSlotDirty,
   markInstanceDirtyRange,
 } from '../packages/renderer-webgl/src/gltf/instance-changes';
-import { forEachFuzzCase } from './fuzz';
+import { assertFuzzEqual, forEachFuzzCase } from './fuzz';
 
 describe('bulk instance change tracking', () => {
   it('matches exact dirty rows and packed-slot oracle across randomized commits and repacks', () => {
@@ -21,7 +21,7 @@ describe('bulk instance change tracking', () => {
         oracle.fill(1, start, start + rangeCount);
       }
       for (let index = 0; index < count; index += 1) {
-        expect(isInstanceDirty(dirty, index), `${label} row=${index}`).toBe(oracle[index] === 1);
+        assertFuzzEqual(isInstanceDirty(dirty, index), oracle[index] === 1, `row=${index}`);
       }
 
       for (let slot = 0; slot < count; slot += 1) {
@@ -32,16 +32,13 @@ describe('bulk instance change tracking', () => {
         const expected = !sameSource
           || previousIndex !== nextIndex
           || (versionChanged && oracle[nextIndex] === 1);
-        expect(
-          isPackedInstanceSlotDirty(
-            dirty,
-            nextIndex,
-            sameSource,
-            previousIndex,
-            versionChanged,
-          ),
-          `${label} slot=${slot}`,
-        ).toBe(expected);
+        assertFuzzEqual(isPackedInstanceSlotDirty(
+          dirty,
+          nextIndex,
+          sameSource,
+          previousIndex,
+          versionChanged,
+        ), expected, `${label} slot=${slot}`);
       }
     });
   });

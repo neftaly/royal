@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { LoadedGltfMaterial } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import type { Mat4 } from "../packages/renderer-webgl/src/math/mat4";
@@ -20,7 +21,7 @@ import {
   retainPacketMaterial,
 } from "../packages/renderer-webgl/src/packet-resource-tables";
 import { NO_RESOURCE_ID } from "../packages/renderer-webgl/src/resource-id";
-import { forEachFuzzCase, SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzArrayEqual, assertFuzzEqual, forEachFuzzCase, SeededRandom } from "./fuzz";
 
 const randomBounds = (random: SeededRandom): Bounds3 => {
   const min = [random.number(-100, 100), random.number(-100, 100), random.number(-100, 100)] as const;
@@ -48,10 +49,7 @@ const randomMaterial = (random: SeededRandom): LoadedGltfMaterial => ({
 });
 
 const expectFloat64Values = (actual: ArrayLike<number>, expected: ArrayLike<number>): void => {
-  expect(actual).toHaveLength(expected.length);
-  for (let index = 0; index < actual.length; index += 1) {
-    expect(actual[index]).toBe(expected[index]);
-  }
+  assertFuzzArrayEqual(actual, expected, "float64 values");
 };
 
 describe("packet resource tables", () => {
@@ -62,8 +60,8 @@ describe("packet resource tables", () => {
       const expectedModels: { determinant: number; model: Mat4 }[] = [];
 
       const undefinedId = retainPacketBounds(tables, undefined);
-      expect(retainPacketBounds(tables, undefined)).toBe(undefinedId);
-      expect(resolvePacketBounds(tables, undefinedId)).toBeUndefined();
+      assertFuzzEqual(retainPacketBounds(tables, undefined), undefinedId, "undefined bounds identity");
+      assertFuzzEqual(resolvePacketBounds(tables, undefinedId), undefined, "undefined bounds resolution");
 
       const count = random.int(1, 48);
       for (let index = 0; index < count; index += 1) {
@@ -72,10 +70,10 @@ describe("packet resource tables", () => {
         const determinant = random.number(-100, 100);
         const boundsId = retainPacketBounds(tables, bounds);
         const modelId = retainPacketLocalModel(tables, model, determinant);
-        expect(boundsId).toBe(index + 1);
-        expect(modelId).toBe(index);
-        expect(retainPacketBounds(tables, bounds)).toBe(boundsId);
-        expect(retainPacketLocalModel(tables, model, determinant + 1)).toBe(modelId);
+        assertFuzzEqual(boundsId, index + 1, "bounds ID");
+        assertFuzzEqual(modelId, index, "model ID");
+        assertFuzzEqual(retainPacketBounds(tables, bounds), boundsId, "bounds identity");
+        assertFuzzEqual(retainPacketLocalModel(tables, model, determinant + 1), modelId, "model identity");
         expectedBounds.push({ max: [...bounds.max], min: [...bounds.min] });
         expectedModels.push({ determinant, model: [...model] as Mat4 });
 
@@ -89,7 +87,7 @@ describe("packet resource tables", () => {
         expectFloat64Values(bounds.min, expectedBounds[index]!.min);
         expectFloat64Values(bounds.max, expectedBounds[index]!.max);
         expectFloat64Values(local.model, expectedModels[index]!.model);
-        expect(local.determinant).toBe(expectedModels[index]!.determinant);
+        assertFuzzEqual(local.determinant, expectedModels[index]!.determinant, `determinant ${index}`);
       }
     });
   });
@@ -141,20 +139,26 @@ describe("packet resource tables", () => {
       for (let index = 0; index < count; index += 1) {
         const material = randomMaterial(random);
         materials.push(material);
-        expect(retainPacketMaterial(tables, material)).toBe(index);
-        expect(retainPacketMaterial(tables, material)).toBe(index);
-        expect(resolvePacketMaterial(tables, index)).toBe(material);
+        assertFuzzEqual(retainPacketMaterial(tables, material), index, "material ID");
+        assertFuzzEqual(retainPacketMaterial(tables, material), index, "material identity");
+        assertFuzzEqual(resolvePacketMaterial(tables, index), material, "material resolution");
 
         const row = {
           kind: random.int(0, 8),
           outerIndex: random.int(0, 10_000),
           planOccurrenceIndex: random.int(0, 10_000),
         };
-        expect(appendPacketRootSource(tables, row)).toBe(index);
-        expect(resolvePacketRootSource(tables, index)).toEqual(row);
+        assertFuzzEqual(appendPacketRootSource(tables, row), index, "root source ID");
+        const resolved = resolvePacketRootSource(tables, index);
+        assertFuzzEqual(resolved.kind, row.kind, "root source kind");
+        assertFuzzEqual(resolved.outerIndex, row.outerIndex, "root source outer index");
+        assertFuzzEqual(resolved.planOccurrenceIndex, row.planOccurrenceIndex, "root source occurrence");
       }
 
-      expect(packetResourceTablesSnapshot(tables).materials).toEqual(materials);
+      assertFuzz(
+        isDeepStrictEqual(packetResourceTablesSnapshot(tables).materials, materials),
+        "material snapshot mismatch",
+      );
     });
   });
 

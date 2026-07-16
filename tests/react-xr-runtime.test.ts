@@ -1,25 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createXrSessionStore, type XrFrame, type XrSession } from "@royal/react/xr";
 import { createXrSessionRuntimeWithRenderer } from "../packages/react/src/xr/runtime";
+import { deferred } from "./async-test-fixtures";
 import { fakeRendererRoot } from "./react-test-fixtures";
 import type { RoyalRendererRootLifecycleSnapshot } from "../packages/react/src/root";
 import type { XrSessionRenderer } from "../packages/react/src/xr/renderer";
-
-type Deferred<Value> = {
-  readonly promise: Promise<Value>;
-  readonly reject: (error: unknown) => void;
-  readonly resolve: (value: Value) => void;
-};
-
-const deferred = <Value>(): Deferred<Value> => {
-  let reject = (_error: unknown): void => undefined;
-  let resolve = (_value: Value): void => undefined;
-  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
-    reject = rejectPromise;
-    resolve = resolvePromise;
-  });
-  return { promise, reject, resolve };
-};
 
 type TestXrSession = XrSession & {
   emit(type: "end" | "visibilitychange"): void;

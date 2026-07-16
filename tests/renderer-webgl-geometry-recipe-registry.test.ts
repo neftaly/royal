@@ -4,7 +4,6 @@ import {
   standardMaterial,
 } from "@royal/renderer-core";
 import {
-  directGeometryDeclaration,
   directGeometryKey,
   type CpuGeometry,
 } from "../packages/renderer-webgl/src/geometry-recipes";

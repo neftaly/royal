@@ -35,6 +35,47 @@ export type FuzzTraceOptions<Operation> = {
   readonly steps: number;
 };
 
+/** Low-overhead assertions for hot property-test loops. The fuzz runner adds seed context. */
+export const assertFuzz: (condition: boolean, message: string) => asserts condition = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+
+export const assertFuzzEqual = <Value>(
+  actual: Value,
+  expected: Value,
+  message: string,
+): void => {
+  if (!Object.is(actual, expected)) {
+    throw new Error(`${message}: expected ${String(expected)}, received ${String(actual)}`);
+  }
+};
+
+export const assertFuzzArrayEqual = (
+  actual: ArrayLike<unknown>,
+  expected: ArrayLike<unknown>,
+  message: string,
+): void => {
+  assertFuzzEqual(actual.length, expected.length, `${message} length`);
+  for (let index = 0; index < actual.length; index += 1) {
+    assertFuzzEqual(actual[index], expected[index], `${message}[${index}]`);
+  }
+};
+
+export const assertFuzzThrows = (
+  run: () => unknown,
+  expectedMessage: RegExp,
+  message: string,
+): void => {
+  try {
+    run();
+  } catch (error) {
+    const actualMessage = error instanceof Error ? error.message : String(error);
+    assertFuzz(expectedMessage.test(actualMessage), `${message}: unexpected error ${actualMessage}`);
+    return;
+  }
+  throw new Error(`${message}: expected function to throw`);
+};
+
 const defaultFuzzCasesEnvName = "ROYAL_FUZZ_CASES";
 
 export class SeededRandom {
@@ -92,47 +133,63 @@ export const fuzzCaseCount = (
   }
   return parsed;
 };
-export const forEachFuzzCase = (
-  options: FuzzCaseOptions,
-  run: (context: FuzzCaseContext) => void,
-): void => {
-  for (const [replayIndex, replay] of (options.replays ?? []).entries()) {
-    const seed = replay.seed ?? seedForCase(options.seed, replayIndex);
-    const label = `replay=${replay.label} seed=0x${seed.toString(16).padStart(8, "0")}`;
-    try {
-      run({
-        caseIndex: -1 - replayIndex,
-        label,
-        random: new SeededRandom(seed),
-        replay: replay.value,
-        replayLabel: replay.label,
-        seed,
-      });
-    } catch (error) {
-      throw new Error(`Fuzz replay failed (${label})`, { cause: error });
-    }
-  }
-  const count = fuzzCaseCount(options.cases ?? 16, options.envName);
-  for (let caseIndex = 0; caseIndex < count; caseIndex += 1) {
-    const seed = seedForCase(options.seed, caseIndex);
-    const label = `seed=0x${seed.toString(16).padStart(8, "0")} case=${caseIndex}`;
-    try {
-      run({
-        caseIndex,
-        label,
-        random: new SeededRandom(seed),
-        seed,
-      });
-    } catch (error) {
-      throw new Error(`Fuzz case failed (${label})`, { cause: error });
-    }
-  }
-};
 const seedForCase = (baseSeed: number, caseIndex: number): number => {
   let state = (baseSeed ^ Math.imul(caseIndex + 1, 0x9e3779b9)) >>> 0;
   state = Math.imul(state ^ (state >>> 16), 0x85ebca6b) >>> 0;
   state = Math.imul(state ^ (state >>> 13), 0xc2b2ae35) >>> 0;
   return (state ^ (state >>> 16)) >>> 0;
+};
+const fuzzCases = function* (options: FuzzCaseOptions): Generator<FuzzCaseContext> {
+  for (const [replayIndex, replay] of (options.replays ?? []).entries()) {
+    const seed = replay.seed ?? seedForCase(options.seed, replayIndex);
+    yield {
+      caseIndex: -1 - replayIndex,
+      label: `replay=${replay.label} seed=0x${seed.toString(16).padStart(8, "0")}`,
+      random: new SeededRandom(seed),
+      replay: replay.value,
+      replayLabel: replay.label,
+      seed,
+    };
+  }
+  const count = fuzzCaseCount(options.cases ?? 16, options.envName);
+  for (let caseIndex = 0; caseIndex < count; caseIndex += 1) {
+    const seed = seedForCase(options.seed, caseIndex);
+    yield {
+      caseIndex,
+      label: `seed=0x${seed.toString(16).padStart(8, "0")} case=${caseIndex}`,
+      random: new SeededRandom(seed),
+      seed,
+    };
+  }
+};
+const wrapFuzzFailure = (context: FuzzCaseContext, error: unknown): Error => new Error(
+  `Fuzz ${context.replayLabel === undefined ? "case" : "replay"} failed (${context.label})`,
+  { cause: error },
+);
+export const forEachFuzzCase = (
+  options: FuzzCaseOptions,
+  run: (context: FuzzCaseContext) => void,
+): void => {
+  for (const context of fuzzCases(options)) {
+    try {
+      run(context);
+    } catch (error) {
+      throw wrapFuzzFailure(context, error);
+    }
+  }
+};
+
+export const forEachFuzzCaseAsync = async (
+  options: FuzzCaseOptions,
+  run: (context: FuzzCaseContext) => Promise<void>,
+): Promise<void> => {
+  for (const context of fuzzCases(options)) {
+    try {
+      await run(context);
+    } catch (error) {
+      throw wrapFuzzFailure(context, error);
+    }
+  }
 };
 const traceFailure = async <Operation>(
   run: FuzzTraceOptions<Operation>["run"],

@@ -17,6 +17,7 @@ import {
   createWebGlTestCanvas,
   type WebGlTestContext,
 } from "./webgl-test-harness";
+import { flushAnimationFrames, flushMicrotasks } from "./async-test-fixtures";
 
 class ControlledImage {
   static readonly instances: ControlledImage[] = [];
@@ -80,10 +81,6 @@ class PassiveResizeObserver implements ResizeObserver {
   unobserve(_target: Element): void {}
 }
 
-const flushMicrotasks = async (): Promise<void> => {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
-};
-
 const installViewport = () => {
   const animationFrames: FrameRequestCallback[] = [];
   vi.stubGlobal("devicePixelRatio", 1);
@@ -104,11 +101,6 @@ const installViewport = () => {
   }));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   return animationFrames;
-};
-
-const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<void> => {
-  for (const [index, callback] of callbacks.splice(0).entries()) callback(index + 1);
-  await flushMicrotasks();
 };
 
 const textureTestContext = (): WebGlTestContext & {
@@ -300,7 +292,7 @@ describe("WebGL root construction and snapshot regressions", () => {
     root.render(texturedScene("/textures/first.png"));
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(animationFrames);
+    await flushAnimationFrames(animationFrames, { firstTimestamp: 1 });
     expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(1);
 
     const deleteFailure = new Error("driver retained deleted texture");
@@ -308,7 +300,7 @@ describe("WebGL root construction and snapshot regressions", () => {
     expect(() => root.render(texturedScene("/textures/second.png"))).toThrow(deleteFailure);
     ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(animationFrames);
+    await flushAnimationFrames(animationFrames, { firstTimestamp: 1 });
 
     expect(
       calls.filter(({ name }) => name === "createTexture"),
@@ -330,7 +322,7 @@ describe("WebGL root construction and snapshot regressions", () => {
     root.render(texturedScene("/textures/quarantined.png"));
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(animationFrames);
+    await flushAnimationFrames(animationFrames, { firstTimestamp: 1 });
     const deleteFailure = new Error("driver retained deleted texture");
     failNextTextureDelete(deleteFailure);
     expect(() => root.render(emptyScene())).toThrow(deleteFailure);

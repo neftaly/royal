@@ -24,7 +24,14 @@ import {
   type FramePacketRow,
   type SelectedFramePackets,
 } from "../packages/renderer-webgl/src/frame/packets";
-import { forEachFuzzCase, SeededRandom } from "./fuzz";
+import {
+  assertFuzz,
+  assertFuzzArrayEqual,
+  assertFuzzEqual,
+  assertFuzzThrows,
+  forEachFuzzCase,
+  SeededRandom,
+} from "./fuzz";
 
 const randomRow = (random: SeededRandom): FramePacketRow => {
   const instanceFirst = random.int(0, 10_000);
@@ -50,22 +57,22 @@ const randomRow = (random: SeededRandom): FramePacketRow => {
 };
 
 const expectCatalog = (catalog: FramePacketCatalog, rows: readonly FramePacketRow[]): void => {
-  expect(catalog.count).toBe(rows.length);
-  expect(catalog.capacity).toBeGreaterThanOrEqual(catalog.count);
+  assertFuzzEqual(catalog.count, rows.length, "catalog count");
+  assertFuzz(catalog.capacity >= catalog.count, "catalog capacity is below its count");
   for (const [index, row] of rows.entries()) {
-    expect(catalog.boundsIds[index]).toBe(row.boundsId);
-    expect(catalog.geometryIds[index]).toBe(row.geometryId);
-    expect(catalog.instanceCounts[index]).toBe(row.instanceCount);
-    expect(catalog.instanceFirsts[index]).toBe(row.instanceFirst);
-    expect(catalog.instanceStreamIds[index]).toBe(row.instanceStreamId ?? NO_FRAME_PACKET_ID);
-    expect(catalog.localModelIds[index]).toBe(row.localModelId);
-    expect(catalog.lodRequirementCounts[index]).toBe(row.lodRequirementCount);
-    expect(catalog.lodRequirementFirsts[index]).toBe(row.lodRequirementFirst);
-    expect(catalog.materialIds[index]).toBe(row.materialId);
-    expect(catalog.orderingSegments[index]).toBe(row.orderingSegment);
-    expect(catalog.renderClasses[index]).toBe(row.renderClass);
-    expect(catalog.rootSourceIds[index]).toBe(row.rootSourceId);
-    expect(catalog.sidedness[index]).toBe(row.sidedness);
+    assertFuzzEqual(catalog.boundsIds[index], row.boundsId, `bounds ID row ${index}`);
+    assertFuzzEqual(catalog.geometryIds[index], row.geometryId, `geometry ID row ${index}`);
+    assertFuzzEqual(catalog.instanceCounts[index], row.instanceCount, `instance count row ${index}`);
+    assertFuzzEqual(catalog.instanceFirsts[index], row.instanceFirst, `instance first row ${index}`);
+    assertFuzzEqual(catalog.instanceStreamIds[index], row.instanceStreamId ?? NO_FRAME_PACKET_ID, `instance stream row ${index}`);
+    assertFuzzEqual(catalog.localModelIds[index], row.localModelId, `local model row ${index}`);
+    assertFuzzEqual(catalog.lodRequirementCounts[index], row.lodRequirementCount, `LOD count row ${index}`);
+    assertFuzzEqual(catalog.lodRequirementFirsts[index], row.lodRequirementFirst, `LOD first row ${index}`);
+    assertFuzzEqual(catalog.materialIds[index], row.materialId, `material row ${index}`);
+    assertFuzzEqual(catalog.orderingSegments[index], row.orderingSegment, `ordering segment row ${index}`);
+    assertFuzzEqual(catalog.renderClasses[index], row.renderClass, `render class row ${index}`);
+    assertFuzzEqual(catalog.rootSourceIds[index], row.rootSourceId, `root source row ${index}`);
+    assertFuzzEqual(catalog.sidedness[index], row.sidedness, `sidedness row ${index}`);
   }
 };
 
@@ -73,9 +80,9 @@ const expectSelection = (
   selected: SelectedFramePackets,
   expected: readonly number[],
 ): void => {
-  expect(selected.count).toBe(expected.length);
-  expect(selected.capacity).toBeGreaterThanOrEqual(selected.count);
-  expect(Array.from(selected.orderedPacketIndices.subarray(0, selected.count))).toEqual(expected);
+  assertFuzzEqual(selected.count, expected.length, "selected packet count");
+  assertFuzz(selected.capacity >= selected.count, "selected capacity is below its count");
+  assertFuzzArrayEqual(selected.orderedPacketIndices.subarray(0, selected.count), expected, "selected packets");
 };
 
 describe("retained frame packets", () => {
@@ -210,10 +217,10 @@ describe("retained frame packets", () => {
         if (kind < 5 || rows.length === 0) {
           const row = randomRow(random);
           const revision = catalog.revision;
-          expect(appendFramePacket(catalog, row)).toBe(rows.length);
+          assertFuzzEqual(appendFramePacket(catalog, row), rows.length, "appended row index");
           rows.push(row);
-          expect(catalog.revision).toBe(revision + 1);
-          expect(() => assertSelectedFramePacketsCurrent(selected, catalog)).toThrow(/stale/);
+          assertFuzzEqual(catalog.revision, revision + 1, "append revision");
+          assertFuzzThrows(() => assertSelectedFramePacketsCurrent(selected, catalog), /stale/, "append invalidation");
           beginSelectedFramePackets(selected, catalog);
           ordered.length = 0;
         } else if (kind < 7) {
@@ -222,8 +229,8 @@ describe("retained frame packets", () => {
           const revision = catalog.revision;
           writeFramePacket(catalog, index, row);
           rows[index] = row;
-          expect(catalog.revision).toBe(revision + 1);
-          expect(() => assertSelectedFramePacketsCurrent(selected, catalog)).toThrow(/stale/);
+          assertFuzzEqual(catalog.revision, revision + 1, "write revision");
+          assertFuzzThrows(() => assertSelectedFramePacketsCurrent(selected, catalog), /stale/, "write invalidation");
           beginSelectedFramePackets(selected, catalog);
           ordered.length = 0;
         } else if (kind === 7) {
@@ -240,12 +247,12 @@ describe("retained frame packets", () => {
           ordered.length = 0;
           rows.length = 0;
           if (revision !== catalog.revision) {
-            expect(() => assertSelectedFramePacketsCurrent(selected, catalog)).toThrow(/stale/);
+            assertFuzzThrows(() => assertSelectedFramePacketsCurrent(selected, catalog), /stale/, "reset invalidation");
             beginSelectedFramePackets(selected, catalog);
           }
         }
-        expect(catalog.count).toBe(rows.length);
-        expect(selected.count).toBe(ordered.length);
+        assertFuzzEqual(catalog.count, rows.length, "catalog count after operation");
+        assertFuzzEqual(selected.count, ordered.length, "selection count after operation");
         if (operation % 8 === 0) {
           expectCatalog(catalog, rows);
           expectSelection(selected, ordered);
@@ -281,9 +288,9 @@ describe("retained frame packets", () => {
         appendSelectedFramePacket(selected, catalog, index);
       }
       for (const [name, value] of Object.entries(catalogArrays)) {
-        expect(catalog[name as keyof typeof catalogArrays]).toBe(value);
+        assertFuzzEqual(catalog[name as keyof typeof catalogArrays], value, `${name} storage identity`);
       }
-      expect(selected.orderedPacketIndices).toBe(orderedPacketIndices);
+      assertFuzzEqual(selected.orderedPacketIndices, orderedPacketIndices, "selection storage identity");
     });
   }, 15_000);
 

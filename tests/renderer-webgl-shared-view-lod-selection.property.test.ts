@@ -15,7 +15,7 @@ import {
   type SharedViewLodMetadata,
   validateSharedViewLodMetadata,
 } from "../packages/renderer-webgl/src/lod-selection";
-import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const HYSTERESIS = 0.15;
 
@@ -105,15 +105,18 @@ describe("retained shared-view LOD selection", () => {
         drawable,
       );
 
-      expect(select(coverages, lod, previous)).toBe(expected);
-      expect(select(shuffled(coverages, random), lod, previous)).toBe(expected);
-      expect(drawable[expected]).toBe(true);
+      assertFuzzEqual(select(coverages, lod, previous), expected, "selected level");
+      assertFuzzEqual(select(shuffled(coverages, random), lod, previous), expected, "permuted selected level");
+      assertFuzz(drawable[expected] === true, "selected an undrawable level");
 
       const higherCoverage = Math.min(1, maximum + random.number(0.0001, 0.2));
       const allDrawable = metadata(thresholds, Array.from({ length: levelCount }, () => true));
       const monotonicPrevious = previous;
-      expect(select([...coverages, higherCoverage], allDrawable, monotonicPrevious))
-        .toBeLessThanOrEqual(select(coverages, allDrawable, monotonicPrevious));
+      assertFuzz(
+        select([...coverages, higherCoverage], allDrawable, monotonicPrevious)
+          <= select(coverages, allDrawable, monotonicPrevious),
+        "higher coverage selected a lower-detail level",
+      );
 
       const forward = createSharedViewLodSelections();
       const reverse = createSharedViewLodSelections();
@@ -125,8 +128,11 @@ describe("retained shared-view LOD selection", () => {
         for (let index = views.length - 1; index >= 0; index -= 1) {
           observeSharedViewLodCoverage(reverse, 0, views[index]!);
         }
-        expect(finalizeSharedViewLodSelection(forward, 0, lod))
-          .toBe(finalizeSharedViewLodSelection(reverse, 0, lod));
+        assertFuzzEqual(
+          finalizeSharedViewLodSelection(forward, 0, lod),
+          finalizeSharedViewLodSelection(reverse, 0, lod),
+          `frame ${frame} temporal selection`,
+        );
       }
     });
   });

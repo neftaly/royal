@@ -16,7 +16,7 @@ import {
   type ResourceGovernorPolicy,
   type ResourceGovernorReservation,
 } from "../packages/renderer-webgl/src/resource-governor";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 const classPolicy = (
   gpuFloor = 0,
@@ -787,39 +787,41 @@ describe("root resource governor", () => {
           },
         );
         if (typeof result === "string") {
-          expect(resourceGovernorSnapshot(governor).total).toEqual(before.total);
+          const after = resourceGovernorSnapshot(governor).total;
+          for (const dimension of Object.keys(after) as (keyof typeof after)[]) {
+            assertFuzzEqual(after[dimension], before.total[dimension], `rejected ${dimension}`);
+          }
         } else if (random.boolean()) {
           result.cancel();
-          expect(result.cancel()).toBe(false);
+          assertFuzzEqual(result.cancel(), false, "reservation cancels once");
         } else {
           leases.push(result.commit());
         }
 
         const snapshot = resourceGovernorSnapshot(governor);
         for (const resourceClass of RESOURCE_GOVERNOR_CLASSES) {
-          expect(snapshot.byClass[resourceClass].cpuDecodedBytes).toBeLessThanOrEqual(
-            maximumResourceGovernorClassDurableBytes(
-              fuzzPolicy,
-              resourceClass,
-              "cpuDecodedBytes",
+          assertFuzz(
+            snapshot.byClass[resourceClass].cpuDecodedBytes <= maximumResourceGovernorClassDurableBytes(
+              fuzzPolicy, resourceClass, "cpuDecodedBytes",
             ),
+            `${resourceClass} CPU capacity exceeded`,
           );
-          expect(snapshot.byClass[resourceClass].persistentGpuBytes).toBeLessThanOrEqual(
-            maximumResourceGovernorClassDurableBytes(
-              fuzzPolicy,
-              resourceClass,
-              "persistentGpuBytes",
+          assertFuzz(
+            snapshot.byClass[resourceClass].persistentGpuBytes <= maximumResourceGovernorClassDurableBytes(
+              fuzzPolicy, resourceClass, "persistentGpuBytes",
             ),
+            `${resourceClass} GPU capacity exceeded`,
           );
         }
         for (const dimension of Object.keys(snapshot.total) as (keyof typeof snapshot.total)[]) {
-          expect(Number.isSafeInteger(snapshot.total[dimension])).toBe(true);
-          expect(snapshot.total[dimension]).toBeGreaterThanOrEqual(0);
-          expect(snapshot.total[dimension]).toBeLessThanOrEqual(snapshot.limits[dimension]);
-          expect(RESOURCE_GOVERNOR_CLASSES.reduce(
+          const total = snapshot.total[dimension];
+          assertFuzz(Number.isSafeInteger(total), `${dimension} is not a safe integer`);
+          assertFuzz(total >= 0, `${dimension} is negative`);
+          assertFuzz(total <= snapshot.limits[dimension], `${dimension} exceeds root capacity`);
+          assertFuzzEqual(RESOURCE_GOVERNOR_CLASSES.reduce(
             (sum, resourceClass) => sum + snapshot.byClass[resourceClass][dimension],
             0,
-          )).toBe(snapshot.total[dimension]);
+          ), total, `${dimension} class sum`);
         }
       }
       for (const lease of leases) lease.release();

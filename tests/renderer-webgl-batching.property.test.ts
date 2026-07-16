@@ -8,7 +8,7 @@ import {
   type RenderRoot,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
-import { forEachFuzzCase, type FuzzCaseContext, type SeededRandom } from "./fuzz";
+import { forEachFuzzCaseAsync, type SeededRandom } from "./fuzz";
 
 type CanvasSize = {
   readonly height: number;
@@ -36,8 +36,6 @@ type BatchDimension = {
   readonly name: string;
   readonly pair: (random: SeededRandom) => readonly [GltfMaterial, GltfMaterial];
 };
-
-type BatchFuzzCase = Pick<FuzzCaseContext, "caseIndex" | "label" | "random">;
 
 const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const batchingGltfSrc = "https://example.test/fixtures/batching-triangle.gltf";
@@ -896,12 +894,10 @@ afterEach(() => {
 
 describe("WebGL renderer batching properties", () => {
   it("instances equivalent glTF primitive draws and splits changed render-state dimensions", async () => {
-    const fuzzCases: BatchFuzzCase[] = [];
-    forEachFuzzCase({ cases: batchDimensions.length, seed: 0xba7c_4110 }, (context) => {
-      fuzzCases.push(context);
-    });
-
-    for (const { caseIndex, label, random } of fuzzCases) {
+    await forEachFuzzCaseAsync({
+      cases: batchDimensions.length,
+      seed: 0xba7c_4110,
+    }, async ({ caseIndex, label, random }) => {
       const dimension = batchDimensions[caseIndex % batchDimensions.length]!;
       const [first, second] = dimension.pair(random);
       const extensionsUsed = dimension.extensionsUsed ?? [];
@@ -911,6 +907,6 @@ describe("WebGL renderer batching properties", () => {
 
       expectInstancedBatch(equivalent, `${caseLabel} equivalent`);
       expectSplitDraws(split, `${caseLabel} split`);
-    }
+    });
   });
 });

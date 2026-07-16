@@ -19,7 +19,7 @@ import {
   type FramePlanResourceManifest,
 } from "../packages/renderer-webgl/src/frame/plan";
 import { SceneBindingRegistry } from "../packages/renderer-webgl/src/scene-binding-registry";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 const EMPTY_MANIFEST: FramePlanResourceManifest = {
   bulkInstances: [],
@@ -284,7 +284,7 @@ describe("scene binding registry", () => {
   });
 
   it("keeps one stable handle and exact declarative transforms across replacement traces", () => {
-    forEachFuzzCase({ cases: 64, seed: 0x5ce1_b1ad }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 64, seed: 0x5ce1_b1ad }, ({ random }) => {
       let current: RenderObjectHandle | null = null;
       const ref = (handle: RenderObjectHandle | null): void => { current = handle; };
       const view = camera();
@@ -294,16 +294,20 @@ describe("scene binding registry", () => {
       for (let step = 0; step < 48; step += 1) {
         const x = random.number(-1_000, 1_000);
         const next = plan(view, [renderedMesh(ref, x)]);
-        expect(() => reconcile(registry, next, previous), `${label} step=${step}`).not.toThrow();
+        try {
+          reconcile(registry, next, previous);
+        } catch (error) {
+          throw new Error(`step=${step} reconcile failed`, { cause: error });
+        }
         const attached = current as unknown as RenderObjectHandle | null;
         if (attached === null) throw new Error("Expected render-object ref to be attached");
         firstHandle ??= attached;
-        expect(attached, `${label} step=${step}`).toBe(firstHandle);
-        expect(attached.position.x, `${label} step=${step}`).toBe(x);
+        assertFuzzEqual(attached, firstHandle, `step=${step} handle identity`);
+        assertFuzzEqual(attached.position.x, x, `step=${step} position`);
         previous = next;
       }
       registry.dispose();
-      expect(current, label).toBeNull();
+      assertFuzzEqual(current, null, "dispose ref");
     });
   });
 });

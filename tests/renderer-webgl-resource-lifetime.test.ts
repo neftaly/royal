@@ -16,6 +16,9 @@ import {
   type ResourceGovernorPolicy,
 } from "../packages/renderer-webgl/src/resource-governor";
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
+import { drainAnimationFrames, flushMicrotasks as flushTestMicrotasks } from "./async-test-fixtures";
+
+const flushMicrotasks = (): Promise<void> => flushTestMicrotasks(2);
 
 type CanvasSize = {
   readonly width: number;
@@ -352,11 +355,6 @@ const resourceCounts = (events: readonly GlEvent[]): ResourceCounts => ({
   draw: countEvents(events, "drawArrays") + countEvents(events, "drawElements"),
 });
 
-const flushMicrotasks = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 const installAnimationFrameQueue = (): FrameRequestCallback[] => {
   const callbacks: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
@@ -366,11 +364,6 @@ const installAnimationFrameQueue = (): FrameRequestCallback[] => {
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
 
   return callbacks;
-};
-
-const flushAnimationFrames = (callbacks: FrameRequestCallback[]): void => {
-  const queued = callbacks.splice(0);
-  for (const [index, callback] of queued.entries()) callback(16 + index);
 };
 
 afterEach(() => {
@@ -423,7 +416,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(ControlledImage.instances).toHaveLength(3);
     ControlledImage.instances[2]!.settleLoad();
     await flushMicrotasks();
-    flushAnimationFrames(frames);
+    drainAnimationFrames(frames);
     expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
     root.dispose();
   });
@@ -584,7 +577,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
 
     const scheduledByImageSettle = animationFrames.length > scheduledBeforeSettle;
     const drewImmediately = resourceCounts(calls).draw > beforeSettle.draw;
-    flushAnimationFrames(animationFrames);
+    drainAnimationFrames(animationFrames);
     await flushMicrotasks();
 
     const afterSettle = resourceCounts(calls);
@@ -652,7 +645,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     requestedImage.naturalHeight = size;
     requestedImage.settleLoad();
     await flushMicrotasks();
-    flushAnimationFrames(animationFrames);
+    drainAnimationFrames(animationFrames);
     await flushMicrotasks();
 
     expect(countEvents(calls, "createTexture")).toBe(0);
@@ -664,7 +657,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(warning).toHaveBeenCalledTimes(1);
     canvas.dispatchContextEvent("webglcontextlost");
     canvas.dispatchContextEvent("webglcontextrestored");
-    flushAnimationFrames(animationFrames);
+    drainAnimationFrames(animationFrames);
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(1);
     expect(countEvents(calls, "createTexture")).toBe(0);
@@ -717,7 +710,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     root.render(graph);
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
-    flushAnimationFrames(frames);
+    drainAnimationFrames(frames);
     await flushMicrotasks();
 
     expect(root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n"))

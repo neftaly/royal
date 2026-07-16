@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createGltfInstanceTransforms,
 } from "@royal/renderer-core";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzArrayEqual, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 describe("glTF instance transform properties", () => {
   it("keeps pose and scale commits independent across randomized updates", () => {
-    forEachFuzzCase({ cases: 64, seed: 0x1a57_a11 }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 64, seed: 0x1a57_a11 }, ({ random }) => {
       const count = random.int(1, 129);
       const scales = new Float32Array(count * 3);
       for (let index = 0; index < scales.length; index += 1) {
@@ -15,8 +15,18 @@ describe("glTF instance transform properties", () => {
       const transforms = createGltfInstanceTransforms({ count, scales });
       const initialScales = transforms.scales.slice();
       const initialScaleVersion = transforms.scaleVersion;
-      const listener = vi.fn();
-      const secondRootListener = vi.fn();
+      let calls = 0;
+      let secondRootCalls = 0;
+      let lastPoseCount = 0;
+      let lastPoseVersion = 0;
+      const listener = (kind: "pose" | "scale", _start: number, committedCount: number, version: number): void => {
+        calls += 1;
+        if (kind === "pose") {
+          lastPoseCount = committedCount;
+          lastPoseVersion = version;
+        }
+      };
+      const secondRootListener = (): void => { secondRootCalls += 1; };
       const unsubscribe = transforms.subscribe(listener);
       const unsubscribeSecondRoot = transforms.subscribe(secondRootListener);
 
@@ -32,18 +42,19 @@ describe("glTF instance transform properties", () => {
         const previousPoseVersion = transforms.poseVersion;
         transforms.commitPose(instanceIndex, 1);
 
-        expect(transforms.poseVersion, label).toBe(previousPoseVersion + 1);
-        expect(transforms.scaleVersion, label).toBe(initialScaleVersion);
+        assertFuzzEqual(transforms.poseVersion, previousPoseVersion + 1, "pose version");
+        assertFuzzEqual(transforms.scaleVersion, initialScaleVersion, "scale version");
       }
-      expect(listener, label).toHaveBeenCalledTimes(32);
-      expect(secondRootListener, label).toHaveBeenCalledTimes(32);
-      expect(listener, label).toHaveBeenLastCalledWith('pose', expect.any(Number), 1, transforms.poseVersion);
-      expect(transforms.scales, label).toEqual(initialScales);
+      assertFuzzEqual(calls, 32, "primary listener calls");
+      assertFuzzEqual(secondRootCalls, 32, "secondary listener calls");
+      assertFuzzEqual(lastPoseCount, 1, "last pose count");
+      assertFuzzEqual(lastPoseVersion, transforms.poseVersion, "last pose version");
+      assertFuzzArrayEqual(transforms.scales, initialScales, "scales");
 
       unsubscribe();
       transforms.commitPose();
-      expect(listener, label).toHaveBeenCalledTimes(32);
-      expect(secondRootListener, label).toHaveBeenCalledTimes(33);
+      assertFuzzEqual(calls, 32, "unsubscribed primary listener calls");
+      assertFuzzEqual(secondRootCalls, 33, "remaining secondary listener calls");
       unsubscribeSecondRoot();
     });
   });

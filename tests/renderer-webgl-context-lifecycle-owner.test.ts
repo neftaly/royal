@@ -9,7 +9,7 @@ import {
   reduceWebGlContextLifecycle,
   type WebGlContextLifecycleEvent,
 } from "../packages/renderer-webgl/src/context/lifecycle";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 describe("WebGL context lifecycle owner", () => {
   it("owns frozen state and preserves exact transition counters", () => {
@@ -183,7 +183,7 @@ describe("WebGL context lifecycle owner", () => {
   it("matches the legal lifecycle reducer across generated traces", () => {
     type Action = "begin" | "dispose" | "fail" | "finish" | "lose";
 
-    forEachFuzzCase({ cases: 64, seed: 0x1fe_c7c1e }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 64, seed: 0x1fe_c7c1e }, ({ random }) => {
       const owner = new WebGlContextLifecycleOwner();
       const delivered: WebGlContextSnapshot[] = [];
       owner.observe((value) => delivered.push(value));
@@ -216,16 +216,17 @@ describe("WebGL context lifecycle owner", () => {
               : action === "lose"
                 ? owner.lose()
                 : owner.dispose();
-        expect(ownerAccepted, `${label} ${step}:${action}`).toBe(accepted);
+        assertFuzzEqual(ownerAccepted, accepted, `${step}:${action} acceptance`);
         if (next !== undefined) {
           expected = next;
           published.push(next);
         }
-        expect(owner.snapshot(), `${label} ${step}:${action} state`).toEqual(expected);
-        expect(Object.isFrozen(owner.snapshot()), `${label} ${step}:${action} frozen`).toBe(true);
+        assertFuzz(isDeepStrictEqual(owner.snapshot(), expected), `${step}:${action} state mismatch`);
+        assertFuzz(Object.isFrozen(owner.snapshot()), `${step}:${action} state is mutable`);
       }
 
-      expect(delivered, `${label} publications`).toEqual(published);
+      assertFuzz(isDeepStrictEqual(delivered, published), "publication history mismatch");
     });
   });
 });
+import { isDeepStrictEqual } from "node:util";

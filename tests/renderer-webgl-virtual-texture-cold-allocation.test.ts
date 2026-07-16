@@ -14,6 +14,7 @@ import {
 } from "../packages/renderer-webgl/src/resource-governor";
 import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/virtual-texture/lazy-feature";
+import { flushMicrotasks } from "./async-test-fixtures";
 
 await preloadVirtualTextureFeature();
 
@@ -71,10 +72,6 @@ const installFetchQueue = (): FetchRequest[] => {
     });
   })));
   return requests;
-};
-
-const flushMicrotasks = async (): Promise<void> => {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
 };
 
 const manifest = (physicalSlots = 1) => ({

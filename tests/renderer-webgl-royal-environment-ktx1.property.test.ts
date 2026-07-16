@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 import {
   parseRoyalEnvironmentKtx1,
   ROYAL_ENVIRONMENT_METADATA_KEY,
   RoyalEnvironmentArtifactError,
 } from "../packages/renderer-webgl/src/gltf/royal-environment-ktx1";
-import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const KTX1_IDENTIFIER = [
   0xab, 0x4b, 0x54, 0x58, 0x20, 0x31, 0x31, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -136,31 +136,36 @@ const mutatedArtifact = (
 
 describe("Royal pinned environment KTX1 parser", () => {
   it("borrows valid cubemap ranges and rejects seeded malformed headers or truncation", () => {
-    forEachFuzzCase({ cases: 256, seed: 0xe17a_4b31 }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 256, seed: 0xe17a_4b31 }, ({ random }) => {
       const size = random.pick([1, 2, 8, 16, 32] as const);
       const value = fixture(size, random);
       const prepared = parseRoyalEnvironmentKtx1(value.source);
-      expect(prepared.source, label).toBe(value.source);
-      expect(prepared.size, label).toBe(size);
-      expect(prepared.levels, label).toHaveLength(Math.floor(Math.log2(size)) + 1);
-      expect(prepared.metadata.sh, label).toHaveLength(9);
-      expect(Object.isFrozen(prepared), label).toBe(true);
-      expect(Object.isFrozen(prepared.levels), label).toBe(true);
+      assertFuzzEqual(prepared.source, value.source, "borrowed source");
+      assertFuzzEqual(prepared.size, size, "cubemap size");
+      assertFuzzEqual(prepared.levels.length, Math.floor(Math.log2(size)) + 1, "mip count");
+      assertFuzzEqual(prepared.metadata.sh.length, 9, "spherical harmonics count");
+      assertFuzz(Object.isFrozen(prepared), "prepared artifact is mutable");
+      assertFuzz(Object.isFrozen(prepared.levels), "prepared levels are mutable");
       let expectedOffset = value.firstImageSizeOffset;
       for (const level of prepared.levels) {
         const expectedFaceBytes = level.size * level.size * 4;
         expectedOffset += 4;
-        expect(level.faces, label).toHaveLength(6);
+        assertFuzzEqual(level.faces.length, 6, "face count");
         for (const face of level.faces) {
-          expect(face.byteOffset, label).toBe(expectedOffset);
-          expect(face.byteLength, label).toBe(expectedFaceBytes);
+          assertFuzzEqual(face.byteOffset, expectedOffset, "face byte offset");
+          assertFuzzEqual(face.byteLength, expectedFaceBytes, "face byte length");
           expectedOffset += expectedFaceBytes;
         }
       }
-      expect(expectedOffset, label).toBe(value.source.byteLength);
+      assertFuzzEqual(expectedOffset, value.source.byteLength, "artifact byte length");
 
       const malformed = mutatedArtifact(value, random.int(0, 10), random);
-      expect(() => parseRoyalEnvironmentKtx1(malformed), label).toThrow(RoyalEnvironmentArtifactError);
+      try {
+        parseRoyalEnvironmentKtx1(malformed);
+        throw new Error("malformed artifact was accepted");
+      } catch (error) {
+        assertFuzz(error instanceof RoyalEnvironmentArtifactError, "malformed artifact raised wrong error");
+      }
     });
   });
 });

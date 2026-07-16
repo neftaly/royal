@@ -15,7 +15,7 @@ import {
   virtualTextureStoredPageBytes,
   virtualTextureStoredPageSize,
 } from "../packages/renderer-webgl/src/virtual-texture/model";
-import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzArrayEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 type FuzzPage = {
   readonly mip: number;
@@ -442,7 +442,7 @@ describe("WebGL virtual texturing runtime model", () => {
     forEachFuzzCase({
       cases: 16,
       seed: 0x5c0a91e7,
-    }, ({ label, random }) => {
+    }, ({ random }) => {
       const width = 8;
       const table = new VirtualTextureAtlasPageTable({ slotCount: 85 });
       const assignments: ResidentAssignment[] = [];
@@ -458,8 +458,9 @@ describe("WebGL virtual texturing runtime model", () => {
       const gpuSlots = new Array<number | undefined>(width * width);
       applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
       let activePageKeys = new Set(assignments.map(({ pageKey }) => pageKey));
-      expect(gpuSlots, `${label} initial mapping`).toEqual(
+      assertFuzzArrayEqual(gpuSlots,
         referencePageTableSlots(width, assignments, activePageKeys),
+        "initial mapping",
       );
 
       for (let step = 0; step < 64; step += 1) {
@@ -469,11 +470,14 @@ describe("WebGL virtual texturing runtime model", () => {
             .map(({ pageKey }) => pageKey),
         );
         table.reconcileActivePageKeys(activePageKeys);
-        expect(table.dirtyPageTableUpdateCount, `${label} step=${step} bounded updates`)
-          .toBeLessThanOrEqual(table.residentCount);
+        assertFuzz(
+          table.dirtyPageTableUpdateCount <= table.residentCount,
+          `step=${step} dirty updates exceed residents`,
+        );
         applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
-        expect(gpuSlots, `${label} step=${step} mapping`).toEqual(
+        assertFuzzArrayEqual(gpuSlots,
           referencePageTableSlots(width, assignments, activePageKeys),
+          `step=${step} mapping`,
         );
       }
     });

@@ -15,6 +15,7 @@ import {
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/virtual-texture/lazy-feature";
+import { flushAnimationFrames, flushMicrotasks, installAnimationFrameQueue } from "./async-test-fixtures";
 
 await preloadVirtualTextureFeature();
 
@@ -506,28 +507,6 @@ const expectUniformVector = (
     .map((values) => values.map(roundNumber));
 
   expect(actual).toContainEqual(expected.map(roundNumber));
-};
-
-const flushMicrotasks = async (): Promise<void> => {
-  for (let index = 0; index < 6; index += 1) await Promise.resolve();
-};
-
-const installAnimationFrameQueue = (): FrameRequestCallback[] => {
-  const callbacks: FrameRequestCallback[] = [];
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    callbacks.push(callback);
-
-    return callbacks.length;
-  }));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-
-  return callbacks;
-};
-
-const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<void> => {
-  const queued = callbacks.splice(0);
-  for (const [index, callback] of queued.entries()) callback(16 + index);
-  await flushMicrotasks();
 };
 
 const gltfFixtureBuffer = (): ArrayBuffer => {

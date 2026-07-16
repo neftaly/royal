@@ -7,6 +7,8 @@ import {
 } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import { GltfPreparationScheduler } from "../packages/renderer-webgl/src/gltf/preparation-scheduler";
 import { ResourceGovernorCpuCapacityError } from "../packages/renderer-webgl/src/resource-governor";
+import { deferred } from "./async-test-fixtures";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCaseAsync } from "./fuzz";
 
 const emptyAsset = (): PreparedGltfAsset => ({
   hasMaterialLod: false,
@@ -23,16 +25,6 @@ const emptyAsset = (): PreparedGltfAsset => ({
   primitives: [],
   variants: [],
 });
-
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-};
 
 describe("PreparedGltfAssetStore", () => {
   it("keeps declarations loading across CPU pressure and retries only on capacity wake", async () => {
@@ -432,46 +424,47 @@ describe("GltfPreparationScheduler", () => {
   });
 
   it("bounds randomized request waves without losing or duplicating jobs", async () => {
-    let seed = 0x9e3779b9;
-    const random = (): number => {
-      seed ^= seed << 13;
-      seed ^= seed >>> 17;
-      seed ^= seed << 5;
-      return seed >>> 0;
-    };
+    vi.useFakeTimers();
+    try {
+      await forEachFuzzCaseAsync({ cases: 12, seed: 0x9e37_79b9 }, async ({ random }) => {
+        const limit = random.int(1, 5);
+        const count = random.int(8, 48);
+        const scheduler = new GltfPreparationScheduler(limit);
+        const controller = new AbortController();
+        const releases: (() => void)[] = [];
+        const completed: number[] = [];
+        let active = 0;
+        let peak = 0;
+        const jobs = Array.from({ length: count }, (_, index) =>
+          scheduler.run(controller.signal, () => new Promise<number>((resolve) => {
+            active += 1;
+            peak = Math.max(peak, active);
+            releases.push(() => {
+              active -= 1;
+              completed.push(index);
+              resolve(index);
+            });
+          })));
+        assertFuzzEqual(scheduler.snapshot().queued, Math.max(0, count - limit), "initial queued jobs");
+        assertFuzzEqual(
+          scheduler.snapshot().queueHighWater,
+          Math.max(0, count - limit),
+          "queue high water",
+        );
 
-    for (let sample = 0; sample < 12; sample += 1) {
-      const limit = 1 + random() % 4;
-      const count = 8 + random() % 40;
-      const scheduler = new GltfPreparationScheduler(limit);
-      const controller = new AbortController();
-      const releases: (() => void)[] = [];
-      const completed: number[] = [];
-      let active = 0;
-      let peak = 0;
-      const jobs = Array.from({ length: count }, (_, index) =>
-        scheduler.run(controller.signal, () => new Promise<number>((resolve) => {
-          active += 1;
-          peak = Math.max(peak, active);
-          releases.push(() => {
-            active -= 1;
-            completed.push(index);
-            resolve(index);
-          });
-        })));
-      expect(scheduler.snapshot().queued).toBe(Math.max(0, count - limit));
-      expect(scheduler.snapshot().queueHighWater).toBe(Math.max(0, count - limit));
-
-      while (completed.length < count) {
-        const releaseIndex = random() % releases.length;
-        releases.splice(releaseIndex, 1)[0]?.();
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-      await expect(Promise.all(jobs)).resolves.toHaveLength(count);
-      expect(peak).toBeLessThanOrEqual(limit);
-      expect(new Set(completed).size).toBe(count);
-      expect(scheduler.snapshot().queued).toBe(0);
-      scheduler.dispose();
+        while (completed.length < count) {
+          const releaseIndex = random.int(0, releases.length);
+          releases.splice(releaseIndex, 1)[0]?.();
+          await vi.runOnlyPendingTimersAsync();
+        }
+        assertFuzzEqual((await Promise.all(jobs)).length, count, "completed job count");
+        assertFuzz(peak <= limit, `peak concurrency ${peak} exceeded ${limit}`);
+        assertFuzzEqual(new Set(completed).size, count, "unique completed jobs");
+        assertFuzzEqual(scheduler.snapshot().queued, 0, "settled queued jobs");
+        scheduler.dispose();
+      });
+    } finally {
+      vi.useRealTimers();
     }
   });
 
@@ -496,45 +489,54 @@ describe("GltfPreparationScheduler", () => {
   });
 
   it("promptly tombstones seeded queued abort waves while the lane remains occupied", async () => {
-    let seed = 0x51a7e;
-    const random = (): number => {
-      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
-      return seed;
-    };
-    for (let sample = 0; sample < 8; sample += 1) {
-      const scheduler = new GltfPreparationScheduler(1);
-      const running = deferred<void>();
-      const activeController = new AbortController();
-      const active = scheduler.run(activeController.signal, () => running.promise);
-      const starts: number[] = [];
-      const queued = Array.from({ length: 24 }, (_, index) => {
-        const controller = new AbortController();
-        return {
-          controller,
-          index,
-          promise: scheduler.run(controller.signal, () => {
-            starts.push(index);
-            return index;
-          }),
-        };
-      });
-      const aborted = queued.filter(() => random() % 3 !== 0);
-      expect(scheduler.snapshot().queueHighWater).toBe(24);
-      for (const job of aborted) job.controller.abort();
-      await Promise.all(aborted.map(async (job) => {
-        await expect(job.promise).rejects.toMatchObject({ name: "AbortError" });
-      }));
-      expect(starts).toEqual([]);
+    vi.useFakeTimers();
+    try {
+      await forEachFuzzCaseAsync({ cases: 8, seed: 0x0005_1a7e }, async ({ random }) => {
+        const scheduler = new GltfPreparationScheduler(1);
+        const running = deferred<void>();
+        const activeController = new AbortController();
+        const active = scheduler.run(activeController.signal, () => running.promise);
+        const starts: number[] = [];
+        const queued = Array.from({ length: 24 }, (_, index) => {
+          const controller = new AbortController();
+          return {
+            controller,
+            index,
+            promise: scheduler.run(controller.signal, () => {
+              starts.push(index);
+              return index;
+            }),
+          };
+        });
+        const aborted = queued.filter(() => random.int(0, 3) !== 0);
+        assertFuzzEqual(scheduler.snapshot().queueHighWater, 24, "queue high water");
+        for (const job of aborted) job.controller.abort();
+        await Promise.all(aborted.map(async (job) => {
+          try {
+            await job.promise;
+            throw new Error("aborted job resolved");
+          } catch (error) {
+            assertFuzz(
+              error instanceof Error && error.name === "AbortError",
+              "aborted job raised wrong error",
+            );
+          }
+        }));
+        assertFuzzEqual(starts.length, 0, "queued jobs started before lane release");
 
-      running.resolve();
-      await active;
-      const survivors = queued.filter((job) => !aborted.includes(job));
-      await expect(Promise.all(survivors.map((job) => job.promise))).resolves.toEqual(
-        survivors.map((job) => job.index),
-      );
-      expect(starts).toEqual(survivors.map((job) => job.index));
-      expect(scheduler.snapshot().queued).toBe(0);
-      scheduler.dispose();
+        running.resolve();
+        await active;
+        const survivors = queued.filter((job) => !aborted.includes(job));
+        await vi.runAllTimersAsync();
+        const survivorIndices = survivors.map((job) => job.index);
+        const results = await Promise.all(survivors.map((job) => job.promise));
+        assertFuzzEqual(results.join(","), survivorIndices.join(","), "survivor results");
+        assertFuzzEqual(starts.join(","), survivorIndices.join(","), "survivor start order");
+        assertFuzzEqual(scheduler.snapshot().queued, 0, "settled queued jobs");
+        scheduler.dispose();
+      });
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

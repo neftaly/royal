@@ -10,7 +10,7 @@ import {
 } from "../packages/renderer-webgl/src/gltf/instance-transform-registry";
 import { isInstanceDirty } from "../packages/renderer-webgl/src/gltf/instance-changes";
 import { transformMat4 } from "../packages/renderer-webgl/src/math/mat4";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzArrayEqual, forEachFuzzCase } from "./fuzz";
 
 type TrackedSource = {
   readonly activeSubscriptions: () => number;
@@ -69,7 +69,11 @@ const expectMatricesCurrent = (
 ): void => {
   const views = registry.views(source);
   for (let index = 0; index < source.count; index += 1) {
-    expect(views.rootModels[index]).toEqual(transformMat4(views.transforms[index]!));
+    assertFuzzArrayEqual(
+      views.rootModels[index]!,
+      transformMat4(views.transforms[index]!),
+      `root model ${index}`,
+    );
   }
 };
 
@@ -259,7 +263,11 @@ describe("glTF instance transform registry", () => {
           registry.endFrame(false);
           registry.beginFrame();
         }
-        expect(() => expectMatricesCurrent(registry, tracked.source), `${label} step=${step}`).not.toThrow();
+        try {
+          expectMatricesCurrent(registry, tracked.source);
+        } catch (error) {
+          throw new Error(`${label} step=${step}`, { cause: error });
+        }
         registry.endFrame(true);
       }
       registry.dispose();

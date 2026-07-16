@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   createVirtualTextureDemandPlanningWorkspace,
@@ -27,7 +28,7 @@ import {
 } from "../packages/renderer-webgl/src/math/mat4";
 import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture/runtime";
 import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzz, forEachFuzzCase } from "./fuzz";
 
 const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({
   height: 1_024,
@@ -328,7 +329,7 @@ describe("virtual texture pure demand planning", () => {
   });
 
   it("keeps projected demand finite, valid, bounded, and deterministic under transform fuzz", () => {
-    forEachFuzzCase({ cases: 128, seed: 0xface_c105 }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 128, seed: 0xface_c105 }, ({ random }) => {
       const near = 10 ** random.number(-3, 0);
       const extent = 10 ** random.number(-3, 6);
       const pageSize = random.pick([1, 64, 256, 1_024]);
@@ -397,16 +398,16 @@ describe("virtual texture pure demand planning", () => {
       const input = { context: demandContext, limit, manifest: source } as const;
       const projected = projectVirtualTextureScreenFootprint(demandContext, undefined, source);
       const first = planVirtualTextureDrawDemand(input);
-      expect(planVirtualTextureDrawDemand(input), label).toEqual(first);
+      assertFuzz(isDeepStrictEqual(planVirtualTextureDrawDemand(input), first), "demand plan is not deterministic");
 
       if (projected.kind === "visible") {
-        expect(Object.values(projected.footprint).every(Number.isFinite), label).toBe(true);
-        expect(projected.footprint.minU, label).toBeGreaterThanOrEqual(0);
-        expect(projected.footprint.maxU, label).toBeLessThanOrEqual(1);
-        expect(projected.footprint.minV, label).toBeGreaterThanOrEqual(0);
-        expect(projected.footprint.maxV, label).toBeLessThanOrEqual(1);
-        expect(projected.footprint.screenWidth, label).toBeGreaterThan(0);
-        expect(projected.footprint.screenHeight, label).toBeGreaterThan(0);
+        assertFuzz(Object.values(projected.footprint).every(Number.isFinite), "non-finite footprint");
+        assertFuzz(projected.footprint.minU >= 0, "footprint minU below zero");
+        assertFuzz(projected.footprint.maxU <= 1, "footprint maxU above one");
+        assertFuzz(projected.footprint.minV >= 0, "footprint minV below zero");
+        assertFuzz(projected.footprint.maxV <= 1, "footprint maxV above one");
+        assertFuzz(projected.footprint.screenWidth > 0, "non-positive footprint width");
+        assertFuzz(projected.footprint.screenHeight > 0, "non-positive footprint height");
       }
 
       for (const pages of [
@@ -414,20 +415,22 @@ describe("virtual texture pure demand planning", () => {
         first.demandCandidates,
         first.preferredCandidates ?? [],
       ]) {
-        expect(pages.length, label).toBeLessThanOrEqual(limit);
-        expect(new Set(pages.map((page) => `${page.mip}/${page.x}/${page.y}`)).size, label)
-          .toBe(pages.length);
+        assertFuzz(pages.length <= limit, `page count ${pages.length} exceeds limit ${limit}`);
+        assertFuzz(
+          new Set(pages.map((page) => `${page.mip}/${page.x}/${page.y}`)).size === pages.length,
+          "duplicate demand pages",
+        );
         for (const page of pages) {
           const grid = virtualTextureDemandPageGrid(source, page.mip);
-          expect(Number.isSafeInteger(page.mip), label).toBe(true);
-          expect(Number.isSafeInteger(page.x), label).toBe(true);
-          expect(Number.isSafeInteger(page.y), label).toBe(true);
-          expect(page.mip, label).toBeGreaterThanOrEqual(0);
-          expect(page.mip, label).toBeLessThan(virtualTextureDemandMipCount(source));
-          expect(page.x, label).toBeGreaterThanOrEqual(0);
-          expect(page.x, label).toBeLessThan(grid.width);
-          expect(page.y, label).toBeGreaterThanOrEqual(0);
-          expect(page.y, label).toBeLessThan(grid.height);
+          assertFuzz(Number.isSafeInteger(page.mip), "non-integer demand mip");
+          assertFuzz(Number.isSafeInteger(page.x), "non-integer demand x");
+          assertFuzz(Number.isSafeInteger(page.y), "non-integer demand y");
+          assertFuzz(page.mip >= 0, "negative demand mip");
+          assertFuzz(page.mip < virtualTextureDemandMipCount(source), "demand mip out of range");
+          assertFuzz(page.x >= 0, "negative demand x");
+          assertFuzz(page.x < grid.width, "demand x out of range");
+          assertFuzz(page.y >= 0, "negative demand y");
+          assertFuzz(page.y < grid.height, "demand y out of range");
         }
       }
     });

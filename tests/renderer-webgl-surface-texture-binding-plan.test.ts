@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
@@ -7,6 +8,7 @@ import {
   type SurfaceTextureBindingPlanInput,
 } from "../packages/renderer-webgl/src/webgl/surface-texture-binding-plan";
 import { SURFACE_SHADER_TEXTURE_FEATURES } from "../packages/renderer-webgl/src/webgl/shaders";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 const input = (overrides: Partial<SurfaceTextureBindingPlanInput> = {}): SurfaceTextureBindingPlanInput => ({
   baseColor: { kind: "none" },
@@ -205,32 +207,27 @@ describe("surface texture binding planner", () => {
   });
 
   it("maintains allocation invariants across seeded readiness and capacity profiles", () => {
-    let state = 0x6d2b79f5;
-    const random = (): number => {
-      state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
-      return state / 0x1_0000_0000;
-    };
-    for (let sample = 0; sample < 1_000; sample += 1) {
-      const maxTextureUnits = Math.floor(random() * 20);
+    forEachFuzzCase({ cases: 1_000, seed: 0x6d2b_79f5 }, ({ random }) => {
+      const maxTextureUnits = random.int(0, 20);
       const reserved = new Set<number>();
-      for (let unit = 0; unit < maxTextureUnits; unit += 1) if (random() < 0.2) reserved.add(unit);
+      for (let unit = 0; unit < maxTextureUnits; unit += 1) if (random.boolean(0.2)) reserved.add(unit);
       const candidates = Object.fromEntries(SURFACE_SHADER_TEXTURE_FEATURES.flatMap((feature) => {
-        const roll = random();
+        const roll = random.float();
         return roll < 0.35 ? [] : [[feature, roll < 0.6 ? "unavailable" : "ready"]];
       }));
-      const baseRoll = random();
+      const baseRoll = random.float();
       const baseColor = baseRoll < 0.33
         ? { kind: "none" } as const
         : baseRoll < 0.66
-          ? { kind: "ordinary", ordinary: random() < 0.5 ? "ready" : "unavailable" } as const
+          ? { kind: "ordinary", ordinary: random.boolean() ? "ready" : "unavailable" } as const
           : {
-              fallback: random() < 0.5 ? "ready" : "unavailable",
+              fallback: random.boolean() ? "ready" : "unavailable",
               kind: "virtual",
-              virtual: random() < 0.5 ? "ready" : "unavailable",
+              virtual: random.boolean() ? "ready" : "unavailable",
             } as const;
       const plannerInput = input({
         baseColor,
-        brdfLutPreferredUnit: Math.floor(random() * 20),
+        brdfLutPreferredUnit: random.int(0, 20),
         candidates,
         maxTextureUnits,
         reservedTextureUnits: reserved,
@@ -239,18 +236,21 @@ describe("surface texture binding planner", () => {
       const baseColorSnapshot = { ...baseColor };
       const reservedSnapshot = [...reserved];
       const plan = planSurfaceTextureBindings(plannerInput);
-      expect(planSurfaceTextureBindings(plannerInput)).toEqual(plan);
-      expect(candidates).toEqual(candidateSnapshot);
-      expect(baseColor).toEqual(baseColorSnapshot);
-      expect([...reserved]).toEqual(reservedSnapshot);
+      assertFuzz(isDeepStrictEqual(planSurfaceTextureBindings(plannerInput), plan), "plan is not deterministic");
+      assertFuzz(isDeepStrictEqual(candidates, candidateSnapshot), "planner mutated candidates");
+      assertFuzz(isDeepStrictEqual(baseColor, baseColorSnapshot), "planner mutated base color");
+      assertFuzz(isDeepStrictEqual([...reserved], reservedSnapshot), "planner mutated reservations");
 
       const reverseCandidates = Object.fromEntries(Object.entries(candidates).reverse());
-      expect(planSurfaceTextureBindings({ ...plannerInput, candidates: reverseCandidates })).toEqual(plan);
+      assertFuzz(
+        isDeepStrictEqual(planSurfaceTextureBindings({ ...plannerInput, candidates: reverseCandidates }), plan),
+        "candidate insertion order changed the plan",
+      );
 
       const expanded = planSurfaceTextureBindings({ ...plannerInput, maxTextureUnits: maxTextureUnits + 1 });
       if (plan.baseColor.kind === expanded.baseColor.kind) {
         for (const feature of plan.features) {
-          expect(expanded.features.has(feature), JSON.stringify({
+          assertFuzz(expanded.features.has(feature), JSON.stringify({
             baseColor,
             candidates,
             expanded: [...expanded.textureUnits],
@@ -258,27 +258,32 @@ describe("surface texture binding planner", () => {
             maxTextureUnits,
             plan: [...plan.textureUnits],
             reserved: [...reserved],
-          })).toBe(true);
+          }));
         }
       }
 
-      expect([...plan.features]).toEqual([...plan.textureUnits.keys()]);
+      assertFuzz(
+        isDeepStrictEqual([...plan.features], [...plan.textureUnits.keys()]),
+        "plan features and texture units differ",
+      );
       const readinessCandidates = Object.fromEntries(
-        Object.keys(candidates).map((feature) => [feature, random() < 0.5 ? "ready" : "unavailable"]),
+        Object.keys(candidates).map((feature) => [feature, random.boolean() ? "ready" : "unavailable"]),
       );
       const resolved = resolveAdmittedSurfaceTextureBindings(plan, {
         baseColor,
         candidates: readinessCandidates,
       });
       for (const [feature, unit] of resolved.textureUnits) {
-        expect(plan.textureUnits.get(feature), `resolved ${feature}`).toBe(unit);
+        assertFuzzEqual(plan.textureUnits.get(feature), unit, `resolved ${feature}`);
       }
-      for (const feature of resolved.features) expect(plan.features.has(feature)).toBe(true);
+      for (const feature of resolved.features) {
+        assertFuzz(plan.features.has(feature), `resolved unplanned feature ${feature}`);
+      }
       const allocated = [...plan.textureUnits.entries()];
       for (const [, unit] of allocated) {
-        expect(unit).toBeGreaterThanOrEqual(0);
-        expect(unit).toBeLessThan(maxTextureUnits);
-        expect(reserved.has(unit)).toBe(false);
+        assertFuzz(unit >= 0, `allocated negative unit ${unit}`);
+        assertFuzz(unit < maxTextureUnits, `allocated out-of-range unit ${unit}`);
+        assertFuzz(!reserved.has(unit), `allocated reserved unit ${unit}`);
       }
       const units = allocated.map(([, unit]) => unit);
       const permittedAlias = plan.baseColor.kind === "virtual" && plan.baseColor.fallback === "atlas-unit"
@@ -286,13 +291,18 @@ describe("surface texture binding planner", () => {
         : undefined;
       for (const unit of new Set(units)) {
         const count = units.filter((candidate) => candidate === unit).length;
-        expect(count).toBeLessThanOrEqual(unit === permittedAlias ? 2 : 1);
+        assertFuzz(count <= (unit === permittedAlias ? 2 : 1), `unit ${unit} has ${count} owners`);
       }
-      expect(plan.features.has("baseColorVirtualTextureAtlas"))
-        .toBe(plan.features.has("baseColorVirtualTexturePageTable"));
-      if (plan.features.has("iblBrdfLut")) expect(plan.features.has("iblSpecularCube")).toBe(true);
+      assertFuzzEqual(
+        plan.features.has("baseColorVirtualTextureAtlas"),
+        plan.features.has("baseColorVirtualTexturePageTable"),
+        "partial VT allocation",
+      );
+      if (plan.features.has("iblBrdfLut")) {
+        assertFuzz(plan.features.has("iblSpecularCube"), "BRDF LUT allocated without specular IBL");
+      }
 
-      const prefixLength = Math.floor(random() * SURFACE_MATERIAL_TEXTURE_BINDINGS.length);
+      const prefixLength = random.int(0, SURFACE_MATERIAL_TEXTURE_BINDINGS.length + 1);
       const higherPriorityCandidates = Object.fromEntries(
         SURFACE_MATERIAL_TEXTURE_BINDINGS.slice(0, prefixLength).map(({ feature }) => [feature, "ready"]),
       );
@@ -309,9 +319,9 @@ describe("surface texture binding planner", () => {
           reservedTextureUnits: reserved,
         }));
         for (const [feature, unit] of beforeLowerPriority.textureUnits) {
-          expect(afterLowerPriority.textureUnits.get(feature)).toBe(unit);
+          assertFuzzEqual(afterLowerPriority.textureUnits.get(feature), unit, `${feature} priority unit`);
         }
       }
-    }
+    });
   });
 });

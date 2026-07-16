@@ -17,7 +17,7 @@ import {
   acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,
 } from "../packages/react/src/root";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
 
 afterEach(() => {
@@ -289,7 +289,7 @@ describe("React frame loop", () => {
   });
 
   it("keeps scheduling and active-run counters coherent under randomized churn", () => {
-    forEachFuzzCase({ cases: 32, seed: 0xf24a_c10c }, ({ label, random }) => {
+    forEachFuzzCase({ cases: 32, seed: 0xf24a_c10c }, ({ random }) => {
       const queuedFrames = new Map<number, FrameRequestCallback>();
       let nextFrameId = 1;
       vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
@@ -333,21 +333,21 @@ describe("React frame loop", () => {
             const snapshotStart = snapshots.length;
             next[1](operation * 17);
             for (const snapshot of snapshots.slice(snapshotStart)) {
-              expect(snapshot.frameIndex, label).toBe(expectedRunIndex);
+              assertFuzzEqual(snapshot.frameIndex, expectedRunIndex, "frame index");
               if (expectedRunIndex === 1) {
-                expect(snapshot.deltaMs, label).toBe(0);
-                expect(snapshot.elapsedSeconds, label).toBe(0);
+                assertFuzzEqual(snapshot.deltaMs, 0, "first-frame delta");
+                assertFuzzEqual(snapshot.elapsedSeconds, 0, "first-frame elapsed time");
               }
             }
           }
         }
 
-        expect(queuedFrames.size, `${label} operation=${operation}`).toBe(activeCount > 0 ? 1 : 0);
-        expect(activity.at(-1), `${label} operation=${operation}`).toBe(activeCount > 0);
+        assertFuzzEqual(queuedFrames.size, activeCount > 0 ? 1 : 0, `operation=${operation} queued frames`);
+        assertFuzzEqual(activity.at(-1), activeCount > 0, `operation=${operation} activity`);
       }
 
       frameLoop.dispose();
-      expect(queuedFrames.size, label).toBe(0);
+      assertFuzzEqual(queuedFrames.size, 0, "queued frames after dispose");
     });
   });
 

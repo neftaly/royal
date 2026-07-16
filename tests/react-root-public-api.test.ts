@@ -11,7 +11,7 @@ import {
   type RenderRoot,
 } from "@royal/renderer-core";
 import { acquireExternalRenderClockForRoyalRoot } from "../packages/react/src/root";
-import { forEachFuzzCase } from "./fuzz";
+import { assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
 
 const emptyScene = (): RenderRoot => scene({
@@ -377,7 +377,7 @@ describe("React root public API", () => {
         ] satisfies readonly Operation[],
       }],
       seed: 0xd3a4_4d5,
-    }, ({ label, random, replay }) => {
+    }, ({ random, replay }) => {
       const queuedFrames: { readonly callback: FrameRequestCallback; readonly id: number }[] = [];
       let nextFrameId = 1;
       vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
@@ -395,10 +395,10 @@ describe("React root public API", () => {
       root.render(emptyScene());
 
       const assertFrame = (operation: string): void => {
-        expect(root.frame, `${label} ${operation}`).toBe(expectedFrame);
+        assertFuzzEqual(root.frame, expectedFrame, `${operation} frame`);
       };
       const recordExpectedSchedule = (previousNextFrameId: number, operation: string): void => {
-        expect(nextFrameId, `${label} ${operation} schedule count`).toBe(previousNextFrameId + 1);
+        assertFuzzEqual(nextFrameId, previousNextFrameId + 1, `${operation} schedule count`);
         scheduledFrameId = previousNextFrameId;
       };
       const run = (operation: Operation, ordinal: number): void => {
@@ -409,7 +409,7 @@ describe("React root public API", () => {
           const previousNextFrameId = nextFrameId;
           root.invalidate();
           if (shouldSchedule) recordExpectedSchedule(previousNextFrameId, operationLabel);
-          else expect(nextFrameId, `${label} ${operationLabel} no schedule`).toBe(previousNextFrameId);
+          else assertFuzzEqual(nextFrameId, previousNextFrameId, `${operationLabel} no schedule`);
         } else if (operation.kind === "acquire") {
           releases.push({ active: true, release: acquireExternalRenderClockForRoyalRoot(root).release });
           externalClocks += 1;
@@ -429,7 +429,7 @@ describe("React root public API", () => {
           const previousNextFrameId = nextFrameId;
           release.release();
           if (shouldSchedule) recordExpectedSchedule(previousNextFrameId, operationLabel);
-          else expect(nextFrameId, `${label} ${operationLabel} no schedule`).toBe(previousNextFrameId);
+          else assertFuzzEqual(nextFrameId, previousNextFrameId, `${operationLabel} no schedule`);
         } else if (operation.kind === "fire") {
           if (queuedFrames.length === 0) return;
           const queueIndex = (operation.index ?? 0) % queuedFrames.length;
