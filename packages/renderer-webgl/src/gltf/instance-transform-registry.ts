@@ -7,6 +7,8 @@ import type {
 import {
   areAllInstancesDirty,
   GltfInstanceChangeTracker,
+  isInstanceDirty,
+  type InstanceDirtyBits,
 } from "./instance-changes";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
@@ -46,6 +48,8 @@ type GltfInstanceTransformViewState = {
   frameScaleVersion: number;
   matrixPoseVersion: number;
   readonly matrixRotationCosines: Float64Array;
+  readonly matrixChanges: GltfInstanceChangeTracker;
+  readonly matrixPositions: Float32Array;
   readonly matrixRotations: Float32Array;
   readonly matrixRotationSines: Float64Array;
   readonly matrixScales: Float32Array;
@@ -106,8 +110,8 @@ const writeInstanceMatrix = (
   const sinZ = views.matrixRotationSines[offset + 2]!;
   composeEulerMat4Into(
     views.rootModels[index]!,
-    views.source.positions,
-    views.source.scales,
+    views.matrixPositions,
+    views.matrixScales,
     offset,
     cosX,
     sinX,
@@ -121,30 +125,110 @@ const writeInstanceMatrix = (
 const applyInstanceMatrix = (
   views: GltfInstanceTransformViewState,
   index: number,
-  poseDirty: boolean,
+  positionDirty: boolean,
   rotationDirty: boolean,
   scaleDirty: boolean,
 ): void => {
   const offset = index * 3;
+  const positionChanged = positionDirty
+    && !sameVector3(views.matrixPositions, views.source.positions, offset);
+  if (positionChanged) copyVector3(views.matrixPositions, views.source.positions, offset);
   const rotationChanged = rotationDirty
     && synchronizeRotationTrig(views, offset);
   const scaleChanged = scaleDirty
     && !sameVector3(views.matrixScales, views.source.scales, offset);
+  if (scaleChanged) {
+    copyVector3(views.matrixScales, views.source.scales, offset);
+    views.orientationPreserving[index] = views.matrixScales[offset]!
+      * views.matrixScales[offset + 1]!
+      * views.matrixScales[offset + 2]! >= 0 ? 1 : 0;
+  }
   if (rotationChanged || scaleChanged) {
     writeInstanceMatrix(views, index, offset);
-    if (scaleChanged) {
-      copyVector3(views.matrixScales, views.source.scales, offset);
-      views.orientationPreserving[index] = views.source.scales[offset]!
-        * views.source.scales[offset + 1]!
-        * views.source.scales[offset + 2]! >= 0 ? 1 : 0;
+    return;
+  }
+  if (!positionChanged) return;
+  const model = views.rootModels[index]!;
+  model[12] = views.matrixPositions[offset]!;
+  model[13] = views.matrixPositions[offset + 1]!;
+  model[14] = views.matrixPositions[offset + 2]!;
+};
+
+const hasDirtyInstances = (dirty: InstanceDirtyBits): boolean =>
+  dirty.maxDirtyWord >= dirty.minDirtyWord;
+
+/** Applies committed dirty lanes to retained CPU matrices without observing other live lanes. */
+const applyDirtyInstanceMatrices = (
+  views: GltfInstanceTransformViewState,
+  position: InstanceDirtyBits,
+  rotation: InstanceDirtyBits,
+  scale: InstanceDirtyBits,
+): void => {
+  const count = views.transforms.length;
+  const allPositionsDirty = areAllInstancesDirty(position, count);
+  const allRotationsDirty = areAllInstancesDirty(rotation, count);
+  const allScalesDirty = areAllInstancesDirty(scale, count);
+  const anyPositionsDirty = hasDirtyInstances(position);
+  const anyRotationsDirty = hasDirtyInstances(rotation);
+  const anyScalesDirty = hasDirtyInstances(scale);
+
+  if (!anyRotationsDirty && !anyScalesDirty && allPositionsDirty) {
+    views.matrixPositions.set(views.source.positions);
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 3;
+      const model = views.rootModels[index]!;
+      model[12] = views.matrixPositions[offset]!;
+      model[13] = views.matrixPositions[offset + 1]!;
+      model[14] = views.matrixPositions[offset + 2]!;
     }
     return;
   }
-  if (!poseDirty) return;
-  const model = views.rootModels[index]!;
-  model[12] = views.source.positions[offset]!;
-  model[13] = views.source.positions[offset + 1]!;
-  model[14] = views.source.positions[offset + 2]!;
+
+  if (allPositionsDirty) {
+    views.matrixPositions.set(views.source.positions);
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 3;
+      const model = views.rootModels[index]!;
+      model[12] = views.matrixPositions[offset]!;
+      model[13] = views.matrixPositions[offset + 1]!;
+      model[14] = views.matrixPositions[offset + 2]!;
+    }
+  }
+  if (allRotationsDirty || allScalesDirty) {
+    for (let index = 0; index < count; index += 1) {
+      applyInstanceMatrix(
+        views,
+        index,
+        !allPositionsDirty && anyPositionsDirty && isInstanceDirty(position, index),
+        allRotationsDirty || (anyRotationsDirty && isInstanceDirty(rotation, index)),
+        allScalesDirty || (anyScalesDirty && isInstanceDirty(scale, index)),
+      );
+    }
+    return;
+  }
+
+  const firstWord = Math.min(position.minDirtyWord, rotation.minDirtyWord, scale.minDirtyWord);
+  const lastWord = Math.max(position.maxDirtyWord, rotation.maxDirtyWord, scale.maxDirtyWord);
+  for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
+    let word = position.words[wordIndex]!
+      | rotation.words[wordIndex]!
+      | scale.words[wordIndex]!;
+    while (word !== 0) {
+      const bitMask = word & -word;
+      const bit = 31 - Math.clz32(bitMask);
+      const index = wordIndex * 32 + bit;
+      if (index < count) {
+        applyInstanceMatrix(
+          views,
+          index,
+          (position.words[wordIndex]! & bitMask) !== 0,
+          (rotation.words[wordIndex]! & bitMask) !== 0,
+          (scale.words[wordIndex]! & bitMask) !== 0,
+        );
+      }
+      word &= word - 1;
+    }
+  }
 };
 
 export class GltfInstanceTransformRegistry {
@@ -168,6 +252,7 @@ export class GltfInstanceTransformRegistry {
     for (const subscription of this.#subscriptions.values()) {
       const views = subscription.views;
       views.changes.beginFrame();
+      views.matrixChanges.beginFrame();
       views.framePoseVersion = views.source.poseVersion;
       views.frameScaleVersion = views.source.scaleVersion;
       views.activeApplied = views.matrixPoseVersion === views.framePoseVersion
@@ -191,6 +276,7 @@ export class GltfInstanceTransformRegistry {
     if (!committed) {
       for (const subscription of this.#subscriptions.values()) {
         subscription.views.changes.abortFrame();
+        subscription.views.matrixChanges.abortFrame();
       }
     }
     this.#frameActive = false;
@@ -206,6 +292,7 @@ export class GltfInstanceTransformRegistry {
         const views = this.views(source) as GltfInstanceTransformViewState;
         const unsubscribe = source.subscribe((channel, startIndex, count) => {
           views.changes.commit(channel, startIndex, count);
+          views.matrixChanges.commit(channel, startIndex, count);
           this.#invalidate();
         });
         this.#subscriptions.set(source, { unsubscribe, views });
@@ -233,9 +320,10 @@ export class GltfInstanceTransformRegistry {
       const transforms: Transform[] = [];
       const rootModels: MutableMat4[] = [];
       const matrixRotationCosines = new Float64Array(source.rotations.length);
+      const matrixPositions = new Float32Array(source.positions);
       const matrixRotations = new Float32Array(source.rotations.length);
       const matrixRotationSines = new Float64Array(source.rotations.length);
-      const matrixScales = new Float32Array(source.scales.length);
+      const matrixScales = new Float32Array(source.scales);
       const orientationPreserving = new Uint8Array(source.count);
       matrixRotations.set(source.rotations);
       for (let offset = 0; offset < source.rotations.length; offset += 1) {
@@ -243,7 +331,6 @@ export class GltfInstanceTransformRegistry {
         matrixRotationCosines[offset] = Math.cos(rotation);
         matrixRotationSines[offset] = Math.sin(rotation);
       }
-      matrixScales.fill(NaN);
       for (let index = 0; index < source.count; index += 1) {
         const offset = index * 3;
         transforms.push({
@@ -251,19 +338,37 @@ export class GltfInstanceTransformRegistry {
           rotation: source.rotations.subarray(offset, offset + 3) as unknown as EulerRads,
           scale: source.scales.subarray(offset, offset + 3) as unknown as Vec3,
         });
-        rootModels.push(identityMat4());
+        const rootModel = identityMat4();
+        composeEulerMat4Into(
+          rootModel,
+          matrixPositions,
+          matrixScales,
+          offset,
+          matrixRotationCosines[offset]!,
+          matrixRotationSines[offset]!,
+          matrixRotationCosines[offset + 1]!,
+          matrixRotationSines[offset + 1]!,
+          matrixRotationCosines[offset + 2]!,
+          matrixRotationSines[offset + 2]!,
+        );
+        rootModels.push(rootModel);
+        orientationPreserving[index] = matrixScales[offset]!
+          * matrixScales[offset + 1]!
+          * matrixScales[offset + 2]! >= 0 ? 1 : 0;
       }
       views = {
         activeApplied: false,
         changes: new GltfInstanceChangeTracker(source.count),
         framePoseVersion: source.poseVersion,
         frameScaleVersion: source.scaleVersion,
-        matrixPoseVersion: -1,
+        matrixPoseVersion: source.poseVersion,
+        matrixChanges: new GltfInstanceChangeTracker(source.count, false),
+        matrixPositions,
         matrixRotationCosines,
         matrixRotations,
         matrixRotationSines,
         matrixScales,
-        matrixScaleVersion: -1,
+        matrixScaleVersion: source.scaleVersion,
         orientationPreserving,
         positions: source.positions,
         rotations: source.rotations,
@@ -277,56 +382,12 @@ export class GltfInstanceTransformRegistry {
       this.#views.set(source, views);
     }
     if (this.#frameActive && !views.activeApplied) {
-      const position = views.changes.activePosition;
-      const rotation = views.changes.activeRotation;
-      const scale = views.changes.activeScale;
-      if (rotation.maxDirtyWord < rotation.minDirtyWord
-        && scale.maxDirtyWord < scale.minDirtyWord
-        && areAllInstancesDirty(position, views.transforms.length)) {
-        for (let index = 0; index < views.transforms.length; index += 1) {
-          const offset = index * 3;
-          const model = views.rootModels[index]!;
-          model[12] = views.positions[offset]!;
-          model[13] = views.positions[offset + 1]!;
-          model[14] = views.positions[offset + 2]!;
-        }
-        views.activeApplied = true;
-        views.matrixPoseVersion = views.framePoseVersion;
-        views.matrixScaleVersion = views.frameScaleVersion;
-        return views;
-      }
-      if (areAllInstancesDirty(rotation, views.transforms.length)
-        || areAllInstancesDirty(scale, views.transforms.length)) {
-        for (let index = 0; index < views.transforms.length; index += 1) {
-          applyInstanceMatrix(views, index, true, true, true);
-        }
-        views.activeApplied = true;
-        views.matrixPoseVersion = views.framePoseVersion;
-        views.matrixScaleVersion = views.frameScaleVersion;
-        return views;
-      }
-      const firstWord = Math.min(position.minDirtyWord, rotation.minDirtyWord, scale.minDirtyWord);
-      const lastWord = Math.max(position.maxDirtyWord, rotation.maxDirtyWord, scale.maxDirtyWord);
-      for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
-        let word = position.words[wordIndex]!
-          | rotation.words[wordIndex]!
-          | scale.words[wordIndex]!;
-        while (word !== 0) {
-          const bitMask = word & -word;
-          const bit = 31 - Math.clz32(bitMask);
-          const index = wordIndex * 32 + bit;
-          if (index < views.transforms.length) {
-            applyInstanceMatrix(
-              views,
-              index,
-              ((position.words[wordIndex]! | rotation.words[wordIndex]!) & bitMask) !== 0,
-              (rotation.words[wordIndex]! & bitMask) !== 0,
-              (scale.words[wordIndex]! & bitMask) !== 0,
-            );
-          }
-          word &= word - 1;
-        }
-      }
+      applyDirtyInstanceMatrices(
+        views,
+        views.matrixChanges.activePosition,
+        views.matrixChanges.activeRotation,
+        views.matrixChanges.activeScale,
+      );
       views.activeApplied = true;
       views.matrixPoseVersion = views.framePoseVersion;
       views.matrixScaleVersion = views.frameScaleVersion;
@@ -337,9 +398,12 @@ export class GltfInstanceTransformRegistry {
         || views.matrixScaleVersion !== source.scaleVersion
       )
     ) {
-      for (let index = 0; index < views.transforms.length; index += 1) {
-        applyInstanceMatrix(views, index, true, true, true);
-      }
+      applyDirtyInstanceMatrices(
+        views,
+        views.matrixChanges.pendingPosition,
+        views.matrixChanges.pendingRotation,
+        views.matrixChanges.pendingScale,
+      );
       views.matrixPoseVersion = source.poseVersion;
       views.matrixScaleVersion = source.scaleVersion;
     }

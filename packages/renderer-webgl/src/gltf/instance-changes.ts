@@ -93,13 +93,13 @@ export class GltfInstanceChangeTracker {
   pendingRotation: InstanceDirtyBits;
   pendingScale: InstanceDirtyBits;
 
-  constructor(readonly count: number) {
+  constructor(readonly count: number, initiallyDirty = true) {
     this.activePosition = createInstanceDirtyBits(count);
     this.activeRotation = createInstanceDirtyBits(count);
     this.activeScale = createInstanceDirtyBits(count);
-    this.pendingPosition = createInstanceDirtyBits(count, true);
-    this.pendingRotation = createInstanceDirtyBits(count, true);
-    this.pendingScale = createInstanceDirtyBits(count, true);
+    this.pendingPosition = createInstanceDirtyBits(count, initiallyDirty);
+    this.pendingRotation = createInstanceDirtyBits(count, initiallyDirty);
+    this.pendingScale = createInstanceDirtyBits(count, initiallyDirty);
   }
 
   beginFrame(): void {

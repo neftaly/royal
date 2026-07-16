@@ -180,6 +180,36 @@ describe("glTF instance transform registry", () => {
     registry.endFrame(true);
   });
 
+  it("keeps uncommitted transform lanes out of retained CPU matrices", () => {
+    const tracked = trackedSource(1);
+    const registry = new GltfInstanceTransformRegistry(() => undefined);
+    registry.reconcile([change(tracked.source, 0, 1)]);
+    const initial = registry.views(tracked.source).rootModels[0]!.slice();
+
+    tracked.source.positions.set([7, 8, 9]);
+    tracked.source.scales.set([-2, 3, 4]);
+    tracked.source.rotations[1] = 0.5;
+    tracked.source.commitRotation();
+    registry.beginFrame();
+    const rotationOnly = registry.views(tracked.source);
+    expect(rotationOnly.rootModels[0]!.slice(12, 15)).toEqual([0, 0, 0]);
+    expect(rotationOnly.orientationPreserving[0]).toBe(1);
+    expect(rotationOnly.rootModels[0]![0]).not.toBe(initial[0]);
+    const committedRotationComponent = rotationOnly.rootModels[0]![2];
+    registry.endFrame(true);
+
+    tracked.source.rotations[1] = -0.75;
+    tracked.source.commitScale();
+    registry.beginFrame();
+    const scaleOnly = registry.views(tracked.source);
+    expect(scaleOnly.rootModels[0]!.slice(12, 15)).toEqual([0, 0, 0]);
+    expect(scaleOnly.orientationPreserving[0]).toBe(0);
+    expect(scaleOnly.rootModels[0]![2]).toBe(committedRotationComponent * -2);
+    registry.endFrame(true);
+
+    registry.dispose();
+  });
+
   it("retains failed release and dispose ownership for retry, including opaque failures", () => {
     const releaseTracked = trackedSource(1, 1);
     const opaqueTracked = trackedSource(1);
