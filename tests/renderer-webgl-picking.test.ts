@@ -154,13 +154,13 @@ describe("WebGL picking", () => {
     }));
 
     expect(root.pick({ clientX: 100, clientY: 100 })?.target).toMatchObject({
-      id: "left-mesh",
+      pickingId: "left-mesh",
       kind: "mesh",
       node: leftMesh,
     });
     await vi.waitFor(() => {
       expect(root.pick({ clientX: 300, clientY: 100 })?.target).toMatchObject({
-        id: "right-gltf",
+        pickingId: "right-gltf",
         kind: "gltf",
         node: rightGltf,
       });
@@ -202,7 +202,7 @@ describe("WebGL picking", () => {
 
     expect(root.pick({ clientX: 272, clientY: 100 })).toBeUndefined();
     expect(root.pick({ clientX: 200, clientY: 100 })?.target).toMatchObject({
-      id: "rotated-mesh",
+      pickingId: "rotated-mesh",
       kind: "mesh",
       node: rotatedMesh,
     });
@@ -268,7 +268,7 @@ describe("WebGL picking", () => {
 
     expect(root.pick({ clientX: 300, clientY: 100 })).toBeUndefined();
     expect(root.pick({ clientX: 200, clientY: 100 })?.target).toMatchObject({
-      id: "proxy-mesh",
+      pickingId: "proxy-mesh",
       kind: "mesh",
       node: proxyMesh,
     });
@@ -301,7 +301,7 @@ describe("WebGL picking", () => {
     }));
 
     expect(root.pick({ clientX: 300, clientY: 100 })?.target).toEqual({
-      id: "pending-gltf",
+      pickingId: "pending-gltf",
       kind: "gltf",
       node: proxyGltf,
     });
@@ -339,7 +339,7 @@ describe("WebGL picking", () => {
     }));
 
     expect(root.pick({ clientX: 300, clientY: 100 })?.target).toEqual({
-      id: "pending-instances",
+      pickingId: "pending-instances",
       instanceId: "right",
       instanceIndex: 1,
       kind: "gltf-instances",

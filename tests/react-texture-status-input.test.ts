@@ -17,7 +17,7 @@ describe("React texture status input", () => {
       .toThrow(/TextureAssetRef or VirtualTextureAssetRef object/i);
     expect(() => validateTextureAssetRef({ kind: "solid" }, "texture"))
       .toThrow(/kind must be "asset" or "virtual-asset"/i);
-    expect(() => validateTextureAssetRef({ kind: "asset", uri: "" }, "texture"))
+    expect(() => validateTextureAssetRef({ kind: "asset", src: "" }, "texture"))
       .toThrow(/src.*non-empty string/i);
     expect(() => validateTextureAssetRef({
       kind: "virtual-asset",
@@ -26,7 +26,7 @@ describe("React texture status input", () => {
     }, "texture")).toThrow(/version.*finite/i);
     expect(() => validateTextureAssetRef({
       kind: "asset",
-      uri: "/albedo.png",
+      src: "/albedo.png",
       flipY: false,
     }, "texture")).toThrow(/unsupported field.*flipY/i);
   });

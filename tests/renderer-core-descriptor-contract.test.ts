@@ -101,7 +101,7 @@ describe("renderer-core descriptor contract", () => {
       src: "/models/helmet.gltf",
     })).toEqual({
       asset: {
-        uri: "/models/helmet.gltf",
+        src: "/models/helmet.gltf",
       },
       kind: "gltf",
       pickingGeometry,
@@ -115,7 +115,7 @@ describe("renderer-core descriptor contract", () => {
       pickingId: "helmets",
       src: "/models/helmet.gltf",
     })).toEqual({
-      asset: { uri: "/models/helmet.gltf" },
+      asset: { src: "/models/helmet.gltf" },
       instances,
       kind: "gltf-instances",
       pickingGeometry,
@@ -383,7 +383,7 @@ describe("renderer-core descriptor contract", () => {
       contentKey: "sha256:albedo",
       kind: "asset",
       sampler: defaultImageTextureSampler,
-      uri: "/textures/albedo-a.png",
+      src: "/textures/albedo-a.png",
     });
     expect(imageTexture({ src: "/textures/albedo-a.png" })).not.toHaveProperty("contentKey");
 
@@ -402,7 +402,7 @@ describe("renderer-core descriptor contract", () => {
     })).toEqual({
       contentKey: "sha256:mask",
       kind: "asset",
-      uri: "/textures/mask-a.ktx2",
+      src: "/textures/mask-a.ktx2",
     });
 
     expect(() => textureAsset({ src: "/textures/a.png", version: Number.NaN }))
@@ -426,7 +426,7 @@ describe("renderer-core descriptor contract", () => {
     })).toEqual({
       asset: {
         bounds,
-        uri: "/models/avatar.glb",
+        src: "/models/avatar.glb",
         version: 12,
       },
       kind: "gltf",
@@ -447,7 +447,7 @@ describe("renderer-core descriptor contract", () => {
   it("preserves selected glTF material variants by exact name", () => {
     const src = "/models/chair.gltf";
     expect(gltf({ materialVariant: "walnut", src })).toMatchObject({
-      asset: { uri: src },
+      asset: { src },
       kind: "gltf",
       materialVariant: "walnut",
     });

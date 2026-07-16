@@ -100,7 +100,7 @@ const source = (serial: number, width = 1, height = 1): LoadedTextureSource => (
   kind: "rgba-texture",
   width,
 }) as LoadedTextureSource;
-const texture: TextureAssetUploadRef = { kind: "asset", uri: "texture.png" };
+const texture: TextureAssetUploadRef = { kind: "asset", src: "texture.png" };
 const setup = (): {
   readonly arena: ReturnType<typeof createOrdinaryTextureGpuArena>;
   readonly gl: FakeGl;
@@ -192,7 +192,7 @@ describe("ordinary texture GPU arena", () => {
       texture: {
         kind: "asset",
         sampler: { minFilter: "linear-mipmap-linear" },
-        uri: "compressed.ktx2",
+        src: "compressed.ktx2",
       },
     })).toEqual({ persistentGpuBytes: 48, uploadBytes: 48 });
   });

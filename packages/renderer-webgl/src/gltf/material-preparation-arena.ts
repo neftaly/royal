@@ -110,7 +110,7 @@ const textureSlotRef = (
     colorSpace,
     kind: "asset",
     preparedOnly: true,
-    uri: slot.textureUri,
+    src: slot.textureUri,
   };
   const contentKey = slot.contentKey ?? contentKeys.get(slot.textureUri);
   if (contentKey !== undefined) texture.contentKey = contentKey;

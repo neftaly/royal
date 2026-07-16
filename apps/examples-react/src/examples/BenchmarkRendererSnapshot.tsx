@@ -66,7 +66,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
     typeof value.nodeCount !== 'number' ||
     phaseMs === null ||
     typeof value.primitiveCount !== 'number' ||
-    typeof value.uri !== 'string' ||
+    typeof value.src !== 'string' ||
     typeof value.status !== 'string' ||
     !Array.isArray(value.variantNames) ||
     value.variantNames.some((name) => typeof name !== 'string')
@@ -84,7 +84,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
     phaseMs,
     primitiveCount: value.primitiveCount,
     status: value.status,
-    uri: value.uri,
+    src: value.src,
     variantNames: [...value.variantNames] as string[],
     ...(typeof value.version === 'number' || typeof value.version === 'string'
       ? { version: value.version }

@@ -67,7 +67,7 @@ describe("renderer runtime ownership", () => {
 
     const key = (version: number): string => textureCacheKey({
       kind: "asset",
-      uri: "/texture.png",
+      src: "/texture.png",
       version,
     });
     expect(key(Number.NaN)).not.toBe(key(Number.POSITIVE_INFINITY));
@@ -78,7 +78,7 @@ describe("renderer runtime ownership", () => {
     const runtime = new PreparedGltfRuntime();
     const key = gltfRequestKey("/asset.glb", undefined);
     const first = runtime.ensure(key, "/asset.glb", undefined, 3, 10);
-    const node = { asset: { uri: "/asset.glb" }, kind: "gltf" } as never;
+    const node = { asset: { src: "/asset.glb" }, kind: "gltf" } as never;
 
     expect(runtime.ensure(key, "/asset.glb", undefined, 3, 20)).toBe(first);
     expect(runtime.stateForNode(node)).toBe(first);

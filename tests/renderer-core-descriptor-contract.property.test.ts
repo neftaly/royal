@@ -147,7 +147,7 @@ describe("renderer-core descriptor properties", () => {
       }), `${label} texture asset identity`).toEqual({
         contentKey: `sha256:asset-${seed.toString(16)}`,
         kind: "asset",
-        uri: `/textures/${seed.toString(16)}.ktx2`,
+        src: `/textures/${seed.toString(16)}.ktx2`,
         version: seed,
       });
 
@@ -200,7 +200,7 @@ describe("renderer-core descriptor properties", () => {
       });
       expect(model.asset, `${label} glTF asset identity`).toEqual({
         bounds,
-        uri: `/models/${seed.toString(16)}.glb`,
+        src: `/models/${seed.toString(16)}.glb`,
         version: seed,
       });
       expect(model.materialVariant, `${label} glTF material variant`).toBe(materialVariant);

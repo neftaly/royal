@@ -143,7 +143,7 @@ const textureSourceCacheKey = (texture: TextureRef): readonly unknown[] => {
   }
   switch (texture.kind) {
     case "asset":
-      return ["uri", texture.uri];
+      return ["uri", texture.src];
     case "virtual-asset":
       return ["manifest", texture.manifestUri];
     case "solid":

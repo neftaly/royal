@@ -202,7 +202,7 @@ export class PreparedGltfRuntime {
   stateForNode(node: AnyGltfNode): PreparedGltfState {
     const nodeState = this.#statesByNode.get(node);
     if (nodeState !== undefined && this.#states.get(nodeState.key) === nodeState) return nodeState;
-    const key = gltfRequestKey(node.asset.uri, node.asset.version);
+    const key = gltfRequestKey(node.asset.src, node.asset.version);
     const state = this.#states.get(key);
     if (state === undefined) throw new Error(`retained glTF request ${key} has no semantic arena state`);
     this.#statesByNode.set(node, state);

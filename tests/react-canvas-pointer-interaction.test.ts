@@ -35,7 +35,7 @@ const pickedTarget = (
     distance: 1,
     point: [0, 0, 0],
     target: {
-      id: node.pickingId ?? "target",
+      pickingId: node.pickingId ?? "target",
       kind: "mesh",
       node,
     },

@@ -19,7 +19,7 @@ export type {
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot, UseFrameOptions } from './frame';
 
-export { useGltfAssetStatus, useGltfAssetVariants } from './gltf-status';
+export { useGltfAssetStatus } from './gltf-status';
 export type {
   GltfAssetStatus,
   GltfAssetStatusInput,

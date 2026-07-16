@@ -76,7 +76,7 @@ export const createCanvasPointerInteractionIdentity = (
   const { target } = hit;
 
   return {
-    target: target.id ?? fallbackTarget,
+    target: target.pickingId ?? fallbackTarget,
     targetKind: target.kind,
     ...(target.kind === "gltf-instances"
       ? {

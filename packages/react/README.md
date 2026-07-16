@@ -56,7 +56,7 @@ export function App() {
     nodes: [
       directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
       mesh({ geometry: cube, material: red }),
-      gltf({ src: helmetSrc, variant: 'display' }),
+      gltf({ src: helmetSrc, materialVariant: 'display' }),
     ],
   }), [orbit.cameraResource]);
 
@@ -215,20 +215,22 @@ hook conditionally. Named `priority` values order callbacks from lower to
 higher priority.
 
 glTF material variants from `KHR_materials_variants` can be selected with
-`gltf({ src, variant })`. Pass a variant name, or pass a zero-based variant
-index. Unknown selections render the primitive's base material. Inside the
-surrounding Canvas, `useGltfAssetVariants(src)` returns the ordered names once
-the exact asset is ready, so asset-driven controls do not need a second glTF
-parser or a duplicated manifest. Pass `node.asset` when using an explicit
-asset `version`.
+`gltf({ src, materialVariant })`. Pass the exact authored variant name.
+Unknown selections render the primitive's base material and emit one bounded
+diagnostic message. Inside the surrounding Canvas,
+`useGltfAssetStatus(src).variantNames` returns the ordered names once the exact
+asset is ready, so asset-driven controls do not need a second glTF parser or a
+duplicated manifest. The list is empty before readiness. Pass `node.asset`
+when using an explicit asset `version`.
 
 `useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
-and returns a status discriminated by `state`. Prepared-asset transitions push
+and returns a status discriminated by `state`, plus the immutable
+`variantNames` list. Prepared-asset transitions push
 focused snapshots; the hook neither waits for unrelated frames nor allocates
 the full renderer diagnostics payload. Pass the normalized `node.asset` instead
 of a string when using an explicit asset `version`. Imperative hosts can use
 `root.gltfAssetSnapshot(asset)` and `root.observeGltfAsset(asset, callback)` for
-the same exact asset identity. Both React hooks validate source and version
+the same exact asset identity. The React hook validates source and version
 identity immediately, including before the Canvas root exists.
 
 `useTextureAssetStatus(texture)` observes the exact `imageTexture(...)` or
@@ -263,6 +265,9 @@ identity, so handler-only changes do not resubmit the scene and pointer-down/up
 and hover stay coherent across immutable scene replacement. Every map entry must
 contain at least one supported function handler; invalid or misspelled handlers
 throw during render instead of becoming silent no-ops.
+Imperative picks and pointer-event hits return the same name as
+`hit.target.pickingId`; Royal does not rename it to a generic `id` at the result
+boundary.
 
 By default Royal tests the rendered mesh or loaded glTF triangles. Set
 `pickingGeometry` when interaction needs a simpler or more forgiving exact

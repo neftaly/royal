@@ -9,7 +9,7 @@ import { recordWithAllowedFields } from "./validation";
 export type TextureAssetStatusInput = TextureAssetRef | VirtualTextureAssetRef;
 
 const TEXTURE_ASSET_REF_FIELDS = [
-  "colorSpace", "contentKey", "kind", "sampler", "uri", "version",
+  "colorSpace", "contentKey", "kind", "sampler", "src", "version",
 ] as const;
 const VIRTUAL_TEXTURE_ASSET_REF_FIELDS = [
   "colorSpace", "contentKey", "kind", "manifestUri", "sampler", "version",
@@ -34,7 +34,7 @@ export const validateTextureAssetRef: (
       ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
       ...(texture.contentKey === undefined ? {} : { contentKey: texture.contentKey }),
       ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
-      src: texture.uri,
+      src: texture.src,
       ...(texture.version === undefined ? {} : { version: texture.version }),
     });
     return;
@@ -56,7 +56,7 @@ export const validateTextureAssetRef: (
 
 export const textureAssetSemanticKey = (texture: TextureAssetStatusInput): string => JSON.stringify([
   texture.kind,
-  texture.kind === "asset" ? texture.uri : texture.manifestUri,
+  texture.kind === "asset" ? texture.src : texture.manifestUri,
   texture.version ?? null,
   texture.contentKey ?? null,
   texture.colorSpace ?? null,

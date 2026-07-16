@@ -137,17 +137,19 @@ export interface RoyalRendererDiagnosticsSnapshot {
 }
 
 /** Focused state for one exact glTF asset identity retained by the renderer. */
-export type RoyalRendererGltfAssetSnapshot =
+export type RoyalRendererGltfAssetSnapshot = Readonly<{
+  /** Authored `KHR_materials_variants` names in declaration order; empty until ready. */
+  readonly variantNames: readonly string[];
+}> & (
   | Readonly<{
     readonly error?: never;
     readonly state: "idle" | "loading" | "ready";
-    readonly variantNames: readonly string[];
   }>
   | Readonly<{
     readonly error: string;
     readonly state: "error";
-    readonly variantNames: readonly string[];
-  }>;
+  }>
+);
 
 /** Focused readiness for one exact ordinary image or authored virtual texture. */
 export type RoyalRendererTextureAssetSnapshot =

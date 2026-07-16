@@ -17,6 +17,7 @@ import type {
   TextureAssetRef,
   TextureAssetOptions,
   TextureColorSpace,
+  GltfAssetRef,
   GltfMaterialVariantName,
   TextureSampler,
   VirtualTextureAssetOptions,
@@ -104,7 +105,7 @@ describe('Canvas public scene boundary', () => {
   it('re-exports concrete public texture types', () => {
     const colorSpace: TextureColorSpace = 'srgb';
     const sampler: TextureSampler = { wrapS: 'repeat' };
-    const ordinary: TextureAssetRef = { colorSpace, kind: 'asset', sampler, uri: '/map.png' };
+    const ordinary: TextureAssetRef = { colorSpace, kind: 'asset', sampler, src: '/map.png' };
     const virtual: VirtualTextureAssetRef = {
       colorSpace,
       kind: 'virtual-asset',
@@ -115,15 +116,19 @@ describe('Canvas public scene boundary', () => {
       manifestUri: '/map.vt.json',
     } satisfies VirtualTextureAssetOptions;
     const virtualInput: VirtualTextureInput = virtualManifest;
+    const asset = { src: '/model.glb' } satisfies GltfAssetRef;
     expect([ordinary.kind, virtual.kind]).toEqual(['asset', 'virtual-asset']);
+    expect([asset.src, ordinary.src]).toEqual(['/model.glb', '/map.png']);
     expect(virtualInput.manifestUri).toBe('/map.vt.json');
 
     if (false) {
       // @ts-expect-error Image object options use only the canonical src field.
       const legacyImage = { uri: '/map.png' } satisfies TextureAssetOptions;
+      // @ts-expect-error Normalized glTF references preserve the constructor's src spelling.
+      const legacyGltfAsset = { uri: '/model.glb' } satisfies GltfAssetRef;
       // @ts-expect-error VT object options name the manifest explicitly.
       const legacyVirtual = { src: '/map.vt.json' } satisfies VirtualTextureAssetOptions;
-      expect([legacyImage, legacyVirtual]).toHaveLength(2);
+      expect([legacyImage, legacyGltfAsset, legacyVirtual]).toHaveLength(3);
     }
   });
 
@@ -140,6 +145,11 @@ describe('Canvas public scene boundary', () => {
     const scenePickingId: ScenePickingId = pickingId;
     const input = { clientX: 10, clientY: 20 } satisfies PickInput;
     const acceptTarget = (target: PickTarget): PickTarget => target;
+    if (false) {
+      const target = null as unknown as PickTarget;
+      // @ts-expect-error Pick results preserve the scene descriptor's pickingId spelling.
+      target.id;
+    }
     const targetIndex = (target: PickTarget): number => {
       if (target.kind === 'gltf-instances') {
         const instance: GltfInstancesPickTarget = target;
@@ -165,7 +175,11 @@ describe('Canvas public scene boundary', () => {
   });
 
   it('exposes asset and renderer failures as discriminated unions', () => {
-    const asset = { error: 'missing buffer', state: 'error' } satisfies GltfAssetStatus;
+    const asset = {
+      error: 'missing buffer',
+      state: 'error',
+      variantNames: [],
+    } satisfies GltfAssetStatus;
     const lifecycle = {
       error: 'context recovery failed',
       generation: 2,
@@ -175,17 +189,20 @@ describe('Canvas public scene boundary', () => {
     } satisfies RoyalRendererRootLifecycleSnapshot;
 
     expect(asset.error).toBe('missing buffer');
+    expect(asset.variantNames).toEqual([]);
     expect(lifecycle.error).toBe('context recovery failed');
 
     if (false) {
       // @ts-expect-error Status state names come from the discriminated union instead of a parallel alias.
       const legacyState: import('@royal/react').GltfAssetLoadState = 'ready';
       // @ts-expect-error Asset failures require an error message.
-      const invalidAsset = { state: 'error' } satisfies GltfAssetStatus;
+      const invalidAsset = { state: 'error', variantNames: [] } satisfies GltfAssetStatus;
+      // @ts-expect-error Every status carries the same immutable variant-name list.
+      const missingVariants = { state: 'loading' } satisfies GltfAssetStatus;
       const acceptLifecycle = (_value: RoyalRendererRootLifecycleSnapshot): void => undefined;
       // @ts-expect-error Available renderer snapshots cannot carry an error.
       acceptLifecycle({ error: 'impossible', generation: 1, interruptions: 0, recoveries: 0, state: 'available' });
-      expect([legacyState, invalidAsset]).toHaveLength(2);
+      expect([legacyState, invalidAsset, missingVariants]).toHaveLength(3);
     }
   });
 

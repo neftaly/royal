@@ -70,18 +70,18 @@ describe("glTF material preparation arena", () => {
         contentKey: baseContentKey,
         kind: "asset",
         preparedOnly: true,
-        uri: "texture:base",
+        src: "texture:base",
       }),
-      expect.objectContaining({ colorSpace: "srgb", uri: "texture:emissive" }),
-      expect.objectContaining({ colorSpace: "linear", uri: "texture:clearcoat" }),
-      expect.objectContaining({ colorSpace: "linear", uri: "texture:anisotropy" }),
+      expect.objectContaining({ colorSpace: "srgb", src: "texture:emissive" }),
+      expect.objectContaining({ colorSpace: "linear", src: "texture:clearcoat" }),
+      expect.objectContaining({ colorSpace: "linear", src: "texture:anisotropy" }),
       expect.objectContaining({
         colorSpace: "srgb",
-        uri: "texture:diffuse-transmission-color",
+        src: "texture:diffuse-transmission-color",
       }),
       expect.objectContaining({
         colorSpace: "linear",
-        uri: "texture:diffuse-transmission-strength",
+        src: "texture:diffuse-transmission-strength",
       }),
     ]));
     expect(refs).toHaveLength(6);
@@ -105,7 +105,7 @@ describe("glTF material preparation arena", () => {
       colorSpace: "srgb",
       kind: "asset",
       preparedOnly: true,
-      uri: "texture:base",
+      src: "texture:base",
     });
     expect(otherPrimitiveReady.materialBatchClassId).toBe(ready.materialBatchClassId);
 
@@ -136,7 +136,7 @@ describe("glTF material preparation arena", () => {
     });
     expect(prepared.material.normalTexture).toMatchObject({
       kind: "asset",
-      uri: "texture:normal",
+      src: "texture:normal",
     });
     expect(prepared.material.basePending).toBeUndefined();
   });

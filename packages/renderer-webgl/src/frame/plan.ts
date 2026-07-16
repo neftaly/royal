@@ -256,12 +256,12 @@ export const compileFramePlan = (scene: RenderRoot, revision: number): FramePlan
       incrementReference(bulkCounts, bulkInstances, node.instances);
     }
     if (node.kind === "gltf" || node.kind === "gltf-instances") {
-      const requestKey = gltfRequestKey(node.asset.uri, node.asset.version);
-      gltfRequestRows.push({ nodeIndex, occurrenceIndex: nodeIndex, requestKey, sourceUri: node.asset.uri });
+      const requestKey = gltfRequestKey(node.asset.src, node.asset.version);
+      gltfRequestRows.push({ nodeIndex, occurrenceIndex: nodeIndex, requestKey, sourceUri: node.asset.src });
       incrementKey(gltfByKey, gltfRequests, requestKey, () => ({
         count: 1,
         key: requestKey,
-        sourceUri: node.asset.uri,
+        sourceUri: node.asset.src,
         ...(node.asset.version === undefined ? {} : { version: node.asset.version }),
       }));
     } else if (node.kind === "mesh") {

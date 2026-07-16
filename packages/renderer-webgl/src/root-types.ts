@@ -170,7 +170,7 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   };
   readonly primitiveCount: number;
   /** URI supplied by the public glTF descriptor. */
-  readonly uri: string;
+  readonly src: string;
   /** Optional application-supplied version used for cache identity. */
   readonly version?: number | string;
   /** `sceneReady` is renderable; image completion metrics may still advance afterward. */

@@ -116,7 +116,7 @@ export const attachCanvasPointerEventHandlers = ({
     const hit = root.pick({ clientX: event.clientX, clientY: event.clientY });
     if (hit === undefined) return undefined;
 
-    const target = sceneInteractions.pointerEventTarget(hit.target.id);
+    const target = sceneInteractions.pointerEventTarget(hit.target.pickingId);
     return target === undefined
       ? undefined
       : {

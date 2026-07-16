@@ -22,7 +22,7 @@ export type GltfLoadDiagnosticsAsset = {
   readonly phaseMs: Record<string, number>;
   readonly primitiveCount: number;
   readonly status: string;
-  readonly uri: string;
+  readonly src: string;
   readonly variantNames: readonly string[];
   readonly version?: number | string;
 };

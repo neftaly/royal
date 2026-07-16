@@ -57,19 +57,19 @@ describe("React root public API", () => {
     expect(() => root.observeLifecycle(invalidCallback)).toThrow("observeLifecycle callback must be a function");
     expect(() => root.observeFrame(invalidCallback)).toThrow("observeFrame callback must be a function");
     expect(() => root.observeRenderFailures(invalidCallback)).toThrow("observeRenderFailures callback must be a function");
-    expect(() => root.gltfAssetSnapshot(null as unknown as { uri: string })).toThrow(/gltfAssetSnapshot asset must be a GltfAssetRef object/i);
+    expect(() => root.gltfAssetSnapshot(null as unknown as { src: string })).toThrow(/gltfAssetSnapshot asset must be a GltfAssetRef object/i);
     expect(() => root.observeGltfAsset(
-      { uri: "/helmet.gltf", version: Number.NaN },
+      { src: "/helmet.gltf", version: Number.NaN },
       () => undefined,
     )).toThrow(/observeGltfAsset asset version must be a non-empty string or finite number/i);
     expect(() => root.observeGltfAsset(
-      { uri: "/helmet.gltf" },
+      { src: "/helmet.gltf" },
       invalidCallback,
     )).toThrow("observeGltfAsset callback must be a function");
     expect(() => root.textureAssetSnapshot(null as unknown as ReturnType<typeof imageTexture>))
       .toThrow(/textureAssetSnapshot texture must be a TextureAssetRef or VirtualTextureAssetRef object/i);
     expect(() => root.observeTextureAsset(
-      { kind: "asset", uri: "" },
+      { kind: "asset", src: "" },
       () => undefined,
     )).toThrow(/texture asset.*src.*non-empty string/i);
     expect(() => root.observeTextureAsset(imageTexture("/albedo.png"), invalidCallback))
@@ -154,7 +154,7 @@ describe("React root public API", () => {
     expect(diagnostics).not.toHaveProperty("latestScene");
     expect(diagnostics).not.toHaveProperty("options");
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
-    const asset = { uri: "/not-retained.glb" };
+    const asset = { src: "/not-retained.glb" };
     expect(root.gltfAssetSnapshot(asset)).toEqual({ state: "idle", variantNames: [] });
     const assetSnapshots: unknown[] = [];
     const stopObservingAsset = root.observeGltfAsset(asset, (snapshot) => assetSnapshots.push(snapshot));

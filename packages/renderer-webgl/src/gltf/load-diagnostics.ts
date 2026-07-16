@@ -52,7 +52,7 @@ const gltfLoadDiagnosticsAssetSnapshot = (
     nodeCount: state.nodeCount,
     phaseMs,
     primitiveCount: state.primitiveCount,
-    uri: state.sourceUri,
+    src: state.sourceUri,
     ...(state.sourceVersion === undefined ? {} : { version: state.sourceVersion }),
     status: state.status === "ready" ? "sceneReady" : state.status,
     variantNames: Object.freeze([...state.variants]),

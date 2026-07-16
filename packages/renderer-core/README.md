@@ -33,6 +33,11 @@ Scene data is immutable and contains no WebGL or React objects. World-space
 positions and sizes are metres, rotations are radians, and public color fields
 are scene-linear `LinearRgba` values.
 
+Source names remain stable across constructor inputs and normalized
+descriptors: glTF and ordinary image references expose `src`; authored virtual
+textures expose `manifestUri` because that source is a JSON manifest. Pick
+targets likewise preserve the authored `pickingId` name.
+
 ## Entrypoints
 
 - `@royal/renderer-core` — cameras, scenes, nodes, materials, textures, lights,

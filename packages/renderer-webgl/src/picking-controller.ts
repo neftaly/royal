@@ -238,7 +238,11 @@ export class PickingController {
       distance,
       drawOrdinal,
       point: pointOnRay(ray, distance),
-      target: { ...(node.pickingId === undefined ? {} : { id: node.pickingId }), kind: "mesh", node },
+      target: {
+        kind: "mesh",
+        node,
+        ...(node.pickingId === undefined ? {} : { pickingId: node.pickingId }),
+      },
     };
   }
 
@@ -482,12 +486,12 @@ export class PickingController {
       point: pointOnRay(ray, bestDistance),
       target: node.kind === "gltf"
         ? {
-            ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+            ...(node.pickingId === undefined ? {} : { pickingId: node.pickingId }),
             kind: "gltf",
             node,
           }
         : {
-          ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+          ...(node.pickingId === undefined ? {} : { pickingId: node.pickingId }),
           ...(node.instances.logicalIds?.[best.outerIndex] === undefined
             ? {}
             : { instanceId: node.instances.logicalIds[best.outerIndex] }),

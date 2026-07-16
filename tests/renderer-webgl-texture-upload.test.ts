@@ -62,7 +62,7 @@ const handle = {} as WebGLTexture;
 const texture = (input: Partial<TextureAssetUploadRef> = {}): TextureAssetUploadRef => ({
   colorSpace: "linear",
   kind: "asset",
-  uri: "texture.png",
+  src: "texture.png",
   ...input,
 });
 const decoded = (): Extract<LoadedTextureSource, { readonly kind: "rgba-texture" }> => ({
@@ -162,7 +162,7 @@ describe("texture upload kernel", () => {
     }, texture({
       colorSpace: "srgb",
       sampler: { minFilter: "linear-mipmap-linear" },
-      uri: "compressed.ktx2",
+      src: "compressed.ktx2",
     }));
 
     expect(gl.calls.filter(({ name }) => name === "compressedTexImage2D").map(({ args }) => args)).toEqual([

@@ -139,7 +139,7 @@ describe("renderer-core public API", () => {
     });
     expect(cube.material.baseColor).toMatchObject({
       kind: "asset",
-      uri: "/crate.png",
+      src: "/crate.png",
     });
   });
 
@@ -187,7 +187,6 @@ describe("renderer-core public API", () => {
       "useCanvasRoot",
       "useFrame",
       "useGltfAssetStatus",
-      "useGltfAssetVariants",
       "useInvalidate",
       "useOrbitCamera",
       "useOrbitCameraView",
@@ -272,11 +271,11 @@ describe("renderer-core public API", () => {
 
       if (target.kind === "gltf-instances") {
         const instancesTarget: GltfInstancesPickTarget = target;
-        return `${instancesTarget.node.asset.uri}:${instancesTarget.instanceIndex}`;
+        return `${instancesTarget.node.asset.src}:${instancesTarget.instanceIndex}`;
       }
 
       const gltfTarget: GltfPickTarget = target;
-      return gltfTarget.node.asset.uri;
+      return gltfTarget.node.asset.src;
     };
 
     expect(typeof pickTargetKind).toBe("function");

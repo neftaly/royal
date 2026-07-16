@@ -1,7 +1,7 @@
 import type { GltfAssetRef } from "@royal/renderer-core";
 import { recordWithAllowedFields } from "./validation";
 
-const GLTF_ASSET_REF_FIELDS = ["bounds", "uri", "version"] as const;
+const GLTF_ASSET_REF_FIELDS = ["bounds", "src", "version"] as const;
 const GLTF_BOUNDS_FIELDS = ["max", "min"] as const;
 
 const validateBound = (value: unknown, label: string): readonly number[] => {
@@ -27,14 +27,14 @@ export const validateGltfAssetRef = (input: unknown, label: string): void => {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new TypeError(`${label} must be a GltfAssetRef object`);
   }
-  const { bounds, uri, version } = recordWithAllowedFields(
+  const { bounds, src, version } = recordWithAllowedFields(
     input,
     GLTF_ASSET_REF_FIELDS,
     label,
     "field",
   ) as Partial<GltfAssetRef>;
-  if (typeof uri !== "string" || uri.length === 0) {
-    throw new TypeError(`${label} uri must be a non-empty string`);
+  if (typeof src !== "string" || src.length === 0) {
+    throw new TypeError(`${label} src must be a non-empty string`);
   }
   if (version !== undefined && (
     (typeof version !== "string" && typeof version !== "number")

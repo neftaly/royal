@@ -315,7 +315,11 @@ export class OrdinaryTextureResidencyController {
     const acquisition = ++row.acquisition;
     let subscription: OrdinaryTextureSourceSubscription | undefined;
     try {
-      subscription = this.#sources.acquire(texture, (result) => {
+      subscription = this.#sources.acquire({
+        ...(texture.contentKey === undefined ? {} : { contentKey: texture.contentKey }),
+        uri: texture.src,
+        ...(texture.version === undefined ? {} : { version: texture.version }),
+      }, (result) => {
         if (!this.#current(key, row, acquisition)) return;
         if (result.kind === "error") {
           const current = ordinaryTextureGpuResource(this.#gpu, key);
@@ -323,7 +327,7 @@ export class OrdinaryTextureResidencyController {
           const detail = result.error instanceof Error ? result.error.message : String(result.error);
           row.error = detail;
           row.terminal = true;
-          this.#options.diagnostic(`Texture image load failed for ${texture.uri}: ${detail}`, `texture-image:${key}`);
+          this.#options.diagnostic(`Texture image load failed for ${texture.src}: ${detail}`, `texture-image:${key}`);
           this.#options.invalidate();
           return;
         }
@@ -345,7 +349,7 @@ export class OrdinaryTextureResidencyController {
         }
         const detail = delivery.error instanceof Error ? delivery.error.message : String(delivery.error);
         capture(() => this.#options.diagnostic(
-          `Texture image publication failed for ${texture.uri} on attempt ${delivery.attempt}: ${detail}`,
+          `Texture image publication failed for ${texture.src} on attempt ${delivery.attempt}: ${detail}`,
           `texture-image-publication:${key}`,
         ));
         row.terminal = true;

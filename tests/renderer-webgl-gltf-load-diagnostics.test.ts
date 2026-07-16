@@ -55,7 +55,7 @@ describe("glTF load diagnostics core", () => {
           toSceneReady: 45,
         },
         primitiveCount: 5,
-        uri: "model.glb",
+        src: "model.glb",
         version: "revision-a",
         status: "sceneReady",
         variantNames: ["ruby", "mint"],

@@ -123,7 +123,7 @@ describe("prepared glTF asset dependency core", () => {
     expect(plan.manifest.ordinaryTextures).toHaveLength(1);
     expect(plan.manifest.ordinaryTextures[0]).toMatchObject({
       count: 4,
-      texture: { contentKey, uri: "texture:shared" },
+      texture: { contentKey, src: "texture:shared" },
     });
     expect(plan.manifest.iblKeys).toEqual([{ count: 1, key: "ibl:studio" }]);
     expect(plan.manifest.requiresHdrComposition).toBe(false);

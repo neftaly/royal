@@ -360,7 +360,7 @@ export const ordinaryTextureUploadCost = (
   const mipmapped = usesMipmaps(upload.texture.sampler?.minFilter);
   if (isDecodedCompressedTexture(upload.source)) {
     if (mipmapped && !decodedTextureHasCompleteMipChain(upload.source)) {
-      throw new Error(`Compressed texture ${upload.texture.uri} is missing required mip levels`);
+      throw new Error(`Compressed texture ${upload.texture.src} is missing required mip levels`);
     }
     const levels = mipmapped ? upload.source.levels : upload.source.levels.slice(0, 1);
     const bytes = levels.reduce((sum, level) => sum + level.data.byteLength, 0);

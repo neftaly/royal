@@ -46,7 +46,8 @@ export interface TextureAssetRef {
   /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
   readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
-  readonly uri: string;
+  /** URI of the image asset, using the same field name as `imageTexture(...)`. */
+  readonly src: string;
   readonly version?: TextureVersion;
 }
 
@@ -172,7 +173,7 @@ export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
     ...(colorSpace === undefined ? {} : { colorSpace }),
     ...(contentKey === undefined ? {} : { contentKey }),
     ...(sampler === undefined ? {} : { sampler }),
-    uri,
+    src: uri,
     ...(version === undefined ? {} : { version })
   });
 };

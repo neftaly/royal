@@ -49,7 +49,7 @@ export class GltfReadyImagePublicationOwner {
             colorSpace: binding.colorSpace,
             kind: "asset",
             ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-            uri: binding.textureUri,
+            src: binding.textureUri,
           };
           const nextTexture: TextureAssetUploadRef = {
             ...previousTexture,
@@ -96,7 +96,7 @@ export class GltfReadyImagePublicationOwner {
           ...(contentKey === undefined ? {} : { contentKey }),
           kind: "asset",
           ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-          uri: binding.textureUri,
+          src: binding.textureUri,
         };
         this.#options.ordinaryTextures.publishPrepared(texture, outcome.source);
       }

@@ -445,7 +445,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         meshLocalBounds: (geometry) => this.#geometryRecipes.localBounds(geometry),
         pickingGeometry: (geometry) => this.#geometryRecipes.pickingRecipe(geometry),
         preparedGltfPrimitives: (node) => {
-          const state = this.#preparedGltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
+          const state = this.#preparedGltf.get(gltfRequestKey(node.asset.src, node.asset.version));
           return state?.status === "ready" ? state.primitives : undefined;
         },
         renderObjectTransform: (node) => this.#sceneBindings.transform(node),
@@ -792,7 +792,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   gltfAssetSnapshot(asset: GltfAssetRef): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined {
     return preparedGltfLoadDiagnosticsAssetSnapshot(
-      this.#preparedGltf.get(gltfRequestKey(asset.uri, asset.version)),
+      this.#preparedGltf.get(gltfRequestKey(asset.src, asset.version)),
     );
   }
 
@@ -814,7 +814,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     callback: (snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined) => void,
   ): () => void {
     return this.#preparedGltf.observeState(
-      gltfRequestKey(asset.uri, asset.version),
+      gltfRequestKey(asset.src, asset.version),
       (state) => callback(preparedGltfLoadDiagnosticsAssetSnapshot(state)),
     );
   }

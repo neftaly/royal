@@ -63,7 +63,7 @@ export const uploadTexture = (
   let uploadedCompleteMipChain = false;
   if (isDecodedCompressedTexture(source)) {
     if (mipmapped && !decodedTextureHasCompleteMipChain(source)) {
-      throw new Error(`Compressed texture ${texture.uri} is missing required mip levels`);
+      throw new Error(`Compressed texture ${texture.src} is missing required mip levels`);
     }
     uploadedCompleteMipChain = mipmapped;
     const levels = mipmapped ? source.levels : source.levels.slice(0, 1);

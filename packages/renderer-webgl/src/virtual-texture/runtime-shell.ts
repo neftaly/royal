@@ -354,7 +354,7 @@ export class VirtualTextureRuntimeShell {
       ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
       decodedBytes: retainedSourceBytes,
       height: Math.ceil(height),
-      label: texture.uri,
+      label: texture.src,
       source,
       width: Math.ceil(width),
     };

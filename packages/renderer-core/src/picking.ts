@@ -42,24 +42,27 @@ export const validatePickInput: (input: unknown) => asserts input is PickInput =
 };
 
 export interface MeshPickTarget {
-  readonly id?: PickingId;
   readonly kind: 'mesh';
   readonly node: MeshNode;
+  /** Stable application identity copied from the picked node. */
+  readonly pickingId?: PickingId;
 }
 
 export interface GltfPickTarget {
-  readonly id?: PickingId;
   readonly kind: 'gltf';
   readonly node: GltfNode;
+  /** Stable application identity copied from the picked node. */
+  readonly pickingId?: PickingId;
 }
 
 export interface GltfInstancesPickTarget {
-  readonly id?: PickingId;
   /** Stable caller identity when supplied by the bulk instance source. */
   readonly instanceId?: PickingId;
   readonly instanceIndex: number;
   readonly kind: 'gltf-instances';
   readonly node: GltfInstancesNode;
+  /** Stable application identity copied from the picked node. */
+  readonly pickingId?: PickingId;
 }
 
 export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;

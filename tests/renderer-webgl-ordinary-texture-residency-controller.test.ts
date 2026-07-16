@@ -150,7 +150,7 @@ const successfulAdmission = {
 describe("ordinary texture residency controller", () => {
   it("suppresses admitted GPU residency idempotently and re-promotes from the retained source", async () => {
     const decoded = source(10, 2, 2);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/generated.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/generated.png" };
     let leaseCommits = 0;
     let leaseReleases = 0;
     const { arena, controller, gl, releasedDecodedLeases } = harness({ load: async () => decoded });
@@ -206,7 +206,7 @@ describe("ordinary texture residency controller", () => {
   it("retains replacement publication while suppressed without restoring GPU residency", async () => {
     const first = source(11);
     const replacement = source(12);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/replacement.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/replacement.png" };
     const registered: LoadedTextureSource[] = [];
     const { arena, controller } = harness({
       load: async () => first,
@@ -233,7 +233,7 @@ describe("ordinary texture residency controller", () => {
 
   it("settles a suppressed pending upload without resurrecting GPU work until request", async () => {
     const decoded = source(14);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/pending.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/pending.png" };
     let leaseCommits = 0;
     const { arena, controller, gl } = harness({ load: async () => decoded });
     retainTexture(arena, texture);
@@ -278,7 +278,7 @@ describe("ordinary texture residency controller", () => {
 
   it("accounts for an opaque deletion failure while keeping suppression and re-promotion coherent", async () => {
     const decoded = source(13);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/opaque-delete.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/opaque-delete.png" };
     let leaseReleases = 0;
     const { arena, controller, gl } = harness({ load: async () => decoded });
     retainTexture(arena, texture);
@@ -322,11 +322,11 @@ describe("ordinary texture residency controller", () => {
 
   it("does not install a released subscription after synchronous publication failure", async () => {
     const decoded = source(1);
-    const base: TextureAssetUploadRef = { kind: "asset", uri: "/shared.png" };
+    const base: TextureAssetUploadRef = { kind: "asset", src: "/shared.png" };
     const variant: TextureAssetUploadRef = {
       kind: "asset",
       sampler: { magFilter: "nearest" },
-      uri: "/shared.png",
+      src: "/shared.png",
     };
     const { arena, controller, diagnostics } = harness({
       load: async () => decoded,
@@ -356,11 +356,11 @@ describe("ordinary texture residency controller", () => {
 
   it("invalidates an acquisition token when semantic release re-enters synchronous delivery", async () => {
     const decoded = source(2);
-    const base: TextureAssetUploadRef = { kind: "asset", uri: "/reentrant.png" };
+    const base: TextureAssetUploadRef = { kind: "asset", src: "/reentrant.png" };
     const variant: TextureAssetUploadRef = {
       colorSpace: "linear",
       kind: "asset",
-      uri: "/reentrant.png",
+      src: "/reentrant.png",
     };
     let controller!: OrdinaryTextureResidencyController;
     let reentrantReport: ReturnType<OrdinaryTextureResidencyController["release"]> | undefined;
@@ -393,7 +393,7 @@ describe("ordinary texture residency controller", () => {
 
   it("keeps terminal state across retained context-loss outcomes until authoritative publication", async () => {
     const decoded = source(3);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/terminal.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/terminal.png" };
     let throwInvalidation = true;
     const { arena, controller, lifecycle } = harness({
       invalidate: () => {
@@ -423,7 +423,7 @@ describe("ordinary texture residency controller", () => {
 
   it("queues retained prepared sources while the matching context is restoring", async () => {
     const decoded = source(31);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/restore-queue.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/restore-queue.png" };
     const { arena, controller, lifecycle } = harness({ load: async () => decoded });
     retainTexture(arena, texture);
     controller.request(texture);
@@ -446,7 +446,7 @@ describe("ordinary texture residency controller", () => {
 
   it("repairs a cached unqueued resource when an active request follows context loss", async () => {
     const decoded = source(32);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/request-repair.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/request-repair.png" };
     const { arena, controller, lifecycle } = harness({ load: async () => decoded });
     retainTexture(arena, texture);
     controller.request(texture);
@@ -483,7 +483,7 @@ describe("ordinary texture residency controller", () => {
     const closeFailure = new Error("decoded close failed");
     const deletionFailure = new Error("texture delete failed");
     const decoded = source(4);
-    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/close-failure.png" };
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/close-failure.png" };
     const { arena, controller, gl } = harness({
       close: () => { throw closeFailure; },
       load: async () => decoded,
@@ -529,7 +529,7 @@ it("keeps merged residency rows bounded under seeded command traces", async () =
     cases: 12,
     operation: (random) => command(random),
     run: async (trace, label) => {
-      const texture: TextureAssetUploadRef = { kind: "asset", uri: "/fuzz.png" };
+      const texture: TextureAssetUploadRef = { kind: "asset", src: "/fuzz.png" };
       const setup = harness();
       retainTexture(setup.arena, texture);
       for (const [step, operation] of trace.entries()) {

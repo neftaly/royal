@@ -70,7 +70,7 @@ const pickResultFor = (node: MeshNode, input: PickInput): PickResult => ({
   target: {
     kind: "mesh",
     node,
-    ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+    ...(node.pickingId === undefined ? {} : { pickingId: node.pickingId }),
   },
 });
 

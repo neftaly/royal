@@ -3,6 +3,18 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+### Public API
+
+- Normalized glTF and ordinary-image descriptor references on `src`, matching
+  their constructors, while retaining explicit `manifestUri` for authored
+  virtual textures.
+- Preserved `pickingId` on pick targets instead of renaming it to a generic
+  `id` at the result boundary.
+- Folded material `variantNames` into `useGltfAssetStatus()` and removed the
+  duplicate `useGltfAssetVariants()` subscription API.
+
 ## 0.0.1 - 2026-07-14
 
 Initial source-level prerelease for application development inside the Royal

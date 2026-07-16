@@ -23,7 +23,8 @@ export interface GltfAssetBounds {
 
 export interface GltfAssetRef {
   readonly bounds?: GltfAssetBounds;
-  readonly uri: string;
+  /** URI of the glTF asset, using the same field name as `gltf(...)`. */
+  readonly src: string;
   /** Non-empty string or finite number identifying one revision of source bytes. */
   readonly version?: number | string;
 }
@@ -80,7 +81,7 @@ export const resolveGltfAsset = (options: {
     : identityScalar(options.version, 'glTF asset version');
   return Object.freeze({
     ...(options.bounds === undefined ? {} : { bounds: frozenBounds3(options.bounds, 'glTF asset bounds') }),
-    uri: nonEmptyString(options.src, 'glTF source'),
+    src: nonEmptyString(options.src, 'glTF source'),
     ...(version === undefined ? {} : { version })
   });
 };
