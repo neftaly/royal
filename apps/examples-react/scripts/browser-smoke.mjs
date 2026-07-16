@@ -55,6 +55,18 @@ const gltfLabManifest = JSON.parse(readFileSync(
 ));
 const gltfLabCaseByName = new Map(gltfLabManifest.cases.map((entry) => [entry.name, entry]));
 const gltfLabResourceSubstring = (entry) => `/${entry.path}`;
+const gltfSceneResourceById = new Map([
+  ['sponza', '/fixtures/scenes/Sponza/glTF/Sponza.gltf'],
+  ['a-beautiful-game', '/fixtures/scenes/ABeautifulGame/glTF-Binary/ABeautifulGame.glb'],
+  ['virtual-city', '/fixtures/scenes/VirtualCity/glTF-Binary/VirtualCity.glb'],
+  ['damaged-helmet', '/DamagedHelmet/DamagedHelmet.gltf'],
+]);
+const selectedGltfSceneId = new URLSearchParams(routeQuery).get('scene') ?? 'sponza';
+const selectedGltfSceneResource = gltfSceneResourceById.get(selectedGltfSceneId);
+
+if (selectedGltfSceneResource === undefined) {
+  throw new Error(`Unknown glTF scene showcase entry: ${selectedGltfSceneId}`);
+}
 
 const smokeExpectations = {
   cube: {
@@ -87,6 +99,12 @@ const smokeExpectations = {
   'gltf-helmet': {
     minColorBuckets: 32,
     minPaintedRatio: 0.01,
+  },
+  'gltf-scenes': {
+    gltfReady: true,
+    minColorBuckets: 12,
+    minPaintedRatio: 0.01,
+    resourceSubstrings: [selectedGltfSceneResource],
   },
   'gltf-instancing': {
     minColorBuckets: 8,

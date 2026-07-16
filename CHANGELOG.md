@@ -15,6 +15,12 @@ versions identify source-level prerelease checkpoints in this repository.
 - Folded material `variantNames` into `useGltfAssetStatus()` and removed the
   duplicate `useGltfAssetVariants()` subscription API.
 
+### Examples
+
+- Added a selectable glTF scene gallery for Sponza, A Beautiful Game, Virtual
+  City, and Damaged Helmet, with source-pinned Khronos fixtures and browser
+  smoke coverage for every entry.
+
 ## 0.0.1 - 2026-07-14
 
 Initial source-level prerelease for application development inside the Royal

@@ -58,6 +58,10 @@ const exampleLoaders: Record<string, () => Promise<LoadedExample>> = {
     () => import('./examples/cases/GltfHelmet').then((module) => module.GltfHelmet),
     () => import('./examples/cases/GltfHelmet.tsx?raw'),
   ),
+  'gltf-scenes': exampleLoader(
+    () => import('./examples/cases/GltfScenes').then((module) => module.GltfScenes),
+    () => import('./examples/cases/GltfScenes.tsx?raw'),
+  ),
   'gltf-instancing': exampleLoader(
     () => import('./examples/cases/GltfInstancing').then((module) => module.GltfInstancing),
     () => import('./examples/cases/GltfInstancing.tsx?raw'),

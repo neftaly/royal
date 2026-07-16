@@ -21,6 +21,7 @@
     "generate:virtual-texture-stress": "node scripts/generate-virtual-texture-stress.mjs",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1",
+    "sync:scene-showcase": "node scripts/sync-scene-showcase.mjs",
     "test": "pnpm exec vitest run --passWithNoTests --config vite.config.ts",
     "test:browser": "pnpm run build && node scripts/browser-smoke.mjs",
     "test:browser:cdp": "EXAMPLES_SMOKE_BROWSER=cdp EXAMPLES_SMOKE_PREVIEW=0 node scripts/browser-smoke.mjs",

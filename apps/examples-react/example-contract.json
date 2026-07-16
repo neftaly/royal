@@ -54,6 +54,13 @@
       "title": "glTF Material Showcase"
     },
     {
+      "id": "gltf-scenes",
+      "maturity": "product",
+      "path": "/gltf-scenes",
+      "sourceFile": "examples/cases/GltfScenes.tsx",
+      "title": "glTF Scenes"
+    },
+    {
       "id": "gltf-instancing",
       "maturity": "product",
       "path": "/gltf-instancing",
