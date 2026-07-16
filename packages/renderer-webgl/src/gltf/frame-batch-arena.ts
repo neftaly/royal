@@ -280,38 +280,37 @@ export class GltfFrameBatchArena {
         (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0;
       sidedness.frontFaceCcw =
         (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0;
+      let previousLocalModelId = NO_FRAME_PACKET_ID;
+      let localModelSemanticId = 0;
+      let localModel: MutableMat4 | undefined;
       for (let memberOffset = 0; memberOffset < memberCount; memberOffset += 1) {
-        this.#writeSubmission(
-          batch,
-          memberOffset,
-          groups.memberIndices[memberFirst + memberOffset]!,
-        );
+        const index = groups.memberIndices[memberFirst + memberOffset]!;
+        const localModelId = workspace.localModelIds[index]!;
+        if (localModelId !== previousLocalModelId) {
+          previousLocalModelId = localModelId;
+          localModelSemanticId = packetLocalModelSemanticId(
+            this.#prepared.packetTopology.resources,
+            localModelId,
+          );
+          localModel = this.#localModels[localModelId];
+          if (localModel === undefined) {
+            localModel = identityMat4();
+            readPacketLocalModelInto(
+              this.#prepared.packetTopology.resources,
+              localModelId,
+              localModel,
+            );
+            this.#localModels[localModelId] = localModel;
+          }
+        }
+        const root = workspace.rootBindings[workspace.rootBindingIds[index]!]!;
+        batch.localModelSignature[memberOffset] = localModelSemanticId;
+        batch.localModels[memberOffset] = localModel!;
+        batch.rootModels[memberOffset] = root.rootModel;
+        batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;
+        batch.rootLogicalIndices[memberOffset] = root.rootLogicalIndex;
+        batch.rootTransforms[memberOffset] = root.rootTransform;
       }
     }
-  }
-
-  #writeSubmission(batch: GltfFrameDrawBatch, memberIndex: number, index: number): void {
-    const root = this.workspace.rootBindings[this.workspace.rootBindingIds[index]!]!;
-    const localModelId = this.workspace.localModelIds[index]!;
-    const localModelSemanticId = packetLocalModelSemanticId(
-      this.#prepared.packetTopology.resources,
-      localModelId,
-    );
-    let localModel = this.#localModels[localModelId];
-    if (localModel === undefined) {
-      localModel = identityMat4();
-      readPacketLocalModelInto(
-        this.#prepared.packetTopology.resources,
-        localModelId,
-        localModel,
-      );
-      this.#localModels[localModelId] = localModel;
-    }
-    batch.localModelSignature[memberIndex] = localModelSemanticId;
-    batch.localModels[memberIndex] = localModel;
-    batch.rootModels[memberIndex] = root.rootModel;
-    batch.rootInstanceViews[memberIndex] = root.rootInstanceViews;
-    batch.rootLogicalIndices[memberIndex] = root.rootLogicalIndex;
-    batch.rootTransforms[memberIndex] = root.rootTransform;
   }
 }
