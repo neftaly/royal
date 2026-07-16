@@ -1,7 +1,7 @@
 import { FrameTextureResidencyIntent } from "../frame/texture-residency-intent";
 import { OrdinaryTextureResidencyController } from "./ordinary-residency-controller";
 import { ResourceCapacityWakeOwner } from "../resource-capacity-wake-owner";
-import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
+import { retainFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   reserveResourceGovernor,
   type ResourceGovernor,
@@ -37,16 +37,22 @@ export class OrdinaryTextureGpuOwner {
     try {
       for (const key of suppressions) {
         let report: ReturnType<OrdinaryTextureResidencyController["suppressGpuResidency"]> | undefined;
-        firstFailure = captureFirstFailure(firstFailure, () => {
+        try {
           report = this.#options.textures.suppressGpuResidency(key);
           capacityReleased ||= report.capacityReleased;
           if (report.operationFailure !== undefined) throw report.operationFailure.error;
-        });
+        } catch (value) {
+          firstFailure = retainFirstFailure(firstFailure, value);
+        }
         const settledReport = report;
-        if (settledReport !== undefined) firstFailure = captureFirstFailure(firstFailure, () => {
-          const settlement = this.#options.textures.settleGpuReport(settledReport);
-          if (settlement !== undefined) throw settlement.error;
-        });
+        if (settledReport !== undefined) {
+          try {
+            const settlement = this.#options.textures.settleGpuReport(settledReport);
+            if (settlement !== undefined) throw settlement.error;
+          } catch (value) {
+            firstFailure = retainFirstFailure(firstFailure, value);
+          }
+        }
       }
     } finally {
       releaseWakeSuppression();

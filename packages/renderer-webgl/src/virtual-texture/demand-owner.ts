@@ -1,7 +1,7 @@
 import type { Material } from "@royal/renderer-core";
 import type { CpuGeometry } from "../geometry-recipes";
 import type { Mat4 } from "../math/mat4";
-import { captureFailure, type CapturedFailure } from "../captured-failure";
+import { captureFailure, retainFirstFailure, type CapturedFailure } from "../captured-failure";
 import type { VertexInputGeometry } from "../vertex-input/arena";
 import {
   cachedVirtualTextureCoverageProvider,
@@ -45,12 +45,6 @@ import {
   virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
 } from "./gpu-arena";
-
-/** Stops transaction mutation after its first failure while retaining that value. */
-const captureUnlessFailed = (
-  failure: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => failure ?? captureFailure(action);
 
 type VirtualTextureDemandOwnerOptions = {
   readonly consumeGpuOutcomes: () => void;
@@ -168,16 +162,13 @@ export class VirtualTextureDemandOwner {
   finishFrame(commit: boolean): void {
     const publication = this.#options.runtime.finishFrame(commit);
     if (publication === undefined) return;
-    let commitFailure: CapturedFailure | undefined;
-    for (const state of publication.admissions) {
-      if (commitFailure !== undefined) break;
-      commitFailure = captureUnlessFailed(commitFailure, () => {
-        this.#options.ensureGpuResource(state, state.manifest!, publication.demanded);
-      });
-    }
     this.#publicationStates.length = 0;
     this.#advanceablePublicationStates.length = 0;
-    if (commitFailure === undefined) {
+    let commitFailure: CapturedFailure | undefined;
+    try {
+      for (const state of publication.admissions) {
+        this.#options.ensureGpuResource(state, state.manifest!, publication.demanded);
+      }
       for (const state of this.#options.runtime.resources.values()) {
         const entry = publication.commits.get(state);
         const submissions = entry?.submissions ?? [];
@@ -189,33 +180,43 @@ export class VirtualTextureDemandOwner {
         const prepared = this.#prepareDemand(state, pages);
         if (prepared === undefined) continue;
         this.#publicationStates.push(state);
-        const requiresConvergence = submissions.some((submission) => submission.viewportDominant === true);
+        let requiresConvergence = false;
+        for (const submission of submissions) {
+          if (submission.viewportDominant === true) {
+            requiresConvergence = true;
+            break;
+          }
+        }
         if (prepared || !requiresConvergence) this.#advanceablePublicationStates.push(state);
       }
-    }
-    for (const state of this.#publicationStates) {
-      commitFailure = captureUnlessFailed(
-        commitFailure,
-        () => this.#commitPreparedDemand(state, true),
-      );
-    }
-    for (const state of this.#publicationStates) {
-      commitFailure = captureUnlessFailed(
-        commitFailure,
-        () => this.#touchPublishedDemand(state),
-      );
-    }
-    if (commitFailure === undefined) {
+      for (const state of this.#publicationStates) this.#commitPreparedDemand(state, true);
+      for (const state of this.#publicationStates) this.#touchPublishedDemand(state);
       this.#options.runtime.commitPublication(
         this.#advanceablePublicationStates,
         this.#options.frame(),
       );
+    } catch (value) {
+      commitFailure = { value };
     }
-    const closeFailure = captureFailure(this.#options.consumeGpuOutcomes);
-    this.#options.runtime.requests.schedule();
+
+    let closeFailure: CapturedFailure | undefined;
+    try {
+      this.#options.consumeGpuOutcomes();
+    } catch (value) {
+      closeFailure = { value };
+    }
+    try {
+      this.#options.runtime.requests.schedule();
+    } catch (value) {
+      closeFailure = retainFirstFailure(closeFailure, value);
+    }
     this.#publicationStates.length = 0;
     this.#advanceablePublicationStates.length = 0;
-    this.#options.runtime.clearFinishedFrame();
+    try {
+      this.#options.runtime.clearFinishedFrame();
+    } catch (value) {
+      closeFailure = retainFirstFailure(closeFailure, value);
+    }
     if (commitFailure !== undefined) throw commitFailure.value;
     if (closeFailure !== undefined) throw closeFailure.value;
   }
