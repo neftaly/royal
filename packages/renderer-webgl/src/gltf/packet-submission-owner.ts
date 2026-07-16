@@ -3,6 +3,7 @@ import {
   NO_FRAME_PACKET_ID,
 } from "../frame/packets";
 import {
+  appendPreparedGltfPacketSubmissionRootBinding,
   appendPreparedGltfPacketSubmission,
   preparedGltfPacketSubmissionLightBindingId,
   preparedGltfPacketSubmissionMaterialBindingId,
@@ -12,7 +13,6 @@ import {
   resetGltfPacketSubmissionWorkspaceForView,
   retainGltfPacketSubmissionLightBinding,
   retainGltfPacketSubmissionMaterialBinding,
-  retainGltfPacketSubmissionRootBinding,
 } from "../gltf-packet-submission-workspace";
 import {
   resolvePacketMaterial,
@@ -312,10 +312,8 @@ export class GltfPacketSubmissionOwner {
           rootBinding.rootTransform = rootTransform;
           if (instanceViews === undefined) delete rootBinding.rootInstanceViews;
           else rootBinding.rootInstanceViews = instanceViews;
-          rootBindingId = retainGltfPacketSubmissionRootBinding(
+          rootBindingId = appendPreparedGltfPacketSubmissionRootBinding(
             this.#batches.workspace,
-            planRevision,
-            catalog,
             rootSourceId,
             selectedOuterIndex,
             lightScopeId,

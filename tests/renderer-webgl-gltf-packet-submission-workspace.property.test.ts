@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendGltfPacketSubmission,
+  appendPreparedGltfPacketSubmissionRootBinding,
   assertGltfPacketSubmissionWorkspaceCurrent,
   clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
@@ -82,6 +83,22 @@ const row = (
 });
 
 describe("glTF packet submission workspace", () => {
+  it("appends renderer-prepared roots after an authoritative lookup miss", () => {
+    const workspace = createGltfPacketSubmissionWorkspace<object, object, object>();
+    const catalog = begin(workspace);
+    const root = {};
+
+    expect(preparedGltfPacketSubmissionRootBindingId(workspace, 9)).toBeUndefined();
+    const rootId = appendPreparedGltfPacketSubmissionRootBinding(workspace, 9, 4, 7_000, root);
+
+    expect(preparedGltfPacketSubmissionRootBindingId(workspace, 9)).toBe(rootId);
+    expect(resolveGltfPacketSubmissionRootBinding(workspace, 7, catalog, rootId)).toBe(root);
+    expect(workspace.rootBindingOuterIndices[rootId]).toBe(4);
+    expect(workspace.rootBindingLightScopeIds[rootId]).toBe(7_000);
+    resetGltfPacketSubmissionWorkspaceForFrame(workspace, 8, catalog);
+    expect(preparedGltfPacketSubmissionRootBindingId(workspace, 9)).toBeUndefined();
+  });
+
   it("grows retained SoA lanes and resets logical state without shrinking", () => {
     forEachFuzzCase({ cases: 32, seed: 0x5355_424d }, ({ random }) => {
       const count = random.int(3, 48);

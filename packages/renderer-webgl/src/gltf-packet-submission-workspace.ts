@@ -437,6 +437,57 @@ export const preparedGltfPacketSubmissionRootBindingId = <M, R, L>(
   );
 };
 
+const appendRootBinding = <M, R, L>(
+  state: WorkspaceState<M, R, L>,
+  sourceId: number,
+  outerIndex: number,
+  lightScopeId: number,
+  binding: R,
+): number => {
+  const id = state.rootBindingCount;
+  const count = id + 1;
+  if (count > state.rootBindingCapacity) {
+    const capacity = nextCapacity(state.rootBindingCapacity, count);
+    state.rootBindings.length = capacity;
+    state.rootBindingLightScopeIds = grownFloat64(state.rootBindingLightScopeIds, capacity);
+    state.rootBindingOuterIndices = grownUint32(state.rootBindingOuterIndices, capacity);
+    state.rootBindingSourceIds = grownUint32(state.rootBindingSourceIds, capacity);
+    state.rootBindingCapacity = capacity;
+  }
+  state.rootBindings[id] = binding;
+  state.rootBindingLightScopeIds[id] = lightScopeId;
+  state.rootBindingOuterIndices[id] = outerIndex;
+  state.rootBindingSourceIds[id] = sourceId;
+  if (sourceId < MAX_DENSE_SOURCE_LOOKUP_CAPACITY) {
+    if (sourceId >= state.rootBindingIdsBySource.length) {
+      state.rootBindingIdsBySource = grownBindingIdLookup(
+        state.rootBindingIdsBySource,
+        sourceId + 1,
+      );
+    }
+    state.rootBindingIdsBySource[sourceId] = id;
+  } else {
+    state.rootBindingIdsBySparseSource.set(sourceId, id);
+  }
+  state.rootBindingCount = count;
+  return id;
+};
+
+/** Appends a renderer-owned root binding after its dense source lookup returned absent. */
+export const appendPreparedGltfPacketSubmissionRootBinding = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  rootSourceId: number,
+  outerIndex: number,
+  lightScopeId: number,
+  binding: R,
+): number => appendRootBinding(
+  workspace as WorkspaceState<M, R, L>,
+  rootSourceId,
+  outerIndex,
+  lightScopeId,
+  binding,
+);
+
 export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   planRevision: number,
@@ -463,33 +514,13 @@ export const retainGltfPacketSubmissionRootBinding = <M, R, L>(
     }
     return existing;
   }
-  const id = resourceId(state.rootBindingCount, "root binding ID");
-  const count = id + 1;
-  if (count > state.rootBindingCapacity) {
-    const capacity = nextCapacity(state.rootBindingCapacity, count);
-    state.rootBindings.length = capacity;
-    state.rootBindingLightScopeIds = grownFloat64(state.rootBindingLightScopeIds, capacity);
-    state.rootBindingOuterIndices = grownUint32(state.rootBindingOuterIndices, capacity);
-    state.rootBindingSourceIds = grownUint32(state.rootBindingSourceIds, capacity);
-    state.rootBindingCapacity = capacity;
-  }
-  state.rootBindings[id] = value;
-  state.rootBindingLightScopeIds[id] = normalizedLightScopeId;
-  state.rootBindingOuterIndices[id] = normalizedOuterIndex;
-  state.rootBindingSourceIds[id] = sourceId;
-  if (sourceId < MAX_DENSE_SOURCE_LOOKUP_CAPACITY) {
-    if (sourceId >= state.rootBindingIdsBySource.length) {
-      state.rootBindingIdsBySource = grownBindingIdLookup(
-        state.rootBindingIdsBySource,
-        sourceId + 1,
-      );
-    }
-    state.rootBindingIdsBySource[sourceId] = id;
-  } else {
-    state.rootBindingIdsBySparseSource.set(sourceId, id);
-  }
-  state.rootBindingCount = count;
-  return id;
+  return appendRootBinding(
+    state,
+    sourceId,
+    normalizedOuterIndex,
+    normalizedLightScopeId,
+    value,
+  );
 };
 
 export const retainGltfPacketSubmissionLightBinding = <M, R, L>(
