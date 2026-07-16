@@ -291,9 +291,16 @@ const bindGltfInstanceRootPoseBuffer = (
   const fullUpload = staging.forceFull || previousInstanceCount !== instanceCount;
   let changedRangeCount = 0;
   let activeRangeStart = -1;
+  let versionSource: GltfInstanceBufferSource | undefined;
+  let sourceVersionChanged = false;
 
   for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
     const sourceViews = rootInstanceViews[transformIndex];
+    if (sourceViews !== versionSource) {
+      versionSource = sourceViews;
+      sourceVersionChanged = sourceViews !== undefined
+        && poseVersions.get(sourceViews) !== sourceViews.framePoseVersion;
+    }
     const logicalIndex = rootLogicalIndices[transformIndex]!;
     const transform = rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM;
     const offset = transformIndex * 6;
@@ -305,7 +312,7 @@ const bindGltfInstanceRootPoseBuffer = (
             logicalIndex,
             packedSources[transformIndex] === sourceViews,
             packedLogicalIndices[transformIndex]!,
-            poseVersions.get(sourceViews) !== sourceViews.framePoseVersion,
+            sourceVersionChanged,
           ));
     if (!changed) {
       if (activeRangeStart >= 0) {
@@ -362,9 +369,16 @@ const bindGltfInstanceRootScaleBuffer = (
   const fullUpload = staging.forceFull || previousInstanceCount !== instanceCount;
   let changedRangeCount = 0;
   let activeRangeStart = -1;
+  let versionSource: GltfInstanceBufferSource | undefined;
+  let sourceVersionChanged = false;
 
   for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
     const sourceViews = rootInstanceViews[transformIndex];
+    if (sourceViews !== versionSource) {
+      versionSource = sourceViews;
+      sourceVersionChanged = sourceViews !== undefined
+        && scaleVersions.get(sourceViews) !== sourceViews.frameScaleVersion;
+    }
     const logicalIndex = rootLogicalIndices[transformIndex]!;
     const transform = rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM;
     const offset = transformIndex * 3;
@@ -376,7 +390,7 @@ const bindGltfInstanceRootScaleBuffer = (
             logicalIndex,
             packedSources[transformIndex] === sourceViews,
             packedLogicalIndices[transformIndex]!,
-            scaleVersions.get(sourceViews) !== sourceViews.frameScaleVersion,
+            sourceVersionChanged,
           ));
     if (!changed) {
       if (activeRangeStart >= 0) {
