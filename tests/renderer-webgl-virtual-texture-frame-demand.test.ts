@@ -57,6 +57,35 @@ const submitVirtualTextureFrameDemand = <K>(
 );
 
 describe("virtual texture frame-demand workspace", () => {
+  it("reuses borrowed publication storage across frames", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    beginVirtualTextureFrameDemand(workspace);
+    submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([page(0), page(1)]));
+    const firstCommits = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+    const firstCommit = firstCommits[0]!;
+    const firstSubmissions = firstCommit.submissions;
+    const firstSubmission = firstSubmissions[0]!;
+    const firstCandidates = firstSubmission.candidates;
+    const firstPreferred = firstSubmission.preferredCandidates;
+    const firstCursorUpdates = firstCommit.preferenceCursorUpdates;
+    advanceVirtualTextureFrameDemand(workspace, firstCommit);
+
+    beginVirtualTextureFrameDemand(workspace);
+    submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([page(2), page(3)]));
+    const secondCommits = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+    const secondCommit = secondCommits[0]!;
+    const secondSubmission = secondCommit.submissions[0]!;
+
+    expect(secondCommits).toBe(firstCommits);
+    expect(secondCommit).toBe(firstCommit);
+    expect(secondCommit.submissions).toBe(firstSubmissions);
+    expect(secondSubmission).toBe(firstSubmission);
+    expect(secondSubmission.candidates).toBe(firstCandidates);
+    expect(secondSubmission.preferredCandidates).toBe(firstPreferred);
+    expect(secondCommit.preferenceCursorUpdates).toBe(firstCursorUpdates);
+    expect(secondSubmission).toEqual(committedSubmission([page(2), page(3)]));
+  });
+
   it("gives each view one fairness lane regardless of repeated object draws", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
     beginVirtualTextureFrameDemand(workspace);
@@ -601,5 +630,6 @@ describe("virtual texture frame-demand workspace", () => {
     expect(workspace.preferenceCursors.size).toBe(0);
     expect(workspace.viewCursors.size).toBe(0);
     expect(workspace.resources.size).toBe(0);
+    expect(workspace.resourcePool.every((resource) => resource.commit === undefined)).toBe(true);
   });
 });

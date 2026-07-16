@@ -13,25 +13,51 @@ export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES =
 
 type MutableViewDemand = {
   readonly candidates: Map<string, VirtualTexturePageId>;
+  readonly candidateOutput: VirtualTexturePageId[];
+  readonly cursor: { index: number; signature: string };
+  cursorPresent: boolean;
+  readonly cursorUpdate: MutablePreferenceCursorUpdate;
   readonly nonconvergentCandidates: Map<string, VirtualTexturePageId>;
   preferTargetMip: boolean;
   readonly preferredAfterCursor: Map<string, PreferredItem>;
+  readonly preferredAfterOutput: PreferredItem[];
+  readonly preferredOutput: VirtualTexturePageId[];
   readonly preferredWrap: Map<string, PreferredItem>;
+  readonly preferredWrapOutput: PreferredItem[];
+  readonly selectedKeys: Set<string>;
+  readonly submission: {
+    candidates: readonly VirtualTexturePageId[];
+    preferTargetMip: boolean;
+    preferredCandidates?: readonly VirtualTexturePageId[];
+    viewportDominant?: true;
+  };
+  readonly uniqueKeys: Set<string>;
   viewportDominant: boolean;
 };
 
 type PreferredItem = {
-  readonly index: number;
-  readonly page: VirtualTexturePageId;
-  readonly signature: string;
+  index: number;
+  page: VirtualTexturePageId;
+  signature: string;
 };
 
 type PreferredCursor = Pick<PreferredItem, "index" | "signature">;
 
+type MutablePreferenceCursorUpdate = {
+  next: PreferredCursor;
+  viewIndex: number;
+};
+
 type MutableResourceDemand<K> = {
   capacity: number;
+  commit?: MutableVirtualTextureFrameDemandCommit<K>;
+  readonly nonconvergentCandidates: Map<string, VirtualTexturePageId>;
+  readonly nonconvergentOutput: VirtualTexturePageId[];
   order: number;
+  readonly orderedViewIndices: number[];
+  readonly preferenceCursorUpdates: MutablePreferenceCursorUpdate[];
   resource?: K;
+  readonly submissions: VirtualTextureDemandSubmission[];
   viewCursor: number;
   viewportDominant: boolean;
   readonly views: Map<number, MutableViewDemand>;
@@ -40,6 +66,8 @@ type MutableResourceDemand<K> = {
 export interface VirtualTextureFrameDemandWorkspace<K> {
   active: boolean;
   readonly availableViews: MutableViewDemand[];
+  readonly commits: VirtualTextureFrameDemandCommit<K>[];
+  readonly orderedResources: MutableResourceDemand<K>[];
   readonly preferenceCursors: Map<K, Map<number, PreferredCursor>>;
   resourcePoolIndex: number;
   resourceCursor: number;
@@ -64,11 +92,17 @@ export interface VirtualTextureFrameDemandCommit<K> {
   readonly viewCursorUpdate?: number;
 }
 
+type MutableVirtualTextureFrameDemandCommit<K> = {
+  -readonly [Key in keyof VirtualTextureFrameDemandCommit<K>]: VirtualTextureFrameDemandCommit<K>[Key];
+};
+
 const EMPTY_FRAME_DEMAND_COMMITS: readonly VirtualTextureFrameDemandCommit<never>[] = Object.freeze([]);
 
 export const createVirtualTextureFrameDemandWorkspace = <K>(): VirtualTextureFrameDemandWorkspace<K> => ({
   active: false,
   availableViews: [],
+  commits: [],
+  orderedResources: [],
   preferenceCursors: new Map(),
   resourcePool: [],
   resourcePoolIndex: 0,
@@ -80,6 +114,8 @@ export const createVirtualTextureFrameDemandWorkspace = <K>(): VirtualTextureFra
 });
 
 export const beginVirtualTextureFrameDemand = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): void => {
+  workspace.commits.length = 0;
+  workspace.orderedResources.length = 0;
   workspace.resources.clear();
   workspace.resourcePoolIndex = 0;
   workspace.availableViews.length = 0;
@@ -93,36 +129,51 @@ const compareSignature = (left: string, right: string): number =>
 const comparePreferredItems = (left: PreferredItem, right: PreferredItem): number =>
   compareSignature(left.signature, right.signature) || left.index - right.index;
 
-const comparePreferredItemToCursor = (item: PreferredItem, cursor: PreferredCursor): number =>
-  compareSignature(item.signature, cursor.signature) || item.index - cursor.index;
+const comparePreferredPosition = (
+  signature: string,
+  index: number,
+  cursor: PreferredCursor,
+): number => compareSignature(signature, cursor.signature) || index - cursor.index;
 
-const retainBoundedPreferredItem = (
+const reserveBoundedPreferredItem = (
   target: Map<string, PreferredItem>,
   key: string,
-  item: PreferredItem,
+  signature: string,
+  index: number,
   limit: number,
-): void => {
-  if (limit <= 0 || target.has(key)) return;
-  if (target.size < limit) {
-    target.set(key, item);
-    return;
-  }
+): boolean => {
+  if (limit <= 0 || target.has(key)) return false;
+  if (target.size < limit) return true;
   let greatest: readonly [string, PreferredItem] | undefined;
   for (const entry of target) {
     if (greatest === undefined || comparePreferredItems(entry[1], greatest[1]) > 0) greatest = entry;
   }
-  if (comparePreferredItems(item, greatest![1]) >= 0) return;
+  const greatestItem = greatest![1];
+  if (comparePreferredPosition(signature, index, greatestItem) >= 0) return false;
   target.delete(greatest![0]);
-  target.set(key, item);
+  return true;
 };
 
-const clearView = (view: MutableViewDemand): void => {
+const clearViewEvidence = (view: MutableViewDemand): void => {
   view.candidates.clear();
   view.nonconvergentCandidates.clear();
   view.preferTargetMip = false;
   view.preferredAfterCursor.clear();
   view.preferredWrap.clear();
   view.viewportDominant = false;
+};
+
+const clearView = (view: MutableViewDemand): void => {
+  clearViewEvidence(view);
+  view.candidateOutput.length = 0;
+  view.cursorPresent = false;
+  view.preferredAfterOutput.length = 0;
+  view.preferredOutput.length = 0;
+  view.preferredWrapOutput.length = 0;
+  view.selectedKeys.clear();
+  delete view.submission.preferredCandidates;
+  delete view.submission.viewportDominant;
+  view.uniqueKeys.clear();
 };
 
 const acquireView = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): MutableViewDemand => {
@@ -132,10 +183,20 @@ const acquireView = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): Mutab
   if (view === undefined) {
     view = {
       candidates: new Map(),
+      candidateOutput: [],
+      cursor: { index: 0, signature: "" },
+      cursorPresent: false,
+      cursorUpdate: { next: { index: 0, signature: "" }, viewIndex: 0 },
       nonconvergentCandidates: new Map(),
       preferTargetMip: false,
       preferredAfterCursor: new Map(),
+      preferredAfterOutput: [],
+      preferredOutput: [],
       preferredWrap: new Map(),
+      preferredWrapOutput: [],
+      selectedKeys: new Set(),
+      submission: { candidates: [], preferTargetMip: false },
+      uniqueKeys: new Set(),
       viewportDominant: false,
     };
     workspace.viewPool.push(view);
@@ -299,8 +360,13 @@ export const submitVirtualTextureFrameDemand = <K>(
       if (resourceDemand === undefined) {
         resourceDemand = {
           capacity,
+          nonconvergentCandidates: new Map(),
+          nonconvergentOutput: [],
           order: resourceOrder,
+          orderedViewIndices: [],
+          preferenceCursorUpdates: [],
           resource,
+          submissions: [],
           viewCursor: workspace.viewCursors.get(resource) ?? -1,
           viewportDominant: false,
           views: new Map(),
@@ -355,18 +421,56 @@ export const submitVirtualTextureFrameDemand = <K>(
     const index = preferredIndex;
     preferredIndex += 1;
     const key = `${signature}#${String(index).padStart(3, "0")}`;
+    const retainWrap = reserveBoundedPreferredItem(
+      viewDemand.preferredWrap,
+      key,
+      signature,
+      index,
+      limits.preferred,
+    );
+    const retainAfter = (cursor === undefined || comparePreferredPosition(signature, index, cursor) > 0)
+      && reserveBoundedPreferredItem(
+      viewDemand.preferredAfterCursor,
+      key,
+      signature,
+      index,
+      limits.preferred,
+    );
+    if (!retainWrap && !retainAfter) continue;
     const item = { index, page, signature };
-    retainBoundedPreferredItem(viewDemand.preferredWrap, key, item, limits.preferred);
-    if (cursor === undefined || comparePreferredItemToCursor(item, cursor) > 0) {
-      retainBoundedPreferredItem(viewDemand.preferredAfterCursor, key, item, limits.preferred);
-    }
+    if (retainWrap) viewDemand.preferredWrap.set(key, item);
+    if (retainAfter) viewDemand.preferredAfterCursor.set(key, item);
   }
 };
 
-const orderedPreferredCandidates = (
+const appendOrderedPreferredItems = (
+  view: MutableViewDemand,
+  items: readonly PreferredItem[],
+  limit: number,
+  capacity: number,
+  selectedCount: number,
+): number => {
+  for (const item of items) {
+    if (view.preferredOutput.length >= limit) break;
+    const key = virtualTexturePageKey(item.page);
+    if (view.uniqueKeys.has(key)) continue;
+    view.uniqueKeys.add(key);
+    view.preferredOutput.push(item.page);
+    if (selectedCount < capacity && !view.selectedKeys.has(key)) {
+      view.selectedKeys.add(key);
+      selectedCount += 1;
+      view.cursor.index = view.viewportDominant ? item.index : Number.MAX_SAFE_INTEGER;
+      view.cursor.signature = item.signature;
+      view.cursorPresent = true;
+    }
+  }
+  return selectedCount;
+};
+
+const orderPreferredCandidates = (
   view: MutableViewDemand,
   capacity: number,
-): { readonly cursor?: PreferredCursor; readonly pages: readonly VirtualTexturePageId[] } => {
+): void => {
   // The fallback candidate can itself be the first preferred page, so retain
   // `capacity` preferred entries to still expose `capacity - 1` distinct
   // refinements after global deduplication.
@@ -374,34 +478,36 @@ const orderedPreferredCandidates = (
     Math.max(0, capacity),
     Math.max(view.preferredAfterCursor.size, view.preferredWrap.size),
   );
-  const items = [...view.preferredAfterCursor.values()].sort(comparePreferredItems);
-  const wrap = [...view.preferredWrap.values()].sort(comparePreferredItems);
-  const ordered: VirtualTexturePageId[] = [];
-  const keys = new Set<string>();
-  const selectedKeys = new Set<string>();
+  view.preferredAfterOutput.length = 0;
+  for (const item of view.preferredAfterCursor.values()) view.preferredAfterOutput.push(item);
+  view.preferredAfterOutput.sort(comparePreferredItems);
+  view.preferredWrapOutput.length = 0;
+  for (const item of view.preferredWrap.values()) view.preferredWrapOutput.push(item);
+  view.preferredWrapOutput.sort(comparePreferredItems);
+  view.preferredOutput.length = 0;
+  view.uniqueKeys.clear();
+  view.selectedKeys.clear();
+  view.cursorPresent = false;
   const fallback = view.candidates.values().next().value;
   let selectedCount = 0;
   if (fallback !== undefined) {
-    selectedKeys.add(virtualTexturePageKey(fallback));
+    view.selectedKeys.add(virtualTexturePageKey(fallback));
     selectedCount = 1;
   }
-  let cursor: PreferredCursor | undefined;
-  for (const item of [...items, ...wrap]) {
-    if (ordered.length >= limit) break;
-    const key = virtualTexturePageKey(item.page);
-    if (keys.has(key)) continue;
-    keys.add(key);
-    ordered.push(item.page);
-    if (selectedCount < capacity && !selectedKeys.has(key)) {
-      selectedKeys.add(key);
-      selectedCount += 1;
-      cursor = {
-        index: view.viewportDominant ? item.index : Number.MAX_SAFE_INTEGER,
-        signature: item.signature,
-      };
-    }
-  }
-  return { ...(cursor === undefined ? {} : { cursor }), pages: ordered };
+  selectedCount = appendOrderedPreferredItems(
+    view,
+    view.preferredAfterOutput,
+    limit,
+    capacity,
+    selectedCount,
+  );
+  appendOrderedPreferredItems(
+    view,
+    view.preferredWrapOutput,
+    limit,
+    capacity,
+    selectedCount,
+  );
 };
 
 const releasePools = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): void => {
@@ -414,7 +520,7 @@ const releasePools = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): void
   }
   for (let index = 0; index < workspace.viewPoolIndex; index += 1) {
     const pooled = workspace.viewPool[index];
-    if (pooled !== undefined) clearView(pooled);
+    if (pooled !== undefined) clearViewEvidence(pooled);
   }
   workspace.resourcePool.length = Math.min(workspace.resourcePool.length, MAX_POOLED_RESOURCES);
   workspace.viewPool.length = Math.min(workspace.viewPool.length, MAX_POOLED_VIEWS);
@@ -433,6 +539,9 @@ export const releaseVirtualTextureFrameDemandResource = <K>(
   workspace.resources.delete(resource);
   workspace.preferenceCursors.delete(resource);
   workspace.viewCursors.delete(resource);
+  for (const pooled of workspace.resourcePool) {
+    if (pooled.commit?.resource === resource) delete pooled.commit;
+  }
 };
 
 export const finalizeVirtualTextureFrameDemand = <K>(
@@ -450,55 +559,88 @@ export const finalizeVirtualTextureFrameDemand = <K>(
     releasePools(workspace);
     return EMPTY_FRAME_DEMAND_COMMITS;
   }
-  const commits: VirtualTextureFrameDemandCommit<K>[] = [];
-  const retainedResources = [...workspace.resources.values()].sort((left, right) => (
+  const commits = workspace.commits;
+  const retainedResources = workspace.orderedResources;
+  for (const resource of workspace.resources.values()) retainedResources.push(resource);
+  retainedResources.sort((left, right) => (
     cyclicOrderDistance(left.order, workspace.resourceCursor)
     - cyclicOrderDistance(right.order, workspace.resourceCursor)
   ));
+  const resourceCursorUpdate = retainedResources.at(-1)!.order;
   for (const resourceDemand of retainedResources) {
     const resource = resourceDemand.resource;
     if (resource === undefined) continue;
-    const views = [...resourceDemand.views.entries()].sort(([left], [right]) => left - right);
-    const nonconvergentCandidates = new Map<string, VirtualTexturePageId>();
+    const viewIndices = resourceDemand.orderedViewIndices;
+    viewIndices.length = 0;
+    for (const viewIndex of resourceDemand.views.keys()) viewIndices.push(viewIndex);
+    viewIndices.sort((left, right) => left - right);
+    const nonconvergentCandidates = resourceDemand.nonconvergentCandidates;
+    nonconvergentCandidates.clear();
     for (const view of resourceDemand.views.values()) {
       for (const [key, page] of view.nonconvergentCandidates) nonconvergentCandidates.set(key, page);
     }
-    const preferenceCursorUpdates: Array<{ next: PreferredCursor; viewIndex: number }> = [];
-    const submissions = views.map(([viewIndex, view]) => {
-      const preferred = orderedPreferredCandidates(view, resourceDemand.capacity);
-      if (preferred.cursor !== undefined) {
-        preferenceCursorUpdates.push({ next: preferred.cursor, viewIndex });
+    const nonconvergentOutput = resourceDemand.nonconvergentOutput;
+    nonconvergentOutput.length = 0;
+    for (const page of nonconvergentCandidates.values()) nonconvergentOutput.push(page);
+    const preferenceCursorUpdates = resourceDemand.preferenceCursorUpdates;
+    preferenceCursorUpdates.length = 0;
+    const submissions = resourceDemand.submissions;
+    submissions.length = 0;
+    for (const viewIndex of viewIndices) {
+      const view = resourceDemand.views.get(viewIndex)!;
+      orderPreferredCandidates(view, resourceDemand.capacity);
+      if (view.cursorPresent) {
+        view.cursorUpdate.next = view.cursor;
+        view.cursorUpdate.viewIndex = viewIndex;
+        preferenceCursorUpdates.push(view.cursorUpdate);
       }
-      return {
-        candidates: [...view.candidates.values()],
-        preferTargetMip: view.preferTargetMip,
-        ...(!view.preferTargetMip || preferred.pages.length === 0
-          ? {}
-          : { preferredCandidates: preferred.pages }),
-        ...(view.viewportDominant ? { viewportDominant: true as const } : {}),
-      };
-    });
+      view.candidateOutput.length = 0;
+      for (const page of view.candidates.values()) view.candidateOutput.push(page);
+      view.submission.candidates = view.candidateOutput;
+      view.submission.preferTargetMip = view.preferTargetMip;
+      if (!view.preferTargetMip || view.preferredOutput.length === 0) {
+        delete view.submission.preferredCandidates;
+      } else view.submission.preferredCandidates = view.preferredOutput;
+      if (view.viewportDominant) view.submission.viewportDominant = true;
+      else delete view.submission.viewportDominant;
+      submissions.push(view.submission);
+    }
     const startSubmission = submissions.length <= 1
       ? 0
       : Math.max(0, cursorFor(resource)) % submissions.length;
     let lastCyclicViewIndex: number | undefined;
     let lastCyclicViewDistance = -1;
-    for (const [viewIndex] of views) {
+    for (const viewIndex of viewIndices) {
       const distance = cyclicViewDistance(viewIndex, resourceDemand.viewCursor);
       if (distance <= lastCyclicViewDistance) continue;
       lastCyclicViewDistance = distance;
       lastCyclicViewIndex = viewIndex;
     }
-    commits.push({
-      nextStartSubmission: submissions.length <= 1 ? 0 : (startSubmission + 1) % submissions.length,
-      nonconvergentCandidates: [...nonconvergentCandidates.values()],
-      preferenceCursorUpdates,
-      resource,
-      resourceCursorUpdate: retainedResources.at(-1)!.order,
-      startSubmission,
-      submissions,
-      ...(lastCyclicViewIndex === undefined ? {} : { viewCursorUpdate: lastCyclicViewIndex }),
-    });
+    let publication = resourceDemand.commit;
+    if (publication === undefined) {
+      publication = {
+        nextStartSubmission: 0,
+        nonconvergentCandidates: nonconvergentOutput,
+        preferenceCursorUpdates,
+        resource,
+        resourceCursorUpdate,
+        startSubmission: 0,
+        submissions,
+      };
+      resourceDemand.commit = publication;
+    }
+    publication.nextStartSubmission = submissions.length <= 1
+      ? 0
+      : (startSubmission + 1) % submissions.length;
+    publication.nonconvergentCandidates = nonconvergentOutput;
+    publication.preferenceCursorUpdates = preferenceCursorUpdates;
+    publication.resource = resource;
+    publication.resourceCursorUpdate = resourceCursorUpdate;
+    publication.startSubmission = startSubmission;
+    publication.submissions = submissions;
+    if (lastCyclicViewIndex === undefined) delete publication.viewCursorUpdate;
+    else publication.viewCursorUpdate = lastCyclicViewIndex;
+    commits.push(publication);
   }
   for (const resource of workspace.preferenceCursors.keys()) {
     if (!workspace.resources.has(resource)) workspace.preferenceCursors.delete(resource);
