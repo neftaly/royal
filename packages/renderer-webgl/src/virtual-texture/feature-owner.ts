@@ -202,6 +202,10 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
     if (closeFailure !== undefined) throw closeFailure.value;
   }
 
+  requiresDrawDemand(geometry: CpuGeometry, material: Material): boolean {
+    return this.#demand.requiresDrawDemand(geometry, material);
+  }
+
   registerAutoDecodedSource(texture: Parameters<VirtualTextureRuntimeShell["registerAutoDecodedSource"]>[0], source: Parameters<VirtualTextureRuntimeShell["registerAutoDecodedSource"]>[1]): void {
     this.#runtime.registerAutoDecodedSource(texture, source);
   }

@@ -155,6 +155,11 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
     this.#feature?.processGpuUploads();
   }
 
+  requiresDrawDemand(geometry: CpuGeometry, material: Material): boolean {
+    if (material.baseColor.kind === "virtual-asset") this.#request();
+    return this.#feature?.requiresDrawDemand(geometry, material) ?? false;
+  }
+
   registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void {
     if (!this.#options.automaticVirtualTextures || isDecodedCompressedTexture(source)) return;
     if (this.#feature !== undefined) {

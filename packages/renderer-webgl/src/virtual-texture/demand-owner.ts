@@ -106,14 +106,9 @@ export class VirtualTextureDemandOwner {
     viewportSize: ViewportSize,
   ): VirtualTextureDrawDemandContext | undefined {
     const texture = material.baseColor;
-    if (
-      material.kind === "wireframe"
+    if (!this.requiresDrawDemand(geometry, material)
       || texture.kind === "solid"
-      || (texture.kind === "asset" && this.#options.runtime.autoSource(texture) === undefined)
-      || geometry.texCoords0 === undefined
-      || geometry.mode !== "triangles"
-      || virtualTextureDemandModelCount(modelSource) === 0
-    ) {
+      || virtualTextureDemandModelCount(modelSource) === 0) {
       return undefined;
     }
     const baseColorCoordinates = (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
@@ -143,6 +138,15 @@ export class VirtualTextureDemandOwner {
     if (texture.sampler?.wrapT === undefined) delete context.wrapT;
     else context.wrapT = texture.sampler.wrapT;
     return context;
+  }
+
+  requiresDrawDemand(geometry: CpuGeometry, material: Material): boolean {
+    const texture = material.baseColor;
+    return material.kind !== "wireframe"
+      && texture.kind !== "solid"
+      && (texture.kind !== "asset" || this.#options.runtime.autoSource(texture) !== undefined)
+      && geometry.texCoords0 !== undefined
+      && geometry.mode === "triangles";
   }
 
   resolveBaseColorResidency(

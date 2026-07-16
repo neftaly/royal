@@ -147,6 +147,7 @@ import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame/texture-residency-intent";
 import { isSvgUri } from "./texture/svg-uri";
 import {
+  type VirtualTextureDrawDemandContext,
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureRef,
   type ViewportSize,
@@ -1629,23 +1630,22 @@ class WebGlRootImpl implements InternalWebGlRoot {
     viewportSize: ViewportSize,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
-    let modelSource: VirtualTextureDrawDemandModelSource;
-    if (batch.localModels.length === 1) {
-      this.#singleVirtualTextureDemandSource.model = multiplyMat4Into(
-        this.#singleGltfDemandModel,
-        batch.rootModels[0]!,
-        batch.localModels[0]!,
-      );
-      modelSource = this.#singleVirtualTextureDemandSource;
-    } else {
-      this.#composedVirtualTextureDemandSource.localModels = batch.localModels;
-      this.#composedVirtualTextureDemandSource.rootModels = batch.rootModels;
-      modelSource = this.#composedVirtualTextureDemandSource;
-    }
-    const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
-      batch.geometry,
-      batch.material,
-      this.#virtualTextures.drawDemandContext(
+    let demandContext: VirtualTextureDrawDemandContext | undefined;
+    if (this.#virtualTextures.requiresDrawDemand(batch.cpuGeometry, batch.material)) {
+      let modelSource: VirtualTextureDrawDemandModelSource;
+      if (batch.localModels.length === 1) {
+        this.#singleVirtualTextureDemandSource.model = multiplyMat4Into(
+          this.#singleGltfDemandModel,
+          batch.rootModels[0]!,
+          batch.localModels[0]!,
+        );
+        modelSource = this.#singleVirtualTextureDemandSource;
+      } else {
+        this.#composedVirtualTextureDemandSource.localModels = batch.localModels;
+        this.#composedVirtualTextureDemandSource.rootModels = batch.rootModels;
+        modelSource = this.#composedVirtualTextureDemandSource;
+      }
+      demandContext = this.#virtualTextures.drawDemandContext(
         batch.geometryId,
         batch.cpuGeometry,
         batch.material,
@@ -1653,7 +1653,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
         projection,
         view,
         viewportSize,
-      ),
+      );
+    }
+    const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
+      batch.geometry,
+      batch.material,
+      demandContext,
     );
     let execution = this.#surfaceGltfBatchExecution;
     if (execution === undefined) {
@@ -1698,18 +1703,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry: CpuGeometry,
   ): void {
+    const demandContext = this.#virtualTextures.requiresDrawDemand(cpuGeometry, material)
+      ? this.#virtualTextures.drawDemandContext(
+          geometryId,
+          cpuGeometry,
+          material,
+          this.#singleDemandSource(model),
+          projection,
+          view,
+          viewportSize,
+        )
+      : undefined;
     const baseColorResidency = this.#virtualTextures.resolveBaseColorResidency(
       geometry,
       material,
-      this.#virtualTextures.drawDemandContext(
-        geometryId,
-        cpuGeometry,
-        material,
-        this.#singleDemandSource(model),
-        projection,
-        view,
-        viewportSize,
-      ),
+      demandContext,
     );
     let execution = this.#surfaceSingleExecution;
     if (execution === undefined) {

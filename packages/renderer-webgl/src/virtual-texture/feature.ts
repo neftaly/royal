@@ -78,6 +78,7 @@ export interface VirtualTextureFeature {
   loseContext(): void;
   prepareFrame(authoredVirtualTextures: boolean): void;
   processGpuUploads(): void;
+  requiresDrawDemand(geometry: CpuGeometry, material: Material): boolean;
   registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void;
   releaseAllGpuLeases(): void;
   releaseAutomaticTexture(textureKey: string): void;
