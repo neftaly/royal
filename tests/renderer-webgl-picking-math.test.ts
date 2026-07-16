@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { identityMat4, type Mat4 } from "../packages/renderer-webgl/src/math/mat4";
+import {
+  identityMat4,
+  multiplyMat4,
+  type Mat4,
+} from "../packages/renderer-webgl/src/math/mat4";
 import {
   createRayGeometryScratch,
+  isAffineBoundsVisible,
   isBoundsVisible,
   nearestExactHitByLowerBound,
   rayAabbDistance,
@@ -181,6 +186,35 @@ describe("renderer-webgl picking math", () => {
     const identity = identityMat4();
     expect(isBoundsVisible({ min: [-2, 0, 0], max: [-1, 0, 0] }, identity)).toBe(true);
     expect(isBoundsVisible({ min: [-3, 0, 0], max: [-2, 0, 0] }, identity)).toBe(false);
+  });
+
+  it("matches materialized view-projection-model visibility for affine transforms", () => {
+    forEachFuzzCase({ cases: 512, seed: 0xaff1_1e }, ({ label, random }) => {
+      const min = [
+        random.number(-20, 20),
+        random.number(-20, 20),
+        random.number(-20, 20),
+      ] as const;
+      const bounds: Bounds3 = {
+        max: [
+          min[0] + random.number(0, 20),
+          min[1] + random.number(0, 20),
+          min[2] + random.number(0, 20),
+        ],
+        min,
+      };
+      const viewProjection = random.array(16, () => random.number(-4, 4)) as Mat4;
+      const model: Mat4 = [
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-50, 50), random.number(-50, 50), random.number(-50, 50), 1,
+      ];
+
+      expect(isAffineBoundsVisible(bounds, viewProjection, model), label).toBe(
+        isBoundsVisible(bounds, multiplyMat4(viewProjection, model)),
+      );
+    });
   });
 
   it("fuzzes cached local bounds against the previous vertex-plane visibility test", () => {

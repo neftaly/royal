@@ -67,6 +67,100 @@ export const isBoundsVisible = (
   );
 };
 
+const isClipBoxOutside = (
+  center: number,
+  axisX: number,
+  axisY: number,
+  axisZ: number,
+): boolean => center + Math.abs(axisX) + Math.abs(axisY) + Math.abs(axisZ) < 0;
+
+/** Tests an affine-transformed local AABB without materializing viewProjection * model. */
+export const isAffineBoundsVisible = (
+  bounds: Bounds3 | undefined,
+  viewProjection: Mat4,
+  model: Mat4,
+): boolean => {
+  if (bounds === undefined) return false;
+  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+  const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
+  const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
+  const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+
+  const worldCenterX = model[0] * centerX + model[4] * centerY
+    + model[8] * centerZ + model[12];
+  const worldCenterY = model[1] * centerX + model[5] * centerY
+    + model[9] * centerZ + model[13];
+  const worldCenterZ = model[2] * centerX + model[6] * centerY
+    + model[10] * centerZ + model[14];
+  const clipCenterX = viewProjection[0] * worldCenterX + viewProjection[4] * worldCenterY
+    + viewProjection[8] * worldCenterZ + viewProjection[12];
+  const clipCenterY = viewProjection[1] * worldCenterX + viewProjection[5] * worldCenterY
+    + viewProjection[9] * worldCenterZ + viewProjection[13];
+  const clipCenterZ = viewProjection[2] * worldCenterX + viewProjection[6] * worldCenterY
+    + viewProjection[10] * worldCenterZ + viewProjection[14];
+  const clipCenterW = viewProjection[3] * worldCenterX + viewProjection[7] * worldCenterY
+    + viewProjection[11] * worldCenterZ + viewProjection[15];
+
+  const axisXClipX = (viewProjection[0] * model[0] + viewProjection[4] * model[1]
+    + viewProjection[8] * model[2]) * extentX;
+  const axisXClipY = (viewProjection[1] * model[0] + viewProjection[5] * model[1]
+    + viewProjection[9] * model[2]) * extentX;
+  const axisXClipZ = (viewProjection[2] * model[0] + viewProjection[6] * model[1]
+    + viewProjection[10] * model[2]) * extentX;
+  const axisXClipW = (viewProjection[3] * model[0] + viewProjection[7] * model[1]
+    + viewProjection[11] * model[2]) * extentX;
+  const axisYClipX = (viewProjection[0] * model[4] + viewProjection[4] * model[5]
+    + viewProjection[8] * model[6]) * extentY;
+  const axisYClipY = (viewProjection[1] * model[4] + viewProjection[5] * model[5]
+    + viewProjection[9] * model[6]) * extentY;
+  const axisYClipZ = (viewProjection[2] * model[4] + viewProjection[6] * model[5]
+    + viewProjection[10] * model[6]) * extentY;
+  const axisYClipW = (viewProjection[3] * model[4] + viewProjection[7] * model[5]
+    + viewProjection[11] * model[6]) * extentY;
+  const axisZClipX = (viewProjection[0] * model[8] + viewProjection[4] * model[9]
+    + viewProjection[8] * model[10]) * extentZ;
+  const axisZClipY = (viewProjection[1] * model[8] + viewProjection[5] * model[9]
+    + viewProjection[9] * model[10]) * extentZ;
+  const axisZClipZ = (viewProjection[2] * model[8] + viewProjection[6] * model[9]
+    + viewProjection[10] * model[10]) * extentZ;
+  const axisZClipW = (viewProjection[3] * model[8] + viewProjection[7] * model[9]
+    + viewProjection[11] * model[10]) * extentZ;
+
+  return !isClipBoxOutside(
+    clipCenterW + clipCenterX,
+    axisXClipW + axisXClipX,
+    axisYClipW + axisYClipX,
+    axisZClipW + axisZClipX,
+  ) && !isClipBoxOutside(
+    clipCenterW - clipCenterX,
+    axisXClipW - axisXClipX,
+    axisYClipW - axisYClipX,
+    axisZClipW - axisZClipX,
+  ) && !isClipBoxOutside(
+    clipCenterW + clipCenterY,
+    axisXClipW + axisXClipY,
+    axisYClipW + axisYClipY,
+    axisZClipW + axisZClipY,
+  ) && !isClipBoxOutside(
+    clipCenterW - clipCenterY,
+    axisXClipW - axisXClipY,
+    axisYClipW - axisYClipY,
+    axisZClipW - axisZClipY,
+  ) && !isClipBoxOutside(
+    clipCenterW + clipCenterZ,
+    axisXClipW + axisXClipZ,
+    axisYClipW + axisYClipZ,
+    axisZClipW + axisZClipZ,
+  ) && !isClipBoxOutside(
+    clipCenterW - clipCenterZ,
+    axisXClipW - axisXClipZ,
+    axisYClipW - axisYClipZ,
+    axisZClipW - axisZClipZ,
+  );
+};
+
 /**
  * Resolves the nearest exact hit after ordering candidates by conservative
  * distance bounds. The lower bound permits early exit without changing exact

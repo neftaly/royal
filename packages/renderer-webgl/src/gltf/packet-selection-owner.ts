@@ -28,7 +28,11 @@ import {
   multiplyMat4Into,
   type Mat4,
 } from "../math/mat4";
-import { isBoundsVisible, type MutableBounds3 } from "../math/picking";
+import {
+  isAffineBoundsVisible,
+  isBoundsVisible,
+  type MutableBounds3,
+} from "../math/picking";
 import {
   createProjectedBoundsWorkspace,
   projectedBoundsScreenCoverage,
@@ -116,7 +120,6 @@ export class GltfPacketSelectionOwner {
           : undefined;
         const first = topology.occurrenceFirsts[occurrenceIndex]!;
         const end = first + topology.occurrenceCounts[occurrenceIndex]!;
-        let projectedOuterIndex = -1;
         for (let packetIndex = first; packetIndex < end; packetIndex += 1) {
           if (!framePacketLodRequirementsMatch(
             topology.catalog,
@@ -138,10 +141,10 @@ export class GltfPacketSelectionOwner {
             for (let selectedOuterIndex = outerIndex; selectedOuterIndex < outerEnd; selectedOuterIndex += 1) {
               const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
               if (rootModel === undefined) continue;
-              multiplyMat4Into(this.#rootViewProjection, this.#viewProjection, rootModel);
-              if (!isBoundsVisible(
+              if (!isAffineBoundsVisible(
                 hasBounds ? this.#boundsScratch : undefined,
-                this.#rootViewProjection,
+                this.#viewProjection,
+                rootModel,
               )) continue;
               this.#appendSelectedPacket(
                 topology.catalog,
@@ -154,18 +157,15 @@ export class GltfPacketSelectionOwner {
           }
           const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
           if (rootModel === undefined) continue;
-          if (outerIndex !== projectedOuterIndex) {
-            multiplyMat4Into(this.#rootViewProjection, this.#viewProjection, rootModel);
-            projectedOuterIndex = outerIndex;
-          }
           const hasBounds = readPacketBoundsInto(
             topology.resources,
             topology.catalog.boundsIds[packetIndex]!,
             this.#boundsScratch,
           );
-          if (!isBoundsVisible(
+          if (!isAffineBoundsVisible(
             hasBounds ? this.#boundsScratch : undefined,
-            this.#rootViewProjection,
+            this.#viewProjection,
+            rootModel,
           )) continue;
           this.#appendSelectedPacket(topology.catalog, packetIndex, requestRow.nodeIndex, outerIndex);
         }

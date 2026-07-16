@@ -130,7 +130,7 @@ import {
   type Mat4,
 } from "./math/mat4";
 import {
-  isBoundsVisible,
+  isAffineBoundsVisible,
 } from "./math/picking";
 import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame/texture-residency-intent";
@@ -253,7 +253,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     hdrOutput: false,
     toneMapping: "pbr-neutral",
   };
-  readonly #meshViewProjectionModel = identityMat4();
   readonly #singleGltfDemandModel = identityMat4();
   readonly #singleVirtualTextureDemandSource: {
     kind: "single";
@@ -1452,9 +1451,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const cpu = retainedGeometry.recipe;
     const model = this.#sceneBindings.modelMatrix(node);
     const localBounds = this.#geometryRecipes.localBounds(cpu);
-    if (!isBoundsVisible(
+    if (!isAffineBoundsVisible(
       localBounds,
-      multiplyMat4Into(this.#meshViewProjectionModel, viewProjection, model),
+      viewProjection,
+      model,
     )) return;
     const gpu = this.#geometryResource(retainedGeometry.id);
     this.#drawGeometry(
