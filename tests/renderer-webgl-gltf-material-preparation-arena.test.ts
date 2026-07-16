@@ -87,6 +87,26 @@ describe("glTF material preparation arena", () => {
     expect(refs).toHaveLength(6);
   });
 
+  it("marks external glTF images as re-fetchable while keeping embedded images prepared-only", () => {
+    const embedded = material();
+    const external: LoadedGltfMaterial = {
+      ...embedded,
+      baseColorTexture: {
+        ...embedded.baseColorTexture!,
+        sourceUri: "https://example.test/base.ktx2",
+      },
+    };
+
+    expect(gltfMaterialTextureRefs(external, new Map())).toContainEqual(expect.objectContaining({
+      releaseSourceAfterUpload: true,
+      src: "https://example.test/base.ktx2",
+    }));
+    expect(gltfMaterialTextureRefs(embedded, new Map())).toContainEqual(expect.objectContaining({
+      preparedOnly: true,
+      src: "texture:base",
+    }));
+  });
+
   it("owns cache identity, reverse invalidation, and material batch classes", () => {
     const arena = new GltfMaterialPreparationArena();
     const loadedMaterial = material();

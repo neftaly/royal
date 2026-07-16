@@ -94,4 +94,30 @@ describe("glTF image source recipes", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(createBitmap).toHaveBeenCalledOnce();
   });
+
+  it("passes the renderer-negotiated Basis target into the lazy codec", async () => {
+    const image = { data: new Uint8Array(16), height: 4, kind: "compressed-texture", levels: [], width: 4 };
+    const decodeGltfBasisuTexture = vi.fn(async () => image);
+    const prepared = {
+      recipe: {
+        key: "basis",
+        source: {
+          bytes: new ArrayBuffer(4),
+          codec: Promise.resolve({ decodeGltfBasisuTexture }),
+          kind: "basisu-bytes",
+          label: "texture.ktx2",
+        },
+      },
+      transportBytes: 0,
+    } as unknown as Parameters<typeof decodePreparedGltfImageSourceRecipe>[0];
+
+    const loaded = await decodePreparedGltfImageSourceRecipe(
+      prepared,
+      new AbortController().signal,
+      { basisuTarget: "bc7" },
+    );
+
+    expect(loaded.image).toBe(image);
+    expect(decodeGltfBasisuTexture).toHaveBeenCalledWith(expect.any(ArrayBuffer), "texture.ktx2", "bc7");
+  });
 });

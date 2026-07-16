@@ -252,6 +252,16 @@ export class OrdinaryTextureResidencyController {
         failure = captureNext(failure, () => this.#retain(outcome.key, outcome.upload));
         continue;
       }
+      if (outcome.kind === "completed" && outcome.upload.texture.releaseSourceAfterUpload === true) {
+        failure = captureNext(failure, () => {
+          const prepared = resourceArenaPreparedSource(this.#options.resourceArena, outcome.key);
+          if (prepared?.source === outcome.upload.source) {
+            releaseResourceArenaPreparedSource(this.#options.resourceArena, outcome.key);
+          }
+          const row = this.#rows.get(outcome.key);
+          if (row !== undefined) this.#releaseSubscription(row);
+        });
+      }
       if (outcome.kind === "failed") {
         failure = captureNext(failure, () => {
           this.#options.diagnostic(outcome.message, `ordinary-texture-upload-limit:${outcome.key}`);

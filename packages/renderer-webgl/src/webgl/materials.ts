@@ -11,6 +11,8 @@ import type { GltfTextureCoordinates } from "../gltf/texture-coordinates";
 export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
   /** Internal dependency whose decoded source is supplied by the owning prepared asset. */
   readonly preparedOnly?: boolean;
+  /** Re-fetchable source whose decoded CPU copy may be dropped after successful GPU upload. */
+  readonly releaseSourceAfterUpload?: boolean;
 };
 
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";

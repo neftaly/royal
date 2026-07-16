@@ -26,6 +26,7 @@ export interface PreparedTextureSource {
   readonly source: LoadedTextureSource;
   readonly texture: TextureAssetRef & {
     readonly preparedOnly?: boolean;
+    readonly releaseSourceAfterUpload?: boolean;
   };
 }
 

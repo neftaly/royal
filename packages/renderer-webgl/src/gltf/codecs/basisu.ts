@@ -1,5 +1,9 @@
 import { parse } from "@loaders.gl/core";
 import { BasisLoader } from "@loaders.gl/textures";
+import {
+  gltfBasisuTargetAcceptsBaseDimensions,
+  type GltfBasisuTranscodeTarget,
+} from "../../texture/compression-target";
 
 type BasisTextureLevel = {
   readonly compressed?: boolean;
@@ -35,6 +39,12 @@ export type DecodedGltfBasisuTexture =
 
 const GL_COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
 const GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
+const GL_COMPRESSED_RGBA_S3TC_DXT5_EXT = 0x83F3;
+const GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT = 0x8C4F;
+const GL_COMPRESSED_RGBA_BPTC_UNORM_EXT = 0x8E8C;
+const GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT = 0x8E8D;
+const GL_COMPRESSED_RGBA_ASTC_4X4_KHR = 0x93B0;
+const GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4X4_KHR = 0x93D0;
 // loaders.gl 4.4.x assigns its requested ETC2 RGBA transcode the SRGB8 enum.
 // The textureFormat and Basis target remain ETC2 RGBA; canonicalize only this
 // exact upstream alias before Royal publishes the correct WebGL2 enum.
@@ -120,21 +130,61 @@ const parsedBasisLevels = (parsed: unknown, label: string): readonly BasisTextur
   return levels;
 };
 
-const etc2Level = (
+type CompressedBasisuTarget = Exclude<GltfBasisuTranscodeTarget, "rgba32">;
+
+type CompressedBasisuTargetDescriptor = Readonly<{
+  basisFormat: "astc-4x4" | "bc7-m5" | "bc3" | "etc2";
+  format: number;
+  srgbFormat: number;
+  textureFormat: string;
+}>;
+
+const COMPRESSED_TARGETS: Readonly<Record<CompressedBasisuTarget, CompressedBasisuTargetDescriptor>> = {
+  "astc-4x4": {
+    basisFormat: "astc-4x4",
+    format: GL_COMPRESSED_RGBA_ASTC_4X4_KHR,
+    srgbFormat: GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4X4_KHR,
+    textureFormat: "astc-4x4-unorm",
+  },
+  bc7: {
+    basisFormat: "bc7-m5",
+    format: GL_COMPRESSED_RGBA_BPTC_UNORM_EXT,
+    srgbFormat: GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT,
+    textureFormat: "bc7-rgba-unorm",
+  },
+  bc3: {
+    basisFormat: "bc3",
+    format: GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
+    srgbFormat: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,
+    textureFormat: "bc3-rgba-unorm",
+  },
+  etc2: {
+    basisFormat: "etc2",
+    format: GL_COMPRESSED_RGBA8_ETC2_EAC,
+    srgbFormat: GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
+    textureFormat: "etc2-rgba8unorm",
+  },
+};
+
+const compressedLevel = (
   level: BasisTextureLevel,
+  descriptor: CompressedBasisuTargetDescriptor,
+  target: CompressedBasisuTarget,
   label: string,
   levelIndex: number,
 ): DecodedGltfBasisuLevel => {
+  const formatMatches = level.format === descriptor.format
+    || (target === "etc2" && level.format === LOADERS_GL_ETC2_RGBA_ENUM_ALIAS);
   if (
     level.compressed !== true
-    || (level.format !== GL_COMPRESSED_RGBA8_ETC2_EAC && level.format !== LOADERS_GL_ETC2_RGBA_ENUM_ALIAS)
-    || level.textureFormat !== "etc2-rgba8unorm"
-  ) throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} did not transcode to ETC2 RGBA`);
+    || !formatMatches
+    || level.textureFormat !== descriptor.textureFormat
+  ) throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} did not transcode to ${target}`);
   const [width, height] = validLevelDimensions(level, label, levelIndex);
   const data = level.data;
   const expectedLength = Math.ceil(width / 4) * Math.ceil(height / 4) * 16;
   if (!(data instanceof Uint8Array) || !Number.isSafeInteger(expectedLength) || data.byteLength !== expectedLength) {
-    throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} decoded an invalid ETC2 payload`);
+    throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} decoded an invalid ${target} payload`);
   }
   return ownedLevel(data, width, height);
 };
@@ -145,18 +195,19 @@ export const decodedGltfBasisuEtc2 = (
   label: string,
   bytes?: ArrayBuffer,
 ): DecodedGltfBasisuCompressedTexture => {
+  const descriptor = COMPRESSED_TARGETS.etc2;
   const dimensions = bytes === undefined ? undefined : ktx2LogicalDimensions(bytes);
   const levels = parsedBasisLevels(parsed, label).map((level, index) =>
-    etc2Level(logicalBasisLevel(level, dimensions, index, label), label, index));
+    compressedLevel(logicalBasisLevel(level, dimensions, index, label), descriptor, "etc2", label, index));
   validMipSizes(levels, label);
   const base = levels[0]!;
   return {
     data: base.data,
-    format: GL_COMPRESSED_RGBA8_ETC2_EAC,
+    format: descriptor.format,
     height: base.height,
     kind: "compressed-texture",
     levels,
-    srgbFormat: GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
+    srgbFormat: descriptor.srgbFormat,
     width: base.width,
   };
 };
@@ -164,12 +215,26 @@ export const decodedGltfBasisuEtc2 = (
 export const decodeGltfBasisuTexture = async (
   bytes: ArrayBuffer,
   label: string,
+  target: GltfBasisuTranscodeTarget = "rgba32",
 ): Promise<DecodedGltfBasisuTexture> => {
+  if (target === "rgba32") return decodeGltfBasisuRgbaTexture(bytes, label);
+  const dimensions = ktx2LogicalDimensions(bytes);
+  if (
+    dimensions !== undefined
+    && !gltfBasisuTargetAcceptsBaseDimensions(target, dimensions.width, dimensions.height)
+  ) return decodeGltfBasisuRgbaTexture(bytes, label);
   try {
-    return await decodeGltfBasisuEtc2Texture(bytes, label);
+    return await decodeGltfBasisuCompressedTexture(bytes, label, target);
   } catch {
     // The universally safe RGBA path below also provides the actionable error.
   }
+  return decodeGltfBasisuRgbaTexture(bytes, label);
+};
+
+const decodeGltfBasisuRgbaTexture = async (
+  bytes: ArrayBuffer,
+  label: string,
+): Promise<DecodedGltfBasisuRgbaTexture> => {
   const parsed = await parse(bytes, BasisLoader, {
     basis: { containerFormat: "auto", format: "rgba32" },
     worker: false,
@@ -177,19 +242,51 @@ export const decodeGltfBasisuTexture = async (
   return decodedGltfBasisuRgba(parsed, label, bytes);
 };
 
-/** Transcodes a page-addressable KTX2/Basis payload to WebGL2-core ETC2. */
+/** Transcodes a page-addressable KTX2/Basis payload to ETC2 after explicit capability negotiation. */
 export const decodeGltfBasisuEtc2Texture = async (
   bytes: ArrayBuffer,
   label: string,
 ): Promise<DecodedGltfBasisuCompressedTexture> => {
-  const parsed = await parse(bytes, BasisLoader, {
-    basis: { containerFormat: "auto", format: "etc2" },
-    worker: false,
-  });
-  return decodedGltfBasisuEtc2(parsed, label, bytes);
+  return decodeGltfBasisuCompressedTexture(bytes, label, "etc2");
 };
 
-/* RGBA remains the fallback when deterministic ETC2 transcoding is unavailable. */
+/** Transcodes KTX2/Basis into an explicitly negotiated GPU format. */
+export const decodeGltfBasisuCompressedTexture = async (
+  bytes: ArrayBuffer,
+  label: string,
+  target: CompressedBasisuTarget,
+): Promise<DecodedGltfBasisuCompressedTexture> => {
+  const descriptor = COMPRESSED_TARGETS[target];
+  const dimensions = ktx2LogicalDimensions(bytes);
+  if (
+    dimensions !== undefined
+    && !gltfBasisuTargetAcceptsBaseDimensions(target, dimensions.width, dimensions.height)
+  ) throw new Error(`glTF KHR_texture_basisu ${label} dimensions cannot be uploaded as ${target} in WebGL`);
+  const parsed = await parse(bytes, BasisLoader, {
+    basis: { containerFormat: "auto", format: descriptor.basisFormat },
+    worker: false,
+  });
+  const levels = parsedBasisLevels(parsed, label).map((level, index) => compressedLevel(
+    logicalBasisLevel(level, dimensions, index, label),
+    descriptor,
+    target,
+    label,
+    index,
+  ));
+  validMipSizes(levels, label);
+  const base = levels[0]!;
+  return {
+    data: base.data,
+    format: descriptor.format,
+    height: base.height,
+    kind: "compressed-texture",
+    levels,
+    srgbFormat: descriptor.srgbFormat,
+    width: base.width,
+  };
+};
+
+/* RGBA remains the fallback when deterministic compressed transcoding is unavailable. */
 const rgbaLevel = (
   level: BasisTextureLevel,
   label: string,

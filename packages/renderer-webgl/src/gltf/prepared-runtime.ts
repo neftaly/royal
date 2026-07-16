@@ -167,6 +167,10 @@ export class PreparedGltfRuntime {
     this.#images?.wake();
   }
 
+  wakeImageCpuCapacity(): boolean {
+    return this.#images?.wakeCpuCapacity() ?? false;
+  }
+
   get(key: string): PreparedGltfState | undefined {
     return this.#states.get(key);
   }

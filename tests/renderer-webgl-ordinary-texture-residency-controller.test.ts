@@ -148,6 +148,26 @@ const successfulAdmission = {
 };
 
 describe("ordinary texture residency controller", () => {
+  it("drops an explicitly re-fetchable decoded source after successful upload", () => {
+    const decoded = source(9, 2, 2);
+    const texture: TextureAssetUploadRef = {
+      kind: "asset",
+      releaseSourceAfterUpload: true,
+      src: "/reloadable.ktx2",
+    };
+    const { arena, controller, releasedDecodedLeases } = harness();
+    retainTexture(arena, texture);
+
+    controller.publishPrepared(texture, decoded);
+    expect(resourceArenaSourceReferenceCount(arena, decoded)).toBe(1);
+    expect(settle(controller, controller.process(0, 1, successfulAdmission))).toBeUndefined();
+
+    expect(resourceArenaSourceReferenceCount(arena, decoded)).toBe(0);
+    expect(releasedDecodedLeases()).toBe(1);
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
   it("suppresses admitted GPU residency idempotently and re-promotes from the retained source", async () => {
     const decoded = source(10, 2, 2);
     const texture: TextureAssetUploadRef = { kind: "asset", src: "/generated.png" };

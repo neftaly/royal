@@ -20,6 +20,24 @@ type GltfReadyImagePublicationOwnerOptions = {
   readonly runtime: PreparedGltfRuntime;
 };
 
+const imageTextureRef = (
+  binding: Readonly<{
+    colorSpace: NonNullable<TextureAssetUploadRef["colorSpace"]>;
+    contentKey?: TextureAssetUploadRef["contentKey"];
+    sampler?: TextureAssetUploadRef["sampler"];
+    sourceUri?: string;
+    textureUri: string;
+  }>,
+): TextureAssetUploadRef => ({
+  colorSpace: binding.colorSpace,
+  ...(binding.contentKey === undefined ? {} : { contentKey: binding.contentKey }),
+  kind: "asset",
+  ...(binding.sourceUri === undefined ? { preparedOnly: true } : {}),
+  ...(binding.sourceUri === undefined ? {} : { releaseSourceAfterUpload: true }),
+  ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
+  src: binding.sourceUri ?? binding.textureUri,
+});
+
 /** Owns generation-safe prepared image identity and resource publication. */
 export class GltfReadyImagePublicationOwner {
   readonly #options: GltfReadyImagePublicationOwnerOptions;
@@ -45,16 +63,8 @@ export class GltfReadyImagePublicationOwner {
         const rekeys: PreparedAssetOrdinaryTextureRekey[] = [];
         for (const binding of outcome.bindings) {
           if (binding.contentKey !== undefined || outcome.contentKey === undefined) continue;
-          const previousTexture: TextureAssetUploadRef = {
-            colorSpace: binding.colorSpace,
-            kind: "asset",
-            ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-            src: binding.textureUri,
-          };
-          const nextTexture: TextureAssetUploadRef = {
-            ...previousTexture,
-            contentKey: outcome.contentKey,
-          };
+          const previousTexture = imageTextureRef(binding);
+          const nextTexture = imageTextureRef({ ...binding, contentKey: outcome.contentKey });
           rekeys.push({
             next: {
               count: binding.count,
@@ -91,13 +101,7 @@ export class GltfReadyImagePublicationOwner {
       }
       for (const binding of outcome.bindings) {
         const contentKey = binding.contentKey ?? outcome.contentKey;
-        const texture: TextureAssetUploadRef = {
-          colorSpace: binding.colorSpace,
-          ...(contentKey === undefined ? {} : { contentKey }),
-          kind: "asset",
-          ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-          src: binding.textureUri,
-        };
+        const texture = imageTextureRef({ ...binding, contentKey });
         this.#options.ordinaryTextures.publishPrepared(texture, outcome.source);
       }
       if (outcome.iblSpecular !== undefined) {

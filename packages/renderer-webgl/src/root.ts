@@ -112,6 +112,11 @@ import {
 import {
   GltfImageDemandCoordinator,
 } from "./gltf/image-demand-coordinator";
+import { decodePreparedGltfImageSourceRecipe } from "./gltf/image-source-recipe";
+import {
+  activateGltfBasisuTranscodeTarget,
+  type GltfBasisuTranscodeTarget,
+} from "./texture/compression-target";
 import {
   PreparedGltfRuntime,
 } from "./gltf/prepared-runtime";
@@ -248,6 +253,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #options: ResolvedWebGlRootOptions;
   readonly #resourceGovernorPolicy: ResourceGovernorPolicy;
   readonly #contextCapabilities: WebGlContextCapabilityOwner;
+  readonly #basisuTarget: GltfBasisuTranscodeTarget;
   readonly #frameViews = createFrameViews();
   readonly #renderProjection = identityMat4();
   readonly #renderView = identityMat4();
@@ -294,8 +300,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     wakeCpu: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeCpuCapacity();
       const preparedAssetWake = wakeResourceArenaPreparedAssetCpuCapacity(this.#resourceArena);
+      const preparedImageWake = this.#preparedGltf.wakeImageCpuCapacity();
       const virtualTextureWake = this.#virtualTextures.wakeDecodedCapacity();
-      return ordinaryWake || preparedAssetWake || virtualTextureWake;
+      return ordinaryWake || preparedAssetWake || preparedImageWake || virtualTextureWake;
     },
     wakeGpu: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeGpuCapacity();
@@ -415,6 +422,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       releaseProgramArenaContextHandles(this.#programArena);
       this.#clusteredLights.releaseContextHandles();
       this.#configureContextCapabilities(this.#contextCapabilities.validateRestoreAndProbe());
+      const restoredBasisuTarget = activateGltfBasisuTranscodeTarget(this.#gl);
+      if (restoredBasisuTarget !== this.#basisuTarget) {
+        throw new Error(
+          `Royal WebGL compressed texture support changed across context restoration: ${this.#basisuTarget} to ${restoredBasisuTarget}`,
+        );
+      }
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       this.#ordinaryTextures.restoreContext(this.#context.generation);
       this.#renderClock.retain();
@@ -483,21 +496,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       registerRollback(() => clearResourceArenaPreparedSources(this.#resourceArena));
       registerRollback(() => { disposeResourceArena(this.#resourceArena); });
-      this.#preparedGltf.configureImages(new GltfImageDemandCoordinator({
-        admit: this.#admitGltfPreparationJob,
-        closeSource: (source) => this.#decodedTextureSources.closeOrdinary(source),
-        diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
-        invalidate: () => this.invalidate(),
-        now: this.#now,
-        progress: (assetKey) => this.#preparedGltf.publishStateChange(assetKey),
-        retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
-        reserveTransportBytes: (bytes) => this.#reserveDecodedCpuBytes(
-          "asset-decode",
-          bytes,
-          "glTF image transport byte retention denied by root resource governor",
-        ),
-      }));
-      registerRollback(() => this.#preparedGltf.disposeImages());
       const gl = canvas.getContext("webgl2", {
         alpha: requestedOptions.alpha,
         antialias: requestedOptions.antialias,
@@ -513,6 +511,27 @@ class WebGlRootImpl implements InternalWebGlRoot {
         resourceBudgets: requestedOptions.resourceBudgets,
         ...this.#contextCapabilities.attributes,
       });
+      this.#basisuTarget = activateGltfBasisuTranscodeTarget(gl);
+      this.#preparedGltf.configureImages(new GltfImageDemandCoordinator({
+        admit: this.#admitGltfPreparationJob,
+        closeSource: (source) => this.#decodedTextureSources.closeOrdinary(source),
+        decodeRecipe: (prepared, signal) => decodePreparedGltfImageSourceRecipe(
+          prepared,
+          signal,
+          { basisuTarget: this.#basisuTarget },
+        ),
+        diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
+        invalidate: () => this.invalidate(),
+        now: this.#now,
+        progress: (assetKey) => this.#preparedGltf.publishStateChange(assetKey),
+        retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
+        reserveTransportBytes: (bytes) => this.#reserveDecodedCpuBytes(
+          "asset-decode",
+          bytes,
+          "glTF image transport byte retention denied by root resource governor",
+        ),
+      }));
+      registerRollback(() => this.#preparedGltf.disposeImages());
       this.#clusteredLights = new LazyClusteredLightingFeature({
         active: () => !this.#disposed && this.#context.lifecycle === "active",
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),

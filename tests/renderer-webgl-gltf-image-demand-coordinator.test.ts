@@ -15,6 +15,7 @@ import type {
   LoadedGltfMaterial,
 } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
+import { ResourceGovernorCpuCapacityError } from "../packages/renderer-webgl/src/resource-governor";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type {
   SurfaceImageBasedLight,
@@ -379,6 +380,44 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     );
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([]);
     expect(ownership.release).toHaveBeenCalledOnce();
+    harness.coordinator.dispose();
+  });
+
+  it("keeps temporary decoded-capacity denial retryable without degrading the asset", async () => {
+    const denied = source("capacity-denied");
+    const retried = source("capacity-retried");
+    loadRecipeMock.mockResolvedValueOnce({ image: denied }).mockResolvedValueOnce({ image: retried });
+    let retainAttempt = 0;
+    const release = vi.fn(() => true);
+    const harness = coordinatorHarness({
+      retainSource: () => {
+        retainAttempt += 1;
+        if (retainAttempt === 1) throw new ResourceGovernorCpuCapacityError("temporary pressure", false);
+        return { release };
+      },
+    });
+    const load = metrics();
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load,
+      materials: [material("capacity")],
+      recipeLease: recipeLease(),
+      recipes: [recipe("capacity")],
+      stateInstanceKey: 1,
+    });
+
+    demandImages(harness.coordinator, "asset", "capacity");
+    await flushMicrotasks();
+
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 0, imageRequests: 1 });
+    expect(harness.coordinator.snapshot()).toMatchObject({ errors: 0, ready: 0 });
+    expect(harness.coordinator.wakeCpuCapacity()).toBe(true);
+    await flushMicrotasks();
+
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
+    expect(harness.coordinator.pendingReadyOutcomes()).toHaveLength(1);
+    expect(harness.closeSource).toHaveBeenCalledWith(denied);
+    expect(harness.diagnostic).not.toHaveBeenCalled();
     harness.coordinator.dispose();
   });
 

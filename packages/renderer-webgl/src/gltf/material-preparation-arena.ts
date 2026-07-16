@@ -106,11 +106,13 @@ const textureSlotRef = (
   if (readyImageKeys !== undefined && slot.imageUri !== undefined && !readyImageKeys.has(slot.imageUri)) {
     return undefined;
   }
+  const sourceUri = slot.sourceUri;
   const texture: { -readonly [Key in keyof TextureAssetUploadRef]: TextureAssetUploadRef[Key] } = {
     colorSpace,
     kind: "asset",
-    preparedOnly: true,
-    src: slot.textureUri,
+    ...(sourceUri === undefined ? { preparedOnly: true } : {}),
+    ...(sourceUri === undefined ? {} : { releaseSourceAfterUpload: true }),
+    src: sourceUri ?? slot.textureUri,
   };
   const contentKey = slot.contentKey ?? contentKeys.get(slot.textureUri);
   if (contentKey !== undefined) texture.contentKey = contentKey;

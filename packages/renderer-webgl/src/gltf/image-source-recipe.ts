@@ -6,6 +6,7 @@ import {
   resolveResourceUri,
 } from "../resource-io";
 import type { LoadedTextureSource } from "../texture/sources";
+import type { GltfBasisuTranscodeTarget } from "../texture/compression-target";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
 import {
   dataUriMediaType,
@@ -48,6 +49,10 @@ export type PreparedGltfImageSourceRecipe = Readonly<{
   }>;
   /** External bytes retained between transport and decode; embedded bytes remain recipe-owned. */
   readonly transportBytes: number;
+}>;
+
+export type GltfImageDecodeOptions = Readonly<{
+  basisuTarget?: GltfBasisuTranscodeTarget;
 }>;
 
 /** True when preparation performs external byte transport before decode. */
@@ -302,6 +307,7 @@ export const prepareGltfImageSourceRecipe = async (
 export const decodePreparedGltfImageSourceRecipe = async (
   prepared: PreparedGltfImageSourceRecipe,
   signal: AbortSignal,
+  options?: GltfImageDecodeOptions,
 ): Promise<LoadedGltfImageSource> => {
   const source = prepared.recipe.source;
   switch (source.kind) {
@@ -323,7 +329,11 @@ export const decodePreparedGltfImageSourceRecipe = async (
       if (signal.aborted) throw abortError();
       return {
         contentKey: source.contentKey ?? byteContentKey(source.bytes, "KHR_texture_basisu"),
-        image: decodedUnlessAborted(await codec.decodeGltfBasisuTexture(source.bytes, source.label), signal),
+        image: decodedUnlessAborted(await codec.decodeGltfBasisuTexture(
+          source.bytes,
+          source.label,
+          options?.basisuTarget,
+        ), signal),
       };
     }
   }

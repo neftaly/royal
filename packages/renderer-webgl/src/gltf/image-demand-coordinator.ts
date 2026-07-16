@@ -6,6 +6,7 @@ import type {
 import { monotonicNowMs, type MonotonicClock } from "../clock";
 import type { LoadedTextureSource } from "../texture/sources";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
+import { ResourceGovernorCpuCapacityError } from "../resource-governor";
 import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,
@@ -99,6 +100,7 @@ type Row = {
   readonly asset: Asset;
   readonly bindings: GltfImageTextureBinding[];
   contentKey?: TextureContentKey;
+  cpuCapacityBlocked: boolean;
   error?: string;
   iblSpecular?: SurfaceImageBasedLightSpecular;
   readonly key: string;
@@ -106,6 +108,7 @@ type Row = {
   outcomeQueued: boolean;
   pendingRefinements?: Set<LoadedGltfMaterial>;
   prepared?: PreparedGltfImageSourceRecipe;
+  requested: boolean;
   referencesRekeyed: boolean;
   recipe?: GltfImageSourceRecipe;
   source?: LoadedTextureSource;
@@ -284,12 +287,14 @@ export class GltfImageDemandCoordinator {
       const row: Row = {
         asset,
         bindings: [],
+        cpuCapacityBlocked: false,
         ...(iblSpecular === undefined ? {} : { iblSpecular }),
         key,
         materials: new Set(),
         outcomeQueued: false,
         referencesRekeyed: false,
         recipe,
+        requested: false,
         status: "idle",
         transportSettled: false,
       };
@@ -488,6 +493,21 @@ export class GltfImageDemandCoordinator {
     }
   }
 
+  /** Retries only decoded sources previously denied by temporary CPU pressure. */
+  wakeCpuCapacity(): boolean {
+    if (this.#disposed) return false;
+    let woke = false;
+    for (const asset of this.#assets.values()) {
+      for (const row of asset.rows.values()) {
+        if (!row.cpuCapacityBlocked) continue;
+        row.cpuCapacityBlocked = false;
+        this.#demand(row);
+        woke = true;
+      }
+    }
+    return woke;
+  }
+
   snapshot(): GltfImageDemandCoordinatorSnapshot {
     let candidates = 0;
     let dormant = 0;
@@ -582,15 +602,18 @@ export class GltfImageDemandCoordinator {
 
   #demand(row: Row | undefined): void {
     if (row === undefined) return;
-    if (row.status !== "idle") return;
+    if (row.status !== "idle" || row.cpuCapacityBlocked) return;
     const asset = row.asset;
     const recipe = row.recipe;
     if (recipe === undefined) return;
     const ownership = asset.recipeOwnership;
     row.status = "queued";
     ownership.activeRecipes.add(recipe);
-    asset.load.imageLoadStartedAt ??= this.#now();
-    asset.load.imageRequests += 1;
+    if (!row.requested) {
+      row.requested = true;
+      asset.load.imageLoadStartedAt ??= this.#now();
+      asset.load.imageRequests += 1;
+    }
     const transport = row.iblSpecular === undefined ? this.#ordinaryTransport : this.#iblTransport;
     transport.queue.push(row);
     if (!this.#requiresTransport(recipe)) {
@@ -650,7 +673,13 @@ export class GltfImageDemandCoordinator {
       row.status = "loading";
       return this.#decodeRecipe(prepared, asset.controller.signal);
     }).then((loaded) => this.#settleImageReady(row, loaded)).catch((error: unknown) => {
-      if (!asset.controller.signal.aborted) this.#settleImageFailure(row, error);
+      if (asset.controller.signal.aborted) return;
+      if (error instanceof ResourceGovernorCpuCapacityError && !error.permanent) {
+        row.status = "idle";
+        row.cpuCapacityBlocked = true;
+        return;
+      }
+      this.#settleImageFailure(row, error);
     }).finally(() => this.#finishImageJob(row, recipe));
   }
 
@@ -719,7 +748,8 @@ export class GltfImageDemandCoordinator {
     const asset = row.asset;
     asset.recipeOwnership.activeRecipes.delete(recipe);
     try {
-      this.#releaseSettledRecipes(asset, [recipe]);
+      const rowIsCurrent = this.#assets.get(asset.key) === asset && asset.rows.get(row.key) === row;
+      this.#releaseSettledRecipes(asset, rowIsCurrent ? [] : [recipe]);
     } catch (error) {
       this.#diagnoseRecipeReleaseFailure(asset, error);
     }
