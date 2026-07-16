@@ -1,8 +1,6 @@
 import {
-  FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
   NO_FRAME_PACKET_ID,
-  type FramePacketRenderClass,
 } from "../frame/packets";
 import {
   appendPreparedGltfPacketSubmission,
@@ -15,7 +13,6 @@ import {
   retainGltfPacketSubmissionLightBinding,
   retainGltfPacketSubmissionMaterialBinding,
   retainGltfPacketSubmissionRootBinding,
-  type GltfPacketSubmissionRow,
 } from "../gltf-packet-submission-workspace";
 import {
   resolvePacketMaterial,
@@ -92,18 +89,6 @@ export class GltfPacketSubmissionOwner {
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
   readonly #selection: GltfPacketSelectionOwner;
-  readonly #submissionRow: GltfPacketSubmissionRow = {
-    geometryId: 0,
-    geometryIdentityId: 0,
-    lightBindingId: NO_FRAME_PACKET_ID,
-    lightScopeId: 0,
-    localModelId: 0,
-    materialBindingId: 0,
-    packetIndex: 0,
-    renderClass: FRAME_PACKET_RENDER_CLASS.opaque,
-    rootBindingId: 0,
-    sidedness: 0,
-  };
   readonly #viewSelection: { packetCursor: number; packetEnd: number } = {
     packetCursor: 0,
     packetEnd: 0,
@@ -278,11 +263,6 @@ export class GltfPacketSubmissionOwner {
         if (selectedOuterIndex < instanceFirst || selectedOuterIndex >= instanceEnd) {
           throw new Error("Royal retained glTF packet selection has an invalid root instance");
         }
-        const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
-        const rootTransform = instanceViews?.transforms[selectedOuterIndex] ?? ordinaryRootTransform;
-        if (rootModel === undefined) {
-          throw new Error("Royal retained glTF packet root source has no current transform");
-        }
         const orientationPreserving = instanceViews === undefined
           ? ordinaryOrientationPreserving
           : instanceViews.orientationPreserving[selectedOuterIndex] !== 0;
@@ -294,6 +274,11 @@ export class GltfPacketSubmissionOwner {
         let lightBindingId = NO_FRAME_PACKET_ID;
         let lightScopeId: number;
         if (rootBindingId === undefined) {
+          const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
+          const rootTransform = instanceViews?.transforms[selectedOuterIndex] ?? ordinaryRootTransform;
+          if (rootModel === undefined) {
+            throw new Error("Royal retained glTF packet root source has no current transform");
+          }
           const assetLights = instanceViews === undefined
             ? ordinaryAssetLights
             : this.#lightResolver.resolveGltfAsset(state, rootModel);
@@ -347,24 +332,22 @@ export class GltfPacketSubmissionOwner {
             lightBindingId = retainedLightBindingId;
           }
         }
-        const submissionRow = this.#submissionRow as {
-          -readonly [Key in keyof GltfPacketSubmissionRow]: GltfPacketSubmissionRow[Key];
-        };
-        submissionRow.geometryId = geometryId;
-        submissionRow.geometryIdentityId = geometryIdentityId;
-        submissionRow.lightBindingId = lightBindingId;
-        submissionRow.lightScopeId = lightScopeId;
-        submissionRow.localModelId = catalog.localModelIds[packetIndex]!;
-        submissionRow.materialBindingId = materialBindingId;
-        submissionRow.packetIndex = packetIndex;
-        submissionRow.renderClass = catalog.renderClasses[packetIndex]! as FramePacketRenderClass;
-        submissionRow.rootBindingId = rootBindingId;
-        submissionRow.sidedness = (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
+        const sidedness = (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
           | (((packetSidedness & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0)
             === orientationPreserving
             ? FRAME_PACKET_SIDEDNESS.frontFaceCcw
             : 0);
-        appendPreparedGltfPacketSubmission(this.#batches.workspace, submissionRow);
+        appendPreparedGltfPacketSubmission(
+          this.#batches.workspace,
+          catalog,
+          packetIndex,
+          geometryIdentityId,
+          lightBindingId,
+          lightScopeId,
+          materialBindingId,
+          rootBindingId,
+          sidedness,
+        );
         cursor += 1;
       }
     }

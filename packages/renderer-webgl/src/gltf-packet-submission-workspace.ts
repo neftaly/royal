@@ -566,26 +566,35 @@ const renderClass = (value: number): FramePacketRenderClass => {
   return value;
 };
 
-const appendValidatedSubmission = <M, R, L>(
+const appendSubmissionLanes = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
-  row: GltfPacketSubmissionRow,
+  geometryId: number,
+  geometryIdentityId: number,
+  lightBindingId: number,
+  lightScopeId: number,
+  localModelId: number,
   materialBatchClassId: number,
+  materialBindingId: number,
+  packetIndex: number,
+  renderClass: FramePacketRenderClass,
+  rootBindingId: number,
+  sidedness: number,
 ): number => {
   const index = workspace.count;
   reserveRows(workspace, index + 1);
   workspace.batchIds[index] = NO_FRAME_PACKET_ID;
-  workspace.geometryIds[index] = row.geometryId;
-  workspace.geometryIdentityIds[index] = row.geometryIdentityId;
-  workspace.lightBindingIds[index] = row.lightBindingId;
-  workspace.lightScopeIds[index] = row.lightScopeId;
-  workspace.localModelIds[index] = row.localModelId;
+  workspace.geometryIds[index] = geometryId;
+  workspace.geometryIdentityIds[index] = geometryIdentityId;
+  workspace.lightBindingIds[index] = lightBindingId;
+  workspace.lightScopeIds[index] = lightScopeId;
+  workspace.localModelIds[index] = localModelId;
   workspace.materialBatchClassIds[index] = materialBatchClassId;
-  workspace.materialBindingIds[index] = row.materialBindingId;
+  workspace.materialBindingIds[index] = materialBindingId;
   workspace.orderingSegments[index] = workspace.segment;
-  workspace.packetIndices[index] = row.packetIndex;
-  workspace.renderClasses[index] = row.renderClass;
-  workspace.rootBindingIds[index] = row.rootBindingId;
-  workspace.sidedness[index] = row.sidedness;
+  workspace.packetIndices[index] = packetIndex;
+  workspace.renderClasses[index] = renderClass;
+  workspace.rootBindingIds[index] = rootBindingId;
+  workspace.sidedness[index] = sidedness;
   workspace.count = index + 1;
   // One revision invalidates any grouping of the previously empty segment;
   // later dense appends belong to the same unpublished construction epoch.
@@ -593,14 +602,30 @@ const appendValidatedSubmission = <M, R, L>(
   return index;
 };
 
-/** Appends a row assembled from this workspace's authoritative packet catalog and bindings. */
+/** Appends trusted renderer-owned bindings from the authoritative packet catalog. */
 export const appendPreparedGltfPacketSubmission = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
-  row: GltfPacketSubmissionRow,
-): number => appendValidatedSubmission(
+  catalog: FramePacketCatalog,
+  packetIndex: number,
+  geometryIdentityId: number,
+  lightBindingId: number,
+  lightScopeId: number,
+  materialBindingId: number,
+  rootBindingId: number,
+  sidedness: number,
+): number => appendSubmissionLanes(
   workspace,
-  row,
-  workspace.materialBindingBatchClassIds[row.materialBindingId]!,
+  catalog.geometryIds[packetIndex]!,
+  geometryIdentityId,
+  lightBindingId,
+  lightScopeId,
+  catalog.localModelIds[packetIndex]!,
+  workspace.materialBindingBatchClassIds[materialBindingId]!,
+  materialBindingId,
+  packetIndex,
+  catalog.renderClasses[packetIndex]! as FramePacketRenderClass,
+  rootBindingId,
+  sidedness,
 );
 
 export const appendGltfPacketSubmission = <M, R, L>(
@@ -655,18 +680,20 @@ export const appendGltfPacketSubmission = <M, R, L>(
   }
   const materialBatchClassId = workspace.materialBindingBatchClassIds[materialBindingId]!;
 
-  return appendValidatedSubmission(workspace, {
+  return appendSubmissionLanes(
+    workspace,
     geometryId,
     geometryIdentityId,
     lightBindingId,
     lightScopeId,
     localModelId,
+    materialBatchClassId,
     materialBindingId,
     packetIndex,
-    renderClass: normalizedRenderClass,
+    normalizedRenderClass,
     rootBindingId,
-    sidedness: normalizedSidedness,
-  }, materialBatchClassId);
+    normalizedSidedness,
+  );
 };
 
 const submissionIndex = <M, R, L>(workspace: GltfPacketSubmissionWorkspace<M, R, L>, index: number): number => {
