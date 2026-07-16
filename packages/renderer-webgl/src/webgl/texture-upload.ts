@@ -60,13 +60,10 @@ export const uploadTexture = (
   gl.bindTexture(gl.TEXTURE_2D, textureHandle);
   const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
   const mipmapped = usesMipmaps(texture.sampler?.minFilter);
-  let uploadedCompleteMipChain = false;
+  let mipmapLevelsReady = false;
   if (isDecodedCompressedTexture(source)) {
-    if (mipmapped && !decodedTextureHasCompleteMipChain(source)) {
-      throw new Error(`Compressed texture ${texture.src} is missing required mip levels`);
-    }
-    uploadedCompleteMipChain = mipmapped;
     const levels = mipmapped ? source.levels : source.levels.slice(0, 1);
+    mipmapLevelsReady = mipmapped;
     const format = texture.colorSpace === "srgb" ? source.srgbFormat : source.format;
     for (const [levelIndex, level] of levels.entries()) {
       gl.compressedTexImage2D(
@@ -79,9 +76,15 @@ export const uploadTexture = (
         level.data,
       );
     }
+    // Compressed levels cannot be synthesized with generateMipmap. Restricting
+    // the texture's mip range makes any valid authored prefix complete while
+    // retaining every supplied level for minification.
+    if (mipmapped && !decodedTextureHasCompleteMipChain(source)) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levels.length - 1);
+    }
   } else if (isDecodedRgbaTexture(source)) {
-    uploadedCompleteMipChain = mipmapped && decodedTextureHasCompleteMipChain(source);
-    const levels = uploadedCompleteMipChain
+    mipmapLevelsReady = mipmapped && decodedTextureHasCompleteMipChain(source);
+    const levels = mipmapLevelsReady
       ? decodedTextureLevels(source)
       : decodedTextureLevels(source).slice(0, 1);
     for (const [levelIndex, level] of levels.entries()) {
@@ -128,5 +131,5 @@ export const uploadTexture = (
     gl.TEXTURE_WRAP_T,
     samplerConstant(gl, sampler?.wrapT, gl.CLAMP_TO_EDGE),
   );
-  if (mipmapped && !uploadedCompleteMipChain) gl.generateMipmap(gl.TEXTURE_2D);
+  if (mipmapped && !mipmapLevelsReady) gl.generateMipmap(gl.TEXTURE_2D);
 };

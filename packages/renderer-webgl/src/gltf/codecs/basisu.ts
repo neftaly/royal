@@ -76,11 +76,6 @@ const validMipSizes = (
   }
 };
 
-const completeMipChain = (levels: readonly DecodedGltfBasisuLevel[]): boolean => {
-  const last = levels.at(-1);
-  return last?.width === 1 && last.height === 1;
-};
-
 const parsedBasisLevels = (parsed: unknown, label: string): readonly BasisTextureLevel[] => {
   const levels = basisTextureLevels(parsed);
   if (levels === undefined || levels.length === 0) {
@@ -132,8 +127,7 @@ export const decodeGltfBasisuTexture = async (
   label: string,
 ): Promise<DecodedGltfBasisuTexture> => {
   try {
-    const compressed = await decodeGltfBasisuEtc2Texture(bytes, label);
-    if (completeMipChain(compressed.levels)) return compressed;
+    return await decodeGltfBasisuEtc2Texture(bytes, label);
   } catch {
     // The universally safe RGBA path below also provides the actionable error.
   }
@@ -156,10 +150,7 @@ export const decodeGltfBasisuEtc2Texture = async (
   return decodedGltfBasisuEtc2(parsed, label);
 };
 
-/*
- * RGBA remains the fallback for incomplete mip chains because WebGL cannot
- * generate missing levels for a compressed texture.
- */
+/* RGBA remains the fallback when deterministic ETC2 transcoding is unavailable. */
 const rgbaLevel = (
   level: BasisTextureLevel,
   label: string,

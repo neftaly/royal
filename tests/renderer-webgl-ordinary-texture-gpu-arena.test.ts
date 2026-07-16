@@ -197,6 +197,27 @@ describe("ordinary texture GPU arena", () => {
     })).toEqual({ persistentGpuBytes: 48, uploadBytes: 48 });
   });
 
+  it("accounts an incomplete compressed mip prefix without RGBA inflation", () => {
+    const levels = [
+      { data: new Uint8Array(16), height: 8, width: 8 },
+      { data: new Uint8Array(16), height: 4, width: 4 },
+    ];
+    expect(ordinaryTextureUploadCost({
+      source: {
+        ...levels[0]!,
+        format: 0x9278,
+        kind: "compressed-texture",
+        levels,
+        srgbFormat: 0x9279,
+      },
+      texture: {
+        kind: "asset",
+        sampler: { minFilter: "linear-mipmap-linear" },
+        src: "partial.ktx2",
+      },
+    })).toEqual({ persistentGpuBytes: 32, uploadBytes: 32 });
+  });
+
   it("keeps lifecycle accounting conserved across replayable operation traces", async () => {
     await runFuzzTraces<Operation>({
       cases: 12,

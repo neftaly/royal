@@ -25,6 +25,7 @@ class FakeGl {
   readonly TEXTURE0 = 0x84c0;
   readonly TEXTURE_2D = 0x0de1;
   readonly TEXTURE_MAG_FILTER = 0x2800;
+  readonly TEXTURE_MAX_LEVEL = 0x813d;
   readonly TEXTURE_MIN_FILTER = 0x2801;
   readonly TEXTURE_WRAP_S = 0x2802;
   readonly TEXTURE_WRAP_T = 0x2803;
@@ -170,6 +171,26 @@ describe("texture upload kernel", () => {
       [gl.TEXTURE_2D, 1, 0x9279, 2, 2, 0, levels[1]!.data],
       [gl.TEXTURE_2D, 2, 0x9279, 1, 1, 0, levels[2]!.data],
     ]);
+    expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
+  });
+
+  it("retains an incomplete compressed mip prefix and makes its last level complete", () => {
+    const gl = new FakeGl();
+    const levels = [
+      { data: new Uint8Array(16).fill(1), height: 8, width: 8 },
+      { data: new Uint8Array(16).fill(2), height: 4, width: 4 },
+    ];
+    uploadTexture(context(gl), handle, {
+      ...levels[0]!,
+      format: 0x9278,
+      kind: "compressed-texture",
+      levels,
+      srgbFormat: 0x9279,
+    }, texture({ sampler: { minFilter: "linear-mipmap-linear" }, src: "partial.ktx2" }));
+
+    expect(gl.calls.filter(({ name }) => name === "compressedTexImage2D")).toHaveLength(2);
+    expect(gl.calls.find(({ name, args }) => name === "texParameteri" && args[1] === gl.TEXTURE_MAX_LEVEL))
+      .toEqual({ args: [gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 1], name: "texParameteri" });
     expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
   });
 

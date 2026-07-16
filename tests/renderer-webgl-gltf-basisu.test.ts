@@ -40,6 +40,27 @@ describe("glTF BasisU RGBA normalization", () => {
     expect(decoded.data).not.toBe(base.data);
   });
 
+  it("owns a valid incomplete ETC2 mip prefix without expanding it to RGBA", () => {
+    const compressedLevel = (width: number, height: number, fill: number) => ({
+      compressed: true,
+      data: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16).fill(fill),
+      format: 0x9278,
+      height,
+      textureFormat: "etc2-rgba8unorm",
+      width,
+    });
+    const decoded = decodedGltfBasisuEtc2([[
+      compressedLevel(8, 8, 1),
+      compressedLevel(4, 4, 2),
+    ]], "partial.ktx2");
+
+    expect(decoded.kind).toBe("compressed-texture");
+    expect(decoded.levels.map(({ height, width }) => ({ height, width }))).toEqual([
+      { height: 8, width: 8 },
+      { height: 4, width: 4 },
+    ]);
+  });
+
   it("copies and preserves a complete authored mip chain", () => {
     const base = level(4, 2, 1);
     const mip1 = level(2, 1, 2);
