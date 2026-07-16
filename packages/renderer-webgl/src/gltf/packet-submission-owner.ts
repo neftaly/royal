@@ -1,4 +1,3 @@
-import type { Transform } from "@royal/renderer-core";
 import {
   FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
@@ -78,11 +77,6 @@ const createCounters = (): GltfInstancingCounters => ({
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
-
-const transformOrientationDeterminant = (transform: Transform | undefined): number => {
-  const scale = transform?.scale;
-  return scale === undefined ? 1 : scale[0] * scale[1] * scale[2];
-};
 
 /** Owns selected glTF packet translation, binding identity, and frame batching. */
 export class GltfPacketSubmissionOwner {
@@ -213,14 +207,15 @@ export class GltfPacketSubmissionOwner {
     const ordinaryRootModel = node.kind === "gltf"
       ? this.#sceneBindings.modelMatrix(node)
       : undefined;
+    const ordinaryScale = ordinaryRootTransform?.scale;
+    const ordinaryOrientationPreserving = ordinaryScale === undefined
+      || ordinaryScale[0] * ordinaryScale[1] * ordinaryScale[2] >= 0;
     const ordinaryAssetLights = ordinaryRootModel === undefined
       ? undefined
       : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
       ? 0
       : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
-    let determinantOuterIndex = -1;
-    let rootDeterminant = 1;
     let cursor = packetCursor;
 
     while (cursor < packetEnd) {
@@ -288,10 +283,9 @@ export class GltfPacketSubmissionOwner {
         if (rootModel === undefined) {
           throw new Error("Royal retained glTF packet root source has no current transform");
         }
-        if (selectedOuterIndex !== determinantOuterIndex) {
-          rootDeterminant = transformOrientationDeterminant(rootTransform);
-          determinantOuterIndex = selectedOuterIndex;
-        }
+        const orientationPreserving = instanceViews === undefined
+          ? ordinaryOrientationPreserving
+          : instanceViews.orientationPreserving[selectedOuterIndex] !== 0;
         const rootSourceId = firstRootSourceId + selectedOuterIndex - instanceFirst;
         let rootBindingId = preparedGltfPacketSubmissionRootBindingId(
           this.#batches.workspace,
@@ -367,7 +361,7 @@ export class GltfPacketSubmissionOwner {
         submissionRow.rootBindingId = rootBindingId;
         submissionRow.sidedness = (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
           | (((packetSidedness & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0)
-            === (rootDeterminant >= 0)
+            === orientationPreserving
             ? FRAME_PACKET_SIDEDNESS.frontFaceCcw
             : 0);
         appendPreparedGltfPacketSubmission(this.#batches.workspace, submissionRow);

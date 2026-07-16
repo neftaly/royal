@@ -23,6 +23,8 @@ export interface GltfInstanceTransformView {
   readonly changes: Pick<GltfInstanceChangeTracker, "activePose" | "activeScale">;
   readonly framePoseVersion: number;
   readonly frameScaleVersion: number;
+  /** One when the synchronized scale preserves mesh winding, zero when it reverses it. */
+  readonly orientationPreserving: Uint8Array;
   readonly rootModels: readonly Mat4[];
   readonly sourceKey: number;
   readonly transforms: readonly Transform[];
@@ -37,6 +39,7 @@ type GltfInstanceTransformViewState = {
   readonly matrixRotations: Float32Array;
   readonly matrixScales: Float32Array;
   matrixScaleVersion: number;
+  readonly orientationPreserving: Uint8Array;
   readonly rootModels: MutableMat4[];
   readonly source: GltfInstanceTransforms;
   readonly sourceKey: number;
@@ -73,7 +76,12 @@ const applyInstanceMatrix = (
   if (rotationChanged || scaleChanged) {
     transformMat4Into(views.rootModels[index]!, views.transforms[index]);
     if (rotationChanged) copyVector3(views.matrixRotations, views.source.rotations, offset);
-    if (scaleChanged) copyVector3(views.matrixScales, views.source.scales, offset);
+    if (scaleChanged) {
+      copyVector3(views.matrixScales, views.source.scales, offset);
+      views.orientationPreserving[index] = views.source.scales[offset]!
+        * views.source.scales[offset + 1]!
+        * views.source.scales[offset + 2]! >= 0 ? 1 : 0;
+    }
     return;
   }
   if (!poseDirty) return;
@@ -170,6 +178,7 @@ export class GltfInstanceTransformRegistry {
       const rootModels: MutableMat4[] = [];
       const matrixRotations = new Float32Array(source.rotations.length);
       const matrixScales = new Float32Array(source.scales.length);
+      const orientationPreserving = new Uint8Array(source.count);
       matrixRotations.fill(NaN);
       matrixScales.fill(NaN);
       for (let index = 0; index < source.count; index += 1) {
@@ -190,6 +199,7 @@ export class GltfInstanceTransformRegistry {
         matrixRotations,
         matrixScales,
         matrixScaleVersion: -1,
+        orientationPreserving,
         rootModels,
         source,
         sourceKey: this.#sourceKey,

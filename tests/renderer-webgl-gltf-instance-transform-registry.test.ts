@@ -74,6 +74,10 @@ const expectMatricesCurrent = (
       transformMat4(views.transforms[index]!),
       `root model ${index}`,
     );
+    const offset = index * 3;
+    expect(views.orientationPreserving[index], `orientation ${index}`).toBe(
+      source.scales[offset]! * source.scales[offset + 1]! * source.scales[offset + 2]! >= 0 ? 1 : 0,
+    );
   }
 };
 
@@ -153,6 +157,20 @@ describe("glTF instance transform registry", () => {
     expect(translated.slice(0, 12)).toEqual(basis);
     expect(translated.slice(12, 15)).toEqual([7, 8, 9]);
     expectMatricesCurrent(registry, tracked.source);
+    registry.endFrame(true);
+  });
+
+  it("updates winding orientation only from synchronized scale", () => {
+    const tracked = trackedSource(3);
+    tracked.source.scales.set([-1, 1, 1, -1, -2, 1, 0, -1, 1]);
+    const registry = new GltfInstanceTransformRegistry(() => undefined);
+    registry.reconcile([change(tracked.source, 0, 1)]);
+    expect(Array.from(registry.views(tracked.source).orientationPreserving)).toEqual([0, 1, 1]);
+
+    tracked.source.scales.set([1, 1, 1], 0);
+    tracked.source.commitScale(0, 1);
+    registry.beginFrame();
+    expect(Array.from(registry.views(tracked.source).orientationPreserving)).toEqual([1, 1, 1]);
     registry.endFrame(true);
   });
 
