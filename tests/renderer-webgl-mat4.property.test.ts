@@ -10,7 +10,9 @@ import type {
 } from "../packages/renderer-webgl/src/gltf/schema";
 import { gltfNodeMat4 } from "../packages/renderer-webgl/src/gltf/transforms";
 import {
+  affineSurfaceNormalTransformInto,
   cameraWorldPositionFromViewInto,
+  identityMat4,
   multiplyMat4,
   rotationXMat4,
   rotationYMat4,
@@ -60,6 +62,26 @@ const referenceTransformVector = (
 };
 
 describe("renderer-webgl transform matrix properties", () => {
+  it("builds reusable signed cofactor normal transforms", () => {
+    const output = identityMat4();
+    forEachFuzzCase({ cases: 64, seed: 0xc0fa_c701 }, ({ label, random }) => {
+      const scale = random.array(3, () => random.number(0.05, 10)) as [number, number, number];
+      if (random.boolean()) scale[random.int(0, 2)]! *= -1;
+      const model = transformMat4({
+        position: random.array(3, () => random.number(-100, 100)) as [number, number, number],
+        rotation: random.array(3, () => random.number(-Math.PI, Math.PI)) as [number, number, number],
+        scale,
+      });
+      expect(affineSurfaceNormalTransformInto(output, model), label).toBe(output);
+      const determinant = scale[0] * scale[1] * scale[2];
+      expect(output[15], label).toBe(determinant < 0 ? -1 : 1);
+      const tangent = transformDirection(model, [1, 0, 0]);
+      const normal = transformDirection(output, [0, 1, 0]);
+      expect(tangent[0] * normal[0] + tangent[1] * normal[1] + tangent[2] * normal[2], label)
+        .toBeCloseTo(0, 6);
+    });
+  });
+
   it("recovers camera world positions into reusable storage", () => {
     forEachFuzzCase({ cases: 64, seed: 0xca6e_a123 }, ({ label, random }) => {
       const position = random.array(3, () => random.number(-1_000, 1_000)) as [number, number, number];

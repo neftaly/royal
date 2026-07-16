@@ -75,6 +75,39 @@ export const cameraWorldPositionFromViewInto = (
   return out;
 };
 
+/**
+ * Writes the signed cofactor transform used for affine surface normals.
+ * The upper-left mat3 transforms normals; slot 15 carries basis handedness.
+ * Keeping both in one mat4 gives the vertex shell a single cached uniform.
+ */
+export const affineSurfaceNormalTransformInto = (
+  out: MutableMat4,
+  model: Mat4,
+): MutableMat4 => {
+  const cofactor0X = model[5] * model[10] - model[6] * model[9];
+  const cofactor0Y = model[6] * model[8] - model[4] * model[10];
+  const cofactor0Z = model[4] * model[9] - model[5] * model[8];
+  const determinant = model[0] * cofactor0X + model[1] * cofactor0Y + model[2] * cofactor0Z;
+  const handedness = determinant < 0 ? -1 : 1;
+  out[0] = cofactor0X * handedness;
+  out[1] = cofactor0Y * handedness;
+  out[2] = cofactor0Z * handedness;
+  out[3] = 0;
+  out[4] = (model[2] * model[9] - model[1] * model[10]) * handedness;
+  out[5] = (model[0] * model[10] - model[2] * model[8]) * handedness;
+  out[6] = (model[1] * model[8] - model[0] * model[9]) * handedness;
+  out[7] = 0;
+  out[8] = (model[1] * model[6] - model[2] * model[5]) * handedness;
+  out[9] = (model[2] * model[4] - model[0] * model[6]) * handedness;
+  out[10] = (model[0] * model[5] - model[1] * model[4]) * handedness;
+  out[11] = 0;
+  out[12] = 0;
+  out[13] = 0;
+  out[14] = 0;
+  out[15] = handedness;
+  return out;
+};
+
 export const transformPointInto = (
   out: MutableVec3,
   matrix: Mat4,

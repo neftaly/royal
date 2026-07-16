@@ -7,6 +7,7 @@ import {
 import type { GltfFrameBatchArena, GltfFrameBatchCounters, GltfFrameDrawBatch } from "../gltf/frame-batch-arena";
 import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
 import {
+  affineSurfaceNormalTransformInto,
   cameraWorldPositionFromViewInto,
   identityMat4,
   multiplyMat4Into,
@@ -332,6 +333,7 @@ export class SurfaceExecutionArena {
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
+  readonly #singleNormalTransform = identityMat4();
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
@@ -482,6 +484,12 @@ export class SurfaceExecutionArena {
       uniformMatrix(this.#programs, program, "u_view", input.view);
       uniformMatrix(this.#programs, program, "u_model", input.model);
       if (!loading && surfaceMaterial?.kind === "standard") {
+        uniformMatrix(
+          this.#programs,
+          program,
+          "u_modelNormalTransform",
+          affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model),
+        );
         this.#bindCameraWorldPosition(program, input.view);
       }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);

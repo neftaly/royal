@@ -353,12 +353,15 @@ vec3 materialGeometryTangent(vec3 normal) {
 }
 
 vec3 materialTangentNormal(vec3 geometricNormal, vec3 textureNormal, vec2 normalUv) {
-  vec3 normal = normalize(geometricNormal);
+  // materialGeometricNormal already returns unit length. The explicit tangent
+  // projection below restores orthogonality after interpolation, so its cross
+  // product with the normal is unit length as well.
+  vec3 normal = geometricNormal;
   if (v_tangent.w == 0.0) {
     return normalize(materialFallbackCotangentFrame(normal, normalUv) * textureNormal);
   }
   vec3 tangent = materialGeometryTangent(normal);
-  vec3 bitangent = normalize(cross(normal, tangent))
+  vec3 bitangent = cross(normal, tangent)
     * (v_tangent.w < 0.0 ? -1.0 : 1.0)
     * materialFaceSign();
 

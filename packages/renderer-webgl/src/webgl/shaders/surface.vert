@@ -10,6 +10,7 @@ layout(location = 12) in vec4 a_color;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_model;
+uniform mat4 u_modelNormalTransform;
 
 out vec3 v_normal;
 out vec4 v_tangent;
@@ -17,20 +18,6 @@ out vec3 v_worldPosition;
 out vec2 v_uv0;
 out vec2 v_uv1;
 out vec4 v_color;
-
-float basisHandedness(mat3 basis) {
-  return determinant(basis) < 0.0 ? -1.0 : 1.0;
-}
-
-vec3 transformSurfaceNormal(mat3 basis, vec3 normal, float handedness) {
-  // sign(det(basis)) * cofactor(basis) is proportional to the inverse transpose,
-  // but avoids a matrix inverse and remains finite when an axis is degenerate.
-  return handedness * (
-    cross(basis[1], basis[2]) * normal.x
-    + cross(basis[2], basis[0]) * normal.y
-    + cross(basis[0], basis[1]) * normal.z
-  );
-}
 
 vec3 orthogonalizeSurfaceTangent(vec3 tangent, vec3 normal) {
   float normalLengthSquared = dot(normal, normal);
@@ -51,11 +38,9 @@ void main() {
   float localTangentHandedness = a_tangent.w;
   vec4 worldPosition = u_model * vec4(localPosition, 1.0);
   mat3 modelBasis = mat3(u_model);
-  float modelHandedness = basisHandedness(modelBasis);
+  float modelHandedness = u_modelNormalTransform[3][3];
 
-  vec3 worldNormal = normalizeSurfaceDirection(
-    transformSurfaceNormal(modelBasis, localNormal, modelHandedness)
-  );
+  vec3 worldNormal = normalizeSurfaceDirection(mat3(u_modelNormalTransform) * localNormal);
   vec3 worldTangent = normalizeSurfaceDirection(
     orthogonalizeSurfaceTangent(modelBasis * localTangent, worldNormal)
   );

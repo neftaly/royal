@@ -76,7 +76,7 @@ const hasVirtualBaseColorSource = (features: ReadonlySet<SurfaceShaderTextureFea
   virtualBaseColorFeaturePair.every((feature) => features.has(feature));
 
 describe("surface shader variants", () => {
-  it("keeps inverse-transpose normal and orthogonal tangent handling in every surface vertex variant", () => {
+  it("keeps affine normal and orthogonal tangent handling in every surface vertex variant", () => {
     const surfaceKinds = [
       "surface",
       "surface-instanced-split",
@@ -85,15 +85,18 @@ describe("surface shader variants", () => {
     for (const kind of surfaceKinds) {
       const source = vertexShaderSource(kind);
 
-      expect(source, kind).toContain("cross(basis[1], basis[2]) * normal.x");
       expect(source, kind).toContain("orthogonalizeSurfaceTangent(");
       expect(source, kind).toContain("normalizeSurfaceDirection(");
       expect(source, kind).toContain("lengthSquared > 0.0");
       expect(source, kind).toContain("localTangentHandedness *");
       expect(source, kind).not.toMatch(/__[A-Z0-9_]+__/u);
       if (kind.startsWith("surface-instanced-split")) {
+        expect(source, kind).toContain("cross(basis[1], basis[2]) * normal.x");
         expect(source, kind).toContain("transformRootNormal(");
         expect(source, kind).toContain("a_instanceScale.y * a_instanceScale.z * localNormal.x");
+      } else {
+        expect(source, kind).toContain("uniform mat4 u_modelNormalTransform;");
+        expect(source, kind).toContain("mat3(u_modelNormalTransform) * localNormal");
       }
     }
   });
