@@ -1,7 +1,7 @@
 import type { ResourceGovernorLease } from "../resource-governor";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
-  decodedTextureLevels,
+  decodedTextureBytes,
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
@@ -143,8 +143,7 @@ export class DecodedTextureSourceLifetime {
 
 export const decodedTextureSourceBytes = (source: LoadedTextureSource): number => {
   if (isDecodedRgbaTexture(source) || isDecodedCompressedTexture(source)) {
-    const bytes = decodedTextureLevels(source)
-      .reduce((sum, level) => sum + level.data.byteLength, 0);
+    const bytes = decodedTextureBytes(source);
     if (!Number.isSafeInteger(bytes)) {
       throw new RangeError("Decoded texture source byte size exceeds safe integer capacity");
     }

@@ -1,6 +1,6 @@
 import {
+  decodedTextureBytes,
   decodedTextureHasCompleteMipChain,
-  decodedTextureLevels,
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
@@ -359,8 +359,12 @@ export const ordinaryTextureUploadCost = (
 ): { readonly persistentGpuBytes: number; readonly uploadBytes: number } => {
   const mipmapped = usesMipmaps(upload.texture.sampler?.minFilter);
   if (isDecodedCompressedTexture(upload.source)) {
-    const levels = mipmapped ? upload.source.levels : upload.source.levels.slice(0, 1);
-    const bytes = levels.reduce((sum, level) => sum + level.data.byteLength, 0);
+    const levels = upload.source.levels;
+    const levelCount = mipmapped ? levels.length : Math.min(1, levels.length);
+    let bytes = 0;
+    for (let index = 0; index < levelCount; index += 1) {
+      bytes += levels[index]!.data.byteLength;
+    }
     if (!Number.isSafeInteger(bytes)) {
       throw new RangeError("ordinary compressed texture byte size exceeds safe integer range");
     }
@@ -384,15 +388,16 @@ export const ordinaryTextureUploadCost = (
     }
   }
   const [sourceWidth, sourceHeight] = size;
-  const decoded = isDecodedRgbaTexture(upload.source) || isDecodedCompressedTexture(upload.source);
-  const uploadBytes = decoded
-    && mipmapped
-    && decodedTextureHasCompleteMipChain(upload.source)
-      ? decodedTextureLevels(upload.source).reduce((sum, level) => sum + level.data.byteLength, 0)
-      : decoded
-        ? upload.source.data.byteLength
-      : checkedTextureDimension(sourceWidth, "ordinary texture width")
-        * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
+  let uploadBytes: number;
+  if (isDecodedRgbaTexture(upload.source)) {
+    const levels = upload.source.levels;
+    uploadBytes = mipmapped && levels !== undefined && decodedTextureHasCompleteMipChain(upload.source)
+      ? decodedTextureBytes(upload.source)
+      : upload.source.data.byteLength;
+  } else {
+    uploadBytes = checkedTextureDimension(sourceWidth, "ordinary texture width")
+      * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
+  }
   if (!Number.isSafeInteger(uploadBytes)) {
     throw new RangeError("ordinary texture upload byte size exceeds safe integer range");
   }

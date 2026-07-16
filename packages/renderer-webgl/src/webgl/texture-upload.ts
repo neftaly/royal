@@ -1,6 +1,5 @@
 import {
   decodedTextureHasCompleteMipChain,
-  decodedTextureLevels,
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   type LoadedTextureSource,
@@ -62,10 +61,12 @@ export const uploadTexture = (
   const mipmapped = usesMipmaps(texture.sampler?.minFilter);
   let mipmapLevelsReady = false;
   if (isDecodedCompressedTexture(source)) {
-    const levels = mipmapped ? source.levels : source.levels.slice(0, 1);
+    const levels = source.levels;
+    const levelCount = mipmapped ? levels.length : Math.min(1, levels.length);
     mipmapLevelsReady = mipmapped;
     const format = texture.colorSpace === "srgb" ? source.srgbFormat : source.format;
-    for (const [levelIndex, level] of levels.entries()) {
+    for (let levelIndex = 0; levelIndex < levelCount; levelIndex += 1) {
+      const level = levels[levelIndex]!;
       gl.compressedTexImage2D(
         gl.TEXTURE_2D,
         levelIndex,
@@ -80,14 +81,14 @@ export const uploadTexture = (
     // the texture's mip range makes any valid authored prefix complete while
     // retaining every supplied level for minification.
     if (mipmapped && !decodedTextureHasCompleteMipChain(source)) {
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levels.length - 1);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levelCount - 1);
     }
   } else if (isDecodedRgbaTexture(source)) {
     mipmapLevelsReady = mipmapped && decodedTextureHasCompleteMipChain(source);
-    const levels = mipmapLevelsReady
-      ? decodedTextureLevels(source)
-      : decodedTextureLevels(source).slice(0, 1);
-    for (const [levelIndex, level] of levels.entries()) {
+    const levels = source.levels;
+    const levelCount = mipmapLevelsReady && levels !== undefined ? levels.length : 1;
+    for (let levelIndex = 0; levelIndex < levelCount; levelIndex += 1) {
+      const level = levels?.[levelIndex] ?? source;
       gl.texImage2D(
         gl.TEXTURE_2D,
         levelIndex,

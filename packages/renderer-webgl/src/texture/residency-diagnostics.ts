@@ -6,7 +6,7 @@ import {
 } from "../resource-arena";
 import type { WebGlTextureResidencySnapshot } from "../root-types";
 import {
-  decodedTextureLevels,
+  decodedTextureBytes,
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
@@ -25,7 +25,7 @@ export const textureResidencyDiagnosticsSnapshot = (
   let preparedBytes = 0;
   for (const source of sources) {
     if (isDecodedRgbaTexture(source) || isDecodedCompressedTexture(source)) {
-      for (const level of decodedTextureLevels(source)) preparedBytes += level.data.byteLength;
+      preparedBytes += decodedTextureBytes(source);
     }
     else {
       const [width, height] = loadedTextureSourceSize(source);

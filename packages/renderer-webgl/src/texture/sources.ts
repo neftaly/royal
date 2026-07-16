@@ -16,18 +16,20 @@ export const isDecodedCompressedTexture = (
   && "kind" in source
   && source.kind === "compressed-texture";
 
-export const decodedTextureLevels = (
-  source: DecodedGltfBasisuTexture,
-): NonNullable<DecodedGltfBasisuRgbaTexture["levels"]> => source.levels ?? [{
-  data: source.data,
-  height: source.height,
-  width: source.width,
-}];
+export const decodedTextureBytes = (source: DecodedGltfBasisuTexture): number => {
+  const levels = source.levels;
+  if (levels === undefined) return source.data.byteLength;
+  let bytes = 0;
+  let index = levels.length;
+  while (index > 0) bytes += levels[index -= 1]!.data.byteLength;
+  return bytes;
+};
 
 export const decodedTextureHasCompleteMipChain = (
   source: DecodedGltfBasisuTexture,
 ): boolean => {
-  const levels = decodedTextureLevels(source);
+  const levels = source.levels;
+  if (levels === undefined) return source.width === 1 && source.height === 1;
   let width = source.width;
   let height = source.height;
   for (const level of levels) {
