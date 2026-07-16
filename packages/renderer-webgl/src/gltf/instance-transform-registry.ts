@@ -10,8 +10,8 @@ import {
 } from "./instance-changes";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
+  composeEulerMat4Into,
   identityMat4,
-  transformMat4Into,
   type Mat4,
   type MutableMat4,
 } from "../math/mat4";
@@ -45,7 +45,9 @@ type GltfInstanceTransformViewState = {
   framePoseVersion: number;
   frameScaleVersion: number;
   matrixPoseVersion: number;
+  readonly matrixRotationCosines: Float64Array;
   readonly matrixRotations: Float32Array;
+  readonly matrixRotationSines: Float64Array;
   readonly matrixScales: Float32Array;
   matrixScaleVersion: number;
   readonly orientationPreserving: Uint8Array;
@@ -74,6 +76,48 @@ const copyVector3 = (target: Float32Array, source: Float32Array, offset: number)
   target[offset + 2] = source[offset + 2]!;
 };
 
+const synchronizeRotationTrig = (
+  views: GltfInstanceTransformViewState,
+  offset: number,
+): boolean => {
+  let changed = false;
+  for (let axis = 0; axis < 3; axis += 1) {
+    const componentOffset = offset + axis;
+    const rotation = views.source.rotations[componentOffset]!;
+    if (Object.is(views.matrixRotations[componentOffset], rotation)) continue;
+    views.matrixRotations[componentOffset] = rotation;
+    views.matrixRotationCosines[componentOffset] = Math.cos(rotation);
+    views.matrixRotationSines[componentOffset] = Math.sin(rotation);
+    changed = true;
+  }
+  return changed;
+};
+
+const writeInstanceMatrix = (
+  views: GltfInstanceTransformViewState,
+  index: number,
+  offset: number,
+): void => {
+  const cosX = views.matrixRotationCosines[offset]!;
+  const sinX = views.matrixRotationSines[offset]!;
+  const cosY = views.matrixRotationCosines[offset + 1]!;
+  const sinY = views.matrixRotationSines[offset + 1]!;
+  const cosZ = views.matrixRotationCosines[offset + 2]!;
+  const sinZ = views.matrixRotationSines[offset + 2]!;
+  composeEulerMat4Into(
+    views.rootModels[index]!,
+    views.source.positions,
+    views.source.scales,
+    offset,
+    cosX,
+    sinX,
+    cosY,
+    sinY,
+    cosZ,
+    sinZ,
+  );
+};
+
 const applyInstanceMatrix = (
   views: GltfInstanceTransformViewState,
   index: number,
@@ -83,12 +127,11 @@ const applyInstanceMatrix = (
 ): void => {
   const offset = index * 3;
   const rotationChanged = rotationDirty
-    && !sameVector3(views.matrixRotations, views.source.rotations, offset);
+    && synchronizeRotationTrig(views, offset);
   const scaleChanged = scaleDirty
     && !sameVector3(views.matrixScales, views.source.scales, offset);
   if (rotationChanged || scaleChanged) {
-    transformMat4Into(views.rootModels[index]!, views.transforms[index]);
-    if (rotationChanged) copyVector3(views.matrixRotations, views.source.rotations, offset);
+    writeInstanceMatrix(views, index, offset);
     if (scaleChanged) {
       copyVector3(views.matrixScales, views.source.scales, offset);
       views.orientationPreserving[index] = views.source.scales[offset]!
@@ -189,10 +232,17 @@ export class GltfInstanceTransformRegistry {
       }
       const transforms: Transform[] = [];
       const rootModels: MutableMat4[] = [];
+      const matrixRotationCosines = new Float64Array(source.rotations.length);
       const matrixRotations = new Float32Array(source.rotations.length);
+      const matrixRotationSines = new Float64Array(source.rotations.length);
       const matrixScales = new Float32Array(source.scales.length);
       const orientationPreserving = new Uint8Array(source.count);
-      matrixRotations.fill(NaN);
+      matrixRotations.set(source.rotations);
+      for (let offset = 0; offset < source.rotations.length; offset += 1) {
+        const rotation = source.rotations[offset]!;
+        matrixRotationCosines[offset] = Math.cos(rotation);
+        matrixRotationSines[offset] = Math.sin(rotation);
+      }
       matrixScales.fill(NaN);
       for (let index = 0; index < source.count; index += 1) {
         const offset = index * 3;
@@ -209,7 +259,9 @@ export class GltfInstanceTransformRegistry {
         framePoseVersion: source.poseVersion,
         frameScaleVersion: source.scaleVersion,
         matrixPoseVersion: -1,
+        matrixRotationCosines,
         matrixRotations,
+        matrixRotationSines,
         matrixScales,
         matrixScaleVersion: -1,
         orientationPreserving,
@@ -237,6 +289,16 @@ export class GltfInstanceTransformRegistry {
           model[12] = views.positions[offset]!;
           model[13] = views.positions[offset + 1]!;
           model[14] = views.positions[offset + 2]!;
+        }
+        views.activeApplied = true;
+        views.matrixPoseVersion = views.framePoseVersion;
+        views.matrixScaleVersion = views.frameScaleVersion;
+        return views;
+      }
+      if (areAllInstancesDirty(rotation, views.transforms.length)
+        || areAllInstancesDirty(scale, views.transforms.length)) {
+        for (let index = 0; index < views.transforms.length; index += 1) {
+          applyInstanceMatrix(views, index, true, true, true);
         }
         views.activeApplied = true;
         views.matrixPoseVersion = views.framePoseVersion;

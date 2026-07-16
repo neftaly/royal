@@ -157,19 +157,21 @@ export const rotationZMat4 = (radians: number): Mat4 => {
   ];
 };
 
-export const transformMat4Into = (
+export const composeEulerMat4Into = (
   out: MutableMat4,
-  transform: Transform | undefined,
+  position: ArrayLike<number>,
+  scale: ArrayLike<number>,
+  offset: number,
+  cosX: number,
+  sinX: number,
+  cosY: number,
+  sinY: number,
+  cosZ: number,
+  sinZ: number,
 ): MutableMat4 => {
-  const actual = transform ?? IDENTITY_TRANSFORM;
-  const [rotationX, rotationY, rotationZ] = actual.rotation;
-  const cosX = Math.cos(rotationX);
-  const sinX = Math.sin(rotationX);
-  const cosY = Math.cos(rotationY);
-  const sinY = Math.sin(rotationY);
-  const cosZ = Math.cos(rotationZ);
-  const sinZ = Math.sin(rotationZ);
-  const [scaleX, scaleY, scaleZ] = actual.scale;
+  const scaleX = scale[offset]!;
+  const scaleY = scale[offset + 1]!;
+  const scaleZ = scale[offset + 2]!;
 
   out[0] = cosZ * cosY * scaleX;
   out[1] = sinZ * cosY * scaleX;
@@ -183,11 +185,37 @@ export const transformMat4Into = (
   out[9] = (sinZ * sinY * cosX - cosZ * sinX) * scaleZ;
   out[10] = cosY * cosX * scaleZ;
   out[11] = 0;
-  out[12] = actual.position[0];
-  out[13] = actual.position[1];
-  out[14] = actual.position[2];
+  out[12] = position[offset]!;
+  out[13] = position[offset + 1]!;
+  out[14] = position[offset + 2]!;
   out[15] = 1;
   return out;
+};
+
+export const transformMat4Into = (
+  out: MutableMat4,
+  transform: Transform | undefined,
+): MutableMat4 => {
+  const actual = transform ?? IDENTITY_TRANSFORM;
+  const [rotationX, rotationY, rotationZ] = actual.rotation;
+  const cosX = Math.cos(rotationX);
+  const sinX = Math.sin(rotationX);
+  const cosY = Math.cos(rotationY);
+  const sinY = Math.sin(rotationY);
+  const cosZ = Math.cos(rotationZ);
+  const sinZ = Math.sin(rotationZ);
+  return composeEulerMat4Into(
+    out,
+    actual.position,
+    actual.scale,
+    0,
+    cosX,
+    sinX,
+    cosY,
+    sinY,
+    cosZ,
+    sinZ,
+  );
 };
 
 export const transformMat4 = (transform: Transform | undefined): Mat4 =>
