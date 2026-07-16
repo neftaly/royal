@@ -186,12 +186,15 @@ const applyDirtyInstanceMatrices = (
 
   if (allPositionsDirty) {
     views.matrixPositions.set(views.source.positions);
-    for (let index = 0; index < count; index += 1) {
-      const offset = index * 3;
-      const model = views.rootModels[index]!;
-      model[12] = views.matrixPositions[offset]!;
-      model[13] = views.matrixPositions[offset + 1]!;
-      model[14] = views.matrixPositions[offset + 2]!;
+    // A full rotation or scale lane rewrites every matrix below, including translation.
+    if (!allRotationsDirty && !allScalesDirty) {
+      for (let index = 0; index < count; index += 1) {
+        const offset = index * 3;
+        const model = views.rootModels[index]!;
+        model[12] = views.matrixPositions[offset]!;
+        model[13] = views.matrixPositions[offset + 1]!;
+        model[14] = views.matrixPositions[offset + 2]!;
+      }
     }
   }
   if (allRotationsDirty || allScalesDirty) {
