@@ -733,7 +733,8 @@ const groupCurrentGltfPacketSubmissionSegment = <M, R, L>(
       sidedness,
       renderClass,
     );
-    workspace.batchIds.fill(batchId, memberIndex, runEnd);
+    if (runEnd === memberIndex + 1) workspace.batchIds[memberIndex] = batchId;
+    else workspace.batchIds.fill(batchId, memberIndex, runEnd);
     if (registry.batchTouchedEpochs[batchId] !== registry.frameEpoch) {
       registry.batchTouchedEpochs[batchId] = registry.frameEpoch;
       registry.touchedBatchIds[registry.touchedBatchCount] = batchId;
