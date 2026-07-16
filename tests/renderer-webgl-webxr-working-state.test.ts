@@ -91,7 +91,6 @@ describe("WebGL root WebXR working state contracts", () => {
 
     const framebufferBinds = calls.filter((call) => call.name === "bindFramebuffer");
     expect(framebufferBinds[0]?.args).toEqual([gl.FRAMEBUFFER, framebuffer]);
-    expect(framebufferBinds.at(-1)?.args).toEqual([gl.FRAMEBUFFER, null]);
     expect(calls.filter((call) => call.name === "viewport").map((call) => call.args)).toEqual([
       [0, 0, 100, 80],
       [100, 0, 100, 80],

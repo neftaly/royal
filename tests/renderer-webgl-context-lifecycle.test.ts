@@ -446,17 +446,11 @@ describe("WebGL root context lifecycle contracts", () => {
     expect(canvas.getContext.mock.calls.some((call) => call[0] === "webgl2")).toBe(true);
   });
 
-  it("preserves a primary render failure while completing the logical epilogue and every GL normalization", () => {
+  it("preserves a primary render failure while completing the logical epilogue", () => {
     const { gl } = fakeGl();
     const primaryFailure = new Error("primary render failure");
     vi.mocked(gl.clear).mockImplementation(() => {
       throw primaryFailure;
-    });
-    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
-      if (vertexArray === null) throw undefined;
-    });
-    vi.mocked(gl.bindBuffer).mockImplementation((_target, buffer) => {
-      if (buffer === null) throw new Error("secondary normalization failure");
     });
     const root = createWebGlRoot(fakeCanvas(gl));
 
@@ -472,16 +466,11 @@ describe("WebGL root context lifecycle contracts", () => {
     expect(thrownPresent).toBe(true);
     expect(thrown).toBe(primaryFailure);
     expect(root.frame).toBe(1);
-    expect(gl.bindVertexArray).toHaveBeenCalledWith(null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
   });
 
-  it("preserves an opaque undefined GL normalization failure", () => {
+  it("preserves an opaque undefined render failure", () => {
     const { gl } = fakeGl();
-    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
-      if (vertexArray === null) throw undefined;
-    });
+    vi.mocked(gl.clear).mockImplementation(() => { throw undefined; });
     const root = createWebGlRoot(fakeCanvas(gl));
     let thrownPresent = false;
     let thrown: unknown = "not thrown";
@@ -497,35 +486,19 @@ describe("WebGL root context lifecycle contracts", () => {
     expect(thrown).toBeUndefined();
   });
 
-  it("attempts later epilogue and normalization phases after body and early-epilogue failures", () => {
+  it("attempts later epilogue phases after body and early-epilogue failures", () => {
     const { gl } = fakeGl();
     const primaryFailure = new Error("baseline preparation failed");
     vi.mocked(gl.clearDepth).mockImplementation(() => {
       throw primaryFailure;
     });
-    let nullFramebufferBindings = 0;
-    vi.mocked(gl.bindFramebuffer).mockImplementation((_target, framebuffer) => {
-      if (framebuffer === null && ++nullFramebufferBindings > 1) {
-        throw new Error("framebuffer normalization failed");
-      }
-    });
-    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
-      if (vertexArray === null) throw undefined;
-    });
-    vi.mocked(gl.bindBuffer).mockImplementation((_target, buffer) => {
-      if (buffer === null) throw new Error("buffer normalization failed");
-    });
     const root = createWebGlRoot(fakeCanvas(gl));
 
     expect(() => root.render(drawableScene([0, 0, 0, 0]))).toThrow(primaryFailure);
     // Baseline preparation failed before the instance-buffer frame began, so
-    // unused-batch release also fails. The later frame/budget advance and all
-    // GL normalization operations must nevertheless still run.
+    // unused-batch release also fails. The later frame/budget advance must
+    // nevertheless still run.
     expect(root.frame).toBe(1);
-    expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(gl.FRAMEBUFFER, null);
-    expect(gl.bindVertexArray).toHaveBeenLastCalledWith(null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
   });
 
   it("preserves an opaque dispose failure while attempting later GPU authorities", () => {

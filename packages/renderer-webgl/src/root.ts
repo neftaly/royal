@@ -16,7 +16,12 @@ import { loadHtmlImage } from "./texture/browser-image-loader";
 import { monotonicNowMs, type MonotonicClock } from "./clock";
 import { GpuUploadCapacityError } from "./gpu-upload-capacity-error";
 import { BoundedDiagnosticLog } from "./diagnostics";
-import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
+import {
+  captureFailure,
+  captureFirstFailure,
+  retainFirstFailure,
+  type CapturedFailure,
+} from "./captured-failure";
 import {
   DecodedTextureSourceLifetime,
 } from "./texture/decoded-source-lifetime";
@@ -280,13 +285,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #resourceArenaSideEffects = new ResourceArenaSideEffectDebtOwner();
   readonly #capacityWakes = new ResourceCapacityWakeOwner({
     invalidate: () => this.invalidate(),
-    wakeCpuCapacity: () => {
+    preparation: [
+      () => this.#preparedGltf.scheduler.wake(),
+      () => this.#preparedGltf.wakeImages(),
+      () => this.#ordinaryTextures.wakeSourceJobs(),
+      () => this.#virtualTextures.drainRequests(),
+    ],
+    wakeCpu: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeCpuCapacity();
       const preparedAssetWake = wakeResourceArenaPreparedAssetCpuCapacity(this.#resourceArena);
       const virtualTextureWake = this.#virtualTextures.wakeDecodedCapacity();
       return ordinaryWake || preparedAssetWake || virtualTextureWake;
     },
-    wakePersistentGpuCapacity: () => {
+    wakeGpu: () => {
       const ordinaryWake = this.#ordinaryTextures.wakeGpuCapacity();
       const iblWake = this.#ibl.wakeDurablePressure();
       this.#virtualTextures.scheduleGovernedAdmissionRetry();
@@ -315,13 +326,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         if (released) return;
         released = true;
         reservation.cancel();
-        const wakes = [
-          () => this.#preparedGltf.scheduler.wake(),
-          () => this.#preparedGltf.wakeImages(),
-          () => this.#ordinaryTextures.wakeSourceJobs(),
-          () => this.#virtualTextures.drainRequests(),
-        ];
-        this.#capacityWakes.wakePreparationPeers(wakes);
+        this.#capacityWakes.wakePreparation();
       },
     };
   };
@@ -1065,51 +1070,61 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.invalidate();
       } else renderFailure = { value };
     }
-    renderFailure = captureFirstFailure(renderFailure, () => this.#consumeSurfaceExecutionSignals());
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined && !renderDeferred),
-    );
-    renderFailure = captureFirstFailure(renderFailure, () => {
+    try {
+      this.#consumeSurfaceExecutionSignals();
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
+      this.#gltfInstanceTransforms.endFrame(renderFailure === undefined && !renderDeferred);
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
       this.#gltfPacketSubmissions.releaseUnused(this.#gl, this.#context.generation);
-    });
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => this.#clusteredLights.endFrame(this.#framePublication.frame),
-    );
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => this.#virtualTextures.finishFrame(renderFailure === undefined && !renderDeferred),
-    );
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
+      this.#clusteredLights.endFrame(this.#framePublication.frame);
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
+      this.#virtualTextures.finishFrame(renderFailure === undefined && !renderDeferred);
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
     if (renderFailure === undefined && !renderDeferred) {
-      renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.processGpuUploads());
+      try {
+        this.#virtualTextures.processGpuUploads();
+      } catch (value) {
+        renderFailure = { value };
+      }
     }
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined && !renderDeferred),
-    );
-    renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
-    renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextures.drainRequests());
-    renderFailure = captureFirstFailure(renderFailure, () => {
+    try {
+      this.#ordinaryTextureGpu.finalizeResidencyIntent(
+        renderFailure === undefined && !renderDeferred,
+      );
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
+      this.#framePublication.advance();
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
+      this.#virtualTextures.drainRequests();
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    try {
       if (this.#virtualTextures.hasActionableUploads()) this.invalidate();
-    });
-
-    // The renderer exclusively owns its context, but leaving vertex-input
-    // bindings neutral makes frame teardown explicit. The EAB is VAO state,
-    // so select the default VAO before clearing it.
-    if (frameViews.scissor) {
-      renderFailure = captureFirstFailure(renderFailure, () => gl.disable(gl.SCISSOR_TEST));
+    } catch (value) {
+      renderFailure = retainFirstFailure(renderFailure, value);
     }
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => gl.bindFramebuffer(gl.FRAMEBUFFER, null),
-    );
-    renderFailure = captureFirstFailure(renderFailure, () => gl.bindVertexArray(null));
-    renderFailure = captureFirstFailure(renderFailure, () => gl.bindBuffer(gl.ARRAY_BUFFER, null));
-    renderFailure = captureFirstFailure(
-      renderFailure,
-      () => gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null),
-    );
+
     if (renderFailure !== undefined) throw renderFailure.value;
     if (renderDeferred) return;
     this.#framePublication.publishFrame();

@@ -115,10 +115,6 @@ describe("WebGL root context lifecycle integration", () => {
 
     expect(() => root.render(emptyScene())).toThrow(marker);
     expect(root.frame).toBe(1);
-    expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(gl.FRAMEBUFFER, null);
-    expect(gl.bindVertexArray).toHaveBeenLastCalledWith(null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
-    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
 
     expect(() => root.render(emptyScene())).not.toThrow();
     expect(root.frame).toBe(2);

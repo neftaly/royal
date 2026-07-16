@@ -1,5 +1,10 @@
 export type CapturedFailure = { readonly value: unknown };
 
+export const retainFirstFailure = (
+  first: CapturedFailure | undefined,
+  value: unknown,
+): CapturedFailure => first ?? { value };
+
 export const captureFailure = (action: () => void): CapturedFailure | undefined => {
   try {
     action();

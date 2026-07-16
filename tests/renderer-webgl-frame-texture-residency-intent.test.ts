@@ -42,6 +42,20 @@ describe("frame texture residency intent", () => {
     expect(intent.finishFrame(true)).toEqual(["virtual-only"]);
   });
 
+  it("reuses frame-owned suppression storage", () => {
+    const intent = new FrameTextureResidencyIntent();
+    intent.beginFrame();
+    intent.recordVirtualBind("first");
+    const first = intent.finishFrame(true);
+
+    intent.beginFrame();
+    intent.recordVirtualBind("second");
+    const second = intent.finishFrame(true);
+
+    expect(second).toBe(first);
+    expect(second).toEqual(["second"]);
+  });
+
   it("rolls back a failed frame and starts the next frame clean", () => {
     const intent = new FrameTextureResidencyIntent();
     intent.beginFrame();

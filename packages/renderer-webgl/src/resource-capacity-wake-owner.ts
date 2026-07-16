@@ -5,8 +5,9 @@ export type ResourceCapacityRelease = Readonly<{
 
 export type ResourceCapacityWakeOwnerOptions = Readonly<{
   invalidate: () => void;
-  wakeCpuCapacity: () => boolean;
-  wakePersistentGpuCapacity: () => boolean;
+  preparation: readonly (() => void)[];
+  wakeCpu: () => boolean;
+  wakeGpu: () => boolean;
 }>;
 
 /** Owns coalescing and suppression for root-wide resource-capacity wakeups. */
@@ -44,7 +45,7 @@ export class ResourceCapacityWakeOwner {
     queueMicrotask(() => queueMicrotask(() => {
       this.#cpuWakeScheduled = false;
       if (this.#disposed) return;
-      if (this.#options.wakeCpuCapacity()) this.#options.invalidate();
+      if (this.#options.wakeCpu()) this.#options.invalidate();
     }));
   }
 
@@ -60,10 +61,11 @@ export class ResourceCapacityWakeOwner {
 
   wakePersistentGpuCapacity(): void {
     if (this.#disposed || this.persistentGpuWakeSuppressed) return;
-    if (this.#options.wakePersistentGpuCapacity()) this.#options.invalidate();
+    if (this.#options.wakeGpu()) this.#options.invalidate();
   }
 
-  wakePreparationPeers(wakes: readonly (() => void)[]): void {
+  wakePreparation(): void {
+    const wakes = this.#options.preparation;
     if (this.#disposed || wakes.length === 0) return;
     const start = this.#preparationWakeCursor % wakes.length;
     this.#preparationWakeCursor = (start + 1) % wakes.length;

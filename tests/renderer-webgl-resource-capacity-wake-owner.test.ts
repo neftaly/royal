@@ -13,11 +13,12 @@ describe("WebGL resource-capacity wake owner", () => {
     let invalidations = 0;
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => { invalidations += 1; },
-      wakeCpuCapacity: () => {
+      preparation: [],
+      wakeCpu: () => {
         wakes += 1;
         return true;
       },
-      wakePersistentGpuCapacity: () => false,
+      wakeGpu: () => false,
     });
 
     owner.scheduleCpuCapacityWake();
@@ -37,8 +38,9 @@ describe("WebGL resource-capacity wake owner", () => {
     let invalidations = 0;
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => { invalidations += 1; },
-      wakeCpuCapacity: () => false,
-      wakePersistentGpuCapacity: () => {
+      preparation: [],
+      wakeCpu: () => false,
+      wakeGpu: () => {
         wakes += 1;
         return true;
       },
@@ -61,11 +63,12 @@ describe("WebGL resource-capacity wake owner", () => {
     const calls: string[] = [];
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => calls.push("invalidate"),
-      wakeCpuCapacity: () => {
+      preparation: [],
+      wakeCpu: () => {
         calls.push("cpu");
         return false;
       },
-      wakePersistentGpuCapacity: () => {
+      wakeGpu: () => {
         calls.push("gpu");
         return false;
       },
@@ -86,17 +89,17 @@ describe("WebGL resource-capacity wake owner", () => {
     const calls: string[] = [];
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => calls.push("invalidate"),
-      wakeCpuCapacity: () => false,
-      wakePersistentGpuCapacity: () => false,
+      preparation: [
+        () => calls.push("a"),
+        () => calls.push("b"),
+        () => calls.push("c"),
+      ],
+      wakeCpu: () => false,
+      wakeGpu: () => false,
     });
-    const wakes = [
-      () => calls.push("a"),
-      () => calls.push("b"),
-      () => calls.push("c"),
-    ];
 
-    owner.wakePreparationPeers(wakes);
-    owner.wakePreparationPeers(wakes);
+    owner.wakePreparation();
+    owner.wakePreparation();
 
     expect(calls).toEqual([
       "a", "b", "c", "invalidate",
@@ -110,11 +113,12 @@ describe("WebGL resource-capacity wake owner", () => {
     let wakes = 0;
     const owner = new ResourceCapacityWakeOwner({
       invalidate: () => { throw new Error("disposed owner invalidated"); },
-      wakeCpuCapacity: () => {
+      preparation: [() => { wakes += 1; }],
+      wakeCpu: () => {
         wakes += 1;
         return true;
       },
-      wakePersistentGpuCapacity: () => {
+      wakeGpu: () => {
         wakes += 1;
         return true;
       },
@@ -125,7 +129,7 @@ describe("WebGL resource-capacity wake owner", () => {
     microtasks.shift()!();
     owner.scheduleCpuCapacityWake();
     owner.wakePersistentGpuCapacity();
-    owner.wakePreparationPeers([() => { wakes += 1; }]);
+    owner.wakePreparation();
 
     expect(wakes).toBe(0);
     expect(microtasks).toHaveLength(0);
