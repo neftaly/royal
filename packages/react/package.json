@@ -1,6 +1,5 @@
 {
   "name": "@royal/react",
-  "private": true,
   "version": "0.0.1",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -12,6 +11,9 @@
     "url": "https://github.com/neftaly/royal/issues"
   },
   "homepage": "https://github.com/neftaly/royal/tree/main/packages/react#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
