@@ -79,6 +79,8 @@ export interface GltfFrameDrawBatch {
   rootLayoutDirty: boolean;
   readonly rootLogicalIndices: number[];
   readonly rootTransforms: Array<Transform | undefined>;
+  sceneLightPlanRevision: number;
+  sceneLights: SurfaceLightSet | undefined;
   sidedness: GltfFrameDrawSidedness;
 }
 
@@ -156,7 +158,7 @@ export class GltfFrameBatchArena {
       planRevision,
       catalog,
     );
-    this.#prepareBatches(sceneLights, gl, contextGeneration, counters);
+    this.#prepareBatches(planRevision, sceneLights, gl, contextGeneration, counters);
     return this.#groups;
   }
 
@@ -224,6 +226,7 @@ export class GltfFrameBatchArena {
   }
 
   #prepareBatches(
+    planRevision: number,
     sceneLights: SurfaceLightSet | undefined,
     gl: WebGL2RenderingContext,
     contextGeneration: number,
@@ -259,6 +262,8 @@ export class GltfFrameBatchArena {
           rootLayoutDirty: true,
           rootLogicalIndices: [],
           rootTransforms: [],
+          sceneLightPlanRevision: 0,
+          sceneLights: undefined,
           sidedness: {
             doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
             frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
@@ -279,7 +284,18 @@ export class GltfFrameBatchArena {
       batch.cpuGeometry = geometry.source;
       batch.geometry = geometry;
       batch.geometryId = geometryId;
-      writeCombinedSurfaceLightSet(batch.lights, sceneLights, assetLights);
+      if (
+        assetLights !== undefined
+        || batch.sceneLightPlanRevision !== planRevision
+        || batch.sceneLights !== sceneLights
+      ) {
+        writeCombinedSurfaceLightSet(batch.lights, sceneLights, assetLights);
+        // Asset-local lights are transformed into a stable mutable workspace,
+        // so identity alone cannot prove their values unchanged. Scene-only
+        // composition is immutable for a plan revision and can be retained.
+        batch.sceneLightPlanRevision = assetLights === undefined ? planRevision : 0;
+        batch.sceneLights = sceneLights;
+      }
       batch.material = material.material;
       const sidedness = batch.sidedness as {
         -readonly [Key in keyof GltfFrameDrawSidedness]: GltfFrameDrawSidedness[Key];
