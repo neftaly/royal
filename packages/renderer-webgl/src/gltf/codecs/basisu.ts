@@ -35,6 +35,42 @@ export type DecodedGltfBasisuTexture =
 
 const GL_COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
 const GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
+// loaders.gl 4.4.x assigns its requested ETC2 RGBA transcode the SRGB8 enum.
+// The textureFormat and Basis target remain ETC2 RGBA; canonicalize only this
+// exact upstream alias before Royal publishes the correct WebGL2 enum.
+const LOADERS_GL_ETC2_RGBA_ENUM_ALIAS = 0x9275;
+const KTX2_IDENTIFIER = [0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A] as const;
+
+type Ktx2LogicalDimensions = Readonly<{ height: number; width: number }>;
+
+const ktx2LogicalDimensions = (bytes: ArrayBuffer): Ktx2LogicalDimensions | undefined => {
+  if (bytes.byteLength < 28) return undefined;
+  const identifier = new Uint8Array(bytes, 0, KTX2_IDENTIFIER.length);
+  for (let index = 0; index < KTX2_IDENTIFIER.length; index += 1) {
+    if (identifier[index] !== KTX2_IDENTIFIER[index]) return undefined;
+  }
+  const header = new DataView(bytes);
+  const width = header.getUint32(20, true);
+  const height = header.getUint32(24, true);
+  return width > 0 && height > 0 ? { height, width } : undefined;
+};
+
+const logicalBasisLevel = (
+  level: BasisTextureLevel,
+  base: Ktx2LogicalDimensions | undefined,
+  index: number,
+  label: string,
+): BasisTextureLevel => {
+  if (base === undefined) return level;
+  const divisor = 2 ** index;
+  const width = Math.max(1, Math.floor(base.width / divisor));
+  const height = Math.max(1, Math.floor(base.height / divisor));
+  if (level.width === width && level.height === height) return level;
+  if (level.width !== Math.max(4, width) || level.height !== Math.max(4, height)) {
+    throw new Error(`glTF KHR_texture_basisu ${label} mip ${index} dimensions disagree with its KTX2 header`);
+  }
+  return { ...level, height, width };
+};
 
 const ownedLevel = (data: Uint8Array, width: number, height: number): DecodedGltfBasisuLevel => {
   const copy = new Uint8Array(data.byteLength);
@@ -91,7 +127,7 @@ const etc2Level = (
 ): DecodedGltfBasisuLevel => {
   if (
     level.compressed !== true
-    || level.format !== GL_COMPRESSED_RGBA8_ETC2_EAC
+    || (level.format !== GL_COMPRESSED_RGBA8_ETC2_EAC && level.format !== LOADERS_GL_ETC2_RGBA_ENUM_ALIAS)
     || level.textureFormat !== "etc2-rgba8unorm"
   ) throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} did not transcode to ETC2 RGBA`);
   const [width, height] = validLevelDimensions(level, label, levelIndex);
@@ -107,8 +143,11 @@ const etc2Level = (
 export const decodedGltfBasisuEtc2 = (
   parsed: unknown,
   label: string,
+  bytes?: ArrayBuffer,
 ): DecodedGltfBasisuCompressedTexture => {
-  const levels = parsedBasisLevels(parsed, label).map((level, index) => etc2Level(level, label, index));
+  const dimensions = bytes === undefined ? undefined : ktx2LogicalDimensions(bytes);
+  const levels = parsedBasisLevels(parsed, label).map((level, index) =>
+    etc2Level(logicalBasisLevel(level, dimensions, index, label), label, index));
   validMipSizes(levels, label);
   const base = levels[0]!;
   return {
@@ -135,7 +174,7 @@ export const decodeGltfBasisuTexture = async (
     basis: { containerFormat: "auto", format: "rgba32" },
     worker: false,
   });
-  return decodedGltfBasisuRgba(parsed, label);
+  return decodedGltfBasisuRgba(parsed, label, bytes);
 };
 
 /** Transcodes a page-addressable KTX2/Basis payload to WebGL2-core ETC2. */
@@ -147,7 +186,7 @@ export const decodeGltfBasisuEtc2Texture = async (
     basis: { containerFormat: "auto", format: "etc2" },
     worker: false,
   });
-  return decodedGltfBasisuEtc2(parsed, label);
+  return decodedGltfBasisuEtc2(parsed, label, bytes);
 };
 
 /* RGBA remains the fallback when deterministic ETC2 transcoding is unavailable. */
@@ -175,8 +214,11 @@ const rgbaLevel = (
 export const decodedGltfBasisuRgba = (
   parsed: unknown,
   label: string,
+  bytes?: ArrayBuffer,
 ): DecodedGltfBasisuRgbaTexture => {
-  const levels = parsedBasisLevels(parsed, label).map((level, index) => rgbaLevel(level, label, index));
+  const dimensions = bytes === undefined ? undefined : ktx2LogicalDimensions(bytes);
+  const levels = parsedBasisLevels(parsed, label).map((level, index) =>
+    rgbaLevel(logicalBasisLevel(level, dimensions, index, label), label, index));
   validMipSizes(levels, label);
   const base = levels[0]!;
   return {

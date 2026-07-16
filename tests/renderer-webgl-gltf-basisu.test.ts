@@ -12,12 +12,22 @@ const level = (width: number, height: number, fill: number) => ({
   width,
 });
 
+const ktx2Header = (width: number, height: number): ArrayBuffer => {
+  const bytes = new Uint8Array(28);
+  bytes.set([0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A]);
+  const header = new DataView(bytes.buffer);
+  header.setUint32(20, width, true);
+  header.setUint32(24, height, true);
+  return bytes.buffer;
+};
+
 describe("glTF BasisU RGBA normalization", () => {
   it("owns a complete ETC2 chain with linear and sRGB upload formats", () => {
     const compressedLevel = (width: number, height: number, fill: number) => ({
       compressed: true,
       data: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16).fill(fill),
-      format: 0x9278,
+      // loaders.gl 4.4.x mislabels its ETC2 RGBA target with 0x9275.
+      format: 0x9275,
       height,
       textureFormat: "etc2-rgba8unorm",
       width,
@@ -59,6 +69,32 @@ describe("glTF BasisU RGBA normalization", () => {
       { height: 8, width: 8 },
       { height: 4, width: 4 },
     ]);
+  });
+
+  it("restores sub-block KTX2 dimensions before validating ETC2 and RGBA payloads", () => {
+    const paddedEtc2 = {
+      compressed: true,
+      data: new Uint8Array(16).fill(7),
+      format: 0x9278,
+      height: 4,
+      textureFormat: "etc2-rgba8unorm",
+      width: 4,
+    };
+    const paddedRgba = {
+      ...level(4, 4, 9),
+      data: new Uint8Array([127, 127, 255, 255]),
+    };
+    const header = ktx2Header(1, 1);
+
+    expect(decodedGltfBasisuEtc2([[paddedEtc2]], "one-pixel.ktx2", header))
+      .toMatchObject({ height: 1, width: 1 });
+    expect(decodedGltfBasisuRgba([[paddedRgba]], "one-pixel.ktx2", header))
+      .toMatchObject({ data: new Uint8Array([127, 127, 255, 255]), height: 1, width: 1 });
+  });
+
+  it("rejects transcoder dimensions that do not match logical or block-padded KTX2 dimensions", () => {
+    expect(() => decodedGltfBasisuRgba([[level(4, 4, 1)]], "mismatch.ktx2", ktx2Header(8, 8)))
+      .toThrow("dimensions disagree with its KTX2 header");
   });
 
   it("copies and preserves a complete authored mip chain", () => {
