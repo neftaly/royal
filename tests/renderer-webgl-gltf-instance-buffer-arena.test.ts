@@ -131,7 +131,7 @@ describe("glTF instance-buffer arena", () => {
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
-  it("rejects malformed keys and parallel lanes before publishing an allocation", () => {
+  it("rejects malformed keys and parallel lane shapes before publishing an allocation", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
@@ -144,15 +144,9 @@ describe("glTF instance-buffer arena", () => {
       rootTransforms: [],
     })).toThrow(/root transform length/);
     expect(() => bindValues(arena, gl, sink, {
-      localModels: [[...identityMat4()].slice(0, 15) as unknown as Mat4],
-    })).toThrow(/does not contain 16 elements/);
-    expect(() => bindValues(arena, gl, sink, {
       localModels: [identityMat4(), identityMat4()],
       localSignature: [1, 2, 3],
     })).toThrow(/local-model signature length/);
-    expect(() => bindValues(arena, gl, sink, {
-      logicalIndices: [0x8000_0000],
-    })).toThrow(/Invalid glTF instance-buffer logical index/);
     expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(0);
     releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
     clearGltfInstanceBufferArena(arena);

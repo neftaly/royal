@@ -224,18 +224,9 @@ const preflightBinding = (
   requireInstanceCount(rootTransforms.length, instanceCount, "root transform");
   requireInstanceCount(rootInstanceViews.length, instanceCount, "root source");
   requireInstanceCount(rootLogicalIndices.length, instanceCount, "root logical-index");
-  for (let index = 0; index < instanceCount; index += 1) {
-    if (localModels[index]!.length !== 16) {
-      throw new Error(`glTF instance-buffer local model ${index} does not contain 16 elements`);
-    }
-    const logicalIndex = rootLogicalIndices[index]!;
-    if (!Number.isInteger(logicalIndex) || logicalIndex < -1 || logicalIndex > 0x7fff_ffff) {
-      throw new Error(`Invalid glTF instance-buffer logical index ${logicalIndex}`);
-    }
-    if (rootInstanceViews[index] !== undefined && logicalIndex < 0) {
-      throw new Error("A glTF instance-buffer source requires a nonnegative logical index");
-    }
-  }
+  // Per-row matrices and logical indices come from validated packet resources
+  // and uint32 frame selections assembled by the renderer-owned workspace.
+  // Keep only constant-time parallel-lane checks at this hot publication edge.
   requireSignature(localModelSignature.length, instanceCount, "local-model");
 };
 
