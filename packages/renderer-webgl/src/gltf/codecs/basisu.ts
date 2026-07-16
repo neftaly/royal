@@ -82,11 +82,11 @@ const logicalBasisLevel = (
   return { ...level, height, width };
 };
 
-const ownedLevel = (data: Uint8Array, width: number, height: number): DecodedGltfBasisuLevel => {
-  const copy = new Uint8Array(data.byteLength);
-  copy.set(data);
-  return { data: copy, height, width };
-};
+const decodedLevel = (data: Uint8Array, width: number, height: number): DecodedGltfBasisuLevel => ({
+  data,
+  height,
+  width,
+});
 
 const validLevelDimensions = (
   level: BasisTextureLevel,
@@ -186,10 +186,10 @@ const compressedLevel = (
   if (!(data instanceof Uint8Array) || !Number.isSafeInteger(expectedLength) || data.byteLength !== expectedLength) {
     throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} decoded an invalid ${target} payload`);
   }
-  return ownedLevel(data, width, height);
+  return decodedLevel(data, width, height);
 };
 
-/** Validates and owns a deterministic ETC2 result returned by the Basis transcoder. */
+/** Validates and adopts a deterministic ETC2 result returned by the Basis transcoder. */
 export const decodedGltfBasisuEtc2 = (
   parsed: unknown,
   label: string,
@@ -304,10 +304,10 @@ const rgbaLevel = (
   if (!Number.isSafeInteger(expectedLength) || data.byteLength !== expectedLength) {
     throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} decoded an invalid RGBA8 payload`);
   }
-  return ownedLevel(data, width, height);
+  return decodedLevel(data, width, height);
 };
 
-/** Validates and owns the deterministic RGBA result returned by the Basis transcoder. */
+/** Validates and adopts the deterministic RGBA result returned by the Basis transcoder. */
 export const decodedGltfBasisuRgba = (
   parsed: unknown,
   label: string,

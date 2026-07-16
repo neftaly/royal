@@ -22,7 +22,7 @@ const ktx2Header = (width: number, height: number): ArrayBuffer => {
 };
 
 describe("glTF BasisU RGBA normalization", () => {
-  it("owns a complete ETC2 chain with linear and sRGB upload formats", () => {
+  it("adopts a complete ETC2 chain with linear and sRGB upload formats", () => {
     const compressedLevel = (width: number, height: number, fill: number) => ({
       compressed: true,
       data: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16).fill(fill),
@@ -47,7 +47,7 @@ describe("glTF BasisU RGBA normalization", () => {
       width: 4,
     });
     expect(decoded.levels.map((entry) => entry.data[0])).toEqual([1, 2, 3]);
-    expect(decoded.data).not.toBe(base.data);
+    expect(decoded.data).toBe(base.data);
   });
 
   it("owns a valid incomplete ETC2 mip prefix without expanding it to RGBA", () => {
@@ -97,7 +97,7 @@ describe("glTF BasisU RGBA normalization", () => {
       .toThrow("dimensions disagree with its KTX2 header");
   });
 
-  it("copies and preserves a complete authored mip chain", () => {
+  it("adopts and preserves a complete authored mip chain", () => {
     const base = level(4, 2, 1);
     const mip1 = level(2, 1, 2);
     const mip2 = level(1, 1, 3);
@@ -113,7 +113,9 @@ describe("glTF BasisU RGBA normalization", () => {
       { first: 2, height: 1, width: 2 },
       { first: 3, height: 1, width: 1 },
     ]);
-    expect(decoded.data).not.toBe(base.data);
+    expect(decoded.data).toBe(base.data);
+    expect(decoded.levels?.[1]?.data).toBe(mip1.data);
+    expect(decoded.levels?.[2]?.data).toBe(mip2.data);
   });
 
   it("rejects malformed mip dimensions and byte payloads", () => {
