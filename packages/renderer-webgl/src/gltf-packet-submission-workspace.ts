@@ -633,31 +633,61 @@ const appendSubmissionLanes = <M, R, L>(
   return index;
 };
 
-/** Appends trusted renderer-owned bindings from the authoritative packet catalog. */
-export const appendPreparedGltfPacketSubmission = <M, R, L>(
+/** Reserves a trusted renderer-owned packet run and stamps its catalog-derived lanes. */
+export const beginPreparedGltfPacketSubmissionRun = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   catalog: FramePacketCatalog,
   packetIndex: number,
   geometryIdentityId: number,
+  materialBindingId: number,
+  count: number,
+): number => {
+  const first = workspace.count;
+  const end = first + count;
+  reserveRows(workspace, end);
+  workspace.batchIds.fill(NO_FRAME_PACKET_ID, first, end);
+  workspace.geometryIds.fill(catalog.geometryIds[packetIndex]!, first, end);
+  workspace.geometryIdentityIds.fill(geometryIdentityId, first, end);
+  workspace.localModelIds.fill(catalog.localModelIds[packetIndex]!, first, end);
+  workspace.materialBatchClassIds.fill(
+    workspace.materialBindingBatchClassIds[materialBindingId]!,
+    first,
+    end,
+  );
+  workspace.materialBindingIds.fill(materialBindingId, first, end);
+  workspace.orderingSegments.fill(workspace.segment, first, end);
+  workspace.packetIndices.fill(packetIndex, first, end);
+  workspace.renderClasses.fill(catalog.renderClasses[packetIndex]!, first, end);
+  return first;
+};
+
+/** Writes the instance-varying lanes of a reserved renderer-owned packet run. */
+export const writePreparedGltfPacketSubmissionRunBinding = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  index: number,
   lightBindingId: number,
   lightScopeId: number,
-  materialBindingId: number,
   rootBindingId: number,
   sidedness: number,
-): number => appendSubmissionLanes(
-  workspace,
-  catalog.geometryIds[packetIndex]!,
-  geometryIdentityId,
-  lightBindingId,
-  lightScopeId,
-  catalog.localModelIds[packetIndex]!,
-  workspace.materialBindingBatchClassIds[materialBindingId]!,
-  materialBindingId,
-  packetIndex,
-  catalog.renderClasses[packetIndex]! as FramePacketRenderClass,
-  rootBindingId,
-  sidedness,
-);
+): void => {
+  workspace.lightBindingIds[index] = lightBindingId;
+  workspace.lightScopeIds[index] = lightScopeId;
+  workspace.rootBindingIds[index] = rootBindingId;
+  workspace.sidedness[index] = sidedness;
+};
+
+/** Publishes a completely written renderer-owned packet run. */
+export const endPreparedGltfPacketSubmissionRun = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+  first: number,
+  count: number,
+): void => {
+  if (workspace.count !== first || count < 1) {
+    throw new Error("Royal prepared glTF packet submission run is invalid or stale");
+  }
+  workspace.count = first + count;
+  if (first === 0) advanceSegmentRevision(workspace);
+};
 
 export const appendGltfPacketSubmission = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,

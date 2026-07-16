@@ -4,7 +4,8 @@ import {
 } from "../frame/packets";
 import {
   appendPreparedGltfPacketSubmissionRootBinding,
-  appendPreparedGltfPacketSubmission,
+  beginPreparedGltfPacketSubmissionRun,
+  endPreparedGltfPacketSubmissionRun,
   preparedGltfPacketSubmissionLightBindingId,
   preparedGltfPacketSubmissionMaterialBindingId,
   preparedGltfPacketSubmissionRootBindingId,
@@ -13,6 +14,7 @@ import {
   resetGltfPacketSubmissionWorkspaceForView,
   retainGltfPacketSubmissionLightBinding,
   retainGltfPacketSubmissionMaterialBinding,
+  writePreparedGltfPacketSubmissionRunBinding,
 } from "../gltf-packet-submission-workspace";
 import {
   resolvePacketMaterial,
@@ -258,10 +260,24 @@ export class GltfPacketSubmissionOwner {
       }
       const packetSidedness = catalog.sidedness[packetIndex]!;
       const firstRootSourceId = catalog.rootSourceIds[packetIndex]!;
+      const runCursor = cursor;
       while (cursor < packetEnd
         && selected.orderedPacketIndices[cursor] === packetIndex
         && selectedPlanNodeIndices[cursor] === nodeIndex) {
-        const selectedOuterIndex = selectedOuterIndices[cursor]!;
+        cursor += 1;
+      }
+      const runCount = cursor - runCursor;
+      const runFirst = beginPreparedGltfPacketSubmissionRun(
+        this.#batches.workspace,
+        catalog,
+        packetIndex,
+        geometryIdentityId,
+        materialBindingId,
+        runCount,
+      );
+      let runOffset = 0;
+      while (runOffset < runCount) {
+        const selectedOuterIndex = selectedOuterIndices[runCursor + runOffset]!;
         if (selectedOuterIndex < instanceFirst || selectedOuterIndex >= instanceEnd) {
           throw new Error("Royal retained glTF packet selection has an invalid root instance");
         }
@@ -337,19 +353,17 @@ export class GltfPacketSubmissionOwner {
             === orientationPreserving
             ? FRAME_PACKET_SIDEDNESS.frontFaceCcw
             : 0);
-        appendPreparedGltfPacketSubmission(
+        writePreparedGltfPacketSubmissionRunBinding(
           this.#batches.workspace,
-          catalog,
-          packetIndex,
-          geometryIdentityId,
+          runFirst + runOffset,
           lightBindingId,
           lightScopeId,
-          materialBindingId,
           rootBindingId,
           sidedness,
         );
-        cursor += 1;
+        runOffset += 1;
       }
+      endPreparedGltfPacketSubmissionRun(this.#batches.workspace, runFirst, runCount);
     }
     return cursor;
   }
