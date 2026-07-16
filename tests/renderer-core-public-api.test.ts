@@ -262,7 +262,7 @@ describe("renderer-core public API", () => {
 
   it("narrows pick targets by kind", () => {
     expect(() => rendererCore.validatePickInput({ clientX: 1, clientY: 2, clientZ: 3 }))
-      .toThrow(/unsupported field.*clientZ/i);
+      .not.toThrow();
     const pickTargetKind = (target: PickTarget) => {
       if (target.kind === "mesh") {
         const meshTarget: MeshPickTarget = target;

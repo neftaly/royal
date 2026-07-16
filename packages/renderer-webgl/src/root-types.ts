@@ -346,7 +346,7 @@ export interface WebGlRoot {
     texture: TextureAssetRef | VirtualTextureAssetRef,
     callback: (snapshot: WebGlTextureAssetSnapshot) => void,
   ): () => void;
-  /** Returns the front-most render target under a DOM client coordinate. */
+  /** Returns the front-most target under a DOM event-shaped input or its client coordinates. */
   pick(input: PickInput): PickResult | undefined;
   /** Renders one scene with its authored camera into the default framebuffer. */
   render(scene: RenderRoot): void;

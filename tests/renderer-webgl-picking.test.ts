@@ -101,12 +101,12 @@ describe("WebGL picking", () => {
   it("validates the shared pick-input contract before renderer state", () => {
     const root = createWebGlRoot(fakeCanvas(fakeGl()));
 
-    expect(() => root.pick({
+    const pointerEvent = {
       clientX: 10,
       clientY: 20,
       screenX: 10,
-    } as unknown as Parameters<typeof root.pick>[0]))
-      .toThrow(/unsupported field.*screenX/i);
+    };
+    expect(() => root.pick(pointerEvent)).not.toThrow();
     expect(() => root.pick({ clientX: Number.NaN, clientY: 20 }))
       .toThrow("Royal pick input clientX must be a finite number");
 

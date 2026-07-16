@@ -25,7 +25,7 @@ export interface GltfInstanceTransforms {
   /** Packed XYZ Euler angles in radians (`count * 3`). */
   readonly rotations: Float32Array;
   readonly scaleVersion: number;
-  /** Packed dimensionless XYZ multipliers (`count * 3`). */
+  /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales: Float32Array;
   /** Notify attached renderer roots after mutating positions only. */
   commitPosition(startIndex?: number, count?: number): void;
@@ -33,7 +33,7 @@ export interface GltfInstanceTransforms {
   commitPose(startIndex?: number, count?: number): void;
   /** Notify attached renderer roots after mutating rotations only. */
   commitRotation(startIndex?: number, count?: number): void;
-  /** Notify attached renderer roots after mutating scales. Negative scales are unsupported. */
+  /** Notify attached renderer roots after mutating finite signed scales. */
   commitScale(startIndex?: number, count?: number): void;
   /** Observe committed logical ranges. Each renderer owns its own consumption state. */
   subscribe(listener: GltfInstanceTransformsListener): () => void;
@@ -55,7 +55,7 @@ export interface CreateGltfInstanceTransformsOptions {
   readonly positions?: ArrayLike<number>;
   /** Packed XYZ Euler angles in radians (`count * 3`). */
   readonly rotations?: ArrayLike<number>;
-  /** Packed dimensionless XYZ multipliers (`count * 3`). */
+  /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales?: ArrayLike<number>;
 }
 
@@ -158,14 +158,6 @@ const validateFiniteChannel = (
   }
 };
 
-const validateScales = (scales: Float32Array, startOffset = 0, endOffset = scales.length): void => {
-  for (let index = startOffset; index < endOffset; index += 1) {
-    if (!Number.isFinite(scales[index]) || !(scales[index]! >= 0)) {
-      throw new Error(`glTF instance scales must be finite and non-negative; received ${String(scales[index])}`);
-    }
-  }
-};
-
 const logicalIdsFrom = (
   logicalIds: readonly PickingId[] | undefined,
   count: number,
@@ -199,7 +191,7 @@ export const createGltfInstanceTransforms = (
   const logicalIds = logicalIdsFrom(options.logicalIds, count);
   validateFiniteChannel(positions, 'positions');
   validateFiniteChannel(rotations, 'rotations');
-  validateScales(scales);
+  validateFiniteChannel(scales, 'scales');
   let notifying = false;
   const notify = (
     channel: GltfInstanceTransformChannel,
@@ -267,7 +259,7 @@ export const createGltfInstanceTransforms = (
       const rangeCount = committedCount ?? count - start;
       const startOffset = start * 3;
       const endOffset = (start + rangeCount) * 3;
-      validateScales(scales, startOffset, endOffset);
+      validateFiniteChannel(scales, 'scales', startOffset, endOffset);
       scaleVersion += 1;
       notify('scale', start, rangeCount, scaleVersion);
     },

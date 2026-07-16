@@ -6,7 +6,6 @@ import type {
   TextureAssetRef,
   VirtualTextureAssetRef,
 } from "@royal/renderer-core";
-import { validatePickInput } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   resolveWebGlRootOptions,
@@ -211,7 +210,7 @@ export interface RoyalRendererRoot {
   ): () => void;
   /** Observes failures from renderer-owned scheduled frames. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
-  /** Returns the front-most render target under a DOM client coordinate. */
+  /** Returns the front-most target under a DOM/React pointer event or its client coordinates. */
   pick(input: PickInput): PickResult | undefined;
   /** Renders a complete scene into the canvas. */
   render(scene: RenderRoot): void;
@@ -356,7 +355,6 @@ export const createRendererRoot = (
       return root.observeRenderFailures(callback);
     },
     pick: (input: PickInput) => {
-      validatePickInput(input);
       return root.pick(input);
     },
     render: (scene: RenderRoot) => {

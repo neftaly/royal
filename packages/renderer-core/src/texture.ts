@@ -220,7 +220,7 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
 };
 
 /** Creates an authored virtual-texture reference from its JSON manifest URI. */
-export function virtualTexture(src: string): VirtualTextureAssetRef;
+export function virtualTexture(manifestUri: string): VirtualTextureAssetRef;
 export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
 export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef;
 export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {

@@ -1,4 +1,4 @@
-import { validatePickInput, type PickInput, type PickResult, type RenderRoot } from "@royal/renderer-core";
+import { type PickInput, type PickResult, type RenderRoot } from "@royal/renderer-core";
 import {
   createContext,
   createElement,
@@ -91,12 +91,11 @@ export const useInvalidate = (): (() => void) => {
   }, [root]);
 };
 
-/** Returns a stable picker that accepts DOM client coordinates for this Canvas. */
+/** Returns a stable picker accepting a DOM/React pointer event or its client coordinates. */
 export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
   const root = useCanvasRoot();
 
   return useCallback((input: PickInput): PickResult | undefined => {
-    validatePickInput(input);
     return root?.pick(input);
   }, [root]);
 };

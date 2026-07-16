@@ -31,8 +31,13 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
-  it("rejects malformed pick coordinates instead of reporting a miss", () => {
+  it("accepts event-shaped picks and rejects malformed coordinates", () => {
     const root = createRendererRoot(fakeCanvas());
+    const pointerEvent = {
+      clientX: 10,
+      clientY: 20,
+      type: "pointermove",
+    };
 
     expect(() => root.pick(null as unknown as { clientX: number; clientY: number }))
       .toThrow("Royal pick input must be an object with clientX and clientY coordinates");
@@ -40,12 +45,7 @@ describe("React root public API", () => {
       .toThrow("Royal pick input clientX must be a finite number");
     expect(() => root.pick({ clientX: 10, clientY: Number.POSITIVE_INFINITY }))
       .toThrow("Royal pick input clientY must be a finite number");
-    expect(() => root.pick({
-      clientX: 10,
-      clientY: 20,
-      x: 10,
-    } as unknown as Parameters<typeof root.pick>[0]))
-      .toThrow(/unsupported field.*x/i);
+    expect(() => root.pick(pointerEvent)).not.toThrow();
 
     root.dispose();
   });

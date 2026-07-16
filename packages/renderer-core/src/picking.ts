@@ -14,23 +14,16 @@ export const resolvePickingId = (
 ): PickingId | undefined => value === undefined ? undefined : nonEmptyString(value, label);
 
 export interface PickInput {
-  /** CSS-pixel coordinate relative to the browser viewport. */
+  /** CSS-pixel coordinate relative to the browser viewport, as on a pointer event. */
   readonly clientX: number;
-  /** CSS-pixel coordinate relative to the browser viewport. */
+  /** CSS-pixel coordinate relative to the browser viewport, as on a pointer event. */
   readonly clientY: number;
 }
 
-const PICK_INPUT_FIELDS = ['clientX', 'clientY'] as const;
-
-/** Validates DOM client coordinates before renderer-specific picking work. */
+/** Validates finite DOM client coordinates while allowing event-shaped inputs. */
 export const validatePickInput: (input: unknown) => asserts input is PickInput = (input) => {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new TypeError('Royal pick input must be an object with clientX and clientY coordinates');
-  }
-  for (const field of Object.keys(input)) {
-    if (!PICK_INPUT_FIELDS.includes(field as (typeof PICK_INPUT_FIELDS)[number])) {
-      throw new TypeError(`Royal pick input contains unsupported field ${JSON.stringify(field)}`);
-    }
   }
   const coordinates = input as Partial<PickInput>;
   if (typeof coordinates.clientX !== 'number' || !Number.isFinite(coordinates.clientX)) {

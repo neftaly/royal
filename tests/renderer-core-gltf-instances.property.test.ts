@@ -11,7 +11,7 @@ describe("glTF instance transform properties", () => {
       const count = random.int(1, 129);
       const scales = new Float32Array(count * 3);
       for (let index = 0; index < scales.length; index += 1) {
-        scales[index] = random.number(0.01, 4);
+        scales[index] = random.number(-4, 4);
       }
       const transforms = createGltfInstanceTransforms({ count, scales });
       const initialScales = transforms.scales.slice();
@@ -106,7 +106,7 @@ describe("glTF instance transform properties", () => {
     expect(() => transforms.commitPose(1, 1)).toThrow(/finite/);
     transforms.positions[3] = 0;
     transforms.scales[3] = Number.POSITIVE_INFINITY;
-    expect(() => transforms.commitScale(1, 1)).toThrow(/finite and non-negative/);
+    expect(() => transforms.commitScale(1, 1)).toThrow(/must be finite/);
   });
 
   it('notifies the stable listener cohort best-effort before rethrowing the first failure', () => {

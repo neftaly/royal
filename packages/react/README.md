@@ -332,8 +332,9 @@ Use `commitPosition(start, count)`, `commitRotation(start, count)`, or
 changed. Use `commitPose(start, count)` after changing both positions and
 rotations. Royal coalesces adjacent packed uploads independently in every
 attached renderer root; commits never render React objects per instance.
-Position and rotation values must be finite, and scales must be finite and
-non-negative. Optional unique `logicalIds` remain stable picking identity when
+Position, rotation, and signed scale values must be finite. Negative scale
+components reflect an instance; Royal preserves its winding and normal handedness.
+Optional unique `logicalIds` remain stable picking identity when
 culling repacks GPU slots. Canvas coalesces commit invalidations at the end of
 the active frame.
 
