@@ -8,7 +8,7 @@ import {
 } from "../packages/renderer-webgl/src/frame/plan";
 import {
   directGeometryDeclaration,
-  directGeometryDeclarationKey,
+  directGeometryKey,
   gltfGeometryDeclaration,
 } from "../packages/renderer-webgl/src/geometry-recipes";
 import {
@@ -174,16 +174,21 @@ describe("semantic resource arena properties", () => {
     const declaration = directGeometryDeclaration(boxGeometry([1, 2, 3]), "surface");
     applyResourceDelta(arena, diffResourceManifests(emptyManifest(), {
       ...emptyManifest(),
-      directGeometries: [{ count: 1, declaration, key: directGeometryDeclarationKey(declaration) }],
+      directGeometries: [{
+        count: 1,
+        declaration,
+        key: directGeometryKey(declaration.geometry, declaration.topology),
+      }],
     }, createResourceManifestDiffScratch()));
     const first = resourceArenaSnapshot(arena);
-    const row = first.geometries.get(directGeometryDeclarationKey(declaration))!;
+    const key = directGeometryKey(declaration.geometry, declaration.topology);
+    const row = first.geometries.get(key)!;
     const retainedPosition = row.recipe.positions[0]!;
     row.recipe.positions[0] = retainedPosition + 100;
     first.geometries.clear();
     first.counters.sceneLeaseAcquires = -1;
     const second = resourceArenaSnapshot(arena);
-    expect(second.geometries.get(directGeometryDeclarationKey(declaration))?.recipe.positions[0])
+    expect(second.geometries.get(key)?.recipe.positions[0])
       .toBe(retainedPosition);
     expect(second.geometries.size).toBe(1);
     expect(second.counters.sceneLeaseAcquires).toBe(1);
@@ -239,7 +244,7 @@ describe("semantic resource arena properties", () => {
         return {
           count: random.int(1, 5),
           declaration,
-          key: directGeometryDeclarationKey(declaration),
+          key: directGeometryKey(declaration.geometry, declaration.topology),
         };
       });
       const next = { ...emptyManifest(), directGeometries };

@@ -85,42 +85,22 @@ export const directGeometryDeclaration = (
   geometry: Geometry,
   topology: DirectGeometryTopology,
 ): DirectGeometryDeclaration => {
-  switch (geometry.kind) {
-    case "box": {
-      const size = "size" in geometry ? geometry.size : undefined;
-      const [width, height, depth] = dimensions(size, 3, "box");
-      const closedSize: [number, number, number] = [width!, height!, depth!];
-      Object.freeze(closedSize);
-      return Object.freeze({
-        geometry: Object.freeze({ kind: "box", size: closedSize }),
-        kind: "direct-geometry",
-        topology,
-      });
-    }
-    case "plane": {
-      const size = "size" in geometry ? geometry.size : undefined;
-      const [width, height] = dimensions(size, 2, "plane");
-      const closedSize: [number, number] = [width!, height!];
-      Object.freeze(closedSize);
-      return Object.freeze({
-        geometry: Object.freeze({ kind: "plane", size: closedSize }),
-        kind: "direct-geometry",
-        topology,
-      });
-    }
+  const kind = geometry.kind;
+  if (kind !== "box" && kind !== "plane") {
+    throw new Error(`Unsupported geometry kind "${String(kind)}"`);
   }
-  const unsupported = geometry as unknown as { readonly kind?: unknown };
-  throw new Error(`Unsupported geometry kind "${String(unsupported.kind)}"`);
+  const size = Object.freeze([...dimensions(geometry.size, kind === "box" ? 3 : 2, kind)]);
+  return Object.freeze({
+    geometry: Object.freeze({ kind, size }) as BoxGeometry | PlaneGeometry,
+    kind: "direct-geometry",
+    topology,
+  });
 };
 
-export const directGeometryDeclarationKey = (declaration: DirectGeometryDeclaration): string => {
-  switch (declaration.geometry.kind) {
-    case "box":
-      return `direct:${declaration.topology}:box:${declaration.geometry.size.join(",")}`;
-    case "plane":
-      return `direct:${declaration.topology}:plane:${declaration.geometry.size.join(",")}`;
-  }
-};
+export const directGeometryKey = (
+  geometry: Geometry,
+  topology: DirectGeometryTopology,
+): string => `direct:${topology}:${geometry.kind}:${geometry.size.join(",")}`;
 
 export const gltfGeometryDeclaration = (
   geometry: Omit<GltfGeometryDeclaration, "bucketKey" | "kind" | typeof preparedGltfGeometryDeclaration>,
@@ -135,7 +115,9 @@ export const gltfGeometryDeclaration = (
 };
 
 export const geometryDeclarationBucketKey = (declaration: GeometryDeclaration): string => {
-  if (declaration.kind === "direct-geometry") return directGeometryDeclarationKey(declaration);
+  if (declaration.kind === "direct-geometry") {
+    return directGeometryKey(declaration.geometry, declaration.topology);
+  }
   return declaration.bucketKey;
 };
 

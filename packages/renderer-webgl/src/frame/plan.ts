@@ -10,7 +10,7 @@ import type {
 } from "@royal/renderer-core";
 import {
   directGeometryDeclaration,
-  directGeometryDeclarationKey,
+  directGeometryKey,
   type DirectGeometryDeclaration,
 } from "../geometry-recipes";
 import { textureCacheKey } from "../webgl/materials";
@@ -267,7 +267,7 @@ export const compileFramePlan = (scene: RenderRoot, revision: number): FramePlan
     } else if (node.kind === "mesh") {
       const topology = node.material.kind === "wireframe" ? "wireframe" : "surface";
       const declaration = directGeometryDeclaration(node.geometry, topology);
-      const key = directGeometryDeclarationKey(declaration);
+      const key = directGeometryKey(declaration.geometry, declaration.topology);
       incrementKey(directGeometryByKey, directGeometries, key, () => ({
         count: 1,
         declaration,

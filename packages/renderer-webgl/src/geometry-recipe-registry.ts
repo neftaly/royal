@@ -1,7 +1,7 @@
 import type { Geometry, Material, MeshNode } from "@royal/renderer-core";
 import {
   directGeometryDeclaration,
-  directGeometryDeclarationKey,
+  directGeometryKey,
   normalizeGeometryDeclaration,
   type CpuGeometry,
 } from "./geometry-recipes";
@@ -16,6 +16,8 @@ export type RetainedGeometryRecipe = {
 
 /** Owns semantic CPU geometry identity, bounds, and glTF packet reverse lookup. */
 export class GeometryRecipeRegistry {
+  readonly #surfaceKeys = new WeakMap<Geometry, string>();
+  readonly #wireframeKeys = new WeakMap<Geometry, string>();
   readonly #localBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #pickingRecipes = new WeakMap<Geometry, CpuGeometry>();
   readonly #retained = new Map<string, RetainedGeometryRecipe>();
@@ -34,11 +36,13 @@ export class GeometryRecipeRegistry {
     geometry: MeshNode["geometry"],
     material: Material,
   ): RetainedGeometryRecipe {
-    const declaration = directGeometryDeclaration(
-      geometry,
-      material.kind === "wireframe" ? "wireframe" : "surface",
-    );
-    const key = directGeometryDeclarationKey(declaration);
+    const wireframe = material.kind === "wireframe";
+    const keys = wireframe ? this.#wireframeKeys : this.#surfaceKeys;
+    let key = keys.get(geometry);
+    if (key === undefined) {
+      key = directGeometryKey(geometry, wireframe ? "wireframe" : "surface");
+      keys.set(geometry, key);
+    }
     const retained = this.#retained.get(key);
     if (retained === undefined) {
       throw new Error(`Royal direct geometry ${key} was not semantically retained`);

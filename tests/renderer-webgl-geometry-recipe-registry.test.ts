@@ -5,7 +5,7 @@ import {
 } from "@royal/renderer-core";
 import {
   directGeometryDeclaration,
-  directGeometryDeclarationKey,
+  directGeometryKey,
   type CpuGeometry,
 } from "../packages/renderer-webgl/src/geometry-recipes";
 import { GeometryRecipeRegistry } from "../packages/renderer-webgl/src/geometry-recipe-registry";
@@ -26,7 +26,7 @@ describe("GeometryRecipeRegistry", () => {
     const registry = new GeometryRecipeRegistry();
     const geometry = boxGeometry(2);
     const material = standardMaterial({ color: [1, 1, 1, 1] });
-    const key = directGeometryDeclarationKey(directGeometryDeclaration(geometry, "surface"));
+    const key = directGeometryKey(geometry, "surface");
     const cpu = recipe();
 
     expect(() => registry.retainedDirectRecipe(geometry, material))

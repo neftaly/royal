@@ -1345,8 +1345,8 @@ export const virtualTextureGpuResourceSnapshot = (
   const stagedPageKey = mutable.inFlightUpload?.phase === "publish-page-table"
     ? undefined
     : mutable.inFlightUpload?.assignment.pageKey;
-  const occupiedPages = allocation?.pageTable.residentPages() ?? [];
-  const cachedPages = occupiedPages.filter((record) => record.pageKey !== stagedPageKey).length;
+  const occupiedSlots = allocation?.pageTable.residentCount ?? 0;
+  const cachedPages = occupiedSlots - (stagedPageKey === undefined ? 0 : 1);
   return {
     activePages: mutable.visibleAssignments.size,
     admissionKind: mutable.admission.kind,
@@ -1357,7 +1357,7 @@ export const virtualTextureGpuResourceSnapshot = (
     dirtyPageTableUpdates: allocation?.pageTable.dirtyPageTableUpdateCount ?? 0,
     drawable: mutable.visibleAssignments.size > 0,
     effectiveSlots: supported?.effectiveSlots ?? 0,
-    occupiedSlots: occupiedPages.length,
+    occupiedSlots,
     ...(allocation === undefined ? {} : { generation: allocation.generation }),
     pendingUploads: mutable.pendingUploads.length - mutable.pendingHead,
     paddedSlots: supported?.paddedSlots ?? 0,

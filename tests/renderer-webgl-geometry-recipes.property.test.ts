@@ -2,7 +2,7 @@ import { boxGeometry, planeGeometry, type Geometry } from "@royal/renderer-core"
 import { describe, expect, it } from "vitest";
 import {
   directGeometryDeclaration,
-  directGeometryDeclarationKey,
+  directGeometryKey,
   geometryArrayBucketKey,
   gltfGeometryDeclaration,
   normalizeGeometryDeclaration,
@@ -35,9 +35,7 @@ describe("WebGL geometry recipes", () => {
 
       expect(first, label).not.toBe(second);
       expect(first.bucketKey, label).toBe(second.bucketKey);
-      expect(first.bucketKey, label).toBe(directGeometryDeclarationKey(
-        directGeometryDeclaration(geometry, topology),
-      ));
+      expect(first.bucketKey, label).toBe(directGeometryKey(geometry, topology));
       expect(sameGeometryBytes(first, second), label).toBe(true);
       expect(first.positions.length % 3, label).toBe(0);
       expect(first.indices?.every((index) => index < first.positions.length / 3), label).toBe(true);
