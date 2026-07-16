@@ -27,6 +27,7 @@ type PendingAutoSource = {
 };
 
 const EMPTY_RESOURCES: ReadonlyMap<string, VirtualTextureRuntimeState> = new Map();
+const NO_BASE_COLOR_RESIDENCY: BaseColorTextureResidency = { kind: "none" };
 let preloadedModule: VirtualTextureFeatureModule | undefined;
 
 /** @internal Allows deterministic VT-focused tests to retain synchronous manifest staging. */
@@ -41,6 +42,7 @@ const failureMessage = (failure: unknown): string => failure instanceof Error
 /** Loads the VT implementation on first authored or automatic VT demand. */
 export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   readonly #options: VirtualTextureFeatureOptions;
+  #ordinaryResidency: { kind: "ordinary"; texture: TextureAssetUploadRef } | undefined;
   readonly #pendingAutoSources = new Map<string, PendingAutoSource>();
   #failure: unknown;
   #feature: VirtualTextureFeature | undefined;
@@ -198,11 +200,18 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
       return this.#feature.resolveBaseColorResidency(geometry, material, demandContext);
     }
     switch (material.baseColor.kind) {
-      case "solid": return { kind: "none" };
-      case "asset": return { kind: "ordinary", texture: material.baseColor };
+      case "solid": return NO_BASE_COLOR_RESIDENCY;
+      case "asset": {
+        let residency = this.#ordinaryResidency;
+        if (residency === undefined) {
+          residency = { kind: "ordinary", texture: material.baseColor };
+          this.#ordinaryResidency = residency;
+        } else residency.texture = material.baseColor;
+        return residency;
+      }
       case "virtual-asset": {
         this.#request();
-        return { kind: "none" };
+        return NO_BASE_COLOR_RESIDENCY;
       }
     }
   }
