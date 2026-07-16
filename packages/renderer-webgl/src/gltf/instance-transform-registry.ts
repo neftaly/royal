@@ -172,7 +172,31 @@ const applyDirtyInstanceMatrices = (
   const anyRotationsDirty = hasDirtyInstances(rotation);
   const anyScalesDirty = hasDirtyInstances(scale);
 
-  if (!anyRotationsDirty && !anyScalesDirty && allPositionsDirty) {
+  if (allPositionsDirty && (allRotationsDirty || allScalesDirty)) {
+    views.matrixPositions.set(views.source.positions);
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 3;
+      if (allRotationsDirty || (anyRotationsDirty && isInstanceDirty(rotation, index))) {
+        synchronizeRotationTrig(views, offset);
+      }
+      if (allScalesDirty || (anyScalesDirty && isInstanceDirty(scale, index))) {
+        const changed = allScalesDirty
+          || !sameVector3(views.matrixScales, views.source.scales, offset);
+        if (changed) {
+          copyVector3(views.matrixScales, views.source.scales, offset);
+          views.orientationPreserving[index] = views.matrixScales[offset]!
+            * views.matrixScales[offset + 1]!
+            * views.matrixScales[offset + 2]! >= 0 ? 1 : 0;
+        }
+      }
+      // A full position lane requires one write even when a separately
+      // committed basis lane happens to contain numerically unchanged values.
+      writeInstanceMatrix(views, index, offset);
+    }
+    return;
+  }
+
+  if (allPositionsDirty) {
     views.matrixPositions.set(views.source.positions);
     for (let index = 0; index < count; index += 1) {
       const offset = index * 3;
@@ -180,21 +204,6 @@ const applyDirtyInstanceMatrices = (
       model[12] = views.matrixPositions[offset]!;
       model[13] = views.matrixPositions[offset + 1]!;
       model[14] = views.matrixPositions[offset + 2]!;
-    }
-    return;
-  }
-
-  if (allPositionsDirty) {
-    views.matrixPositions.set(views.source.positions);
-    // A full rotation or scale lane rewrites every matrix below, including translation.
-    if (!allRotationsDirty && !allScalesDirty) {
-      for (let index = 0; index < count; index += 1) {
-        const offset = index * 3;
-        const model = views.rootModels[index]!;
-        model[12] = views.matrixPositions[offset]!;
-        model[13] = views.matrixPositions[offset + 1]!;
-        model[14] = views.matrixPositions[offset + 2]!;
-      }
     }
   }
   if (allRotationsDirty || allScalesDirty) {

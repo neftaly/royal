@@ -166,6 +166,26 @@ describe("glTF instance transform registry", () => {
     registry.endFrame(true);
   });
 
+  it("applies full pose positions when the committed rotations are unchanged", () => {
+    const tracked = trackedSource(2);
+    tracked.source.positions.set([1, 2, 3, 4, 5, 6]);
+    const registry = new GltfInstanceTransformRegistry(() => undefined);
+    registry.reconcile([change(tracked.source, 0, 1)]);
+    registry.views(tracked.source);
+
+    tracked.source.positions.set([7, 8, 9, 10, 11, 12]);
+    tracked.source.commitPose();
+    registry.beginFrame();
+    const views = registry.views(tracked.source);
+
+    expect(views.rootModels.map((model) => model.slice(12, 15))).toEqual([
+      [7, 8, 9],
+      [10, 11, 12],
+    ]);
+    expectMatricesCurrent(registry, tracked.source);
+    registry.endFrame(true);
+  });
+
   it("updates winding orientation only from synchronized scale", () => {
     const tracked = trackedSource(3);
     tracked.source.scales.set([-1, 1, 1, -1, -2, 1, 0, -1, 1]);
