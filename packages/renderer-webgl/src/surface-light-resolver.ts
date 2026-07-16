@@ -35,6 +35,9 @@ export interface SurfaceLightResolverOptions {
 
 export type GltfSurfaceLightSource = Pick<PreparedGltfState, "imageBasedLight" | "lights">;
 
+export const hasGltfAssetLights = (state: GltfSurfaceLightSource): boolean =>
+  state.lights.length !== 0 || state.imageBasedLight !== undefined;
+
 type MutableSurfaceIblSpecular = {
   encoding: SurfaceIblSpecular["encoding"];
   intensity: number;
@@ -113,7 +116,7 @@ export class SurfaceLightResolver {
 
   resolveGltfAsset(state: GltfSurfaceLightSource, rootModel: Mat4): SurfaceLightSet | undefined {
     const imageBasedLight = state.imageBasedLight;
-    if (state.lights.length === 0 && imageBasedLight === undefined) return undefined;
+    if (!hasGltfAssetLights(state)) return undefined;
     const workspace = this.#gltfAssetWorkspace(state, rootModel);
     const irradiance = imageBasedLight === undefined
       ? undefined

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { studioEnvironment } from "@royal/renderer-core";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
+  hasGltfAssetLights,
   SurfaceLightResolver,
   type GltfSurfaceLightSource,
 } from "../packages/renderer-webgl/src/surface-light-resolver";
@@ -30,6 +31,12 @@ const state = (): GltfSurfaceLightSource => ({
 });
 
 describe("SurfaceLightResolver", () => {
+  it("classifies optional glTF light content without resolving a root", () => {
+    expect(hasGltfAssetLights({ lights: [] })).toBe(false);
+    expect(hasGltfAssetLights({ lights: [directional] })).toBe(true);
+    expect(hasGltfAssetLights(state())).toBe(true);
+  });
+
   it("preserves compiled scene lights without an environment and resolves studio IBL", () => {
     const studioResource = {
       key: "ibl:studio",

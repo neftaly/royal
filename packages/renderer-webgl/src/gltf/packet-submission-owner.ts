@@ -26,7 +26,10 @@ import {
   vertexInputGeometry,
   type VertexInputArena,
 } from "../vertex-input/arena";
-import { SurfaceLightResolver } from "../surface-light-resolver";
+import {
+  hasGltfAssetLights,
+  SurfaceLightResolver,
+} from "../surface-light-resolver";
 import type { SurfaceLightSet } from "../webgl/lights";
 import type { SurfaceMaterial } from "../webgl/materials";
 import {
@@ -186,6 +189,7 @@ export class GltfPacketSubmissionOwner {
       return packetCursor;
     }
     const state = this.#runtime.stateForNode(node);
+    const hasAssetLights = hasGltfAssetLights(state);
     const contentKeys = resourceArenaContentKeys(this.#resourceArena, state.key);
     const instanceViews = node.kind === "gltf-instances"
       ? this.#instanceTransforms.views(node.instances)
@@ -199,7 +203,7 @@ export class GltfPacketSubmissionOwner {
     const ordinaryScale = ordinaryRootTransform?.scale;
     const ordinaryOrientationPreserving = ordinaryScale === undefined
       || ordinaryScale[0] * ordinaryScale[1] * ordinaryScale[2] >= 0;
-    const ordinaryAssetLights = ordinaryRootModel === undefined
+    const ordinaryAssetLights = ordinaryRootModel === undefined || !hasAssetLights
       ? undefined
       : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
@@ -297,7 +301,9 @@ export class GltfPacketSubmissionOwner {
           if (rootModel === undefined) {
             throw new Error("Royal retained glTF packet root source has no current transform");
           }
-          const assetLights = instanceViews === undefined
+          const assetLights = !hasAssetLights
+            ? undefined
+            : instanceViews === undefined
             ? ordinaryAssetLights
             : this.#lightResolver.resolveGltfAsset(state, rootModel);
           lightScopeId = assetLights === undefined
