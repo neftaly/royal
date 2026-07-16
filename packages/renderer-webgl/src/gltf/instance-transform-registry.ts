@@ -4,7 +4,10 @@ import type {
   Transform,
   Vec3,
 } from "@royal/renderer-core";
-import { GltfInstanceChangeTracker } from "./instance-changes";
+import {
+  areAllInstancesDirty,
+  GltfInstanceChangeTracker,
+} from "./instance-changes";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   identityMat4,
@@ -225,6 +228,21 @@ export class GltfInstanceTransformRegistry {
       const position = views.changes.activePosition;
       const rotation = views.changes.activeRotation;
       const scale = views.changes.activeScale;
+      if (rotation.maxDirtyWord < rotation.minDirtyWord
+        && scale.maxDirtyWord < scale.minDirtyWord
+        && areAllInstancesDirty(position, views.transforms.length)) {
+        for (let index = 0; index < views.transforms.length; index += 1) {
+          const offset = index * 3;
+          const model = views.rootModels[index]!;
+          model[12] = views.positions[offset]!;
+          model[13] = views.positions[offset + 1]!;
+          model[14] = views.positions[offset + 2]!;
+        }
+        views.activeApplied = true;
+        views.matrixPoseVersion = views.framePoseVersion;
+        views.matrixScaleVersion = views.frameScaleVersion;
+        return views;
+      }
       const firstWord = Math.min(position.minDirtyWord, rotation.minDirtyWord, scale.minDirtyWord);
       const lastWord = Math.max(position.maxDirtyWord, rotation.maxDirtyWord, scale.maxDirtyWord);
       for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {

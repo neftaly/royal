@@ -62,6 +62,18 @@ export const markInstanceDirtyRange = (
 export const isInstanceDirty = (dirty: InstanceDirtyBits, index: number): boolean =>
   (dirty.words[index >>> 5]! & (1 << (index & 31))) !== 0;
 
+export const areAllInstancesDirty = (dirty: InstanceDirtyBits, count: number): boolean => {
+  if (count === 0) return true;
+  const lastWord = (count - 1) >>> 5;
+  if (dirty.minDirtyWord !== 0 || dirty.maxDirtyWord !== lastWord) return false;
+  for (let wordIndex = 0; wordIndex < lastWord; wordIndex += 1) {
+    if (dirty.words[wordIndex] !== 0xffff_ffff) return false;
+  }
+  const trailingBits = count & 31;
+  const lastMask = trailingBits === 0 ? 0xffff_ffff : 0xffff_ffff >>> (32 - trailingBits);
+  return dirty.words[lastWord] === lastMask;
+};
+
 export const isPackedInstanceSlotDirty = (
   dirty: InstanceDirtyBits | undefined,
   logicalIndex: number,

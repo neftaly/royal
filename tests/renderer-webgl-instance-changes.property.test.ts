@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  areAllInstancesDirty,
   GltfInstanceChangeTracker,
   createInstanceDirtyBits,
   isInstanceDirty,
@@ -23,6 +24,11 @@ describe('bulk instance change tracking', () => {
       for (let index = 0; index < count; index += 1) {
         assertFuzzEqual(isInstanceDirty(dirty, index), oracle[index] === 1, `row=${index}`);
       }
+      assertFuzzEqual(
+        areAllInstancesDirty(dirty, count),
+        oracle.every((value) => value === 1),
+        `${label} dense`,
+      );
 
       for (let slot = 0; slot < count; slot += 1) {
         const previousIndex = random.int(0, count);
@@ -41,6 +47,16 @@ describe('bulk instance change tracking', () => {
         ), expected, `${label} slot=${slot}`);
       }
     });
+  });
+
+  it('recognizes exact dense ranges including partial trailing words', () => {
+    for (const count of [0, 1, 31, 32, 33, 127, 128, 129]) {
+      const dirty = createInstanceDirtyBits(count);
+      expect(areAllInstancesDirty(dirty, count)).toBe(count === 0);
+      if (count === 0) continue;
+      markInstanceDirtyRange(dirty, 0, count);
+      expect(areAllInstancesDirty(dirty, count)).toBe(true);
+    }
   });
 
   it('keeps active and pending generations independent for commits during submit', () => {
