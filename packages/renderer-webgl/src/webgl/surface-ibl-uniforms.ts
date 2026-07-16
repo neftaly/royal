@@ -7,7 +7,10 @@ import {
   type ProgramArena,
 } from "./program-arena";
 
-const IBL_IRRADIANCE_COEFFICIENT_COUNT = 9;
+const IBL_IRRADIANCE_COEFFICIENT_UNIFORMS = Array.from(
+  { length: 9 },
+  (_, index) => `u_iblIrradianceCoefficients[${index}]`,
+);
 const IDENTITY_IBL_MATRIX = identityMat4();
 const ZERO_IRRADIANCE_COEFFICIENT = [0, 0, 0] as const;
 
@@ -18,13 +21,12 @@ export const bindSurfaceIblIrradiance = (
   lightSet: SurfaceLightSet,
 ): void => {
   const irradiance = lightSet.irradiance;
-  uniform1i(programArena, program, "u_useIblIrradiance", irradiance === undefined ? 0 : 1);
   uniform4f(programArena, program, "u_iblIrradianceSettings",
     irradiance === undefined ? 0 : 1, irradiance?.intensity ?? 1, 0, 0);
   uniformMatrix(programArena, program, "u_iblWorldToIbl", irradiance?.worldToIbl ?? IDENTITY_IBL_MATRIX);
-  for (let index = 0; index < IBL_IRRADIANCE_COEFFICIENT_COUNT; index += 1) {
+  for (let index = 0; index < IBL_IRRADIANCE_COEFFICIENT_UNIFORMS.length; index += 1) {
     const coefficient = irradiance?.coefficients[index] ?? ZERO_IRRADIANCE_COEFFICIENT;
-    uniform4f(programArena, program, `u_iblIrradianceCoefficients[${index}]`,
+    uniform4f(programArena, program, IBL_IRRADIANCE_COEFFICIENT_UNIFORMS[index]!,
       coefficient[0], coefficient[1], coefficient[2], 0);
   }
 };

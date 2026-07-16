@@ -104,6 +104,10 @@ const uniform1iValues = (gl: FakeGl, name: string): readonly unknown[] =>
   calls(gl, "uniform1i")
     .filter((call) => (call.args[0] as { readonly name?: string } | undefined)?.name === name)
     .map((call) => call.args[1]);
+const uniform4fvValues = (gl: FakeGl, name: string): readonly unknown[] =>
+  calls(gl, "uniform4fv")
+    .filter((call) => (call.args[0] as { readonly name?: string } | undefined)?.name === name)
+    .map((call) => call.args[1]);
 const source = (size: number, seed = 1): LoadedTextureSource => ({
   data: new Uint8Array(size * size * 4).fill(seed), height: size, kind: "rgba-texture", width: size,
 });
@@ -163,7 +167,7 @@ describe("IBL texture arena", () => {
 
     bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, undefined, 7);
 
-    expect(uniform1iValues(gl, "u_useIblIrradiance")).toEqual([1]);
+    expect(uniform4fvValues(gl, "u_iblIrradianceSettings")).toEqual([[1, 2, 0, 0]]);
     expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([0]);
     expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([0]);
     expect(uniform1iValues(gl, "u_iblSpecularCube")).toEqual([]);

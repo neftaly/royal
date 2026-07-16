@@ -885,7 +885,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).toContain("toneMapPbrNeutral");
     expect(sources).toContain("linearToSrgb");
-    expect(sources).toContain("if (!u_useIblIrradiance) {\n    return vec3(0.0);");
+    expect(sources).toContain("if (u_iblIrradianceSettings.x < 0.5) return vec3(0.0);");
     expect(sources).not.toContain("uniform sampler2D u_iblBrdfLut;");
     expect(sources).not.toContain("texture(u_iblBrdfLut");
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
@@ -918,7 +918,8 @@ describe("WebGL renderer pipeline contracts", () => {
 
     root.render(iblEnvironmentScene());
 
-    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 80, 0, 0]);
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toEqual([0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
 
@@ -927,7 +928,8 @@ describe("WebGL renderer pipeline contracts", () => {
     root.render(iblEnvironmentScene());
 
     expect(uniform1iPayloadsByName(calls, "u_surfaceLightCount")).toContain(0);
-    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 80, 0, 0]);
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(iblSpecularTextureUnit);
     expect(uniform1iPayloadsByName(calls, "u_useIblBrdfLut")).toContain(1);
@@ -976,7 +978,8 @@ describe("WebGL renderer pipeline contracts", () => {
 
     root.render(iblEnvironmentScene());
 
-    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 80, 0, 0]);
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(calls.some((call) =>

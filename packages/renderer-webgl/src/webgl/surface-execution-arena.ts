@@ -1020,8 +1020,7 @@ export class SurfaceExecutionArena {
     }
     uniform1i(this.#programs, program, "u_surfaceLightCount", lights.length);
     for (let index = 0; index < lights.length; index += 1) {
-      const light = lights[index];
-      if (light === undefined) continue;
+      const light = lights[index]!;
       uniform1i(this.#programs, program, `u_surfaceLightKind[${index}]`, 0);
       uniformColor(this.#programs, program, `u_surfaceLightColor[${index}]`, light.color);
       uniform4f(this.#programs, program, `u_surfaceLightDirection[${index}]`,

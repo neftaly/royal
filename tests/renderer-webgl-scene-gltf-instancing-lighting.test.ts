@@ -658,7 +658,6 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(drawCalls(readyFrameCalls).length).toBeGreaterThan(0);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceSettings").map(roundVector))
       .toContainEqual([1, 1, 0, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[0]").map(roundVector))
@@ -802,7 +801,8 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const diagnostics = root.snapshot().diagnosticLog.entries.map((entry) => entry.message).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(0);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([0, 1, 0, 0]);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
     expect(diagnostics).toMatch(/EXT_lights_image_based skipped: missing light 5/i);
   });

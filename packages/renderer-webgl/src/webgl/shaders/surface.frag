@@ -32,7 +32,6 @@ uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
 __CLUSTERED_LIGHT_UNIFORMS__
 
 // Image-based lighting.
-uniform bool u_useIblIrradiance;
 uniform vec4 u_iblIrradianceCoefficients[9];
 uniform vec4 u_iblIrradianceSettings;
 uniform mat4 u_iblWorldToIbl;
@@ -613,9 +612,7 @@ float rangeAttenuation(float distanceToLight, float range) {
 }
 
 vec3 iblDiffuseIrradiance(vec3 normal) {
-  if (!u_useIblIrradiance) {
-    return vec3(0.0);
-  }
+  if (u_iblIrradianceSettings.x < 0.5) return vec3(0.0);
 
   vec3 iblNormal = normalize((u_iblWorldToIbl * vec4(normal, 0.0)).xyz);
   vec3 irradiance = vec3(0.0);
