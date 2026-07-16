@@ -288,12 +288,10 @@ export class GltfPacketSubmissionOwner {
         this.#runtime.images.demandMaterial(state.key, loadedMaterial);
       }
       const prepared = this.#materials.prepare(
-        primitive,
         loadedMaterial,
         contentKeys,
-        this.#runtime.images.readyImageKeys(state.key),
-        this.#runtime.images.materialImagesPending(state.key, loadedMaterial),
-        this.#runtime.images.materialCriticalImagePending(state.key, loadedMaterial),
+        this.#runtime.images.readyKeys(state.key),
+        this.#runtime.images.materialBasePending(state.key, loadedMaterial),
         this.#runtime.images.publication(state.key),
       );
       const geometry = vertexInputGeometry(

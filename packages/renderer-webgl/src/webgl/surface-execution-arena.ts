@@ -216,7 +216,6 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
   readonly baseColor: SurfaceBaseColorTextureBinding;
   readonly criticalPending: boolean;
   readonly extendedMaterial: boolean;
-  readonly materialPending: boolean;
   readonly readyTextures: ReadonlyMap<SurfaceShaderTextureFeature, Extract<
     OrdinaryTextureGpuResource,
     { readonly uploaded: true }
@@ -227,7 +226,6 @@ type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorTextureBinding;
   criticalPending: boolean;
   extendedMaterial: boolean;
-  materialPending: boolean;
   readonly features: PureSurfaceTextureBindingPlan["features"];
   readonly omissions: PureSurfaceTextureBindingPlan["omissions"];
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
@@ -339,7 +337,6 @@ export class SurfaceExecutionArena {
     baseColor: { kind: "none" },
     criticalPending: false,
     extendedMaterial: false,
-    materialPending: false,
     features: this.#textureReadinessWorkspace.plan.features,
     omissions: this.#textureReadinessWorkspace.plan.omissions,
     readyTextures: this.#readyTextures,
@@ -373,6 +370,7 @@ export class SurfaceExecutionArena {
 
   /** Synchronizes the state cache with Royal's frame baseline. */
   beginFrame(): void {
+    for (const publication of this.#publicationGroups) publication.pending = false;
     this.#blendEnabled = false;
     this.#cullEnabled = false;
     this.#depthWriteEnabled = true;
@@ -423,7 +421,7 @@ export class SurfaceExecutionArena {
   #executeSingle(input: SurfaceSingleExecution, manageState: boolean): void {
     if (manageState) this.#beginDirectDraw(input.material);
     {
-      const programKind: ProgramKind = input.material.kind === "wireframe"
+      const materialProgramKind: ProgramKind = input.material.kind === "wireframe"
         ? "wireframe"
         : input.material.kind === "standard" ? "surface" : "unlit";
       const surfaceMaterial = input.material.kind !== "wireframe" ? input.material : undefined;
@@ -442,33 +440,28 @@ export class SurfaceExecutionArena {
             surfaceLights,
             input.baseColorResidency,
           );
-      if (
+      const loading =
         surfaceMaterial !== undefined
         && plan !== undefined
         && this.#materialLoading(
           surfaceMaterial,
-          plan.materialPending,
           plan.criticalPending,
-          input.frame,
-        )
-      ) {
-        this.#drawLoadingSingle(input);
-        return;
-      }
+        );
       const program = this.#program(
         input.frame,
-        programKind,
-        plan?.features,
-        (surfaceLights?.punctuals.length ?? 0) > 0,
-        plan?.extendedMaterial ?? false,
+        loading ? "unlit" : materialProgramKind,
+        loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan?.features,
+        !loading && (surfaceLights?.punctuals.length ?? 0) > 0,
+        !loading && (plan?.extendedMaterial ?? false),
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
       uniformMatrix(this.#programs, program, "u_model", input.model);
-      this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
-      if (plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
+      if (loading) this.#bindLoadingSurface(program, input.toneMapping);
+      else this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
+      if (!loading && plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
         if (surfaceMaterial.kind === "standard") {
           this.#bindEmissiveColor(program, surfaceMaterial);
           this.#bindMaterialFactors(program, surfaceMaterial, input.transmissionScreenColorTexture, plan);
@@ -478,7 +471,7 @@ export class SurfaceExecutionArena {
           this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
         }
       }
-      this.#bindBaseColorTexture(program, plan);
+      if (!loading) this.#bindBaseColorTexture(program, plan);
       drawGeometry(
         this.#geometry,
         input.contextGeneration,
@@ -518,36 +511,34 @@ export class SurfaceExecutionArena {
         surfaceLights,
         input.baseColorResidency,
       );
-      if (this.#materialLoading(
+      const loading = this.#materialLoading(
         batch.material,
-        plan.materialPending,
         plan.criticalPending,
-        input.frame,
-      )) {
-        this.#drawLoadingGltfBatch(input);
-        return;
-      }
+      );
       const program = this.#program(
         input.frame,
-        batch.material.kind === "standard" ? "surface-instanced-split" : "unlit-instanced-split",
-        plan.features,
-        surfaceLights.punctuals.length > 0,
-        plan.extendedMaterial,
+        loading
+          ? "unlit-instanced-split"
+          : batch.material.kind === "standard" ? "surface-instanced-split" : "unlit-instanced-split",
+        loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan.features,
+        !loading && surfaceLights.punctuals.length > 0,
+        !loading && plan.extendedMaterial,
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
       uniformMatrix(this.#programs, program, "u_projection", input.projection);
       uniformMatrix(this.#programs, program, "u_view", input.view);
-      this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
-      if (batch.material.kind === "standard") {
+      if (loading) this.#bindLoadingSurface(program, input.toneMapping);
+      else this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
+      if (!loading && batch.material.kind === "standard") {
         this.#bindEmissiveColor(program, batch.material);
         this.#bindMaterialFactors(program, batch.material, input.transmissionScreenColorTexture, plan);
         this.#bindToneMapping(program, input.toneMapping);
         this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
-      } else {
+      } else if (!loading) {
         this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
       }
-      this.#bindBaseColorTexture(program, plan);
+      if (!loading) this.#bindBaseColorTexture(program, plan);
       const allocation = this.#gltfFrames.bindInstanceBuffer(
         this.#gl,
         input.contextGeneration,
@@ -569,8 +560,8 @@ export class SurfaceExecutionArena {
 
   drainSignals(): SurfaceExecutionSignals {
     for (const publication of this.#publicationGroups) {
-      if (publication.published || publication.pending) continue;
-      publication.published = true;
+      if (publication.ready || publication.pending) continue;
+      publication.ready = true;
       this.#wakeRequested = true;
     }
     this.#captureIblSignals();
@@ -651,8 +642,7 @@ export class SurfaceExecutionArena {
     admissionInput.candidates = candidates;
     admissionInput.maxTextureUnits = this.#maxTextureImageUnits;
     const admission = planSurfaceTextureBindings(admissionInput, this.#textureAdmissionWorkspace);
-    let criticalPending = material.criticalTexturePending === true;
-    let materialPending = criticalPending;
+    let criticalPending = material.basePending === true;
     // Queue the authored base color before secondary maps. GPU residency uses
     // request order, so this preserves the planner's semantic priority and
     // avoids presenting normal/roughness variants over a factor-only surface.
@@ -661,7 +651,6 @@ export class SurfaceExecutionArena {
       const resource = this.#requestOrdinaryTexture(baseColorResidency.texture);
       ordinaryBaseColor = resource.uploaded ? resource : undefined;
       const baseColorPending = this.#ordinaryTextureIsLoading(baseColorResidency.texture, resource);
-      materialPending ||= baseColorPending;
       criticalPending ||= baseColorPending;
     }
     for (let index = 0; index < entries.length; index += 1) {
@@ -669,7 +658,6 @@ export class SurfaceExecutionArena {
       if (!admission.features.has(descriptor.feature)) continue;
       const resource = this.#requestOrdinaryTexture(texture);
       const ready = resource.uploaded ? resource : undefined;
-      if (ready === undefined && this.#ordinaryTextureIsLoading(texture, resource)) materialPending = true;
       candidates[descriptor.feature] = ready === undefined ? "unavailable" : "ready";
       if (ready !== undefined) readyTextures.set(descriptor.feature, ready);
     }
@@ -710,7 +698,6 @@ export class SurfaceExecutionArena {
             virtualFallbackTexture,
             fallbackResource,
           );
-          materialPending ||= fallbackPending;
           criticalPending ||= fallbackPending;
         }
         virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
@@ -774,76 +761,21 @@ export class SurfaceExecutionArena {
     this.#texturePlan.baseColor = selectedBaseColor;
     this.#texturePlan.criticalPending = criticalPending;
     this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
-    this.#texturePlan.materialPending = materialPending;
     return this.#texturePlan;
   }
 
   #materialLoading(
     material: SurfaceMaterial,
-    pending: boolean,
     criticalPending: boolean,
-    frame: number,
   ): boolean {
     const publication = material.publication;
-    if (publication === undefined) return pending;
-    if (publication.evaluationFrame !== frame) {
-      publication.evaluationFrame = frame;
-      publication.pending = false;
-    }
+    if (publication === undefined) return criticalPending;
     publication.pending ||= criticalPending;
     this.#publicationGroups.add(publication);
     // Secondary maps refine an already useful asset progressively. Loss or a
     // new demand for the base/alpha-critical texture returns only that material
     // to gray until the critical dependency is resident again.
-    return !publication.published || criticalPending;
-  }
-
-  #drawLoadingSingle(input: SurfaceSingleExecution): void {
-    const program = this.#program(input.frame, "unlit", EMPTY_SURFACE_TEXTURE_FEATURES, false, false);
-    if (program === undefined) return;
-    useProgram(this.#programs, program);
-    uniformMatrix(this.#programs, program, "u_projection", input.projection);
-    uniformMatrix(this.#programs, program, "u_view", input.view);
-    uniformMatrix(this.#programs, program, "u_model", input.model);
-    this.#bindLoadingSurface(program, input.toneMapping);
-    drawGeometry(
-      this.#geometry,
-      input.contextGeneration,
-      input.geometryId,
-      input.geometry,
-    );
-  }
-
-  #drawLoadingGltfBatch(input: SurfaceGltfBatchExecution): void {
-    const { batch } = input;
-    const program = this.#program(
-      input.frame,
-      "unlit-instanced-split",
-      EMPTY_SURFACE_TEXTURE_FEATURES,
-      false,
-      false,
-    );
-    if (program === undefined) return;
-    useProgram(this.#programs, program);
-    uniformMatrix(this.#programs, program, "u_projection", input.projection);
-    uniformMatrix(this.#programs, program, "u_view", input.view);
-    this.#bindLoadingSurface(program, input.toneMapping);
-    const allocation = this.#gltfFrames.bindInstanceBuffer(
-      this.#gl,
-      input.contextGeneration,
-      batch,
-      input.counters,
-    );
-    prepareGeometryInstancedDraw(
-      this.#geometry,
-      input.contextGeneration,
-      batch.geometryId,
-      batch.geometry,
-      allocation,
-    );
-    input.counters.drawCalls += 1;
-    input.counters.instancesDrawn += batch.localModels.length;
-    submitGeometryInstancedDraw(this.#geometry, batch.geometry, batch.localModels.length);
+    return !publication.ready || criticalPending;
   }
 
   #bindLoadingSurface(program: WebGLProgram, toneMapping: SurfaceToneMappingState): void {

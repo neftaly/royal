@@ -9,6 +9,14 @@ export type GltfMaterialExtensionTextureDefinition = {
   readonly textureInfo: (material: GltfMaterial | undefined) => GltfTextureInfo | undefined;
 };
 
+export const GLTF_CORE_MATERIAL_TEXTURES = [
+  ["baseColorTexture", "srgb"],
+  ["emissiveTexture", "srgb"],
+  ["metallicRoughnessTexture", "linear"],
+  ["normalTexture", "linear"],
+  ["occlusionTexture", "linear"],
+] as const;
+
 /** Shared declarative metadata used by scene preparation and material binding. */
 export const GLTF_MATERIAL_EXTENSION_TEXTURES = [
   {

@@ -6,10 +6,6 @@ import type {
   UnlitMaterial,
   Vec3,
 } from "@royal/renderer-core";
-import {
-  surfaceLightValueKey,
-  surfaceLightVectorKey,
-} from "./lights";
 import type { GltfTextureCoordinates } from "../gltf/texture-coordinates";
 
 export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
@@ -21,15 +17,14 @@ export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
 /** Mutable renderer-owned state shared by every material from one glTF asset. */
 export type SurfaceMaterialPublication = {
-  evaluationFrame: number;
   pending: boolean;
-  published: boolean;
+  ready: boolean;
 };
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly anisotropyTexture?: TextureAssetUploadRef;
   /** Internal glTF base/alpha publication barrier; never authored through the public API. */
-  readonly criticalTexturePending?: true;
+  readonly basePending?: true;
   /** Internal asset-wide glTF publication state; never authored through the public API. */
   readonly publication?: SurfaceMaterialPublication;
   readonly baseColorFactor?: LinearRgba;
@@ -247,73 +242,6 @@ export const surfaceMaterialRoughnessFactor = (material: SurfaceMaterial): numbe
 
 export const surfaceMaterialOcclusionStrength = (material: SurfaceMaterial): number =>
   material.kind === "standard" ? material.occlusionStrength ?? 1 : 1;
-
-const surfaceMaterialExtensionFactorsKey = (
-  factors: SurfaceMaterialExtensionFactors,
-): string =>
-  [
-    factors.anisotropyStrength,
-    factors.anisotropyRotation,
-    factors.specularFactor,
-    ...factors.specularColorFactor,
-    factors.ior,
-    factors.clearcoatFactor,
-    factors.clearcoatNormalScale,
-    factors.clearcoatRoughnessFactor,
-    factors.diffuseTransmissionFactor,
-    ...factors.diffuseTransmissionColorFactor,
-    factors.dispersionFactor,
-    ...factors.sheenColorFactor,
-    factors.sheenRoughnessFactor,
-    factors.iridescenceFactor,
-    factors.iridescenceIor,
-    factors.iridescenceThicknessMinimum,
-    factors.iridescenceThicknessMaximum,
-    factors.transmissionFactor,
-    factors.thicknessFactor,
-    ...factors.attenuationColor,
-    factors.attenuationDistance,
-  ].map((value) => surfaceLightValueKey(value)).join(",");
-
-export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
-  [
-    material.kind,
-    material.criticalTexturePending === true ? "critical-texture-pending" : "critical-texture-settled",
-    material.doubleSided === true ? "double-sided" : "front-sided",
-    surfaceMaterialAlphaMode(material),
-    surfaceLightValueKey(surfaceMaterialAlphaCutoff(material)),
-    textureCacheKey(material.baseColor),
-    surfaceLightVectorKey(materialColor(material)),
-    material.anisotropyTexture === undefined ? "" : textureCacheKey(material.anisotropyTexture),
-    material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
-    material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
-    material.normalTexture === undefined ? "" : `${textureCacheKey(material.normalTexture)}:${surfaceLightValueKey(material.normalScale ?? 1)}`,
-    material.occlusionTexture === undefined ? "" : textureCacheKey(material.occlusionTexture),
-    material.specularTexture === undefined ? "" : textureCacheKey(material.specularTexture),
-    material.specularColorTexture === undefined ? "" : textureCacheKey(material.specularColorTexture),
-    material.clearcoatTexture === undefined ? "" : textureCacheKey(material.clearcoatTexture),
-    material.clearcoatNormalTexture === undefined ? "" : textureCacheKey(material.clearcoatNormalTexture),
-    material.clearcoatRoughnessTexture === undefined ? "" : textureCacheKey(material.clearcoatRoughnessTexture),
-    material.diffuseTransmissionColorTexture === undefined ? "" : textureCacheKey(material.diffuseTransmissionColorTexture),
-    material.diffuseTransmissionTexture === undefined ? "" : textureCacheKey(material.diffuseTransmissionTexture),
-    material.sheenColorTexture === undefined ? "" : textureCacheKey(material.sheenColorTexture),
-    material.sheenRoughnessTexture === undefined ? "" : textureCacheKey(material.sheenRoughnessTexture),
-    material.iridescenceTexture === undefined ? "" : textureCacheKey(material.iridescenceTexture),
-    material.iridescenceThicknessTexture === undefined ? "" : textureCacheKey(material.iridescenceThicknessTexture),
-    material.materialTransmissionTexture === undefined ? "" : textureCacheKey(material.materialTransmissionTexture),
-    material.thicknessTexture === undefined ? "" : textureCacheKey(material.thicknessTexture),
-    ...Object.entries(material.textureCoordinates ?? {}).flatMap(([key, coordinates]) => [
-      key,
-      coordinates.set,
-      ...coordinates.row0,
-      ...coordinates.row1,
-    ]),
-    surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
-    surfaceLightValueKey(surfaceMaterialOcclusionStrength(material)),
-    surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),
-    surfaceLightVectorKey(materialEmissiveColor(material)),
-    surfaceMaterialExtensionFactorsKey(surfaceMaterialExtensionFactors(material)),
-  ].join(":");
 
 export const materialColor = (material: Material): LinearRgba => {
   if ("baseColorFactor" in material && Array.isArray(material.baseColorFactor)) {

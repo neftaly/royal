@@ -20,7 +20,10 @@ import type {
   LoadedGltfMaterial,
   LoadedGltfMaterialTextureSlot,
 } from "./prepared-asset";
-import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./material-texture-definitions";
+import {
+  GLTF_CORE_MATERIAL_TEXTURES,
+  GLTF_MATERIAL_EXTENSION_TEXTURES,
+} from "./material-texture-definitions";
 import {
   gltfImageSourceRecipeBytes,
   loadGltfImageSourceRecipe,
@@ -117,15 +120,12 @@ type Asset = {
   readonly load: GltfLoadMetrics;
   readonly publication: SurfaceMaterialPublication;
   readonly recipeOwnership: RecipeOwnership;
-  readonly readyImageKeys: Set<string>;
+  readonly readyKeys: Set<string>;
   readonly rows: Map<string, Row>;
   readonly stateInstanceKey: number;
 };
 
 const EMPTY_IMAGE_KEYS: ReadonlySet<string> = new Set();
-
-const materialHasCriticalImage = (material: LoadedGltfMaterial): boolean =>
-  material.baseColorTexture?.imageUri !== undefined;
 
 const GLTF_IMAGE_LANE_CONCURRENCY = 1;
 
@@ -138,11 +138,7 @@ const imageDemandKeys = (
     if (slot?.imageUri !== undefined) keys.add(slot.imageUri);
   };
   for (const material of materials) {
-    add(material.baseColorTexture);
-    add(material.emissiveTexture);
-    add(material.metallicRoughnessTexture);
-    add(material.normalTexture);
-    add(material.occlusionTexture);
+    for (const [key] of GLTF_CORE_MATERIAL_TEXTURES) add(material[key]);
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       add(material.extensionTextures?.[texture.key]);
     }
@@ -216,9 +212,8 @@ export class GltfImageDemandCoordinator {
       key: input.key,
       load: input.load,
       publication: {
-        evaluationFrame: -1,
         pending: false,
-        published: !input.materials.some(materialHasCriticalImage),
+        ready: input.materials.every((material) => material.baseColorTexture?.imageUri === undefined),
       },
       recipeOwnership: {
         activeRecipes: new Set(),
@@ -229,7 +224,7 @@ export class GltfImageDemandCoordinator {
         released: false,
         retainedRecipes: new Set(),
       },
-      readyImageKeys: new Set(),
+      readyKeys: new Set(),
       rows: new Map(),
       stateInstanceKey: input.stateInstanceKey,
     };
@@ -307,50 +302,21 @@ export class GltfImageDemandCoordinator {
     const demand = (slot: LoadedGltfMaterialTextureSlot | undefined): void => {
       if (slot?.imageUri !== undefined) this.#demand(asset.rows.get(slot.imageUri));
     };
-    demand(material.baseColorTexture);
-    demand(material.emissiveTexture);
-    demand(material.metallicRoughnessTexture);
-    demand(material.normalTexture);
-    demand(material.occlusionTexture);
+    for (const [key] of GLTF_CORE_MATERIAL_TEXTURES) demand(material[key]);
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       demand(material.extensionTextures?.[texture.key]);
     }
   }
 
-  imageReady(assetKey: string, imageKey: string): boolean {
-    return this.#assets.get(assetKey)?.rows.get(imageKey)?.status === "ready";
-  }
-
-  readyImageKeys(assetKey: string): ReadonlySet<string> {
-    return this.#assets.get(assetKey)?.readyImageKeys ?? EMPTY_IMAGE_KEYS;
+  readyKeys(assetKey: string): ReadonlySet<string> {
+    return this.#assets.get(assetKey)?.readyKeys ?? EMPTY_IMAGE_KEYS;
   }
 
   publication(assetKey: string): SurfaceMaterialPublication | undefined {
     return this.#assets.get(assetKey)?.publication;
   }
 
-  materialImagesPending(assetKey: string, material: LoadedGltfMaterial): boolean {
-    const asset = this.#assets.get(assetKey);
-    if (asset === undefined) return false;
-    const pending = (slot: LoadedGltfMaterialTextureSlot | undefined): boolean => {
-      if (slot?.imageUri === undefined) return false;
-      const status = asset.rows.get(slot.imageUri)?.status;
-      return status !== undefined && status !== "ready" && status !== "error";
-    };
-    if (
-      pending(material.baseColorTexture)
-      || pending(material.emissiveTexture)
-      || pending(material.metallicRoughnessTexture)
-      || pending(material.normalTexture)
-      || pending(material.occlusionTexture)
-    ) return true;
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      if (pending(material.extensionTextures?.[texture.key])) return true;
-    }
-    return false;
-  }
-
-  materialCriticalImagePending(assetKey: string, material: LoadedGltfMaterial): boolean {
+  materialBasePending(assetKey: string, material: LoadedGltfMaterial): boolean {
     const imageKey = material.baseColorTexture?.imageUri;
     if (imageKey === undefined) return false;
     const status = this.#assets.get(assetKey)?.rows.get(imageKey)?.status;
@@ -597,7 +563,7 @@ export class GltfImageDemandCoordinator {
       }
       row.sourceLease = sourceLease;
       row.source = loaded.image;
-      asset.readyImageKeys.add(row.key);
+      asset.readyKeys.add(row.key);
       if (loaded.contentKey === undefined) delete row.contentKey;
       else row.contentKey = loaded.contentKey;
       row.status = "ready";
@@ -612,7 +578,7 @@ export class GltfImageDemandCoordinator {
       if (asset.controller.signal.aborted) return;
       row.error = error instanceof Error ? error.message : String(error);
       row.status = "error";
-      asset.readyImageKeys.delete(row.key);
+      asset.readyKeys.delete(row.key);
       this.#recordSettled(asset, true);
       this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
       this.#requestInvalidate(row.key);

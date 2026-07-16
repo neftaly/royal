@@ -90,18 +90,16 @@ describe("glTF material preparation arena", () => {
   it("owns cache identity, reverse invalidation, and material batch classes", () => {
     const arena = new GltfMaterialPreparationArena();
     const loadedMaterial = material();
-    const firstPrimitive = primitive(loadedMaterial);
-    const secondPrimitive = primitive(loadedMaterial);
     const contentKeys = new Map<string, TextureContentKey>();
 
-    const pending = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, new Set(), true);
-    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, new Set(), true)).toBe(pending);
+    const pending = arena.prepare(loadedMaterial, contentKeys, new Set(), true);
+    expect(arena.prepare(loadedMaterial, contentKeys, new Set(), true)).toBe(pending);
     expect(pending.material.baseColor).toMatchObject({ kind: "solid" });
 
     arena.invalidate([loadedMaterial]);
     const readyImages = new Set(["image:base"]);
-    const ready = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, readyImages, false);
-    const otherPrimitiveReady = arena.prepare(secondPrimitive, loadedMaterial, contentKeys, readyImages, false);
+    const ready = arena.prepare(loadedMaterial, contentKeys, readyImages, false);
+    const otherPrimitiveReady = arena.prepare(loadedMaterial, contentKeys, readyImages, false);
     expect(ready).not.toBe(pending);
     expect(ready.material.baseColor).toMatchObject({
       colorSpace: "srgb",
@@ -112,7 +110,7 @@ describe("glTF material preparation arena", () => {
     expect(otherPrimitiveReady.materialBatchClassId).toBe(ready.materialBatchClassId);
 
     arena.clear();
-    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, readyImages, false)).not.toBe(ready);
+    expect(arena.prepare(loadedMaterial, contentKeys, readyImages, false)).not.toBe(ready);
   });
 
   it("publishes a gray degraded base with a ready normal after base-color failure", () => {
@@ -126,11 +124,9 @@ describe("glTF material preparation arena", () => {
       },
     };
     const prepared = arena.prepare(
-      primitive(loadedMaterial),
       loadedMaterial,
       new Map(),
       new Set(["image:normal"]),
-      false,
       false,
     );
 
@@ -142,7 +138,7 @@ describe("glTF material preparation arena", () => {
       kind: "asset",
       uri: "texture:normal",
     });
-    expect(prepared.material.criticalTexturePending).toBeUndefined();
+    expect(prepared.material.basePending).toBeUndefined();
   });
 
   it("resolves named and numeric variants without accepting invalid selections", () => {

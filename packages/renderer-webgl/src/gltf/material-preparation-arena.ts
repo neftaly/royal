@@ -4,7 +4,10 @@ import type {
   TextureContentKey,
   TextureRef,
 } from "@royal/renderer-core";
-import { GLTF_MATERIAL_EXTENSION_TEXTURES } from "./material-texture-definitions";
+import {
+  GLTF_CORE_MATERIAL_TEXTURES,
+  GLTF_MATERIAL_EXTENSION_TEXTURES,
+} from "./material-texture-definitions";
 import type { GltfTextureCoordinates } from "./texture-coordinates";
 import type {
   LoadedGltfMaterial,
@@ -13,7 +16,6 @@ import type {
   LoadedGltfPrimitiveMaterial,
 } from "./prepared-asset";
 import {
-  surfaceMaterialBatchKey,
   type SurfaceMaterial,
   type SurfaceMaterialPublication,
   type SurfaceMaterialTextureCoordinates,
@@ -43,8 +45,6 @@ type LoadedGltfSurfaceTextures = {
 };
 
 export type GltfPreparedPrimitiveMaterial = {
-  readonly criticalImagePending: boolean;
-  readonly imagesPending: boolean;
   readonly material: SurfaceMaterial;
   readonly materialBatchClassId: number;
 };
@@ -53,6 +53,15 @@ export type GltfPreparedPrimitiveMaterial = {
 const DEFAULT_COLOR: LinearRgba = [0.21404114, 0.21404114, 0.21404114, 1];
 const TEXTURE_COLOR: LinearRgba = [1, 1, 1, 1];
 
+const omitPublicationState = (key: string, value: unknown): unknown =>
+  key === "publication" ? undefined : value;
+
+/** Value identity preserves automatic instancing across equivalent assets. */
+const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
+  JSON.stringify(material, omitPublicationState);
+
+type SurfaceMaterialBuildKey = keyof SurfaceMaterial | "metallicFactor" | "roughnessFactor";
+
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
@@ -60,73 +69,31 @@ const loadedGltfSurfaceMaterial = (
   criticalImagePending: boolean,
   publication?: SurfaceMaterialPublication,
 ): SurfaceMaterial => {
-  const emissive = loadedMaterial.emissive;
-  const extensionFactors = loadedMaterial.extensionFactors;
-  const common = {
+  const material: Partial<Record<SurfaceMaterialBuildKey, unknown>> & {
+    baseColor: TextureRef;
+    kind: "standard" | "unlit";
+  } = {
     baseColor,
     baseColorFactor: loadedMaterial.color ?? TEXTURE_COLOR,
     alphaMode: loadedMaterial.alphaMode,
-    ...(criticalImagePending ? { criticalTexturePending: true as const } : {}),
-    ...(publication === undefined ? {} : { publication }),
-    ...(loadedMaterial.alphaMode === "MASK" ? { alphaCutoff: loadedMaterial.alphaCutoff ?? 0.5 } : {}),
     doubleSided: loadedMaterial.doubleSided,
-    ...(emissive === undefined ? {} : { emissive }),
-    ...(textures.emissiveTexture === undefined ? {} : { emissiveTexture: textures.emissiveTexture }),
-    ...(extensionFactors === undefined ? {} : { extensionFactors }),
-    ...(textures.textureCoordinates === undefined ? {} : { textureCoordinates: textures.textureCoordinates }),
+    kind: loadedMaterial.unlit === true ? "unlit" : "standard",
   };
-  if (loadedMaterial.unlit === true) return { ...common, kind: "unlit" };
-
-  return {
-    ...common,
-    kind: "standard",
-    ...(textures.anisotropyTexture === undefined ? {} : { anisotropyTexture: textures.anisotropyTexture }),
-    ...(textures.clearcoatNormalTexture === undefined ? {} : { clearcoatNormalTexture: textures.clearcoatNormalTexture }),
-    ...(textures.clearcoatRoughnessTexture === undefined
-      ? {}
-      : { clearcoatRoughnessTexture: textures.clearcoatRoughnessTexture }),
-    ...(textures.clearcoatTexture === undefined ? {} : { clearcoatTexture: textures.clearcoatTexture }),
-    ...(textures.diffuseTransmissionColorTexture === undefined
-      ? {}
-      : { diffuseTransmissionColorTexture: textures.diffuseTransmissionColorTexture }),
-    ...(textures.diffuseTransmissionTexture === undefined
-      ? {}
-      : { diffuseTransmissionTexture: textures.diffuseTransmissionTexture }),
-    ...(textures.iridescenceTexture === undefined ? {} : { iridescenceTexture: textures.iridescenceTexture }),
-    ...(textures.iridescenceThicknessTexture === undefined
-      ? {}
-      : { iridescenceThicknessTexture: textures.iridescenceThicknessTexture }),
-    ...(textures.materialTransmissionTexture === undefined
-      ? {}
-      : { materialTransmissionTexture: textures.materialTransmissionTexture }),
-    metallicFactor: loadedMaterial.metallicFactor ?? 1,
-    ...(textures.metallicRoughnessTexture === undefined
-      ? {}
-      : { metallicRoughnessTexture: textures.metallicRoughnessTexture }),
-    ...(textures.normalTexture === undefined ? {} : { normalTexture: textures.normalTexture }),
-    normalScale: loadedMaterial.normalScale ?? 1,
-    ...(textures.occlusionTexture === undefined ? {} : { occlusionTexture: textures.occlusionTexture }),
-    occlusionStrength: loadedMaterial.occlusionStrength ?? 1,
-    roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
-    ...(textures.sheenColorTexture === undefined ? {} : { sheenColorTexture: textures.sheenColorTexture }),
-    ...(textures.sheenRoughnessTexture === undefined
-      ? {}
-      : { sheenRoughnessTexture: textures.sheenRoughnessTexture }),
-    ...(textures.specularColorTexture === undefined
-      ? {}
-      : { specularColorTexture: textures.specularColorTexture }),
-    ...(textures.specularTexture === undefined ? {} : { specularTexture: textures.specularTexture }),
-    ...(textures.thicknessTexture === undefined ? {} : { thicknessTexture: textures.thicknessTexture }),
-  };
-};
-
-const textureContentKeyProps = (
-  textureUri: string,
-  authored: TextureContentKey | undefined,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
-): { readonly contentKey?: TextureContentKey } => {
-  const contentKey = authored ?? contentKeys.get(textureUri);
-  return contentKey === undefined ? {} : { contentKey };
+  material.basePending = criticalImagePending ? true : undefined;
+  material.publication = publication;
+  material.alphaCutoff = loadedMaterial.alphaMode === "MASK" ? loadedMaterial.alphaCutoff ?? 0.5 : undefined;
+  material.emissive = loadedMaterial.emissive;
+  material.emissiveTexture = textures.emissiveTexture;
+  material.extensionFactors = loadedMaterial.extensionFactors;
+  material.textureCoordinates = textures.textureCoordinates;
+  if (material.kind === "standard") {
+    material.metallicFactor = loadedMaterial.metallicFactor ?? 1;
+    material.normalScale = loadedMaterial.normalScale ?? 1;
+    material.occlusionStrength = loadedMaterial.occlusionStrength ?? 1;
+    material.roughnessFactor = loadedMaterial.roughnessFactor ?? 1;
+    Object.assign(material, textures);
+  }
+  return material as SurfaceMaterial;
 };
 
 const textureSlotRef = (
@@ -139,26 +106,17 @@ const textureSlotRef = (
   if (readyImageKeys !== undefined && slot.imageUri !== undefined && !readyImageKeys.has(slot.imageUri)) {
     return undefined;
   }
-  return {
+  const texture: { -readonly [Key in keyof TextureAssetUploadRef]: TextureAssetUploadRef[Key] } = {
     colorSpace,
-    ...textureContentKeyProps(slot.textureUri, slot.contentKey, contentKeys),
     kind: "asset",
     preparedOnly: true,
-    ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
     uri: slot.textureUri,
   };
+  const contentKey = slot.contentKey ?? contentKeys.get(slot.textureUri);
+  if (contentKey !== undefined) texture.contentKey = contentKey;
+  if (slot.sampler !== undefined) texture.sampler = slot.sampler;
+  return texture;
 };
-
-const baseColorTextureRef = (
-  material: LoadedGltfMaterial,
-  contentKeys: ReadonlyMap<string, TextureContentKey>,
-  readyImageKeys?: ReadonlySet<string>,
-): TextureAssetUploadRef | undefined => textureSlotRef(
-  material.baseColorTexture,
-  "srgb",
-  contentKeys,
-  readyImageKeys,
-);
 
 const surfaceTextures = (
   material: LoadedGltfMaterial,
@@ -166,12 +124,11 @@ const surfaceTextures = (
   readyImageKeys: ReadonlySet<string>,
 ): LoadedGltfSurfaceTextures => {
   const extensionTextures = material.extensionTextures;
-  const textures: {
-    -readonly [Key in keyof Omit<LoadedGltfSurfaceTextures, "textureCoordinates">]?: TextureAssetUploadRef
-  } = {};
+  const textures: { -readonly [Key in keyof LoadedGltfSurfaceTextures]: LoadedGltfSurfaceTextures[Key] } = {};
   const textureCoordinates: {
     -readonly [Key in keyof SurfaceMaterialTextureCoordinates]?: GltfTextureCoordinates
   } = {};
+  let hasTextureCoordinates = false;
   const setTexture = (
     key: keyof Omit<LoadedGltfSurfaceTextures, "textureCoordinates">,
     texture: TextureAssetUploadRef | undefined,
@@ -182,46 +139,40 @@ const surfaceTextures = (
     key: keyof SurfaceMaterialTextureCoordinates,
     slot: LoadedGltfMaterialTextureSlot | undefined,
   ): void => {
-    if (slot !== undefined) textureCoordinates[key] = slot.coordinates;
+    if (slot !== undefined) {
+      textureCoordinates[key] = slot.coordinates;
+      hasTextureCoordinates = true;
+    }
   };
 
-  setTexture("emissiveTexture", textureSlotRef(material.emissiveTexture, "srgb", contentKeys, readyImageKeys));
-  setTexture(
-    "metallicRoughnessTexture",
-    textureSlotRef(material.metallicRoughnessTexture, "linear", contentKeys, readyImageKeys),
-  );
-  setTexture("normalTexture", textureSlotRef(material.normalTexture, "linear", contentKeys, readyImageKeys));
-  setTexture("occlusionTexture", textureSlotRef(material.occlusionTexture, "linear", contentKeys, readyImageKeys));
-  setCoordinates("baseColorTexture", material.baseColorTexture);
-  setCoordinates("emissiveTexture", material.emissiveTexture);
-  setCoordinates("metallicRoughnessTexture", material.metallicRoughnessTexture);
-  setCoordinates("normalTexture", material.normalTexture);
-  setCoordinates("occlusionTexture", material.occlusionTexture);
+  for (const [key, colorSpace] of GLTF_CORE_MATERIAL_TEXTURES) {
+    const slot = material[key];
+    setCoordinates(key, slot);
+    if (key !== "baseColorTexture") {
+      setTexture(key, textureSlotRef(slot, colorSpace, contentKeys, readyImageKeys));
+    }
+  }
   for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
     const slot = extensionTextures?.[texture.key];
     setTexture(texture.key, textureSlotRef(slot, texture.colorSpace, contentKeys, readyImageKeys));
     setCoordinates(texture.key, slot);
   }
 
-  return {
-    ...textures,
-    ...(Object.keys(textureCoordinates).length === 0 ? {} : { textureCoordinates }),
-  };
+  if (hasTextureCoordinates) textures.textureCoordinates = textureCoordinates;
+  return textures;
 };
 
 export const gltfMaterialTextureRefs = (
   material: LoadedGltfMaterial,
   contentKeys: ReadonlyMap<string, TextureContentKey>,
 ): readonly TextureAssetUploadRef[] => {
-  const refs = [
-    baseColorTextureRef(material, contentKeys),
-    textureSlotRef(material.emissiveTexture, "srgb", contentKeys),
-    textureSlotRef(material.metallicRoughnessTexture, "linear", contentKeys),
-    textureSlotRef(material.normalTexture, "linear", contentKeys),
-    textureSlotRef(material.occlusionTexture, "linear", contentKeys),
-    ...GLTF_MATERIAL_EXTENSION_TEXTURES.map((texture) =>
-      textureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace, contentKeys)),
-  ];
+  const refs: (TextureAssetUploadRef | undefined)[] = [];
+  for (const [key, colorSpace] of GLTF_CORE_MATERIAL_TEXTURES) {
+    refs.push(textureSlotRef(material[key], colorSpace, contentKeys));
+  }
+  for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+    refs.push(textureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace, contentKeys));
+  }
   return refs.filter((ref): ref is TextureAssetUploadRef => ref !== undefined);
 };
 
@@ -251,42 +202,24 @@ export const selectedGltfVariantIndex = (
 export class GltfMaterialPreparationArena {
   #batchClassIdCount = 0;
   readonly #batchClassIds = new Map<string, number>();
-  #materialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
-  #prepared = new WeakMap<
-    LoadedGltfPrimitive,
-    WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>
-  >();
+  #prepared = new WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>();
 
   prepare(
-    primitive: LoadedGltfPrimitive,
     loadedMaterial: LoadedGltfMaterial,
     contentKeys: ReadonlyMap<string, TextureContentKey>,
     readyImageKeys: ReadonlySet<string>,
-    imagesPending: boolean,
     criticalImagePending = false,
     publication?: SurfaceMaterialPublication,
   ): GltfPreparedPrimitiveMaterial {
-    let primitiveCache = this.#prepared.get(primitive);
-    const cached = primitiveCache?.get(loadedMaterial);
-    if (
-      cached !== undefined
-      && cached.imagesPending === imagesPending
-      && cached.criticalImagePending === criticalImagePending
-    ) return cached;
+    const cached = this.#prepared.get(loadedMaterial);
+    if (cached !== undefined) return cached;
 
-    let materialPrimitives = this.#materialPrimitives.get(loadedMaterial);
-    if (materialPrimitives === undefined) {
-      materialPrimitives = new Set();
-      this.#materialPrimitives.set(loadedMaterial, materialPrimitives);
-    }
-    materialPrimitives.add(primitive);
-
-    if (primitiveCache === undefined) {
-      primitiveCache = new WeakMap();
-      this.#prepared.set(primitive, primitiveCache);
-    }
-
-    const baseColor = baseColorTextureRef(loadedMaterial, contentKeys, readyImageKeys);
+    const baseColor = textureSlotRef(
+      loadedMaterial.baseColorTexture,
+      "srgb",
+      contentKeys,
+      readyImageKeys,
+    );
     const material = loadedGltfSurfaceMaterial(
       loadedMaterial,
       loadedMaterial.baseColorTexture?.imageUri !== undefined
@@ -303,27 +236,20 @@ export class GltfMaterialPreparationArena {
       publication,
     );
     const prepared = {
-      criticalImagePending,
-      imagesPending,
       material,
       materialBatchClassId: this.#batchClassId(surfaceMaterialBatchKey(material)),
     };
-    primitiveCache.set(loadedMaterial, prepared);
+    this.#prepared.set(loadedMaterial, prepared);
     return prepared;
   }
 
   invalidate(materials: Iterable<LoadedGltfMaterial>): void {
-    for (const material of materials) {
-      for (const primitive of this.#materialPrimitives.get(material) ?? []) {
-        this.#prepared.get(primitive)?.delete(material);
-      }
-    }
+    for (const material of materials) this.#prepared.delete(material);
   }
 
   clear(): void {
     this.#batchClassIds.clear();
     this.#batchClassIdCount = 0;
-    this.#materialPrimitives = new WeakMap();
     this.#prepared = new WeakMap();
   }
 

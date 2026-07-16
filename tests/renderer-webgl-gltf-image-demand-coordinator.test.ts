@@ -214,8 +214,8 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     expect(load.firstImageSettledAt).toBe(20);
     expect(load.imagesSettledAt).toBe(30);
     expect(ownership.release).toHaveBeenCalledOnce();
-    expect(harness.coordinator.imageReady("asset", ordinaryKey)).toBe(true);
-    expect(harness.coordinator.imageReady("asset", iblKey)).toBe(true);
+    expect(harness.coordinator.readyKeys("asset").has(ordinaryKey)).toBe(true);
+    expect(harness.coordinator.readyKeys("asset").has(iblKey)).toBe(true);
 
     const outcomes = harness.coordinator.pendingReadyOutcomes();
     expect(outcomes).toHaveLength(2);
@@ -256,7 +256,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
-    expect(harness.coordinator.imageReady("asset", "invalidate-failure")).toBe(true);
+    expect(harness.coordinator.readyKeys("asset").has("invalidate-failure")).toBe(true);
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([
       expect.objectContaining({ key: "invalidate-failure" }),
     ]);
@@ -695,7 +695,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     await flushMicrotasks();
 
     expect(replacementLoad).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
-    expect(harness.coordinator.imageReady("asset", "replacement")).toBe(true);
+    expect(harness.coordinator.readyKeys("asset").has("replacement")).toBe(true);
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([
       expect.objectContaining({ assetKey: "asset", key: "replacement", stateInstanceKey: 2 }),
     ]);
@@ -767,8 +767,8 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     await flushMicrotasks();
 
     expect(replacementLoad).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
-    expect(harness.coordinator.imageReady("asset", "outer")).toBe(false);
-    expect(harness.coordinator.imageReady("asset", "replacement")).toBe(true);
+    expect(harness.coordinator.readyKeys("asset").has("outer")).toBe(false);
+    expect(harness.coordinator.readyKeys("asset").has("replacement")).toBe(true);
     expect(harness.coordinator.pendingReadyOutcomes()).toEqual([
       expect.objectContaining({ assetKey: "asset", key: "replacement", stateInstanceKey: 2 }),
     ]);
