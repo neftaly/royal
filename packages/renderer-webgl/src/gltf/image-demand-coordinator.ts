@@ -131,6 +131,7 @@ type RecipeOwnership = {
 
 type Asset = {
   readonly controller: AbortController;
+  readonly demandedMaterials: WeakSet<LoadedGltfMaterial>;
   readonly key: string;
   readonly load: GltfLoadMetrics;
   readonly pendingMaterialRows: WeakMap<LoadedGltfMaterial, number>;
@@ -269,6 +270,7 @@ export class GltfImageDemandCoordinator {
     }
     const asset: Asset = {
       controller: new AbortController(),
+      demandedMaterials: new WeakSet(),
       key: input.key,
       load: input.load,
       pendingMaterialRows: new WeakMap(),
@@ -354,10 +356,14 @@ export class GltfImageDemandCoordinator {
     const asset = this.#assets.get(assetKey);
     if (asset === undefined || asset.settledMaterials.has(material)) return false;
     const baseKey = material.baseColorTexture?.imageUri;
+    const base = baseKey === undefined ? undefined : asset.rows.get(baseKey);
+    if (asset.demandedMaterials.has(material)) {
+      return base !== undefined && base.status !== "error" && base.status !== "ready";
+    }
+    asset.demandedMaterials.add(material);
     if (baseKey !== undefined) {
-      const base = asset.rows.get(baseKey);
       this.#demand(base);
-      if (base?.status === "loading" || base?.status === "queued") {
+      if (base !== undefined && base.status !== "error" && base.status !== "ready") {
         (base.pendingRefinements ??= new Set()).add(material);
         return true;
       }

@@ -394,7 +394,11 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
   it("keeps temporary decoded-capacity denial retryable without degrading the asset", async () => {
     const denied = source("capacity-denied");
     const retried = source("capacity-retried");
-    loadRecipeMock.mockResolvedValueOnce({ image: denied }).mockResolvedValueOnce({ image: retried });
+    const refinement = source("capacity-refinement");
+    loadRecipeMock
+      .mockResolvedValueOnce({ image: denied })
+      .mockResolvedValueOnce({ image: retried })
+      .mockResolvedValueOnce({ image: refinement });
     let retainAttempt = 0;
     const release = vi.fn(() => true);
     const harness = coordinatorHarness({
@@ -405,25 +409,29 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       },
     });
     const load = metrics();
+    const capacityMaterial = material("capacity", "refinement");
     harness.coordinator.registerAsset({
       key: "asset",
       load,
-      materials: [material("capacity")],
+      materials: [capacityMaterial],
       recipeLease: recipeLease(),
-      recipes: [recipe("capacity")],
+      recipes: [recipe("capacity"), recipe("refinement")],
       stateInstanceKey: 1,
     });
 
-    demandImages(harness.coordinator, "asset", "capacity");
+    expect(harness.coordinator.demandMaterial("asset", capacityMaterial)).toBe(true);
     await flushMicrotasks();
 
     expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 0, imageRequests: 1 });
     expect(harness.coordinator.snapshot()).toMatchObject({ errors: 0, ready: 0 });
+    expect(harness.coordinator.demandMaterial("asset", capacityMaterial)).toBe(true);
+    await flushMicrotasks();
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual(["capacity"]);
     expect(harness.coordinator.wakeCpuCapacity()).toBe(true);
     await flushMicrotasks();
 
-    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
-    expect(harness.coordinator.pendingReadyOutcomes()).toHaveLength(1);
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 2, imageRequests: 2 });
+    expect(harness.coordinator.pendingReadyOutcomes()).toHaveLength(2);
     expect(harness.closeSource).toHaveBeenCalledWith(denied);
     expect(harness.diagnostic).not.toHaveBeenCalled();
     harness.coordinator.dispose();
