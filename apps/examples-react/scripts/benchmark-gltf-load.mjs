@@ -905,18 +905,24 @@ const roundedGltfLoadDiagnostics = (snapshot) => {
           Object.entries(asset.phaseMs ?? {}).map(([key, value]) => [key, round(value)]),
         ),
         primitiveCount: asset.primitiveCount ?? 0,
-        sourceUri: asset.sourceUri,
-        ...(asset.sourceVersion === undefined ? {} : { sourceVersion: asset.sourceVersion }),
+        sourceUri: asset.sourceUri ?? asset.src,
+        ...(asset.sourceVersion === undefined && asset.version === undefined
+          ? {}
+          : { sourceVersion: asset.sourceVersion ?? asset.version }),
         status: asset.status,
-        variantCount: asset.variantCount ?? 0,
+        variantCount: asset.variantCount
+          ?? (Array.isArray(asset.variantNames) ? asset.variantNames.length : 0),
       }))
     : [];
 
   return {
     assets,
-    errorAssets: snapshot.errorAssets ?? 0,
-    loadingAssets: snapshot.loadingAssets ?? 0,
-    sceneReadyAssets: snapshot.sceneReadyAssets ?? 0,
+    errorAssets: snapshot.errorAssets
+      ?? assets.filter((asset) => asset.status === 'error').length,
+    loadingAssets: snapshot.loadingAssets
+      ?? assets.filter((asset) => asset.status === 'loading').length,
+    sceneReadyAssets: snapshot.sceneReadyAssets
+      ?? assets.filter((asset) => asset.status === 'sceneReady').length,
   };
 };
 
