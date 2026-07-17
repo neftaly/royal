@@ -21,6 +21,7 @@ export {
   type SurfaceShaderFeatures,
   type SurfaceShaderTextureFeature,
 } from "./surface-texture-features";
+export { surfaceShaderFeatureMask } from "./surface-texture-features";
 
 export type ProgramKind =
   | "surface"
@@ -48,16 +49,6 @@ export const surfaceShaderFeatureKey = (features: SurfaceShaderFeatures): string
     key += key === "" ? feature : `,${feature}`;
   }
   return key;
-};
-
-/** Allocation-free identity for the fixed surface sampler feature universe. */
-export const surfaceShaderFeatureMask = (features: SurfaceShaderFeatures): number => {
-  let mask = 0;
-  for (const feature of features) {
-    const index = SURFACE_SHADER_TEXTURE_FEATURES.indexOf(feature);
-    if (index >= 0) mask |= 1 << index;
-  }
-  return mask >>> 0;
 };
 
 const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): string =>

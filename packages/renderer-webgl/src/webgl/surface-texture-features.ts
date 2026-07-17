@@ -31,6 +31,16 @@ export type SurfaceShaderTextureFeature = typeof SURFACE_SHADER_TEXTURE_FEATURES
 export type SurfaceShaderFeatures = ReadonlySet<SurfaceShaderTextureFeature>;
 export type SurfaceMaterialTextureKey = keyof SurfaceMaterialTextureCoordinates;
 
+/** Allocation-free identity for the fixed surface sampler feature universe. */
+export const surfaceShaderFeatureMask = (features: SurfaceShaderFeatures): number => {
+  let mask = 0;
+  for (const feature of features) {
+    const index = SURFACE_SHADER_TEXTURE_FEATURES.indexOf(feature);
+    if (index >= 0) mask |= 1 << index;
+  }
+  return mask >>> 0;
+};
+
 export type SurfaceMaterialTextureBindingDescriptor = {
   readonly feature: SurfaceShaderTextureFeature;
   readonly key: SurfaceMaterialTextureKey;

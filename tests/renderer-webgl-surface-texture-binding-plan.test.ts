@@ -7,7 +7,10 @@ import {
   resolveAdmittedSurfaceTextureBindings,
   type SurfaceTextureBindingPlanInput,
 } from "../packages/renderer-webgl/src/webgl/surface-texture-binding-plan";
-import { SURFACE_SHADER_TEXTURE_FEATURES } from "../packages/renderer-webgl/src/webgl/shaders";
+import {
+  SURFACE_SHADER_TEXTURE_FEATURES,
+  surfaceShaderFeatureMask,
+} from "../packages/renderer-webgl/src/webgl/shaders";
 import { assertFuzz, assertFuzzEqual, forEachFuzzCase } from "./fuzz";
 
 const input = (overrides: Partial<SurfaceTextureBindingPlanInput> = {}): SurfaceTextureBindingPlanInput => ({
@@ -63,6 +66,7 @@ describe("surface texture binding planner", () => {
       ["metallicRoughnessTexture", 3],
     ]);
     expect([...plan.features]).toEqual([...plan.textureUnits.keys()]);
+    expect(plan.featureMask).toBe(surfaceShaderFeatureMask(plan.features));
     expect(plan.omissions.filter(({ reason }) => reason === "unit-exhausted").map(({ feature }) => feature))
       .toEqual([
         "normalTexture",

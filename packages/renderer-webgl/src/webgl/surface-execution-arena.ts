@@ -256,6 +256,7 @@ type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorTextureBinding;
   criticalPending: boolean;
   extendedMaterial: boolean;
+  featureMask: number;
   features: PureSurfaceTextureBindingPlan["features"];
   materialTextures: readonly SurfaceMaterialTextureCandidateEntry[];
   omissions: PureSurfaceTextureBindingPlan["omissions"];
@@ -378,6 +379,7 @@ export class SurfaceExecutionArena {
     baseColor: { kind: "none" },
     criticalPending: false,
     extendedMaterial: false,
+    featureMask: 0,
     features: this.#textureReadinessWorkspace.plan.features,
     materialTextures: [],
     omissions: this.#textureReadinessWorkspace.plan.omissions,
@@ -502,6 +504,7 @@ export class SurfaceExecutionArena {
         loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan?.features,
         !loading && (surfaceLights?.punctuals.length ?? 0) > 0,
         !loading && (plan?.extendedMaterial ?? false),
+        loading ? 0 : plan?.featureMask,
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -580,6 +583,7 @@ export class SurfaceExecutionArena {
         loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan.features,
         !loading && surfaceLights.punctuals.length > 0,
         !loading && plan.extendedMaterial,
+        loading ? 0 : plan.featureMask,
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
@@ -639,6 +643,7 @@ export class SurfaceExecutionArena {
     features: PureSurfaceTextureBindingPlan["features"] | undefined,
     clusteredLights: boolean,
     extendedMaterial: boolean,
+    featureMask?: number,
   ): WebGLProgram | undefined {
     const resource = requestProgram(
       this.#programs,
@@ -647,6 +652,7 @@ export class SurfaceExecutionArena {
       features,
       clusteredLights,
       extendedMaterial,
+      featureMask,
     );
     return resource?.program;
   }
@@ -860,6 +866,7 @@ export class SurfaceExecutionArena {
     this.#texturePlan.baseColor = selectedBaseColor;
     this.#texturePlan.criticalPending = criticalPending;
     this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
+    this.#texturePlan.featureMask = pure.featureMask;
     this.#texturePlan.features = pure.features;
     this.#texturePlan.materialTextures = entries;
     this.#texturePlan.omissions = pure.omissions;

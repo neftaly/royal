@@ -1,5 +1,6 @@
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
+  surfaceShaderFeatureMask,
   type SurfaceShaderFeatures,
   type SurfaceShaderTextureFeature,
 } from "./surface-texture-features";
@@ -52,6 +53,7 @@ export type SurfaceBaseColorBindingPlan =
 
 export type SurfaceTextureBindingPlan = {
   readonly baseColor: SurfaceBaseColorBindingPlan;
+  readonly featureMask: number;
   readonly features: SurfaceShaderFeatures;
   readonly omissions: readonly SurfaceTextureBindingOmission[];
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
@@ -59,6 +61,7 @@ export type SurfaceTextureBindingPlan = {
 
 type MutableSurfaceTextureBindingPlan = {
   baseColor: SurfaceBaseColorBindingPlan;
+  featureMask: number;
   readonly features: Set<SurfaceShaderTextureFeature>;
   readonly omissions: SurfaceTextureBindingOmission[];
   readonly textureUnits: Map<SurfaceShaderTextureFeature, number>;
@@ -86,6 +89,7 @@ export const createSurfaceTextureBindingWorkspace = (): SurfaceTextureBindingWor
   omissionSlots: [],
   plan: {
     baseColor: BASE_COLOR_NONE,
+    featureMask: 0,
     features: new Set(),
     omissions: [],
     textureUnits: new Map(),
@@ -98,6 +102,7 @@ const resetWorkspace = (
 ): MutableSurfaceTextureBindingPlan => {
   const { plan } = workspace;
   plan.baseColor = BASE_COLOR_NONE;
+  plan.featureMask = 0;
   plan.features.clear();
   plan.omissions.length = 0;
   plan.textureUnits.clear();
@@ -316,6 +321,7 @@ export const planSurfaceTextureBindings = (
   }
 
   output.baseColor = baseColor;
+  output.featureMask = surfaceShaderFeatureMask(output.features);
   return output;
 };
 
@@ -393,5 +399,6 @@ export const resolveAdmittedSurfaceTextureBindings = (
   }
 
   output.baseColor = baseColor;
+  output.featureMask = surfaceShaderFeatureMask(output.features);
   return output;
 };

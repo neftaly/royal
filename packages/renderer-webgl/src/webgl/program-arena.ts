@@ -28,11 +28,12 @@ export const programVariantKey = (
   features: SurfaceShaderFeatures | undefined,
   clusteredLights: boolean,
   extendedMaterial = false,
+  knownFeatureMask?: number,
 ): number => (
   (PROGRAM_KIND_IDS[kind] << PROGRAM_KIND_SHIFT)
   | (clusteredLights ? PROGRAM_CLUSTERED_FLAG : 0)
   | (extendedMaterial ? PROGRAM_EXTENDED_MATERIAL_FLAG : 0)
-  | (features === undefined ? 0 : surfaceShaderFeatureMask(features))
+  | (knownFeatureMask ?? (features === undefined ? 0 : surfaceShaderFeatureMask(features)))
 ) >>> 0;
 
 export interface ParallelShaderCompileExtension {
@@ -293,9 +294,10 @@ export const requestProgram = (
   features?: SurfaceShaderFeatures,
   clusteredLights = false,
   extendedMaterial = false,
+  knownFeatureMask?: number,
 ): ProgramArenaResource | undefined => {
   const state = arena as unknown as State;
-  const key = programVariantKey(kind, features, clusteredLights, extendedMaterial);
+  const key = programVariantKey(kind, features, clusteredLights, extendedMaterial, knownFeatureMask);
   let request = state.requests.get(key);
   if (request === undefined) {
     // Draw-time feature sets may come from a reusable planner workspace.
