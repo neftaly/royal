@@ -350,6 +350,10 @@ type StableLightBinding = {
   revision: number;
   specularTextureUnit: number | undefined;
 };
+type StableMaterialBinding = {
+  material: SurfaceMaterial;
+  preparedVirtual: boolean;
+};
 
 export interface SurfaceGltfBatchExecution {
   readonly baseColorResidency: BaseColorTextureResidency;
@@ -420,7 +424,7 @@ export class SurfaceExecutionArena {
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
   readonly #programGltfModels = new WeakMap<WebGLProgram, { frame: number; model: Mat4 }>();
-  readonly #programMaterials = new WeakMap<WebGLProgram, SurfaceMaterial>();
+  readonly #programMaterials = new WeakMap<WebGLProgram, StableMaterialBinding>();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
     baseColor: BASE_COLOR_INPUT_NONE,
@@ -596,10 +600,15 @@ export class SurfaceExecutionArena {
           }
         }
       }
-      if (loading) this.#bindLoadingSurface(program);
-      else this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
-      if (!loading && plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
-        this.#bindStableMaterialUniforms(program, surfaceMaterial, plan);
+      if (loading) {
+        this.#bindLoadingSurface(program);
+      } else if (plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
+        this.#bindStableMaterialUniforms(
+          program,
+          surfaceMaterial,
+          plan,
+          plan.baseColor.kind === "prepared-virtual",
+        );
         if (surfaceMaterial.kind === "standard") {
           this.#bindMaterialResources(program, input.transmissionScreenColorTexture, plan);
           this.#bindLights(
@@ -613,8 +622,8 @@ export class SurfaceExecutionArena {
             input.stableLightUniformRevision ?? 0,
           );
         }
-      }
-      if (!loading) this.#bindBaseColorTexture(program, plan);
+        this.#bindBaseColorTexture(program, plan);
+      } else this.#bindMaterialColor(program, input.material, false);
       drawGeometry(
         this.#geometry,
         input.contextGeneration,
@@ -707,23 +716,30 @@ export class SurfaceExecutionArena {
         input.toneMapping,
         !loading && batch.material.kind === "standard",
       );
-      if (loading) this.#bindLoadingSurface(program);
-      else this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
-      if (!loading && batch.material.kind === "standard") {
-        this.#bindStableMaterialUniforms(program, batch.material, plan);
-        this.#bindMaterialResources(program, input.transmissionScreenColorTexture, plan);
-        this.#bindLights(
+      if (loading) {
+        this.#bindLoadingSurface(program);
+      } else {
+        this.#bindStableMaterialUniforms(
           program,
-          surfaceLights,
+          batch.material,
           plan,
-          input.projection,
-          input.view,
-          input.viewportSize,
-          input.frame,
-          batch.sceneLightPlanRevision,
+          plan.baseColor.kind === "prepared-virtual",
         );
-      } else if (!loading) this.#bindStableMaterialUniforms(program, batch.material, plan);
-      if (!loading) this.#bindBaseColorTexture(program, plan);
+        if (batch.material.kind === "standard") {
+          this.#bindMaterialResources(program, input.transmissionScreenColorTexture, plan);
+          this.#bindLights(
+            program,
+            surfaceLights,
+            plan,
+            input.projection,
+            input.view,
+            input.viewportSize,
+            input.frame,
+            batch.sceneLightPlanRevision,
+          );
+        }
+        this.#bindBaseColorTexture(program, plan);
+      }
       const allocation = this.#gltfFrames.bindInstanceBuffer(
         this.#gl,
         input.contextGeneration,
@@ -1170,8 +1186,11 @@ export class SurfaceExecutionArena {
     program: WebGLProgram,
     material: SurfaceMaterial,
     plan: SurfaceTextureBindingPlan,
+    preparedVirtual: boolean,
   ): void {
-    if (this.#programMaterials.get(program) === material) return;
+    const stable = this.#programMaterials.get(program);
+    if (stable?.material === material && stable.preparedVirtual === preparedVirtual) return;
+    this.#bindMaterialColor(program, material, preparedVirtual);
     const factors = surfaceMaterialExtensionFactors(material);
     const { extendedMaterial } = plan;
     this.#bindAlphaSettings(program, material);
@@ -1212,7 +1231,12 @@ export class SurfaceExecutionArena {
       uniform4f(this.#programs, program, "u_occlusionSettings",
         surfaceMaterialOcclusionStrength(material), 0, 0, 0);
     }
-    this.#programMaterials.set(program, material);
+    if (stable === undefined) {
+      this.#programMaterials.set(program, { material, preparedVirtual });
+    } else {
+      stable.material = material;
+      stable.preparedVirtual = preparedVirtual;
+    }
   }
 
   #bindMaterialResources(
