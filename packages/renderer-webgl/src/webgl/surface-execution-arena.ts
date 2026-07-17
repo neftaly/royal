@@ -818,7 +818,12 @@ export class SurfaceExecutionArena {
     }
 
     uniformMatrix(this.#programs, program, "u_model", input.model);
-    this.#programGltfModels.set(program, { frame: input.frame, model: modelIdentity });
+    if (retained === undefined) {
+      this.#programGltfModels.set(program, { frame: input.frame, model: modelIdentity });
+    } else {
+      retained.frame = input.frame;
+      retained.model = modelIdentity;
+    }
     return false;
   }
 
