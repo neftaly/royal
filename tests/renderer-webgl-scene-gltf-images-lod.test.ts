@@ -464,8 +464,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
         ...triangleDocument(),
         extensionsRequired: ["KHR_texture_basisu"],
         extensionsUsed: ["KHR_texture_basisu"],
-        images: [{ mimeType: "image/ktx2", uri: triangleBasisuImageUri }],
-        textures: [{ extensions: { KHR_texture_basisu: { source: 0 } }, sampler: 0 }],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/ktx2", uri: triangleBasisuImageUri },
+        ],
+        textures: [{ extensions: { KHR_texture_basisu: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>

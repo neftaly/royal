@@ -4,19 +4,12 @@ import {
   unsupportedRequiredGltfExtensions,
 } from "../packages/renderer-webgl/src/gltf/extensions";
 import { gltfImageLoadKey, type GltfImageKind } from "../packages/renderer-webgl/src/gltf/image-keys";
-import type { GltfDocument, GltfImage, GltfTexture, GltfTextureInfo } from "../packages/renderer-webgl/src/gltf/schema";
+import type { GltfDocument, GltfImage, GltfTextureInfo } from "../packages/renderer-webgl/src/gltf/schema";
 import {
   gltfTextureCoordinates,
   transformGltfTextureCoordinates,
 } from "../packages/renderer-webgl/src/gltf/texture-coordinates";
 import { forEachFuzzCase, type FuzzReplay, type SeededRandom } from "./fuzz";
-
-const textureSourceExtensions = [
-  "EXT_texture_webp",
-  "KHR_texture_basisu",
-] as const;
-
-type TextureSourceExtension = typeof textureSourceExtensions[number];
 
 type ValidationCounters = {
   readonly extensionBlockCount: number;
@@ -24,12 +17,6 @@ type ValidationCounters = {
   readonly sourceMask: number;
   readonly textureCount: number;
   readonly validationOutcome: "accepted" | "rejected";
-};
-
-type TextureSourceConflictReplay = {
-  readonly document: GltfDocument;
-  readonly extension: TextureSourceExtension;
-  readonly conflictIndex: number;
 };
 
 type ImageLoadKeyExpectation = {
@@ -84,24 +71,6 @@ const expectedUnsupported = (
   }
   return [...unique].filter((extension) => !supported.has(extension));
 };
-
-const extensionBlock = (extension: TextureSourceExtension, source: number) => ({
-  [extension]: { source },
-}) as NonNullable<GltfTexture["extensions"]>;
-
-const documentWithConflictingTextureSource = (
-  extension: TextureSourceExtension,
-  textureCount: number,
-  conflictIndex: number,
-): GltfDocument => ({
-  extensionsRequired: [extension],
-  extensionsUsed: [],
-  images: [{ uri: "texture.svg" }],
-  textures: Array.from({ length: textureCount }, (_, textureIndex): GltfTexture => ({
-    ...(textureIndex === conflictIndex ? { source: 0 } : {}),
-    ...(textureIndex === conflictIndex ? { extensions: extensionBlock(extension, 0) } : {}),
-  })),
-});
 
 describe("glTF material texture coordinate preparation", () => {
   it("matches the KHR_texture_transform affine definition across both retained UV sets", () => {
@@ -205,39 +174,6 @@ const randomImageKind = (random: SeededRandom): GltfImageKind => {
   const kinds: readonly GltfImageKind[] = ["basisu", "image", "svg"];
   return random.pick(kinds);
 };
-
-const textureSourceConflictReplays: readonly FuzzReplay[] = [
-  {
-    label: "required EXT_texture_webp conflicts with core fallback",
-    value: {
-      conflictIndex: 0,
-      document: {
-        extensionsRequired: ["EXT_texture_webp"],
-        extensionsUsed: ["EXT_texture_webp"],
-        images: [{ uri: "fallback.png" }, { uri: "texture.webp" }],
-        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, source: 0 }],
-      },
-      extension: "EXT_texture_webp",
-    } satisfies TextureSourceConflictReplay,
-  },
-  {
-    label: "required KHR_texture_basisu conflicts after unrelated texture",
-    value: {
-      conflictIndex: 1,
-      document: {
-        extensionsRequired: ["KHR_texture_basisu"],
-        extensionsUsed: ["KHR_texture_basisu"],
-        images: [{ uri: "albedo.png" }, { uri: "albedo.ktx2" }],
-        textures: [
-          { source: 0 },
-          { extensions: { KHR_texture_basisu: { source: 1 } }, source: 0 },
-          { extensions: { KHR_texture_basisu: { source: 1 } } },
-        ],
-      },
-      extension: "KHR_texture_basisu",
-    } satisfies TextureSourceConflictReplay,
-  },
-];
 
 const imageLoadKeyReplays: readonly FuzzReplay[] = [
   {
@@ -530,25 +466,20 @@ describe("renderer-webgl glTF texture validation properties", () => {
     });
   });
 
-  it("rejects required texture source extensions when the texture also has a core source", () => {
-    forEachFuzzCase({ cases: 24, replays: textureSourceConflictReplays, seed: 0x2190a7e4 }, ({
-      label,
-      random,
-      replay,
-    }) => {
-      const replayValue = replay as TextureSourceConflictReplay | undefined;
-      const extension = replayValue?.extension ?? random.pick(textureSourceExtensions);
-      const textureCount = random.int(1, 6);
-      const conflictIndex = replayValue?.conflictIndex ?? random.int(0, textureCount);
-      const document = replayValue?.document
-        ?? documentWithConflictingTextureSource(extension, textureCount, conflictIndex);
-      const counters = validationCounters(document, "rejected");
-
-      expect(
-        () => assertSupportedRequiredGltfExtensions("conflict.gltf", document),
-        `${label} extension=${extension} conflict=${conflictIndex} counters=${JSON.stringify(counters)}`,
-      ).toThrow(/must omit core source/);
-    });
+  it("accepts core texture fallbacks alongside required compressed sources", () => {
+    expect(() => assertSupportedRequiredGltfExtensions("fallbacks.gltf", {
+      extensionsRequired: ["EXT_texture_webp", "KHR_texture_basisu"],
+      extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu"],
+      images: [
+        { uri: "fallback.png" },
+        { uri: "texture.webp" },
+        { mimeType: "image/ktx2", uri: "texture.ktx2" },
+      ],
+      textures: [
+        { extensions: { EXT_texture_webp: { source: 1 } }, source: 0 },
+        { extensions: { KHR_texture_basisu: { source: 2 } }, source: 0 },
+      ],
+    })).not.toThrow();
   });
 
   it("keeps required material texture slot validation aligned with implemented renderer support", () => {

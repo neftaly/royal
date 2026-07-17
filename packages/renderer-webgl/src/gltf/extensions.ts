@@ -57,7 +57,6 @@ export const assertSupportedRequiredGltfExtensions = (
   const unsupported = unsupportedRequiredGltfExtensions(document, supportedExtensions);
   if (unsupported.length > 0) throw new UnsupportedRequiredGltfExtensionError(src, unsupported);
   assertNoUnsupportedDeformation(src, document);
-  assertRequiredTextureSourceExtensions(src, document);
 };
 
 const assertNoUnsupportedDeformation = (src: string, document: GltfDocument): void => {
@@ -69,23 +68,6 @@ const assertNoUnsupportedDeformation = (src: string, document: GltfDocument): vo
     const primitiveIndex = (mesh.primitives ?? []).findIndex((primitive) => (primitive.targets?.length ?? 0) > 0);
     if (primitiveIndex >= 0) {
       throw new Error(`glTF mesh ${meshIndex} primitive ${primitiveIndex} in ${src} requires unsupported morph deformation`);
-    }
-  }
-};
-
-const requiredTextureSourceExtensions = [
-  "EXT_texture_webp",
-  "KHR_texture_basisu",
-] as const;
-
-const assertRequiredTextureSourceExtensions = (src: string, document: GltfDocument): void => {
-  const textures = document.textures ?? [];
-  const required = new Set(uniqueStrings(document.extensionsRequired));
-  for (const [textureIndex, texture] of textures.entries()) {
-    if (texture.source === undefined) continue;
-    for (const extension of requiredTextureSourceExtensions) {
-      if (!required.has(extension) || texture.extensions?.[extension] === undefined) continue;
-      throw new Error(`glTF ${extension} texture ${textureIndex} in ${src} must omit core source when the extension is required`);
     }
   }
 };
