@@ -16,6 +16,8 @@ describe('examples contract', () => {
     expect(exampleContract.version).toBe(1);
     expect(new Set(exampleRoutes.map(({ id }) => id)).size).toBe(exampleRoutes.length);
     expect(new Set(exampleRoutes.map(({ path }) => path)).size).toBe(exampleRoutes.length);
+    expect(exampleContract.benchmark.gltfExampleIds.every((id) =>
+      exampleRoutes.some((entry) => entry.id === id))).toBe(true);
     expect(examples.map(({ load: _load, ...entry }) => entry)).toEqual(exampleRoutes);
   });
 
@@ -65,6 +67,10 @@ describe('examples contract', () => {
     }) satisfies RendererBenchmarkSnapshot;
 
     expect(rendererBenchmarkSnapshotReady(null)).toBe(false);
+    expect(rendererBenchmarkSnapshotReady({
+      ...snapshot({}),
+      gltfLoadDiagnostics: null,
+    }, { requireGltfAsset: true })).toBe(false);
     expect(rendererBenchmarkSnapshotReady(snapshot({}))).toBe(false);
     expect(rendererBenchmarkSnapshotReady(snapshot({ imageRequests: 2 }))).toBe(true);
     expect(rendererBenchmarkSnapshotReady(snapshot({ imagesLoaded: 3 }))).toBe(true);

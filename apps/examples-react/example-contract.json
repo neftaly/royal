@@ -142,6 +142,17 @@
       "rootScaleUploadBytes",
       "rootScaleUploadCalls"
     ],
+    "gltfExampleIds": [
+      "picking",
+      "gltf-helmet",
+      "gltf-scenes",
+      "gltf-instancing",
+      "gltf-lab",
+      "gltf-ghostscript-tiger-svg",
+      "gltf-lod",
+      "gltf-variants",
+      "webxr-vr"
+    ],
     "rendererSnapshotFields": [
       "frame",
       "gltfInstancing",

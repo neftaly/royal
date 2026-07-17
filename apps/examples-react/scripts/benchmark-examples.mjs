@@ -63,7 +63,9 @@ const gltfLabManifest = JSON.parse(readFileSync(
 const runnableGltfLabCases = gltfLabManifest.cases.filter((entry) =>
   entry.status === 'supported-oracle' || entry.status === 'normalized-ingestion'
 );
+const gltfExampleIds = new Set(exampleContract.benchmark.gltfExampleIds);
 const gltfLabRoute = (entry) => ({
+  expectsGltf: true,
   id: `gltf-lab-${entry.name}`,
   path: `/gltf-lab?case=${encodeURIComponent(entry.name)}`,
 });
@@ -152,6 +154,7 @@ if (!new Set(['0', 'quick', 'default', 'full']).has(instancingSweepMode)) {
 }
 
 const instancingRoute = ({ animate, animation = 'position', grid, id, seed, sweep }) => ({
+  expectsGltf: true,
   id,
   path: `/gltf-instancing?animate=${animate ? 1 : 0}&animation=${animation}&grid=${grid}&redraw=${animate ? 0 : 1}&seed=${seed}`,
   profile: {
@@ -167,6 +170,7 @@ const instancingRoute = ({ animate, animation = 'position', grid, id, seed, swee
 });
 
 const defaultInstancingRoute = () => ({
+  expectsGltf: true,
   id: 'gltf-instancing',
   path: '/gltf-instancing',
   profile: {
@@ -204,6 +208,7 @@ const routes = exampleContract.examples.flatMap(({ id, path }) => {
     return [gltfLabRoute(runnableGltfLabCases.find((entry) => entry.name === 'Box'))];
   }
   return [{
+    expectsGltf: gltfExampleIds.has(id),
     id,
     path,
     // Keep the long Sponza camera sample inside the authored bounds. Its
@@ -213,8 +218,8 @@ const routes = exampleContract.examples.flatMap(({ id, path }) => {
 });
 
 const optInRoutes = [
-  { id: 'gltf-scenes-beautiful-game', path: '/gltf-scenes?scene=a-beautiful-game' },
-  { id: 'gltf-scenes-virtual-city', path: '/gltf-scenes?scene=virtual-city' },
+  { expectsGltf: true, id: 'gltf-scenes-beautiful-game', path: '/gltf-scenes?scene=a-beautiful-game' },
+  { expectsGltf: true, id: 'gltf-scenes-virtual-city', path: '/gltf-scenes?scene=virtual-city' },
   { id: 'forward-plus-8', path: '/standard-lighting?lights=8' },
   { id: 'forward-plus-100', path: '/standard-lighting?lights=100' },
   { id: 'forward-plus-1000', path: '/standard-lighting?lights=1000' },
@@ -1395,7 +1400,7 @@ const installBenchmarkHooks = async (session) => {
   });
 };
 
-const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(session, `
+const waitForBenchmarkReady = (session, requireWindowRaf = true, requireGltfAsset = false) => evaluate(session, `
 (async () => {
   const deadline = performance.now() + ${routeReadyTimeoutMs};
   const rafOrTimeout = (timeoutMs) => new Promise((resolve) => {
@@ -1421,7 +1426,9 @@ const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(ses
     if (document.readyState === 'complete' && canvas !== null && performance.now() - stableSince > 350) {
       const snapshot = globalThis[${JSON.stringify(exampleContract.benchmark.bridge.rendererSnapshotGlobal)}]?.() ?? null;
       const assets = snapshot?.gltfLoadDiagnostics?.assets ?? [];
-      const rendererReady = snapshot !== null && assets.every((asset) => (
+      const rendererReady = snapshot !== null
+        && (${requireGltfAsset ? 'assets.length > 0' : 'true'})
+        && assets.every((asset) => (
         asset.status !== 'loading' && (
           asset.status === 'error'
           || asset.imagesLoaded + asset.imageFailures >= asset.imageRequests
@@ -2071,6 +2078,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
   const ready = await waitForBenchmarkReady(
     session,
     !(realXrEnabled && route.id === 'webxr-vr'),
+    route.expectsGltf === true,
   );
   if (realXrEnabled && route.id === 'webxr-vr') {
     // Quest can ignore trusted Input commands on the CDP attachment that

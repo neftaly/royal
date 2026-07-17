@@ -59,6 +59,7 @@ type ExampleContract = {
       readonly renderNowGlobal: string;
     };
     readonly browserGlCounterFields: readonly string[];
+    readonly gltfExampleIds: readonly string[];
     readonly gltfInstancingCounterFields: readonly string[];
     readonly rendererSnapshotFields: readonly (keyof RendererBenchmarkSnapshot)[];
   };
@@ -84,9 +85,11 @@ export const readRendererBenchmarkSnapshot = (
 /** True once every retained glTF has left scene preparation and settled its requested images. */
 export const rendererBenchmarkSnapshotReady = (
   snapshot: RendererBenchmarkSnapshot | null,
+  options: Readonly<{ requireGltfAsset?: boolean }> = {},
 ): boolean => {
   if (snapshot === null) return false;
   const assets = snapshot.gltfLoadDiagnostics?.assets ?? [];
+  if (options.requireGltfAsset === true && assets.length === 0) return false;
   return assets.every((asset) => asset.status !== 'loading' && (
     asset.status === 'error'
     || asset.imagesLoaded + asset.imageFailures >= asset.imageRequests
