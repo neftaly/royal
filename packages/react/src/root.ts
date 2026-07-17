@@ -163,13 +163,15 @@ export interface RoyalRendererGltfImageFailure {
 
 /** Image preparation progress for one retained glTF asset. */
 export interface RoyalRendererGltfImageProgress {
+  /** Known asset images not demanded by the current prepared materials yet. */
+  readonly dormant: number;
   /** Images whose decode or admission failed. */
   readonly failed: number;
   /** Focused reasons for each failed image, in settlement order. */
   readonly failures: readonly RoyalRendererGltfImageFailure[];
   /** Images decoded and accepted for publication. */
   readonly loaded: number;
-  /** Images not yet loaded or failed, including dormant material demand. */
+  /** Requested images not yet loaded or failed. */
   readonly pending: number;
   /** Images whose loading has been requested. */
   readonly requested: number;
@@ -215,7 +217,7 @@ export type RoyalRendererGltfAssetSnapshot =
   }>)
   | (RoyalRendererGltfAssetDetails & Readonly<{
     readonly error?: never;
-    /** Scene geometry and every relevant image source are prepared. */
+    /** Scene geometry is renderable and current image demand has settled; dormant images may load later. */
     readonly state: "ready";
   }>)
   | (RoyalRendererGltfAssetDetails & Readonly<{
@@ -330,6 +332,7 @@ export const royalGltfAssetSnapshotFrom = (
 ): RoyalRendererGltfAssetSnapshot => {
   if (snapshot === undefined) return Object.freeze({ state: "idle", variantNames: NO_GLTF_VARIANTS });
   const settledImages = snapshot.imagesLoaded + snapshot.imageFailures;
+  const pendingImages = Math.max(0, snapshot.imageRequests - settledImages);
   const details: RoyalRendererGltfAssetDetails = {
     ...(snapshot.bounds === undefined ? {} : {
       bounds: Object.freeze({
@@ -338,10 +341,11 @@ export const royalGltfAssetSnapshotFrom = (
       }),
     }),
     images: Object.freeze({
+      dormant: Math.max(0, snapshot.imageCandidates - snapshot.imageRequests),
       failed: snapshot.imageFailures,
       failures: Object.freeze(snapshot.imageFailureDetails.map((failure) => Object.freeze({ ...failure }))),
       loaded: snapshot.imagesLoaded,
-      pending: Math.max(0, snapshot.imageCandidates - settledImages),
+      pending: pendingImages,
       requested: snapshot.imageRequests,
       total: snapshot.imageCandidates,
     }),
@@ -364,7 +368,7 @@ export const royalGltfAssetSnapshotFrom = (
     });
   }
   if (snapshot.imageFailures > 0) return Object.freeze({ ...details, state: "degraded" });
-  if (settledImages < snapshot.imageCandidates) return Object.freeze({ ...details, state: "streaming" });
+  if (pendingImages > 0) return Object.freeze({ ...details, state: "streaming" });
   return Object.freeze({ ...details, state: "ready" });
 };
 

@@ -1422,7 +1422,7 @@ const waitForBenchmarkReady = (session, requireWindowRaf = true) => evaluate(ses
       const rendererReady = snapshot !== null && assets.every((asset) => (
         asset.status !== 'loading' && (
           asset.status === 'error'
-          || asset.imagesLoaded + asset.imageFailures >= asset.imageCandidates
+          || asset.imagesLoaded + asset.imageFailures >= asset.imageRequests
         )
       ));
       if (rendererReady) {

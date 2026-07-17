@@ -53,7 +53,7 @@ describe("React root public API", () => {
 
     expect(royalGltfAssetSnapshotFrom(snapshot)).toEqual({
       bounds: { max: [10, 3, 8], min: [-2, -1, -4] },
-      images: { failed: 0, failures: [], loaded: 1, pending: 3, requested: 3, total: 4 },
+      images: { dormant: 1, failed: 0, failures: [], loaded: 1, pending: 2, requested: 3, total: 4 },
       phaseMs: { document: 5, toSceneReady: 12 },
       scene: { lights: 2, nodes: 20, primitives: 8 },
       state: "streaming",
@@ -65,10 +65,19 @@ describe("React root public API", () => {
       imageFailures: 1,
     })).toMatchObject({
       images: {
+        dormant: 1,
         failed: 1,
         failures: [{ key: "wall.ktx2", message: "invalid RGBA8 payload" }],
+        pending: 1,
       },
       state: "degraded",
+    });
+    expect(royalGltfAssetSnapshotFrom({
+      ...snapshot,
+      imagesLoaded: 3,
+    })).toMatchObject({
+      images: { dormant: 1, pending: 0 },
+      state: "ready",
     });
     expect(royalGltfAssetSnapshotFrom({
       ...snapshot,

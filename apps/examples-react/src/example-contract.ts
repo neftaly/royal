@@ -80,7 +80,7 @@ export const readRendererBenchmarkSnapshot = (
     : null;
 };
 
-/** True once every retained glTF has left scene preparation and settled its candidate images. */
+/** True once every retained glTF has left scene preparation and settled its requested images. */
 export const rendererBenchmarkSnapshotReady = (
   snapshot: RendererBenchmarkSnapshot | null,
 ): boolean => {
@@ -88,7 +88,7 @@ export const rendererBenchmarkSnapshotReady = (
   const assets = snapshot.gltfLoadDiagnostics?.assets ?? [];
   return assets.every((asset) => asset.status !== 'loading' && (
     asset.status === 'error'
-    || asset.imagesLoaded + asset.imageFailures >= asset.imageCandidates
+    || asset.imagesLoaded + asset.imageFailures >= asset.imageRequests
   ));
 };
 

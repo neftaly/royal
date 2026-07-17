@@ -178,7 +178,7 @@ describe('Canvas public scene boundary', () => {
   it('exposes asset and renderer failures as discriminated unions', () => {
     const asset = {
       error: 'missing buffer',
-      images: { failed: 0, failures: [], loaded: 0, pending: 0, requested: 0, total: 0 },
+      images: { dormant: 0, failed: 0, failures: [], loaded: 0, pending: 0, requested: 0, total: 0 },
       phaseMs: {},
       scene: { lights: 0, nodes: 0, primitives: 0 },
       state: 'error',

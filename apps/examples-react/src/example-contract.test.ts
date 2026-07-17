@@ -35,7 +35,7 @@ describe('examples contract', () => {
     expect(target[exampleContract.benchmark.bridge.renderNowGlobal]).toBeUndefined();
   });
 
-  it('waits for every glTF candidate image to settle', () => {
+  it('waits for requested glTF images without forcing dormant candidates to load', () => {
     type Asset = NonNullable<RendererBenchmarkSnapshot['gltfLoadDiagnostics']>['assets'][number];
     const snapshot = (asset: Partial<Asset>) => ({
       frame: 1,
@@ -65,6 +65,7 @@ describe('examples contract', () => {
 
     expect(rendererBenchmarkSnapshotReady(null)).toBe(false);
     expect(rendererBenchmarkSnapshotReady(snapshot({}))).toBe(false);
+    expect(rendererBenchmarkSnapshotReady(snapshot({ imageRequests: 2 }))).toBe(true);
     expect(rendererBenchmarkSnapshotReady(snapshot({ imagesLoaded: 3 }))).toBe(true);
     expect(rendererBenchmarkSnapshotReady(snapshot({ imageFailures: 1 }))).toBe(true);
     expect(rendererBenchmarkSnapshotReady(snapshot({ status: 'loading' }))).toBe(false);
