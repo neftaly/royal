@@ -409,6 +409,20 @@ export const uniformMatrix = (arena: ProgramArena, program: WebGLProgram, name: 
   cacheValue(slot.value, value, 16);
 };
 
+/** Uploads a proven-changing matrix and invalidates its ordinary value cache. */
+export const uniformMatrixUncached = (
+  arena: ProgramArena,
+  program: WebGLProgram,
+  name: string,
+  value: Mat4,
+): void => {
+  const state = arena as unknown as State;
+  const slot = uniformSlot(state, program, name);
+  if (slot.location === null) return;
+  state.gl.uniformMatrix4fv(slot.location, false, value);
+  slot.value.length = 0;
+};
+
 export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: string, value: LinearRgba): void => {
   const state = arena as unknown as State;
   const slot = prepareVectorUniform(state, program, name, value, 4);

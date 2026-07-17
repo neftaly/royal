@@ -12,6 +12,7 @@ import {
   identityMat4,
   multiplyMat4Into,
   type Mat4,
+  type MutableMat4,
   type MutableVec3,
 } from "../math/mat4";
 import type { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
@@ -61,6 +62,7 @@ import {
   uniformColor,
   uniform4f,
   uniformMatrix,
+  uniformMatrixUncached,
   useProgram,
   type ProgramArena,
 } from "./program-arena";
@@ -324,7 +326,11 @@ export interface SurfaceSingleExecution {
   readonly geometryId: number;
   readonly lights: SurfaceLightSet | undefined;
   readonly material: Material;
+  /** Internal glTF composition identity; omitted for direct geometry. */
+  readonly modelLocal?: Mat4;
   readonly model: Mat4;
+  /** Internal glTF composition identity; omitted for direct geometry. */
+  readonly modelRoot?: Mat4;
   readonly projection: Mat4;
   readonly stableLightUniformRevision?: number;
   readonly toneMapping: SurfaceToneMappingState;
@@ -401,6 +407,7 @@ export class SurfaceExecutionArena {
   readonly #singleNormalTransform = identityMat4();
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
+  readonly #programGltfModels = new WeakMap<WebGLProgram, { frame: number; local: Mat4; root: Mat4 }>();
   readonly #programMaterials = new WeakMap<WebGLProgram, SurfaceMaterial>();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
@@ -541,14 +548,26 @@ export class SurfaceExecutionArena {
       if (program === undefined) return;
       useProgram(this.#programs, program);
       this.#bindViewMatrices(program, input.projection, input.view);
-      uniformMatrix(this.#programs, program, "u_model", input.model);
+      const modelBinding = this.#bindModelMatrix(program, input);
       if (!loading && surfaceMaterial?.kind === "standard") {
-        uniformMatrix(
-          this.#programs,
-          program,
-          "u_modelNormalTransform",
-          affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model),
-        );
+        if (modelBinding !== undefined) {
+          const normalTransform = affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model);
+          if (modelBinding) {
+            uniformMatrixUncached(
+              this.#programs,
+              program,
+              "u_modelNormalTransform",
+              normalTransform,
+            );
+          } else {
+            uniformMatrix(
+              this.#programs,
+              program,
+              "u_modelNormalTransform",
+              normalTransform,
+            );
+          }
+        }
         this.#bindCameraWorldPosition(program, input.view);
       }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);
@@ -595,7 +614,9 @@ export class SurfaceExecutionArena {
           geometryId: batch.geometryId,
           lights: batch.lights,
           material: batch.material,
-          model: multiplyMat4Into(this.#singleGltfModel, batch.rootModels[0]!, batch.localModels[0]!),
+          model: this.#singleGltfModel,
+          modelLocal: batch.localModels[0]!,
+          modelRoot: batch.rootModels[0]!,
           projection: input.projection,
           stableLightUniformRevision: batch.sceneLightPlanRevision,
           toneMapping: input.toneMapping,
@@ -713,6 +734,36 @@ export class SurfaceExecutionArena {
     uniformMatrix(this.#programs, program, "u_projection", projection);
     uniformMatrix(this.#programs, program, "u_view", view);
     this.#programViewRevisions.set(program, this.#viewRevision);
+  }
+
+  /** Returns undefined for reuse, false for compared, and true for proven changed. */
+  #bindModelMatrix(program: WebGLProgram, input: SurfaceSingleExecution): boolean | undefined {
+    const root = input.modelRoot;
+    const local = input.modelLocal;
+    if (root === undefined || local === undefined) {
+      // A direct draw can share a shader program with glTF and therefore
+      // invalidates any semantic proof retained for that program.
+      this.#programGltfModels.delete(program);
+      uniformMatrix(this.#programs, program, "u_model", input.model);
+      return false;
+    }
+
+    const retained = this.#programGltfModels.get(program);
+    if (retained?.frame === input.frame && retained.root === root && retained.local === local) {
+      return undefined;
+    }
+
+    multiplyMat4Into(input.model as MutableMat4, root, local);
+    if (retained?.frame === input.frame) {
+      uniformMatrixUncached(this.#programs, program, "u_model", input.model);
+      retained.root = root;
+      retained.local = local;
+      return true;
+    }
+
+    uniformMatrix(this.#programs, program, "u_model", input.model);
+    this.#programGltfModels.set(program, { frame: input.frame, local, root });
+    return false;
   }
 
   #textureBindingPlan(

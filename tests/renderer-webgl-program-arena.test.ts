@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
   configureProgramArenaParallelCompile,
   consumeProgramArenaWake,
@@ -12,6 +13,8 @@ import {
   uniform1i,
   uniform2f,
   uniform4f,
+  uniformMatrix,
+  uniformMatrixUncached,
   useProgram,
 } from "../packages/renderer-webgl/src/webgl/program-arena";
 
@@ -158,6 +161,22 @@ describe("program arena", () => {
     expect(count(gl, "uniform4f")).toBe(1);
     expect(gl.calls.filter((call) => call.name === "getUniformLocation" && call.args[0] === "u_missing"))
       .toHaveLength(1);
+  });
+
+  it("lets a lifecycle proof bypass matrix comparison and invalidates ordinary reuse", () => {
+    const gl = new FakeGl();
+    const arena = createProgramArena(context(gl));
+    const program = requestProgram(arena, 0, "wireframe")!.program;
+    const matrix = identityMat4();
+
+    uniformMatrix(arena, program, "u_model", matrix);
+    uniformMatrix(arena, program, "u_model", matrix);
+    matrix[12] = 2;
+    uniformMatrixUncached(arena, program, "u_model", matrix);
+    uniformMatrix(arena, program, "u_model", matrix);
+    uniformMatrix(arena, program, "u_model", matrix);
+
+    expect(count(gl, "uniformMatrix4fv")).toBe(3);
   });
 
   it("evicts failed links and releases active or drops lost context handles", () => {
