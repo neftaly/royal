@@ -11,7 +11,11 @@ import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,
 } from "../webgl/lights";
-import type { SurfaceMaterialPublication } from "../webgl/materials";
+import {
+  textureCacheKey,
+  type SurfaceMaterialPublication,
+  type TextureAssetUploadRef,
+} from "../webgl/materials";
 import {
   GltfPreparationScheduler,
   type GltfPreparationJobAdmitter,
@@ -35,6 +39,7 @@ import {
   type LoadedGltfImageSource,
   type PreparedGltfImageSourceRecipe,
 } from "./image-source-recipe";
+import { gltfImageTextureRef } from "./image-texture-ref";
 
 export type GltfImageTextureBinding = Readonly<{
   baseColor: boolean;
@@ -361,6 +366,30 @@ export class GltfImageDemandCoordinator {
       }
     }
     this.#demandMaterialRefinements(asset, material);
+    return false;
+  }
+
+  /** Re-decodes an embedded image after its durable GPU copy was lost. */
+  recoverPreparedTexture(texture: TextureAssetUploadRef): boolean {
+    if (this.#disposed || texture.preparedOnly !== true) return false;
+    const key = textureCacheKey(texture);
+    for (const asset of this.#assets.values()) {
+      for (const row of asset.rows.values()) {
+        if (
+          row.status !== "ready"
+          || row.source !== undefined
+          || row.recipe === undefined
+          || !this.#retainsRecipeForRestore(row)
+          || !row.bindings.some((binding) => textureCacheKey(gltfImageTextureRef(binding)) === key)
+        ) continue;
+        row.status = "idle";
+        asset.load.imageLoaded = Math.max(0, asset.load.imageLoaded - 1);
+        delete asset.load.imagesSettledAt;
+        this.#requestProgress(asset.key);
+        this.#demand(row);
+        return true;
+      }
+    }
     return false;
   }
 
@@ -812,13 +841,21 @@ export class GltfImageDemandCoordinator {
     const ownership = asset.recipeOwnership;
     const settledRecipes = new Set<GltfImageSourceRecipe>(additional);
     for (const row of asset.rows.values()) {
-      if (
-        row.recipe !== undefined
-        && (row.status === "error" || row.status === "ready")
-      ) settledRecipes.add(row.recipe);
+      if (row.recipe === undefined) continue;
+      if (row.status === "error" || (row.status === "ready" && !this.#retainsRecipeForRestore(row))) {
+        settledRecipes.add(row.recipe);
+      }
     }
     this.#forgetRecipes(ownership, settledRecipes, asset.rows.values());
     this.#releaseRecipesIfUnused(ownership);
+  }
+
+  #retainsRecipeForRestore(row: Row): boolean {
+    if (row.iblSpecular !== undefined || !row.bindings.some((binding) => binding.sourceUri === undefined)) {
+      return false;
+    }
+    const kind = row.recipe?.source.kind;
+    return kind === "basisu-bytes" || kind === "bitmap-bytes" || kind === "svg-bytes";
   }
 
   #diagnoseRecipeReleaseFailure(asset: Asset, error: unknown): void {

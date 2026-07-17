@@ -60,6 +60,7 @@ describe('examples contract', () => {
       planning: null,
       resourceLifetime: null,
       resourcePressure: null,
+      textureResidency: null,
       virtualTexturing: null,
     }) satisfies RendererBenchmarkSnapshot;
 

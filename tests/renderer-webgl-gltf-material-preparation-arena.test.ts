@@ -107,6 +107,7 @@ describe("glTF material preparation arena", () => {
     }));
     expect(gltfMaterialTextureRefs(embedded)).toContainEqual(expect.objectContaining({
       preparedOnly: true,
+      releaseSourceAfterUpload: true,
       src: "texture:base",
     }));
   });

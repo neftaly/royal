@@ -20,6 +20,7 @@ import {
   type SurfaceMaterialTextureCoordinates,
   type TextureAssetUploadRef,
 } from "../webgl/materials";
+import { gltfImageTextureRef } from "./image-texture-ref";
 
 type LoadedGltfSurfaceTextures = {
   readonly anisotropyTexture?: TextureAssetUploadRef;
@@ -104,17 +105,13 @@ const textureSlotRef = (
   if (readyImageKeys !== undefined && slot.imageUri !== undefined && !readyImageKeys.has(slot.imageUri)) {
     return undefined;
   }
-  const sourceUri = slot.sourceUri;
-  const texture: { -readonly [Key in keyof TextureAssetUploadRef]: TextureAssetUploadRef[Key] } = {
+  return gltfImageTextureRef({
     colorSpace,
-    kind: "asset",
-    ...(sourceUri === undefined ? { preparedOnly: true } : {}),
-    ...(sourceUri === undefined ? {} : { releaseSourceAfterUpload: true }),
-    src: sourceUri ?? slot.textureUri,
-  };
-  if (slot.contentKey !== undefined) texture.contentKey = slot.contentKey;
-  if (slot.sampler !== undefined) texture.sampler = slot.sampler;
-  return texture;
+    ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
+    ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
+    ...(slot.sourceUri === undefined ? {} : { sourceUri: slot.sourceUri }),
+    textureUri: slot.textureUri,
+  });
 };
 
 const surfaceTextures = (

@@ -79,6 +79,7 @@ export type OrdinaryTextureResidencyControllerOptions = Readonly<{
   invalidate: () => void;
   lifecycle: () => OrdinaryTextureResidencyLifecycle;
   loadSource: (texture: OrdinaryTextureSourceRequest, signal: AbortSignal) => Promise<LoadedTextureSource>;
+  recoverPreparedTexture?: (texture: TextureAssetUploadRef) => boolean;
   registerAutoVirtualTextureDecodedSource: (texture: TextureAssetUploadRef, source: LoadedTextureSource) => void;
   resourceArena: ResourceArena;
   textureHandles: TextureHandleArena;
@@ -87,6 +88,7 @@ type Row = {
   acquisition: number;
   error?: string;
   gpuSuppressed: boolean;
+  recoveryRequested: boolean;
   /** `null` means acquire has entered but has not returned its subscription. */
   subscription?: OrdinaryTextureSourceSubscription | null;
   terminal: boolean;
@@ -139,7 +141,12 @@ export class OrdinaryTextureResidencyController {
     if (resource.uploaded || ordinaryTextureGpuPendingUpload(resource) !== undefined) return resource;
     const prepared = resourceArenaPreparedSource(this.#options.resourceArena, key);
     if (prepared !== undefined) this.#queue(resource, prepared.source, prepared.texture);
-    else if (texture.preparedOnly !== true && row.subscription === undefined) this.#acquire(row, key, texture);
+    else if (texture.preparedOnly === true) {
+      if (
+        !row.recoveryRequested
+        && this.#options.recoverPreparedTexture?.(texture) === true
+      ) row.recoveryRequested = true;
+    } else if (row.subscription === undefined) this.#acquire(row, key, texture);
     return resource;
   }
 
@@ -169,6 +176,7 @@ export class OrdinaryTextureResidencyController {
     }
     const row = this.#row(key);
     delete row.error;
+    row.recoveryRequested = false;
     row.terminal = false;
     this.#releaseSubscription(row);
     this.#retain(key, { source, texture });
@@ -230,6 +238,7 @@ export class OrdinaryTextureResidencyController {
   }
 
   dropContext(): OrdinaryTextureResidencyGpuReport {
+    for (const row of this.#rows.values()) row.recoveryRequested = false;
     const before = ordinaryTextureGpuQuarantinedBytes(this.#gpu);
     return this.#report(false, capture(() => dropOrdinaryTextureGpuContext(this.#gpu)), undefined, before);
   }
@@ -453,7 +462,7 @@ export class OrdinaryTextureResidencyController {
   #row(key: string): Row {
     let row = this.#rows.get(key);
     if (row === undefined) {
-      row = { acquisition: 0, gpuSuppressed: false, terminal: false };
+      row = { acquisition: 0, gpuSuppressed: false, recoveryRequested: false, terminal: false };
       this.#rows.set(key, row);
     }
     return row;

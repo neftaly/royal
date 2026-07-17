@@ -213,6 +213,8 @@ const routes = exampleContract.examples.flatMap(({ id, path }) => {
 });
 
 const optInRoutes = [
+  { id: 'gltf-scenes-beautiful-game', path: '/gltf-scenes?scene=a-beautiful-game' },
+  { id: 'gltf-scenes-virtual-city', path: '/gltf-scenes?scene=virtual-city' },
   { id: 'forward-plus-8', path: '/standard-lighting?lights=8' },
   { id: 'forward-plus-100', path: '/standard-lighting?lights=100' },
   { id: 'forward-plus-1000', path: '/standard-lighting?lights=1000' },

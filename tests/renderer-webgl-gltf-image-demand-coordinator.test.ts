@@ -608,7 +608,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     harness.coordinator.dispose();
   });
 
-  it("charges shared recipe buffers once until the final dormant consumer settles", async () => {
+  it("charges shared restorable recipe buffers once until the asset releases", async () => {
     const sharedBytes = new ArrayBuffer(64);
     loadRecipeMock.mockImplementation(async (value) => loaded(value.key));
     const harness = coordinatorHarness();
@@ -626,13 +626,55 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     demandImages(harness.coordinator, "asset", "first");
     await flushMicrotasks();
     expect(harness.coordinator.snapshot()).toMatchObject({ dormant: 1, ready: 1 });
-    expect(ownership.resize.mock.calls).toEqual([[64], [64]]);
+    expect(ownership.resize.mock.calls).toEqual([[64]]);
     expect(ownership.release).not.toHaveBeenCalled();
 
     demandImages(harness.coordinator, "asset", "second");
     await flushMicrotasks();
-    expect(ownership.resize.mock.calls).toEqual([[64], [64], [0]]);
+    expect(ownership.resize.mock.calls).toEqual([[64]]);
+    expect(ownership.release).not.toHaveBeenCalled();
+    harness.coordinator.dispose();
     expect(ownership.release).toHaveBeenCalledOnce();
+  });
+
+  it("re-decodes one retained embedded recipe when its prepared texture is requested again", async () => {
+    const bytes = new ArrayBuffer(32);
+    loadRecipeMock.mockImplementation(async (value) => loaded(value.key));
+    const harness = coordinatorHarness();
+    const load = metrics();
+    const ownership = recipeLease();
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load,
+      materials: [material("restorable")],
+      recipeLease: ownership,
+      recipes: [byteRecipe("restorable", bytes)],
+      stateInstanceKey: 4,
+    });
+
+    demandImages(harness.coordinator, "asset", "restorable");
+    await flushMicrotasks();
+    harness.coordinator.pendingReadyOutcomes()[0]!.acknowledge();
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
+
+    const texture = {
+      colorSpace: "srgb",
+      kind: "asset",
+      preparedOnly: true,
+      releaseSourceAfterUpload: true,
+      src: "texture:restorable",
+    } as const;
+    expect(harness.coordinator.recoverPreparedTexture(texture)).toBe(true);
+    expect(harness.coordinator.recoverPreparedTexture(texture)).toBe(false);
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 0, imageRequests: 1 });
+    await flushMicrotasks();
+
+    expect(loadRecipeMock).toHaveBeenCalledTimes(2);
+    expect(load).toMatchObject({ imageFailures: 0, imageLoaded: 1, imageRequests: 1 });
+    expect(harness.coordinator.pendingReadyOutcomes()).toEqual([
+      expect.objectContaining({ key: "restorable" }),
+    ]);
+    expect(ownership.resize.mock.calls).toEqual([[32]]);
     harness.coordinator.dispose();
   });
 
@@ -913,10 +955,22 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       .mockImplementation(() => undefined);
     const release = vi.fn<() => void>();
     const ownership: GltfImageRecipeLease = { release, resize };
+    const embedded = material("first", "second");
+    const external: LoadedGltfMaterial = {
+      ...embedded,
+      baseColorTexture: {
+        ...embedded.baseColorTexture!,
+        sourceUri: "https://example.test/first.png",
+      },
+      emissiveTexture: {
+        ...embedded.emissiveTexture!,
+        sourceUri: "https://example.test/second.png",
+      },
+    };
     harness.coordinator.registerAsset({
       key: "asset",
       load: metrics(),
-      materials: [material("first", "second")],
+      materials: [external],
       recipeLease: ownership,
       recipes: [
         byteRecipe("first", new ArrayBuffer(12)),

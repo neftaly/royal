@@ -73,6 +73,7 @@ type HarnessOptions = {
   readonly close?: (source: LoadedTextureSource) => void;
   readonly invalidate?: () => void;
   readonly load?: (texture: OrdinaryTextureSourceRequest, signal: AbortSignal) => Promise<LoadedTextureSource>;
+  readonly recover?: (texture: TextureAssetUploadRef) => boolean;
   readonly register?: (texture: TextureAssetUploadRef, source: LoadedTextureSource) => void;
 };
 
@@ -128,6 +129,7 @@ const harness = (options: HarnessOptions = {}) => {
     invalidate: options.invalidate ?? (() => undefined),
     lifecycle: () => lifecycle,
     loadSource: options.load ?? (() => new Promise(() => undefined)),
+    ...(options.recover === undefined ? {} : { recoverPreparedTexture: options.recover }),
     registerAutoVirtualTextureDecodedSource: options.register ?? (() => undefined),
     resourceArena: arena,
     textureHandles: createTextureHandleArena(context(gl)),
@@ -157,6 +159,7 @@ describe("ordinary texture residency controller", () => {
     };
     const { arena, controller, releasedDecodedLeases } = harness();
     retainTexture(arena, texture);
+    controller.request(texture);
 
     controller.publishPrepared(texture, decoded);
     expect(resourceArenaSourceReferenceCount(arena, decoded)).toBe(1);
@@ -165,6 +168,32 @@ describe("ordinary texture residency controller", () => {
     expect(resourceArenaSourceReferenceCount(arena, decoded)).toBe(0);
     expect(releasedDecodedLeases()).toBe(1);
     expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
+  it("coalesces recovery requests until a reconstructed source is published", () => {
+    const texture: TextureAssetUploadRef = {
+      kind: "asset",
+      preparedOnly: true,
+      releaseSourceAfterUpload: true,
+      src: "embedded:restore",
+    };
+    let recoveries = 0;
+    const { arena, controller } = harness({ recover: () => {
+      recoveries += 1;
+      return true;
+    } });
+    retainTexture(arena, texture);
+
+    controller.request(texture);
+    controller.request(texture);
+    expect(recoveries).toBe(1);
+
+    controller.publishPrepared(texture, source(92));
+    expect(settle(controller, controller.process(0, 1, successfulAdmission))).toBeUndefined();
+    expect(settle(controller, controller.dropContext())).toBeUndefined();
+    controller.request(texture);
+    expect(recoveries).toBe(2);
     controller.disposeSources();
   });
 

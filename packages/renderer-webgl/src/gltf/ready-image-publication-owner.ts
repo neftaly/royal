@@ -1,8 +1,8 @@
 import type { ImageBasedLightingRootFeature } from "../image-based-lighting-feature";
 import { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
-import type { TextureAssetUploadRef } from "../webgl/materials";
 import { GltfMaterialPreparationArena } from "./material-preparation-arena";
 import { PreparedGltfRuntime } from "./prepared-runtime";
+import { gltfImageTextureRef } from "./image-texture-ref";
 
 type GltfReadyImagePublicationOwnerOptions = {
   readonly ibl: Pick<ImageBasedLightingRootFeature, "settleSpecularImage">;
@@ -10,24 +10,6 @@ type GltfReadyImagePublicationOwnerOptions = {
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
   readonly runtime: PreparedGltfRuntime;
 };
-
-const imageTextureRef = (
-  binding: Readonly<{
-    colorSpace: NonNullable<TextureAssetUploadRef["colorSpace"]>;
-    contentKey?: TextureAssetUploadRef["contentKey"];
-    sampler?: TextureAssetUploadRef["sampler"];
-    sourceUri?: string;
-    textureUri: string;
-  }>,
-): TextureAssetUploadRef => ({
-  colorSpace: binding.colorSpace,
-  ...(binding.contentKey === undefined ? {} : { contentKey: binding.contentKey }),
-  kind: "asset",
-  ...(binding.sourceUri === undefined ? { preparedOnly: true } : {}),
-  ...(binding.sourceUri === undefined ? {} : { releaseSourceAfterUpload: true }),
-  ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-  src: binding.sourceUri ?? binding.textureUri,
-});
 
 /** Owns generation-safe prepared image identity and resource publication. */
 export class GltfReadyImagePublicationOwner {
@@ -51,7 +33,7 @@ export class GltfReadyImagePublicationOwner {
         continue;
       }
       for (const binding of outcome.bindings) {
-        const texture = imageTextureRef(binding);
+        const texture = gltfImageTextureRef(binding);
         this.#options.ordinaryTextures.publishPrepared(texture, outcome.source);
       }
       if (outcome.iblSpecular !== undefined) {

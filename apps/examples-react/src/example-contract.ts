@@ -48,6 +48,7 @@ export type RendererBenchmarkSnapshot = {
   readonly planning: Record<string, number> | null;
   readonly resourcePressure: RoyalRendererDiagnosticsSnapshot['resourcePressure'] | null;
   readonly resourceLifetime: Record<string, number> | null;
+  readonly textureResidency: RoyalRendererDiagnosticsSnapshot['textureResidency'] | null;
   readonly virtualTexturing: Record<string, number> | null;
 };
 

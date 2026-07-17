@@ -127,6 +127,7 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
         planning: copyNumberCounters(diagnostics.planning),
         resourcePressure: diagnostics.resourcePressure,
         resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),
+        textureResidency: diagnostics.textureResidency,
         virtualTexturing: copyVirtualTexturingCounters(diagnostics.virtualTexturing),
       };
     };

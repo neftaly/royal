@@ -671,6 +671,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
             loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
           ))
           : loadHtmlImage(request.uri, { signal }),
+        recoverPreparedTexture: (texture) =>
+          this.#preparedGltf.images.recoverPreparedTexture(texture),
         registerAutoVirtualTextureDecodedSource: (texture, source) => {
           this.#virtualTextures.registerAutoDecodedSource(texture, source);
         },

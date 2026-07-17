@@ -976,11 +976,9 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     loader.bitmapRequests[0]?.resolve(firstBitmap as unknown as ImageBitmap);
     await waitForAnimationFrameWork(
       viewport.animationFrames,
-      () => root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes === 0,
+      () => callCount(calls, "texImage2D") >= 1,
     );
-    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
-    await flushAnimationFrames(viewport.animationFrames);
-    await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(4);
 
     expect(callCount(calls, "texImage2D")).toBe(1);
     const uploadsBeforeSecondGltf = callCount(calls, "texImage2D");
@@ -999,15 +997,17 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(secondBitmap as unknown as ImageBitmap);
     await waitForAnimationFrameWork(
       viewport.animationFrames,
-      () => root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes === 0,
+      () => callCount(calls, "texImage2D") >= uploadsBeforeSecondGltf + 1,
     );
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(8);
     root.render(secondGraph);
 
     expect(
       callCount(calls, "texImage2D"),
       "different assets require an authored contentKey to share an upload",
     ).toBe(uploadsBeforeSecondGltf + 1);
-    expect(firstBitmap.close.mock.calls.length + secondBitmap.close.mock.calls.length).toBe(0);
+    expect(firstBitmap.close).toHaveBeenCalledTimes(1);
+    expect(secondBitmap.close).toHaveBeenCalledTimes(1);
 
     root.render(renderScene([]));
     expect(firstBitmap.close).toHaveBeenCalledTimes(1);
@@ -1018,6 +1018,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       preparedSources: 0,
       resources: 0,
     });
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
   });
 
   it("keeps explicit glTF extras.contentKey ahead of computed image content keys", async () => {

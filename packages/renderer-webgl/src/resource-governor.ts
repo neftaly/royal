@@ -250,7 +250,7 @@ export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.f
   limits: Object.freeze({
     cpuDecodedBytes: mib(512),
     jobs: 8,
-    persistentGpuBytes: mib(512),
+    persistentGpuBytes: mib(864),
     transientPeakBytes: mib(192),
     uploadBytes: mib(16),
   }),

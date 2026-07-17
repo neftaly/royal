@@ -150,6 +150,7 @@
       "planning",
       "resourcePressure",
       "resourceLifetime",
+      "textureResidency",
       "virtualTexturing"
     ]
   }

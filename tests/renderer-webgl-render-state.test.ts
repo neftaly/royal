@@ -153,7 +153,7 @@ describe("WebGL root render state contracts", () => {
         limits: {
           cpuDecodedBytes: 512 * 1024 * 1024,
           jobs: 8,
-          persistentGpuBytes: 512 * 1024 * 1024,
+          persistentGpuBytes: 864 * 1024 * 1024,
           transientPeakBytes: 192 * 1024 * 1024,
           uploadBytes: 16 * 1024 * 1024,
         },
