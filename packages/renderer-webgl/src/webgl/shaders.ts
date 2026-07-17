@@ -477,7 +477,8 @@ return materialTangentNormal(geometricNormal, textureNormal, normalUv);`,
     ["__MATERIAL_TRANSMISSION_SCREEN_BODY__", surfaceFeatureBlock(
       features,
       "transmissionScreenTexture",
-      `vec2 screenUv = clamp((gl_FragCoord.xy - u_viewportOrigin) / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
+      `vec2 straightUv = clamp((gl_FragCoord.xy - u_viewportOrigin) / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
+vec2 screenUv = materialTransmissionScreenUv(normal, straightUv);
 vec4 screenSample = texture(u_transmissionScreenTexture, screenUv);
 vec3 environmentFallback = iblDiffuseIrradiance(-normal) / PI;
 vec3 screenRadiance = mix(environmentFallback, screenSample.rgb, screenSample.a);
@@ -486,7 +487,12 @@ if (dispersion <= 0.0) {
   return screenRadiance * baseColor * materialVolumeAttenuation();
 }
 vec3 iors = materialDispersionIors(u_materialExtensionFactors.y, dispersion);
-vec2 direction = materialDispersionDirection(normal, viewDirection);
+vec2 direction = screenUv - straightUv;
+if (dot(direction, direction) <= 0.000001) {
+  direction = materialDispersionDirection(normal, viewDirection);
+} else {
+  direction = normalize(direction);
+}
 float thickness = materialThicknessFactor();
 float offsetScale = clamp(max(thickness, 0.0) * 0.25, 0.0, 0.08);
 vec2 redUv = clamp(screenUv - direction * max(iors.g - iors.r, 0.0) * offsetScale, vec2(0.0), vec2(1.0));

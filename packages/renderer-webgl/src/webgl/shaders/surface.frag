@@ -11,6 +11,7 @@ in vec4 v_color;
 #define MAX_SURFACE_LIGHTS __MAX_SURFACE_LIGHTS__
 #define MATERIAL_EXTENDED __MATERIAL_EXTENDED__
 
+uniform highp mat4 u_projection;
 uniform highp mat4 u_view;
 uniform highp vec4 u_cameraWorldPosition;
 
@@ -562,6 +563,29 @@ vec2 materialDispersionDirection(vec3 normal, vec3 viewDirection) {
   }
 
   return normalize(direction);
+}
+
+vec2 materialTransmissionScreenUv(vec3 normal, vec2 straightUv) {
+#if MATERIAL_EXTENDED
+  float thickness = materialThicknessFactor();
+  if (thickness <= 0.0) {
+    return straightUv;
+  }
+
+  // A bounded first-order screen-space exit cue. Projecting the full refracted
+  // ray per fragment was materially too expensive for dense WebXR scenes.
+  vec3 viewNormal = mat3(u_view) * normal;
+  vec2 projectionScale = vec2(u_projection[0][0], u_projection[1][1]) * 0.5;
+  float relativeThickness = abs(u_projection[3][3]) < 0.5
+    ? min(thickness * max(gl_FragCoord.w, 0.0), 1.0)
+    : thickness;
+  float refractionStrength = 1.0 - 1.0 / max(materialIor(), 1.0);
+  vec2 uvOffset = viewNormal.xy * refractionStrength * relativeThickness * projectionScale;
+
+  return clamp(straightUv + uvOffset, vec2(0.0), vec2(1.0));
+#else
+  return straightUv;
+#endif
 }
 
 vec3 iblDiffuseIrradiance(vec3 normal);

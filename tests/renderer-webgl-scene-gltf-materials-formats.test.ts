@@ -147,6 +147,10 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       .toContainEqual([0.65, 0.4, 2, 1]);
     expect(sources).toContain("materialVolumeAttenuation");
     expect(sources).toContain("materialTransmissionScreenColor");
+    expect(sources).toContain("materialTransmissionScreenUv");
+    expect(sources).toContain("max(gl_FragCoord.w, 0.0)");
+    expect(sources).toContain("viewNormal.xy * refractionStrength * relativeThickness");
+    expect(sources).toContain("u_projection[0][0]");
     expect(sources).toContain("gl_FragCoord.xy - u_viewportOrigin");
     expect(sources).toContain("texture(u_transmissionScreenTexture");
     expect(sources).toContain("lit = mix(lit, transmitted + lit * fresnel, transmission);");
