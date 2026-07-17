@@ -38,8 +38,22 @@ export interface WebGlRootOptions {
   readonly resourceBudgets?: WebGlResourceBudgetOptions;
 }
 
-/** Concise overrides for renderer resource admission budgets. */
-export type WebGlResourceBudgetOptions = Readonly<Partial<ResourceGovernorUsage>>;
+/**
+ * Partial root-wide resource admission ceilings. These values do not reserve or
+ * preallocate memory; they bound work admitted by one renderer root.
+ */
+export interface WebGlResourceBudgetOptions {
+  /** Retained decoded CPU data, in bytes. @defaultValue 512 MiB */
+  readonly cpuDecodedBytes?: number;
+  /** Concurrent asynchronous preparation jobs. @defaultValue `8` */
+  readonly jobs?: number;
+  /** Retained GPU allocations, in bytes. @defaultValue 1280 MiB */
+  readonly persistentGpuBytes?: number;
+  /** Concurrent temporary preparation and GPU scratch data, in bytes. @defaultValue 192 MiB */
+  readonly transientPeakBytes?: number;
+  /** GPU upload traffic admitted during one rendered frame, in bytes. @defaultValue 16 MiB */
+  readonly uploadBytes?: number;
+}
 
 /** Complete immutable resource budgets retained by a renderer root. */
 export type WebGlResourceBudgets = ResourceGovernorUsage;

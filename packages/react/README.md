@@ -189,7 +189,10 @@ The imperative root separates its two observational models:
   until generated coverage is ready. Authored `virtualTexture(...)` resources
   are unaffected.
 - `resourceBudgets` accepts root-wide CPU, GPU, per-frame upload,
-  transient-memory, and concurrent-job limits. Byte-named fields are bytes.
+  transient-memory, and concurrent-job ceilings. They are admission guardrails,
+  not memory preallocations. The defaults are 512 MiB decoded CPU, 1280 MiB
+  persistent GPU, 192 MiB concurrent transient data, 16 MiB of upload traffic
+  per rendered frame, and 8 preparation jobs. Byte-named fields are bytes.
   Royal keeps per-resource lending policy internal. The normalized complete
   limits are available as `root.options.resourceBudgets`.
 - Manifest `physicalByteBudget` and `physicalSlots` remain the authored VT
