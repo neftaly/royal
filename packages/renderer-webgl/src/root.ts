@@ -25,7 +25,10 @@ import {
 import {
   DecodedTextureSourceLifetime,
 } from "./texture/decoded-source-lifetime";
-import { OrdinaryTextureResidencyController } from "./texture/ordinary-residency-controller";
+import {
+  OrdinaryTextureResidencyController,
+  type OrdinaryTextureResidencyLifecycle,
+} from "./texture/ordinary-residency-controller";
 import { OrdinaryTextureGpuOwner } from "./texture/ordinary-gpu-owner";
 import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
@@ -135,7 +138,6 @@ import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-o
 import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
 import {
   identityMat4,
-  multiplyMat4Into,
   projectionMat4Into,
   viewMat4Into,
   type Mat4,
@@ -271,11 +273,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     hdrOutput: false,
     toneMapping: "pbr-neutral",
   };
-  readonly #singleGltfDemandModel = identityMat4();
   readonly #singleVirtualTextureDemandSource: {
     kind: "single";
     model: Mat4;
-  } = { kind: "single", model: this.#singleGltfDemandModel };
+  } = { kind: "single", model: identityMat4() };
   readonly #composedVirtualTextureDemandSource: {
     kind: "composed";
     localModels: readonly Mat4[];
@@ -286,6 +287,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #programArena: ProgramArena;
   readonly #geometryRecipes = new GeometryRecipeRegistry();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
+  readonly #ordinaryTextureLifecycle: Mutable<OrdinaryTextureResidencyLifecycle> = {
+    active: false,
+    disposed: false,
+    generation: 0,
+  };
+  readonly #readOrdinaryTextureLifecycle = (): OrdinaryTextureResidencyLifecycle => {
+    const lifecycle = this.#ordinaryTextureLifecycle;
+    lifecycle.active = this.#context.lifecycle === "active";
+    lifecycle.disposed = this.#disposed;
+    lifecycle.generation = this.#context.generation;
+    return lifecycle;
+  };
   readonly #ordinaryTextureGpu: OrdinaryTextureGpuOwner;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
@@ -661,11 +674,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),
         gl,
         invalidate: () => this.invalidate(),
-        lifecycle: () => ({
-          active: this.#context.lifecycle === "active",
-          disposed: this.#disposed,
-          generation: this.#context.generation,
-        }),
+        lifecycle: this.#readOrdinaryTextureLifecycle,
         loadSource: (request, signal) => isSvgUri(request.uri)
           ? import("./texture/svg").then(({ loadSvgTextureFromUri }) => (
             loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
@@ -1635,11 +1644,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#virtualTextures.requiresDrawDemand(batch.cpuGeometry, batch.material)) {
       let modelSource: VirtualTextureDrawDemandModelSource;
       if (batch.localModels.length === 1) {
-        this.#singleVirtualTextureDemandSource.model = multiplyMat4Into(
-          this.#singleGltfDemandModel,
-          batch.rootModels[0]!,
-          batch.localModels[0]!,
-        );
+        const singleModel = batch.singleModel;
+        if (singleModel === undefined) {
+          throw new Error("Royal single-instance glTF batch has no retained model");
+        }
+        this.#singleVirtualTextureDemandSource.model = singleModel.model;
         modelSource = this.#singleVirtualTextureDemandSource;
       } else {
         this.#composedVirtualTextureDemandSource.localModels = batch.localModels;

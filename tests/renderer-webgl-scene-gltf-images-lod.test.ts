@@ -116,6 +116,33 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     ]);
   });
 
+  it("refreshes retained glTF model composition after an imperative root transform", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const graph = renderScene([gltf({ ref, src: triangleGltfSrc, version: "retained-root-model" })]);
+
+    root.render(graph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+    if (ref.current === null) throw new Error("Expected glTF render-object ref to be attached");
+
+    const callsBeforeMove = calls.length;
+    ref.current.position.x = 0.25;
+    root.render(graph);
+
+    expect(matrixUniformPayloads(calls.slice(callsBeforeMove), "u_model").map(roundVector))
+      .toContainEqual([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0.25, 0, 0, 1,
+      ]);
+  });
+
   it("loads glTF bufferView base-color images on primitives without normals", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

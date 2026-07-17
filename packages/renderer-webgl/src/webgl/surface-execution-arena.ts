@@ -10,9 +10,7 @@ import {
   affineSurfaceNormalTransformInto,
   cameraWorldPositionFromViewInto,
   identityMat4,
-  multiplyMat4Into,
   type Mat4,
-  type MutableMat4,
   type MutableVec3,
 } from "../math/mat4";
 import type { OrdinaryTextureResidencyController } from "../texture/ordinary-residency-controller";
@@ -326,11 +324,11 @@ export interface SurfaceSingleExecution {
   readonly geometryId: number;
   readonly lights: SurfaceLightSet | undefined;
   readonly material: Material;
-  /** Internal glTF composition identity; omitted for direct geometry. */
-  readonly modelLocal?: Mat4;
   readonly model: Mat4;
-  /** Internal glTF composition identity; omitted for direct geometry. */
-  readonly modelRoot?: Mat4;
+  /** Retained composed glTF model identity; omitted for direct geometry. */
+  readonly modelIdentity?: Mat4;
+  /** Retained glTF normal transform; direct geometry computes into its draw workspace. */
+  readonly normalTransform?: Mat4;
   readonly projection: Mat4;
   readonly stableLightUniformRevision?: number;
   readonly toneMapping: SurfaceToneMappingState;
@@ -338,6 +336,10 @@ export interface SurfaceSingleExecution {
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
 }
+
+type MutableSurfaceSingleExecution = {
+  -readonly [Key in keyof SurfaceSingleExecution]: SurfaceSingleExecution[Key];
+};
 
 export interface SurfaceGltfBatchExecution {
   readonly baseColorResidency: BaseColorTextureResidency;
@@ -403,11 +405,11 @@ export class SurfaceExecutionArena {
   readonly #stableLightUniformRevisions = new WeakMap<WebGLProgram, number>();
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
-  readonly #singleGltfModel = identityMat4();
+  #singleGltfExecution: MutableSurfaceSingleExecution | undefined;
   readonly #singleNormalTransform = identityMat4();
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
-  readonly #programGltfModels = new WeakMap<WebGLProgram, { frame: number; local: Mat4; root: Mat4 }>();
+  readonly #programGltfModels = new WeakMap<WebGLProgram, { frame: number; model: Mat4 }>();
   readonly #programMaterials = new WeakMap<WebGLProgram, SurfaceMaterial>();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
@@ -551,7 +553,8 @@ export class SurfaceExecutionArena {
       const modelBinding = this.#bindModelMatrix(program, input);
       if (!loading && surfaceMaterial?.kind === "standard") {
         if (modelBinding !== undefined) {
-          const normalTransform = affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model);
+          const normalTransform = input.normalTransform
+            ?? affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model);
           if (modelBinding) {
             uniformMatrixUncached(
               this.#programs,
@@ -606,24 +609,50 @@ export class SurfaceExecutionArena {
     this.#beginGltfDraw(batch.material, batch.sidedness);
     {
       if (batch.localModels.length === 1) {
-        this.#executeSingle({
-          baseColorResidency: input.baseColorResidency,
-          contextGeneration: input.contextGeneration,
-          frame: input.frame,
-          geometry: batch.geometry,
-          geometryId: batch.geometryId,
-          lights: batch.lights,
-          material: batch.material,
-          model: this.#singleGltfModel,
-          modelLocal: batch.localModels[0]!,
-          modelRoot: batch.rootModels[0]!,
-          projection: input.projection,
-          stableLightUniformRevision: batch.sceneLightPlanRevision,
-          toneMapping: input.toneMapping,
-          transmissionScreenColorTexture: input.transmissionScreenColorTexture,
-          view: input.view,
-          viewportSize: input.viewportSize,
-        }, false);
+        const singleModel = batch.singleModel;
+        if (singleModel === undefined) {
+          throw new Error("Royal single-instance glTF batch has no retained model");
+        }
+        let execution = this.#singleGltfExecution;
+        if (execution === undefined) {
+          execution = {
+            baseColorResidency: input.baseColorResidency,
+            contextGeneration: input.contextGeneration,
+            frame: input.frame,
+            geometry: batch.geometry,
+            geometryId: batch.geometryId,
+            lights: batch.lights,
+            material: batch.material,
+            model: singleModel.model,
+            modelIdentity: singleModel.model,
+            normalTransform: singleModel.normalTransform,
+            projection: input.projection,
+            stableLightUniformRevision: batch.sceneLightPlanRevision,
+            toneMapping: input.toneMapping,
+            transmissionScreenColorTexture: input.transmissionScreenColorTexture,
+            view: input.view,
+            viewportSize: input.viewportSize,
+          };
+          this.#singleGltfExecution = execution;
+        } else {
+          execution.baseColorResidency = input.baseColorResidency;
+          execution.contextGeneration = input.contextGeneration;
+          execution.frame = input.frame;
+          execution.geometry = batch.geometry;
+          execution.geometryId = batch.geometryId;
+          execution.lights = batch.lights;
+          execution.material = batch.material;
+          execution.model = singleModel.model;
+          execution.modelIdentity = singleModel.model;
+          execution.normalTransform = singleModel.normalTransform;
+          execution.projection = input.projection;
+          execution.stableLightUniformRevision = batch.sceneLightPlanRevision;
+          execution.toneMapping = input.toneMapping;
+          execution.transmissionScreenColorTexture = input.transmissionScreenColorTexture;
+          execution.view = input.view;
+          execution.viewportSize = input.viewportSize;
+        }
+        this.#executeSingle(execution, false);
         return;
       }
       const surfaceLights = batch.material.kind === "standard" ? batch.lights : EMPTY_SURFACE_LIGHT_SET;
@@ -694,7 +723,8 @@ export class SurfaceExecutionArena {
   }
 
   drainSignals(): SurfaceExecutionSignals {
-    for (const publication of this.#publicationGroups) {
+    for (let index = 0; index < this.#publicationGroups.length; index += 1) {
+      const publication = this.#publicationGroups[index]!;
       if (publication.ready || publication.pendingEpoch === this.#publicationEpoch) continue;
       publication.ready = true;
       this.#wakeRequested = true;
@@ -738,9 +768,8 @@ export class SurfaceExecutionArena {
 
   /** Returns undefined for reuse, false for compared, and true for proven changed. */
   #bindModelMatrix(program: WebGLProgram, input: SurfaceSingleExecution): boolean | undefined {
-    const root = input.modelRoot;
-    const local = input.modelLocal;
-    if (root === undefined || local === undefined) {
+    const modelIdentity = input.modelIdentity;
+    if (modelIdentity === undefined) {
       // A direct draw can share a shader program with glTF and therefore
       // invalidates any semantic proof retained for that program.
       this.#programGltfModels.delete(program);
@@ -749,20 +778,18 @@ export class SurfaceExecutionArena {
     }
 
     const retained = this.#programGltfModels.get(program);
-    if (retained?.frame === input.frame && retained.root === root && retained.local === local) {
+    if (retained?.frame === input.frame && retained.model === modelIdentity) {
       return undefined;
     }
 
-    multiplyMat4Into(input.model as MutableMat4, root, local);
     if (retained?.frame === input.frame) {
       uniformMatrixUncached(this.#programs, program, "u_model", input.model);
-      retained.root = root;
-      retained.local = local;
+      retained.model = modelIdentity;
       return true;
     }
 
     uniformMatrix(this.#programs, program, "u_model", input.model);
-    this.#programGltfModels.set(program, { frame: input.frame, local, root });
+    this.#programGltfModels.set(program, { frame: input.frame, model: modelIdentity });
     return false;
   }
 
@@ -1131,7 +1158,8 @@ export class SurfaceExecutionArena {
     if (plan.extendedMaterial) {
       this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
     }
-    for (const entry of plan.materialTextures) {
+    for (let index = 0; index < plan.materialTextures.length; index += 1) {
+      const entry = plan.materialTextures[index]!;
       this.#bindCachedTexture2d(program, entry.descriptor, plan);
     }
   }
@@ -1210,7 +1238,8 @@ export class SurfaceExecutionArena {
       BASE_COLOR_TEXTURE_COORDINATE_UNIFORMS,
       true,
     );
-    for (const entry of plan.materialTextures) {
+    for (let index = 0; index < plan.materialTextures.length; index += 1) {
+      const entry = plan.materialTextures[index]!;
       const descriptor = entry.descriptor;
       this.#bindTextureCoordinate(
         program,
@@ -1465,7 +1494,8 @@ export class SurfaceExecutionArena {
   #recordTextureBindingOmissions(
     plan: Pick<PureSurfaceTextureBindingPlan, "omissions">,
   ): void {
-    for (const omission of plan.omissions) {
+    for (let index = 0; index < plan.omissions.length; index += 1) {
+      const omission = plan.omissions[index]!;
       if (omission.reason !== "unit-exhausted") continue;
       this.#diagnostics.push({
         key: `surface-texture-unit-exhausted:${omission.feature}:${this.#maxTextureImageUnits}`,
@@ -1476,7 +1506,9 @@ export class SurfaceExecutionArena {
 
   #captureIblSignals(): void {
     const signals = this.#consumeIblSignals();
-    for (const diagnostic of signals.diagnostics) this.#diagnostics.push(diagnostic);
+    for (let index = 0; index < signals.diagnostics.length; index += 1) {
+      this.#diagnostics.push(signals.diagnostics[index]!);
+    }
     this.#wakeRequested ||= signals.wakeRequested;
   }
 

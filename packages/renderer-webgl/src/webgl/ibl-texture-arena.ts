@@ -533,11 +533,26 @@ const clearPublished = (state: State, clearPolicyState: boolean): void => {
   state.frameWakeRequested = false;
 };
 
+const EMPTY_IBL_TEXTURE_DIAGNOSTICS: readonly string[] = [];
+
 export const consumeIblTextureDiagnostics = (arena: IblTextureArena): readonly string[] => {
   const state = arena as unknown as State;
+  if (state.diagnostics.length === 0) return EMPTY_IBL_TEXTURE_DIAGNOSTICS;
   const diagnostics = state.diagnostics.slice();
   state.diagnostics.length = 0;
   return diagnostics;
+};
+
+/** Imperative drain boundary for frame shells that own reusable diagnostic storage. */
+export const drainIblTextureDiagnostics = (
+  arena: IblTextureArena,
+  consume: (message: string) => void,
+): void => {
+  const state = arena as unknown as State;
+  for (let index = 0; index < state.diagnostics.length; index += 1) {
+    consume(state.diagnostics[index]!);
+  }
+  state.diagnostics.length = 0;
 };
 
 export const consumeIblTextureFrameWake = (arena: IblTextureArena): boolean => {

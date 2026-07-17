@@ -3,12 +3,15 @@ import type {
   ImageBasedLightingFeature,
   ImageBasedLightingFeatureOptions,
 } from "./image-based-lighting-feature";
-import type { SurfaceExecutionSignals } from "./webgl/surface-execution-arena";
+import type {
+  SurfaceExecutionDiagnostic,
+  SurfaceExecutionSignals,
+} from "./webgl/surface-execution-arena";
 import {
   bindSurfaceIbl,
-  consumeIblTextureDiagnostics,
   consumeIblTextureFrameWake,
   createIblTextureArena,
+  drainIblTextureDiagnostics,
   dropIblTextureContext,
   prepareSurfaceIblBrdfLut,
   releaseGltfIblSpecularTexture,
@@ -24,11 +27,17 @@ import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
 
 /** Owns IBL GPU resources, surface binding, and lifecycle over retained sources. */
 export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature {
+  readonly #diagnostics: SurfaceExecutionDiagnostic[] = [];
+  readonly #recordDiagnostic = (message: string): void => {
+    this.#diagnostics.push({ key: `ibl-governor:${message}`, message });
+  };
   readonly #runtime: IblRuntimeOwner;
+  readonly #signals: { diagnostics: readonly SurfaceExecutionDiagnostic[]; wakeRequested: boolean };
   readonly #textures: IblTextureArena;
 
   constructor(options: ImageBasedLightingFeatureOptions) {
     this.#textures = createIblTextureArena(options.gl, options.governor);
+    this.#signals = { diagnostics: this.#diagnostics, wakeRequested: false };
     this.#runtime = new IblRuntimeOwner({
       contextLifecycle: options.contextLifecycle,
       diagnostics: options.diagnostic,
@@ -60,13 +69,10 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
   }
 
   consumeSurfaceSignals(): SurfaceExecutionSignals {
-    return {
-      diagnostics: consumeIblTextureDiagnostics(this.#textures).map((message) => ({
-        key: `ibl-governor:${message}`,
-        message,
-      })),
-      wakeRequested: consumeIblTextureFrameWake(this.#textures),
-    };
+    this.#diagnostics.length = 0;
+    drainIblTextureDiagnostics(this.#textures, this.#recordDiagnostic);
+    this.#signals.wakeRequested = consumeIblTextureFrameWake(this.#textures);
+    return this.#signals;
   }
 
   dropContext(): void {

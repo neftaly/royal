@@ -26,7 +26,13 @@ import {
 } from "../gltf-packet-submission-workspace";
 import { FRAME_PACKET_SIDEDNESS, NO_FRAME_PACKET_ID } from "../frame/packets";
 import type { CpuGeometry } from "../geometry-recipes";
-import { identityMat4, type Mat4, type MutableMat4 } from "../math/mat4";
+import {
+  affineSurfaceNormalTransformInto,
+  identityMat4,
+  multiplyMat4Into,
+  type Mat4,
+  type MutableMat4,
+} from "../math/mat4";
 import {
   packetLocalModelSemanticId,
   packetResourceTablesPlanRevision,
@@ -64,6 +70,13 @@ export interface GltfFrameDrawSidedness {
   readonly frontFaceCcw: boolean;
 }
 
+export interface GltfFrameSingleModel {
+  local: Mat4;
+  readonly model: MutableMat4;
+  readonly normalTransform: MutableMat4;
+  readonly rootSnapshot: MutableMat4;
+}
+
 export interface GltfFrameDrawBatch {
   contextGeneration: number;
   cpuGeometry: CpuGeometry;
@@ -82,6 +95,7 @@ export interface GltfFrameDrawBatch {
   readonly rootTransforms: Array<Transform | undefined>;
   sceneLightPlanRevision: number;
   sceneLights: SurfaceLightSet | undefined;
+  singleModel?: GltfFrameSingleModel;
   sidedness: GltfFrameDrawSidedness;
 }
 
@@ -99,6 +113,32 @@ export const gltfFrameBatchIsRetained = (
   touchedEpoch: number,
   retentionFrames = GLTF_BATCH_RETENTION_FRAMES,
 ): boolean => touchedEpoch !== 0 && ((frameEpoch - touchedEpoch) >>> 0) <= retentionFrames;
+
+const synchronizeSingleModel = (batch: GltfFrameDrawBatch): void => {
+  if (batch.localModels.length !== 1) return;
+  const local = batch.localModels[0]!;
+  const root = batch.rootModels[0]!;
+  let single = batch.singleModel;
+  let changed = single === undefined;
+  if (single === undefined) {
+    single = {
+      local,
+      model: identityMat4(),
+      normalTransform: identityMat4(),
+      rootSnapshot: identityMat4(),
+    };
+    batch.singleModel = single;
+  }
+  changed ||= single.local !== local;
+  for (let index = 0; index < 16; index += 1) {
+    if (!Object.is(single.rootSnapshot[index], root[index])) changed = true;
+  }
+  if (!changed) return;
+  single.local = local;
+  for (let index = 0; index < 16; index += 1) single.rootSnapshot[index] = root[index]!;
+  multiplyMat4Into(single.model, root, local);
+  affineSurfaceNormalTransformInto(single.normalTransform, single.model);
+};
 
 export class GltfFrameBatchArena {
   readonly workspace: GltfPacketSubmissionWorkspace<
@@ -365,6 +405,7 @@ export class GltfFrameBatchArena {
           batch.rootTransforms[memberOffset] = root.rootTransform;
         }
       }
+      synchronizeSingleModel(batch);
     }
   }
 }
