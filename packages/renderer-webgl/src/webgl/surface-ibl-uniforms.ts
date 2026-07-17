@@ -35,9 +35,10 @@ export const bindSurfaceIblFallback = (
   programArena: ProgramArena,
   program: WebGLProgram,
   lightSet: SurfaceLightSet,
-  bindIrradiance = true,
+  bindUniforms = true,
 ): void => {
-  if (bindIrradiance) bindSurfaceIblIrradiance(programArena, program, lightSet);
+  if (!bindUniforms) return;
+  bindSurfaceIblIrradiance(programArena, program, lightSet);
   uniform1i(programArena, program, "u_useIblSpecular", 0);
   uniform4f(programArena, program, "u_iblSpecularSettings",
     0, lightSet.specular?.intensity ?? 1, lightSet.specular?.mipCount ?? 1,

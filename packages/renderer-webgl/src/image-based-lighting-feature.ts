@@ -29,7 +29,7 @@ export interface ImageBasedLightingFeature {
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
-    bindIrradiance: boolean,
+    bindUniforms: boolean,
   ): void;
   consumeSurfaceSignals(): SurfaceExecutionSignals;
   dropContext(): void;

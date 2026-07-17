@@ -486,10 +486,10 @@ export const bindSurfaceIbl = (
   bindings: WebGlTextureBindingShell = new WebGlTextureBindingShell(
     (arena as unknown as State).gl,
   ),
-  bindIrradiance = true,
+  bindUniforms = true,
 ): void => {
   const state = arena as unknown as State;
-  if (bindIrradiance) bindSurfaceIblIrradiance(programArena, program, lightSet);
+  if (bindUniforms) bindSurfaceIblIrradiance(programArena, program, lightSet);
   const specular = lightSet.specular;
   const useSpecular = specular !== undefined && specularTextureUnit !== undefined;
   if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");
@@ -500,23 +500,27 @@ export const bindSurfaceIbl = (
       throw new RangeError(`IBL specular and BRDF LUT texture units must not alias unit ${brdfLutTextureUnit}`);
     }
   }
-  uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
-  uniform4f(programArena, program, "u_iblSpecularSettings",
-    useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
-    specular?.encoding === "rgbd" ? 1 : 0);
+  if (bindUniforms) {
+    uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
+    uniform4f(programArena, program, "u_iblSpecularSettings",
+      useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
+      specular?.encoding === "rgbd" ? 1 : 0);
+  }
   if (useSpecular) {
     bindings.bindCube(specularTextureUnit, specular.texture);
-    uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
+    if (bindUniforms) uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
   }
   const hadBrdfLut = state.brdfLut !== undefined;
   const brdfLut = useBrdfLut ? ensureBrdfLut(state) : undefined;
   // First-time LUT realization uses the raw upload lane and invalidates every
   // target binding on its transient unit before retained draw binding resumes.
   if (!hadBrdfLut && brdfLut !== undefined) bindings.invalidate();
-  uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
+  if (bindUniforms) {
+    uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
+  }
   if (brdfLut !== undefined && brdfLutTextureUnit !== undefined) {
     bindings.bindTexture2d(brdfLutTextureUnit, brdfLut);
-    uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
+    if (bindUniforms) uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
   }
 };
 

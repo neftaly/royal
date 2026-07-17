@@ -341,6 +341,12 @@ type MutableSurfaceSingleExecution = {
   -readonly [Key in keyof SurfaceSingleExecution]: SurfaceSingleExecution[Key];
 };
 
+type StableLightBinding = {
+  brdfLutTextureUnit: number | undefined;
+  revision: number;
+  specularTextureUnit: number | undefined;
+};
+
 export interface SurfaceGltfBatchExecution {
   readonly baseColorResidency: BaseColorTextureResidency;
   readonly batch: GltfFrameDrawBatch;
@@ -361,7 +367,7 @@ export interface SurfaceExecutionArenaOptions {
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
-    bindIrradiance: boolean,
+    bindUniforms: boolean,
   ) => void;
   readonly bindVirtualTexture: (
     bindings: WebGlTextureBindingShell,
@@ -402,7 +408,7 @@ export class SurfaceExecutionArena {
   readonly #publicationGroups: SurfaceMaterialPublication[] = [];
   #publicationEpoch = 0;
   readonly #programViewRevisions = new WeakMap<WebGLProgram, number>();
-  readonly #stableLightUniformRevisions = new WeakMap<WebGLProgram, number>();
+  readonly #stableLightBindings = new WeakMap<WebGLProgram, StableLightBinding>();
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   #singleGltfExecution: MutableSurfaceSingleExecution | undefined;
@@ -1327,15 +1333,21 @@ export class SurfaceExecutionArena {
     frame: number,
     stableUniformRevision: number,
   ): void {
+    const specularTextureUnit = plan.textureUnits.get("iblSpecularCube");
+    const brdfLutTextureUnit = plan.textureUnits.get("iblBrdfLut");
+    const stableBinding = this.#stableLightBindings.get(program);
     const bindStableUniforms = stableUniformRevision === 0
-      || this.#stableLightUniformRevisions.get(program) !== stableUniformRevision;
+      || stableBinding === undefined
+      || stableBinding.revision !== stableUniformRevision
+      || stableBinding.specularTextureUnit !== specularTextureUnit
+      || stableBinding.brdfLutTextureUnit !== brdfLutTextureUnit;
     try {
       this.#bindIbl(
         this.#textureBindings,
         program,
         lightSet,
-        plan.textureUnits.get("iblSpecularCube"),
-        plan.textureUnits.get("iblBrdfLut"),
+        specularTextureUnit,
+        brdfLutTextureUnit,
         bindStableUniforms,
       );
     } finally {
@@ -1354,8 +1366,18 @@ export class SurfaceExecutionArena {
         uniform4f(this.#programs, program, uniforms[1],
           light.direction[0], light.direction[1], light.direction[2], 0);
       }
-      if (stableUniformRevision === 0) this.#stableLightUniformRevisions.delete(program);
-      else this.#stableLightUniformRevisions.set(program, stableUniformRevision);
+      if (stableUniformRevision === 0) this.#stableLightBindings.delete(program);
+      else if (stableBinding === undefined) {
+        this.#stableLightBindings.set(program, {
+          brdfLutTextureUnit,
+          revision: stableUniformRevision,
+          specularTextureUnit,
+        });
+      } else {
+        stableBinding.brdfLutTextureUnit = brdfLutTextureUnit;
+        stableBinding.revision = stableUniformRevision;
+        stableBinding.specularTextureUnit = specularTextureUnit;
+      }
     }
     if (lightSet.punctuals.length > 0) {
       this.#textureBindings.invalidate();

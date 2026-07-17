@@ -191,9 +191,10 @@ describe("IBL texture arena", () => {
     expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
   });
 
-  it("can retain stable irradiance uniforms while refreshing specular bindings", () => {
+  it("can retain stable IBL uniforms while refreshing specular texture bindings", () => {
     const gl = new FakeGl();
     const arena = createIblTextureArena(context(gl));
+    const specularTexture = {} as WebGLTexture;
     const lightSet: SurfaceLightSet = {
       directionals: [],
       irradiance: {
@@ -203,6 +204,14 @@ describe("IBL texture arena", () => {
       },
       lights: [],
       punctuals: [],
+      specular: {
+        encoding: "linear",
+        intensity: 1,
+        key: "retained",
+        mipCount: 1,
+        texture: specularTexture,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
     };
 
     bindSurfaceIbl(
@@ -210,15 +219,19 @@ describe("IBL texture arena", () => {
       createProgramArena(context(gl)),
       {} as WebGLProgram,
       lightSet,
-      undefined,
+      2,
       undefined,
       undefined,
       false,
     );
 
     expect(uniform4fvValues(gl, "u_iblIrradianceSettings")).toEqual([]);
-    expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([0]);
-    expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([0]);
+    expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([]);
+    expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([]);
+    expect(calls(gl, "bindTexture")).toContainEqual({
+      args: [gl.TEXTURE_CUBE_MAP, specularTexture],
+      name: "bindTexture",
+    });
   });
 
   it("binds planned specular and BRDF units without aliasing them", () => {

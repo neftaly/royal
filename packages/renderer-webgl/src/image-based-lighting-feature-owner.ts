@@ -34,6 +34,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
   readonly #runtime: IblRuntimeOwner;
   readonly #signals: { diagnostics: readonly SurfaceExecutionDiagnostic[]; wakeRequested: boolean };
   readonly #textures: IblTextureArena;
+  readonly #uniformBindings = new WeakSet<WebGLProgram>();
 
   constructor(options: ImageBasedLightingFeatureOptions) {
     this.#textures = createIblTextureArena(options.gl, options.governor);
@@ -54,8 +55,9 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
-    bindIrradiance: boolean,
+    bindUniforms: boolean,
   ): void {
+    const requiresUniforms = bindUniforms || !this.#uniformBindings.has(program);
     bindSurfaceIbl(
       this.#textures,
       programs,
@@ -64,8 +66,9 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
       specularTextureUnit,
       brdfLutTextureUnit,
       bindings,
-      bindIrradiance,
+      requiresUniforms,
     );
+    this.#uniformBindings.add(program);
   }
 
   consumeSurfaceSignals(): SurfaceExecutionSignals {

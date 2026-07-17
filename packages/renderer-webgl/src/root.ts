@@ -769,7 +769,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           lightSet,
           specularTextureUnit,
           brdfLutTextureUnit,
-          bindIrradiance,
+          bindUniforms,
         ) => {
           this.#ibl.bindSurface(
             bindings,
@@ -778,7 +778,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             lightSet,
             specularTextureUnit,
             brdfLutTextureUnit,
-            bindIrradiance,
+            bindUniforms,
           );
         },
         bindVirtualTexture: (bindings, key, atlasTextureUnit, pageTableTextureUnit) => (
