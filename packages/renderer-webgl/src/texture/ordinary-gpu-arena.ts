@@ -100,6 +100,7 @@ type MutableResource = {
 };
 
 type State = {
+  capacityBlocked: boolean;
   readonly gl: WebGL2RenderingContext;
   readonly handles: TextureHandleArena;
   readonly outcomes: OrdinaryTextureGpuOutcome[];
@@ -122,6 +123,7 @@ export const createOrdinaryTextureGpuArena = (
   gl: WebGL2RenderingContext,
   handles: TextureHandleArena,
 ): OrdinaryTextureGpuArena => ({
+  capacityBlocked: false,
   gl,
   handles,
   outcomes: [],
@@ -309,6 +311,7 @@ export const processOrdinaryTextureUploads = (
         );
         continue;
       }
+      if (admissionResult.reason !== "upload-capacity") state.capacityBlocked = true;
       state.pendingUploads.push(resource);
       if (admissionResult.reason === "upload-capacity") state.wakeRequested = true;
       continue;
@@ -361,6 +364,16 @@ export const processOrdinaryTextureUploads = (
     state.pendingUploadHead < state.pendingUploads.length
     && !canUpload(state, frame, MAX_UPLOADS_PER_FRAME)
   ) state.wakeRequested = true;
+};
+
+/** Consumes durable-capacity pressure observed during the latest upload pass. */
+export const consumeOrdinaryTextureGpuCapacityBlocked = (
+  arena: OrdinaryTextureGpuArena,
+): boolean => {
+  const state = stateOf(arena);
+  const blocked = state.capacityBlocked;
+  state.capacityBlocked = false;
+  return blocked;
 };
 
 const checkedTextureDimension = (value: number, label: string): number => {

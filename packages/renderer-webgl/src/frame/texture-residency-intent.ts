@@ -14,6 +14,11 @@ export class FrameTextureResidencyIntent {
     this.#active = true;
   }
 
+  /** Current-frame ordinary demand; valid only until `finishFrame` returns. */
+  ordinaryRequiredKeys(): ReadonlySet<string> {
+    return this.#ordinaryRequired;
+  }
+
   requireOrdinary(key: string): void {
     if (this.#active) this.#ordinaryRequired.add(key);
   }

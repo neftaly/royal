@@ -22,20 +22,34 @@ type OrdinaryTextureGpuOwnerOptions = {
 
 /** Owns ordinary-texture GPU suppression, admission, upload, and settlement. */
 export class OrdinaryTextureGpuOwner {
+  readonly #evictionKeys: string[] = [];
   readonly #options: OrdinaryTextureGpuOwnerOptions;
+  readonly #releaseKeys: string[] = [];
 
   constructor(options: OrdinaryTextureGpuOwnerOptions) {
     this.#options = options;
   }
 
   finalizeResidencyIntent(commit: boolean): void {
+    const capacityBlocked = this.#options.textures.consumeGpuCapacityBlocked();
+    const evictions = commit && capacityBlocked
+      ? this.#options.textures.collectUnrequestedGpuResidencyKeys(
+          this.#options.residencyIntent.ordinaryRequiredKeys(),
+          this.#evictionKeys,
+        )
+      : this.#evictionKeys;
+    if (!commit || !capacityBlocked) this.#evictionKeys.length = 0;
     const suppressions = this.#options.residencyIntent.finishFrame(commit);
-    if (suppressions.length === 0) return;
+    const releaseKeys = this.#releaseKeys;
+    releaseKeys.length = 0;
+    for (const key of suppressions) releaseKeys.push(key);
+    for (const key of evictions) releaseKeys.push(key);
+    if (releaseKeys.length === 0) return;
     this.#options.capacityWakes.blockGpuWake(1);
     let capacityReleased = false;
     let firstFailure: CapturedFailure | undefined;
     try {
-      for (const key of suppressions) {
+      for (const key of releaseKeys) {
         let report: ReturnType<OrdinaryTextureResidencyController["suppressGpuResidency"]> | undefined;
         try {
           report = this.#options.textures.suppressGpuResidency(key);

@@ -188,6 +188,13 @@ describe("ordinary texture residency controller", () => {
     };
     expect(settle(controller, controller.process(0, 1, admission))).toBeUndefined();
     expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+    const evictionKeys: string[] = [];
+    expect(controller.collectUnrequestedGpuResidencyKeys(new Set(), evictionKeys))
+      .toEqual([textureCacheKey(texture)]);
+    expect(controller.collectUnrequestedGpuResidencyKeys(
+      new Set([textureCacheKey(texture)]),
+      evictionKeys,
+    )).toEqual([]);
 
     const first = controller.suppressGpuResidency(textureCacheKey(texture));
     expect(first).toMatchObject({ capacityReleased: true, operationFailure: undefined });

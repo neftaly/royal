@@ -42,6 +42,15 @@ describe("frame texture residency intent", () => {
     expect(intent.finishFrame(true)).toEqual(["virtual-only"]);
   });
 
+  it("exposes only the active frame's ordinary demand", () => {
+    const intent = new FrameTextureResidencyIntent();
+    intent.beginFrame();
+    intent.requireOrdinary("visible");
+    expect([...intent.ordinaryRequiredKeys()]).toEqual(["visible"]);
+    intent.finishFrame(true);
+    expect(intent.ordinaryRequiredKeys().size).toBe(0);
+  });
+
   it("reuses frame-owned suppression storage", () => {
     const intent = new FrameTextureResidencyIntent();
     intent.beginFrame();

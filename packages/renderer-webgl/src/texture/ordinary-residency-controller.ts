@@ -20,6 +20,7 @@ import {
 import type { LoadedTextureSource } from "./sources";
 import {
   clearOrdinaryTextureGpuOutcomes,
+  consumeOrdinaryTextureGpuCapacityBlocked,
   consumeOrdinaryTextureGpuWake,
   createOrdinaryTextureGpuArena,
   discardOrdinaryTexturePendingUpload,
@@ -206,6 +207,26 @@ export class OrdinaryTextureResidencyController {
   /** Decoded ordinary texture bytes that have not reached GPU residency yet. */
   pendingUploadBytes(): number {
     return ordinaryTextureGpuPendingUploadBytes(this.#gpu);
+  }
+
+  consumeGpuCapacityBlocked(): boolean {
+    return consumeOrdinaryTextureGpuCapacityBlocked(this.#gpu);
+  }
+
+  collectUnrequestedGpuResidencyKeys(
+    required: ReadonlySet<string>,
+    output: string[],
+  ): readonly string[] {
+    output.length = 0;
+    for (const key of this.#rows.keys()) {
+      if (
+        required.has(key)
+        || resourceArenaPreparedSource(this.#options.resourceArena, key) === undefined
+        || ordinaryTextureGpuResource(this.#gpu, key)?.uploaded !== true
+      ) continue;
+      output.push(key);
+    }
+    return output;
   }
 
   dropContext(): OrdinaryTextureResidencyGpuReport {

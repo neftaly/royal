@@ -3,6 +3,7 @@ import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture
 import type { TextureAssetUploadRef } from "../packages/renderer-webgl/src/webgl/materials";
 import {
   clearOrdinaryTextureGpuOutcomes,
+  consumeOrdinaryTextureGpuCapacityBlocked,
   consumeOrdinaryTextureGpuWake,
   createOrdinaryTextureGpuArena,
   discardOrdinaryTexturePendingUpload,
@@ -433,6 +434,8 @@ describe("ordinary texture GPU arena", () => {
       consumeOrdinaryTextureGpuWake(arena),
       "durable-capacity denial remains quiescent until the owner publishes released capacity",
     ).toBe(false);
+    expect(consumeOrdinaryTextureGpuCapacityBlocked(arena)).toBe(true);
+    expect(consumeOrdinaryTextureGpuCapacityBlocked(arena)).toBe(false);
   });
   it("spends upload admission and releases its failed unpublished allocation", () => {
     const { arena, gl, handles } = setup();
