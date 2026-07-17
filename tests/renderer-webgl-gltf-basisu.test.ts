@@ -158,7 +158,7 @@ describe("glTF BasisU RGBA normalization", () => {
     expect(parseMock).not.toHaveBeenCalled();
   });
 
-  it("adds one burst lane and terminates it when concurrent work drains", async () => {
+  it("reuses one burst lane across scheduler waves, then retires it when idle", async () => {
     type Request = Readonly<{ id: number; target: string }>;
     class MockWorker {
       static readonly instances: MockWorker[] = [];
@@ -189,6 +189,7 @@ describe("glTF BasisU RGBA normalization", () => {
       }
     }
 
+    vi.useFakeTimers();
     vi.stubGlobal("Worker", MockWorker);
     const lease = retainGltfBasisuWorker();
     try {
@@ -201,12 +202,24 @@ describe("glTF BasisU RGBA normalization", () => {
       MockWorker.instances[0]!.respond(1);
       MockWorker.instances[1]!.respond(2);
       await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+      expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([false, false]);
+
+      const third = decodeGltfBasisuTexture(ktx2Header(1, 1), "third.ktx2");
+      const fourth = decodeGltfBasisuTexture(ktx2Header(1, 1), "fourth.ktx2");
+      await Promise.resolve();
+      expect(MockWorker.instances).toHaveLength(2);
+      MockWorker.instances[0]!.respond(3);
+      MockWorker.instances[1]!.respond(4);
+      await expect(Promise.all([third, fourth])).resolves.toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(100);
       expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([false, true]);
     } finally {
       lease.release();
       await Promise.resolve();
       await Promise.resolve();
       vi.unstubAllGlobals();
+      vi.useRealTimers();
     }
     expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([true, true]);
   });

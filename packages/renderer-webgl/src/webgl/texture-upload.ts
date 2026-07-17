@@ -65,15 +65,21 @@ export const uploadTexture = (
     const levelCount = mipmapped ? levels.length : Math.min(1, levels.length);
     mipmapLevelsReady = mipmapped;
     const format = texture.colorSpace === "srgb" ? source.srgbFormat : source.format;
+    const base = levels[0]!;
+    // WebGL2 immutable storage separates driver allocation from payload
+    // transfer. In particular, this avoids compressedTexImage2D repeatedly
+    // forcing synchronous allocation/validation on large streaming scenes.
+    gl.texStorage2D(gl.TEXTURE_2D, levelCount, format, base.width, base.height);
     for (let levelIndex = 0; levelIndex < levelCount; levelIndex += 1) {
       const level = levels[levelIndex]!;
-      gl.compressedTexImage2D(
+      gl.compressedTexSubImage2D(
         gl.TEXTURE_2D,
         levelIndex,
-        format,
+        0,
+        0,
         level.width,
         level.height,
-        0,
+        format,
         level.data,
       );
     }

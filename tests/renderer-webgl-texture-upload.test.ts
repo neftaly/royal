@@ -48,7 +48,7 @@ class FakeGl {
 
   activeTexture = (...args: readonly unknown[]): void => this.#record("activeTexture", ...args);
   bindTexture = (...args: readonly unknown[]): void => this.#record("bindTexture", ...args);
-  compressedTexImage2D = (...args: readonly unknown[]): void => this.#record("compressedTexImage2D", ...args);
+  compressedTexSubImage2D = (...args: readonly unknown[]): void => this.#record("compressedTexSubImage2D", ...args);
   generateMipmap = (...args: readonly unknown[]): void => this.#record("generateMipmap", ...args);
   pixelStorei = (...args: readonly unknown[]): void => this.#record("pixelStorei", ...args);
   texImage2D = (...args: readonly unknown[]): void => {
@@ -56,6 +56,7 @@ class FakeGl {
     if (this.failTexImage) throw new Error("texImage failure");
   };
   texParameteri = (...args: readonly unknown[]): void => this.#record("texParameteri", ...args);
+  texStorage2D = (...args: readonly unknown[]): void => this.#record("texStorage2D", ...args);
 }
 
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
@@ -166,10 +167,13 @@ describe("texture upload kernel", () => {
       src: "compressed.ktx2",
     }));
 
-    expect(gl.calls.filter(({ name }) => name === "compressedTexImage2D").map(({ args }) => args)).toEqual([
-      [gl.TEXTURE_2D, 0, 0x9279, 4, 4, 0, levels[0]!.data],
-      [gl.TEXTURE_2D, 1, 0x9279, 2, 2, 0, levels[1]!.data],
-      [gl.TEXTURE_2D, 2, 0x9279, 1, 1, 0, levels[2]!.data],
+    expect(gl.calls.find(({ name }) => name === "texStorage2D")?.args).toEqual([
+      gl.TEXTURE_2D, 3, 0x9279, 4, 4,
+    ]);
+    expect(gl.calls.filter(({ name }) => name === "compressedTexSubImage2D").map(({ args }) => args)).toEqual([
+      [gl.TEXTURE_2D, 0, 0, 0, 4, 4, 0x9279, levels[0]!.data],
+      [gl.TEXTURE_2D, 1, 0, 0, 2, 2, 0x9279, levels[1]!.data],
+      [gl.TEXTURE_2D, 2, 0, 0, 1, 1, 0x9279, levels[2]!.data],
     ]);
     expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
   });
@@ -188,7 +192,10 @@ describe("texture upload kernel", () => {
       srgbFormat: 0x9279,
     }, texture({ sampler: { minFilter: "linear-mipmap-linear" }, src: "partial.ktx2" }));
 
-    expect(gl.calls.filter(({ name }) => name === "compressedTexImage2D")).toHaveLength(2);
+    expect(gl.calls.find(({ name }) => name === "texStorage2D")?.args).toEqual([
+      gl.TEXTURE_2D, 2, 0x9278, 8, 8,
+    ]);
+    expect(gl.calls.filter(({ name }) => name === "compressedTexSubImage2D")).toHaveLength(2);
     expect(gl.calls.find(({ name, args }) => name === "texParameteri" && args[1] === gl.TEXTURE_MAX_LEVEL))
       .toEqual({ args: [gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 1], name: "texParameteri" });
     expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);

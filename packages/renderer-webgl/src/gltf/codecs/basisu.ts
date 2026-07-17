@@ -144,9 +144,14 @@ let basisuWorkerPool: BasisuWorkerPool | undefined;
 class BasisuWorkerDisposedError extends Error {}
 
 const BASISU_WORKER_LANES = 2;
+// The glTF scheduler refills decode lanes on a later task. A short grace keeps
+// that sustained wave on its warm worker without retaining the burst heap once
+// the scene is actually idle.
+const BASISU_BURST_LANE_IDLE_MS = 100;
 
 class BasisuWorkerPool {
   readonly #owners: BasisuWorkerOwner[] = [];
+  readonly #retirements = new Map<BasisuWorkerOwner, ReturnType<typeof setTimeout>>();
 
   parse(bytes: ArrayBuffer, target: BasisuDecodeTarget): Promise<unknown> {
     let owner = this.#owners[0];
@@ -163,23 +168,42 @@ class BasisuWorkerPool {
         this.#owners.push(owner);
       }
     }
+    this.#cancelRetirement(owner);
     return owner.parse(bytes, target);
   }
 
   dispose(): void {
+    for (const timeout of this.#retirements.values()) clearTimeout(timeout);
+    this.#retirements.clear();
     for (const owner of this.#owners) owner.dispose();
     this.#owners.length = 0;
   }
 
   #createOwner(): BasisuWorkerOwner {
-    return new BasisuWorkerOwner((owner) => {
-      const index = this.#owners.indexOf(owner);
-      // Retain one warm lane; burst-only lanes release their WASM high-water
-      // memory as soon as their assigned queue drains.
-      if (index <= 0) return;
-      this.#owners.splice(index, 1);
+    return new BasisuWorkerOwner((owner) => this.#scheduleRetirement(owner));
+  }
+
+  #cancelRetirement(owner: BasisuWorkerOwner): void {
+    const timeout = this.#retirements.get(owner);
+    if (timeout === undefined) return;
+    clearTimeout(timeout);
+    this.#retirements.delete(owner);
+  }
+
+  #scheduleRetirement(owner: BasisuWorkerOwner): void {
+    const index = this.#owners.indexOf(owner);
+    // Retain one warm lane. Additional lanes get a cancellable grace so a
+    // scheduler refill does not repeatedly initialize the Basis WASM heap.
+    if (index <= 0 || this.#retirements.has(owner)) return;
+    const timeout = setTimeout(() => {
+      this.#retirements.delete(owner);
+      if (owner.queued !== 0) return;
+      const currentIndex = this.#owners.indexOf(owner);
+      if (currentIndex <= 0) return;
+      this.#owners.splice(currentIndex, 1);
       owner.dispose();
-    });
+    }, BASISU_BURST_LANE_IDLE_MS);
+    this.#retirements.set(owner, timeout);
   }
 }
 
