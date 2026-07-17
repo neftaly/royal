@@ -10,7 +10,6 @@ import {
   type OrbitCameraViewOptions,
   type PerspectiveCameraViewResource,
   type Rads,
-  type WorldPosition3,
 } from "@royal/renderer-core";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { recordWithAllowedFields } from "../validation";
@@ -78,15 +77,8 @@ export const validateUseOrbitCameraOptions = (options: UseOrbitCameraOptions): v
   }
 };
 
-const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
-  const view = resolveOrbitCameraView(input);
-  return Object.freeze({
-    distance: view.distance,
-    pitch: view.pitch,
-    target: Object.freeze([view.target[0], view.target[1], view.target[2]]) as WorldPosition3,
-    yaw: view.yaw,
-  });
-};
+const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView =>
+  resolveOrbitCameraView(input);
 
 const validOrbitCameraProjection = (input: unknown): OrbitCameraProjection => {
   const { far, fovY, near } = recordWithAllowedFields(

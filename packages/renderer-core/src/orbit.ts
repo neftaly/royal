@@ -103,28 +103,34 @@ const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void
   }
 };
 
-export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => {
+const resolveOrbitCameraViewWithConstraints = (
+  view: OrbitCameraViewOptions,
+  constraints?: OrbitCameraViewConstraints,
+): OrbitCameraView => {
   objectWithAllowedFields(view, ORBIT_VIEW_FIELDS, 'orbit view');
+  const distance = positiveFiniteNumber(view.distance, 'orbit distance');
+  const pitch = finiteNumber(view.pitch ?? 0, 'orbit pitch');
   return Object.freeze({
-    distance: positiveFiniteNumber(view.distance, 'orbit distance'),
-    pitch: finiteNumber(view.pitch ?? 0, 'orbit pitch'),
+    distance: constraints === undefined
+      ? distance
+      : clamp(distance, constraints.minDistance, constraints.maxDistance),
+    pitch: constraints === undefined
+      ? pitch
+      : clamp(pitch, constraints.minPitch, constraints.maxPitch),
     target: orbitTarget(view.target),
     yaw: finiteNumber(view.yaw ?? 0, 'orbit yaw')
   });
 };
+
+export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView =>
+  resolveOrbitCameraViewWithConstraints(view);
 
 export const clampOrbitCameraView = (
   view: OrbitCameraViewOptions,
   constraints: OrbitCameraViewConstraints = {}
 ): OrbitCameraView => {
   validateOrbitConstraints(constraints);
-  const resolvedView = resolveOrbitCameraView(view);
-
-  return Object.freeze({
-    ...resolvedView,
-    distance: clamp(resolvedView.distance, constraints.minDistance, constraints.maxDistance),
-    pitch: clamp(resolvedView.pitch, constraints.minPitch, constraints.maxPitch)
-  });
+  return resolveOrbitCameraViewWithConstraints(view, constraints);
 };
 
 /** Conservatively fits an orbit view to bounds in the same coordinate space as the returned target. */
@@ -201,10 +207,11 @@ export const rotateOrbitCameraView = (
   finiteNumber(deltaY, 'orbit rotation deltaY');
   finiteNumber(rotateSpeed, 'orbit rotateSpeed');
 
-  return resolveOrbitCameraView({
-    ...resolvedView,
-    pitch: resolvedView.pitch + deltaY * rotateSpeed,
-    yaw: resolvedView.yaw + deltaX * rotateSpeed
+  return Object.freeze({
+    distance: resolvedView.distance,
+    pitch: finiteNumber(resolvedView.pitch + deltaY * rotateSpeed, 'orbit pitch'),
+    target: resolvedView.target,
+    yaw: finiteNumber(resolvedView.yaw + deltaX * rotateSpeed, 'orbit yaw'),
   });
 };
 
@@ -218,9 +225,14 @@ export const zoomOrbitCameraView = (
   finiteNumber(deltaPixels, 'orbit zoom deltaPixels');
   finiteNumber(zoomSpeed, 'orbit zoomSpeed');
 
-  return resolveOrbitCameraView({
-    ...resolvedView,
-    distance: resolvedView.distance * Math.exp(deltaPixels * zoomSpeed)
+  return Object.freeze({
+    distance: positiveFiniteNumber(
+      resolvedView.distance * Math.exp(deltaPixels * zoomSpeed),
+      'orbit distance',
+    ),
+    pitch: resolvedView.pitch,
+    target: resolvedView.target,
+    yaw: resolvedView.yaw,
   });
 };
 
@@ -237,16 +249,21 @@ export const panOrbitCameraView = (
   finiteNumber(deltaX, 'orbit pan deltaX');
   finiteNumber(deltaY, 'orbit pan deltaY');
   finiteNumber(panSpeed, 'orbit panSpeed');
-  const { right, up } = orbitCameraBasis(resolvedView);
+  const cy = Math.cos(resolvedView.yaw);
+  const sy = Math.sin(resolvedView.yaw);
+  const cx = Math.cos(resolvedView.pitch);
+  const sx = Math.sin(resolvedView.pitch);
   const scale = resolvedView.distance * panSpeed;
 
-  return resolveOrbitCameraView({
-    ...resolvedView,
-    target: [
-      resolvedView.target[0] - right[0] * deltaX * scale + up[0] * deltaY * scale,
-      resolvedView.target[1] - right[1] * deltaX * scale + up[1] * deltaY * scale,
-      resolvedView.target[2] - right[2] * deltaX * scale + up[2] * deltaY * scale
-    ]
+  return Object.freeze({
+    distance: resolvedView.distance,
+    pitch: resolvedView.pitch,
+    target: frozenVec3([
+      resolvedView.target[0] - cy * deltaX * scale + sx * sy * deltaY * scale,
+      resolvedView.target[1] + cx * deltaY * scale,
+      resolvedView.target[2] - sy * deltaX * scale - sx * cy * deltaY * scale,
+    ], 'orbit target') as WorldPosition3,
+    yaw: resolvedView.yaw,
   });
 };
 

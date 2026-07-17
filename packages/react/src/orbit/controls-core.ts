@@ -72,7 +72,8 @@ type Interaction =
 const DEFAULT_PAN_SPEED = 0.0016;
 const DEFAULT_ROTATE_SPEED = 0.006;
 const DEFAULT_ZOOM_SPEED = 0.0018;
-const ignored = (): OrbitGestureDecision => ({ preventDefault: false });
+const IGNORED_DECISION: OrbitGestureDecision = Object.freeze({ preventDefault: false });
+const PREVENTED_DECISION: OrbitGestureDecision = Object.freeze({ preventDefault: true });
 
 const constraintsFromBehavior = (
   behavior: OrbitGestureBehavior,
@@ -94,6 +95,23 @@ const sameView = (left: OrbitCameraView, right: OrbitCameraView): boolean =>
   && left.target[1] === right.target[1]
   && left.target[2] === right.target[2];
 
+/** Applies already-validated behavior constraints to an already-resolved core result. */
+const clampResolvedView = (
+  view: OrbitCameraView,
+  constraints: OrbitCameraViewConstraints,
+): OrbitCameraView => {
+  const distance = Math.min(
+    constraints.maxDistance ?? Infinity,
+    Math.max(constraints.minDistance ?? -Infinity, view.distance),
+  );
+  const pitch = Math.min(
+    constraints.maxPitch ?? Infinity,
+    Math.max(constraints.minPitch ?? -Infinity, view.pitch),
+  );
+  if (distance === view.distance && pitch === view.pitch) return view;
+  return Object.freeze({ ...view, distance, pitch });
+};
+
 /** Environment-free orbit gesture state; DOM ownership belongs to the caller. */
 export const createOrbitGestureController = (
   initialView: OrbitCameraViewOptions,
@@ -103,14 +121,17 @@ export const createOrbitGestureController = (
   let constraints = constraintsFromBehavior(behavior);
   let interaction: Interaction | undefined;
   const pointers = new Map<number, PointerContact>();
-  const clampView = (next: OrbitCameraView): OrbitCameraView => clampOrbitCameraView(next, constraints);
-  let view = clampView(resolveOrbitCameraView(initialView));
-  const apply = (next: OrbitCameraViewOptions, clamp: boolean, emit: boolean): void => {
-    const resolved = resolveOrbitCameraView(next);
-    const result = clamp ? clampView(resolved) : resolved;
+  let view = clampOrbitCameraView(initialView, constraints);
+  const commit = (result: OrbitCameraView, emit: boolean): void => {
     if (sameView(view, result)) return;
     view = result;
     if (emit) behavior.onChange?.(view);
+  };
+  const apply = (next: OrbitCameraViewOptions, clamp: boolean, emit: boolean): void => {
+    commit(clamp ? clampOrbitCameraView(next, constraints) : resolveOrbitCameraView(next), emit);
+  };
+  const applyResolved = (next: OrbitCameraView): void => {
+    commit(clampResolvedView(next, constraints), true);
   };
   const cancel = (): readonly number[] => {
     const active = [...pointers.keys()];
@@ -135,12 +156,16 @@ export const createOrbitGestureController = (
     contextMenu: () => behavior.enabled !== false && behavior.enablePan !== false,
     getView: () => view,
     pointerDown: (pointer) => {
-      if (behavior.enabled === false || ![0, 1, 2].includes(pointer.button) || pointers.size >= 2) return ignored();
+      if (
+        behavior.enabled === false
+        || ![0, 1, 2].includes(pointer.button)
+        || pointers.size >= 2
+      ) return IGNORED_DECISION;
       pointers.set(pointer.pointerId, pointer);
       if (pointers.size >= 2) {
         if (startPinch()) return { capture: pointer.pointerId, preventDefault: true };
         pointers.delete(pointer.pointerId);
-        return ignored();
+        return IGNORED_DECISION;
       }
       const mode = pointer.button === 0 && !pointer.modified ? "orbit" : "pan";
       if (
@@ -148,7 +173,7 @@ export const createOrbitGestureController = (
         || (mode === "pan" && behavior.enablePan === false)
       ) {
         pointers.delete(pointer.pointerId);
-        return ignored();
+        return IGNORED_DECISION;
       }
       interaction = {
         kind: "drag",
@@ -161,51 +186,49 @@ export const createOrbitGestureController = (
       return { capture: pointer.pointerId, preventDefault: true };
     },
     pointerEnd: (pointerId) => {
-      if (!pointers.has(pointerId)) return ignored();
+      if (!pointers.has(pointerId)) return IGNORED_DECISION;
       pointers.delete(pointerId);
       if (interaction?.kind === "pinch" && interaction.pointerIds.includes(pointerId)) interaction = undefined;
       if (interaction?.kind === "drag" && interaction.pointerId === pointerId) interaction = undefined;
       return { preventDefault: false, release: pointerId };
     },
     pointerMove: (pointer) => {
-      if (!pointers.has(pointer.pointerId) || behavior.enabled === false) return ignored();
+      if (!pointers.has(pointer.pointerId) || behavior.enabled === false) return IGNORED_DECISION;
       pointers.set(pointer.pointerId, pointer);
       if (interaction?.kind === "pinch") {
-        if (behavior.enableZoom === false) return { preventDefault: true };
+        if (behavior.enableZoom === false) return PREVENTED_DECISION;
         const first = pointers.get(interaction.pointerIds[0]);
         const second = pointers.get(interaction.pointerIds[1]);
         if (first !== undefined && second !== undefined) {
-          apply(
+          applyResolved(
             zoomOrbitCameraView(
               interaction.startView,
               interaction.startDistance - pointerDistance(first, second),
               behavior.zoomSpeed ?? DEFAULT_ZOOM_SPEED,
             ),
-            true,
-            true,
           );
         }
       } else if (interaction?.kind === "drag" && interaction.pointerId === pointer.pointerId) {
         const deltaX = pointer.clientX - interaction.startX;
         const deltaY = pointer.clientY - interaction.startY;
         if (interaction.mode === "orbit" && behavior.enableRotate !== false) {
-          apply(rotateOrbitCameraView(
+          applyResolved(rotateOrbitCameraView(
             interaction.startView,
             deltaX,
             deltaY,
             behavior.rotateSpeed ?? DEFAULT_ROTATE_SPEED,
-          ), true, true);
+          ));
         }
         if (interaction.mode === "pan" && behavior.enablePan !== false) {
-          apply(panOrbitCameraView(
+          applyResolved(panOrbitCameraView(
             interaction.startView,
             deltaX,
             deltaY,
             behavior.panSpeed ?? DEFAULT_PAN_SPEED,
-          ), true, true);
+          ));
         }
       }
-      return { preventDefault: true };
+      return PREVENTED_DECISION;
     },
     setBehavior: (next) => {
       behavior = next;
@@ -215,13 +238,13 @@ export const createOrbitGestureController = (
         || (interaction?.kind === "drag" && interaction.mode === "orbit" && behavior.enableRotate === false)
         || (interaction?.kind === "drag" && interaction.mode === "pan" && behavior.enablePan === false);
       const released = disabled ? cancel() : [];
-      apply(view, true, true);
+      commit(clampOrbitCameraView(view, constraints), true);
       return released;
     },
     setView: apply,
     wheel: (deltaPixels) => {
       if (behavior.enabled === false || behavior.enableZoom === false) return false;
-      apply(zoomOrbitCameraView(view, deltaPixels, behavior.zoomSpeed ?? DEFAULT_ZOOM_SPEED), true, true);
+      applyResolved(zoomOrbitCameraView(view, deltaPixels, behavior.zoomSpeed ?? DEFAULT_ZOOM_SPEED));
       return true;
     },
   };
