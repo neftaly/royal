@@ -76,16 +76,24 @@ const copyGltfInstanceSignature = (
   return next;
 };
 
-const sameRootSnapshot = (
+const sameRootBasisSnapshot = (
   snapshots: Float32Array,
   offset: number,
   root: Mat4,
 ): boolean => {
-  for (let component = 0; component < 16; component += 1) {
+  for (let component = 0; component < 12; component += 1) {
     if (!Object.is(snapshots[offset + component], Math.fround(root[component]!))) return false;
   }
-  return true;
+  return Object.is(snapshots[offset + 15], Math.fround(root[15]));
 };
+
+const sameRootTranslationSnapshot = (
+  snapshots: Float32Array,
+  offset: number,
+  root: Mat4,
+): boolean => Object.is(snapshots[offset + 12], Math.fround(root[12]))
+  && Object.is(snapshots[offset + 13], Math.fround(root[13]))
+  && Object.is(snapshots[offset + 14], Math.fround(root[14]));
 
 const copyRootSnapshot = (
   snapshots: Float32Array,
@@ -95,6 +103,22 @@ const copyRootSnapshot = (
   for (let component = 0; component < 16; component += 1) {
     snapshots[offset + component] = root[component]!;
   }
+};
+
+const writeProductTranslation = (
+  output: Float32Array,
+  offset: number,
+  root: Mat4,
+  local: Mat4,
+): void => {
+  const x = local[12];
+  const y = local[13];
+  const z = local[14];
+  const w = local[15];
+  output[offset + 12] = x * root[0] + y * root[4] + z * root[8] + w * root[12];
+  output[offset + 13] = x * root[1] + y * root[5] + z * root[9] + w * root[13];
+  output[offset + 14] = x * root[2] + y * root[6] + z * root[10] + w * root[14];
+  output[offset + 15] = x * root[3] + y * root[7] + z * root[11] + w * root[15];
 };
 
 const recordModelUpload = (
@@ -276,7 +300,11 @@ export const bindGltfInstanceBuffer = (
       ));
     const rootOffset = modelIndex * 16;
     const root = rootModels[modelIndex]!;
-    const rootChanged = fullUpload || !sameRootSnapshot(resource.rootSnapshots, rootOffset, root);
+    const rootBasisChanged = fullUpload
+      || !sameRootBasisSnapshot(resource.rootSnapshots, rootOffset, root);
+    const rootTranslationChanged = fullUpload
+      || !sameRootTranslationSnapshot(resource.rootSnapshots, rootOffset, root);
+    const rootChanged = rootBasisChanged || rootTranslationChanged;
     if (!localChanged && !rootChanged) {
       if (rangeStart >= 0) {
         staging.ranges[rangeCount * 2] = rangeStart;
@@ -287,8 +315,13 @@ export const bindGltfInstanceBuffer = (
       continue;
     }
     copyRootSnapshot(resource.rootSnapshots, rootOffset, root);
-    multiplyMat4Into(state.modelWorkspace, root, localModels[modelIndex]!);
-    staging.models.set(state.modelWorkspace, rootOffset);
+    const local = localModels[modelIndex]!;
+    if (localChanged || rootBasisChanged) {
+      multiplyMat4Into(state.modelWorkspace, root, local);
+      staging.models.set(state.modelWorkspace, rootOffset);
+    } else {
+      writeProductTranslation(staging.models, rootOffset, root, local);
+    }
     if (rangeStart < 0) rangeStart = modelIndex;
   }
   if (rangeStart >= 0) {

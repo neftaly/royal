@@ -13,6 +13,7 @@ import {
   scaleMat4,
   translationMat4,
   type Mat4,
+  type MutableMat4,
 } from "../packages/renderer-webgl/src/math/mat4";
 import {
   createVertexInputArena,
@@ -183,6 +184,36 @@ describe("glTF instance-buffer arena", () => {
     expect(gl.uploads.at(-1)?.byteOffset).toBe(64);
     expect(gl.uploads.at(-1)?.values).toHaveLength(32);
     expect(sink).toEqual({ modelUploadBytes: 384, modelUploadCalls: 3 });
+    clearGltfInstanceBufferArena(arena);
+    disposeVertexInputArena(vertexInputs, context(gl), 1);
+  });
+
+  it("preserves exact root-times-local output when only root translation changes", () => {
+    const gl = new FakeGl();
+    const vertexInputs = createVertexInputArena();
+    const arena = createGltfInstanceBufferArena(vertexInputs);
+    const sink = counters();
+    const root = scaleMat4([2, 3, 4]) as MutableMat4;
+    const local = translationMat4([1, 2, 3]);
+    beginGltfInstanceBufferArenaFrame(arena);
+    bindValues(arena, gl, sink, {
+      localModels: [local],
+      localSignature: [1],
+      rootModels: [root],
+    });
+    root[12] = 5;
+    root[13] = 6;
+    root[14] = 7;
+    bindValues(arena, gl, sink, {
+      localModels: [local],
+      localSignature: [1],
+      localSignatureDirty: false,
+      rootModels: [root],
+    });
+    expect(gl.uploads.at(-1)).toEqual({
+      byteOffset: 0,
+      values: [...multiplyMat4(root, local)],
+    });
     clearGltfInstanceBufferArena(arena);
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
