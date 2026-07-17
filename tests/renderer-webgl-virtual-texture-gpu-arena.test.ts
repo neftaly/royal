@@ -35,6 +35,10 @@ import {
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
   virtualTextureGpuResource,
+  virtualTextureGpuResourceAllocated,
+  virtualTextureGpuResourceEffectiveSlots,
+  virtualTextureGpuResourceOccupiedSlots,
+  virtualTextureGpuResourcePendingUploads,
   virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
   type VirtualTextureGpuPendingUpload,
@@ -733,6 +737,10 @@ describe("virtual texture GPU arena", () => {
       occupiedSlots: 3,
       pendingUploads: 1,
     });
+    expect(virtualTextureGpuResourceAllocated(resource)).toBe(snapshot.allocated);
+    expect(virtualTextureGpuResourceEffectiveSlots(resource)).toBe(snapshot.effectiveSlots);
+    expect(virtualTextureGpuResourceOccupiedSlots(resource)).toBe(snapshot.occupiedSlots);
+    expect(virtualTextureGpuResourcePendingUploads(resource)).toBe(snapshot.pendingUploads);
     expect(virtualTextureGpuCachedResidency(arena, "a", replacement.page)).toBeUndefined();
     expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploadsBefore);
 

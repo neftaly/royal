@@ -48,7 +48,9 @@ import {
   queueVirtualTextureGpuUpload,
   virtualTextureGpuCachedResidency,
   virtualTextureGpuResource,
-  virtualTextureGpuResourceSnapshot,
+  virtualTextureGpuResourceAllocated,
+  virtualTextureGpuResourceEffectiveSlots,
+  virtualTextureGpuResourcePendingUploads,
   type VirtualTextureGpuArena,
 } from "./gpu-arena";
 
@@ -352,18 +354,23 @@ export class VirtualTextureRequestCoordinator {
       const requestState = this.#requestState(state);
       this.#purgeObsolete(state, requestState);
       const resource = virtualTextureGpuResource(this.#options.gpu, state.key);
-      const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
       let snapshot = this.#resourcePool[resourceIndex];
       if (snapshot === undefined) {
         snapshot = emptyResourceSnapshot();
         this.#resourcePool.push(snapshot);
       }
-      snapshot.allocated = gpu?.allocated ?? false;
-      snapshot.effectiveSlots = gpu?.effectiveSlots ?? 0;
+      snapshot.allocated = resource === undefined
+        ? false
+        : virtualTextureGpuResourceAllocated(resource);
+      snapshot.effectiveSlots = resource === undefined
+        ? 0
+        : virtualTextureGpuResourceEffectiveSlots(resource);
       snapshot.enabled = state.status === "ready" && state.desiredPages.length > 0;
       snapshot.key = state.key;
       snapshot.loadingPages = this.snapshot(state).loadingPages;
-      snapshot.pendingUploads = gpu?.pendingUploads ?? 0;
+      snapshot.pendingUploads = resource === undefined
+        ? 0
+        : virtualTextureGpuResourcePendingUploads(resource);
       for (let pageIndex = 0; pageIndex < state.desiredPages.length; pageIndex += 1) {
         const page = state.desiredPages[pageIndex]!;
         const pageKey = virtualTexturePageKey(page);

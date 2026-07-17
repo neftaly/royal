@@ -24,7 +24,7 @@ import {
   virtualTextureGpuAdmission,
   virtualTextureGpuArenaSnapshot,
   virtualTextureGpuResource,
-  virtualTextureGpuResourceSnapshot,
+  virtualTextureGpuResourceAllocated,
   type VirtualTextureGpuArena,
 } from "./gpu-arena";
 
@@ -270,7 +270,7 @@ export class VirtualTextureGpuAdmissionOwner {
       const resource = virtualTextureGpuResource(this.#options.gpu, candidate.key);
       return {
         admissionTicket: candidate.admissionTicket,
-        allocated: resource !== undefined && virtualTextureGpuResourceSnapshot(resource).allocated,
+        allocated: resource !== undefined && virtualTextureGpuResourceAllocated(resource),
         demanded: demandedStates.has(candidate),
         lastDemandFrame: candidate.lastDemandFrame,
         state: candidate,

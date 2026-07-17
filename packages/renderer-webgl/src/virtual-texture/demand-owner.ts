@@ -43,7 +43,8 @@ import {
   virtualTextureGpuDrawable,
   virtualTextureGpuExactResidency,
   virtualTextureGpuResource,
-  virtualTextureGpuResourceSnapshot,
+  virtualTextureGpuResourceEffectiveSlots,
+  virtualTextureGpuResourceOccupiedSlots,
   type VirtualTextureGpuArena,
 } from "./gpu-arena";
 
@@ -415,8 +416,7 @@ export class VirtualTextureDemandOwner {
   #demandCapacity(state: VirtualTextureRuntimeState): number {
     if (state.manifest === undefined) return 0;
     const resource = virtualTextureGpuResource(this.#options.gpu, state.key);
-    const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-    return gpu?.allocated === true ? gpu.effectiveSlots : 0;
+    return resource === undefined ? 0 : virtualTextureGpuResourceEffectiveSlots(resource);
   }
 
   #frameDemandCapacity(state: VirtualTextureRuntimeState): number {
@@ -437,12 +437,11 @@ export class VirtualTextureDemandOwner {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return undefined;
     const resource = virtualTextureGpuResource(this.#options.gpu, state.key);
-    const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
     const stabilized = stabilizeVirtualTextureDesiredPagesInto(
       workingCandidates,
       state.desiredPages,
       state.desiredPageKeys,
-      gpu?.occupiedSlots ?? 0,
+      resource === undefined ? 0 : virtualTextureGpuResourceOccupiedSlots(resource),
       (page) => virtualTextureGpuCachedResidency(this.#options.gpu, state.key, page) !== undefined,
       this.#demandCapacity(state),
       state.desiredPagesScratch,

@@ -1313,6 +1313,33 @@ export const virtualTextureGpuDrawable = (arena: VirtualTextureGpuArena, key: st
   return allocation !== undefined && (stateOf(arena).resources.get(key)?.visibleAssignments.size ?? 0) > 0;
 };
 
+/** Allocation-free planning query for hot demand and admission paths. */
+export const virtualTextureGpuResourceAllocated = (
+  resource: VirtualTextureGpuResource,
+): boolean => mutableResource(resource).allocation !== undefined;
+
+/** Usable atlas capacity, or zero until the physical allocation exists. */
+export const virtualTextureGpuResourceEffectiveSlots = (
+  resource: VirtualTextureGpuResource,
+): number => {
+  const mutable = mutableResource(resource);
+  if (mutable.allocation === undefined || mutable.admission.kind !== "supported") return 0;
+  return mutable.admission.effectiveSlots;
+};
+
+/** Slots claimed by cached pages or an in-flight upload. */
+export const virtualTextureGpuResourceOccupiedSlots = (
+  resource: VirtualTextureGpuResource,
+): number => mutableResource(resource).allocation?.pageTable.residentCount ?? 0;
+
+/** Uploads not yet fully published to the page table. */
+export const virtualTextureGpuResourcePendingUploads = (
+  resource: VirtualTextureGpuResource,
+): number => {
+  const mutable = mutableResource(resource);
+  return mutable.pendingUploads.length - mutable.pendingHead;
+};
+
 export const bindVirtualTextureGpuResource = (
   arena: VirtualTextureGpuArena,
   key: string,
