@@ -39,7 +39,9 @@ import {
   virtualTextureStoredPageBytes,
   virtualTextureStoredPageSize,
   virtualTexturePageKey,
+  virtualTexturePageLabel,
   type VirtualTexturePageId,
+  type VirtualTexturePageKey,
 } from "./model";
 import {
   consumeVirtualTextureGpuWake,
@@ -59,9 +61,9 @@ type MutableResourceSnapshot = Omit<{
 }, "pages"> & { pages: MutablePageSnapshot[] };
 
 type ResourceRequestState = {
-  readonly abortControllers: Map<string, AbortController>;
-  readonly lifecycles: Map<string, VirtualTexturePageLifecycle>;
-  readonly retryTimers: Map<string, ReturnType<typeof setTimeout>>;
+  readonly abortControllers: Map<VirtualTexturePageKey, AbortController>;
+  readonly lifecycles: Map<VirtualTexturePageKey, VirtualTexturePageLifecycle>;
+  readonly retryTimers: Map<VirtualTexturePageKey, ReturnType<typeof setTimeout>>;
 };
 
 export type VirtualTextureRequestStateSnapshot = {
@@ -156,11 +158,11 @@ export class VirtualTextureRequestCoordinator {
     this.#now = options.now ?? monotonicNowMs;
   }
 
-  canBecomeResident(state: VirtualTextureRuntimeState, pageKey: string): boolean {
+  canBecomeResident(state: VirtualTextureRuntimeState, pageKey: VirtualTexturePageKey): boolean {
     return virtualTexturePageLifecycleCanBecomeResident(this.#states.get(state)?.lifecycles.get(pageKey));
   }
 
-  reconcileDemand(state: VirtualTextureRuntimeState, previousPageKeys: ReadonlySet<string>): void {
+  reconcileDemand(state: VirtualTextureRuntimeState, previousPageKeys: ReadonlySet<VirtualTexturePageKey>): void {
     const requestState = this.#states.get(state);
     if (requestState === undefined) return;
     for (const pageKey of previousPageKeys) {
@@ -211,7 +213,7 @@ export class VirtualTextureRequestCoordinator {
     }
   }
 
-  settleGpuPage(state: VirtualTextureRuntimeState, pageKey: string): void {
+  settleGpuPage(state: VirtualTextureRuntimeState, pageKey: VirtualTexturePageKey): void {
     const requestState = this.#states.get(state);
     if (requestState !== undefined) this.#transition(requestState, pageKey, { kind: "gpu-settled" });
   }
@@ -307,7 +309,7 @@ export class VirtualTextureRequestCoordinator {
 
   #transition(
     state: ResourceRequestState,
-    pageKey: string,
+    pageKey: VirtualTexturePageKey,
     event: VirtualTexturePageLifecycleEvent,
   ): VirtualTexturePageLifecycleTransition {
     const previous = state.lifecycles.get(pageKey);
@@ -420,7 +422,7 @@ export class VirtualTextureRequestCoordinator {
       this.#transition(requestState, pageKey, { kind: "capacity-denied", permanent });
       if (permanent && state.diagnosticsEnabled) {
         this.#diagnostic(
-          `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} requires ${retainedBytes} retained CPU bytes, exceeding the virtual-texture maximum ${this.#options.maximumDecodedCpuBytes}`,
+          `Virtual texture page ${state.activeSource.manifestUri} ${virtualTexturePageLabel(page)} requires ${retainedBytes} retained CPU bytes, exceeding the virtual-texture maximum ${this.#options.maximumDecodedCpuBytes}`,
           `virtual-texture-page-cpu-limit:${state.activeSource.manifestUri}:${pageKey}`,
         );
       }
@@ -521,7 +523,7 @@ export class VirtualTextureRequestCoordinator {
           state.stats.pageLoadFailures += 1;
           if (state.diagnosticsEnabled) {
             this.#diagnostic(
-              `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} has ${validation.actual}; expected ${virtualTextureStoredPageSize(manifest)}x${virtualTextureStoredPageSize(manifest)} ${manifest.pageEncoding}`,
+              `Virtual texture page ${state.activeSource.manifestUri} ${virtualTexturePageLabel(page)} has ${validation.actual}; expected ${virtualTextureStoredPageSize(manifest)}x${virtualTextureStoredPageSize(manifest)} ${manifest.pageEncoding}`,
               `virtual-texture-page-size:${state.activeSource.manifestUri}:${pageKey}`,
             );
           }
@@ -555,7 +557,7 @@ export class VirtualTextureRequestCoordinator {
           state.stats.pageLoadFailures += 1;
           if (state.diagnosticsEnabled) {
             this.#diagnostic(
-              `Virtual texture page fulfillment failed for ${state.activeSource.manifestUri} ${pageKey}: ${error instanceof Error ? error.message : String(error)}`,
+              `Virtual texture page fulfillment failed for ${state.activeSource.manifestUri} ${virtualTexturePageLabel(page)}: ${error instanceof Error ? error.message : String(error)}`,
               `virtual-texture-page-fulfillment:${state.activeSource.manifestUri}:${pageKey}`,
             );
           }
@@ -583,7 +585,7 @@ export class VirtualTextureRequestCoordinator {
       state.stats.pageLoadFailures += 1;
       if (state.diagnosticsEnabled) {
         this.#diagnostic(
-          `Virtual texture page load failed for ${state.activeSource.manifestUri} ${pageKey}: ${error instanceof Error ? error.message : String(error)}`,
+          `Virtual texture page load failed for ${state.activeSource.manifestUri} ${virtualTexturePageLabel(page)}: ${error instanceof Error ? error.message : String(error)}`,
           `virtual-texture-page:${state.activeSource.manifestUri}`,
         );
       }

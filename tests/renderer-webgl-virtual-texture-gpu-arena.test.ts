@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   VirtualTextureAtlasPageTable,
   virtualTextureDecodedPageBytes,
+  virtualTexturePageKey,
   virtualTextureStoredPageBytes,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -206,7 +207,7 @@ const upload = (
 ): VirtualTextureGpuPendingUpload => ({
   payload: { image: image(serial), kind: "image" },
   page,
-  pageKey: `${page.mip}/${page.x}/${page.y}`,
+  pageKey: virtualTexturePageKey(page),
   sourceGeneration: 1,
 });
 
@@ -253,7 +254,7 @@ describe("virtual texture GPU arena", () => {
       physicalSlots: 2,
     }));
     const firstPage = { mip: 0, x: 0, y: 0 };
-    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set(["0/0/0"]));
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([virtualTexturePageKey(firstPage)]));
     queueVirtualTextureGpuUpload(arena, resource, upload(firstPage, 1));
 
     processVirtualTextureGpuUploads(arena, 1);
@@ -278,7 +279,7 @@ describe("virtual texture GPU arena", () => {
     const data = new Uint8Array(virtualTextureStoredPageBytes(compressedManifest));
     const pending: VirtualTextureGpuPendingUpload = {
       page: { mip: 0, x: 0, y: 0 },
-      pageKey: "0/0/0",
+      pageKey: virtualTexturePageKey({ mip: 0, x: 0, y: 0 }),
       payload: {
         data,
         format: 0x9278,
@@ -739,10 +740,10 @@ describe("virtual texture GPU arena", () => {
       .filter(({ page }) => virtualTextureGpuCachedResidency(arena, "a", page) !== undefined)
       .map(({ page }) => page);
     const previousPages = [replacement.page, ...survivors];
-    const previousKeys = new Set(previousPages.map(({ mip, x, y }) => `${mip}/${x}/${y}`));
+    const previousKeys = new Set(previousPages.map(virtualTexturePageKey));
     const nextCandidate = { mip: 0, x: 0, y: 1 };
     const desiredPages: VirtualTexturePageId[] = [];
-    const desiredPageKeys = new Set<string>();
+    const desiredPageKeys = new Set<ReturnType<typeof virtualTexturePageKey>>();
     expect(stabilizeVirtualTextureDesiredPagesInto(
       [replacement.page, nextCandidate],
       previousPages,
@@ -754,7 +755,7 @@ describe("virtual texture GPU arena", () => {
       desiredPageKeys,
     )).toEqual({ admissions: 0, deferred: true, retentions: 2 });
     expect(desiredPages).toEqual(previousPages);
-    expect(desiredPageKeys.has(`${nextCandidate.mip}/${nextCandidate.x}/${nextCandidate.y}`)).toBe(false);
+    expect(desiredPageKeys.has(virtualTexturePageKey(nextCandidate))).toBe(false);
 
     processVirtualTextureGpuUploads(arena, 4);
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
@@ -964,7 +965,7 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuResourceSnapshot(resource).dirtyPageTableUpdates).toBe(0);
     expect(virtualTextureGpuExactResidency(arena, "a", replacement)).toBeDefined();
     expect(virtualTextureGpuOutcome(arena, 0)).toMatchObject({
-      evictedPageKey: "1/0/0",
+      evictedPageKey: virtualTexturePageKey(evicted),
       kind: "completed",
     });
   });
@@ -1136,7 +1137,7 @@ describe("virtual texture GPU arena", () => {
     const child = { mip: 0, x: 0, y: 0 };
     queueVirtualTextureGpuUpload(arena, resource, upload(child, 3));
     processVirtualTextureGpuUploads(arena, 2);
-    expect(virtualTextureGpuExactResidency(arena, "a", ancestor)?.pageKey).toBe("2/0/0");
+    expect(virtualTextureGpuExactResidency(arena, "a", ancestor)?.pageKey).toBe(virtualTexturePageKey(ancestor));
     expect(virtualTextureGpuExactResidency(arena, "a", evictable)).toBeUndefined();
   });
 
@@ -1178,7 +1179,7 @@ describe("virtual texture GPU arena", () => {
     expect(setVirtualTextureGpuDesiredPageKeys(
       arena,
       resource,
-      new Set(["0/0/0", "0/1/0", "0/3/0"]),
+      new Set([first, second, replacement].map(virtualTexturePageKey)),
     )).toBe(true);
     processVirtualTextureGpuUploads(arena, 3);
 
@@ -1292,7 +1293,7 @@ describe("virtual texture GPU arena", () => {
     const child = { mip: 0, x: 0, y: 0 };
     queueVirtualTextureGpuUpload(arena, resource, upload(child, 2));
     processVirtualTextureGpuUploads(arena, 2);
-    expect(virtualTextureGpuExactResidency(arena, "a", child)?.pageKey).toBe("0/0/0");
+    expect(virtualTextureGpuExactResidency(arena, "a", child)?.pageKey).toBe(virtualTexturePageKey(child));
     expect(virtualTextureGpuExactResidency(arena, "a", ancestor)).toBeUndefined();
   });
 
@@ -1304,8 +1305,8 @@ describe("virtual texture GPU arena", () => {
     processVirtualTextureGpuUploads(arena, 1);
     const child = { mip: 0, x: 0, y: 0 };
     expect(virtualTextureGpuExactResidency(arena, "a", child)).toBeUndefined();
-    expect(virtualTextureGpuCoverage(arena, "a", child, 1)?.pageKey).toBe("1/0/0");
-    expect(touchVirtualTextureGpuResidency(arena, "a", child, 1)?.pageKey).toBe("1/0/0");
+    expect(virtualTextureGpuCoverage(arena, "a", child, 1)?.pageKey).toBe(virtualTexturePageKey(ancestor));
+    expect(touchVirtualTextureGpuResidency(arena, "a", child, 1)?.pageKey).toBe(virtualTexturePageKey(ancestor));
   });
 
   it("retains decoded work dormant across loss and explicitly wakes it on restore", () => {
@@ -1406,8 +1407,8 @@ describe("virtual texture GPU arena", () => {
   it("releases only physical allocation while preserving resource identity", () => {
     const { arena, gl } = setup();
     const resource = admitTestVirtualTextureGpuResource(arena, "a", 1, options());
-    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set(["0/0/0"]));
     const pending = upload({ mip: 0, x: 0, y: 0 }, 1);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([pending.pageKey]));
     queueVirtualTextureGpuUpload(arena, resource, pending);
 
     expect(releaseVirtualTextureGpuAllocation(arena, "a")).toEqual({

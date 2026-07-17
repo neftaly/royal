@@ -2,7 +2,7 @@ import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./canva
 import { validateVirtualTexturePageImage } from "./page-image";
 import {
   virtualTextureMipTexelSize,
-  virtualTexturePageKey,
+  virtualTexturePageLabel,
   virtualTextureStoredPageSize,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -35,7 +35,7 @@ export const rasterizeGeneratedVirtualTexturePage = (
   const canvas = createVirtualTextureCanvas(
     storedPageSize,
     storedPageSize,
-    `generated virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
+    `generated virtual texture page ${source.label} ${virtualTexturePageLabel(page)}`,
   );
   const context = virtualTextureCanvasContext(canvas, source.label);
   const pattern = context.createPattern(source.image, "repeat");

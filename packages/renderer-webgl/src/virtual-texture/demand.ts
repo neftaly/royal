@@ -21,6 +21,7 @@ import {
   virtualTexturePageKey,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
+  type VirtualTexturePageKey,
 } from "./model";
 
 export type VirtualTextureProjection =
@@ -29,7 +30,7 @@ export type VirtualTextureProjection =
   | { readonly footprint: VirtualTextureScreenFootprint; readonly kind: "visible" };
 
 export type VirtualTextureDemandSource = {
-  readonly availablePageKeys?: ReadonlySet<string>;
+  readonly availablePageKeys?: ReadonlySet<VirtualTexturePageKey>;
   readonly manifest: VirtualTextureManifestModel;
 };
 
@@ -916,7 +917,7 @@ const planBoundedFinestRegionDemand = (
   }
 
   const pages: VirtualTexturePageId[] = [];
-  const pageKeys = new Set<string>();
+  const pageKeys = new Set<VirtualTexturePageKey>();
   let candidateIndex = 0;
   while (pages.length < boundedLimit) {
     let visitedCandidate = false;
@@ -983,7 +984,7 @@ export const planVirtualTextureBootstrapDemand = (
 ): readonly VirtualTexturePageId[] => {
   const boundedLimit = demandLimit(limit);
   if (boundedLimit === 0) return [];
-  const candidates = new Map<string, VirtualTexturePageId>();
+  const candidates = new Map<VirtualTexturePageKey, VirtualTexturePageId>();
   const add = (page: VirtualTexturePageId): boolean => {
     if (!isVirtualTextureDemandPageAvailable(source, page)) return false;
     candidates.set(virtualTexturePageKey(page), page);
@@ -1289,12 +1290,12 @@ export const selectVirtualTextureWorkingSet = (
 export const stabilizeVirtualTextureDesiredPagesInto = (
   workingCandidates: readonly VirtualTexturePageId[],
   previousPages: readonly VirtualTexturePageId[],
-  previousPageKeys: ReadonlySet<string>,
+  previousPageKeys: ReadonlySet<VirtualTexturePageKey>,
   occupiedSlots: number,
   isResident: (page: VirtualTexturePageId) => boolean,
   capacity: number,
   desiredPages: VirtualTexturePageId[],
-  desiredPageKeys: Set<string>,
+  desiredPageKeys: Set<VirtualTexturePageKey>,
   canBecomeResident: (page: VirtualTexturePageId) => boolean = () => true,
 ): { readonly admissions: number; readonly deferred: boolean; readonly retentions: number } => {
   desiredPages.length = 0;
@@ -1383,13 +1384,13 @@ export interface VirtualTextureDemandSubmission {
 
 type VirtualTextureWorkingSetQueue = {
   index: number;
-  readonly keys: Set<string>;
+  readonly keys: Set<VirtualTexturePageKey>;
   order: number;
   readonly pages: VirtualTexturePageId[];
 };
 
 export type VirtualTextureFrameWorkingSetWorkspace = {
-  readonly keys: Set<string>;
+  readonly keys: Set<VirtualTexturePageKey>;
   readonly pages: VirtualTexturePageId[];
   readonly queues: VirtualTextureWorkingSetQueue[];
 };
@@ -1405,7 +1406,7 @@ const selectVirtualTextureSubmissionWorkingSetInto = (
   submission: VirtualTextureDemandSubmission,
   capacity: number,
   selected: VirtualTexturePageId[],
-  selectedKeys: Set<string>,
+  selectedKeys: Set<VirtualTexturePageKey>,
 ): void => {
   if (submission.preferredCandidates === undefined) {
     selectVirtualTextureWorkingSetInto(

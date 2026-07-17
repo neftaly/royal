@@ -28,7 +28,11 @@ import {
   type Mat4,
 } from "../packages/renderer-webgl/src/math/mat4";
 import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture/runtime";
-import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texture/model";
+import {
+  virtualTexturePageKey,
+  type VirtualTextureManifestModel,
+  type VirtualTexturePageKey,
+} from "../packages/renderer-webgl/src/virtual-texture/model";
 import { assertFuzz, forEachFuzzCase } from "./fuzz";
 
 const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({
@@ -660,7 +664,7 @@ describe("virtual texture pure demand planning", () => {
       texCoords.set([0, 0, 1, 0, 0, 1], triangle * 6);
     }
     const input = {
-      availablePageKeys: new Set(["30/0/0"]),
+      availablePageKeys: new Set([virtualTexturePageKey({ mip: 30, x: 0, y: 0 })]),
       context: context(positions, identityMat4(), { texCoords }),
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
@@ -827,7 +831,7 @@ describe("virtual texture pure demand planning", () => {
     };
 
     const demand = planVirtualTextureDrawDemand({
-      availablePageKeys: new Set(sparse.pages.map((page) => `${page.mip}/${page.x}/${page.y}`)),
+      availablePageKeys: new Set(sparse.pages.map(virtualTexturePageKey)),
       context: faceOn,
       limit: 4,
       manifest: sparse,
@@ -984,29 +988,29 @@ describe("virtual texture pure demand planning", () => {
     const next = [4, 5, 6, 7].map((x) => ({ mip: 0, x, y: 0 }));
     const stabilize = (
       prior: readonly { readonly mip: number; readonly x: number; readonly y: number }[],
-      resident: ReadonlySet<string>,
+      resident: ReadonlySet<VirtualTexturePageKey>,
       residentCount: number,
     ) => {
       const pages: Array<{ mip: number; x: number; y: number }> = [];
-      const keys = new Set<string>();
+      const keys = new Set<VirtualTexturePageKey>();
       const result = stabilizeVirtualTextureDesiredPagesInto(
         next,
         prior,
-        new Set(prior.map((page) => `${page.mip}/${page.x}/${page.y}`)),
+        new Set(prior.map(virtualTexturePageKey)),
         residentCount,
-        (page) => resident.has(`${page.mip}/${page.x}/${page.y}`),
+        (page) => resident.has(virtualTexturePageKey(page)),
         4,
         pages,
         keys,
       );
       return { pages, result };
     };
-    const fullResidents = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const fullResidents = new Set(previous.map(virtualTexturePageKey));
     const full = stabilize(previous, fullResidents, 4);
     expect(full.result).toEqual({ admissions: 2, deferred: true, retentions: 2 });
     expect(full.pages.slice(0, 2)).toEqual(next.slice(0, 2));
 
-    const underfilled = stabilize(previous, new Set(["0/0/0"]), 1);
+    const underfilled = stabilize(previous, new Set([virtualTexturePageKey(previous[0]!)]), 1);
     expect(underfilled.pages).toEqual(next);
     expect(underfilled.result).toEqual({ admissions: 4, deferred: true, retentions: 0 });
     const evicted = stabilize(previous, new Set(), 0);
@@ -1017,18 +1021,18 @@ describe("virtual texture pure demand planning", () => {
     let step = full;
     for (let frame = 0; frame < 4 && step.result.deferred; frame += 1) {
       prior = step.pages;
-      step = stabilize(prior, new Set(prior.map((page) => `${page.mip}/${page.x}/${page.y}`)), 4);
+      step = stabilize(prior, new Set(prior.map(virtualTexturePageKey)), 4);
       expect(step.result.admissions).toBeLessThanOrEqual(2);
     }
     expect(step.pages).toEqual(next);
     expect(step.result.deferred).toBe(false);
-    const quiescent = stabilize(step.pages, new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`)), 4);
+    const quiescent = stabilize(step.pages, new Set(next.map(virtualTexturePageKey)), 4);
     expect(quiescent.result).toEqual({ admissions: 0, deferred: false, retentions: 0 });
   });
 
   it("publishes an exact small or empty working set instead of filling it from old residency", () => {
     const previous = [0, 1, 2, 3].map((x) => ({ mip: 0, x, y: 0 }));
-    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const previousKeys = new Set(previous.map(virtualTexturePageKey));
     const stabilize = (working: readonly { readonly mip: number; readonly x: number; readonly y: number }[]) => {
       const pages: Array<{ mip: number; x: number; y: number }> = [];
       const keys = new Set<string>();
@@ -1037,7 +1041,7 @@ describe("virtual texture pure demand planning", () => {
         previous,
         previousKeys,
         previous.length,
-        (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+        (page) => previousKeys.has(virtualTexturePageKey(page)),
         previous.length,
         pages,
         keys,
@@ -1058,7 +1062,7 @@ describe("virtual texture pure demand planning", () => {
   it("keeps transition overlap only while a two-page replacement is deferred", () => {
     const previous = [0, 1, 2, 3].map((x) => ({ mip: 0, x, y: 0 }));
     const next = [4, 5, 6, 7].map((x) => ({ mip: 0, x, y: 0 }));
-    const residentKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const residentKeys = new Set(previous.map(virtualTexturePageKey));
     const firstPages: Array<{ mip: number; x: number; y: number }> = [];
     const firstKeys = new Set<string>();
     const first = stabilizeVirtualTextureDesiredPagesInto(
@@ -1066,7 +1070,7 @@ describe("virtual texture pure demand planning", () => {
       previous,
       residentKeys,
       4,
-      (page) => residentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => residentKeys.has(virtualTexturePageKey(page)),
       4,
       firstPages,
       firstKeys,
@@ -1081,7 +1085,7 @@ describe("virtual texture pure demand planning", () => {
       firstPages,
       firstKeys,
       4,
-      (page) => residentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => residentKeys.has(virtualTexturePageKey(page)),
       4,
       secondPages,
       secondKeys,
@@ -1089,7 +1093,7 @@ describe("virtual texture pure demand planning", () => {
     expect(second).toEqual({ admissions: 0, deferred: true, retentions: 2 });
     expect(secondPages).toEqual(firstPages);
 
-    const loadedKeys = new Set([...residentKeys, ...next.slice(0, 2).map((page) => `${page.mip}/${page.x}/${page.y}`)]);
+    const loadedKeys = new Set([...residentKeys, ...next.slice(0, 2).map(virtualTexturePageKey)]);
     const thirdPages: Array<{ mip: number; x: number; y: number }> = [];
     const thirdKeys = new Set<string>();
     const third = stabilizeVirtualTextureDesiredPagesInto(
@@ -1097,7 +1101,7 @@ describe("virtual texture pure demand planning", () => {
       secondPages,
       secondKeys,
       4,
-      (page) => loadedKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => loadedKeys.has(virtualTexturePageKey(page)),
       4,
       thirdPages,
       thirdKeys,
@@ -1105,7 +1109,7 @@ describe("virtual texture pure demand planning", () => {
     expect(third).toEqual({ admissions: 2, deferred: true, retentions: 0 });
     expect(thirdPages).toEqual(next);
 
-    const allLoadedKeys = new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const allLoadedKeys = new Set(next.map(virtualTexturePageKey));
     const settledPages: Array<{ mip: number; x: number; y: number }> = [];
     const settledKeys = new Set<string>();
     expect(stabilizeVirtualTextureDesiredPagesInto(
@@ -1113,7 +1117,7 @@ describe("virtual texture pure demand planning", () => {
       thirdPages,
       thirdKeys,
       4,
-      (page) => allLoadedKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => allLoadedKeys.has(virtualTexturePageKey(page)),
       4,
       settledPages,
       settledKeys,
@@ -1126,8 +1130,8 @@ describe("virtual texture pure demand planning", () => {
     const healthy = [5, 6, 7, 8].map((x) => ({ mip: 0, x, y: 0 }));
     const old = [0, 1, 2].map((x) => ({ mip: 0, x, y: 0 }));
     const previous = [failed, ...old];
-    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
-    const oldResidentKeys = new Set(old.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const previousKeys = new Set(previous.map(virtualTexturePageKey));
+    const oldResidentKeys = new Set(old.map(virtualTexturePageKey));
     const transitionPages: Array<{ mip: number; x: number; y: number }> = [];
     const transitionKeys = new Set<string>();
 
@@ -1136,7 +1140,7 @@ describe("virtual texture pure demand planning", () => {
       previous,
       previousKeys,
       4,
-      (page) => oldResidentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => oldResidentKeys.has(virtualTexturePageKey(page)),
       4,
       transitionPages,
       transitionKeys,
@@ -1146,7 +1150,7 @@ describe("virtual texture pure demand planning", () => {
 
     const firstHealthyResidents = new Set([
       ...oldResidentKeys,
-      ...healthy.slice(0, 2).map((page) => `${page.mip}/${page.x}/${page.y}`),
+      ...healthy.slice(0, 2).map(virtualTexturePageKey),
     ]);
     const finalTransitionPages: Array<{ mip: number; x: number; y: number }> = [];
     const finalTransitionKeys = new Set<string>();
@@ -1155,7 +1159,7 @@ describe("virtual texture pure demand planning", () => {
       transitionPages,
       transitionKeys,
       4,
-      (page) => firstHealthyResidents.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => firstHealthyResidents.has(virtualTexturePageKey(page)),
       4,
       finalTransitionPages,
       finalTransitionKeys,
@@ -1163,7 +1167,7 @@ describe("virtual texture pure demand planning", () => {
     )).toEqual({ admissions: 2, deferred: true, retentions: 0 });
     expect(finalTransitionPages).toEqual(healthy);
 
-    const healthyResidentKeys = new Set(healthy.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const healthyResidentKeys = new Set(healthy.map(virtualTexturePageKey));
     const settledPages: Array<{ mip: number; x: number; y: number }> = [];
     const settledKeys = new Set<string>();
     expect(stabilizeVirtualTextureDesiredPagesInto(
@@ -1171,7 +1175,7 @@ describe("virtual texture pure demand planning", () => {
       finalTransitionPages,
       finalTransitionKeys,
       4,
-      (page) => healthyResidentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => healthyResidentKeys.has(virtualTexturePageKey(page)),
       4,
       settledPages,
       settledKeys,
@@ -1189,7 +1193,7 @@ describe("virtual texture pure demand planning", () => {
       { mip: 1, x: 1, y: 6 },
       { mip: 0, x: 11, y: 3 },
     ];
-    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const previousKeys = new Set(previous.map(virtualTexturePageKey));
     const transitionPages: Array<{ mip: number; x: number; y: number }> = [];
     const transitionKeys = new Set<string>();
     expect(stabilizeVirtualTextureDesiredPagesInto(
@@ -1197,7 +1201,7 @@ describe("virtual texture pure demand planning", () => {
       previous,
       previousKeys,
       4,
-      (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => previousKeys.has(virtualTexturePageKey(page)),
       4,
       transitionPages,
       transitionKeys,
@@ -1211,14 +1215,14 @@ describe("virtual texture pure demand planning", () => {
       transitionPages,
       transitionKeys,
       4,
-      (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => previousKeys.has(virtualTexturePageKey(page)),
       4,
       repeatedPages,
       repeatedKeys,
     )).toEqual({ admissions: 0, deferred: true, retentions: 2 });
     expect(repeatedPages).toEqual(transitionPages);
 
-    const nextKeys = new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const nextKeys = new Set(next.map(virtualTexturePageKey));
     const settledPages: Array<{ mip: number; x: number; y: number }> = [];
     const settledKeys = new Set<string>();
     expect(stabilizeVirtualTextureDesiredPagesInto(
@@ -1226,7 +1230,7 @@ describe("virtual texture pure demand planning", () => {
       repeatedPages,
       repeatedKeys,
       4,
-      (page) => nextKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      (page) => nextKeys.has(virtualTexturePageKey(page)),
       4,
       settledPages,
       settledKeys,
@@ -1317,7 +1321,7 @@ describe("virtual texture pure demand planning", () => {
       pages: [{ mip: 1, uri: "parent.png", x: 0, y: 0 }],
       width: 1_024,
     };
-    const availablePageKeys = new Set(["1/0/0"]);
+    const availablePageKeys = new Set([virtualTexturePageKey({ mip: 1, x: 0, y: 0 })]);
     expect(isVirtualTextureDemandPageAvailable({ availablePageKeys, manifest: sparse }, {
       mip: 1,
       x: 0,

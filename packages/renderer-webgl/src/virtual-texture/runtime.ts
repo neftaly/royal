@@ -7,6 +7,7 @@ import {
   type VirtualTextureManifestModel,
   type VirtualTextureManifestParseResult,
   type VirtualTexturePageId,
+  type VirtualTexturePageKey,
 } from "./model";
 export const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
 export const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
@@ -85,17 +86,17 @@ export type VirtualTextureRuntimeState = {
   activeSource: VirtualTexturePageSource;
   /** Monotonic handoff: automatic VT never returns to ordinary source selection after activation. */
   automaticResidencyActivated?: true;
-  availablePageKeys?: ReadonlySet<string>;
+  availablePageKeys?: ReadonlySet<VirtualTexturePageKey>;
   /** Stable root-policy ordering for admission and cold-reclamation ties. */
   readonly admissionTicket: number;
   demandPublished: boolean;
   /** Raw current draw demand before terminal-page convergence filtering. */
-  demandedPageKeys: Set<string>;
-  demandedPageKeysScratch: Set<string>;
+  demandedPageKeys: Set<VirtualTexturePageKey>;
+  demandedPageKeysScratch: Set<VirtualTexturePageKey>;
   diagnosticsEnabled: boolean;
   /** GPU publication target: exact current demand plus bounded replacement overlap while converging. */
-  desiredPageKeys: Set<string>;
-  desiredPageKeysScratch: Set<string>;
+  desiredPageKeys: Set<VirtualTexturePageKey>;
+  desiredPageKeysScratch: Set<VirtualTexturePageKey>;
   /** Ordered counterpart of `desiredPageKeys`; inactive physical cache is owned by the GPU arena. */
   desiredPages: VirtualTexturePageId[];
   desiredPagesScratch: VirtualTexturePageId[];

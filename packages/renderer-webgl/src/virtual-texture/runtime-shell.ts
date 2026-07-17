@@ -39,6 +39,7 @@ import {
   virtualTexturePageKey,
   virtualTexturePageUri,
   type VirtualTexturePageId,
+  type VirtualTexturePageKey,
 } from "./model";
 import { resolveResourceUri, throwIfAborted } from "../resource-io";
 import {
@@ -582,7 +583,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   #sidecarSource(manifestUri: string): VirtualTexturePageSource {
-    let pageUrisByKey: ReadonlyMap<string, string> = new Map();
+    let pageUrisByKey: ReadonlyMap<VirtualTexturePageKey, string> = new Map();
     return {
       loadManifest: async (signal) => {
         let response: Response;

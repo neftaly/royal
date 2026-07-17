@@ -6,6 +6,9 @@ export interface VirtualTexturePageId {
   readonly y: number;
 }
 
+/** Allocation-light internal identity; strings preserve exactness outside the packed range. */
+export type VirtualTexturePageKey = number | string;
+
 export interface VirtualTexturePageEntry extends VirtualTexturePageId {
   readonly uri: string;
 }
@@ -49,7 +52,7 @@ export interface VirtualTextureAtlasPageTableOptions {
 export interface VirtualTextureAtlasAssignment {
   readonly evicted?: VirtualTextureResidentPage;
   readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
+  readonly pageKey: VirtualTexturePageKey;
   readonly slot: number;
 }
 
@@ -59,9 +62,9 @@ export interface VirtualTextureResidentPage extends VirtualTextureAtlasAssignmen
 
 export interface VirtualTexturePageTableUpdate {
   readonly fallbackPage?: VirtualTexturePageId;
-  readonly fallbackPageKey?: string;
+  readonly fallbackPageKey?: VirtualTexturePageKey;
   readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
+  readonly pageKey: VirtualTexturePageKey;
   readonly residentMip?: number;
   readonly slot?: number;
 }
@@ -79,7 +82,7 @@ export interface VirtualTextureResidentTransaction {
 }
 
 interface ProtectedVirtualTexturePageKeys {
-  has(pageKey: string): boolean;
+  has(pageKey: VirtualTexturePageKey): boolean;
 }
 
 type MutableVirtualTextureResidentTransaction = {
@@ -115,8 +118,28 @@ const readDimensions = (value: unknown): readonly [number, number] | undefined =
 const readColorSpace = (value: unknown): TextureColorSpace | undefined =>
   value === "linear" || value === "srgb" ? value : undefined;
 
-export const virtualTexturePageKey = (page: VirtualTexturePageId): string =>
+const PACKED_PAGE_MIP_STRIDE = 0x100;
+const PACKED_PAGE_ROW_STRIDE = 0x1_000_000;
+const PACKED_PAGE_MAX_AXIS = 0xffff;
+const PACKED_PAGE_MAX_MIP = PACKED_PAGE_MIP_STRIDE - 1;
+
+export const virtualTexturePageLabel = (page: VirtualTexturePageId): string =>
   `${page.mip}/${page.x}/${page.y}`;
+
+export const virtualTexturePageKey = (page: VirtualTexturePageId): VirtualTexturePageKey => {
+  if (
+    Number.isSafeInteger(page.mip)
+    && page.mip >= 0
+    && page.mip <= PACKED_PAGE_MAX_MIP
+    && Number.isSafeInteger(page.x)
+    && page.x >= 0
+    && page.x <= PACKED_PAGE_MAX_AXIS
+    && Number.isSafeInteger(page.y)
+    && page.y >= 0
+    && page.y <= PACKED_PAGE_MAX_AXIS
+  ) return page.mip + page.x * PACKED_PAGE_MIP_STRIDE + page.y * PACKED_PAGE_ROW_STRIDE;
+  return virtualTexturePageLabel(page);
+};
 
 export const virtualTextureMipDimension = (baseDimension: number, mip: number): number =>
   Math.max(1, Math.ceil(baseDimension / (2 ** mip)));
@@ -430,7 +453,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     });
   }
   const effectiveMipCount = mipCount ?? derivedMipCount;
-  const pageKeys = new Set<string>();
+  const pageKeys = new Set<VirtualTexturePageKey>();
   if (Array.isArray(rawEntries)) {
     for (const [index, entry] of rawEntries.entries()) {
       const page = readPageEntry(entry);
@@ -487,8 +510,8 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
 
 export const virtualTextureExplicitPageUrisByKey = (
   manifest: VirtualTextureManifestModel,
-): ReadonlyMap<string, string> => {
-  const pageUrisByKey = new Map<string, string>();
+): ReadonlyMap<VirtualTexturePageKey, string> => {
+  const pageUrisByKey = new Map<VirtualTexturePageKey, string>();
   for (const page of manifest.pages) {
     pageUrisByKey.set(virtualTexturePageKey(page), page.uri);
   }
@@ -498,7 +521,7 @@ export const virtualTextureExplicitPageUrisByKey = (
 export const virtualTexturePageUri = (
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
-  pageUrisByKey: ReadonlyMap<string, string> = virtualTextureExplicitPageUrisByKey(manifest),
+  pageUrisByKey: ReadonlyMap<VirtualTexturePageKey, string> = virtualTextureExplicitPageUrisByKey(manifest),
 ): string | undefined => {
   const key = virtualTexturePageKey(page);
   const explicitUri = pageUrisByKey.get(key);
@@ -510,20 +533,20 @@ export const virtualTexturePageUri = (
     .replaceAll("{mip}", String(page.mip))
     .replaceAll("{x}", String(page.x))
     .replaceAll("{y}", String(page.y))
-    .replaceAll("{key}", key);
+    .replaceAll("{key}", virtualTexturePageLabel(page));
 };
 
 export class VirtualTextureAtlasPageTable {
-  #activePageKeys = new Set<string>();
+  #activePageKeys = new Set<VirtualTexturePageKey>();
   #activePageKeysPublished = false;
-  #activePageKeysScratch = new Set<string>();
+  #activePageKeysScratch = new Set<VirtualTexturePageKey>();
   readonly #activeRecordsScratch: VirtualTextureResidentPage[] = [];
-  readonly #changedPageKeysScratch = new Set<string>();
+  readonly #changedPageKeysScratch = new Set<VirtualTexturePageKey>();
   readonly #dirty: QueuedVirtualTexturePageTableUpdate[] = [];
   #dirtyHead = 0;
   readonly #freeSlots: number[];
   readonly #inactiveRecordsScratch: VirtualTextureResidentPage[] = [];
-  readonly #recordsByPage = new Map<string, VirtualTextureResidentPage>();
+  readonly #recordsByPage = new Map<VirtualTexturePageKey, VirtualTextureResidentPage>();
   readonly #recordsBySlot = new Map<number, VirtualTextureResidentPage>();
   #clockHand = 0;
   #revision = 0;
@@ -551,7 +574,7 @@ export class VirtualTextureAtlasPageTable {
    * residency. Coarse mappings are queued before fine mappings so overlapping
    * active descendants always win when the updates reach the GPU.
    */
-  reconcileActivePageKeys(pageKeys: ReadonlySet<string>): boolean {
+  reconcileActivePageKeys(pageKeys: ReadonlySet<VirtualTexturePageKey>): boolean {
     const previous = this.#activePageKeys;
     let identical = this.#activePageKeysPublished && previous.size === pageKeys.size;
     if (identical) {
@@ -660,11 +683,11 @@ export class VirtualTextureAtlasPageTable {
     return true;
   }
 
-  isActivePageKey(pageKey: string): boolean {
+  isActivePageKey(pageKey: VirtualTexturePageKey): boolean {
     return !this.#activePageKeysPublished || this.#activePageKeys.has(pageKey);
   }
 
-  residentPage(pageKey: string): VirtualTextureResidentPage | undefined {
+  residentPage(pageKey: VirtualTexturePageKey): VirtualTextureResidentPage | undefined {
     return this.#recordsByPage.get(pageKey);
   }
 
@@ -883,7 +906,7 @@ export class VirtualTextureAtlasPageTable {
 
   #hasChangedAncestor(
     page: VirtualTexturePageId,
-    changedPageKeys: ReadonlySet<string>,
+    changedPageKeys: ReadonlySet<VirtualTexturePageKey>,
     maximumChangedMip: number,
   ): boolean {
     let ancestor = page;
@@ -896,7 +919,7 @@ export class VirtualTextureAtlasPageTable {
 
   #residentFallbackRecord(
     requested: VirtualTexturePageId,
-    excludedPageKey: string,
+    excludedPageKey: VirtualTexturePageKey,
   ): VirtualTextureResidentPage | undefined {
     let page = requested;
     const maxMip = requested.mip + 32;

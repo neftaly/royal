@@ -1,5 +1,9 @@
 import type { VirtualTextureDemandSubmission } from "./demand";
-import { virtualTexturePageKey, type VirtualTexturePageId } from "./model";
+import {
+  virtualTexturePageKey,
+  type VirtualTexturePageId,
+  type VirtualTexturePageKey,
+} from "./model";
 
 const MAX_POOLED_RESOURCES = 64;
 const MAX_POOLED_VIEWS = 256;
@@ -12,11 +16,11 @@ export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES =
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES * VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES;
 
 type MutableViewDemand = {
-  readonly candidates: Map<string, VirtualTexturePageId>;
+  readonly candidates: Map<VirtualTexturePageKey, VirtualTexturePageId>;
   readonly candidateOutput: VirtualTexturePageId[];
-  readonly nonconvergentCandidates: Map<string, VirtualTexturePageId>;
+  readonly nonconvergentCandidates: Map<VirtualTexturePageKey, VirtualTexturePageId>;
   preferTargetMip: boolean;
-  readonly preferred: Map<string, PreferredItem>;
+  readonly preferred: Map<VirtualTexturePageKey, PreferredItem>;
   readonly preferredOutput: VirtualTexturePageId[];
   readonly preferredSorted: PreferredItem[];
   readonly submission: {
@@ -25,7 +29,7 @@ type MutableViewDemand = {
     preferredCandidates?: readonly VirtualTexturePageId[];
     viewportDominant?: true;
   };
-  readonly uniqueKeys: Set<string>;
+  readonly uniqueKeys: Set<VirtualTexturePageKey>;
   viewportDominant: boolean;
 };
 
@@ -38,7 +42,7 @@ type PreferredItem = {
 type MutableResourceDemand<K> = {
   capacity: number;
   commit?: MutableVirtualTextureFrameDemandCommit<K>;
-  readonly nonconvergentCandidates: Map<string, VirtualTexturePageId>;
+  readonly nonconvergentCandidates: Map<VirtualTexturePageKey, VirtualTexturePageId>;
   readonly nonconvergentOutput: VirtualTexturePageId[];
   order: number;
   readonly orderedViewIndices: number[];
@@ -110,15 +114,15 @@ const comparePreferredItems = (left: PreferredItem, right: PreferredItem): numbe
   compareSignature(left.signature, right.signature) || left.index - right.index;
 
 const reserveBoundedPreferredItem = (
-  target: Map<string, PreferredItem>,
-  key: string,
+  target: Map<VirtualTexturePageKey, PreferredItem>,
+  key: VirtualTexturePageKey,
   signature: string,
   index: number,
   limit: number,
 ): boolean => {
   if (limit <= 0 || target.has(key)) return false;
   if (target.size < limit) return true;
-  let greatest: readonly [string, PreferredItem] | undefined;
+  let greatest: readonly [VirtualTexturePageKey, PreferredItem] | undefined;
   for (const entry of target) {
     if (greatest === undefined || comparePreferredItems(entry[1], greatest[1]) > 0) greatest = entry;
   }
@@ -212,17 +216,17 @@ const rebalanceEvidence = <K>(resource: MutableResourceDemand<K>): void => {
   const limits = evidenceLimits(resource);
   for (const view of resource.views.values()) {
     while (view.candidates.size > limits.candidates) {
-      let lastKey: string | undefined;
+      let lastKey: VirtualTexturePageKey | undefined;
       for (const key of view.candidates.keys()) lastKey = key;
       view.candidates.delete(lastKey!);
     }
     while (view.nonconvergentCandidates.size > limits.nonconvergent) {
-      let lastKey: string | undefined;
+      let lastKey: VirtualTexturePageKey | undefined;
       for (const key of view.nonconvergentCandidates.keys()) lastKey = key;
       view.nonconvergentCandidates.delete(lastKey!);
     }
     while (view.preferred.size > limits.preferred) {
-      let greatest: readonly [string, PreferredItem] | undefined;
+      let greatest: readonly [VirtualTexturePageKey, PreferredItem] | undefined;
       for (const entry of view.preferred) {
         if (greatest === undefined || comparePreferredItems(entry[1], greatest[1]) > 0) greatest = entry;
       }

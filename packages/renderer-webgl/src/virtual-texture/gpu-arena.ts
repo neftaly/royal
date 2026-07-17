@@ -14,6 +14,7 @@ import {
   type VirtualTextureAtlasAssignment,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
+  type VirtualTexturePageKey,
   type VirtualTexturePageTableUpdate,
 } from "./model";
 import { prepareTextureUpload } from "../webgl/imperative-state";
@@ -87,12 +88,12 @@ export interface VirtualTextureGpuResourceOptions {
 export interface VirtualTextureGpuPendingUpload {
   readonly payload: VirtualTexturePagePayload;
   readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
+  readonly pageKey: VirtualTexturePageKey;
   readonly sourceGeneration: number;
 }
 
 export type VirtualTextureGpuOutcome = {
-  readonly evictedPageKey?: string;
+  readonly evictedPageKey?: VirtualTexturePageKey;
   readonly key: string;
   readonly kind: "completed" | "discarded";
   readonly upload: VirtualTextureGpuPendingUpload;
@@ -105,7 +106,7 @@ export interface VirtualTextureGpuReleaseResult {
 
 export interface VirtualTextureGpuResidency {
   readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
+  readonly pageKey: VirtualTexturePageKey;
   readonly residentMip: number;
   readonly slot: number;
 }
@@ -221,7 +222,7 @@ type MutableResource = {
   atlasUploadBytesPerChunkMax: number;
   atlasUploadBytesPerChunkMin: number;
   atlasUploadChunkSamples: number;
-  readonly desiredPageKeys: Set<string>;
+  readonly desiredPageKeys: Set<VirtualTexturePageKey>;
   desiredPageKeysPublished: boolean;
   readonly key: string;
   inFlightUpload?: {
@@ -234,8 +235,8 @@ type MutableResource = {
   pageTableUpdates: number;
   pendingHead: number;
   readonly pendingUploads: VirtualTextureGpuPendingUpload[];
-  readonly protectedAncestorPageKeys: Set<string>;
-  readonly protectedPageKeys: { has(pageKey: string): boolean };
+  readonly protectedAncestorPageKeys: Set<VirtualTexturePageKey>;
+  readonly protectedPageKeys: { has(pageKey: VirtualTexturePageKey): boolean };
   uploadedPageBytes: number;
   uploadedPages: number;
   uploadQueueWaitMaxMs: number;
@@ -243,7 +244,7 @@ type MutableResource = {
   readonly uploadQueueWaitMsByMip: number[];
   readonly uploadQueueWaitSamplesByMip: number[];
   uploadQueueWaitSamples: number;
-  readonly visibleAssignments: Map<string, VirtualTextureAtlasAssignment>;
+  readonly visibleAssignments: Map<VirtualTexturePageKey, VirtualTextureAtlasAssignment>;
 };
 
 type State = {
@@ -615,8 +616,8 @@ export const admitVirtualTextureGpuResource = (
   );
   if (admission.kind === "unsupported") return admission;
   if (resource === undefined) {
-    const desiredPageKeys = new Set<string>();
-    const protectedAncestorPageKeys = new Set<string>();
+    const desiredPageKeys = new Set<VirtualTexturePageKey>();
+    const protectedAncestorPageKeys = new Set<VirtualTexturePageKey>();
     resource = {
       admission,
       desiredPageKeys,
@@ -759,7 +760,7 @@ export const queueVirtualTextureGpuUpload = (
 export const setVirtualTextureGpuDesiredPageKeys = (
   arena: VirtualTextureGpuArena,
   resource: VirtualTextureGpuResource,
-  pageKeys: ReadonlySet<string>,
+  pageKeys: ReadonlySet<VirtualTexturePageKey>,
 ): boolean => {
   const state = stateOf(arena);
   const mutable = mutableResource(resource);
@@ -953,7 +954,7 @@ const flushPageTable = (
 const protectedUploadPages = (
   resource: MutableResource,
   page: VirtualTexturePageId,
-): { has(pageKey: string): boolean } => {
+): { has(pageKey: VirtualTexturePageKey): boolean } => {
   const protectedAncestors = resource.protectedAncestorPageKeys;
   protectedAncestors.clear();
   const manifest = resource.options.manifest;
@@ -972,7 +973,7 @@ const publish = (
   resource: MutableResource,
   kind: VirtualTextureGpuOutcome["kind"],
   upload: VirtualTextureGpuPendingUpload,
-  evictedPageKey?: string,
+  evictedPageKey?: VirtualTexturePageKey,
 ): void => {
   if (kind === "discarded") state.uploadQueuedAt.delete(upload);
   state.outcomes.push({

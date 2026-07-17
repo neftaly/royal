@@ -16,7 +16,10 @@ import {
   selectVirtualTextureFrameWorkingSet,
   type VirtualTextureDemandSubmission,
 } from "../packages/renderer-webgl/src/virtual-texture/demand";
-import type { VirtualTexturePageId } from "../packages/renderer-webgl/src/virtual-texture/model";
+import {
+  virtualTexturePageKey,
+  type VirtualTexturePageId,
+} from "../packages/renderer-webgl/src/virtual-texture/model";
 import { forEachFuzzCase } from "./fuzz";
 
 const page = (x: number, mip = 0): VirtualTexturePageId => ({ mip, x, y: 0 });
@@ -406,7 +409,7 @@ describe("virtual texture frame-demand workspace", () => {
     expect(viewNode.preferred).toBe(preferredNode);
     expect([...viewNode.candidates.values()]).toEqual([second]);
     expect([...preferredNode.values()].map((item) => item.page)).toEqual([second]);
-    expect(viewNode.candidates.has("0/1/0")).toBe(false);
+    expect(viewNode.candidates.has(virtualTexturePageKey(page(1)))).toBe(false);
 
     finalizeVirtualTextureFrameDemand(workspace, false, () => 0);
     expect(resourceNode.resource).toBeUndefined();
@@ -492,7 +495,9 @@ describe("virtual texture frame-demand workspace", () => {
       }
     }
     const resource = workspace.resources.get("terrain")!;
-    expect([...resource.views.values()].some((lane) => lane.candidates.has("12/0/0"))).toBe(true);
+    expect([...resource.views.values()].some((lane) => lane.candidates.has(
+      virtualTexturePageKey(page(0, 12)),
+    ))).toBe(true);
     expect(maximumPages).toBeGreaterThan(0);
     expect(maximumViews).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS);
   });

@@ -7,7 +7,7 @@ import {
 import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "../virtual-texture/canvas";
 import { validateVirtualTexturePageImage } from "../virtual-texture/page-image";
 import {
-  virtualTexturePageKey,
+  virtualTexturePageLabel,
   virtualTextureStoredPageSize,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -368,7 +368,7 @@ export const loadAutomaticSvgVirtualTexturePageImage = async (
   signal: AbortSignal,
 ): Promise<TexImageSource> => {
   if (signal.aborted) throw abortError();
-  const label = `${source.label} virtual texture page ${virtualTexturePageKey(page)}`;
+  const label = `${source.label} virtual texture page ${virtualTexturePageLabel(page)}`;
   const pageText = automaticSvgVirtualTexturePageText(source, manifest, page);
   const pageImage = await loadImageFromBlob(new Blob([pageText], { type: "image/svg+xml" }), label, signal);
   if (signal.aborted) throw abortError();
