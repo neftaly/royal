@@ -94,11 +94,12 @@ describe("program arena", () => {
       programVariantKey("surface", baseColor, false),
       programVariantKey("surface", baseColor, true),
       programVariantKey("surface", baseColor, false, true),
+      programVariantKey("surface", baseColor, false, false, true),
       programVariantKey("surface", normal, false),
       programVariantKey("unlit", baseColor, false),
       programVariantKey("wireframe", undefined, false),
     ]);
-    expect(keys.size).toBe(6);
+    expect(keys.size).toBe(7);
   });
   it("compiles, links, caches, and reuses a synchronous program", () => {
     const gl = new FakeGl();

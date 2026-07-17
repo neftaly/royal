@@ -136,6 +136,7 @@ import {
 } from "./gltf/load-diagnostics";
 import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-owner";
 import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
+import { surfaceMaterialAlphaMode } from "./webgl/materials";
 import {
   identityMat4,
   projectionMat4Into,
@@ -1567,9 +1568,27 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#context.generation,
     );
 
+    // Full-coverage opaque draws precede alpha-tested draws. Besides keeping
+    // the no-discard program contiguous, this gives masked fragments the
+    // strongest available early-depth rejection without reordering either
+    // class internally.
     for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
+      const batch = this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!);
+      if (surfaceMaterialAlphaMode(batch.material) === "MASK") continue;
       this.#drawGltfPrimitiveDrawBatch(
-        this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!),
+        batch,
+        projection,
+        view,
+        toneMapping,
+        viewportSize,
+        undefined,
+      );
+    }
+    for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
+      const batch = this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!);
+      if (surfaceMaterialAlphaMode(batch.material) !== "MASK") continue;
+      this.#drawGltfPrimitiveDrawBatch(
+        batch,
         projection,
         view,
         toneMapping,

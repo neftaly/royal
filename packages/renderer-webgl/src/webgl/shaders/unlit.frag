@@ -32,10 +32,7 @@ vec3 linearToSrgb(vec3 color) {
 
 void main() {
   vec4 baseColor = (__BASE_COLOR_EXPR__) * v_color;
-  if (u_alphaSettings.x > 0.5 && u_alphaSettings.x < 1.5 && baseColor.a < u_alphaSettings.y) {
-    discard;
-  }
-  if (u_alphaSettings.x < 1.5) baseColor.a = 1.0;
+  __MATERIAL_ALPHA_BODY__
 
   outColor = u_toneMappingSettings.z > 0.5
     ? vec4(baseColor.rgb / max(u_toneMappingSettings.y, 0.000001), baseColor.a)

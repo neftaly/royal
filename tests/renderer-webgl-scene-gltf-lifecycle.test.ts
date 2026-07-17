@@ -39,6 +39,7 @@ import {
   solidTriangleDocument,
   doubleSidedTriangleDocument,
   alphaMaskTriangleDocument,
+  opaqueThenMaskTriangleDocument,
   alphaBlendTriangleDocument,
   mirroredTriangleNodesDocument,
 } from "./renderer-webgl-scene-gltf-material-documents";
@@ -633,6 +634,57 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(finalBlendState?.call).toEqual({ args: [gl.BLEND], name: "disable" });
     expect(finalBlendState?.index).toBeGreaterThan(drawIndexes[1] ?? -1);
     expect(finalDepthMask?.value).toBe(true);
+  });
+
+  it("draws full-coverage opaque batches before masked shader batches", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([gltf({
+      src: triangleGltfSrc,
+      version: "opaque-before-alpha-mask",
+    })]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, opaqueThenMaskTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    // Program compilation is deliberately paced. The first ready frame starts
+    // the opaque variant; the next starts the masked companion.
+    root.render(renderGraph);
+    const frameFirst = calls.length;
+    root.render(renderGraph);
+    const frameCalls = calls.slice(frameFirst);
+    const frameDraws = new Set(drawCalls(frameCalls));
+    const shaderSourcesByHandle = new Map<unknown, string>();
+    const fragmentSourcesByProgram = new Map<unknown, string>();
+    for (const call of calls) {
+      if (call.name === "shaderSource") {
+        shaderSourcesByHandle.set(call.args[0], String(call.args[1] ?? ""));
+      }
+    }
+    for (const call of calls) {
+      if (call.name !== "attachShader") continue;
+      const source = shaderSourcesByHandle.get(call.args[1]);
+      if (source?.includes("out vec4 outColor;") === true) {
+        fragmentSourcesByProgram.set(call.args[0], source);
+      }
+    }
+
+    let activeProgram: unknown;
+    const maskedDraws: boolean[] = [];
+    for (const call of calls) {
+      if (call.name === "useProgram") activeProgram = call.args[0];
+      if (!frameDraws.has(call)) continue;
+      maskedDraws.push(fragmentSourcesByProgram.get(activeProgram)?.includes("discard") === true);
+    }
+    expect(maskedDraws).toEqual([false, true]);
   });
 
   it("splits one-sided mirrored glTF draws so frontFace tracks model orientation", async () => {

@@ -213,6 +213,15 @@ const surfaceBaseColorExpression = (features: SurfaceShaderFeatures): string => 
     : ordinary;
 };
 
+const materialAlphaBody = (alphaMask: boolean): string => alphaMask
+  ? `if (baseColor.a < u_alphaSettings.y) {
+  discard;
+}
+baseColor.a = 1.0;`
+  : `if (u_alphaSettings.x < 1.5) {
+  baseColor.a = 1.0;
+}`;
+
 const replaceShaderTokens = (source: string, replacements: ReadonlyMap<string, string>): string => {
   let next = source;
   for (const [token, value] of replacements) {
@@ -252,6 +261,7 @@ export const fragmentShaderSource = (
   surfaceFeatures: SurfaceShaderFeatures = ALL_SURFACE_SHADER_TEXTURE_FEATURES,
   clusteredLights = false,
   extendedMaterial = true,
+  alphaMask = false,
 ): string => {
   if (kind === "postprocess") return postprocessFragmentShaderSource;
   switch (kind) {
@@ -259,15 +269,16 @@ export const fragmentShaderSource = (
       return wireframeFragmentShaderSource;
     case "surface":
     case "surface-instanced-split":
-      return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights, extendedMaterial);
+      return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights, extendedMaterial, alphaMask);
     case "unlit":
     case "unlit-instanced-split":
-      return unlitFragmentShaderSource(surfaceFeatures);
+      return unlitFragmentShaderSource(surfaceFeatures, alphaMask);
   }
 };
 
-const unlitFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
+const unlitFragmentShaderSource = (features: SurfaceShaderFeatures, alphaMask: boolean): string =>
   assertNoShaderTokens(replaceShaderTokens(unlitFragmentTemplate, new Map([
+    ["__MATERIAL_ALPHA_BODY__", materialAlphaBody(alphaMask)],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
     ["__SURFACE_TEXTURE_COORDINATE_UNIFORMS__", surfaceTextureCoordinateUniformDeclarations(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
@@ -331,10 +342,12 @@ const surfaceFragmentShaderSource = (
   features: SurfaceShaderFeatures,
   clusteredLights: boolean,
   extendedMaterial: boolean,
+  alphaMask: boolean,
 ): string =>
   assertNoShaderTokens(replaceShaderTokens(surfaceFragmentTemplate, new Map([
     ["__MAX_SURFACE_LIGHTS__", String(MAX_SURFACE_LIGHTS)],
     ["__MATERIAL_EXTENDED__", extendedMaterial ? "1" : "0"],
+    ["__MATERIAL_ALPHA_BODY__", materialAlphaBody(alphaMask)],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
     ["__SURFACE_TEXTURE_COORDINATE_UNIFORMS__", surfaceTextureCoordinateUniformDeclarations(features)],
     ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],

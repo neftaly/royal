@@ -811,13 +811,7 @@ __CLUSTERED_LIGHT_FUNCTIONS__
 
 void main() {
   vec4 baseColor = (__BASE_COLOR_EXPR__) * v_color;
-  if (u_alphaSettings.x > 0.5 && u_alphaSettings.x < 1.5 && baseColor.a < u_alphaSettings.y) {
-    discard;
-  }
-
-  if (u_alphaSettings.x < 1.5) {
-    baseColor.a = 1.0;
-  }
+  __MATERIAL_ALPHA_BODY__
 
   // glTF double-sided surfaces keep their material response on the visible
   // side. Single-sided batches cull back faces, so this is branch-free in

@@ -205,4 +205,14 @@ describe("surface shader variants", () => {
         .toBe(features.has("iblBrdfLut"));
     });
   });
+
+  it("keeps discard out of opaque and blended shader variants", () => {
+    const features = new Set(["baseColorTexture"] as const);
+    const opaqueOrBlend = fragmentShaderSource("surface", features, false, false, false);
+    const masked = fragmentShaderSource("surface", features, false, false, true);
+
+    expect(opaqueOrBlend).not.toContain("discard");
+    expect(masked).toContain("discard");
+    expect(masked).toContain("baseColor.a < u_alphaSettings.y");
+  });
 });

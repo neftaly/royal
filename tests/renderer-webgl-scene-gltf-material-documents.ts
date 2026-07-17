@@ -357,6 +357,35 @@ export const alphaMaskTriangleDocument = () => {
   };
 };
 
+export const opaqueThenMaskTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    materials: [
+      {
+        alphaCutoff: 0.37,
+        alphaMode: "MASK",
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.8, 0.62, 0.36, 0.25],
+        },
+      },
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.1, 0.8, 0.2, 1],
+        },
+      },
+    ],
+    meshes: [{
+      primitives: [
+        { ...primitive, material: 0 },
+        { ...primitive, material: 1 },
+      ],
+    }],
+  };
+};
+
 export const alphaBlendTriangleDocument = () => {
   const base = solidTriangleDocument();
   const primitive = base.meshes[0]!.primitives[0]!;

@@ -545,6 +545,9 @@ export class SurfaceExecutionArena {
         loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan?.features,
         !loading && (surfaceLights?.punctuals.length ?? 0) > 0,
         !loading && (plan?.extendedMaterial ?? false),
+        !loading
+          && surfaceMaterial !== undefined
+          && surfaceMaterialAlphaMode(surfaceMaterial) === "MASK",
         loading ? 0 : plan?.featureMask,
       );
       if (program === undefined) return;
@@ -675,6 +678,7 @@ export class SurfaceExecutionArena {
         loading ? EMPTY_SURFACE_TEXTURE_FEATURES : plan.features,
         !loading && surfaceLights.punctuals.length > 0,
         !loading && plan.extendedMaterial,
+        !loading && surfaceMaterialAlphaMode(batch.material) === "MASK",
         loading ? 0 : plan.featureMask,
       );
       if (program === undefined) return;
@@ -745,6 +749,7 @@ export class SurfaceExecutionArena {
     features: PureSurfaceTextureBindingPlan["features"] | undefined,
     clusteredLights: boolean,
     extendedMaterial: boolean,
+    alphaMask: boolean,
     featureMask?: number,
   ): WebGLProgram | undefined {
     const resource = requestProgram(
@@ -754,6 +759,7 @@ export class SurfaceExecutionArena {
       features,
       clusteredLights,
       extendedMaterial,
+      alphaMask,
       featureMask,
     );
     return resource?.program;
