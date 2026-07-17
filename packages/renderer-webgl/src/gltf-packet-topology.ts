@@ -239,6 +239,7 @@ const materialRenderClass = (material: LoadedGltfMaterial): FramePacketRenderCla
   if ((material.extensionFactors?.transmissionFactor ?? 0) > 0) {
     return FRAME_PACKET_RENDER_CLASS.transmissive;
   }
+  if (material.alphaMode === "MASK") return FRAME_PACKET_RENDER_CLASS.masked;
   return FRAME_PACKET_RENDER_CLASS.opaque;
 };
 

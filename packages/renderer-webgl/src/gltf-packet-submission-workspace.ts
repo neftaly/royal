@@ -602,7 +602,8 @@ const bindingId = (value: number, count: number, label: string): number => {
 const renderClass = (value: number): FramePacketRenderClass => {
   if (value !== FRAME_PACKET_RENDER_CLASS.opaque
     && value !== FRAME_PACKET_RENDER_CLASS.transmissive
-    && value !== FRAME_PACKET_RENDER_CLASS.blended) {
+    && value !== FRAME_PACKET_RENDER_CLASS.blended
+    && value !== FRAME_PACKET_RENDER_CLASS.masked) {
     throw new Error("Royal glTF packet submission render class is invalid");
   }
   return value;

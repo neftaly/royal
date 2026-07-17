@@ -136,7 +136,6 @@ import {
 } from "./gltf/load-diagnostics";
 import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-owner";
 import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
-import { surfaceMaterialAlphaMode } from "./webgl/materials";
 import {
   identityMat4,
   projectionMat4Into,
@@ -1573,10 +1572,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // strongest available early-depth rejection without reordering either
     // class internally.
     for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
-      const batch = this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!);
-      if (surfaceMaterialAlphaMode(batch.material) === "MASK") continue;
       this.#drawGltfPrimitiveDrawBatch(
-        batch,
+        this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!),
         projection,
         view,
         toneMapping,
@@ -1584,11 +1581,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         undefined,
       );
     }
-    for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
-      const batch = this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!);
-      if (surfaceMaterialAlphaMode(batch.material) !== "MASK") continue;
+    for (let index = 0; index < groups.maskedBatchCount; index += 1) {
       this.#drawGltfPrimitiveDrawBatch(
-        batch,
+        this.#gltfPacketSubmissions.batch(groups.maskedBatchIds[index]!),
         projection,
         view,
         toneMapping,

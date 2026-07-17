@@ -7,6 +7,7 @@ export const FRAME_PACKET_RENDER_CLASS = Object.freeze({
   opaque: 0,
   transmissive: 1,
   blended: 2,
+  masked: 3,
 } as const);
 
 export type FramePacketRenderClass =
@@ -215,7 +216,8 @@ const positiveUint32 = (value: number, label: string): number => {
 const renderClass = (value: number): FramePacketRenderClass => {
   if (value !== FRAME_PACKET_RENDER_CLASS.opaque
     && value !== FRAME_PACKET_RENDER_CLASS.transmissive
-    && value !== FRAME_PACKET_RENDER_CLASS.blended) {
+    && value !== FRAME_PACKET_RENDER_CLASS.blended
+    && value !== FRAME_PACKET_RENDER_CLASS.masked) {
     throw new Error("Royal frame-packet render class is invalid");
   }
   return value;

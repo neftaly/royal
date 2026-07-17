@@ -78,6 +78,20 @@ const occurrence = (
 });
 
 describe("pure retained glTF packet topology", () => {
+  it("classifies alpha masks separately without stealing transmissive materials", () => {
+    const topology = createGltfPacketTopology();
+
+    rebuildGltfPacketTopology(topology, 1, [occurrence(0, 0, [
+      primitive(1, [material("MASK")]),
+      primitive(2, [material("MASK", false, 0.5)]),
+    ])]);
+
+    expect(Array.from(topology.catalog.renderClasses.subarray(0, 2))).toEqual([
+      FRAME_PACKET_RENDER_CLASS.masked,
+      FRAME_PACKET_RENDER_CLASS.transmissive,
+    ]);
+  });
+
   it("emits node then material predicates for every material LOD alternative", () => {
     const opaque = material();
     const blended = material("BLEND", true);

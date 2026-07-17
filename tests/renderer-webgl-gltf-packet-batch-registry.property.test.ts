@@ -211,19 +211,23 @@ describe("glTF packet numeric batch registry", () => {
   it("retains first-seen global and per-class order with prefix/scatter ranges", () => {
     const blended = tuple(1, 1, 0, 0, FRAME_PACKET_RENDER_CLASS.blended);
     const opaqueA = tuple(2);
-    const transmissive = tuple(3, 1, 0, 0, FRAME_PACKET_RENDER_CLASS.transmissive);
-    const opaqueB = tuple(4);
-    const { catalog, workspace } = segment([blended, opaqueA, transmissive, blended, opaqueB, opaqueA]);
+    const masked = tuple(3, 1, 0, 0, FRAME_PACKET_RENDER_CLASS.masked);
+    const transmissive = tuple(4, 1, 0, 0, FRAME_PACKET_RENDER_CLASS.transmissive);
+    const opaqueB = tuple(5);
+    const { catalog, workspace } = segment([
+      blended, opaqueA, masked, transmissive, blended, opaqueB, opaqueA,
+    ]);
     const registry = createGltfPacketBatchRegistry();
     const groups = createGltfPacketBatchSegmentGroups();
     beginGltfPacketBatchRegistryFrame(registry);
     groupGltfPacketSubmissionSegment(registry, groups, workspace, 7, catalog);
-    expect(activeIds(groups)).toEqual([0, 1, 2, 3]);
-    expect(Array.from(groups.opaqueBatchIds.subarray(0, groups.opaqueBatchCount))).toEqual([1, 3]);
-    expect(Array.from(groups.transmissiveBatchIds.subarray(0, groups.transmissiveBatchCount))).toEqual([2]);
+    expect(activeIds(groups)).toEqual([0, 1, 2, 3, 4]);
+    expect(Array.from(groups.opaqueBatchIds.subarray(0, groups.opaqueBatchCount))).toEqual([1, 4]);
+    expect(Array.from(groups.maskedBatchIds.subarray(0, groups.maskedBatchCount))).toEqual([2]);
+    expect(Array.from(groups.transmissiveBatchIds.subarray(0, groups.transmissiveBatchCount))).toEqual([3]);
     expect(Array.from(groups.blendedBatchIds.subarray(0, groups.blendedBatchCount))).toEqual([0]);
-    expect(Array.from(groups.memberIndices.subarray(0, groups.memberCount))).toEqual([0, 3, 1, 5, 2, 4]);
-    expect([0, 1, 2, 3].map((id) => groups.batchMemberFirsts[id])).toEqual([0, 2, 4, 5]);
+    expect(Array.from(groups.memberIndices.subarray(0, groups.memberCount))).toEqual([0, 4, 1, 6, 2, 3, 5]);
+    expect([0, 1, 2, 3, 4].map((id) => groups.batchMemberFirsts[id])).toEqual([0, 2, 4, 5, 6]);
   });
 
   it("preserves first-seen order independently within every render class", () => {

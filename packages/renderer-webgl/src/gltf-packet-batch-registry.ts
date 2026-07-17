@@ -61,6 +61,8 @@ export interface GltfPacketBatchSegmentGroups {
   memberCapacity: number;
   memberCount: number;
   memberIndices: Uint32Array;
+  maskedBatchCount: number;
+  maskedBatchIds: Uint32Array;
   opaqueBatchCount: number;
   opaqueBatchIds: Uint32Array;
   planRevision: number;
@@ -142,7 +144,8 @@ const batchTupleHash = (
   }
   if (renderClass !== FRAME_PACKET_RENDER_CLASS.opaque
     && renderClass !== FRAME_PACKET_RENDER_CLASS.transmissive
-    && renderClass !== FRAME_PACKET_RENDER_CLASS.blended) {
+    && renderClass !== FRAME_PACKET_RENDER_CLASS.blended
+    && renderClass !== FRAME_PACKET_RENDER_CLASS.masked) {
     throw new Error("Royal glTF packet batch render class is invalid");
   }
   let hash = 0x811c_9dc5;
@@ -232,6 +235,8 @@ export const createGltfPacketBatchSegmentGroups = (
     memberCapacity: members,
     memberCount: 0,
     memberIndices: new Uint32Array(members),
+    maskedBatchCount: 0,
+    maskedBatchIds: new Uint32Array(batches),
     opaqueBatchCount: 0,
     opaqueBatchIds: new Uint32Array(batches),
     planRevision: 0,
@@ -286,6 +291,7 @@ const reserveActive = (groups: GltfPacketBatchSegmentGroups, required: number): 
   if (required <= groups.activeBatchCapacity) return;
   const capacity = powerOfTwo(required);
   groups.activeBatchIds = grownUint32(groups.activeBatchIds, capacity);
+  groups.maskedBatchIds = grownUint32(groups.maskedBatchIds, capacity);
   groups.opaqueBatchIds = grownUint32(groups.opaqueBatchIds, capacity);
   groups.transmissiveBatchIds = grownUint32(groups.transmissiveBatchIds, capacity);
   groups.blendedBatchIds = grownUint32(groups.blendedBatchIds, capacity);
@@ -426,6 +432,7 @@ const beginEpoch = (groups: GltfPacketBatchSegmentGroups): number => {
     groups.epoch = 1;
   }
   groups.activeBatchCount = 0;
+  groups.maskedBatchCount = 0;
   groups.opaqueBatchCount = 0;
   groups.transmissiveBatchCount = 0;
   groups.blendedBatchCount = 0;
@@ -492,6 +499,9 @@ const appendClassBatch = (
   if (renderClass === FRAME_PACKET_RENDER_CLASS.opaque) {
     groups.opaqueBatchIds[groups.opaqueBatchCount] = batchId;
     groups.opaqueBatchCount += 1;
+  } else if (renderClass === FRAME_PACKET_RENDER_CLASS.masked) {
+    groups.maskedBatchIds[groups.maskedBatchCount] = batchId;
+    groups.maskedBatchCount += 1;
   } else if (renderClass === FRAME_PACKET_RENDER_CLASS.transmissive) {
     groups.transmissiveBatchIds[groups.transmissiveBatchCount] = batchId;
     groups.transmissiveBatchCount += 1;
@@ -526,7 +536,8 @@ const validateWorkspaceSegment = <M, R, L>(
         !== (catalog.sidedness[packetIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided)
       || (renderClass !== FRAME_PACKET_RENDER_CLASS.opaque
         && renderClass !== FRAME_PACKET_RENDER_CLASS.transmissive
-        && renderClass !== FRAME_PACKET_RENDER_CLASS.blended)) {
+        && renderClass !== FRAME_PACKET_RENDER_CLASS.blended
+        && renderClass !== FRAME_PACKET_RENDER_CLASS.masked)) {
       throw new Error("Royal glTF packet batch workspace row is invalid or stale");
     }
     const slot = findSlot(
@@ -761,6 +772,7 @@ export const clearGltfPacketBatchSegmentGroups = (groups: GltfPacketBatchSegment
   groups.activeBatchCount = 0;
   groups.blendedBatchCount = 0;
   groups.epoch = 0;
+  groups.maskedBatchCount = 0;
   groups.memberCount = 0;
   groups.opaqueBatchCount = 0;
   groups.transmissiveBatchCount = 0;
