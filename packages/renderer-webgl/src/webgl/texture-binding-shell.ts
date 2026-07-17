@@ -7,8 +7,10 @@ export const textureBindingOperations = (
   boundTexture: WebGLTexture | null | undefined,
   unit: number,
   texture: WebGLTexture | null,
-): number => (activeUnit === unit ? 0 : TEXTURE_BINDING_ACTIVATE_UNIT)
-  | (boundTexture === texture ? 0 : TEXTURE_BINDING_BIND_TARGET);
+): number => boundTexture === texture
+  ? 0
+  : TEXTURE_BINDING_BIND_TARGET
+    | (activeUnit === unit ? 0 : TEXTURE_BINDING_ACTIVATE_UNIT);
 
 /** Imperative shell retaining texture-unit state only within one Royal-owned pass. */
 export class WebGlTextureBindingShell {

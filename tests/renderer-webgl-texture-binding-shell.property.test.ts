@@ -14,7 +14,7 @@ describe("WebGL texture binding transition policy", () => {
       TEXTURE_BINDING_ACTIVATE_UNIT | TEXTURE_BINDING_BIND_TARGET,
     );
     expect(textureBindingOperations(3, first, 3, first)).toBe(0);
-    expect(textureBindingOperations(2, first, 3, first)).toBe(TEXTURE_BINDING_ACTIVATE_UNIT);
+    expect(textureBindingOperations(2, first, 3, first)).toBe(0);
     expect(textureBindingOperations(3, first, 3, second)).toBe(TEXTURE_BINDING_BIND_TARGET);
   });
 });
