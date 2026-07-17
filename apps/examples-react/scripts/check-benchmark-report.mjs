@@ -192,6 +192,17 @@ const checkFrameStats = (value, label) => {
   }
 };
 
+const checkIdleFrameStats = (value, label) => {
+  if (!requireObject(value, label)) return;
+  for (const field of requiredFrameStats) {
+    requireNumber(value[field], `${label}.${field}`);
+  }
+  requireBoolean(value.failed, `${label}.failed`);
+  requireBoolean(value.timedOut, `${label}.timedOut`);
+  requireZero(value.sampleCount, `${label}.sampleCount`);
+  requireNonNegativeNumber(value.samplesMissing, `${label}.samplesMissing`);
+};
+
 const checkRouteFrameEvidence = (route, routeLabel) => {
   requireBoolean(route.ready, `${routeLabel}.ready`);
   requireNumber(route.wallNavigationAndReadyMs, `${routeLabel}.wallNavigationAndReadyMs`);
@@ -441,6 +452,26 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled, gpuTimersEnabled)
 const checkFrameWork = (route, routeLabel, gpuTimersEnabled) => {
   if (route.frameWork === undefined) return;
   if (!requireObject(route.frameWork, `${routeLabel}.frameWork`)) return;
+  if (!requireBoolean(route.frameWork.idle, `${routeLabel}.frameWork.idle`)) return;
+  if (route.frameWork.idle === true) {
+    checkIdleFrameStats(
+      route.frameWork.renderCallbackDurationMs,
+      `${routeLabel}.frameWork.renderCallbackDurationMs`,
+    );
+    if (!gpuTimersEnabled) return;
+    const timers = route.frameWork.gpuDurationMs;
+    const timerLabel = `${routeLabel}.frameWork.gpuDurationMs`;
+    if (!requireObject(timers, timerLabel)) return;
+    requireBoolean(timers.enabled, `${timerLabel}.enabled`);
+    requireBoolean(timers.supported, `${timerLabel}.supported`);
+    if (timers.supported === true) {
+      checkIdleFrameStats(timers, timerLabel);
+      requireNonNegativeNumber(timers.disjointSamples, `${timerLabel}.disjointSamples`);
+      requireNonNegativeNumber(timers.errors, `${timerLabel}.errors`);
+      requireNonNegativeNumber(timers.pendingSamples, `${timerLabel}.pendingSamples`);
+    }
+    return;
+  }
   if (requireObject(
     route.frameWork.renderCallbackDurationMs,
     `${routeLabel}.frameWork.renderCallbackDurationMs`,

@@ -849,13 +849,15 @@ const installBenchmarkHooks = async (session) => {
     windowFrameSample = null;
     gpuTimers.windowEnabled = sample.previousGpuTimerEnabled;
     await settleGpuTimers(sample.gl, sample.generation, 250);
+    const renderCallbackDurationMs = statsFromDeltas(
+      windowDrawCallbackDurations.slice(sample.callbackStartIndex),
+      requestedSampleCount,
+      ${frameSampleTimeoutMs},
+    );
     return {
       gpuDurationMs: gpuTimerStats(sample.gl, sample.gpuStartIndex, requestedSampleCount),
-      renderCallbackDurationMs: statsFromDeltas(
-        windowDrawCallbackDurations.slice(sample.callbackStartIndex),
-        requestedSampleCount,
-        ${frameSampleTimeoutMs},
-      ),
+      idle: renderCallbackDurationMs.sampleCount === 0,
+      renderCallbackDurationMs,
     };
   };
   const resolveXrWaiters = () => {
