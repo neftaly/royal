@@ -413,6 +413,15 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled, gpuTimersEnabled)
       `${routeLabel}.cameraDrag.frameStats.cameraInput.handlerDurationMs`,
     );
   }
+  if (requireObject(
+    route.cameraDrag.frameStats?.renderCallbackDurationMs,
+    `${routeLabel}.cameraDrag.frameStats.renderCallbackDurationMs`,
+  )) {
+    checkFrameStats(
+      route.cameraDrag.frameStats.renderCallbackDurationMs,
+      `${routeLabel}.cameraDrag.frameStats.renderCallbackDurationMs`,
+    );
+  }
   checkGpuTimerStats(
     route.cameraDrag.frameStats?.gpuDurationMs,
     `${routeLabel}.cameraDrag.frameStats.gpuDurationMs`,

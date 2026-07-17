@@ -695,6 +695,7 @@ const installBenchmarkHooks = async (session) => {
   let lastDrawGl;
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
+  const windowDrawCallbackDurations = [];
   const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
     const sorted = [...deltas].sort((left, right) => left - right);
     const sum = sorted.reduce((total, value) => total + value, 0);
@@ -902,13 +903,16 @@ const installBenchmarkHooks = async (session) => {
     const wrappedWindowRequestAnimationFrame = (callback) =>
       originalWindowRequestAnimationFrame.call(globalThis, (time) => {
         const drawsBefore = drawCount();
+        const callbackStartedAt = performance.now();
         const gpuTimer = gpuTimers.windowEnabled && !gpuDrawProfile.active
           ? beginGpuTimerForGl(lastDrawGl)
           : undefined;
         try {
           callback(time);
         } finally {
-          endGpuTimer(gpuTimer, drawCount() > drawsBefore);
+          const drew = drawCount() > drawsBefore;
+          if (drew) windowDrawCallbackDurations.push(performance.now() - callbackStartedAt);
+          endGpuTimer(gpuTimer, drew);
         }
       });
     Object.defineProperty(wrappedWindowRequestAnimationFrame, '__royalBenchPatched', { value: true });
@@ -1195,6 +1199,7 @@ const installBenchmarkHooks = async (session) => {
     const gpuGl = lastDrawGl;
     const gpuGeneration = gpuTimers.generation;
     const gpuStartIndex = gpuTimers.durations.length;
+    const callbackDurationStartIndex = windowDrawCallbackDurations.length;
     const previousWindowGpuTimerEnabled = gpuTimers.windowEnabled;
     gpuTimers.windowEnabled = true;
     gpuDrawProfile.records.length = 0;
@@ -1249,6 +1254,11 @@ const installBenchmarkHooks = async (session) => {
       cameraInput: {
         handlerDurationMs: statsFromDeltas(handlerDeltas, requestedSampleCount, sampleTimeoutMs),
       },
+      renderCallbackDurationMs: statsFromDeltas(
+        windowDrawCallbackDurations.slice(callbackDurationStartIndex),
+        requestedSampleCount,
+        sampleTimeoutMs,
+      ),
       gpuDurationMs: gpuTimerStats(gpuGl, gpuStartIndex, requestedSampleCount),
       gpuDrawProfile: {
         attempted: gpuDrawProfile.attempted,
@@ -1409,6 +1419,7 @@ const installBenchmarkHooks = async (session) => {
       for (const key of Object.keys(counters)) counters[key] = 0;
       xr.callbackDurations.length = 0;
       xr.frameTimes.length = 0;
+      windowDrawCallbackDurations.length = 0;
       gpuTimers.disjointSamples = 0;
       gpuTimers.durations.length = 0;
       gpuTimers.errors = 0;
@@ -2239,6 +2250,7 @@ const routeSummary = (route) => {
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
   const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
+  const cameraRenderCallbackStats = cameraDragFrameStats?.renderCallbackDurationMs;
   const gpuDrawProfile = cameraDragFrameStats?.gpuDrawProfile;
   const topGpuDraw = gpuDrawProfile?.records?.[0];
   const topGpuProgram = gpuDrawProfile?.programs?.[0];
@@ -2419,6 +2431,12 @@ const routeSummary = (route) => {
           ? {
               cameraInputHandlerMaxMs: round(cameraInputHandlerStats.maxMs),
               cameraInputHandlerP95Ms: round(cameraInputHandlerStats.p95Ms),
+            }
+          : {}),
+        ...(typeof cameraRenderCallbackStats?.p95Ms === 'number'
+          ? {
+              cameraRenderCallbackMaxMs: round(cameraRenderCallbackStats.maxMs),
+              cameraRenderCallbackP95Ms: round(cameraRenderCallbackStats.p95Ms),
             }
           : {}),
         ...(typeof cameraDragFrameStats.samplesMissing === 'number' && cameraDragFrameStats.samplesMissing > 0
@@ -2697,6 +2715,9 @@ const main = async () => {
               : []),
             ...(typeof cameraDragFrameStats.cameraInput?.handlerDurationMs?.p95Ms === 'number'
               ? [`dragHandlerP95=${cameraDragFrameStats.cameraInput.handlerDurationMs.p95Ms.toFixed(2)}ms`]
+              : []),
+            ...(typeof cameraDragFrameStats.renderCallbackDurationMs?.p95Ms === 'number'
+              ? [`dragCpuP95=${cameraDragFrameStats.renderCallbackDurationMs.p95Ms.toFixed(2)}ms`]
               : []),
             ...(typeof cameraDragFrameStats.raf?.p95Ms === 'number'
               ? [`dragRafP95=${cameraDragFrameStats.raf.p95Ms.toFixed(1)}ms`]
