@@ -277,13 +277,14 @@ type SurfaceMaterialTextureRuntime = {
   lastOrdinaryTexture: TextureAssetUploadRef | undefined;
   lastPunctual: boolean;
   lastResidencyKind: "none" | "ordinary" | undefined;
+  lastTextureUnitRevision: number;
   lastTransmission: ScreenColorTextureResource | undefined;
   lastTransmissionUploaded: boolean;
-  lastViewRevision: number;
   ordinaryBaseColorBinding: MutableOrdinaryBaseColorTextureBinding | undefined;
   readonly plan: MutableSurfaceTextureBindingPlan;
   readonly readinessWorkspace: SurfaceTextureBindingWorkspace;
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
+  residencyComplete: boolean;
   virtualBaseColorBinding: MutableVirtualBaseColorTextureBinding | undefined;
 };
 
@@ -295,9 +296,9 @@ const createSurfaceMaterialTextureRuntime = (): SurfaceMaterialTextureRuntime =>
     lastOrdinaryTexture: undefined,
     lastPunctual: false,
     lastResidencyKind: undefined,
+    lastTextureUnitRevision: -1,
     lastTransmission: undefined,
     lastTransmissionUploaded: false,
-    lastViewRevision: -1,
     ordinaryBaseColorBinding: undefined,
     plan: {
       baseColor: { kind: "none" },
@@ -312,6 +313,7 @@ const createSurfaceMaterialTextureRuntime = (): SurfaceMaterialTextureRuntime =>
     },
     readinessWorkspace,
     readyTextures,
+    residencyComplete: false,
     virtualBaseColorBinding: undefined,
   };
 };
@@ -434,6 +436,7 @@ export class SurfaceExecutionArena {
     wakeRequested: boolean;
   } = { diagnostics: EMPTY_SURFACE_DIAGNOSTICS, wakeRequested: false };
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
+  #textureUnitRevision = 0;
   readonly #textureBindings: WebGlTextureBindingShell;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
   #viewRevision = 0;
@@ -458,6 +461,10 @@ export class SurfaceExecutionArena {
 
   configureTextureUnits(maxTextureImageUnits: number): void {
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
+    // Context restoration re-enters through this boundary even when the
+    // numeric capability is unchanged. Invalidate plans that refer to lost
+    // ordinary/IBL/cluster texture resources without walking the WeakMap.
+    this.#textureUnitRevision += 1;
   }
 
   /** Synchronizes the state cache with Royal's frame baseline. */
@@ -829,8 +836,9 @@ export class SurfaceExecutionArena {
     const runtime = textureCatalog.runtime;
     if (
       reusableResidency
-      && runtime.lastViewRevision === this.#viewRevision
+      && runtime.residencyComplete
       && runtime.lastResidencyKind === baseColorResidency.kind
+      && runtime.lastTextureUnitRevision === this.#textureUnitRevision
       && runtime.lastOrdinaryTexture === (
         baseColorResidency.kind === "ordinary" ? baseColorResidency.texture : undefined
       )
@@ -838,6 +846,7 @@ export class SurfaceExecutionArena {
       && runtime.lastTransmissionUploaded === transmissionUploaded
       && runtime.lastIbl === ibl
       && runtime.lastPunctual === punctual
+      && this.#retainCachedOrdinaryResidency(runtime.plan)
     ) {
       this.#recordTextureBindingOmissions(runtime.plan);
       return runtime.plan;
@@ -901,6 +910,7 @@ export class SurfaceExecutionArena {
       ordinaryBaseColor = resource.uploaded ? resource : undefined;
       const baseColorPending = this.#ordinaryTextureIsLoading(baseColorResidency.texture, resource);
       criticalPending ||= baseColorPending;
+      if (ordinaryBaseColor === undefined) admittedResourcesReady = false;
     }
     for (let index = 0; index < entries.length; index += 1) {
       const { descriptor, texture } = entries[index]!;
@@ -1022,9 +1032,10 @@ export class SurfaceExecutionArena {
     runtime.plan.materialTextures = entries;
     runtime.plan.omissions = pure.omissions;
     runtime.plan.textureUnits = pure.textureUnits;
+    runtime.residencyComplete = reusableResidency && admittedResourcesReady && !criticalPending;
     if (reusableResidency) {
-      runtime.lastViewRevision = this.#viewRevision;
       runtime.lastResidencyKind = baseColorResidency.kind;
+      runtime.lastTextureUnitRevision = this.#textureUnitRevision;
       runtime.lastOrdinaryTexture = baseColorResidency.kind === "ordinary"
         ? baseColorResidency.texture
         : undefined;
@@ -1032,8 +1043,22 @@ export class SurfaceExecutionArena {
       runtime.lastTransmissionUploaded = transmissionUploaded;
       runtime.lastIbl = ibl;
       runtime.lastPunctual = punctual;
-    } else runtime.lastViewRevision = -1;
+    }
     return runtime.plan;
+  }
+
+  /** Reasserts frame intent while proving a complete retained plan is still live. */
+  #retainCachedOrdinaryResidency(plan: SurfaceTextureBindingPlan): boolean {
+    if (plan.baseColor.kind === "ordinary") {
+      const resource = plan.baseColor.resource;
+      if (this.#ordinaryTextures.peekGpuResource(resource.key) !== resource || !resource.uploaded) return false;
+      this.#textureResidencyIntent.requireOrdinary(resource.key);
+    }
+    for (const resource of plan.readyTextures.values()) {
+      if (this.#ordinaryTextures.peekGpuResource(resource.key) !== resource || !resource.uploaded) return false;
+      this.#textureResidencyIntent.requireOrdinary(resource.key);
+    }
+    return true;
   }
 
   #materialLoading(
