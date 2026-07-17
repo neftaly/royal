@@ -489,38 +489,43 @@ export const bindSurfaceIbl = (
   bindUniforms = true,
 ): void => {
   const state = arena as unknown as State;
-  if (bindUniforms) bindSurfaceIblIrradiance(programArena, program, lightSet);
   const specular = lightSet.specular;
   const useSpecular = specular !== undefined && specularTextureUnit !== undefined;
-  if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");
   const useBrdfLut = useSpecular && brdfLutTextureUnit !== undefined;
+  if (!bindUniforms) {
+    // The owning program/unit revision already completed the validating bind;
+    // only texture targets can have been displaced by intervening materials.
+    if (useSpecular) bindings.bindCube(specularTextureUnit, specular.texture);
+    if (useSpecular && brdfLutTextureUnit !== undefined && state.brdfLut !== undefined) {
+      bindings.bindTexture2d(brdfLutTextureUnit, state.brdfLut);
+    }
+    return;
+  }
+  bindSurfaceIblIrradiance(programArena, program, lightSet);
+  if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");
   if (useBrdfLut) {
     assertTextureUnit(state, brdfLutTextureUnit, "IBL BRDF LUT");
     if (brdfLutTextureUnit === specularTextureUnit) {
       throw new RangeError(`IBL specular and BRDF LUT texture units must not alias unit ${brdfLutTextureUnit}`);
     }
   }
-  if (bindUniforms) {
-    uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
-    uniform4f(programArena, program, "u_iblSpecularSettings",
-      useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
-      specular?.encoding === "rgbd" ? 1 : 0);
-  }
+  uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
+  uniform4f(programArena, program, "u_iblSpecularSettings",
+    useSpecular ? 1 : 0, specular?.intensity ?? 1, specular?.mipCount ?? 1,
+    specular?.encoding === "rgbd" ? 1 : 0);
   if (useSpecular) {
     bindings.bindCube(specularTextureUnit, specular.texture);
-    if (bindUniforms) uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
+    uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
   }
   const hadBrdfLut = state.brdfLut !== undefined;
   const brdfLut = useBrdfLut ? ensureBrdfLut(state) : undefined;
   // First-time LUT realization uses the raw upload lane and invalidates every
   // target binding on its transient unit before retained draw binding resumes.
   if (!hadBrdfLut && brdfLut !== undefined) bindings.invalidate();
-  if (bindUniforms) {
-    uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
-  }
+  uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
   if (brdfLut !== undefined && brdfLutTextureUnit !== undefined) {
     bindings.bindTexture2d(brdfLutTextureUnit, brdfLut);
-    if (bindUniforms) uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
+    uniform1i(programArena, program, "u_iblBrdfLut", brdfLutTextureUnit);
   }
 };
 
