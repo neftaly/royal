@@ -92,8 +92,9 @@ describe("surface shader variants", () => {
       expect(source, kind).not.toMatch(/__[A-Z0-9_]+__/u);
       if (kind.startsWith("surface-instanced-split")) {
         expect(source, kind).toContain("cross(basis[1], basis[2]) * normal.x");
-        expect(source, kind).toContain("transformRootNormal(");
-        expect(source, kind).toContain("a_instanceScale.y * a_instanceScale.z * localNormal.x");
+        expect(source, kind).toContain("transformSurfaceNormal(modelBasis, localNormal, modelHandedness)");
+        expect(source, kind).not.toContain("sin(");
+        expect(source, kind).not.toContain("cos(");
       } else {
         expect(source, kind).toContain("uniform mat4 u_modelNormalTransform;");
         expect(source, kind).toContain("mat3(u_modelNormalTransform) * localNormal");
@@ -115,7 +116,8 @@ describe("surface shader variants", () => {
       expect(source, kind).toContain("v_color = a_color;");
     }
     expect(vertexShaderSource("unlit")).toContain("u_model * vec4(a_position, 1.0)");
-    expect(vertexShaderSource("unlit-instanced-split")).toContain("transformRootPoint(assetPosition.xyz)");
+    expect(vertexShaderSource("unlit-instanced-split"))
+      .toContain("a_instanceModel * vec4(a_position, 1.0)");
   });
 
   it("generates sampler declarations only for enabled texture features", () => {

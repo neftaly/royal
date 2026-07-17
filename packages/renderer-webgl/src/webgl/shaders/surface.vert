@@ -3,9 +3,9 @@
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec4 a_tangent;
-layout(location = 10) in vec2 a_uv0;
-layout(location = 11) in vec2 a_uv1;
-layout(location = 12) in vec4 a_color;
+layout(location = 7) in vec2 a_uv0;
+layout(location = 8) in vec2 a_uv1;
+layout(location = 9) in vec4 a_color;
 
 uniform mat4 u_projection;
 uniform mat4 u_view;

@@ -793,14 +793,8 @@ export const gltfInstancingSnapshotKeys = [
   "batchInstancesTotal",
   "drawCalls",
   "instancesDrawn",
-  "localModelUploadBytes",
-  "localModelUploadCalls",
-  "rootPositionUploadBytes",
-  "rootPositionUploadCalls",
-  "rootRotationUploadBytes",
-  "rootRotationUploadCalls",
-  "rootScaleUploadBytes",
-  "rootScaleUploadCalls",
+  "modelUploadBytes",
+  "modelUploadCalls",
 ] as const satisfies readonly (keyof WebGlGltfInstancingSnapshot)[];
 
 export const gltfInstancingDelta = (

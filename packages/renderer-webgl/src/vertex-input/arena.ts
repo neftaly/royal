@@ -52,10 +52,7 @@ export interface VertexInputGpuGovernor {
 }
 
 interface VertexInputInstanceBuffers {
-  readonly localModelBuffer: WebGLBuffer;
-  readonly rootPositionBuffer: WebGLBuffer;
-  readonly rootRotationBuffer: WebGLBuffer;
-  readonly rootScaleBuffer: WebGLBuffer;
+  readonly modelBuffer: WebGLBuffer;
 }
 
 declare const vertexInputInstanceAuthority: unique symbol;
@@ -66,14 +63,11 @@ export interface VertexInputInstanceAllocation {
 }
 
 export interface VertexInputInstanceStaging {
-  /** True when preparation requires callers to repopulate every active lane element. */
+  /** True when preparation requires callers to repopulate every active model. */
   readonly forceFull: boolean;
-  readonly localModels: Float32Array;
-  /** Reusable packed [start, end) instance pairs, consumed one lane at a time. */
+  readonly models: Float32Array;
+  /** Reusable packed [start, end) instance pairs. */
   readonly ranges: Int32Array;
-  readonly rootPositions: Float32Array;
-  readonly rootRotations: Float32Array;
-  readonly rootScales: Float32Array;
 }
 
 export interface VertexInputInstanceLaneUploadStats {
@@ -152,24 +146,15 @@ type OwnedInstanceAllocation = {
   pendingBufferDeletes?: Set<WebGLBuffer>;
   capacity: number;
   instanceCount: number;
-  localModelsDirty: boolean;
-  readonly localModelsStats: MutableInstanceLaneUploadStats;
-  rootPositionsDirty: boolean;
-  readonly rootPositionsStats: MutableInstanceLaneUploadStats;
-  rootRotationsDirty: boolean;
-  readonly rootRotationsStats: MutableInstanceLaneUploadStats;
-  rootScalesDirty: boolean;
-  readonly rootScalesStats: MutableInstanceLaneUploadStats;
+  modelsDirty: boolean;
+  readonly modelsStats: MutableInstanceLaneUploadStats;
   readonly staging: MutableInstanceStaging;
 };
 
 type MutableInstanceStaging = {
   forceFull: boolean;
-  localModels: Float32Array;
+  models: Float32Array;
   ranges: Int32Array;
-  rootPositions: Float32Array;
-  rootRotations: Float32Array;
-  rootScales: Float32Array;
 };
 
 type MutableInstanceLaneUploadStats = {
@@ -261,21 +246,12 @@ export const createVertexInputInstanceAllocation = (
     gpuLeases: [],
     capacity: 0,
     instanceCount: 0,
-    localModelsDirty: true,
-    localModelsStats: { bytes: 0, calls: 0 },
-    rootPositionsDirty: true,
-    rootPositionsStats: { bytes: 0, calls: 0 },
-    rootRotationsDirty: true,
-    rootRotationsStats: { bytes: 0, calls: 0 },
-    rootScalesDirty: true,
-    rootScalesStats: { bytes: 0, calls: 0 },
+    modelsDirty: true,
+    modelsStats: { bytes: 0, calls: 0 },
     staging: {
       forceFull: true,
-      localModels: new Float32Array(),
+      models: new Float32Array(),
       ranges: new Int32Array(),
-      rootPositions: new Float32Array(),
-      rootRotations: new Float32Array(),
-      rootScales: new Float32Array(),
     },
   });
   return allocation as unknown as VertexInputInstanceAllocation;
@@ -529,10 +505,7 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
     resource.governedBufferCapacity = 0;
     delete resource.buffers;
     delete resource.pendingBufferDeletes;
-    resource.localModelsDirty = true;
-    resource.rootPositionsDirty = true;
-    resource.rootRotationsDirty = true;
-    resource.rootScalesDirty = true;
+    resource.modelsDirty = true;
     resource.staging.forceFull = true;
   }
   state.nextStaticIdentityId = 1;
@@ -566,10 +539,7 @@ const accountAbandonedContextHandles = (state: VertexInputArenaState): void => {
     if (resource.pendingBufferDeletes !== undefined) {
       for (const buffer of resource.pendingBufferDeletes) buffers.add(buffer);
     } else if (resource.buffers !== undefined) {
-      buffers.add(resource.buffers.localModelBuffer);
-      buffers.add(resource.buffers.rootPositionBuffer);
-      buffers.add(resource.buffers.rootRotationBuffer);
-      buffers.add(resource.buffers.rootScaleBuffer);
+      buffers.add(resource.buffers.modelBuffer);
     }
   }
   state.abandonedBufferCount += buffers.size;
@@ -612,12 +582,7 @@ const createOwnedInstanceBuffers = (
     return buffer;
   };
   try {
-    const buffers = {
-      localModelBuffer: create(16),
-      rootPositionBuffer: create(3),
-      rootRotationBuffer: create(3),
-      rootScaleBuffer: create(3),
-    };
+    const buffers = { modelBuffer: create(16) };
     unbindVertexInput(gl);
     for (const buffer of owned) state.pendingBufferDeletes.delete(buffer);
     const lease = reservation?.commit();
@@ -644,29 +609,19 @@ const resizeOwnedInstanceBuffers = (
   capacity: number,
 ): void => {
   try {
-    for (const [buffer, floatsPerInstance] of [
-      [buffers.localModelBuffer, 16],
-      [buffers.rootPositionBuffer, 3],
-      [buffers.rootRotationBuffer, 3],
-      [buffers.rootScaleBuffer, 3],
-    ] as const) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        capacity * floatsPerInstance * Float32Array.BYTES_PER_ELEMENT,
-        gl.DYNAMIC_DRAW,
-      );
-    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.modelBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      capacity * 16 * Float32Array.BYTES_PER_ELEMENT,
+      gl.DYNAMIC_DRAW,
+    );
   } finally {
     unbindVertexInput(gl);
   }
 };
 
 const markAllInstanceLanesDirty = (resource: OwnedInstanceAllocation): void => {
-  resource.localModelsDirty = true;
-  resource.rootPositionsDirty = true;
-  resource.rootRotationsDirty = true;
-  resource.rootScalesDirty = true;
+  resource.modelsDirty = true;
   resource.staging.forceFull = true;
 };
 
@@ -720,10 +675,7 @@ export const prepareVertexInputInstance = (
       }
     }
     resource.capacity = instanceCount;
-    resource.staging.localModels = arrays.localModels;
-    resource.staging.rootPositions = arrays.rootPositions;
-    resource.staging.rootRotations = arrays.rootRotations;
-    resource.staging.rootScales = arrays.rootScales;
+    resource.staging.models = arrays.models;
     resource.staging.ranges = arrays.ranges;
   } else if (resource.buffers === undefined) {
     const reservation = reserveGpu(state, instanceBufferByteLength(resource.capacity), 0);
@@ -734,10 +686,7 @@ export const prepareVertexInputInstance = (
   }
   if (grew || countChanged || buffersMissing) markAllInstanceLanesDirty(resource);
   resource.instanceCount = instanceCount;
-  resource.staging.forceFull = resource.localModelsDirty
-    || resource.rootPositionsDirty
-    || resource.rootRotationsDirty
-    || resource.rootScalesDirty;
+  resource.staging.forceFull = resource.modelsDirty;
   return resource.staging;
 };
 
@@ -753,39 +702,15 @@ export const uploadVertexInputInstanceLane = (
   requireContextGeneration(state, contextGeneration);
   const resource = instanceAllocation(state, allocation);
   validSerial(rangeCount, "instance upload range count");
-  let buffer: WebGLBuffer | undefined;
-  let data: Float32Array;
-  let stride: number;
-  let forceFull: boolean;
-  let stats: MutableInstanceLaneUploadStats;
-  if (lane === "localModels") {
-    buffer = resource.buffers?.localModelBuffer;
-    data = resource.staging.localModels;
-    stride = vertexInputInstanceLaneStride(lane);
-    forceFull = resource.localModelsDirty;
-    stats = resource.localModelsStats;
-  } else if (lane === "rootPositions") {
-    buffer = resource.buffers?.rootPositionBuffer;
-    data = resource.staging.rootPositions;
-    stride = vertexInputInstanceLaneStride(lane);
-    forceFull = resource.rootPositionsDirty;
-    stats = resource.rootPositionsStats;
-  } else if (lane === "rootRotations") {
-    buffer = resource.buffers?.rootRotationBuffer;
-    data = resource.staging.rootRotations;
-    stride = vertexInputInstanceLaneStride(lane);
-    forceFull = resource.rootRotationsDirty;
-    stats = resource.rootRotationsStats;
-  } else if (lane === "rootScales") {
-    buffer = resource.buffers?.rootScaleBuffer;
-    data = resource.staging.rootScales;
-    stride = vertexInputInstanceLaneStride(lane);
-    forceFull = resource.rootScalesDirty;
-    stats = resource.rootScalesStats;
-  } else {
+  if (lane !== "models") {
     throw new Error(`Invalid vertex-input instance lane ${String(lane)}`);
   }
+  const buffer = resource.buffers?.modelBuffer;
   if (buffer === undefined) throw new Error("Vertex-input instance must be prepared before upload");
+  const data = resource.staging.models;
+  const stride = vertexInputInstanceLaneStride(lane);
+  const forceFull = resource.modelsDirty;
+  const stats = resource.modelsStats;
   const actualRangeCount = forceFull ? (resource.instanceCount === 0 ? 0 : 1) : rangeCount;
   const bytes = vertexInputInstanceLaneUploadBytes(
     lane,
@@ -819,24 +744,15 @@ export const uploadVertexInputInstanceLane = (
         floatCount,
       );
     }
-    if (lane === "localModels") resource.localModelsDirty = false;
-    else if (lane === "rootPositions") resource.rootPositionsDirty = false;
-    else if (lane === "rootRotations") resource.rootRotationsDirty = false;
-    else resource.rootScalesDirty = false;
-    resource.staging.forceFull = resource.localModelsDirty
-      || resource.rootPositionsDirty
-      || resource.rootRotationsDirty
-      || resource.rootScalesDirty;
+    resource.modelsDirty = false;
+    resource.staging.forceFull = false;
     stats.bytes = bytes;
     stats.calls = actualRangeCount;
     settleUploadReservation();
     return stats;
   } catch (error) {
     settleUploadReservation();
-    if (lane === "localModels") resource.localModelsDirty = true;
-    else if (lane === "rootPositions") resource.rootPositionsDirty = true;
-    else if (lane === "rootRotations") resource.rootRotationsDirty = true;
-    else resource.rootScalesDirty = true;
+    resource.modelsDirty = true;
     resource.staging.forceFull = true;
     throw error;
   } finally {
@@ -957,31 +873,16 @@ export const vertexInputBaseVertexArray = (
 };
 
 const sameInstanceBuffers = (left: VertexInputInstanceBuffers, right: VertexInputInstanceBuffers): boolean =>
-  left.localModelBuffer === right.localModelBuffer
-  && left.rootPositionBuffer === right.rootPositionBuffer
-  && left.rootRotationBuffer === right.rootRotationBuffer
-  && left.rootScaleBuffer === right.rootScaleBuffer;
+  left.modelBuffer === right.modelBuffer;
 
 const configureInstanceAttributes = (gl: WebGL2RenderingContext, buffers: VertexInputInstanceBuffers): void => {
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.localModelBuffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.modelBuffer);
   for (let column = 0; column < 4; column += 1) {
-    const location = VERTEX_ATTRIBUTE.instanceLocalModelFirstColumn + column;
+    const location = VERTEX_ATTRIBUTE.instanceModelFirstColumn + column;
     gl.enableVertexAttribArray(location);
     gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 64, column * 16);
     gl.vertexAttribDivisor(location, 1);
   }
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.rootPositionBuffer);
-  gl.enableVertexAttribArray(VERTEX_ATTRIBUTE.instancePosition);
-  gl.vertexAttribPointer(VERTEX_ATTRIBUTE.instancePosition, 3, gl.FLOAT, false, 12, 0);
-  gl.vertexAttribDivisor(VERTEX_ATTRIBUTE.instancePosition, 1);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.rootRotationBuffer);
-  gl.enableVertexAttribArray(VERTEX_ATTRIBUTE.instanceRotation);
-  gl.vertexAttribPointer(VERTEX_ATTRIBUTE.instanceRotation, 3, gl.FLOAT, false, 12, 0);
-  gl.vertexAttribDivisor(VERTEX_ATTRIBUTE.instanceRotation, 1);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.rootScaleBuffer);
-  gl.enableVertexAttribArray(VERTEX_ATTRIBUTE.instanceScale);
-  gl.vertexAttribPointer(VERTEX_ATTRIBUTE.instanceScale, 3, gl.FLOAT, false, 12, 0);
-  gl.vertexAttribDivisor(VERTEX_ATTRIBUTE.instanceScale, 1);
 };
 
 const vertexInputCompositeVertexArray = (
@@ -1056,14 +957,9 @@ export const vertexInputCompositeVertexArrayForInstance = (
 ): WebGLVertexArrayObject => {
   const state = arena as unknown as VertexInputArenaState;
   const resource = instanceAllocation(state, allocation);
-  if (resource.buffers === undefined
-    || resource.localModelsDirty || resource.rootPositionsDirty
-    || resource.rootRotationsDirty || resource.rootScalesDirty) {
+  if (resource.buffers === undefined || resource.modelsDirty) {
     prepareVertexInputInstance(arena, gl, contextGeneration, allocation, resource.instanceCount);
-    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "localModels", 0);
-    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "rootPositions", 0);
-    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "rootRotations", 0);
-    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "rootScales", 0);
+    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "models", 0);
   } else {
     requireContextGeneration(state, contextGeneration);
   }
@@ -1170,10 +1066,7 @@ const deleteOwnedInstanceBuffers = (
 ): void => {
   if (resource.buffers === undefined && resource.pendingBufferDeletes === undefined) return;
   const buffers = resource.pendingBufferDeletes ??= new Set<WebGLBuffer>([
-    resource.buffers!.localModelBuffer,
-    resource.buffers!.rootPositionBuffer,
-    resource.buffers!.rootRotationBuffer,
-    resource.buffers!.rootScaleBuffer,
+    resource.buffers!.modelBuffer,
   ]);
   throwFailure(deletePendingBuffers(gl, buffers));
   delete resource.pendingBufferDeletes;

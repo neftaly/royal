@@ -146,14 +146,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforeCommit);
 
     expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
-      { byteOffset: 477 * 3 * Float32Array.BYTES_PER_ELEMENT, floatLength: 9, floatOffset: 477 * 3 },
+      { byteOffset: 477 * 16 * Float32Array.BYTES_PER_ELEMENT, floatLength: 48, floatOffset: 477 * 16 },
     ]);
-    expect(counters.rootPositionUploadBytes).toBe(36);
-    expect(counters.rootPositionUploadCalls).toBe(1);
-    expect(counters.rootRotationUploadBytes).toBe(0);
-    expect(counters.rootRotationUploadCalls).toBe(0);
-    expect(counters.rootScaleUploadBytes).toBe(0);
-    expect(counters.rootScaleUploadCalls).toBe(0);
+    expect(counters.modelUploadBytes).toBe(3 * 16 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.modelUploadCalls).toBe(1);
     renderRoot.dispose();
   });
 
@@ -192,9 +188,9 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const callsBeforeRetry = fake.calls.length;
     renderRoot.render(renderGraph);
     const retryPose = bufferSubDataPayloads(fake.calls.slice(callsBeforeRetry))
-      .find((payload) => payload.length === 12);
+      .find((payload) => payload.length === 64);
     expect(retryPose).toBeDefined();
-    expect(roundVector(retryPose!.slice(3, 6))).toEqual([0.75, 0, 0]);
+    expect(roundVector(retryPose!.slice(28, 31))).toEqual([0.75, 0, 0]);
     renderRoot.dispose();
   });
 
@@ -244,15 +240,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
       expect(instancedDrawCalls(frameCalls)).toHaveLength(1);
       expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
-        { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-        { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+        { byteOffset: 0, floatLength: 32, floatOffset: 0 },
       ]);
-      expect(counters.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
-      expect(counters.rootPositionUploadCalls).toBe(1);
-      expect(counters.rootRotationUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
-      expect(counters.rootRotationUploadCalls).toBe(1);
-      expect(counters.rootScaleUploadBytes).toBe(0);
-      expect(counters.rootScaleUploadCalls).toBe(0);
+      expect(counters.modelUploadBytes).toBe(2 * 16 * Float32Array.BYTES_PER_ELEMENT);
+      expect(counters.modelUploadCalls).toBe(1);
       expect(Array.from(instances.scales)).toEqual([0.5, 0.5, 0.5, 0.75, 0.75, 0.75]);
     }
 
@@ -302,21 +293,14 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(instancedDrawCalls(swapCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(swapCalls)).toEqual([
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 16, floatOffset: 0 },
     ]);
-    expect(bufferSubDataPayloads(swapCalls).map(roundVector)).toEqual([
-      [-0.4, 0, 0, 0.4, 0, 0],
-      [0, 0, 0],
-      [1, 1, 1],
-    ]);
-    expect(counters.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
-    expect(counters.rootPositionUploadCalls).toBe(1);
-    expect(counters.rootRotationUploadBytes).toBe(3 * Float32Array.BYTES_PER_ELEMENT);
-    expect(counters.rootRotationUploadCalls).toBe(1);
-    expect(counters.rootScaleUploadBytes).toBe(3 * Float32Array.BYTES_PER_ELEMENT);
-    expect(counters.rootScaleUploadCalls).toBe(1);
+    const swappedModels = bufferSubDataPayloads(swapCalls).map(roundVector);
+    expect(swappedModels).toHaveLength(1);
+    expect(swappedModels[0]).toHaveLength(16);
+    expect(swappedModels[0]?.[12]).toBe(-0.4);
+    expect(counters.modelUploadBytes).toBe(16 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.modelUploadCalls).toBe(1);
 
     renderRoot.dispose();
   });
@@ -409,14 +393,12 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(translatedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 32, floatOffset: 0 },
     ]);
     expect(translatedInstancing.batchPlansBuilt).toBe(0);
     expect(translatedInstancing.batchInstancesTotal).toBe(2);
-    expect(translatedInstancing.rootPositionUploadBytes).toBe(6 * Float32Array.BYTES_PER_ELEMENT);
-    expect(translatedInstancing.rootPositionUploadCalls).toBe(1);
-    expect(translatedInstancing.rootRotationUploadBytes).toBe(0);
-    expect(translatedInstancing.rootRotationUploadCalls).toBe(0);
+    expect(translatedInstancing.modelUploadBytes).toBe(2 * 16 * Float32Array.BYTES_PER_ELEMENT);
+    expect(translatedInstancing.modelUploadCalls).toBe(1);
 
     const expandedRenderGraph = renderScene([
       directionalLight({
@@ -512,9 +494,6 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
     expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 32, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
 
     const callsBeforeSecondReadyRender = calls.length;
@@ -603,9 +582,12 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const viewCalls = calls.slice(callsBeforeViews);
     const instancedDraws = instancedDrawCalls(viewCalls);
     const posePayloads = bufferSubDataPayloads(viewCalls)
-      .filter((payload) => payload.length === 6)
+      .filter((payload) => payload.length === 32)
       .map(roundVector)
-      .filter((payload) => payload.some((value) => value !== 0 && value !== 1));
+      .map((payload) => [
+        payload[12], payload[13], payload[14],
+        payload[28], payload[29], payload[30],
+      ]);
 
     expect(instancedDraws).toHaveLength(2);
     expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
@@ -952,7 +934,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
       0.375, 0.5,
       0.625, 0.75,
     ]);
-    expect(sources).toContain("layout(location = 11) in vec2 a_uv1;");
+    expect(sources).toContain("layout(location = 8) in vec2 a_uv1;");
     expect(uniform1iPayloads(calls, "u_emissiveUvSet")).toContain(1);
     expect(sources).toContain("in vec2 a_uv1;");
     expect(sources).toContain("texture(u_emissiveTexture, materialTextureUv(u_emissiveUvSet");

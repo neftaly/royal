@@ -5,11 +5,15 @@ import {
   clearGltfInstanceBufferArena,
   createGltfInstanceBufferArena,
   releaseUnusedGltfInstanceBuffers,
-  type GltfInstanceBufferSource,
   type GltfInstanceBufferUploadCounters,
 } from "../packages/renderer-webgl/src/gltf-instance-buffer-arena";
-import { createInstanceDirtyBits } from "../packages/renderer-webgl/src/gltf/instance-changes";
-import { identityMat4, type Mat4 } from "../packages/renderer-webgl/src/math/mat4";
+import {
+  identityMat4,
+  multiplyMat4,
+  scaleMat4,
+  translationMat4,
+  type Mat4,
+} from "../packages/renderer-webgl/src/math/mat4";
 import {
   createVertexInputArena,
   disposeVertexInputArena,
@@ -19,12 +23,17 @@ import {
 } from "../packages/renderer-webgl/src/vertex-input/arena";
 
 type Handle = { readonly serial: number };
+type Upload = {
+  readonly byteOffset: number;
+  readonly values: readonly number[];
+};
 
 class FakeGl {
   readonly ARRAY_BUFFER = 0x8892;
   readonly ELEMENT_ARRAY_BUFFER = 0x8893;
   readonly DYNAMIC_DRAW = 0x88e8;
   readonly deletedBuffers: Handle[] = [];
+  readonly uploads: Upload[] = [];
   bufferSubDataFailure?: Error;
   #serial = 1;
 
@@ -36,107 +45,72 @@ class FakeGl {
   bufferData = (_target: number, _data: AllowSharedBufferSource | number, _usage: number): void => {};
   bufferSubData = (
     _target: number,
-    _byteOffset: number,
-    _data: AllowSharedBufferSource,
-    _sourceOffset?: number,
-    _length?: number,
+    byteOffset: number,
+    data: AllowSharedBufferSource,
+    sourceOffset = 0,
+    length?: number,
   ): void => {
     if (this.bufferSubDataFailure !== undefined) throw this.bufferSubDataFailure;
+    const floats = data as Float32Array;
+    this.uploads.push({
+      byteOffset,
+      values: Array.from(floats.subarray(sourceOffset, sourceOffset + (length ?? floats.length))),
+    });
   };
   bindVertexArray = (_vertexArray: WebGLVertexArrayObject | null): void => {};
 }
 
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
-
 const counters = (): GltfInstanceBufferUploadCounters => ({
-  localModelUploadBytes: 0,
-  localModelUploadCalls: 0,
-  rootPositionUploadBytes: 0,
-  rootPositionUploadCalls: 0,
-  rootRotationUploadBytes: 0,
-  rootRotationUploadCalls: 0,
-  rootScaleUploadBytes: 0,
-  rootScaleUploadCalls: 0,
+  modelUploadBytes: 0,
+  modelUploadCalls: 0,
 });
-
-const bindOne = (
-  arena: ReturnType<typeof createGltfInstanceBufferArena>,
-  gl: FakeGl,
-  generation: number,
-  key: number,
-  sink: GltfInstanceBufferUploadCounters,
-) => bindGltfInstanceBuffer(
-  arena,
-  context(gl),
-  generation,
-  key,
-  [identityMat4()],
-  [1],
-  true,
-  true,
-  [{ position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }],
-  [undefined],
-  [0],
-  sink,
-);
 
 const bindValues = (
   arena: ReturnType<typeof createGltfInstanceBufferArena>,
   gl: FakeGl,
   sink: GltfInstanceBufferUploadCounters,
   values: {
+    readonly generation?: number;
     readonly key?: number;
     readonly localModels?: readonly Mat4[];
     readonly localSignature?: readonly number[];
-    readonly logicalIndices?: readonly number[];
-    readonly rootLayoutDirty?: boolean;
-    readonly rootSources?: readonly (GltfInstanceBufferSource | undefined)[];
-    readonly rootTransforms?: readonly ({
-      readonly position: readonly [number, number, number];
-      readonly rotation: readonly [number, number, number];
-      readonly scale: readonly [number, number, number];
-    } | undefined)[];
-  },
+    readonly localSignatureDirty?: boolean;
+    readonly rootModels?: readonly Mat4[];
+  } = {},
 ) => {
   const localModels = values.localModels ?? [identityMat4()];
-  const count = localModels.length;
   return bindGltfInstanceBuffer(
     arena,
     context(gl),
-    1,
+    values.generation ?? 1,
     values.key ?? 1,
     localModels,
-    values.localSignature ?? new Array<number>(count).fill(1),
-    true,
-    values.rootLayoutDirty ?? true,
-    values.rootTransforms ?? new Array(count).fill(undefined),
-    values.rootSources ?? new Array(count).fill(undefined),
-    values.logicalIndices ?? new Array<number>(count).fill(-1),
+    values.localSignature ?? new Array<number>(localModels.length).fill(1),
+    values.localSignatureDirty ?? true,
+    values.rootModels ?? new Array<Mat4>(localModels.length).fill(identityMat4()),
     sink,
   );
 };
 
 describe("glTF instance-buffer arena", () => {
-  it("rejects bind and prune outside an explicitly begun frame", () => {
+  it("requires an explicitly active frame", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
     const sink = counters();
-    expect(() => bindOne(arena, gl, 1, 1, sink)).toThrow(/frame is not active/);
+    expect(() => bindValues(arena, gl, sink)).toThrow(/frame is not active/);
     expect(() => releaseUnusedGltfInstanceBuffers(arena, context(gl), 1)).toThrow(/frame is not active/);
 
     beginGltfInstanceBufferArenaFrame(arena);
-    bindOne(arena, gl, 1, 1, sink);
+    bindValues(arena, gl, sink);
     releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
-    expect(() => bindOne(arena, gl, 1, 1, sink)).toThrow(/frame is not active/);
-    expect(() => releaseUnusedGltfInstanceBuffers(arena, context(gl), 1)).toThrow(/frame is not active/);
-
+    expect(() => bindValues(arena, gl, sink)).toThrow(/frame is not active/);
     clearGltfInstanceBufferArena(arena);
-    expect(() => bindOne(arena, gl, 1, 1, sink)).toThrow(/frame is not active/);
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
-  it("rejects malformed keys and parallel lane shapes before publishing an allocation", () => {
+  it("rejects malformed parallel inputs before allocating", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
@@ -145,254 +119,116 @@ describe("glTF instance-buffer arena", () => {
     for (const key of [-1, 1.5, 0xffff_ffff]) {
       expect(() => bindValues(arena, gl, sink, { key })).toThrow(/Invalid glTF instance-buffer key/);
     }
-    expect(() => bindValues(arena, gl, sink, {
-      rootTransforms: [],
-    })).toThrow(/root transform length/);
+    expect(() => bindValues(arena, gl, sink, { rootModels: [] })).toThrow(/root-model length/);
     expect(() => bindValues(arena, gl, sink, {
       localModels: [identityMat4(), identityMat4()],
       localSignature: [1, 2, 3],
     })).toThrow(/local-model signature length/);
     expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(0);
-    releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
     clearGltfInstanceBufferArena(arena);
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
-  it("reuses a stable numeric key without redundant lane uploads", () => {
+  it("uploads final root-times-local matrices and skips unchanged bindings", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
     const sink = counters();
+    const localModels = [translationMat4([1, 2, 3]), scaleMat4([2, 3, 4])];
+    const rootModels = [scaleMat4([2, 2, 2]), translationMat4([5, 6, 7])];
     beginGltfInstanceBufferArenaFrame(arena);
-    const first = bindOne(arena, gl, 1, 7, sink);
-    const firstCounters = { ...sink };
-    const second = bindOne(arena, gl, 1, 7, sink);
-
-    expect(second).toBe(first);
-    expect(sink).toEqual(firstCounters);
-    expect(firstCounters).toEqual({
-      localModelUploadBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
-      localModelUploadCalls: 1,
-      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootRotationUploadCalls: 1,
-      rootScaleUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootScaleUploadCalls: 1,
-    });
-    clearGltfInstanceBufferArena(arena);
-    disposeVertexInputArena(vertexInputs, context(gl), 1);
-  });
-
-  it("uses retained Float32 staging as the ordinary-root change authority", () => {
-    const gl = new FakeGl();
-    const vertexInputs = createVertexInputArena();
-    const arena = createGltfInstanceBufferArena(vertexInputs);
-    const sink = counters();
-    const root = (positionX: number, scaleX: number) => ({
-      position: [positionX, 2, 3] as const,
-      rotation: [0.1, 0.2, 0.3] as const,
-      scale: [scaleX, 1, 1] as const,
-    });
-
-    beginGltfInstanceBufferArenaFrame(arena);
-    bindValues(arena, gl, sink, { rootTransforms: [root(1, 1)] });
-    const initial = { ...sink };
-    bindValues(arena, gl, sink, { rootTransforms: [root(1, 1)] });
-    expect(sink).toEqual(initial);
-
-    bindValues(arena, gl, sink, { rootTransforms: [root(2, 1)] });
-    expect(sink.rootPositionUploadCalls).toBe(initial.rootPositionUploadCalls + 1);
-    expect(sink.rootRotationUploadCalls).toBe(initial.rootRotationUploadCalls);
-    expect(sink.rootScaleUploadCalls).toBe(initial.rootScaleUploadCalls);
-
-    bindValues(arena, gl, sink, { rootTransforms: [root(2, 2)] });
-    expect(sink.rootPositionUploadCalls).toBe(initial.rootPositionUploadCalls + 1);
-    expect(sink.rootRotationUploadCalls).toBe(initial.rootRotationUploadCalls);
-    expect(sink.rootScaleUploadCalls).toBe(initial.rootScaleUploadCalls + 1);
-
-    clearGltfInstanceBufferArena(arena);
-    disposeVertexInputArena(vertexInputs, context(gl), 1);
-  });
-
-  it("tracks packed source lifetime once per distinct source as membership changes", () => {
-    const gl = new FakeGl();
-    const vertexInputs = createVertexInputArena();
-    const arena = createGltfInstanceBufferArena(vertexInputs);
-    const sink = counters();
-    const source = (version: number): GltfInstanceBufferSource => ({
-      changes: {
-        activePosition: createInstanceDirtyBits(2),
-        activeRotation: createInstanceDirtyBits(2),
-        activeScale: createInstanceDirtyBits(2),
-      },
-      framePoseVersion: version,
-      frameScaleVersion: version,
-      positions: new Float32Array(6),
-      rotations: new Float32Array(6),
-      scales: new Float32Array(6).fill(1),
-    });
-    const firstSource = source(1);
-    const secondSource = source(2);
-    const resource = () => (arena as unknown as {
-      readonly resources: Map<number, {
-        readonly poseVersions: Map<GltfInstanceBufferSource, number>;
-        readonly scaleVersions: Map<GltfInstanceBufferSource, number>;
-        readonly sourceCounts: Map<GltfInstanceBufferSource, number>;
-      }>;
-    }).resources.get(1)!;
-
-    beginGltfInstanceBufferArenaFrame(arena);
-    bindValues(arena, gl, sink, {
-      localModels: [identityMat4(), identityMat4()],
-      logicalIndices: [0, 1],
-      rootSources: [firstSource, firstSource],
-    });
-    expect(Array.from(resource().sourceCounts)).toEqual([[firstSource, 2]]);
-    expect(resource().poseVersions.size).toBe(1);
-    expect(resource().scaleVersions.size).toBe(1);
-
-    bindValues(arena, gl, sink, {
-      localModels: [identityMat4(), identityMat4()],
-      logicalIndices: [0, 1],
-      rootSources: [firstSource, secondSource],
-    });
-    expect(Array.from(resource().sourceCounts)).toEqual([[firstSource, 1], [secondSource, 1]]);
-
-    bindValues(arena, gl, sink, {
-      logicalIndices: [1],
-      rootSources: [secondSource],
-    });
-    expect(Array.from(resource().sourceCounts)).toEqual([[secondSource, 1]]);
-    expect(Array.from(resource().poseVersions)).toEqual([[secondSource, 2]]);
-    expect(Array.from(resource().scaleVersions)).toEqual([[secondSource, 2]]);
-
-    clearGltfInstanceBufferArena(arena);
-    disposeVertexInputArena(vertexInputs, context(gl), 1);
-  });
-
-  it("does not publish packed logical-index growth when vertex admission is denied", () => {
-    let denyGrowth = false;
-    const vertexInputs = createVertexInputArena({
-      reserve: (cost) => {
-        if (denyGrowth && cost.persistentGpuBytes !== 0) return undefined;
-        return {
-          cancel: () => true,
-          commit: () => ({ release: () => true }),
-        };
-      },
-    });
-    const gl = new FakeGl();
-    const arena = createGltfInstanceBufferArena(vertexInputs);
-    const sink = counters();
-    beginGltfInstanceBufferArenaFrame(arena);
-    bindOne(arena, gl, 1, 7, sink);
-    const resource = (arena as unknown as {
-      readonly resources: Map<number, { readonly packedLogicalIndices: Int32Array }>;
-    }).resources.get(7)!;
-    const originalPackedLogicalIndices = resource.packedLogicalIndices;
-    denyGrowth = true;
-
-    expect(() => bindValues(arena, gl, sink, {
+    const first = bindValues(arena, gl, sink, {
       key: 7,
-      localModels: [identityMat4(), identityMat4()],
-      localSignature: [1, 1],
-      logicalIndices: [0, 1],
-      rootTransforms: [undefined, undefined],
-    })).toThrow(/governor/);
-    expect(resource.packedLogicalIndices).toBe(originalPackedLogicalIndices);
-    expect(resource.packedLogicalIndices).toHaveLength(1);
+      localModels,
+      localSignature: [11, 12],
+      rootModels,
+    });
 
+    expect(gl.uploads).toEqual([{
+      byteOffset: 0,
+      values: [...multiplyMat4(rootModels[0]!, localModels[0]!), ...multiplyMat4(rootModels[1]!, localModels[1]!)],
+    }]);
+    expect(sink).toEqual({ modelUploadBytes: 128, modelUploadCalls: 1 });
+    expect(bindValues(arena, gl, sink, {
+      key: 7,
+      localModels,
+      localSignature: [11, 12],
+      rootModels,
+    })).toBe(first);
+    expect(gl.uploads).toHaveLength(1);
+    expect(sink).toEqual({ modelUploadBytes: 128, modelUploadCalls: 1 });
     clearGltfInstanceBufferArena(arena);
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
-  it("publishes repacked membership only after every GPU lane succeeds", () => {
+  it("coalesces changed model ranges and detects in-place root mutation", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
     const sink = counters();
-    const source: GltfInstanceBufferSource = {
-      changes: {
-        activePosition: createInstanceDirtyBits(2),
-        activeRotation: createInstanceDirtyBits(2),
-        activeScale: createInstanceDirtyBits(2),
-      },
-      framePoseVersion: 1,
-      frameScaleVersion: 1,
-      positions: new Float32Array([0, 0, 0, 1, 0, 0]),
-      rotations: new Float32Array(6),
-      scales: new Float32Array(6).fill(1),
-    };
-    const packedLogicalIndex = () => (arena as unknown as {
-      readonly resources: Map<number, { readonly packedLogicalIndices: Int32Array }>;
-    }).resources.get(1)!.packedLogicalIndices[0];
-
+    const roots = [identityMat4(), identityMat4(), identityMat4()];
+    const locals = [identityMat4(), identityMat4(), identityMat4()];
     beginGltfInstanceBufferArenaFrame(arena);
-    bindValues(arena, gl, sink, { logicalIndices: [0], rootSources: [source] });
-    expect(packedLogicalIndex()).toBe(0);
-    const beforeRetry = { ...sink };
+    bindValues(arena, gl, sink, { localModels: locals, localSignature: [1, 1, 1], rootModels: roots });
+    roots[1]![12] = 4;
+    bindValues(arena, gl, sink, { localModels: locals, localSignature: [1, 1, 1], rootModels: roots });
+    expect(gl.uploads.at(-1)).toEqual({ byteOffset: 64, values: [...roots[1]!] });
+    expect(sink).toEqual({ modelUploadBytes: 256, modelUploadCalls: 2 });
 
-    gl.bufferSubDataFailure = new Error("repack upload failed");
-    expect(() => bindValues(arena, gl, sink, { logicalIndices: [1], rootSources: [source] }))
-      .toThrow(gl.bufferSubDataFailure);
-    expect(packedLogicalIndex()).toBe(0);
-
-    delete gl.bufferSubDataFailure;
-    bindValues(arena, gl, sink, { logicalIndices: [1], rootSources: [source] });
-    expect(packedLogicalIndex()).toBe(1);
-    expect(sink.rootPositionUploadCalls).toBe(beforeRetry.rootPositionUploadCalls + 1);
-    expect(sink.rootRotationUploadCalls).toBe(beforeRetry.rootRotationUploadCalls + 1);
-    expect(sink.rootScaleUploadCalls).toBe(beforeRetry.rootScaleUploadCalls + 1);
-
+    bindValues(arena, gl, sink, {
+      localModels: [locals[0]!, scaleMat4([2, 2, 2]), translationMat4([1, 0, 0])],
+      localSignature: [1, 2, 2],
+      rootModels: roots,
+    });
+    expect(gl.uploads.at(-1)?.byteOffset).toBe(64);
+    expect(gl.uploads.at(-1)?.values).toHaveLength(32);
+    expect(sink).toEqual({ modelUploadBytes: 384, modelUploadCalls: 3 });
     clearGltfInstanceBufferArena(arena);
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
-  it("prunes independently active IDs and retains failed-frame creations for the next prune", () => {
-    const gl = new FakeGl();
-    const vertexInputs = createVertexInputArena();
-    const arena = createGltfInstanceBufferArena(vertexInputs);
-    const sink = counters();
-    beginGltfInstanceBufferArenaFrame(arena);
-    const first = bindOne(arena, gl, 1, 3, sink);
-    const failedFrameOnly = bindOne(arena, gl, 1, 9, sink);
-    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(2);
-
-    beginGltfInstanceBufferArenaFrame(arena);
-    expect(bindOne(arena, gl, 1, 3, sink)).toBe(first);
-    releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
-    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(1);
-
-    beginGltfInstanceBufferArenaFrame(arena);
-    const recreated = bindOne(arena, gl, 1, 9, sink);
-    expect(recreated).not.toBe(failedFrameOnly);
-    releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
-    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(1);
-    clearGltfInstanceBufferArena(arena);
-    disposeVertexInputArena(vertexInputs, context(gl), 1);
-  });
-
-  it("preserves logical resources across context loss and force-uploads every lane after restore", () => {
+  it("force-uploads the model lane after a failed upload and after context restore", () => {
     const firstGl = new FakeGl();
     const restoredGl = new FakeGl();
     const vertexInputs = createVertexInputArena();
     const arena = createGltfInstanceBufferArena(vertexInputs);
     const sink = counters();
     beginGltfInstanceBufferArenaFrame(arena);
-    const allocation = bindOne(arena, firstGl, 1, 5, sink);
-    const beforeRestore = { ...sink };
+    firstGl.bufferSubDataFailure = new Error("upload failed");
+    expect(() => bindValues(arena, firstGl, sink, { key: 5 })).toThrow(firstGl.bufferSubDataFailure);
+    expect(sink).toEqual({ modelUploadBytes: 0, modelUploadCalls: 0 });
+    delete firstGl.bufferSubDataFailure;
+    const allocation = bindValues(arena, firstGl, sink, { key: 5 });
+    expect(sink).toEqual({ modelUploadBytes: 64, modelUploadCalls: 1 });
 
     dropVertexInputArenaContext(vertexInputs);
     restoreVertexInputArenaContext(vertexInputs, 2);
     beginGltfInstanceBufferArenaFrame(arena);
-    expect(bindOne(arena, restoredGl, 2, 5, sink)).toBe(allocation);
-    expect(sink.localModelUploadCalls).toBe(beforeRestore.localModelUploadCalls + 1);
-    expect(sink.rootPositionUploadCalls).toBe(beforeRestore.rootPositionUploadCalls + 1);
-    expect(sink.rootRotationUploadCalls).toBe(beforeRestore.rootRotationUploadCalls + 1);
-    expect(sink.rootScaleUploadCalls).toBe(beforeRestore.rootScaleUploadCalls + 1);
-    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(1);
+    expect(bindValues(arena, restoredGl, sink, { generation: 2, key: 5 })).toBe(allocation);
+    expect(sink).toEqual({ modelUploadBytes: 128, modelUploadCalls: 2 });
     clearGltfInstanceBufferArena(arena);
     disposeVertexInputArena(vertexInputs, context(restoredGl), 2);
+  });
+
+  it("prunes independently active keys", () => {
+    const gl = new FakeGl();
+    const vertexInputs = createVertexInputArena();
+    const arena = createGltfInstanceBufferArena(vertexInputs);
+    const sink = counters();
+    beginGltfInstanceBufferArenaFrame(arena);
+    const first = bindValues(arena, gl, sink, { key: 3 });
+    const removed = bindValues(arena, gl, sink, { key: 9 });
+    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(2);
+
+    beginGltfInstanceBufferArenaFrame(arena);
+    expect(bindValues(arena, gl, sink, { key: 3 })).toBe(first);
+    releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
+    expect(vertexInputArenaSnapshot(vertexInputs).instanceAllocationCount).toBe(1);
+
+    beginGltfInstanceBufferArenaFrame(arena);
+    expect(bindValues(arena, gl, sink, { key: 9 })).not.toBe(removed);
+    releaseUnusedGltfInstanceBuffers(arena, context(gl), 1);
+    clearGltfInstanceBufferArena(arena);
+    disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 });

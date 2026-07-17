@@ -148,10 +148,7 @@ describe("geometry draw arena", () => {
     const plain = vertexInputGeometry(vertexInputs, context(gl), 3, 2);
     const allocation = createVertexInputInstanceAllocation(vertexInputs);
     prepareVertexInputInstance(vertexInputs, context(gl), 3, allocation, 5);
-    uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "localModels", 0);
-    uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "rootPositions", 0);
-    uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "rootRotations", 0);
-    uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "rootScales", 0);
+    uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "models", 0);
     const arena = createGeometryDrawArena(context(gl), vertexInputs);
 
     drawGeometry(arena, 3, 1, indexed);

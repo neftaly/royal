@@ -234,14 +234,9 @@ export interface WebGlGltfInstancingSnapshot {
   readonly batchInstancesTotal: number;
   readonly drawCalls: number;
   readonly instancesDrawn: number;
-  readonly localModelUploadBytes: number;
-  readonly localModelUploadCalls: number;
-  readonly rootPositionUploadBytes: number;
-  readonly rootPositionUploadCalls: number;
-  readonly rootRotationUploadBytes: number;
-  readonly rootRotationUploadCalls: number;
-  readonly rootScaleUploadBytes: number;
-  readonly rootScaleUploadCalls: number;
+  /** Final root-times-local instance matrices uploaded after semantic changes. */
+  readonly modelUploadBytes: number;
+  readonly modelUploadCalls: number;
 }
 
 export interface WebGlVirtualTexturingSnapshot {

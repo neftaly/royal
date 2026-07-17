@@ -1,20 +1,14 @@
-export type VertexInputInstanceLane = "localModels" | "rootPositions" | "rootRotations" | "rootScales";
+export type VertexInputInstanceLane = "models";
 
 export type VertexInputInstanceBufferLayout = Readonly<{
   byteLength: number;
-  localModelElements: number;
+  modelElements: number;
   rangeElements: number;
-  rootPositionElements: number;
-  rootRotationElements: number;
-  rootScaleElements: number;
 }>;
 
 export type VertexInputInstanceArrays = Readonly<{
-  localModels: Float32Array;
+  models: Float32Array;
   ranges: Int32Array;
-  rootPositions: Float32Array;
-  rootRotations: Float32Array;
-  rootScales: Float32Array;
 }>;
 
 const MAX_TYPED_ARRAY_ELEMENTS = 0xffff_ffff;
@@ -36,22 +30,12 @@ const checkedElementLength = (capacity: number, stride: number, label: string): 
 export const vertexInputInstanceBufferLayout = (
   capacity: number,
 ): VertexInputInstanceBufferLayout => {
-  const localModelElements = checkedElementLength(capacity, 16, "instance local-model staging");
-  const rootPositionElements = checkedElementLength(capacity, 3, "instance root-position staging");
-  const rootRotationElements = checkedElementLength(capacity, 3, "instance root-rotation staging");
-  const rootScaleElements = checkedElementLength(capacity, 3, "instance root-scale staging");
+  const modelElements = checkedElementLength(capacity, 16, "instance model staging");
   const rangeElements = checkedElementLength(capacity, 2, "instance range staging");
-  const floatElements = localModelElements + rootPositionElements + rootRotationElements + rootScaleElements;
-  if (!Number.isSafeInteger(floatElements)) {
-    throw new RangeError("instance buffer element count exceeds the safe integer range");
-  }
   return {
-    byteLength: checkedProduct(floatElements, Float32Array.BYTES_PER_ELEMENT, "instance buffer byte size"),
-    localModelElements,
+    byteLength: checkedProduct(modelElements, Float32Array.BYTES_PER_ELEMENT, "instance buffer byte size"),
+    modelElements,
     rangeElements,
-    rootPositionElements,
-    rootRotationElements,
-    rootScaleElements,
   };
 };
 
@@ -60,24 +44,15 @@ export const growVertexInputInstanceArrays = (
   previous: VertexInputInstanceArrays,
   previousCount: number,
 ): VertexInputInstanceArrays => {
-  const localModels = new Float32Array(layout.localModelElements);
+  const models = new Float32Array(layout.modelElements);
   const ranges = new Int32Array(layout.rangeElements);
-  const rootPositions = new Float32Array(layout.rootPositionElements);
-  const rootRotations = new Float32Array(layout.rootRotationElements);
-  const rootScales = new Float32Array(layout.rootScaleElements);
-  localModels.set(previous.localModels.subarray(0, previousCount * 16));
-  rootPositions.set(previous.rootPositions.subarray(0, previousCount * 3));
-  rootRotations.set(previous.rootRotations.subarray(0, previousCount * 3));
-  rootScales.set(previous.rootScales.subarray(0, previousCount * 3));
-  return { localModels, ranges, rootPositions, rootRotations, rootScales };
+  models.set(previous.models.subarray(0, previousCount * 16));
+  return { models, ranges };
 };
 
 export const vertexInputInstanceLaneStride = (lane: VertexInputInstanceLane): number => {
   switch (lane) {
-    case "localModels": return 16;
-    case "rootPositions": return 3;
-    case "rootRotations": return 3;
-    case "rootScales": return 3;
+    case "models": return 16;
   }
 };
 

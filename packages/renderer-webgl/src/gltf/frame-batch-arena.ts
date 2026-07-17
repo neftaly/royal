@@ -1,4 +1,3 @@
-import type { Transform } from "@royal/renderer-core";
 import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   beginGltfInstanceBufferArenaFrame,
@@ -51,7 +50,6 @@ import {
   type SurfaceLightSetWorkspace,
 } from "../webgl/lights";
 import type { SurfaceMaterial } from "../webgl/materials";
-import type { GltfInstanceTransformView } from "./instance-transform-registry";
 import type { PreparedGltfRuntime } from "./prepared-runtime";
 
 export interface GltfFrameMaterialBinding {
@@ -60,9 +58,6 @@ export interface GltfFrameMaterialBinding {
 
 export interface GltfFrameRootBinding {
   readonly rootModel: Mat4;
-  readonly rootInstanceViews?: GltfInstanceTransformView;
-  readonly rootLogicalIndex: number;
-  readonly rootTransform: Transform | undefined;
 }
 
 export interface GltfFrameDrawSidedness {
@@ -89,10 +84,6 @@ export interface GltfFrameDrawBatch {
   readonly localModels: Mat4[];
   material: SurfaceMaterial;
   readonly rootModels: Mat4[];
-  readonly rootInstanceViews: Array<GltfInstanceTransformView | undefined>;
-  rootLayoutDirty: boolean;
-  readonly rootLogicalIndices: number[];
-  readonly rootTransforms: Array<Transform | undefined>;
   sceneLightPlanRevision: number;
   sceneLights: SurfaceLightSet | undefined;
   singleModel?: GltfFrameSingleModel;
@@ -225,14 +216,10 @@ export class GltfFrameBatchArena {
       batch.localModels,
       batch.localModelSignature,
       batch.localModelSignatureDirty,
-      batch.rootLayoutDirty,
-      batch.rootTransforms,
-      batch.rootInstanceViews,
-      batch.rootLogicalIndices,
+      batch.rootModels,
       counters,
     );
     batch.localModelSignatureDirty = false;
-    batch.rootLayoutDirty = false;
     return allocation;
   }
 
@@ -303,10 +290,6 @@ export class GltfFrameBatchArena {
           localModels: [],
           material: material.material,
           rootModels: [],
-          rootInstanceViews: [],
-          rootLayoutDirty: true,
-          rootLogicalIndices: [],
-          rootTransforms: [],
           sceneLightPlanRevision: 0,
           sceneLights: undefined,
           sidedness: {
@@ -329,13 +312,9 @@ export class GltfFrameBatchArena {
       // These parallel arrays are resized as one owned layout.
       if (batch.localModels.length !== memberCount) {
         batch.localModelSignatureDirty = true;
-        batch.rootLayoutDirty = true;
         batch.localModelSignature.length = memberCount;
         batch.localModels.length = memberCount;
         batch.rootModels.length = memberCount;
-        batch.rootInstanceViews.length = memberCount;
-        batch.rootLogicalIndices.length = memberCount;
-        batch.rootTransforms.length = memberCount;
       }
       if (
         assetLights !== undefined
@@ -392,17 +371,6 @@ export class GltfFrameBatchArena {
         }
         if (batch.rootModels[memberOffset] !== root.rootModel) {
           batch.rootModels[memberOffset] = root.rootModel;
-        }
-        if (batch.rootInstanceViews[memberOffset] !== root.rootInstanceViews) {
-          batch.rootLayoutDirty = true;
-          batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;
-        }
-        if (batch.rootLogicalIndices[memberOffset] !== root.rootLogicalIndex) {
-          batch.rootLayoutDirty = true;
-          batch.rootLogicalIndices[memberOffset] = root.rootLogicalIndex;
-        }
-        if (batch.rootTransforms[memberOffset] !== root.rootTransform) {
-          batch.rootTransforms[memberOffset] = root.rootTransform;
         }
       }
       synchronizeSingleModel(batch);

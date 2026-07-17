@@ -647,11 +647,9 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.texCoord1}) in vec2 a_uv1;`);
     expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.color}) in vec4 a_color;`);
     expect(instanced).toContain(
-      `layout(location = ${VERTEX_ATTRIBUTE.instanceLocalModelFirstColumn}) in mat4 a_instanceLocalModel;`,
+      `layout(location = ${VERTEX_ATTRIBUTE.instanceModelFirstColumn}) in mat4 a_instanceModel;`,
     );
-    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instancePosition}) in vec3 a_instancePosition;`);
-    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instanceRotation}) in vec3 a_instanceRotation;`);
-    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instanceScale}) in vec3 a_instanceScale;`);
+    expect(instanced).not.toContain("a_instanceRotation");
   });
 
   it("uploads material uniform changes after a previous render cached different values", () => {

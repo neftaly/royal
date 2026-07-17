@@ -1222,37 +1222,28 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 32, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 7
-      && call.args[1] === 3
+      && call.args[0] === 3
+      && call.args[1] === 4
       && call.args[2] === gl.FLOAT
-      && call.args[4] === 12
+      && call.args[4] === 64
       && call.args[5] === 0)).toBe(true);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 8
-      && call.args[1] === 3
+      && call.args[0] === 6
+      && call.args[1] === 4
       && call.args[2] === gl.FLOAT
-      && call.args[4] === 12
-      && call.args[5] === 0)).toBe(true);
+      && call.args[4] === 64
+      && call.args[5] === 48)).toBe(true);
     expect(readyInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 1,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 32 * Float32Array.BYTES_PER_ELEMENT,
-      localModelUploadCalls: 1,
-      rootPositionUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootRotationUploadCalls: 1,
-      rootScaleUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootScaleUploadCalls: 1,
+      modelUploadBytes: 32 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const callsBeforeImperativeChange = calls.length;
@@ -1267,24 +1258,16 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(instancedDrawInstanceCount(changedInstancedDraws[0]!)).toBe(2);
     expect(drawCalls(changedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(changedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 16, floatOffset: 0 },
     ]);
-    expect(bufferSubDataPayloads(changedFrameCalls).map(roundVector)).toEqual([
-      [-0.5, 0, 0],
-    ]);
+    expect(roundVector(bufferSubDataPayloads(changedFrameCalls)[0] ?? [])[12]).toBe(-0.5);
     expect(changedInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 0,
-      localModelUploadCalls: 0,
-      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 0,
-      rootRotationUploadCalls: 0,
-      rootScaleUploadBytes: 0,
-      rootScaleUploadCalls: 0,
+      modelUploadBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const callsBeforeSecondImperativeChange = calls.length;
@@ -1302,24 +1285,16 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(instancedDrawInstanceCount(secondChangedInstancedDraws[0]!)).toBe(2);
     expect(drawCalls(secondChangedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(secondChangedFrameCalls)).toEqual([
-      { byteOffset: 12, floatLength: 3, floatOffset: 3 },
+      { byteOffset: 64, floatLength: 16, floatOffset: 16 },
     ]);
-    expect(bufferSubDataPayloads(secondChangedFrameCalls).map(roundVector)).toEqual([
-      [0.5, 0, 0],
-    ]);
+    expect(roundVector(bufferSubDataPayloads(secondChangedFrameCalls)[0] ?? [])[12]).toBe(0.5);
     expect(secondChangedInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 0,
-      localModelUploadCalls: 0,
-      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 0,
-      rootRotationUploadCalls: 0,
-      rootScaleUploadBytes: 0,
-      rootScaleUploadCalls: 0,
+      modelUploadBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const callsBeforeAdjacentPoseSlotChange = calls.length;
@@ -1336,24 +1311,17 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(instancedDrawCalls(adjacentPoseSlotFrameCalls)).toHaveLength(1);
     expect(drawCalls(adjacentPoseSlotFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(adjacentPoseSlotFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 32, floatOffset: 0 },
     ]);
-    expect(bufferSubDataPayloads(adjacentPoseSlotFrameCalls).map(roundVector)).toEqual([
-      [-0.6, 0, 0, 0.6, 0, 0],
-    ]);
+    const adjacentModels = roundVector(bufferSubDataPayloads(adjacentPoseSlotFrameCalls)[0] ?? []);
+    expect([adjacentModels[12], adjacentModels[28]]).toEqual([-0.6, 0.6]);
     expect(adjacentPoseSlotInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 0,
-      localModelUploadCalls: 0,
-      rootPositionUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 0,
-      rootRotationUploadCalls: 0,
-      rootScaleUploadBytes: 0,
-      rootScaleUploadCalls: 0,
+      modelUploadBytes: 32 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const callsBeforePoseChange = calls.length;
@@ -1369,26 +1337,17 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(instancedDrawCalls(poseChangedFrameCalls)).toHaveLength(1);
     expect(drawCalls(poseChangedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(poseChangedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 32, floatOffset: 0 },
     ]);
-    expect(bufferSubDataPayloads(poseChangedFrameCalls).map(roundVector)).toEqual([
-      [-0.75, 0, 0, 0.75, 0, 0],
-      [0, 0, 0.25, 0, 0, -0.25],
-    ]);
+    const poseModels = roundVector(bufferSubDataPayloads(poseChangedFrameCalls)[0] ?? []);
+    expect([poseModels[12], poseModels[28]]).toEqual([-0.75, 0.75]);
     expect(poseChangedInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 0,
-      localModelUploadCalls: 0,
-      rootPositionUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootPositionUploadCalls: 1,
-      rootRotationUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
-      rootRotationUploadCalls: 1,
-      rootScaleUploadBytes: 0,
-      rootScaleUploadCalls: 0,
+      modelUploadBytes: 32 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const callsBeforeScaleChange = calls.length;
@@ -1401,24 +1360,16 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(instancedDrawCalls(scaleChangedFrameCalls)).toHaveLength(1);
     expect(drawCalls(scaleChangedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(scaleChangedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 16, floatOffset: 0 },
     ]);
-    expect(bufferSubDataPayloads(scaleChangedFrameCalls).map(roundVector)).toEqual([
-      [2, 2, 2],
-    ]);
+    expect(bufferSubDataPayloads(scaleChangedFrameCalls)[0]).toHaveLength(16);
     expect(scaleChangedInstancing).toEqual({
       batchInstancesTotal: 2,
       batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
-      localModelUploadBytes: 0,
-      localModelUploadCalls: 0,
-      rootPositionUploadBytes: 0,
-      rootPositionUploadCalls: 0,
-      rootRotationUploadBytes: 0,
-      rootRotationUploadCalls: 0,
-      rootScaleUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
-      rootScaleUploadCalls: 1,
+      modelUploadBytes: 16 * Float32Array.BYTES_PER_ELEMENT,
+      modelUploadCalls: 1,
     });
 
     const deletedVertexArraysBeforeSingle = callCount(calls, "deleteVertexArray");

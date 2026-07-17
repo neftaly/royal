@@ -659,7 +659,7 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     expect(uvUpload, "a textured box should upload at least 24 UV coordinates").toBeDefined();
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 10
+      && call.args[0] === 7
       && call.args[1] === 2)).toBe(true);
   });
 

@@ -46,7 +46,7 @@ type BitmapRequest = {
 };
 
 const canvasSize = { height: 180, width: 320 };
-const uvLocations = [10, 11] as const;
+const uvLocations = [7, 8] as const;
 
 const handle = <Handle>(kind: string, id: number): Handle =>
   ({ id, kind }) as Handle;

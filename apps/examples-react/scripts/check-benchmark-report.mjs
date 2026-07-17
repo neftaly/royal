@@ -67,14 +67,8 @@ const requiredGltfInstancingCounters = [
   'batchPlansBuilt',
   'drawCalls',
   'instancesDrawn',
-  'localModelUploadBytes',
-  'localModelUploadCalls',
-  'rootPositionUploadBytes',
-  'rootPositionUploadCalls',
-  'rootRotationUploadBytes',
-  'rootRotationUploadCalls',
-  'rootScaleUploadBytes',
-  'rootScaleUploadCalls',
+  'modelUploadBytes',
+  'modelUploadCalls',
 ];
 
 const requiredPlanningCounters = ['compileNodeVisits', 'planCompiles', 'planRevision', 'sceneCommits'];
@@ -141,11 +135,6 @@ const requireZero = (value, label) => {
   if (!requireNumber(value, label)) return;
   if (value !== 0) errors.push(`${label} must be 0`);
 };
-
-const rootTransformUploadBytes = (counters) =>
-  (isNumber(counters?.rootPositionUploadBytes) ? counters.rootPositionUploadBytes : 0) +
-  (isNumber(counters?.rootRotationUploadBytes) ? counters.rootRotationUploadBytes : 0) +
-  (isNumber(counters?.rootScaleUploadBytes) ? counters.rootScaleUploadBytes : 0);
 
 const instancedDrawCount = (counters) =>
   (isNumber(counters?.drawArraysInstanced) ? counters.drawArraysInstanced : 0) +
@@ -374,8 +363,8 @@ const checkInstancingRoute = (route, routeLabel) => {
       `${routeLabel}.renderer.gltfInstancing.delta.instancesDrawn`,
     );
     requirePositiveNumber(
-      rootTransformUploadBytes(gltfInstancing?.delta),
-      `${routeLabel}.renderer.gltfInstancing.delta.rootTransformUploadBytes`,
+      gltfInstancing?.delta?.modelUploadBytes,
+      `${routeLabel}.renderer.gltfInstancing.delta.modelUploadBytes`,
     );
   } else {
     requirePositiveNumber(route.gl.setup?.instancedDrawCalls, `${routeLabel}.gl.setup.instancedDrawCalls`);

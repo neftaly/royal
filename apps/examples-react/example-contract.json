@@ -133,14 +133,8 @@
       "batchPlansBuilt",
       "drawCalls",
       "instancesDrawn",
-      "localModelUploadBytes",
-      "localModelUploadCalls",
-      "rootPositionUploadBytes",
-      "rootPositionUploadCalls",
-      "rootRotationUploadBytes",
-      "rootRotationUploadCalls",
-      "rootScaleUploadBytes",
-      "rootScaleUploadCalls"
+      "modelUploadBytes",
+      "modelUploadCalls"
     ],
     "gltfExampleIds": [
       "picking",

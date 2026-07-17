@@ -930,7 +930,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(readyFrameCalls.some((call) => call.name === "getAttribLocation")).toBe(false);
     expect(readyFrameCalls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 12
+      && call.args[0] === 9
       && call.args[1] === 4
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(sources).toContain("in vec4 a_color;");
@@ -979,7 +979,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 10
+      && call.args[0] === 7
       && call.args[1] === 2
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(uniform4fvPayloads(calls, "u_surfaceLightDirection[0]").map(roundVector)).toContainEqual([

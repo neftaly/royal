@@ -70,14 +70,8 @@ const createCounters = (): GltfInstancingCounters => ({
   batchInstancesTotal: 0,
   drawCalls: 0,
   instancesDrawn: 0,
-  localModelUploadBytes: 0,
-  localModelUploadCalls: 0,
-  rootPositionUploadBytes: 0,
-  rootPositionUploadCalls: 0,
-  rootRotationUploadBytes: 0,
-  rootRotationUploadCalls: 0,
-  rootScaleUploadBytes: 0,
-  rootScaleUploadCalls: 0,
+  modelUploadBytes: 0,
+  modelUploadCalls: 0,
 });
 
 /** Owns selected glTF packet translation, binding identity, and frame batching. */
@@ -294,7 +288,6 @@ export class GltfPacketSubmissionOwner {
         let lightScopeId: number;
         if (rootBindingId === undefined) {
           const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
-          const rootTransform = instanceViews?.transforms[selectedOuterIndex] ?? ordinaryRootTransform;
           if (rootModel === undefined) {
             throw new Error("Royal retained glTF packet root source has no current transform");
           }
@@ -319,18 +312,10 @@ export class GltfPacketSubmissionOwner {
               );
           let rootBinding = this.#rootBindings[rootSourceId];
           if (rootBinding === undefined) {
-            rootBinding = {
-              rootModel,
-              rootLogicalIndex: -1,
-              rootTransform,
-            };
+            rootBinding = { rootModel };
             this.#rootBindings[rootSourceId] = rootBinding;
           }
           rootBinding.rootModel = rootModel;
-          rootBinding.rootLogicalIndex = instanceViews === undefined ? -1 : selectedOuterIndex;
-          rootBinding.rootTransform = rootTransform;
-          if (instanceViews === undefined) delete rootBinding.rootInstanceViews;
-          else rootBinding.rootInstanceViews = instanceViews;
           rootBindingId = appendPreparedGltfPacketSubmissionRootBinding(
             this.#batches.workspace,
             rootSourceId,
