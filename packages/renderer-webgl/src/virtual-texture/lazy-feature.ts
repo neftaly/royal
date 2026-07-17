@@ -51,6 +51,7 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   #loading: Promise<void> | undefined;
   #module: VirtualTextureFeatureModule | undefined;
   #requested = false;
+  #disposed = false;
 
   constructor(options: VirtualTextureFeatureOptions) {
     this.#options = options;
@@ -96,6 +97,13 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   clear(): void {
     this.#pendingAutoSources.clear();
     this.#feature?.clear();
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.#pendingAutoSources.clear();
+    this.#feature?.dispose();
   }
 
   drainRequests(): void {
@@ -242,6 +250,7 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
       || this.#module === undefined
       || !this.#options.active()
       || this.#options.disposed()
+      || this.#disposed
     ) return;
     try {
       this.#feature = new this.#module.VirtualTextureFeatureOwner(this.#options);
@@ -275,6 +284,7 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   }
 
   #request(): void {
+    if (this.#disposed) return;
     this.#requested = true;
     this.#activate();
     if (

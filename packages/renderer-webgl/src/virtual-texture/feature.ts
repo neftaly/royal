@@ -61,6 +61,7 @@ export interface VirtualTextureFeature {
     pageTableTextureUnit: number,
   ): VirtualTextureGpuBinding | undefined;
   clear(): void;
+  dispose(): void;
   drainRequests(): void;
   drawDemandContext(
     geometryId: number,

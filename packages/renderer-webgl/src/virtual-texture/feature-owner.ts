@@ -139,6 +139,10 @@ export class VirtualTextureFeatureOwner implements VirtualTextureFeature {
     this.#runtime.clearAutoMetadata();
   }
 
+  dispose(): void {
+    this.#runtime.disposeCodec();
+  }
+
   drainRequests(): void {
     this.#runtime.requests.drain();
   }

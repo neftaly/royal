@@ -1344,9 +1344,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#geometryRecipes.clearRetainedRecipes();
     this.#virtualTextures.clear();
+    teardown(() => this.#virtualTextures.dispose());
     this.#geometryRecipes.clearPacketPrimitives();
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     teardown(() => this.#preparedGltf.dispose());
+    teardown(() => this.#gltfPreparation.dispose());
     teardown(() => this.#gltfPacketSubmissions.dispose());
     this.#gltfMaterials.clear();
     this.#lightResolver.clear();

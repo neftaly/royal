@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   decodedGltfBasisuEtc2,
   decodedGltfBasisuRgba,
+  parseGltfBasisuWithRuntime,
+  type BasisuParseRuntime,
 } from "../packages/renderer-webgl/src/gltf/codecs/basisu";
 
 const level = (width: number, height: number, fill: number) => ({
@@ -124,5 +126,40 @@ describe("glTF BasisU RGBA normalization", () => {
     expect(() => decodedGltfBasisuRgba([[
       { ...level(2, 2, 1), data: new Uint8Array(3) },
     ]], "bad-bytes.ktx2")).toThrow("invalid RGBA8 payload");
+  });
+
+  it("transfers only disposable worker bytes and caches a working local fallback", async () => {
+    const parseMock = vi.fn();
+    const runtime: BasisuParseRuntime = {
+      parse: parseMock,
+      supportsWorker: () => true,
+      workerAvailable: true,
+    };
+    const firstBytes = new ArrayBuffer(32);
+    parseMock.mockImplementationOnce(async (input: ArrayBuffer) => {
+      structuredClone(input, { transfer: [input] });
+      return "worker";
+    });
+
+    await expect(parseGltfBasisuWithRuntime(runtime, firstBytes, "rgba32")).resolves.toBe("worker");
+    expect(parseMock.mock.calls[0]?.[0]).not.toBe(firstBytes);
+    expect(parseMock.mock.calls[0]?.[2]).toMatchObject({ worker: true });
+    expect(firstBytes.byteLength).toBe(32);
+
+    const fallbackBytes = new ArrayBuffer(24);
+    parseMock.mockRejectedValueOnce(new Error("worker unavailable"));
+    parseMock.mockResolvedValueOnce("fallback");
+    await expect(parseGltfBasisuWithRuntime(runtime, fallbackBytes, "rgba32")).resolves
+      .toBe("fallback");
+    expect(parseMock.mock.calls[1]?.[0]).not.toBe(fallbackBytes);
+    expect(parseMock.mock.calls[1]?.[2]).toMatchObject({ worker: true });
+    expect(parseMock.mock.calls[2]?.[0]).toBe(fallbackBytes);
+    expect(parseMock.mock.calls[2]?.[2]).toMatchObject({ worker: false });
+
+    const cachedFallbackBytes = new ArrayBuffer(16);
+    parseMock.mockResolvedValueOnce("cached fallback");
+    await parseGltfBasisuWithRuntime(runtime, cachedFallbackBytes, "rgba32");
+    expect(parseMock.mock.calls[3]?.[0]).toBe(cachedFallbackBytes);
+    expect(parseMock.mock.calls[3]?.[2]).toMatchObject({ worker: false });
   });
 });

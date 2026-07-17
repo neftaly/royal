@@ -4,13 +4,19 @@ import { preloadVirtualTextureFeature } from "../packages/renderer-webgl/src/vir
 import { preloadImageBasedLightingFeature } from "../packages/renderer-webgl/src/lazy-image-based-lighting-feature";
 import { preloadClusteredLightingFeature } from "../packages/renderer-webgl/src/lazy-clustered-lighting-feature";
 
-const hoistedMocks = vi.hoisted(() => ({
-  decodeBasisu: vi.fn(),
-}));
+const hoistedMocks = vi.hoisted(() => {
+  const releaseBasisuWorker = vi.fn();
+  return {
+    decodeBasisu: vi.fn(),
+    releaseBasisuWorker,
+    retainBasisuWorker: vi.fn(() => ({ release: releaseBasisuWorker })),
+  };
+});
 export const decodeBasisuMock = hoistedMocks.decodeBasisu;
 
 vi.mock("../packages/renderer-webgl/src/gltf/codecs/basisu", () => ({
   decodeGltfBasisuTexture: decodeBasisuMock,
+  retainGltfBasisuWorker: hoistedMocks.retainBasisuWorker,
 }));
 
 import {
@@ -901,6 +907,8 @@ export const resetGltfSceneTestState = (): void => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   decodeBasisuMock.mockReset();
+  hoistedMocks.releaseBasisuWorker.mockClear();
+  hoistedMocks.retainBasisuWorker.mockClear();
   ControlledImage.instances.splice(0);
   ControlledResizeObserver.instances.splice(0);
 };

@@ -21,6 +21,7 @@ import { readGltfScene } from "./scene-reader";
 import type { GltfDocument, GltfMeshPrimitive } from "./schema";
 
 type GltfBasisuCodecModule = typeof import("./codecs/basisu");
+type GltfBasisuWorkerLease = ReturnType<GltfBasisuCodecModule["retainGltfBasisuWorker"]>;
 type GltfDracoCodecModule = typeof import("./codecs/draco");
 type GltfMeshoptCodecModule = typeof import("./codecs/meshopt");
 
@@ -38,11 +39,14 @@ const startCodecImport = <Module>(load: () => Promise<Module>): Promise<Module> 
   return pending;
 };
 
-const importCodecs = (document: GltfDocument): GltfCodecImports => {
+const importCodecs = (
+  document: GltfDocument,
+  basisu: () => Promise<GltfBasisuCodecModule>,
+): GltfCodecImports => {
   const demand = gltfCodecDemand(document);
   return {
     ...(demand.basisu
-      ? { basisu: startCodecImport(() => import("./codecs/basisu")) }
+      ? { basisu: startCodecImport(basisu) }
       : {}),
     ...(demand.draco
       ? { draco: startCodecImport(() => import("./codecs/draco")) }
@@ -61,12 +65,22 @@ type GltfAssetPreparationOwnerOptions = {
 
 /** Owns glTF transport, codec, CPU-admission, scene-read, and recipe phases. */
 export class GltfAssetPreparationOwner {
+  #basisuCodec: Promise<GltfBasisuCodecModule> | undefined;
+  #basisuWorkerLease: GltfBasisuWorkerLease | undefined;
+  #disposed = false;
   readonly #now: MonotonicClock;
   readonly #options: GltfAssetPreparationOwnerOptions;
 
   constructor(options: GltfAssetPreparationOwnerOptions) {
     this.#options = options;
     this.#now = options.now ?? monotonicNowMs;
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.#basisuWorkerLease?.release();
+    this.#basisuWorkerLease = undefined;
   }
 
   ensure(
@@ -121,7 +135,7 @@ export class GltfAssetPreparationOwner {
       const cpuEstimate = estimateGltfPreparationCpu(document);
       cpuAdmission = this.#options.runtime.reserveCpuAdmission(assetKey, cpuEstimate);
       throwIfAborted(signal);
-      const codecs = importCodecs(document);
+      const codecs = importCodecs(document, () => this.#loadBasisuCodec());
       const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk, signal);
       load.buffersLoadedAt = this.#now();
       throwIfAborted(signal);
@@ -175,5 +189,14 @@ export class GltfAssetPreparationOwner {
       if (cpuAdmission !== undefined) this.#options.runtime.discardCpuAdmission(cpuAdmission);
       throw error;
     }
+  }
+
+  async #loadBasisuCodec(): Promise<GltfBasisuCodecModule> {
+    this.#basisuCodec ??= import("./codecs/basisu").then((codec) => {
+      if (this.#disposed) throw new Error("glTF Basis codec owner is disposed");
+      this.#basisuWorkerLease ??= codec.retainGltfBasisuWorker();
+      return codec;
+    });
+    return this.#basisuCodec;
   }
 }

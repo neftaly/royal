@@ -78,6 +78,9 @@ export type VirtualTextureAssetSnapshot =
   | Readonly<{ error?: never; pendingPages: number; state: "loading" | "ready" }>
   | Readonly<{ error: string; pendingPages: number; state: "error" | "unsupported" }>;
 
+type GltfBasisuCodecModule = typeof import("../gltf/codecs/basisu");
+type GltfBasisuWorkerLease = ReturnType<GltfBasisuCodecModule["retainGltfBasisuWorker"]>;
+
 /**
  * Owns the mutable browser-shell state shared by VT demand publication and
  * asynchronous page requests. Pure demand planning and GPU allocation remain
@@ -114,7 +117,8 @@ export class VirtualTextureRuntimeShell {
     demanded: this.#demanded,
   };
   readonly requests: VirtualTextureRequestCoordinator;
-  #basisuCodec: Promise<typeof import("../gltf/codecs/basisu")> | undefined;
+  #basisuCodec: Promise<GltfBasisuCodecModule> | undefined;
+  #basisuWorkerLease: GltfBasisuWorkerLease | undefined;
   #nextAdmissionTicket = 1;
   #retryTicket = 1;
   #viewIndex = 0;
@@ -127,6 +131,11 @@ export class VirtualTextureRuntimeShell {
       loadPage: (state, page, signal) => this.#pageImage(state, page, signal),
       resources: this.#resources,
     });
+  }
+
+  disposeCodec(): void {
+    this.#basisuWorkerLease?.release();
+    this.#basisuWorkerLease = undefined;
   }
 
   get activeFrame(): boolean {
@@ -621,8 +630,10 @@ export class VirtualTextureRuntimeShell {
     uri: string,
     signal: AbortSignal,
   ): Promise<Extract<VirtualTexturePagePayload, { readonly kind: "compressed" }>> {
-    this.#basisuCodec ??= import("../gltf/codecs/basisu");
-    const [response, codec] = await Promise.all([fetch(uri, { signal }), this.#basisuCodec]);
+    const [response, codec] = await Promise.all([
+      fetch(uri, { signal }),
+      this.#loadBasisuCodec(),
+    ]);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const bytes = await response.arrayBuffer();
     throwIfAborted(signal);
@@ -636,6 +647,15 @@ export class VirtualTextureRuntimeShell {
       srgbFormat: decoded.srgbFormat,
       width: decoded.width,
     };
+  }
+
+  async #loadBasisuCodec(): Promise<GltfBasisuCodecModule> {
+    this.#basisuCodec ??= import("../gltf/codecs/basisu").then((codec) => {
+      if (this.#options.disposed()) throw new Error("Virtual-texture Basis codec owner is disposed");
+      this.#basisuWorkerLease ??= codec.retainGltfBasisuWorker();
+      return codec;
+    });
+    return this.#basisuCodec;
   }
 
   #fail(state: VirtualTextureRuntimeState, reason: string): void {
