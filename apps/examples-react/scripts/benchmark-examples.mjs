@@ -663,6 +663,9 @@ const installBenchmarkHooks = async (session) => {
     records: [],
   };
   const glObjectIds = new WeakMap();
+  const glProgramLabels = new WeakMap();
+  const glProgramShaders = new WeakMap();
+  const glShaderSources = new WeakMap();
   let nextGlObjectId = 1;
   const drawState = { program: null, vertexArray: null };
   const glObjectId = (value) => {
@@ -673,6 +676,20 @@ const installBenchmarkHooks = async (session) => {
     nextGlObjectId += 1;
     glObjectIds.set(value, id);
     return id;
+  };
+  const labelProgram = (program) => {
+    const sources = glProgramShaders.get(program)?.map((shader) => glShaderSources.get(shader) ?? '').join('\\n') ?? '';
+    const kind = sources.includes('u_hdrColor')
+      ? 'postprocess'
+      : sources.includes('u_cameraWorldPosition')
+        ? 'surface'
+        : sources.includes('u_toneMappingSettings') ? 'unlit' : 'wireframe';
+    const instanced = sources.includes('a_instanceModel') ? '-instanced' : '';
+    const samplers = [...sources.matchAll(/uniform(?: highp)? u?sampler(?:2D|Cube) (u_[A-Za-z0-9]+);/g)]
+      .map((match) => match[1].slice(2).replace(/Texture$/u, ''))
+      .map((name) => kind === 'surface' && name === 'texture' ? 'baseColor' : name);
+    const features = [...new Set(samplers)].sort();
+    glProgramLabels.set(program, kind + instanced + (features.length === 0 ? '' : ':' + features.join(',')));
   };
   let lastDrawGl;
   const pendingDrawPulses = [];
@@ -966,6 +983,7 @@ const installBenchmarkHooks = async (session) => {
       kind,
       ordinal: gpuDrawProfile.records.length,
       programId: glObjectId(drawState.program),
+      programLabel: glProgramLabels.get(drawState.program) ?? 'unknown',
       vertexArrayId: glObjectId(drawState.vertexArray),
     };
     gpuDrawProfile.records.push(record);
@@ -973,6 +991,16 @@ const installBenchmarkHooks = async (session) => {
     return () => endGpuTimer(timer, false);
   };
   const patchPrototype = (prototype) => {
+    patch(prototype, 'shaderSource', (args) => {
+      if (config.gpuDrawProfileEnabled && args[0] !== null) glShaderSources.set(args[0], String(args[1] ?? ''));
+    });
+    patch(prototype, 'attachShader', (args) => {
+      if (!config.gpuDrawProfileEnabled || args[0] === null || args[1] === null) return;
+      const shaders = glProgramShaders.get(args[0]) ?? [];
+      shaders.push(args[1]);
+      glProgramShaders.set(args[0], shaders);
+      labelProgram(args[0]);
+    });
     patch(prototype, 'bindBuffer', () => { counters.bindBuffer += 1; });
     patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
     patch(prototype, 'bindVertexArray', (args) => {
@@ -1186,6 +1214,24 @@ const installBenchmarkHooks = async (session) => {
     const completedGpuDraws = gpuDrawProfile.records
       .filter((record) => typeof record.durationMs === 'number')
       .sort((left, right) => right.durationMs - left.durationMs);
+    const gpuProgramTotals = new Map();
+    for (const record of completedGpuDraws) {
+      let total = gpuProgramTotals.get(record.programLabel);
+      if (total === undefined) {
+        total = {
+          drawCount: 0,
+          durationMs: 0,
+          elementCount: 0,
+          programLabel: record.programLabel,
+        };
+        gpuProgramTotals.set(record.programLabel, total);
+      }
+      total.drawCount += 1;
+      total.durationMs += record.durationMs;
+      total.elementCount += record.count * record.instances;
+    }
+    const gpuPrograms = [...gpuProgramTotals.values()]
+      .sort((left, right) => right.durationMs - left.durationMs);
     const sampleTimeoutMs = 250;
     const draw = statsFromDeltas(drawDeltas, requestedSampleCount, sampleTimeoutMs);
     return {
@@ -1200,6 +1246,7 @@ const installBenchmarkHooks = async (session) => {
         attempted: gpuDrawProfile.attempted,
         completedCount: completedGpuDraws.length,
         enabled: config.gpuDrawProfileEnabled,
+        programs: gpuPrograms,
         records: completedGpuDraws,
         requestedCount: gpuDrawProfile.records.length,
       },
@@ -2185,6 +2232,7 @@ const routeSummary = (route) => {
   const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
   const gpuDrawProfile = cameraDragFrameStats?.gpuDrawProfile;
   const topGpuDraw = gpuDrawProfile?.records?.[0];
+  const topGpuProgram = gpuDrawProfile?.programs?.[0];
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.drawCalls / cameraDragSampleCount;
@@ -2338,6 +2386,15 @@ const routeSummary = (route) => {
               cameraDragGpuTopDrawCount: topGpuDraw.count,
               cameraDragGpuTopDrawDurationMs: round(topGpuDraw.durationMs),
               cameraDragGpuTopDrawProgramId: topGpuDraw.programId,
+              cameraDragGpuTopDrawProgramLabel: topGpuDraw.programLabel,
+            }
+          : {}),
+        ...(typeof topGpuProgram?.durationMs === 'number'
+          ? {
+              cameraDragGpuTopProgramDrawCount: topGpuProgram.drawCount,
+              cameraDragGpuTopProgramDurationMs: round(topGpuProgram.durationMs),
+              cameraDragGpuTopProgramElementCount: topGpuProgram.elementCount,
+              cameraDragGpuTopProgramLabel: topGpuProgram.programLabel,
             }
           : {}),
         ...(typeof cameraInputHandlerStats?.p95Ms === 'number'
@@ -2596,6 +2653,7 @@ const main = async () => {
         ? result.renderer?.gltfInstancing
         : undefined;
       const topGpuDraw = cameraDragFrameStats?.gpuDrawProfile?.records?.[0];
+      const topGpuProgram = cameraDragFrameStats?.gpuDrawProfile?.programs?.[0];
       const gltfModelUploadKibPerFrame = gltfInstancing?.perFrame === undefined
         ? undefined
         : gltfInstancing.perFrame.modelUploadBytes / 1024;
@@ -2614,7 +2672,10 @@ const main = async () => {
               ? [`dragGpuP95=${cameraDragFrameStats.gpuDurationMs.p95Ms.toFixed(2)}ms`]
               : []),
             ...(typeof topGpuDraw?.durationMs === 'number'
-              ? [`dragGpuTop=${topGpuDraw.durationMs.toFixed(2)}ms/${topGpuDraw.count}v/p${topGpuDraw.programId}`]
+              ? [`dragGpuTop=${topGpuDraw.durationMs.toFixed(2)}ms/${topGpuDraw.count}v/${topGpuDraw.programLabel}`]
+              : []),
+            ...(typeof topGpuProgram?.durationMs === 'number'
+              ? [`dragGpuProgram=${topGpuProgram.durationMs.toFixed(2)}ms/${topGpuProgram.drawCount}d/${topGpuProgram.programLabel}`]
               : []),
             ...(typeof cameraDragFrameStats.cameraInput?.handlerDurationMs?.p95Ms === 'number'
               ? [`dragHandlerP95=${cameraDragFrameStats.cameraInput.handlerDurationMs.p95Ms.toFixed(2)}ms`]
