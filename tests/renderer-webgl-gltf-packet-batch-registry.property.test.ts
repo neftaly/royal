@@ -226,7 +226,7 @@ describe("glTF packet numeric batch registry", () => {
     expect([0, 1, 2, 3].map((id) => groups.batchMemberFirsts[id])).toEqual([0, 2, 4, 5]);
   });
 
-  it("clusters opaque batches by material state without reordering composited classes", () => {
+  it("preserves first-seen order independently within every render class", () => {
     const blendedA = tuple(1, 9, 0, 0, FRAME_PACKET_RENDER_CLASS.blended);
     const opaqueB = tuple(2, 20);
     const transmissiveB = tuple(3, 20, 0, 0, FRAME_PACKET_RENDER_CLASS.transmissive);
@@ -241,24 +241,9 @@ describe("glTF packet numeric batch registry", () => {
     beginGltfPacketBatchRegistryFrame(registry);
     groupGltfPacketSubmissionSegment(registry, groups, workspace, 7, catalog);
 
-    expect(Array.from(groups.opaqueBatchIds.subarray(0, groups.opaqueBatchCount))).toEqual([3, 1]);
+    expect(Array.from(groups.opaqueBatchIds.subarray(0, groups.opaqueBatchCount))).toEqual([1, 3]);
     expect(Array.from(groups.transmissiveBatchIds.subarray(0, groups.transmissiveBatchCount))).toEqual([2, 5]);
     expect(Array.from(groups.blendedBatchIds.subarray(0, groups.blendedBatchCount))).toEqual([0, 4]);
-  });
-
-  it("invalidates retained opaque order when registry identities restart", () => {
-    const registry = createGltfPacketBatchRegistry();
-    const groups = createGltfPacketBatchSegmentGroups();
-    const first = segment([tuple(1, 20), tuple(2, 10)]);
-    beginGltfPacketBatchRegistryFrame(registry);
-    groupGltfPacketSubmissionSegment(registry, groups, first.workspace, 7, first.catalog);
-    expect(Array.from(groups.opaqueBatchIds.subarray(0, 2))).toEqual([1, 0]);
-
-    clearGltfPacketBatchRegistry(registry);
-    const second = segment([tuple(3, 5), tuple(4, 15)]);
-    beginGltfPacketBatchRegistryFrame(registry);
-    groupGltfPacketSubmissionSegment(registry, groups, second.workspace, 7, second.catalog);
-    expect(Array.from(groups.opaqueBatchIds.subarray(0, 2))).toEqual([0, 1]);
   });
 
   it("handles injected epoch wrap and retains grown capacity across segment resets", () => {
