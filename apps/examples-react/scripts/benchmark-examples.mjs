@@ -696,6 +696,7 @@ const installBenchmarkHooks = async (session) => {
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
   const windowDrawCallbackDurations = [];
+  let windowFrameSample = null;
   const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
     const sorted = [...deltas].sort((left, right) => left - right);
     const sum = sorted.reduce((total, value) => total + value, 0);
@@ -830,6 +831,32 @@ const installBenchmarkHooks = async (session) => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     pollGpuTimers(state);
+  };
+  const startWindowFrameSample = () => {
+    if (windowFrameSample !== null) throw new Error('Royal benchmark window frame sample already active');
+    windowFrameSample = {
+      callbackStartIndex: windowDrawCallbackDurations.length,
+      generation: gpuTimers.generation,
+      gl: lastDrawGl,
+      gpuStartIndex: gpuTimers.durations.length,
+      previousGpuTimerEnabled: gpuTimers.windowEnabled,
+    };
+    gpuTimers.windowEnabled = true;
+  };
+  const stopWindowFrameSample = async (requestedSampleCount) => {
+    const sample = windowFrameSample;
+    if (sample === null) return null;
+    windowFrameSample = null;
+    gpuTimers.windowEnabled = sample.previousGpuTimerEnabled;
+    await settleGpuTimers(sample.gl, sample.generation, 250);
+    return {
+      gpuDurationMs: gpuTimerStats(sample.gl, sample.gpuStartIndex, requestedSampleCount),
+      renderCallbackDurationMs: statsFromDeltas(
+        windowDrawCallbackDurations.slice(sample.callbackStartIndex),
+        requestedSampleCount,
+        ${frameSampleTimeoutMs},
+      ),
+    };
   };
   const resolveXrWaiters = () => {
     xr.waiters = xr.waiters.filter((waiter) => {
@@ -1417,6 +1444,7 @@ const installBenchmarkHooks = async (session) => {
     },
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
+      windowFrameSample = null;
       xr.callbackDurations.length = 0;
       xr.frameTimes.length = 0;
       windowDrawCallbackDurations.length = 0;
@@ -1424,13 +1452,16 @@ const installBenchmarkHooks = async (session) => {
       gpuTimers.durations.length = 0;
       gpuTimers.errors = 0;
       gpuTimers.generation += 1;
+      gpuTimers.windowEnabled = false;
     },
     sampleXrFrames,
     startFrameRecorder,
+    startWindowFrameSample,
     snapshot() {
       return { ...counters };
     },
     stopFrameRecorder,
+    stopWindowFrameSample,
     xrSnapshot() {
       const activeSession = xr.activeSession;
       const baseLayer = activeSession?.renderState?.baseLayer;
@@ -1566,6 +1597,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const rendererBeforeFrames = await evaluate(session, `
 (() => {
   globalThis.__royalBench?.reset?.();
+  ${xrOnly ? '' : 'globalThis.__royalBench?.startWindowFrameSample?.();'}
   performance.mark('royal-bench-measure-start');
   return ${rendererSnapshotExpression};
 })()
@@ -1648,6 +1680,11 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 `);
   const gl = frameMeasurement.gl;
   const rendererAfterFrames = frameMeasurement.renderer;
+  const frameWork = xrOnly
+    ? undefined
+    : await evaluate(session, `
+(async () => globalThis.__royalBench?.stopWindowFrameSample?.(${frames}) ?? null)()
+`);
   const renderedFrameCount = rendererFrameDelta(rendererAfterFrames, rendererBeforeFrames);
   const cameraDrag = cameraDragEnabled
     ? await (async () => {
@@ -1745,6 +1782,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const afterFinalGc = await session.call('Runtime.getHeapUsage');
   return {
     frameStats,
+    ...(frameWork === undefined || frameWork === null ? {} : { frameWork }),
     glFrameCount: xrOnly && renderedFrameCount > 0
       ? renderedFrameCount
       : frameStats.sampleCount ?? frames,
@@ -2247,6 +2285,7 @@ const routeSummary = (route) => {
   const copyTexSubImage2DPerFrame = route.gl.copyTexSubImage2D / sampledFrameCount;
   const copyTexSubImage2DPixelsPerFrame = route.gl.copyTexSubImage2DPixels / sampledFrameCount;
   const uniformCallsPerFrame = route.gl.uniformCalls / sampledFrameCount;
+  const frameRenderCallbackStats = route.frameWork?.renderCallbackDurationMs;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
   const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
@@ -2324,6 +2363,20 @@ const routeSummary = (route) => {
     copyTexSubImage2DPixelsPerFrame: round(copyTexSubImage2DPixelsPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
     uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / sampledFrameCount),
+    ...(typeof frameRenderCallbackStats?.p95Ms === 'number' && frameRenderCallbackStats.sampleCount > 0
+      ? {
+          renderCallbackMaxMs: round(frameRenderCallbackStats.maxMs),
+          renderCallbackP95Ms: round(frameRenderCallbackStats.p95Ms),
+        }
+      : {}),
+    ...(route.frameWork?.gpuDurationMs?.supported === true
+      && route.frameWork.gpuDurationMs.sampleCount > 0
+      ? {
+          gpuP95Ms: round(route.frameWork.gpuDurationMs.p95Ms),
+          gpuSampleCount: route.frameWork.gpuDurationMs.sampleCount,
+          gpuSamplesMissing: route.frameWork.gpuDurationMs.samplesMissing,
+        }
+      : {}),
     ...(typeof route.xr?.frameStats?.callbackDurationMs?.p95Ms === 'number'
       ? { xrCallbackP95Ms: round(route.xr.frameStats.callbackDurationMs.p95Ms) }
       : {}),
@@ -2516,6 +2569,8 @@ const analyzeResults = (results) => {
   const summaries = results.map(routeSummary);
   const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
   const cameraDrag = summaries.filter((route) => typeof route.cameraDragDrawP95Ms === 'number');
+  const measuredCpu = summaries.filter((route) => typeof route.renderCallbackP95Ms === 'number');
+  const measuredGpu = summaries.filter((route) => typeof route.gpuP95Ms === 'number');
   return {
     slowestRoutesByP95: [...summaries]
       .sort((left, right) => right.p95Ms - left.p95Ms)
@@ -2528,6 +2583,12 @@ const analyzeResults = (results) => {
       .slice(0, 8),
     heaviestUniformRoutes: [...summaries]
       .sort((left, right) => right.uniformCallsPerFrame - left.uniformCallsPerFrame)
+      .slice(0, 8),
+    heaviestCpuRoutes: [...measuredCpu]
+      .sort((left, right) => right.renderCallbackP95Ms - left.renderCallbackP95Ms)
+      .slice(0, 8),
+    heaviestGpuRoutes: [...measuredGpu]
+      .sort((left, right) => right.gpuP95Ms - left.gpuP95Ms)
       .slice(0, 8),
     instancing: {
       comparisons: instancingComparisons(summaries),
@@ -2661,6 +2722,7 @@ const main = async () => {
       const stateChangesPerFrame = result.gl.stateChanges / measuredGlFrameCount;
       const uniformCallsPerFrame = result.gl.uniformCalls / measuredGlFrameCount;
       const cameraDragFrameStats = result.cameraDrag?.frameStats;
+      const frameRenderCallbackStats = result.frameWork?.renderCallbackDurationMs;
       const frameFailure = result.frameStats.failed === true
         ? result.frameStats.reason
         : result.frameStats.timedOut === true
@@ -2700,6 +2762,13 @@ const main = async () => {
         `ready=${result.wallNavigationAndReadyMs.toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
+        ...(typeof frameRenderCallbackStats?.p95Ms === 'number' && frameRenderCallbackStats.sampleCount > 0
+          ? [`cpuP95=${frameRenderCallbackStats.p95Ms.toFixed(2)}ms`]
+          : []),
+        ...(result.frameWork?.gpuDurationMs?.supported === true
+          && result.frameWork.gpuDurationMs.sampleCount > 0
+          ? [`gpuP95=${result.frameWork.gpuDurationMs.p95Ms.toFixed(2)}ms`]
+          : []),
         ...(frameFailure === undefined ? [] : [`frames=${frameFailure}`]),
         ...(hasCameraDragStats
           ? [
@@ -2849,6 +2918,8 @@ const main = async () => {
       gpu: report.gpu,
       routeCount: report.routes.length,
       slowestRoutesByP95: analysis.slowestRoutesByP95.slice(0, 5),
+      heaviestCpuRoutes: analysis.heaviestCpuRoutes.slice(0, 5),
+      heaviestGpuRoutes: analysis.heaviestGpuRoutes.slice(0, 5),
       heaviestGlStateRoutes: analysis.heaviestGlStateRoutes.slice(0, 5),
       heaviestUniformRoutes: analysis.heaviestUniformRoutes.slice(0, 5),
       ...(cameraDragEnabled

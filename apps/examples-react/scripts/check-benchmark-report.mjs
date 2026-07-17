@@ -438,6 +438,25 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled, gpuTimersEnabled)
   }
 };
 
+const checkFrameWork = (route, routeLabel, gpuTimersEnabled) => {
+  if (route.frameWork === undefined) return;
+  if (!requireObject(route.frameWork, `${routeLabel}.frameWork`)) return;
+  if (requireObject(
+    route.frameWork.renderCallbackDurationMs,
+    `${routeLabel}.frameWork.renderCallbackDurationMs`,
+  )) {
+    checkFrameStats(
+      route.frameWork.renderCallbackDurationMs,
+      `${routeLabel}.frameWork.renderCallbackDurationMs`,
+    );
+  }
+  checkGpuTimerStats(
+    route.frameWork.gpuDurationMs,
+    `${routeLabel}.frameWork.gpuDurationMs`,
+    gpuTimersEnabled,
+  );
+};
+
 const checkRealXrRoute = (route, routeLabel) => {
   if (route.id !== 'webxr-vr') return;
   if (!requireObject(route.prepared, `${routeLabel}.prepared`)) return;
@@ -739,6 +758,7 @@ if (requireObject(report, 'report')) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
         }
         checkCameraDrag(route, routeLabel, cameraDragEnabled, gpuTimersEnabled);
+        checkFrameWork(route, routeLabel, gpuTimersEnabled);
         checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
         checkXrGpuTimers(route, routeLabel, gpuTimersEnabled);
         if (realXrEnabled) checkRealXrRoute(route, routeLabel);
@@ -754,6 +774,8 @@ if (requireObject(report, 'report')) {
         ['heaviestGlStateRoutes', [...requiredVisibleSummaryCounters, ...requiredSummaryCounters]],
         ['heaviestUniformRoutes', [...requiredVisibleSummaryCounters, 'uniformCallsPerFrame']],
         ['heaviestDrawRoutes', [...requiredVisibleSummaryCounters, 'drawCallsPerFrame']],
+        ['heaviestCpuRoutes', [...requiredVisibleSummaryCounters, 'renderCallbackP95Ms']],
+        ['heaviestGpuRoutes', [...requiredVisibleSummaryCounters, 'gpuP95Ms']],
       ]) {
         const name = String(rawName);
         const requiredCounters = rawRequiredCounters.map(String);
