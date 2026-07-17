@@ -47,6 +47,11 @@ program/VAO identities for each draw, sorted slowest first under
 `cameraDrag.frameStats.gpuDrawProfile.records`. Per-draw timer queries perturb
 that profiled frame, so use it to locate expensive coverage or shader variants;
 use the ordinary drag GPU p95 from a separate run for regression comparisons.
+It profiles drag frame 1 by default; set the 1-based
+`EXAMPLES_BENCH_GPU_DRAW_PROFILE_FRAME` to inspect a later camera view.
+Ordinary timer summaries also retain the twelve slowest frame ordinals under
+`gpuDurationMs.slowestSamples`, annotated with any shader links, buffer uploads,
+texture storage/uploads, or mip generation submitted by the same RAF callback.
 
 Focused virtual-texture near-plane stress:
 

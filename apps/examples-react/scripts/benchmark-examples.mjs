@@ -132,6 +132,7 @@ const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
 const gpuTimersEnabled = process.env.EXAMPLES_BENCH_GPU_TIMERS !== '0';
 const gpuDrawProfileEnabled = process.env.EXAMPLES_BENCH_GPU_DRAW_PROFILE === '1';
+const gpuDrawProfileFrameIndex = envInteger('EXAMPLES_BENCH_GPU_DRAW_PROFILE_FRAME', 1) - 1;
 const resourceTimingBufferSize = envInteger('EXAMPLES_BENCH_RESOURCE_TIMINGS', 10_000);
 
 if (fakeXrEnabled && realXrEnabled) {
@@ -576,6 +577,7 @@ const installBenchmarkHooks = async (session) => {
     fakeXrSampleTimeoutMs,
     fakeXrViews,
     gpuDrawProfileEnabled,
+    gpuDrawProfileFrameIndex,
     gpuTimersEnabled,
     resourceTimingBufferSize,
   });
@@ -627,19 +629,44 @@ const installBenchmarkHooks = async (session) => {
     bufferDataCalls: 0,
     bufferSubDataBytes: 0,
     bufferSubDataCalls: 0,
+    compileShader: 0,
+    compressedTexSubImage2D: 0,
     copyTexImage2D: 0,
     copyTexSubImage2D: 0,
     copyTexSubImage2DPixels: 0,
+    generateMipmap: 0,
+    linkProgram: 0,
     drawArrays: 0,
     drawArraysInstanced: 0,
     drawElements: 0,
     drawElementsInstanced: 0,
     texImage2D: 0,
+    texStorage2D: 0,
     texSubImage2D: 0,
     uniformCalls: 0,
     uniformMatrixCalls: 0,
     useProgram: 0,
   };
+  const gpuWorkCounterNames = [
+    'bufferDataBytes',
+    'bufferDataCalls',
+    'bufferSubDataBytes',
+    'bufferSubDataCalls',
+    'compileShader',
+    'compressedTexSubImage2D',
+    'generateMipmap',
+    'linkProgram',
+    'texImage2D',
+    'texStorage2D',
+    'texSubImage2D',
+  ];
+  const gpuWorkSnapshot = () => Object.fromEntries(
+    gpuWorkCounterNames.map((name) => [name, counters[name]]),
+  );
+  const gpuWorkDelta = (before) => Object.fromEntries(gpuWorkCounterNames.flatMap((name) => {
+    const value = counters[name] - before[name];
+    return value === 0 ? [] : [[name, value]];
+  }));
   const xr = {
     activeSession: null,
     callbackDurations: [],
@@ -654,6 +681,7 @@ const installBenchmarkHooks = async (session) => {
     disjointSamples: 0,
     durations: [],
     errors: 0,
+    frameWork: [],
     generation: 0,
     supported: false,
     windowEnabled: false,
@@ -766,7 +794,10 @@ const installBenchmarkHooks = async (session) => {
         if (Number.isFinite(nanoseconds) && nanoseconds >= 0) {
           const durationMs = nanoseconds / 1_000_000;
           if (sample.drawRecord !== undefined) sample.drawRecord.durationMs = durationMs;
-          else if (sample.record !== false) gpuTimers.durations.push(durationMs);
+          else if (sample.record !== false) {
+            gpuTimers.durations.push(durationMs);
+            gpuTimers.frameWork.push(sample.frameWork ?? {});
+          }
         }
       }
       state.freeQueries.push(sample.query);
@@ -806,9 +837,10 @@ const installBenchmarkHooks = async (session) => {
     pollGpuTimers(state);
     if (!config.gpuTimersEnabled) return { enabled: false, supported: false };
     if (state === undefined) return { enabled: true, supported: false };
+    const durations = gpuTimers.durations.slice(startIndex);
     return {
       ...statsFromDeltas(
-        gpuTimers.durations.slice(startIndex),
+        durations,
         requestedSampleCount,
         config.fakeXrSampleTimeoutMs,
       ),
@@ -816,6 +848,14 @@ const installBenchmarkHooks = async (session) => {
       enabled: true,
       errors: gpuTimers.errors,
       pendingSamples: state?.pending.length ?? 0,
+      slowestSamples: durations
+        .map((durationMs, index) => ({
+          durationMs,
+          frameNumber: index + 1,
+          ...gpuTimers.frameWork[startIndex + index],
+        }))
+        .sort((left, right) => right.durationMs - left.durationMs)
+        .slice(0, 12),
       supported: true,
     };
   };
@@ -936,11 +976,15 @@ const installBenchmarkHooks = async (session) => {
         const gpuTimer = gpuTimers.windowEnabled && !gpuDrawProfile.active
           ? beginGpuTimerForGl(lastDrawGl)
           : undefined;
+        const gpuWorkBefore = gpuTimer === undefined ? undefined : gpuWorkSnapshot();
         try {
           callback(time);
         } finally {
           const drew = drawCount() > drawsBefore;
           if (drew) windowDrawCallbackDurations.push(performance.now() - callbackStartedAt);
+          if (gpuTimer !== undefined && gpuWorkBefore !== undefined) {
+            gpuTimer.frameWork = gpuWorkDelta(gpuWorkBefore);
+          }
           endGpuTimer(gpuTimer, drew);
         }
       });
@@ -1028,6 +1072,7 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'shaderSource', (args) => {
       if (config.gpuDrawProfileEnabled && args[0] !== null) glShaderSources.set(args[0], String(args[1] ?? ''));
     });
+    patch(prototype, 'compileShader', () => { counters.compileShader += 1; });
     patch(prototype, 'attachShader', (args) => {
       if (!config.gpuDrawProfileEnabled || args[0] === null || args[1] === null) return;
       const shaders = glProgramShaders.get(args[0]) ?? [];
@@ -1069,6 +1114,7 @@ const installBenchmarkHooks = async (session) => {
       counters.bufferSubDataCalls += 1;
       counters.bufferSubDataBytes += bufferSubDataByteLength(args);
     });
+    patch(prototype, 'compressedTexSubImage2D', () => { counters.compressedTexSubImage2D += 1; });
     patch(prototype, 'copyTexImage2D', () => { counters.copyTexImage2D += 1; });
     patch(prototype, 'copyTexSubImage2D', (args) => {
       counters.copyTexSubImage2D += 1;
@@ -1078,7 +1124,10 @@ const installBenchmarkHooks = async (session) => {
         counters.copyTexSubImage2DPixels += width * height;
       }
     });
+    patch(prototype, 'generateMipmap', () => { counters.generateMipmap += 1; });
+    patch(prototype, 'linkProgram', () => { counters.linkProgram += 1; });
     patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
+    patch(prototype, 'texStorage2D', () => { counters.texStorage2D += 1; });
     patch(prototype, 'texSubImage2D', () => { counters.texSubImage2D += 1; });
     patch(prototype, 'useProgram', (args) => {
       counters.useProgram += 1;
@@ -1235,7 +1284,8 @@ const installBenchmarkHooks = async (session) => {
     gpuDrawProfile.attempted = false;
     try {
       for (let index = 0; index < requestedSampleCount; index += 1) {
-        gpuDrawProfile.active = config.gpuDrawProfileEnabled && index === 0;
+        gpuDrawProfile.active = config.gpuDrawProfileEnabled
+          && index === config.gpuDrawProfileFrameIndex;
         clientX += step;
         const drawPromise = nextObservedDraw(250);
         const rafPromise = nextRaf(250);
@@ -1293,6 +1343,7 @@ const installBenchmarkHooks = async (session) => {
         attempted: gpuDrawProfile.attempted,
         completedCount: completedGpuDraws.length,
         enabled: config.gpuDrawProfileEnabled,
+        frameNumber: config.gpuDrawProfileFrameIndex + 1,
         programs: gpuPrograms,
         records: completedGpuDraws,
         requestedCount: gpuDrawProfile.records.length,
