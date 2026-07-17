@@ -655,6 +655,26 @@ describe("WebGL renderer pipeline contracts", () => {
       .map(roundVector)).toContainEqual([1, 2, 5, 1]);
   });
 
+  it("refreshes view-derived tone mapping when a later frame changes exposure", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderAtExposure = (exposureEv100: number): void => {
+      root.render(scene({
+        camera: testCamera(),
+        exposureEv100,
+        nodes: [unlitBox()],
+        toneMapping: "pbr-neutral",
+      }));
+    };
+
+    renderAtExposure(1);
+    const callsBeforeExposureChange = calls.length;
+    renderAtExposure(2);
+
+    expect(uniform4fvPayloadsByName(calls.slice(callsBeforeExposureChange), "u_toneMappingSettings")
+      .map(roundVector)).toContainEqual([1, roundNumber(1 / 4.8), 0, 0]);
+  });
+
   it("uses the fixed vertex attribute ABI without program-dependent binding or lookup", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

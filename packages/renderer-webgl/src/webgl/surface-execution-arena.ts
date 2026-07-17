@@ -552,7 +552,13 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      const viewBindingChanged = this.#bindViewMatrices(program, input.projection, input.view);
+      this.#bindViewUniforms(
+        program,
+        input.projection,
+        input.view,
+        input.toneMapping,
+        !loading && surfaceMaterial?.kind === "standard",
+      );
       const modelBinding = this.#bindModelMatrix(program, input);
       if (!loading && surfaceMaterial?.kind === "standard") {
         if (modelBinding !== undefined) {
@@ -574,15 +580,13 @@ export class SurfaceExecutionArena {
             );
           }
         }
-        if (viewBindingChanged) this.#bindCameraWorldPosition(program, input.view);
       }
-      if (loading) this.#bindLoadingSurface(program, input.toneMapping);
+      if (loading) this.#bindLoadingSurface(program);
       else this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
       if (!loading && plan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
+        this.#bindStableMaterialUniforms(program, surfaceMaterial, plan);
         if (surfaceMaterial.kind === "standard") {
-          this.#bindStableMaterialUniforms(program, surfaceMaterial, plan);
           this.#bindMaterialResources(program, input.transmissionScreenColorTexture, plan);
-          this.#bindToneMapping(program, input.toneMapping);
           this.#bindLights(
             program,
             surfaceLights,
@@ -593,8 +597,6 @@ export class SurfaceExecutionArena {
             input.frame,
             input.stableLightUniformRevision ?? 0,
           );
-        } else {
-          this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
         }
       }
       if (!loading) this.#bindBaseColorTexture(program, plan);
@@ -683,16 +685,18 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      const viewBindingChanged = this.#bindViewMatrices(program, input.projection, input.view);
-      if (!loading && batch.material.kind === "standard") {
-        if (viewBindingChanged) this.#bindCameraWorldPosition(program, input.view);
-      }
-      if (loading) this.#bindLoadingSurface(program, input.toneMapping);
+      this.#bindViewUniforms(
+        program,
+        input.projection,
+        input.view,
+        input.toneMapping,
+        !loading && batch.material.kind === "standard",
+      );
+      if (loading) this.#bindLoadingSurface(program);
       else this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
       if (!loading && batch.material.kind === "standard") {
         this.#bindStableMaterialUniforms(program, batch.material, plan);
         this.#bindMaterialResources(program, input.transmissionScreenColorTexture, plan);
-        this.#bindToneMapping(program, input.toneMapping);
         this.#bindLights(
           program,
           surfaceLights,
@@ -703,9 +707,7 @@ export class SurfaceExecutionArena {
           input.frame,
           batch.sceneLightPlanRevision,
         );
-      } else if (!loading) {
-        this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
-      }
+      } else if (!loading) this.#bindStableMaterialUniforms(program, batch.material, plan);
       if (!loading) this.#bindBaseColorTexture(program, plan);
       const allocation = this.#gltfFrames.bindInstanceBuffer(
         this.#gl,
@@ -765,13 +767,19 @@ export class SurfaceExecutionArena {
     return resource?.program;
   }
 
-  #bindViewMatrices(program: WebGLProgram, projection: Mat4, view: Mat4): boolean {
-    if (this.#programViewRevisions.get(program) === this.#viewRevision) return false;
+  #bindViewUniforms(
+    program: WebGLProgram,
+    projection: Mat4,
+    view: Mat4,
+    toneMapping: SurfaceToneMappingState,
+    bindCameraPosition: boolean,
+  ): void {
+    if (this.#programViewRevisions.get(program) === this.#viewRevision) return;
     uniformMatrix(this.#programs, program, "u_projection", projection);
     uniformMatrix(this.#programs, program, "u_view", view);
+    this.#bindToneMapping(program, toneMapping);
+    if (bindCameraPosition) this.#bindCameraWorldPosition(program, view);
     this.#programViewRevisions.set(program, this.#viewRevision);
-    // The first program bind for a view also owns uniforms derived solely from that view.
-    return true;
   }
 
   /** Returns undefined for reuse, false for compared, and true for proven changed. */
@@ -1083,7 +1091,7 @@ export class SurfaceExecutionArena {
     return plan;
   }
 
-  #bindLoadingSurface(program: WebGLProgram, toneMapping: SurfaceToneMappingState): void {
+  #bindLoadingSurface(program: WebGLProgram): void {
     // The loading shader can alias an untextured unlit material program while
     // writing a different alpha policy, so it invalidates that program's
     // material identity proof before publication resumes.
@@ -1098,7 +1106,6 @@ export class SurfaceExecutionArena {
       LOADING_SURFACE_COLOR[3],
     );
     uniform4f(this.#programs, program, "u_alphaSettings", 0, 0.5, 0, 0);
-    this.#bindToneMapping(program, toneMapping);
   }
 
   #materialTextureCatalog(material: SurfaceMaterial): SurfaceMaterialTextureCatalog {
@@ -1217,16 +1224,6 @@ export class SurfaceExecutionArena {
       emissive?.[2] ?? 0,
       emissive?.[3] ?? 1,
     );
-  }
-
-  #bindUnlitMaterial(
-    program: WebGLProgram,
-    material: SurfaceMaterial,
-    plan: SurfaceTextureBindingPlan,
-    toneMapping: SurfaceToneMappingState,
-  ): void {
-    this.#bindStableMaterialUniforms(program, material, plan);
-    this.#bindToneMapping(program, toneMapping);
   }
 
   #bindAlphaSettings(program: WebGLProgram, material: SurfaceMaterial): void {
