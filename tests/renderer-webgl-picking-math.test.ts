@@ -5,8 +5,10 @@ import {
   type Mat4,
 } from "../packages/renderer-webgl/src/math/mat4";
 import {
+  createFrustumPlanes,
   createRayGeometryScratch,
   isAffineBoundsVisible,
+  isAffineBoundsVisibleAgainstPlanes,
   isBoundsVisible,
   nearestExactHitByLowerBound,
   rayAabbDistance,
@@ -15,6 +17,7 @@ import {
   transformBoundsInto,
   worldBounds,
   worldBoundsInto,
+  writeFrustumPlanesInto,
   type Bounds3,
   type MutableBounds3,
   type Ray,
@@ -214,6 +217,14 @@ describe("renderer-webgl picking math", () => {
       expect(isAffineBoundsVisible(bounds, viewProjection, model), label).toBe(
         isBoundsVisible(bounds, multiplyMat4(viewProjection, model)),
       );
+      expect(
+        isAffineBoundsVisibleAgainstPlanes(
+          bounds,
+          writeFrustumPlanesInto(createFrustumPlanes(), viewProjection),
+          model,
+        ),
+        label,
+      ).toBe(isAffineBoundsVisible(bounds, viewProjection, model));
     });
   });
 

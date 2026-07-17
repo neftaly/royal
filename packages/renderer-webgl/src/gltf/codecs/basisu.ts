@@ -143,7 +143,7 @@ let basisuWorkerPool: BasisuWorkerPool | undefined;
 
 class BasisuWorkerDisposedError extends Error {}
 
-const BASISU_WORKER_LANES = 2;
+const BASISU_WORKER_LANES = 3;
 // The glTF scheduler refills decode lanes on a later task. A short grace keeps
 // that sustained wave on its warm worker without retaining the burst heap once
 // the scene is actually idle.

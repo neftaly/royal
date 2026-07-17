@@ -273,6 +273,7 @@ type MutableSurfaceTextureBindingPlan = {
 };
 
 type SurfaceMaterialTextureRuntime = {
+  lastIntentEpoch: number;
   lastIbl: boolean;
   lastOrdinaryTexture: TextureAssetUploadRef | undefined;
   lastPunctual: boolean;
@@ -292,6 +293,7 @@ const createSurfaceMaterialTextureRuntime = (): SurfaceMaterialTextureRuntime =>
   const readinessWorkspace = createSurfaceTextureBindingWorkspace();
   const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
   return {
+    lastIntentEpoch: -1,
     lastIbl: false,
     lastOrdinaryTexture: undefined,
     lastPunctual: false,
@@ -851,7 +853,7 @@ export class SurfaceExecutionArena {
       && runtime.lastTransmissionUploaded === transmissionUploaded
       && runtime.lastIbl === ibl
       && runtime.lastPunctual === punctual
-      && this.#retainCachedOrdinaryResidency(runtime.plan)
+      && this.#retainCachedOrdinaryResidency(runtime)
     ) {
       this.#recordTextureBindingOmissions(runtime.plan);
       return runtime.plan;
@@ -1048,12 +1050,19 @@ export class SurfaceExecutionArena {
       runtime.lastTransmissionUploaded = transmissionUploaded;
       runtime.lastIbl = ibl;
       runtime.lastPunctual = punctual;
+      // Every ordinary request above records this plan's exact current-frame
+      // intent. Repeated draws of the same material need neither repeat those
+      // Set writes nor re-prove resources that cannot mutate during surface
+      // execution.
+      runtime.lastIntentEpoch = this.#publicationEpoch;
     }
     return runtime.plan;
   }
 
   /** Reasserts frame intent while proving a complete retained plan is still live. */
-  #retainCachedOrdinaryResidency(plan: SurfaceTextureBindingPlan): boolean {
+  #retainCachedOrdinaryResidency(runtime: SurfaceMaterialTextureRuntime): boolean {
+    if (runtime.lastIntentEpoch === this.#publicationEpoch) return true;
+    const plan = runtime.plan;
     if (plan.baseColor.kind === "ordinary") {
       const resource = plan.baseColor.resource;
       if (this.#ordinaryTextures.peekGpuResource(resource.key) !== resource || !resource.uploaded) return false;
@@ -1063,6 +1072,7 @@ export class SurfaceExecutionArena {
       if (this.#ordinaryTextures.peekGpuResource(resource.key) !== resource || !resource.uploaded) return false;
       this.#textureResidencyIntent.requireOrdinary(resource.key);
     }
+    runtime.lastIntentEpoch = this.#publicationEpoch;
     return true;
   }
 

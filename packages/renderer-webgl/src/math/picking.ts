@@ -16,6 +16,29 @@ export type MutableBounds3 = {
   readonly min: [number, number, number];
 };
 
+/** Six clip planes packed as consecutive x/y/z/w scalars. */
+export type FrustumPlanes = Float64Array;
+
+export const createFrustumPlanes = (): FrustumPlanes => new Float64Array(24);
+
+/** Extracts immutable-for-the-view clip-plane facts into caller-owned storage. */
+export const writeFrustumPlanesInto = (
+  out: FrustumPlanes,
+  viewProjection: Mat4,
+): FrustumPlanes => {
+  let offset = 0;
+  for (let axis = 0; axis < 3; axis += 1) {
+    for (let sign = 1; sign >= -1; sign -= 2) {
+      out[offset] = viewProjection[3] + sign * viewProjection[axis]!;
+      out[offset + 1] = viewProjection[7] + sign * viewProjection[axis + 4]!;
+      out[offset + 2] = viewProjection[11] + sign * viewProjection[axis + 8]!;
+      out[offset + 3] = viewProjection[15] + sign * viewProjection[axis + 12]!;
+      offset += 4;
+    }
+  }
+  return out;
+};
+
 const isBoundsOutsideClipPlane = (
   centerX: number,
   centerY: number,
@@ -96,6 +119,36 @@ export const isAffineBoundsVisible = (
         + Math.abs(localY) * extentY
         + Math.abs(localZ) * extentZ < 0) return false;
     }
+  }
+  return true;
+};
+
+/** Tests many affine bounds against clip planes extracted once for their shared view. */
+export const isAffineBoundsVisibleAgainstPlanes = (
+  bounds: Bounds3 | undefined,
+  planes: FrustumPlanes,
+  model: Mat4,
+): boolean => {
+  if (bounds === undefined) return false;
+  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+  const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
+  const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
+  const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+
+  for (let offset = 0; offset < 24; offset += 4) {
+    const planeX = planes[offset]!;
+    const planeY = planes[offset + 1]!;
+    const planeZ = planes[offset + 2]!;
+    const localX = planeX * model[0] + planeY * model[1] + planeZ * model[2];
+    const localY = planeX * model[4] + planeY * model[5] + planeZ * model[6];
+    const localZ = planeX * model[8] + planeY * model[9] + planeZ * model[10];
+    const localW = planeX * model[12] + planeY * model[13] + planeZ * model[14] + planes[offset + 3]!;
+    if (localX * centerX + localY * centerY + localZ * centerZ + localW
+      + Math.abs(localX) * extentX
+      + Math.abs(localY) * extentY
+      + Math.abs(localZ) * extentZ < 0) return false;
   }
   return true;
 };

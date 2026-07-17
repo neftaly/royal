@@ -29,9 +29,11 @@ import {
   type Mat4,
 } from "../math/mat4";
 import {
-  isAffineBoundsVisible,
+  createFrustumPlanes,
+  isAffineBoundsVisibleAgainstPlanes,
   isBoundsVisible,
   type MutableBounds3,
+  writeFrustumPlanesInto,
 } from "../math/picking";
 import {
   createProjectedBoundsWorkspace,
@@ -52,6 +54,7 @@ export const gltfMaterialLodSelectionKey = (
 /** Owns shared-view glTF LOD observation and per-view packet selection. */
 export class GltfPacketSelectionOwner {
   readonly #boundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
+  readonly #frustumPlanes = createFrustumPlanes();
   readonly #instanceTransforms: GltfInstanceTransformRegistry;
   readonly #projectedBounds = createProjectedBoundsWorkspace();
   readonly #rootViewProjection = identityMat4();
@@ -109,6 +112,7 @@ export class GltfPacketSelectionOwner {
     for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
       beginSelectedFramePacketView(this.selected, topology.catalog, viewIndex);
       copyFrameViewMatrixInto(this.#viewProjection, frameViews.viewProjections, viewIndex);
+      writeFrustumPlanesInto(this.#frustumPlanes, this.#viewProjection);
       for (let occurrenceIndex = 0; occurrenceIndex < topology.occurrenceCount; occurrenceIndex += 1) {
         const requestRow = plan.gltfRequestRows[occurrenceIndex]!;
         const node = plan.nodes[requestRow.nodeIndex] as AnyGltfNode;
@@ -141,9 +145,9 @@ export class GltfPacketSelectionOwner {
             for (let selectedOuterIndex = outerIndex; selectedOuterIndex < outerEnd; selectedOuterIndex += 1) {
               const rootModel = instanceViews?.rootModels[selectedOuterIndex] ?? ordinaryRootModel;
               if (rootModel === undefined) continue;
-              if (!isAffineBoundsVisible(
+              if (!isAffineBoundsVisibleAgainstPlanes(
                 hasBounds ? this.#boundsScratch : undefined,
-                this.#viewProjection,
+                this.#frustumPlanes,
                 rootModel,
               )) continue;
               this.#appendSelectedPacket(
@@ -162,9 +166,9 @@ export class GltfPacketSelectionOwner {
             topology.catalog.boundsIds[packetIndex]!,
             this.#boundsScratch,
           );
-          if (!isAffineBoundsVisible(
+          if (!isAffineBoundsVisibleAgainstPlanes(
             hasBounds ? this.#boundsScratch : undefined,
-            this.#viewProjection,
+            this.#frustumPlanes,
             rootModel,
           )) continue;
           this.#appendSelectedPacket(topology.catalog, packetIndex, requestRow.nodeIndex, outerIndex);

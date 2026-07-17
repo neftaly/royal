@@ -824,7 +824,11 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
       }
       expect(reserveTransportBytes.mock.calls.map(([size]) => size))
         .toEqual(transportOrder.map((key) => bytes.get(key)));
-      expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key)).toEqual(keys.slice(0, 2));
+      const initialDecodeCount = decodeRecipe.mock.calls.length;
+      expect(initialDecodeCount).toBeGreaterThan(1);
+      expect(initialDecodeCount).toBeLessThan(keys.length);
+      expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key))
+        .toEqual(keys.slice(0, initialDecodeCount));
 
       for (const [index, key] of keys.entries()) {
         decodes.get(key)!.resolve(loaded(key));
@@ -832,7 +836,7 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
         await flushSchedulerTurn();
         expect(transportReleases.get(bytes.get(key)!)).toHaveBeenCalledOnce();
         expect(decodeRecipe.mock.calls.map(([value]) => value.recipe.key))
-          .toEqual(keys.slice(0, index + 3));
+          .toEqual(keys.slice(0, Math.min(keys.length, initialDecodeCount + index + 1)));
       }
       expect(harness.coordinator.snapshot()).toMatchObject({ loading: 0, queued: 0, ready: keys.length });
       for (const outcome of harness.coordinator.pendingReadyOutcomes()) outcome.acknowledge();
