@@ -181,15 +181,17 @@ const installBenchmarkHooks = async (session) => {
     finiteDimension(width) && finiteDimension(height)
       ? Math.max(0, Math.round(width * height * bytesPerPixel(format, type)))
       : 0;
+  const texImagePayload = (args) => args.length >= 9 ? args[8] : args[5];
   const texImageBytes = (args) => {
-    if (typeof args[3] === 'number' && typeof args[4] === 'number') {
+    if (args.length >= 9) {
       return roughBytes(args[3], args[4], args[6], args[7]);
     }
     const size = sourceSize(args[5]);
     return size === null ? 0 : roughBytes(size.width, size.height, args[3], args[4]);
   };
+  const texSubImagePayload = (args) => args.length >= 9 ? args[8] : args[6];
   const texSubImageBytes = (args) => {
-    if (typeof args[4] === 'number' && typeof args[5] === 'number') {
+    if (args.length >= 9) {
       return roughBytes(args[4], args[5], args[6], args[7]);
     }
     const size = sourceSize(args[6]);
@@ -197,7 +199,10 @@ const installBenchmarkHooks = async (session) => {
   };
   const compressedBytes = (args) => {
     const payload = args.find((value) => value?.byteLength !== undefined);
-    return typeof payload?.byteLength === 'number' ? payload.byteLength : 0;
+    if (typeof payload?.byteLength === 'number') return payload.byteLength;
+    // WebGL 2 pixel-unpack-buffer overloads pass imageSize followed by an
+    // integer byte offset instead of an ArrayBufferView.
+    return args.length >= 8 && finiteDimension(args[6]) ? args[6] : 0;
   };
   const recordDraw = (gl) => {
     if (gpuTimerContext === null && typeof gl?.createQuery === 'function') {
@@ -319,15 +324,18 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'drawArraysInstanced', (_args, gl) => { counters.drawArraysInstanced += 1; recordDraw(gl); });
     patch(prototype, 'drawElementsInstanced', (args, gl) => { counters.drawElementsInstanced += 1; recordDraw(gl); recordGlError(gl, 'drawElementsInstanced', args); });
     patch(prototype, 'texImage2D', (args) => {
-      const bytes = texImageBytes(args);
       counters.texImage2D += 1;
       counters.textureAllocationCalls += 1;
+      const payload = texImagePayload(args);
+      if (payload === null || payload === undefined) return;
+      const bytes = texImageBytes(args);
       counters.textureUploadCalls += 1;
       counters.textureUploadBytesRough += bytes;
       recordTextureUploadChunk(bytes);
       recordTextureUpload();
     });
     patch(prototype, 'texSubImage2D', (args) => {
+      if (texSubImagePayload(args) === null || texSubImagePayload(args) === undefined) return;
       const bytes = texSubImageBytes(args);
       counters.texSubImage2D += 1;
       counters.textureUploadCalls += 1;
