@@ -18,6 +18,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
@@ -59,6 +60,7 @@ export const WireframeCube = (): ReactNode => {
 
   return (
     <Canvas aria-label="Wireframe cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>
+      <BenchmarkRendererSnapshot />
       <SpinController meshRef={meshRef} />
       <OrbitControls orbit={orbit} />
     </Canvas>

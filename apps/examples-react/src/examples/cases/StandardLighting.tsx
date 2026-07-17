@@ -14,6 +14,7 @@ import {
   standardMaterial,
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
@@ -82,6 +83,7 @@ export const StandardLighting = (): ReactNode => {
       style={interactiveCanvasStyle}
       scene={renderScene}
     >
+      <BenchmarkRendererSnapshot />
       <OrbitControls orbit={orbit} />
     </Canvas>
   );
