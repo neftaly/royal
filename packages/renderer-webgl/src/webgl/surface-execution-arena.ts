@@ -166,6 +166,7 @@ type SurfaceMaterialTextureCatalog = Readonly<{
   candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>>;
   entries: readonly SurfaceMaterialTextureCandidateEntry[];
   extendedMaterial: boolean;
+  runtime: SurfaceMaterialTextureRuntime;
   transmission: boolean;
 }>;
 const textureCoordinateUniformNames = (stem: string): TextureCoordinateUniformNames => ({
@@ -199,7 +200,14 @@ const createSurfaceMaterialTextureCatalog = (
       uniforms: SURFACE_MATERIAL_TEXTURE_COORDINATE_UNIFORMS[index]!,
     });
   }
-  return { admissions: [], candidates, entries, extendedMaterial, transmission };
+  return {
+    admissions: [],
+    candidates,
+    entries,
+    extendedMaterial,
+    runtime: createSurfaceMaterialTextureRuntime(),
+    transmission,
+  };
 };
 
 export interface SurfaceExecutionCounters extends GltfFrameBatchCounters {
@@ -262,6 +270,50 @@ type MutableSurfaceTextureBindingPlan = {
   omissions: PureSurfaceTextureBindingPlan["omissions"];
   readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
   textureUnits: PureSurfaceTextureBindingPlan["textureUnits"];
+};
+
+type SurfaceMaterialTextureRuntime = {
+  lastIbl: boolean;
+  lastOrdinaryTexture: TextureAssetUploadRef | undefined;
+  lastPunctual: boolean;
+  lastResidencyKind: "none" | "ordinary" | undefined;
+  lastTransmission: ScreenColorTextureResource | undefined;
+  lastTransmissionUploaded: boolean;
+  lastViewRevision: number;
+  ordinaryBaseColorBinding: MutableOrdinaryBaseColorTextureBinding | undefined;
+  readonly plan: MutableSurfaceTextureBindingPlan;
+  readonly readinessWorkspace: SurfaceTextureBindingWorkspace;
+  readonly readyTextures: Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>;
+  virtualBaseColorBinding: MutableVirtualBaseColorTextureBinding | undefined;
+};
+
+const createSurfaceMaterialTextureRuntime = (): SurfaceMaterialTextureRuntime => {
+  const readinessWorkspace = createSurfaceTextureBindingWorkspace();
+  const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
+  return {
+    lastIbl: false,
+    lastOrdinaryTexture: undefined,
+    lastPunctual: false,
+    lastResidencyKind: undefined,
+    lastTransmission: undefined,
+    lastTransmissionUploaded: false,
+    lastViewRevision: -1,
+    ordinaryBaseColorBinding: undefined,
+    plan: {
+      baseColor: { kind: "none" },
+      criticalPending: false,
+      extendedMaterial: false,
+      featureMask: 0,
+      features: readinessWorkspace.plan.features,
+      materialTextures: [],
+      omissions: readinessWorkspace.plan.omissions,
+      readyTextures,
+      textureUnits: readinessWorkspace.plan.textureUnits,
+    },
+    readinessWorkspace,
+    readyTextures,
+    virtualBaseColorBinding: undefined,
+  };
 };
 
 export interface SurfaceSingleExecution {
@@ -350,16 +402,6 @@ export class SurfaceExecutionArena {
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
   readonly #programMaterials = new WeakMap<WebGLProgram, SurfaceMaterial>();
-  #lastTexturePlanIbl = false;
-  #lastTexturePlanMaterial: SurfaceMaterial | undefined;
-  #lastTexturePlanOrdinaryTexture: TextureAssetUploadRef | undefined;
-  #lastTexturePlanPunctual = false;
-  #lastTexturePlanResidencyKind: "none" | "ordinary" | undefined;
-  #lastTexturePlanTransmission: ScreenColorTextureResource | undefined;
-  #lastTexturePlanTransmissionUploaded = false;
-  #lastTexturePlanViewRevision = -1;
-  readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
-    createSurfaceTextureBindingWorkspace();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
     baseColor: BASE_COLOR_INPUT_NONE,
@@ -372,24 +414,10 @@ export class SurfaceExecutionArena {
     baseColor: BASE_COLOR_INPUT_NONE,
     candidates: {},
   };
-  readonly #readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
-  #ordinaryBaseColorBinding: MutableOrdinaryBaseColorTextureBinding | undefined;
-  #virtualBaseColorBinding: MutableVirtualBaseColorTextureBinding | undefined;
   readonly #signals: {
     diagnostics: readonly SurfaceExecutionDiagnostic[];
     wakeRequested: boolean;
   } = { diagnostics: EMPTY_SURFACE_DIAGNOSTICS, wakeRequested: false };
-  readonly #texturePlan: MutableSurfaceTextureBindingPlan = {
-    baseColor: { kind: "none" },
-    criticalPending: false,
-    extendedMaterial: false,
-    featureMask: 0,
-    features: this.#textureReadinessWorkspace.plan.features,
-    materialTextures: [],
-    omissions: this.#textureReadinessWorkspace.plan.omissions,
-    readyTextures: this.#readyTextures,
-    textureUnits: this.#textureReadinessWorkspace.plan.textureUnits,
-  };
   readonly #textureResidencyIntent: FrameTextureResidencyIntent;
   readonly #textureBindings: WebGlTextureBindingShell;
   readonly #virtualTextureDrawable: SurfaceExecutionArenaOptions["virtualTextureDrawable"];
@@ -697,26 +725,26 @@ export class SurfaceExecutionArena {
     const ibl = lightSet.specular !== undefined;
     const punctual = lightSet.punctuals.length > 0;
     const transmissionUploaded = transmissionScreenColorTexture?.uploaded === true;
+    const textureCatalog = this.#materialTextureCatalog(material);
+    const runtime = textureCatalog.runtime;
     if (
       reusableResidency
-      && this.#lastTexturePlanViewRevision === this.#viewRevision
-      && this.#lastTexturePlanMaterial === material
-      && this.#lastTexturePlanResidencyKind === baseColorResidency.kind
-      && this.#lastTexturePlanOrdinaryTexture === (
+      && runtime.lastViewRevision === this.#viewRevision
+      && runtime.lastResidencyKind === baseColorResidency.kind
+      && runtime.lastOrdinaryTexture === (
         baseColorResidency.kind === "ordinary" ? baseColorResidency.texture : undefined
       )
-      && this.#lastTexturePlanTransmission === transmissionScreenColorTexture
-      && this.#lastTexturePlanTransmissionUploaded === transmissionUploaded
-      && this.#lastTexturePlanIbl === ibl
-      && this.#lastTexturePlanPunctual === punctual
+      && runtime.lastTransmission === transmissionScreenColorTexture
+      && runtime.lastTransmissionUploaded === transmissionUploaded
+      && runtime.lastIbl === ibl
+      && runtime.lastPunctual === punctual
     ) {
-      this.#recordTextureBindingOmissions(this.#texturePlan);
-      return this.#texturePlan;
+      this.#recordTextureBindingOmissions(runtime.plan);
+      return runtime.plan;
     }
-    const textureCatalog = this.#materialTextureCatalog(material);
     const candidates = textureCatalog.candidates;
     const entries = textureCatalog.entries;
-    const readyTextures = this.#readyTextures;
+    const readyTextures = runtime.readyTextures;
     readyTextures.clear();
     for (let index = 0; index < entries.length; index += 1) {
       candidates[entries[index]!.descriptor.feature] = "ready";
@@ -863,50 +891,49 @@ export class SurfaceExecutionArena {
     // is resident. Avoid rebuilding the same Maps/Sets for every steady draw.
     const pure = admittedResourcesReady && baseColor === declaredBaseColor
       ? admission
-      : resolveAdmittedSurfaceTextureBindings(admission, readinessInput, this.#textureReadinessWorkspace);
+      : resolveAdmittedSurfaceTextureBindings(admission, readinessInput, runtime.readinessWorkspace);
     this.#recordTextureBindingOmissions(pure);
     let selectedBaseColor: SurfaceBaseColorTextureBinding = NO_BASE_COLOR_TEXTURE_BINDING;
     if (pure.baseColor.kind === "ordinary") {
       const resource = ordinaryBaseColor ?? virtualFallbackReady;
       if (resource !== undefined) {
-        let binding = this.#ordinaryBaseColorBinding;
+        let binding = runtime.ordinaryBaseColorBinding;
         if (binding === undefined) {
           binding = { kind: "ordinary", resource };
-          this.#ordinaryBaseColorBinding = binding;
+          runtime.ordinaryBaseColorBinding = binding;
         } else binding.resource = resource;
         selectedBaseColor = binding;
       }
     } else if (pure.baseColor.kind === "virtual" && baseColorResidency.kind === "prepared-virtual") {
-      let binding = this.#virtualBaseColorBinding;
+      let binding = runtime.virtualBaseColorBinding;
       if (binding === undefined) {
         binding = { kind: "prepared-virtual", state: baseColorResidency.state };
-        this.#virtualBaseColorBinding = binding;
+        runtime.virtualBaseColorBinding = binding;
       } else binding.state = baseColorResidency.state;
       if (virtualFallbackTexture === undefined) delete binding.ordinaryFallback;
       else binding.ordinaryFallback = virtualFallbackTexture;
       selectedBaseColor = binding;
     }
-    this.#texturePlan.baseColor = selectedBaseColor;
-    this.#texturePlan.criticalPending = criticalPending;
-    this.#texturePlan.extendedMaterial = textureCatalog.extendedMaterial;
-    this.#texturePlan.featureMask = pure.featureMask;
-    this.#texturePlan.features = pure.features;
-    this.#texturePlan.materialTextures = entries;
-    this.#texturePlan.omissions = pure.omissions;
-    this.#texturePlan.textureUnits = pure.textureUnits;
+    runtime.plan.baseColor = selectedBaseColor;
+    runtime.plan.criticalPending = criticalPending;
+    runtime.plan.extendedMaterial = textureCatalog.extendedMaterial;
+    runtime.plan.featureMask = pure.featureMask;
+    runtime.plan.features = pure.features;
+    runtime.plan.materialTextures = entries;
+    runtime.plan.omissions = pure.omissions;
+    runtime.plan.textureUnits = pure.textureUnits;
     if (reusableResidency) {
-      this.#lastTexturePlanViewRevision = this.#viewRevision;
-      this.#lastTexturePlanMaterial = material;
-      this.#lastTexturePlanResidencyKind = baseColorResidency.kind;
-      this.#lastTexturePlanOrdinaryTexture = baseColorResidency.kind === "ordinary"
+      runtime.lastViewRevision = this.#viewRevision;
+      runtime.lastResidencyKind = baseColorResidency.kind;
+      runtime.lastOrdinaryTexture = baseColorResidency.kind === "ordinary"
         ? baseColorResidency.texture
         : undefined;
-      this.#lastTexturePlanTransmission = transmissionScreenColorTexture;
-      this.#lastTexturePlanTransmissionUploaded = transmissionUploaded;
-      this.#lastTexturePlanIbl = ibl;
-      this.#lastTexturePlanPunctual = punctual;
-    } else this.#lastTexturePlanMaterial = undefined;
-    return this.#texturePlan;
+      runtime.lastTransmission = transmissionScreenColorTexture;
+      runtime.lastTransmissionUploaded = transmissionUploaded;
+      runtime.lastIbl = ibl;
+      runtime.lastPunctual = punctual;
+    } else runtime.lastViewRevision = -1;
+    return runtime.plan;
   }
 
   #materialLoading(
