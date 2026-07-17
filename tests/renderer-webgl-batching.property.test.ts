@@ -850,12 +850,12 @@ const renderReadyCalls = async (
   root.render(renderGraph);
 
   let readyFrameCalls: readonly GlCall[] = [];
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     await flushMicrotasks();
     const callsBeforeRender = calls.length;
     root.render(renderGraph);
     readyFrameCalls = calls.slice(callsBeforeRender);
-    if (drawCalls(readyFrameCalls).length + instancedDrawCalls(readyFrameCalls).length > 0) break;
+    if (drawCalls(readyFrameCalls).length > 0 && instancedDrawCalls(readyFrameCalls).length > 0) break;
   }
 
   root.dispose();
@@ -863,28 +863,20 @@ const renderReadyCalls = async (
   return { calls: readyFrameCalls, gl };
 };
 
-const expectInstancedBatch = (
+const expectEquivalentBatchAndChangedDraw = (
   result: { readonly calls: readonly GlCall[]; readonly gl: WebGL2RenderingContext },
   label: string,
 ): void => {
   const instancedDraws = instancedDrawCalls(result.calls);
+  const draws = drawCalls(result.calls);
 
-  expect(drawCalls(result.calls), label).toHaveLength(0);
+  expect(draws, label).toHaveLength(1);
   expect(instancedDraws, label).toHaveLength(1);
   expect(instancedDraws[0]?.name, label).toBe("drawElementsInstanced");
   expect(instancedDraws[0]?.args[0], label).toBe(result.gl.TRIANGLES);
-  expect(instancedDraws[0] === undefined ? 0 : instancedDrawInstanceCount(instancedDraws[0]), label).toBe(2);
-};
-
-const expectSplitDraws = (
-  result: { readonly calls: readonly GlCall[]; readonly gl: WebGL2RenderingContext },
-  label: string,
-): void => {
-  const draws = drawCalls(result.calls);
-
-  expect(instancedDrawCalls(result.calls), label).toHaveLength(0);
-  expect(draws, label).toHaveLength(2);
-  expect(draws.every((call) => call.args[0] === result.gl.TRIANGLES && drawCount(call) === 3), label).toBe(true);
+  expect(instancedDraws[0] === undefined ? 0 : instancedDrawInstanceCount(instancedDraws[0]), label).toBe(3);
+  expect(draws[0]?.args[0], label).toBe(result.gl.TRIANGLES);
+  expect(draws[0] === undefined ? 0 : drawCount(draws[0]), label).toBe(3);
 };
 
 afterEach(() => {
@@ -901,12 +893,10 @@ describe("WebGL renderer batching properties", () => {
       const dimension = batchDimensions[caseIndex % batchDimensions.length]!;
       const [first, second] = dimension.pair(random);
       const extensionsUsed = dimension.extensionsUsed ?? [];
-      const equivalent = await renderReadyCalls([first, first], extensionsUsed);
-      const split = await renderReadyCalls([first, second], extensionsUsed);
+      const result = await renderReadyCalls([first, first, first, second], extensionsUsed);
       const caseLabel = `${label} dimension=${dimension.name}`;
 
-      expectInstancedBatch(equivalent, `${caseLabel} equivalent`);
-      expectSplitDraws(split, `${caseLabel} split`);
+      expectEquivalentBatchAndChangedDraw(result, caseLabel);
     });
   });
 });
