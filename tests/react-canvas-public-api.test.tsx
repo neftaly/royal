@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanvasProps,
+  AssetStatusOptions,
   GltfInstancesPickTarget,
   GltfPickTarget,
   MeshPickTarget,
@@ -12,6 +13,7 @@ import type {
   RendererOptions,
   RoyalPointerEventHandlers,
   RoyalRendererRootLifecycleSnapshot,
+  RoyalRendererRoot,
 } from '@royal/react';
 import type {
   TextureAssetRef,
@@ -89,6 +91,21 @@ describe('Canvas public scene boundary', () => {
       // @ts-expect-error The implementation-shaped pre-release option was removed.
       const legacyAutomaticVt = { generatedImageVirtualTextures: true } satisfies RendererOptions;
       expect([internalPolicy, legacyAutomaticVt]).toHaveLength(2);
+    }
+  });
+
+  it('supports parent-owned renderer observation without abandoning Canvas ownership', () => {
+    const rendererRef = (_root: RoyalRendererRoot | null): void => undefined;
+    const props = { rendererRef, scene: renderScene } satisfies CanvasProps;
+    const pendingObservation = { root: null } satisfies AssetStatusOptions;
+
+    expect(props.rendererRef).toBe(rendererRef);
+    expect(pendingObservation.root).toBeNull();
+
+    if (false) {
+      // @ts-expect-error Explicit asset observation names the renderer root it follows.
+      const missingRoot = {} satisfies AssetStatusOptions;
+      expect(missingRoot).toBeDefined();
     }
   });
 

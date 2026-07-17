@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { useCanvasRoot } from "./canvas";
+import { useAssetStatusRoot, type AssetStatusOptions } from "./asset-status-root";
 import { createObservedExternalStore } from "./observed-external-store";
 import type { RoyalRendererTextureAssetSnapshot } from "./root";
 import {
@@ -21,13 +21,17 @@ const virtualIdle: TextureAssetStatus = Object.freeze({
 });
 
 /**
- * Observes the exact texture descriptor retained by the surrounding Canvas.
+ * Observes the exact retained texture descriptor. It uses the surrounding
+ * Canvas by default; a parent can pass `{ root }` from `Canvas.rendererRef`.
  * For authored VTs, `ready` means the manifest is accepted; `pendingPages`
  * reports visible detail still loading or awaiting GPU publication.
  */
-export const useTextureAssetStatus = (texture: TextureAssetStatusInput): TextureAssetStatus => {
+export const useTextureAssetStatus = (
+  texture: TextureAssetStatusInput,
+  options?: AssetStatusOptions,
+): TextureAssetStatus => {
   validateTextureAssetRef(texture, "texture asset status input");
-  const root = useCanvasRoot();
+  const root = useAssetStatusRoot(options, "useTextureAssetStatus");
   const semanticKey = textureAssetSemanticKey(texture);
   const store = useMemo(() => {
     const idle = texture.kind === "asset" ? ordinaryIdle : virtualIdle;

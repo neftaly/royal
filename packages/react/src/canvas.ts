@@ -58,6 +58,8 @@ export interface CanvasProps
    * refs that return a cleanup use that cleanup instead of a `null` call.
    */
   readonly rendererOptions?: RendererOptions;
+  /** Active renderer root for parent-owned status, diagnostics, or imperative integration. */
+  readonly rendererRef?: Ref<RoyalRendererRoot>;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
   readonly scene: RenderRoot;
 }
@@ -82,6 +84,10 @@ export const useCanvasRoot = (): RoyalRendererRoot | null => {
   return root;
 };
 
+/** @internal Context probe used by hooks that also accept an explicit root. */
+export const useOptionalCanvasRoot = (): RoyalRendererRoot | null | undefined =>
+  useContext(CanvasRootContext);
+
 /** Returns a stable callback that requests one render of the current Canvas root. */
 export const useInvalidate = (): (() => void) => {
   const root = useCanvasRoot();
@@ -100,18 +106,18 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
   }, [root]);
 };
 
-const assignCanvasRef = (
-  ref: Ref<HTMLCanvasElement> | undefined,
-  canvas: HTMLCanvasElement | null,
+const assignRef = <Value>(
+  ref: Ref<Value> | undefined,
+  value: Value | null,
 ): (() => void) | undefined => {
   if (ref === undefined || ref === null) return undefined;
 
   if (typeof ref === "function") {
-    const cleanup = ref(canvas);
+    const cleanup = ref(value);
     return typeof cleanup === "function" ? cleanup : undefined;
   }
 
-  ref.current = canvas;
+  ref.current = value;
   return undefined;
 };
 
@@ -121,6 +127,7 @@ export const Canvas = ({
   scenePointerEvents,
   ref,
   rendererOptions,
+  rendererRef,
   scene,
   ...canvasProps
 }: CanvasProps): ReactNode => {
@@ -140,15 +147,23 @@ export const Canvas = ({
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
-    const externalCleanup = assignCanvasRef(ref, canvas);
+    const externalCleanup = assignRef(ref, canvas);
     if (canvas === null) return externalCleanup;
     return () => {
       canvasRef.current = null;
       setCanvasElement(null);
-      if (externalCleanup === undefined) assignCanvasRef(ref, null);
+      if (externalCleanup === undefined) assignRef(ref, null);
       else externalCleanup();
     };
   }, [ref]);
+
+  useLayoutEffect(() => {
+    const externalCleanup = assignRef(rendererRef, canvasRoot);
+    return () => {
+      if (externalCleanup === undefined) assignRef(rendererRef, null);
+      else externalCleanup();
+    };
+  }, [canvasRoot, rendererRef]);
 
   const canvasElementNode = createElement("canvas", {
     ...canvasProps,

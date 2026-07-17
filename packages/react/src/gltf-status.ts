@@ -1,6 +1,6 @@
 import type { GltfAssetRef } from "@royal/renderer-core";
 import { useMemo, useSyncExternalStore } from "react";
-import { useCanvasRoot } from "./canvas";
+import { useAssetStatusRoot, type AssetStatusOptions } from "./asset-status-root";
 import { validateGltfAssetStatusInput } from "./gltf-asset-identity";
 import { createObservedExternalStore } from "./observed-external-store";
 import type { RoyalRendererGltfAssetSnapshot } from "./root";
@@ -19,9 +19,12 @@ const IDLE_ASSET: RoyalRendererGltfAssetSnapshot = Object.freeze({
   variantNames: NO_VARIANTS,
 });
 
-const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAssetSnapshot => {
+const useGltfAssetSnapshot = (
+  input: GltfAssetStatusInput,
+  options: AssetStatusOptions | undefined,
+): RoyalRendererGltfAssetSnapshot => {
   validateGltfAssetStatusInput(input);
-  const root = useCanvasRoot();
+  const root = useAssetStatusRoot(options, "useGltfAssetStatus");
   const src = typeof input === "string" ? input : input.src;
   const version = typeof input === "string" ? undefined : input.version;
   const store = useMemo(() => {
@@ -42,10 +45,14 @@ const useGltfAssetSnapshot = (input: GltfAssetStatusInput): RoyalRendererGltfAss
 };
 
 /**
- * Observes one glTF asset retained by the surrounding Canvas without polling.
+ * Observes one retained glTF asset without polling. It uses the surrounding
+ * Canvas by default; a parent can pass `{ root }` from `Canvas.rendererRef`.
  * A string matches an unversioned source URI; pass the original `GltfAssetRef`
  * when the scene uses an explicit `version`.
  */
-export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus => {
-  return useGltfAssetSnapshot(input);
+export const useGltfAssetStatus = (
+  input: GltfAssetStatusInput,
+  options?: AssetStatusOptions,
+): GltfAssetStatus => {
+  return useGltfAssetSnapshot(input, options);
 };
