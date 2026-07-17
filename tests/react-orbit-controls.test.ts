@@ -230,9 +230,27 @@ describe("OrbitControls", () => {
     } as unknown as Parameters<typeof orbit.setProjection>[0]))
       .toThrow(/unsupported field.*fieldOfView/i);
     expect(orbit.cameraResource).toMatchObject({ far: 100, fovY: 1, near: 0.1 });
+    expect(orbit.getProjection()).toEqual({ far: 100, fovY: 1, near: 0.1 });
+
+    orbit.setProjection(orbit.getProjection());
+    expect(orbit.cameraResource.version).toBe(version + 1);
 
     orbit.setProjection({ far: 200, fovY: 0.8, near: 0.01 });
     expect(orbit.cameraResource).toMatchObject({ far: 200, fovY: 0.8, near: 0.01 });
+    expect(orbit.getProjection()).toEqual({ far: 200, fovY: 0.8, near: 0.01 });
+
+    orbit.fit({ min: [-2, -1, -4], max: [2, 3, 4] }, {
+      aspectRatio: 2,
+      padding: 1.1,
+      pitch: 0.4,
+      yaw: 0.5,
+    });
+    expect(orbit.getView()).toMatchObject({
+      pitch: 0.4,
+      target: [0, 1, 0],
+      yaw: 0.5,
+    });
+    expect(orbit.getView().distance).toBeGreaterThan(8);
   });
 
   it("zooms in and out from wheel input", () => {

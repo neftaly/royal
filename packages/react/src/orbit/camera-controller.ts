@@ -1,8 +1,11 @@
 import {
   createCameraViewResource,
+  fitOrbitCameraView,
   orbitPerspectiveCamera,
   resolveOrbitCameraView,
   type Metres,
+  type GltfAssetBounds,
+  type OrbitCameraFitOptions,
   type OrbitCameraView,
   type OrbitCameraViewOptions,
   type PerspectiveCameraViewResource,
@@ -29,6 +32,10 @@ export interface OrbitCameraProjection {
 export interface OrbitCameraController {
   /** Stable scene camera resource; include it in `scene({ camera })`. */
   readonly cameraResource: PerspectiveCameraViewResource;
+  /** Fits the complete view to bounds, using the current field of view unless `fovY` is passed. */
+  readonly fit: (bounds: GltfAssetBounds, options: OrbitCameraFitOptions) => void;
+  /** Reads the latest committed projection without subscribing React. */
+  readonly getProjection: () => OrbitCameraProjection;
   /** Reads the latest committed orbit view without subscribing React. */
   readonly getView: () => OrbitCameraView;
   /** Updates clipping and field-of-view values on the stable camera resource. */
@@ -130,9 +137,9 @@ export const createOrbitCameraController = (
   projection: OrbitCameraProjection,
 ): OrbitCameraController => {
   let view = stableOrbitView(initial);
-  const initialProjection = validOrbitCameraProjection(projection);
+  let currentProjection = Object.freeze(validOrbitCameraProjection(projection));
   const cameraResource = createCameraViewResource(orbitPerspectiveCamera({
-    ...initialProjection,
+    ...currentProjection,
     view,
   }));
   const setView = (next: OrbitCameraViewOptions): void => {
@@ -143,9 +150,22 @@ export const createOrbitCameraController = (
   };
   return {
     cameraResource,
+    fit: (bounds, options) => {
+      setView(fitOrbitCameraView(bounds, {
+        ...options,
+        fovY: options.fovY ?? currentProjection.fovY,
+      }));
+    },
+    getProjection: () => currentProjection,
     getView: () => view,
     setProjection: (nextProjection) => {
       const { far, fovY, near } = validOrbitCameraProjection(nextProjection);
+      if (
+        currentProjection.far === far
+        && currentProjection.fovY === fovY
+        && currentProjection.near === near
+      ) return;
+      currentProjection = Object.freeze({ far, fovY, near });
       cameraResource.far = far;
       cameraResource.fovY = fovY;
       cameraResource.near = near;

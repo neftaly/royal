@@ -6,6 +6,8 @@ export {
   useInvalidate,
 } from './canvas';
 export type { CanvasProps } from './canvas';
+export { useCanvasSize } from './canvas-size';
+export type { CanvasSize } from './canvas-size';
 export type { ScenePointerEvents } from './interaction/scene-interactions';
 export type {
   GltfInstancesPickTarget,

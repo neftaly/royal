@@ -185,6 +185,7 @@ describe("renderer-core public API", () => {
       "useCanvasElement",
       "useCanvasPick",
       "useCanvasRoot",
+      "useCanvasSize",
       "useFrame",
       "useGltfAssetStatus",
       "useInvalidate",

@@ -80,7 +80,11 @@ sRGB by default. Mesh and glTF transforms default omitted `position` and
 explicit `cameraResource`; orbit gestures stage pose values and commit them
 directly to every renderer root using the scene, without a React render or scene
 reconstruction. Use `orbit.getView()` for an imperative read, or
-`useOrbitCameraView(orbit)` only when React UI must observe the view.
+`useOrbitCameraView(orbit)` only when React UI must observe the view. Read the
+projection with `orbit.getProjection()`. `orbit.fit(bounds, { aspectRatio })`
+commits a complete fitted view and uses the controller's current `fovY` unless
+one is passed explicitly; near and far clipping remain explicit projection
+choices.
 
 Camera resources expose writable `Float64Array` pose staging. Renderer roots
 continue using the last committed view until `commit()` succeeds; an unchanged
@@ -96,7 +100,10 @@ ARIA attributes, native React event handlers, and application-owned `data-*`
 metadata. Royal does not use `data-*` as renderer state or a scene protocol.
 Native `width` and `height` props are intentionally excluded: size the element
 with CSS and Royal keeps its backing buffer synchronized to CSS pixels and the
-current device-pixel ratio.
+current device-pixel ratio. A child of `Canvas` can call `useCanvasSize()` to
+observe the positive CSS-pixel `width`, `height`, and `aspectRatio` without
+polling. It returns `undefined` before attachment or while layout gives the
+canvas no area, and composes directly with `orbit.fit(...)`.
 
 ### WebXR
 
@@ -240,7 +247,9 @@ prepared, `bounds` is the aggregate loaded asset-space
 bound after authored node and instance transforms, so camera fitting and framing
 do not need to parse the glTF again. Pass it to renderer-core's pure
 `fitOrbitCameraView(bounds, { aspectRatio })` helper to produce a conservative
-orbit target and distance. Image progress includes dormant material images in `total`,
+orbit target and distance, or use `orbit.fit(bounds, { aspectRatio })` with
+`useCanvasSize()` inside `Canvas` when an imperative controller owns the camera.
+Image progress includes dormant material images in `total`,
 so a large scene cannot report complete merely because those images have not
 been requested yet. Prepared-asset and image transitions push focused snapshots;
 the hook neither waits for unrelated frames nor allocates the full renderer
