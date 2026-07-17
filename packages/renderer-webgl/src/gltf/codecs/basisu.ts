@@ -1,9 +1,12 @@
-import { parse } from "@loaders.gl/core";
-import { BasisLoader, BasisWorkerLoader } from "@loaders.gl/textures";
 import {
   gltfBasisuTargetAcceptsBaseDimensions,
   type GltfBasisuTranscodeTarget,
 } from "../../texture/compression-target";
+import {
+  basisuWorkerSource,
+  basisuWorkerTargets,
+  type BasisuDecodeTarget,
+} from "./basisu-worker-source";
 
 type BasisTextureLevel = {
   readonly compressed?: boolean;
@@ -37,18 +40,10 @@ export type DecodedGltfBasisuTexture =
   | DecodedGltfBasisuCompressedTexture
   | DecodedGltfBasisuRgbaTexture;
 
-const GL_COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
 const GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
-const GL_COMPRESSED_RGBA_S3TC_DXT5_EXT = 0x83F3;
 const GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT = 0x8C4F;
-const GL_COMPRESSED_RGBA_BPTC_UNORM_EXT = 0x8E8C;
 const GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT = 0x8E8D;
-const GL_COMPRESSED_RGBA_ASTC_4X4_KHR = 0x93B0;
 const GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4X4_KHR = 0x93D0;
-// loaders.gl 4.4.x assigns its requested ETC2 RGBA transcode the SRGB8 enum.
-// The textureFormat and Basis target remain ETC2 RGBA; canonicalize only this
-// exact upstream alias before Royal publishes the correct WebGL2 enum.
-const LOADERS_GL_ETC2_RGBA_ENUM_ALIAS = 0x9275;
 const KTX2_IDENTIFIER = [0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A] as const;
 
 type Ktx2LogicalDimensions = Readonly<{ height: number; width: number }>;
@@ -131,28 +126,18 @@ const parsedBasisLevels = (parsed: unknown, label: string): readonly BasisTextur
 };
 
 type CompressedBasisuTarget = Exclude<GltfBasisuTranscodeTarget, "rgba32">;
-type BasisuDecodeTarget = GltfBasisuTranscodeTarget | "astc-4x4" | "bc7-m5";
-type BasisuParseOptions = Readonly<{
-  basis: Readonly<{ containerFormat: "auto"; format: BasisuDecodeTarget }>;
-  core: Readonly<{ CDN: string }>;
-  worker: boolean;
-}>;
-
 type BasisuParser = (
   bytes: ArrayBuffer,
-  loader: typeof BasisLoader,
-  options: BasisuParseOptions,
+  target: BasisuDecodeTarget,
 ) => Promise<unknown>;
 
 export type BasisuParseRuntime = {
-  workerAvailable: boolean;
   readonly parse: BasisuParser;
   readonly supportsWorker: () => boolean;
 };
 
 type BasisuWorkerLease = Readonly<{ release(): void }>;
 
-const LOADERS_GL_CDN = "https://unpkg.com/@loaders.gl";
 let basisuWorkerLeaseCount = 0;
 let basisuWorkerOwner: BasisuWorkerOwner | undefined;
 
@@ -161,6 +146,7 @@ class BasisuWorkerDisposedError extends Error {}
 class BasisuWorkerOwner {
   #disposed = false;
   #failed: unknown;
+  #nextRequestId = 0;
   #tail: Promise<unknown> = Promise.resolve();
   #worker: Worker | undefined;
 
@@ -168,9 +154,9 @@ class BasisuWorkerOwner {
     return typeof globalThis.Worker === "function";
   }
 
-  parse(bytes: ArrayBuffer, options: BasisuParseOptions): Promise<unknown> {
+  parse(bytes: ArrayBuffer, target: BasisuDecodeTarget): Promise<unknown> {
     if (this.#disposed) return Promise.reject(new BasisuWorkerDisposedError());
-    const parsed = this.#tail.then(() => this.#parse(bytes, options));
+    const parsed = this.#tail.then(() => this.#parse(bytes, target));
     this.#tail = parsed.catch(() => undefined);
     return parsed;
   }
@@ -181,21 +167,23 @@ class BasisuWorkerOwner {
     void this.#tail.finally(() => { this.#terminate(); });
   }
 
-  #parse(bytes: ArrayBuffer, options: BasisuParseOptions): Promise<unknown> {
+  #parse(bytes: ArrayBuffer, target: BasisuDecodeTarget): Promise<unknown> {
     if (this.#disposed) return Promise.reject(new BasisuWorkerDisposedError());
     if (this.#failed !== undefined) return Promise.reject(this.#failed);
     this.#worker ??= createBasisuWorker();
+    const id = this.#nextRequestId;
+    this.#nextRequestId += 1;
     return new Promise((resolve, reject) => {
       this.#worker!.onmessage = ({ data }: MessageEvent<unknown>) => {
         if (typeof data !== "object" || data === null) return;
         const message = data as {
-          payload?: { error?: string; result?: unknown };
-          source?: string;
-          type?: string;
+          error?: string;
+          id?: number;
+          result?: unknown;
         };
-        if (message.source !== "loaders.gl") return;
-        if (message.type === "done") resolve(message.payload?.result);
-        else reject(new Error(message.payload?.error ?? "Basis worker failed"));
+        if (message.id !== id) return;
+        if (message.error === undefined) resolve(message.result);
+        else reject(new Error(message.error));
       };
       this.#worker!.onerror = (event) => {
         this.#failed = event.error ?? new Error(event.message);
@@ -203,12 +191,9 @@ class BasisuWorkerOwner {
         reject(this.#failed);
       };
       this.#worker!.postMessage({
-        payload: {
-          input: bytes,
-          options: { basis: options.basis, core: { CDN: LOADERS_GL_CDN }, worker: false },
-        },
-        source: "loaders.gl",
-        type: "process",
+        id,
+        input: bytes,
+        target,
       }, [bytes]);
     });
   }
@@ -220,10 +205,7 @@ class BasisuWorkerOwner {
 }
 
 const createBasisuWorker = (): Worker => {
-  const remote = `https://unpkg.com/@loaders.gl/textures@${BasisWorkerLoader.version}/dist/basis-worker.js`;
-  const url = URL.createObjectURL(new Blob([
-    `importScripts(${JSON.stringify(remote)});`,
-  ], { type: "application/javascript" }));
+  const url = URL.createObjectURL(new Blob([basisuWorkerSource], { type: "application/javascript" }));
   try {
     return new Worker(url, { name: "Royal Basis" });
   } finally {
@@ -233,18 +215,15 @@ const createBasisuWorker = (): Worker => {
 
 const parseBasisuOnWorker = async (
   bytes: ArrayBuffer,
-  options: BasisuParseOptions,
+  target: BasisuDecodeTarget,
 ): Promise<unknown> => {
   basisuWorkerOwner ??= new BasisuWorkerOwner();
-  return basisuWorkerOwner.parse(bytes, options);
+  return basisuWorkerOwner.parse(bytes, target);
 };
 
 const basisuParseRuntime: BasisuParseRuntime = {
-  parse: (bytes, loader, options) => options.worker
-    ? parseBasisuOnWorker(bytes, options)
-    : parse(bytes, loader, options),
+  parse: parseBasisuOnWorker,
   supportsWorker: () => basisuWorkerLeaseCount > 0 && BasisuWorkerOwner.supported(),
-  workerAvailable: true,
 };
 
 /** Retains the lazy, shared Basis worker until the owning renderer feature is disposed. */
@@ -259,7 +238,6 @@ export const retainGltfBasisuWorker = (): BasisuWorkerLease => {
       if (basisuWorkerLeaseCount !== 0) return;
       basisuWorkerOwner?.dispose();
       basisuWorkerOwner = undefined;
-      basisuParseRuntime.workerAvailable = true;
     },
   };
 };
@@ -269,60 +247,33 @@ export const parseGltfBasisuWithRuntime = async (
   bytes: ArrayBuffer,
   format: BasisuDecodeTarget,
 ): Promise<unknown> => {
-  const options = (worker: boolean) => ({
-    basis: { containerFormat: "auto" as const, format },
-    core: { CDN: LOADERS_GL_CDN },
-    worker,
-  });
-  if (!runtime.workerAvailable || !runtime.supportsWorker()) {
-    return runtime.parse(bytes, BasisLoader, options(false));
-  }
-  try {
-    // loaders.gl transfers its input buffer to the worker. Recipes may share
-    // their encoded buffer, so only a disposable copy can cross this boundary.
-    return await runtime.parse(bytes.slice(0), BasisLoader, options(true));
-  } catch (error) {
-    if (error instanceof BasisuWorkerDisposedError) throw error;
-    // A successful local retry identifies worker startup, CSP, or transport as
-    // the failure. Cache that result so a blocked worker is not retried per texture.
-    const parsed = await runtime.parse(bytes, BasisLoader, options(false));
-    runtime.workerAvailable = false;
-    return parsed;
-  }
+  if (!runtime.supportsWorker()) throw new Error("glTF KHR_texture_basisu requires Web Worker support");
+  // Recipes may share their encoded buffer, so only a disposable copy can
+  // cross the worker boundary.
+  return runtime.parse(bytes.slice(0), format);
 };
 
 type CompressedBasisuTargetDescriptor = Readonly<{
-  basisFormat: "astc-4x4" | "bc7-m5" | "bc3" | "etc2";
   format: number;
+  parseFormat: Exclude<BasisuDecodeTarget, "rgba32">;
   srgbFormat: number;
   textureFormat: string;
 }>;
 
+const compressedTargetDescriptor = (
+  parseFormat: CompressedBasisuTargetDescriptor["parseFormat"],
+  srgbFormat: number,
+): CompressedBasisuTargetDescriptor => {
+  const { format, textureFormat } = basisuWorkerTargets[parseFormat];
+  if (format === undefined) throw new Error(`Basis target ${parseFormat} is not compressed`);
+  return { format, parseFormat, srgbFormat, textureFormat };
+};
+
 const COMPRESSED_TARGETS: Readonly<Record<CompressedBasisuTarget, CompressedBasisuTargetDescriptor>> = {
-  "astc-4x4": {
-    basisFormat: "astc-4x4",
-    format: GL_COMPRESSED_RGBA_ASTC_4X4_KHR,
-    srgbFormat: GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4X4_KHR,
-    textureFormat: "astc-4x4-unorm",
-  },
-  bc7: {
-    basisFormat: "bc7-m5",
-    format: GL_COMPRESSED_RGBA_BPTC_UNORM_EXT,
-    srgbFormat: GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT,
-    textureFormat: "bc7-rgba-unorm",
-  },
-  bc3: {
-    basisFormat: "bc3",
-    format: GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
-    srgbFormat: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,
-    textureFormat: "bc3-rgba-unorm",
-  },
-  etc2: {
-    basisFormat: "etc2",
-    format: GL_COMPRESSED_RGBA8_ETC2_EAC,
-    srgbFormat: GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
-    textureFormat: "etc2-rgba8unorm",
-  },
+  "astc-4x4": compressedTargetDescriptor("astc-4x4", GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4X4_KHR),
+  bc7: compressedTargetDescriptor("bc7-m5", GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT),
+  bc3: compressedTargetDescriptor("bc3", GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT),
+  etc2: compressedTargetDescriptor("etc2", GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC),
 };
 
 const compressedLevel = (
@@ -332,11 +283,9 @@ const compressedLevel = (
   label: string,
   levelIndex: number,
 ): DecodedGltfBasisuLevel => {
-  const formatMatches = level.format === descriptor.format
-    || (target === "etc2" && level.format === LOADERS_GL_ETC2_RGBA_ENUM_ALIAS);
   if (
     level.compressed !== true
-    || !formatMatches
+    || level.format !== descriptor.format
     || level.textureFormat !== descriptor.textureFormat
   ) throw new Error(`glTF KHR_texture_basisu ${label} mip ${levelIndex} did not transcode to ${target}`);
   const [width, height] = validLevelDimensions(level, label, levelIndex);
@@ -421,7 +370,7 @@ export const decodeGltfBasisuCompressedTexture = async (
   const parsed = await parseGltfBasisuWithRuntime(
     basisuParseRuntime,
     bytes,
-    descriptor.basisFormat,
+    descriptor.parseFormat,
   );
   const levels = parsedBasisLevels(parsed, label).map((level, index) => compressedLevel(
     logicalBasisLevel(level, dimensions, index, label),

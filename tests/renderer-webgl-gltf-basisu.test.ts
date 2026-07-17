@@ -28,8 +28,7 @@ describe("glTF BasisU RGBA normalization", () => {
     const compressedLevel = (width: number, height: number, fill: number) => ({
       compressed: true,
       data: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16).fill(fill),
-      // loaders.gl 4.4.x mislabels its ETC2 RGBA target with 0x9275.
-      format: 0x9275,
+      format: 0x9278,
       height,
       textureFormat: "etc2-rgba8unorm",
       width,
@@ -128,12 +127,11 @@ describe("glTF BasisU RGBA normalization", () => {
     ]], "bad-bytes.ktx2")).toThrow("invalid RGBA8 payload");
   });
 
-  it("transfers only disposable worker bytes and caches a working local fallback", async () => {
+  it("transfers only disposable bytes to the negotiated worker target", async () => {
     const parseMock = vi.fn();
     const runtime: BasisuParseRuntime = {
       parse: parseMock,
       supportsWorker: () => true,
-      workerAvailable: true,
     };
     const firstBytes = new ArrayBuffer(32);
     parseMock.mockImplementationOnce(async (input: ArrayBuffer) => {
@@ -143,29 +141,18 @@ describe("glTF BasisU RGBA normalization", () => {
 
     await expect(parseGltfBasisuWithRuntime(runtime, firstBytes, "rgba32")).resolves.toBe("worker");
     expect(parseMock.mock.calls[0]?.[0]).not.toBe(firstBytes);
-    expect(parseMock.mock.calls[0]?.[2]).toMatchObject({
-      core: { CDN: "https://unpkg.com/@loaders.gl" },
-      worker: true,
-    });
+    expect(parseMock.mock.calls[0]?.[1]).toBe("rgba32");
     expect(firstBytes.byteLength).toBe(32);
+  });
 
-    const fallbackBytes = new ArrayBuffer(24);
-    parseMock.mockRejectedValueOnce(new Error("worker unavailable"));
-    parseMock.mockResolvedValueOnce("fallback");
-    await expect(parseGltfBasisuWithRuntime(runtime, fallbackBytes, "rgba32")).resolves
-      .toBe("fallback");
-    expect(parseMock.mock.calls[1]?.[0]).not.toBe(fallbackBytes);
-    expect(parseMock.mock.calls[1]?.[2]).toMatchObject({ worker: true });
-    expect(parseMock.mock.calls[2]?.[0]).toBe(fallbackBytes);
-    expect(parseMock.mock.calls[2]?.[2]).toMatchObject({
-      core: { CDN: "https://unpkg.com/@loaders.gl" },
-      worker: false,
-    });
-
-    const cachedFallbackBytes = new ArrayBuffer(16);
-    parseMock.mockResolvedValueOnce("cached fallback");
-    await parseGltfBasisuWithRuntime(runtime, cachedFallbackBytes, "rgba32");
-    expect(parseMock.mock.calls[3]?.[0]).toBe(cachedFallbackBytes);
-    expect(parseMock.mock.calls[3]?.[2]).toMatchObject({ worker: false });
+  it("fails explicitly instead of allocating a decoder on the render thread", async () => {
+    const parseMock = vi.fn();
+    const runtime: BasisuParseRuntime = {
+      parse: parseMock,
+      supportsWorker: () => false,
+    };
+    await expect(parseGltfBasisuWithRuntime(runtime, new ArrayBuffer(24), "etc2"))
+      .rejects.toThrow("requires Web Worker support");
+    expect(parseMock).not.toHaveBeenCalled();
   });
 });
