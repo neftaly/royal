@@ -8,7 +8,7 @@ export {
 export type { CanvasProps } from './canvas';
 export type { AssetStatusOptions } from './asset-status-root';
 export { useCanvasSize } from './canvas-size';
-export type { CanvasSize } from './canvas-size';
+export type { CanvasSize, CanvasSizeOptions } from './canvas-size';
 export type { ScenePointerEvents } from './interaction/scene-interactions';
 export type {
   GltfInstancesPickTarget,

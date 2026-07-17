@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { useCanvasElement } from "./canvas";
+import { useOptionalCanvasElement } from "./canvas";
 import { createObservedExternalStore, type ObservedExternalStore } from "./observed-external-store";
+import type { RoyalRendererRoot } from "./root";
 
 /** Current CSS layout size of the surrounding Canvas. */
 export interface CanvasSize {
@@ -10,6 +11,11 @@ export interface CanvasSize {
   readonly aspectRatio: number;
   /** CSS-pixel width. */
   readonly width: number;
+}
+
+export interface CanvasSizeOptions {
+  /** Root received from `Canvas.rendererRef`; `null` represents the pre-mount lifecycle. */
+  readonly root: RoyalRendererRoot | null;
 }
 
 const UNAVAILABLE_CANVAS_SIZE = undefined;
@@ -53,12 +59,25 @@ export const createCanvasSizeStore = (
   }, sameCanvasSize);
 };
 
+/** @internal Selects either the surrounding Canvas or an explicitly parent-owned root. */
+export const canvasSizeElement = (
+  contextCanvas: HTMLCanvasElement | null | undefined,
+  options: CanvasSizeOptions | undefined,
+): HTMLCanvasElement | null => {
+  if (options !== undefined) return options.root?.canvas ?? null;
+  if (contextCanvas === undefined) {
+    throw new Error("useCanvasSize must be used inside <Canvas> or receive { root }");
+  }
+  return contextCanvas;
+};
+
 /**
- * Observes the surrounding Canvas CSS size without polling. Returns
+ * Observes Canvas CSS size without polling. Uses the surrounding Canvas by
+ * default; a parent can pass `{ root }` from `Canvas.rendererRef`. Returns
  * `undefined` before attachment or while layout gives the canvas no area.
  */
-export const useCanvasSize = (): CanvasSize | undefined => {
-  const canvas = useCanvasElement();
+export const useCanvasSize = (options?: CanvasSizeOptions): CanvasSize | undefined => {
+  const canvas = canvasSizeElement(useOptionalCanvasElement(), options);
   const store = useMemo(
     () => canvas === null ? UNAVAILABLE_CANVAS_SIZE_STORE : createCanvasSizeStore(canvas),
     [canvas],

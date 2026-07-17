@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  canvasSizeElement,
   canvasSizeFromCssBox,
   createCanvasSizeStore,
 } from "../packages/react/src/canvas-size";
@@ -9,6 +10,15 @@ afterEach(() => {
 });
 
 describe("React Canvas CSS size", () => {
+  it("selects either context or parent-owned root without an implicit global fallback", () => {
+    const contextCanvas = {} as HTMLCanvasElement;
+    const parentCanvas = {} as HTMLCanvasElement;
+    expect(canvasSizeElement(contextCanvas, undefined)).toBe(contextCanvas);
+    expect(canvasSizeElement(undefined, { root: { canvas: parentCanvas } as never })).toBe(parentCanvas);
+    expect(canvasSizeElement(undefined, { root: null })).toBeNull();
+    expect(() => canvasSizeElement(undefined, undefined)).toThrow(/inside <Canvas> or receive \{ root \}/);
+  });
+
   it("projects only positive finite boxes", () => {
     expect(canvasSizeFromCssBox(800, 400)).toEqual({
       aspectRatio: 2,

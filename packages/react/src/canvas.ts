@@ -74,6 +74,10 @@ export const useCanvasElement = (): HTMLCanvasElement | null => {
   return canvas;
 };
 
+/** @internal Context probe used by hooks that also accept an explicit root. */
+export const useOptionalCanvasElement = (): HTMLCanvasElement | null | undefined =>
+  useContext(CanvasElementContext);
+
 /** Returns the active renderer root, or `null` while Canvas is creating it. */
 export const useCanvasRoot = (): RoyalRendererRoot | null => {
   const root = useContext(CanvasRootContext);

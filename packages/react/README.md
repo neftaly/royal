@@ -102,8 +102,11 @@ Native `width` and `height` props are intentionally excluded: size the element
 with CSS and Royal keeps its backing buffer synchronized to CSS pixels and the
 current device-pixel ratio. A child of `Canvas` can call `useCanvasSize()` to
 observe the positive CSS-pixel `width`, `height`, and `aspectRatio` without
-polling. It returns `undefined` before attachment or while layout gives the
-canvas no area, and composes directly with `orbit.fit(...)`.
+polling. A parent that owns `Canvas.rendererRef` can pass the same root to
+`useCanvasSize({ root })` and `useGltfAssetStatus(asset, { root })`, so
+asset-driven camera fitting does not need a child-to-parent bridge or `window`
+dimensions. The size is `undefined` before attachment or while layout gives
+the canvas no area, and composes directly with `orbit.fit(...)`.
 
 ### WebXR
 
