@@ -628,6 +628,33 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(secondRenderCalls.some((call) => drawCallNames.has(call.name))).toBe(true);
   });
 
+  it("refreshes view-derived camera uniforms when a later frame moves the camera", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderAt = (position: readonly [number, number, number]): void => {
+      root.render(scene({
+        camera: perspectiveCamera({
+          far: 100,
+          fovY: Math.PI / 3,
+          near: 0.1,
+          position,
+          rotation: [0, 0, 0],
+        }),
+        nodes: [mesh({
+          geometry: boxGeometry(1),
+          material: standardMaterial({ color: [1, 1, 1, 1] }),
+        })],
+      }));
+    };
+
+    renderAt([0, 0, 4]);
+    const callsBeforeCameraMove = calls.length;
+    renderAt([1, 2, 5]);
+
+    expect(uniform4fvPayloadsByName(calls.slice(callsBeforeCameraMove), "u_cameraWorldPosition")
+      .map(roundVector)).toContainEqual([1, 2, 5, 1]);
+  });
+
   it("uses the fixed vertex attribute ABI without program-dependent binding or lookup", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

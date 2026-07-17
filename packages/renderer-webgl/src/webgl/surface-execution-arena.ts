@@ -552,7 +552,7 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      this.#bindViewMatrices(program, input.projection, input.view);
+      const viewBindingChanged = this.#bindViewMatrices(program, input.projection, input.view);
       const modelBinding = this.#bindModelMatrix(program, input);
       if (!loading && surfaceMaterial?.kind === "standard") {
         if (modelBinding !== undefined) {
@@ -574,7 +574,7 @@ export class SurfaceExecutionArena {
             );
           }
         }
-        this.#bindCameraWorldPosition(program, input.view);
+        if (viewBindingChanged) this.#bindCameraWorldPosition(program, input.view);
       }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);
       else this.#bindMaterialColor(program, input.material, plan?.baseColor.kind === "prepared-virtual");
@@ -683,9 +683,9 @@ export class SurfaceExecutionArena {
       );
       if (program === undefined) return;
       useProgram(this.#programs, program);
-      this.#bindViewMatrices(program, input.projection, input.view);
+      const viewBindingChanged = this.#bindViewMatrices(program, input.projection, input.view);
       if (!loading && batch.material.kind === "standard") {
-        this.#bindCameraWorldPosition(program, input.view);
+        if (viewBindingChanged) this.#bindCameraWorldPosition(program, input.view);
       }
       if (loading) this.#bindLoadingSurface(program, input.toneMapping);
       else this.#bindMaterialColor(program, batch.material, plan.baseColor.kind === "prepared-virtual");
@@ -765,11 +765,13 @@ export class SurfaceExecutionArena {
     return resource?.program;
   }
 
-  #bindViewMatrices(program: WebGLProgram, projection: Mat4, view: Mat4): void {
-    if (this.#programViewRevisions.get(program) === this.#viewRevision) return;
+  #bindViewMatrices(program: WebGLProgram, projection: Mat4, view: Mat4): boolean {
+    if (this.#programViewRevisions.get(program) === this.#viewRevision) return false;
     uniformMatrix(this.#programs, program, "u_projection", projection);
     uniformMatrix(this.#programs, program, "u_view", view);
     this.#programViewRevisions.set(program, this.#viewRevision);
+    // The first program bind for a view also owns uniforms derived solely from that view.
+    return true;
   }
 
   /** Returns undefined for reuse, false for compared, and true for proven changed. */
