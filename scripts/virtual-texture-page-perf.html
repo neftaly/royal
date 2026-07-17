@@ -64,10 +64,13 @@
   for (let mip = 5; mip >= 0; mip -= 1) {
     const width = 32 / (2 ** mip);
     for (let y = 0; y < width; y += 1) {
-      for (let x = 0; x < width; x += 1) pageTable.ensureResident({ mip, x, y });
+      for (let x = 0; x < width; x += 1) {
+        const transaction = pageTable.planResident({ mip, x, y });
+        pageTable.commitResident(transaction);
+      }
     }
   }
-  pageTable.takeDirtyPageTableUpdates();
+  while (pageTable.dirtyPageTableUpdateCount > 0) pageTable.commitDirtyPageTableUpdate();
   const pageTableSamples = [];
   let pageTableUpdates = 0;
   for (let motion = 0; motion < 256; motion += 1) {
