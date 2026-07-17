@@ -593,19 +593,20 @@ const installBenchmarkHooks = async (session) => {
     let stableResourceCount = -1;
     let stableSince = performance.now();
     let lastState = null;
+    let resources = resourceSummary();
     await waitForFirstUsable(timeoutMs);
     while (performance.now() < deadline) {
       const resourceCount = performance.getEntriesByType('resource').length;
       if (resourceCount !== stableResourceCount) {
         stableResourceCount = resourceCount;
         stableSince = performance.now();
+        resources = resourceSummary();
       }
       const renderer = readRendererSnapshot();
       updateFirstUsable();
       const rendererSettled = rendererGltfAssetsSettled(renderer, false);
       const rendererReady = rendererGltfAssetsSettled(renderer, true);
       const sample = firstUsableSample ?? sampleCanvas(rendererReady);
-      const resources = resourceSummary();
       lastState = {
         documentReadyState: document.readyState,
         renderer,
@@ -631,7 +632,7 @@ const installBenchmarkHooks = async (session) => {
         fullyLoadedState = {
           ...lastState,
           renderer: readRendererSnapshot(),
-          resources: resourceSummary(),
+          resources,
         };
         finishLoadHitchSampling();
         return {
