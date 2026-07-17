@@ -898,6 +898,7 @@ const installBenchmarkHooks = async (session) => {
   }
   const recordDraw = (gl) => {
     lastDrawGl = gl;
+    if (pendingDrawPulses.length === 0) return;
     const now = performance.now();
     while (pendingDrawPulses.length > 0) {
       pendingDrawPulses.shift().resolve(now);
