@@ -345,6 +345,14 @@ export class SurfaceExecutionArena {
   readonly #singleNormalTransform = identityMat4();
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
+  #lastTexturePlanIbl = false;
+  #lastTexturePlanMaterial: SurfaceMaterial | undefined;
+  #lastTexturePlanOrdinaryTexture: TextureAssetUploadRef | undefined;
+  #lastTexturePlanPunctual = false;
+  #lastTexturePlanResidencyKind: "none" | "ordinary" | undefined;
+  #lastTexturePlanTransmission: ScreenColorTextureResource | undefined;
+  #lastTexturePlanTransmissionUploaded = false;
+  #lastTexturePlanViewRevision = -1;
   readonly #textureReadinessWorkspace: SurfaceTextureBindingWorkspace =
     createSurfaceTextureBindingWorkspace();
   readonly #reservedTextureUnits = new Set<number>();
@@ -656,6 +664,26 @@ export class SurfaceExecutionArena {
     lightSet: SurfaceLightSet,
     baseColorResidency: BaseColorTextureResidency,
   ): SurfaceTextureBindingPlan {
+    const reusableResidency = baseColorResidency.kind !== "prepared-virtual";
+    const ibl = lightSet.specular !== undefined;
+    const punctual = lightSet.punctuals.length > 0;
+    const transmissionUploaded = transmissionScreenColorTexture?.uploaded === true;
+    if (
+      reusableResidency
+      && this.#lastTexturePlanViewRevision === this.#viewRevision
+      && this.#lastTexturePlanMaterial === material
+      && this.#lastTexturePlanResidencyKind === baseColorResidency.kind
+      && this.#lastTexturePlanOrdinaryTexture === (
+        baseColorResidency.kind === "ordinary" ? baseColorResidency.texture : undefined
+      )
+      && this.#lastTexturePlanTransmission === transmissionScreenColorTexture
+      && this.#lastTexturePlanTransmissionUploaded === transmissionUploaded
+      && this.#lastTexturePlanIbl === ibl
+      && this.#lastTexturePlanPunctual === punctual
+    ) {
+      this.#recordTextureBindingOmissions(this.#texturePlan);
+      return this.#texturePlan;
+    }
     const textureCatalog = this.#materialTextureCatalog(material);
     const candidates = textureCatalog.candidates;
     const entries = textureCatalog.entries;
@@ -836,6 +864,18 @@ export class SurfaceExecutionArena {
     this.#texturePlan.materialTextures = entries;
     this.#texturePlan.omissions = pure.omissions;
     this.#texturePlan.textureUnits = pure.textureUnits;
+    if (reusableResidency) {
+      this.#lastTexturePlanViewRevision = this.#viewRevision;
+      this.#lastTexturePlanMaterial = material;
+      this.#lastTexturePlanResidencyKind = baseColorResidency.kind;
+      this.#lastTexturePlanOrdinaryTexture = baseColorResidency.kind === "ordinary"
+        ? baseColorResidency.texture
+        : undefined;
+      this.#lastTexturePlanTransmission = transmissionScreenColorTexture;
+      this.#lastTexturePlanTransmissionUploaded = transmissionUploaded;
+      this.#lastTexturePlanIbl = ibl;
+      this.#lastTexturePlanPunctual = punctual;
+    } else this.#lastTexturePlanMaterial = undefined;
     return this.#texturePlan;
   }
 
@@ -1289,7 +1329,9 @@ export class SurfaceExecutionArena {
     );
   }
 
-  #recordTextureBindingOmissions(plan: PureSurfaceTextureBindingPlan): void {
+  #recordTextureBindingOmissions(
+    plan: Pick<PureSurfaceTextureBindingPlan, "omissions">,
+  ): void {
     for (const omission of plan.omissions) {
       if (omission.reason !== "unit-exhausted") continue;
       this.#diagnostics.push({
