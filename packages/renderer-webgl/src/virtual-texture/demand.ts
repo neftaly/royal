@@ -65,6 +65,14 @@ const FINEST_REGION_COMPONENTS = 7;
 const RETAINED_POLYGON_COMPONENT_CAPACITY = 32_768;
 const RETAINED_POLYGON_CAPACITY = 4_096;
 
+type VirtualTextureRefinementCandidate = {
+  mip: number;
+  score: number;
+  spatialOrder: number;
+  x: number;
+  y: number;
+};
+
 export type VirtualTextureDemandPlanningWorkspace = {
   conservativeAddressing: boolean;
   readonly clippedPolygonA: Float64Array;
@@ -689,16 +697,18 @@ export const projectVirtualTextureScreenFootprint = (
 const virtualTexturePageScreenError = (
   workspace: VirtualTextureDemandPlanningWorkspace,
   manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
+  mip: number,
+  pageX: number,
+  pageY: number,
   viewportSize: ViewportSize,
 ): number => {
   const { clippedPolygonA, clippedPolygonB } = workspace;
   const [viewportWidth, viewportHeight] = viewportSize;
-  const pageTexelSpan = virtualTexturePageTexelSpan(manifest, page.mip);
-  const minPageU = Math.min(1, page.x * pageTexelSpan / manifest.width);
-  const maxPageU = Math.min(1, (page.x + 1) * pageTexelSpan / manifest.width);
-  const minPageV = Math.min(1, page.y * pageTexelSpan / manifest.height);
-  const maxPageV = Math.min(1, (page.y + 1) * pageTexelSpan / manifest.height);
+  const pageTexelSpan = virtualTexturePageTexelSpan(manifest, mip);
+  const minPageU = Math.min(1, pageX * pageTexelSpan / manifest.width);
+  const maxPageU = Math.min(1, (pageX + 1) * pageTexelSpan / manifest.width);
+  const minPageV = Math.min(1, pageY * pageTexelSpan / manifest.height);
+  const maxPageV = Math.min(1, (pageY + 1) * pageTexelSpan / manifest.height);
   let minNdcX = Number.POSITIVE_INFINITY;
   let maxNdcX = Number.NEGATIVE_INFINITY;
   let minNdcY = Number.POSITIVE_INFINITY;
@@ -1044,23 +1054,17 @@ export const planVirtualTextureCoarseToFineDemand = (
   return candidates;
 };
 
-type VirtualTextureRefinementCandidate = {
-  readonly page: VirtualTexturePageId;
-  readonly score: number;
-  readonly spatialOrder: number;
-};
-
 // Refine before a resident texel reaches a full screen pixel, leaving enough
 // admission headroom that subpixel camera jitter does not toggle the frontier.
 const VIRTUAL_TEXTURE_REFINEMENT_ADMISSION_ERROR = 0.75;
 
-const virtualTexturePageSpatialOrder = (page: VirtualTexturePageId): number => {
+const virtualTexturePageSpatialOrder = (x: number, y: number): number => {
   let order = 0;
   let scale = 0.25;
   for (let bit = 0; bit < 20; bit += 1) {
-    order += ((page.x >>> bit) & 1) * scale;
+    order += ((x >>> bit) & 1) * scale;
     scale *= 0.5;
-    order += ((page.y >>> bit) & 1) * scale;
+    order += ((y >>> bit) & 1) * scale;
     scale *= 0.5;
   }
   return order;
@@ -1090,12 +1094,13 @@ const planVirtualTextureHierarchicalDemand = (
     footprint,
     boundedLimit,
   )]
-    .sort((left, right) => virtualTexturePageSpatialOrder(left) - virtualTexturePageSpatialOrder(right)
+    .sort((left, right) => virtualTexturePageSpatialOrder(left.x, left.y)
+      - virtualTexturePageSpatialOrder(right.x, right.y)
       || left.y - right.y
       || left.x - right.x);
-  const roots = geometricRoots.filter((page) => isVirtualTextureDemandPageAvailable(source, page));
-  const demandCandidates = roots.slice(0, boundedLimit);
-  const queuedKeys = new Set(demandCandidates.map(virtualTexturePageKey));
+  // This path is reached only for complete address spaces. Quadtree children
+  // have exactly one parent, so no duplicate-key set is required.
+  const demandCandidates = geometricRoots.slice(0, boundedLimit);
   const queue: VirtualTextureRefinementCandidate[] = [];
   const enqueueChildren = (parent: VirtualTexturePageId, parentScore: number): void => {
     if (parent.mip === 0 || parentScore <= VIRTUAL_TEXTURE_REFINEMENT_ADMISSION_ERROR) return;
@@ -1103,14 +1108,25 @@ const planVirtualTextureHierarchicalDemand = (
     const childGrid = virtualTextureDemandPageGrid(source.manifest, childMip);
     for (let offsetY = 0; offsetY < 2; offsetY += 1) {
       for (let offsetX = 0; offsetX < 2; offsetX += 1) {
-        const page = { mip: childMip, x: parent.x * 2 + offsetX, y: parent.y * 2 + offsetY };
-        if (page.x >= childGrid.width || page.y >= childGrid.height) continue;
-        const key = virtualTexturePageKey(page);
-        if (queuedKeys.has(key)) continue;
-        queuedKeys.add(key);
-        const score = virtualTexturePageScreenError(workspace, source.manifest, page, context.viewportSize);
+        const x = parent.x * 2 + offsetX;
+        const y = parent.y * 2 + offsetY;
+        if (x >= childGrid.width || y >= childGrid.height) continue;
+        const score = virtualTexturePageScreenError(
+          workspace,
+          source.manifest,
+          childMip,
+          x,
+          y,
+          context.viewportSize,
+        );
         if (score <= 0) continue;
-        queue.push({ page, score, spatialOrder: virtualTexturePageSpatialOrder(page) });
+        queue.push({
+          mip: childMip,
+          score,
+          spatialOrder: virtualTexturePageSpatialOrder(x, y),
+          x,
+          y,
+        });
       }
     }
   };
@@ -1118,7 +1134,9 @@ const planVirtualTextureHierarchicalDemand = (
     enqueueChildren(root, virtualTexturePageScreenError(
       workspace,
       source.manifest,
-      root,
+      root.mip,
+      root.x,
+      root.y,
       context.viewportSize,
     ));
   }
@@ -1130,9 +1148,9 @@ const planVirtualTextureHierarchicalDemand = (
       const best = queue[bestIndex]!;
       if (
         candidate.score > best.score
-        || (candidate.score === best.score && candidate.page.mip > best.page.mip)
+        || (candidate.score === best.score && candidate.mip > best.mip)
         || (candidate.score === best.score
-          && candidate.page.mip === best.page.mip
+          && candidate.mip === best.mip
           && candidate.spatialOrder < best.spatialOrder)
       ) {
         bestIndex = index;
@@ -1141,10 +1159,10 @@ const planVirtualTextureHierarchicalDemand = (
     const candidate = queue[bestIndex]!;
     queue[bestIndex] = queue.at(-1)!;
     queue.pop();
-    if (isVirtualTextureDemandPageAvailable(source, candidate.page)) demandCandidates.push(candidate.page);
-    enqueueChildren(candidate.page, candidate.score);
+    demandCandidates.push({ mip: candidate.mip, x: candidate.x, y: candidate.y });
+    enqueueChildren(candidate, candidate.score);
   }
-  return { coverageCandidates: roots, demandCandidates };
+  return { coverageCandidates: geometricRoots, demandCandidates };
 };
 
 export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInput): VirtualTextureDrawDemand => {

@@ -596,6 +596,8 @@ describe("virtual texture pure demand planning", () => {
     expect(first).toEqual(second);
     expect(first.coverageCandidates).toEqual([{ mip: 2, x: 0, y: 0 }]);
     expect(first.demandCandidates[0]).toEqual({ mip: 2, x: 0, y: 0 });
+    expect(new Set(first.demandCandidates.map(virtualTexturePageKey)).size)
+      .toBe(first.demandCandidates.length);
     expect(new Set(first.demandCandidates.slice(1).map((page) => `${page.x}/${page.y}`)))
       .toEqual(new Set(["0/0", "1/0", "0/1", "1/1"]));
   });
