@@ -76,6 +76,34 @@ import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
 const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
   trackGltfSceneTestRoot(createWebGlRootBase(...args));
 
+const prepareLitTriangle = async ({
+  buffer = triangleBin(),
+  document,
+  version,
+}: Readonly<{
+  buffer?: ArrayBuffer;
+  document: unknown;
+  version: string;
+}>) => {
+  vi.stubGlobal("devicePixelRatio", 1);
+  const viewport = installViewportInvalidationStubs();
+  const loader = installStagedGltfLoader();
+  const { calls, gl } = fakeGl();
+  const root = createWebGlRoot(fakeCanvas(gl));
+  const renderGraph = renderScene([
+    directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+    gltf({ src: triangleGltfSrc, version }),
+  ]);
+  root.render(renderGraph);
+  expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+    responseWithJson(url, document))).toBe(true);
+  await flushMicrotasks();
+  expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+    responseWithBuffer(url, buffer))).toBe(true);
+  await flushMicrotasks();
+  return { calls, gl, loader, renderGraph, root, viewport };
+};
+
 describe("WebGL renderer glTF instancing and lighting regressions", () => {
   afterEach(resetGltfSceneTestState);
 
@@ -846,29 +874,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR_materials_emissive_strength as an emissive material multiplier", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-emissive-strength",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, emissiveStrengthTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: emissiveStrengthTriangleDocument(),
+      version: "khr-materials-emissive-strength",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -880,29 +889,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds glTF emissive textures", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "emissive-texture",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, emissiveTextureTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: emissiveTextureTriangleDocument(),
+      version: "emissive-texture",
+    });
 
     await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -939,29 +929,11 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uses glTF emissiveTexture texCoord 1 when present", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "multi-uv-emissive",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, multiUvEmissiveTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, multiUvTriangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root, viewport } = await prepareLitTriangle({
+      buffer: multiUvTriangleBin(),
+      document: multiUvEmissiveTriangleDocument(),
+      version: "multi-uv-emissive",
+    });
 
     await flushPreparedAssetBoundary();
     ControlledImage.instances[0]?.settleLoad();
@@ -987,29 +959,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders glTF metallic and roughness factors as surface uniforms", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "metallic-roughness-factors",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, metallicRoughnessTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: metallicRoughnessTriangleDocument(),
+      version: "metallic-roughness-factors",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1022,29 +975,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds glTF metallic-roughness textures", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "metallic-roughness-texture",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, metallicRoughnessTextureTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: metallicRoughnessTextureTriangleDocument(),
+      version: "metallic-roughness-texture",
+    });
 
     await settleControlledImageWave(2);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -1070,29 +1004,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds glTF occlusion textures", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "occlusion-texture",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, occlusionTextureTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: occlusionTextureTriangleDocument(),
+      version: "occlusion-texture",
+    });
 
     await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -1120,29 +1035,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds core glTF normal textures without colliding with transmission texture units", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "normal-texture",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, normalTextureTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: normalTextureTriangleDocument(),
+      version: "normal-texture",
+    });
 
     await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -1172,29 +1068,11 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds glTF TANGENT attributes for normal mapping", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "normal-tangent",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, tangentTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, tangentTriangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      buffer: tangentTriangleBin(),
+      document: tangentTriangleDocument(),
+      version: "normal-tangent",
+    });
     await flushPreparedAssetBoundary();
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
@@ -1221,29 +1099,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-pbr-extension-factors",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialPbrExtensionFactorsTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: materialPbrExtensionFactorsTriangleDocument(),
+      version: "khr-materials-pbr-extension-factors",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1257,29 +1116,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR material specular, IOR, and clearcoat defaults deterministically", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-pbr-extension-defaults",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialPbrExtensionDefaultsTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: materialPbrExtensionDefaultsTriangleDocument(),
+      version: "khr-materials-pbr-extension-defaults",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1292,29 +1132,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds KHR material specular and clearcoat textures", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-pbr-extension-texture-diagnostics",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialPbrExtensionTextureDiagnosticTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: materialPbrExtensionTextureDiagnosticTriangleDocument(),
+      version: "khr-materials-pbr-extension-texture-diagnostics",
+    });
 
     await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -1363,32 +1184,13 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR_materials_clearcoat normal maps", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-clearcoat-required-normal-map",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
+    const { calls, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: {
         ...materialPbrExtensionTextureDiagnosticTriangleDocument(),
         extensionsRequired: ["KHR_materials_clearcoat", "KHR_materials_specular"],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+      },
+      version: "khr-materials-clearcoat-required-normal-map",
+    });
     await flushPreparedAssetBoundary();
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
@@ -1402,29 +1204,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR material sheen and iridescence factors as visible shader uniforms", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-sheen-iridescence-factors",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialSheenIridescenceFactorsTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: materialSheenIridescenceFactorsTriangleDocument(),
+      version: "khr-materials-sheen-iridescence-factors",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1443,29 +1226,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders required KHR material sheen and iridescence defaults exactly", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-sheen-iridescence-defaults",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialSheenIridescenceDefaultsTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: materialSheenIridescenceDefaultsTriangleDocument(),
+      version: "khr-materials-sheen-iridescence-defaults",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -1478,29 +1242,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("uploads and binds KHR material sheen and iridescence textures", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-sheen-iridescence-texture-diagnostics",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialSheenIridescenceTextureDiagnosticTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, gl, renderGraph, root, viewport } = await prepareLitTriangle({
+      document: materialSheenIridescenceTextureDiagnosticTriangleDocument(),
+      version: "khr-materials-sheen-iridescence-texture-diagnostics",
+    });
 
     await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
@@ -1542,29 +1287,10 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
   });
 
   it("renders distinct sheen and iridescence uniforms for split glTF materials", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "khr-materials-sheen-iridescence-batch-key",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, materialSheenIridescenceBatchKeyTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
+    const { calls, renderGraph, root } = await prepareLitTriangle({
+      document: materialSheenIridescenceBatchKeyTriangleDocument(),
+      version: "khr-materials-sheen-iridescence-batch-key",
+    });
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
