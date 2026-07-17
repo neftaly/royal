@@ -67,35 +67,6 @@ export const isBoundsVisible = (
   );
 };
 
-type ClipAxis = 0 | 1 | 2;
-
-const isAffineBoundsOutsideClipPlane = (
-  bounds: Bounds3,
-  viewProjection: Mat4,
-  model: Mat4,
-  axis: ClipAxis,
-  sign: -1 | 1,
-): boolean => {
-  const planeX = viewProjection[3] + sign * viewProjection[axis]!;
-  const planeY = viewProjection[7] + sign * viewProjection[axis + 4]!;
-  const planeZ = viewProjection[11] + sign * viewProjection[axis + 8]!;
-  const planeW = viewProjection[15] + sign * viewProjection[axis + 12]!;
-  const localX = planeX * model[0] + planeY * model[1] + planeZ * model[2];
-  const localY = planeX * model[4] + planeY * model[5] + planeZ * model[6];
-  const localZ = planeX * model[8] + planeY * model[9] + planeZ * model[10];
-  const localW = planeX * model[12] + planeY * model[13] + planeZ * model[14] + planeW;
-  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
-  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
-  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
-  const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
-  const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
-  const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
-  return localX * centerX + localY * centerY + localZ * centerZ + localW
-    + Math.abs(localX) * extentX
-    + Math.abs(localY) * extentY
-    + Math.abs(localZ) * extentZ < 0;
-};
-
 /** Tests an affine-transformed local AABB without materializing viewProjection * model. */
 export const isAffineBoundsVisible = (
   bounds: Bounds3 | undefined,
@@ -103,12 +74,30 @@ export const isAffineBoundsVisible = (
   model: Mat4,
 ): boolean => {
   if (bounds === undefined) return false;
-  return !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 0, 1)
-    && !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 0, -1)
-    && !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 1, 1)
-    && !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 1, -1)
-    && !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 2, 1)
-    && !isAffineBoundsOutsideClipPlane(bounds, viewProjection, model, 2, -1);
+  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+  const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
+  const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
+  const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    for (let sign = 1; sign >= -1; sign -= 2) {
+      const planeX = viewProjection[3] + sign * viewProjection[axis]!;
+      const planeY = viewProjection[7] + sign * viewProjection[axis + 4]!;
+      const planeZ = viewProjection[11] + sign * viewProjection[axis + 8]!;
+      const planeW = viewProjection[15] + sign * viewProjection[axis + 12]!;
+      const localX = planeX * model[0] + planeY * model[1] + planeZ * model[2];
+      const localY = planeX * model[4] + planeY * model[5] + planeZ * model[6];
+      const localZ = planeX * model[8] + planeY * model[9] + planeZ * model[10];
+      const localW = planeX * model[12] + planeY * model[13] + planeZ * model[14] + planeW;
+      if (localX * centerX + localY * centerY + localZ * centerZ + localW
+        + Math.abs(localX) * extentX
+        + Math.abs(localY) * extentY
+        + Math.abs(localZ) * extentZ < 0) return false;
+    }
+  }
+  return true;
 };
 
 /**
