@@ -40,6 +40,10 @@ const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS
 const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1';
 const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
 const glErrorDebugEnabled = process.env.EXAMPLES_GLTF_LOAD_GL_ERROR_DEBUG === '1';
+const resourceTimingBufferSize = envNumber('EXAMPLES_GLTF_LOAD_RESOURCE_TIMINGS', 10_000);
+if (!Number.isInteger(resourceTimingBufferSize)) {
+  throw new Error('EXAMPLES_GLTF_LOAD_RESOURCE_TIMINGS must be a positive integer');
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -53,6 +57,7 @@ const installBenchmarkHooks = async (session) => {
     firstUsableSampleSize: 96,
     glErrorDebugEnabled,
     readyTimeoutMs,
+    resourceTimingBufferSize,
     vtCameraDragStepPixels,
   });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
@@ -61,6 +66,7 @@ const installBenchmarkHooks = async (session) => {
   if (globalThis.__royalGltfLoadBenchInstalled === true) return;
   Object.defineProperty(globalThis, '__royalGltfLoadBenchInstalled', { value: true });
   const config = ${hookConfig};
+  performance.setResourceTimingBufferSize(config.resourceTimingBufferSize);
   const counters = {
     bindTexture: 0,
     compressedTexImage2D: 0,
@@ -1045,6 +1051,7 @@ const buildReport = ({
       vtFrameSampleTimeoutMs,
       vtCameraDragEnabled,
       glErrorDebugEnabled,
+      resourceTimingBufferSize,
     },
     metrics: {
       firstDrawMs: round(firstDrawMs),

@@ -132,6 +132,7 @@ const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
 const gpuTimersEnabled = process.env.EXAMPLES_BENCH_GPU_TIMERS !== '0';
 const gpuDrawProfileEnabled = process.env.EXAMPLES_BENCH_GPU_DRAW_PROFILE === '1';
+const resourceTimingBufferSize = envInteger('EXAMPLES_BENCH_RESOURCE_TIMINGS', 10_000);
 
 if (fakeXrEnabled && realXrEnabled) {
   throw new Error('EXAMPLES_BENCH_FAKE_XR and EXAMPLES_BENCH_REAL_XR cannot both be enabled');
@@ -576,11 +577,13 @@ const installBenchmarkHooks = async (session) => {
     fakeXrViews,
     gpuDrawProfileEnabled,
     gpuTimersEnabled,
+    resourceTimingBufferSize,
   });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
     source: `
 (() => {
   const config = ${hookConfig};
+  performance.setResourceTimingBufferSize(config.resourceTimingBufferSize);
   const uniformCallNames = [
     'uniform1f',
     'uniform1fv',
@@ -2717,6 +2720,7 @@ const main = async () => {
         instancingSeed,
         instancingSweepMode,
         managePreview,
+        resourceTimingBufferSize,
       },
       analysis,
       deployment: size,
