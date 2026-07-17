@@ -451,6 +451,12 @@ const installBenchmarkHooks = async (session) => {
     typeof sample.paintedRatio === 'number' &&
     sample.paintedRatio >= config.firstUsableMinPaintedRatio &&
     sample.colorBuckets >= config.firstUsableMinColorBuckets;
+  const rendererGltfSceneReady = (renderer) => {
+    const assets = renderer?.gltfLoadDiagnostics?.assets;
+    return Array.isArray(assets)
+      && assets.length > 0
+      && assets.every((asset) => asset.status === 'sceneReady');
+  };
   const rendererGltfAssetsSettled = (renderer, requireSuccess) => {
     const diagnostics = renderer?.gltfLoadDiagnostics;
     if (diagnostics === undefined || diagnostics === null) return false;
@@ -464,19 +470,24 @@ const installBenchmarkHooks = async (session) => {
       (!requireSuccess || (asset.imageFailures ?? 0) === 0));
   };
   const updateFirstUsable = () => {
-    if (firstUsableAt !== null) return true;
     const renderer = readRendererSnapshot();
-    const assetsReady = rendererGltfAssetsSettled(renderer, true);
-    if (!assetsReady) return false;
-    const sample = sampleCanvas(assetsReady);
-    if (firstTexturedFrameAt === null && firstTextureUploadAt !== null && assetsReady && isUsableSample(sample)) {
+    if (!rendererGltfSceneReady(renderer)) return false;
+    const textureReady = (renderer?.textureResidency?.resources ?? 0) > 0;
+    const needsUsableSample = firstUsableAt === null;
+    const needsTexturedSample = firstTexturedFrameAt === null
+      && firstTextureUploadAt !== null
+      && textureReady;
+    if (!needsUsableSample && !needsTexturedSample) return true;
+    const sample = sampleCanvas(true);
+    if (needsTexturedSample && isUsableSample(sample)) {
       firstTexturedFrameAt = performance.now();
       firstTexturedFrameSample = sample;
     }
-    if (firstDrawAt === null || !isUsableSample(sample)) return false;
-    firstUsableAt = performance.now();
-    firstUsableSample = sample;
-    return true;
+    if (needsUsableSample && firstDrawAt !== null && isUsableSample(sample)) {
+      firstUsableAt = performance.now();
+      firstUsableSample = sample;
+    }
+    return firstUsableAt !== null;
   };
   const waitForFirstUsable = async (timeoutMs = config.readyTimeoutMs) => {
     const deadline = performance.now() + timeoutMs;
@@ -590,6 +601,7 @@ const installBenchmarkHooks = async (session) => {
         stableSince = performance.now();
       }
       const renderer = readRendererSnapshot();
+      updateFirstUsable();
       const rendererSettled = rendererGltfAssetsSettled(renderer, false);
       const rendererReady = rendererGltfAssetsSettled(renderer, true);
       const sample = firstUsableSample ?? sampleCanvas(rendererReady);
