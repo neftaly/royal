@@ -63,6 +63,10 @@ export interface GltfPacketBatchSegmentGroups {
   memberIndices: Uint32Array;
   opaqueBatchCount: number;
   opaqueBatchIds: Uint32Array;
+  /** Exact retained state order for the previous opaque batch set. */
+  opaqueOrderCache: Uint32Array;
+  opaqueOrderCount: number;
+  opaqueOrderRegistryGeneration: number;
   /** Reused merge lane for opaque state ordering. */
   opaqueSortScratch: Uint32Array;
   planRevision: number;
@@ -236,6 +240,9 @@ export const createGltfPacketBatchSegmentGroups = (
     memberIndices: new Uint32Array(members),
     opaqueBatchCount: 0,
     opaqueBatchIds: new Uint32Array(batches),
+    opaqueOrderCache: new Uint32Array(batches),
+    opaqueOrderCount: 0,
+    opaqueOrderRegistryGeneration: 0,
     opaqueSortScratch: new Uint32Array(batches),
     planRevision: 0,
     registry: undefined,
@@ -290,6 +297,7 @@ const reserveActive = (groups: GltfPacketBatchSegmentGroups, required: number): 
   const capacity = powerOfTwo(required);
   groups.activeBatchIds = grownUint32(groups.activeBatchIds, capacity);
   groups.opaqueBatchIds = grownUint32(groups.opaqueBatchIds, capacity);
+  groups.opaqueOrderCache = grownUint32(groups.opaqueOrderCache, capacity);
   groups.opaqueSortScratch = grownUint32(groups.opaqueSortScratch, capacity);
   groups.transmissiveBatchIds = grownUint32(groups.transmissiveBatchIds, capacity);
   groups.blendedBatchIds = grownUint32(groups.blendedBatchIds, capacity);
@@ -519,7 +527,25 @@ const orderOpaqueBatchesByState = (
   groups: GltfPacketBatchSegmentGroups,
 ): void => {
   const count = groups.opaqueBatchCount;
-  if (count < 2) return;
+  if (
+    groups.opaqueOrderCount === count
+    && groups.opaqueOrderRegistryGeneration === registry.generation
+  ) {
+    let current = true;
+    for (let index = 0; current && index < count; index += 1) {
+      current = groups.batchEpochs[groups.opaqueOrderCache[index]!] === groups.epoch;
+    }
+    if (current) {
+      groups.opaqueBatchIds.set(groups.opaqueOrderCache.subarray(0, count), 0);
+      return;
+    }
+  }
+  if (count < 2) {
+    groups.opaqueOrderCache.set(groups.opaqueBatchIds.subarray(0, count), 0);
+    groups.opaqueOrderCount = count;
+    groups.opaqueOrderRegistryGeneration = registry.generation;
+    return;
+  }
   let source = groups.opaqueBatchIds;
   let target = groups.opaqueSortScratch;
   for (let width = 1; width < count; width *= 2) {
@@ -559,6 +585,9 @@ const orderOpaqueBatchesByState = (
   if (source !== groups.opaqueBatchIds) {
     groups.opaqueBatchIds.set(source.subarray(0, count), 0);
   }
+  groups.opaqueOrderCache.set(groups.opaqueBatchIds.subarray(0, count), 0);
+  groups.opaqueOrderCount = count;
+  groups.opaqueOrderRegistryGeneration = registry.generation;
 };
 
 const validateWorkspaceSegment = <M, R, L>(
@@ -824,6 +853,8 @@ export const clearGltfPacketBatchSegmentGroups = (groups: GltfPacketBatchSegment
   groups.epoch = 0;
   groups.memberCount = 0;
   groups.opaqueBatchCount = 0;
+  groups.opaqueOrderCount = 0;
+  groups.opaqueOrderRegistryGeneration = 0;
   groups.transmissiveBatchCount = 0;
   groups.catalog = undefined;
   groups.catalogRevision = 0;

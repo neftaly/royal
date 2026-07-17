@@ -246,6 +246,21 @@ describe("glTF packet numeric batch registry", () => {
     expect(Array.from(groups.blendedBatchIds.subarray(0, groups.blendedBatchCount))).toEqual([0, 4]);
   });
 
+  it("invalidates retained opaque order when registry identities restart", () => {
+    const registry = createGltfPacketBatchRegistry();
+    const groups = createGltfPacketBatchSegmentGroups();
+    const first = segment([tuple(1, 20), tuple(2, 10)]);
+    beginGltfPacketBatchRegistryFrame(registry);
+    groupGltfPacketSubmissionSegment(registry, groups, first.workspace, 7, first.catalog);
+    expect(Array.from(groups.opaqueBatchIds.subarray(0, 2))).toEqual([1, 0]);
+
+    clearGltfPacketBatchRegistry(registry);
+    const second = segment([tuple(3, 5), tuple(4, 15)]);
+    beginGltfPacketBatchRegistryFrame(registry);
+    groupGltfPacketSubmissionSegment(registry, groups, second.workspace, 7, second.catalog);
+    expect(Array.from(groups.opaqueBatchIds.subarray(0, 2))).toEqual([0, 1]);
+  });
+
   it("handles injected epoch wrap and retains grown capacity across segment resets", () => {
     const registry = createGltfPacketBatchRegistry(1, 0xffff_fffe);
     const groups = createGltfPacketBatchSegmentGroups(1, 1, 0xffff_fffe);

@@ -57,8 +57,10 @@ class FakeGl {
   };
   detachShader = (...args: readonly unknown[]): void => this.#record("detachShader", ...args);
   getProgramInfoLog = (): string => "program log";
-  getProgramParameter = (_program: WebGLProgram, parameter: number): boolean =>
-    parameter === 0x91b1 ? this.complete : this.linkStatus;
+  getProgramParameter = (program: WebGLProgram, parameter: number): boolean => {
+    this.#record("getProgramParameter", program, parameter);
+    return parameter === 0x91b1 ? this.complete : this.linkStatus;
+  };
   getShaderInfoLog = (): string => "shader log";
   getUniformLocation = (_program: WebGLProgram, name: string): WebGLUniformLocation | null => {
     this.#record("getUniformLocation", name);
@@ -126,6 +128,9 @@ describe("program arena", () => {
     configureProgramArenaParallelCompile(arena, { COMPLETION_STATUS_KHR: 0x91b1 });
     gl.complete = false;
     expect(requestProgram(arena, 0, "wireframe")).toBeUndefined();
+    expect(requestProgram(arena, 0, "wireframe")).toBeUndefined();
+    expect(gl.calls.filter((call) => call.name === "getProgramParameter" && call.args[1] === 0x91b1))
+      .toHaveLength(1);
     expect(consumeProgramArenaWake(arena)).toBe(true);
     gl.complete = true;
     expect(requestProgram(arena, 1, "wireframe")).toBeDefined();

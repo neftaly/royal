@@ -65,6 +65,7 @@ export interface GltfFrameDrawSidedness {
 }
 
 export interface GltfFrameDrawBatch {
+  contextGeneration: number;
   cpuGeometry: CpuGeometry;
   geometry: VertexInputGeometry;
   geometryId: number;
@@ -240,14 +241,15 @@ export class GltfFrameBatchArena {
       const memberCount = groups.batchCounts[batchId]!;
       const firstIndex = groups.memberIndices[memberFirst]!;
       const geometryId = workspace.geometryIds[firstIndex]!;
-      const geometry = vertexInputGeometry(this.#vertexInputs, gl, contextGeneration, geometryId);
       const material = workspace.materialBindings[workspace.materialBindingIds[firstIndex]!]!;
       const assetLights = workspace.lightBindingIds[firstIndex] === NO_FRAME_PACKET_ID
         ? undefined
         : workspace.lightBindings[workspace.lightBindingIds[firstIndex]!]!;
       let batch = this.#batches[batchId];
       if (batch === undefined) {
+        const geometry = vertexInputGeometry(this.#vertexInputs, gl, contextGeneration, geometryId);
         batch = {
+          contextGeneration,
           cpuGeometry: geometry.source,
           geometry,
           geometryId,
@@ -271,6 +273,15 @@ export class GltfFrameBatchArena {
         };
         this.#batches[batchId] = batch;
         counters.batchPlansBuilt += 1;
+      } else if (
+        batch.contextGeneration !== contextGeneration
+        || batch.geometryId !== geometryId
+      ) {
+        const geometry = vertexInputGeometry(this.#vertexInputs, gl, contextGeneration, geometryId);
+        batch.contextGeneration = contextGeneration;
+        batch.cpuGeometry = geometry.source;
+        batch.geometry = geometry;
+        batch.geometryId = geometryId;
       }
       batch.localModelSignatureDirty ||= batch.localModelSignature.length !== memberCount;
       batch.rootLayoutDirty ||= batch.rootInstanceViews.length !== memberCount
@@ -281,9 +292,6 @@ export class GltfFrameBatchArena {
       batch.rootInstanceViews.length = memberCount;
       batch.rootLogicalIndices.length = memberCount;
       batch.rootTransforms.length = memberCount;
-      batch.cpuGeometry = geometry.source;
-      batch.geometry = geometry;
-      batch.geometryId = geometryId;
       if (
         assetLights !== undefined
         || batch.sceneLightPlanRevision !== planRevision
@@ -331,16 +339,22 @@ export class GltfFrameBatchArena {
         if (batch.localModelSignature[memberOffset] !== localModelSemanticId) {
           batch.localModelSignatureDirty = true;
           batch.localModelSignature[memberOffset] = localModelSemanticId;
+          batch.localModels[memberOffset] = localModel!;
         }
-        batch.localModels[memberOffset] = localModel!;
-        batch.rootModels[memberOffset] = root.rootModel;
-        if (batch.rootInstanceViews[memberOffset] !== root.rootInstanceViews
-          || batch.rootLogicalIndices[memberOffset] !== root.rootLogicalIndex) {
+        if (batch.rootModels[memberOffset] !== root.rootModel) {
+          batch.rootModels[memberOffset] = root.rootModel;
+        }
+        if (batch.rootInstanceViews[memberOffset] !== root.rootInstanceViews) {
           batch.rootLayoutDirty = true;
+          batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;
         }
-        batch.rootInstanceViews[memberOffset] = root.rootInstanceViews;
-        batch.rootLogicalIndices[memberOffset] = root.rootLogicalIndex;
-        batch.rootTransforms[memberOffset] = root.rootTransform;
+        if (batch.rootLogicalIndices[memberOffset] !== root.rootLogicalIndex) {
+          batch.rootLayoutDirty = true;
+          batch.rootLogicalIndices[memberOffset] = root.rootLogicalIndex;
+        }
+        if (batch.rootTransforms[memberOffset] !== root.rootTransform) {
+          batch.rootTransforms[memberOffset] = root.rootTransform;
+        }
       }
     }
   }

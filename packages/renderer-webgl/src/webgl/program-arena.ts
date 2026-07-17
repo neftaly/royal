@@ -59,6 +59,8 @@ declare const authority: unique symbol;
 export interface ProgramArena { readonly [authority]: "ProgramArena" }
 
 type Resource = ProgramArenaResource & {
+  completionKnown: boolean;
+  completionPollFrame: number;
   readonly fragmentShader: WebGLShader;
   linked: boolean;
   readonly vertexShader: WebGLShader;
@@ -196,7 +198,14 @@ const compileProgram = (
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
-    return { fragmentShader, linked: false, program, vertexShader };
+    return {
+      completionKnown: false,
+      completionPollFrame: -1,
+      fragmentShader,
+      linked: false,
+      program,
+      vertexShader,
+    };
   } catch (error) {
     if (vertexShader !== undefined) deleteShader(state, vertexShader);
     if (fragmentShader !== undefined) deleteShader(state, fragmentShader);
@@ -240,12 +249,17 @@ const startPendingPrograms = (state: State, frame: number): void => {
 const finishProgram = (state: State, frame: number, resource: Resource): Resource | undefined => {
   if (resource.linked) return resource;
   const parallel = state.parallel;
-  if (
-    parallel !== undefined
-    && !state.gl.getProgramParameter(resource.program, parallel.COMPLETION_STATUS_KHR)
-  ) {
-    requestWake(state);
-    return undefined;
+  if (parallel !== undefined && !resource.completionKnown) {
+    if (resource.completionPollFrame === frame) {
+      requestWake(state);
+      return undefined;
+    }
+    resource.completionPollFrame = frame;
+    if (!state.gl.getProgramParameter(resource.program, parallel.COMPLETION_STATUS_KHR)) {
+      requestWake(state);
+      return undefined;
+    }
+    resource.completionKnown = true;
   }
   if (parallel !== undefined) {
     if (state.linkFrame !== frame) {
