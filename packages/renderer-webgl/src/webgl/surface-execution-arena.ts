@@ -1082,6 +1082,10 @@ export class SurfaceExecutionArena {
   ): boolean {
     const publication = material.publication;
     if (publication === undefined) return criticalPending;
+    // Publication is monotonic. A later critical-texture loss temporarily
+    // returns this material to gray, but does not reopen its initial group
+    // barrier. Avoid retaining and draining every settled material each frame.
+    if (publication.ready) return criticalPending;
     if (criticalPending) publication.pendingEpoch = this.#publicationEpoch;
     if (publication.executionEpoch !== this.#publicationEpoch) {
       publication.executionEpoch = this.#publicationEpoch;
