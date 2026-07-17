@@ -164,6 +164,22 @@ export class OrdinaryTextureResidencyController {
   }
 
   publishPrepared(texture: TextureAssetUploadRef | undefined, source: LoadedTextureSource): void {
+    this.#publishPrepared(texture, source, true);
+  }
+
+  /** Publishes immediately before the current frame's ordinary-texture upload pass. */
+  publishPreparedBeforeUploadPass(
+    texture: TextureAssetUploadRef | undefined,
+    source: LoadedTextureSource,
+  ): void {
+    this.#publishPrepared(texture, source, false);
+  }
+
+  #publishPrepared(
+    texture: TextureAssetUploadRef | undefined,
+    source: LoadedTextureSource,
+    scheduleUploadWake: boolean,
+  ): void {
     if (texture === undefined) return;
     const key = textureCacheKey(texture);
     if (resourceArenaTextureReferenceCount(this.#options.resourceArena, key) === 0) return;
@@ -183,7 +199,13 @@ export class OrdinaryTextureResidencyController {
     this.#options.registerAutoVirtualTextureDecodedSource(texture, source);
     const lifecycle = this.#options.lifecycle();
     if (row.gpuSuppressed || !lifecycle.active || cached?.uploaded === true) return;
-    this.#queue(cached ?? ensureOrdinaryTextureGpuResource(this.#gpu, key, lifecycle.generation), source, texture);
+    this.#queue(
+      cached ?? ensureOrdinaryTextureGpuResource(this.#gpu, key, lifecycle.generation),
+      source,
+      texture,
+      false,
+      scheduleUploadWake,
+    );
   }
 
   restoreContext(generation: number): void {
@@ -429,6 +451,7 @@ export class OrdinaryTextureResidencyController {
     source: LoadedTextureSource,
     texture: TextureAssetUploadRef,
     allowRestoring = false,
+    scheduleWake = true,
   ): void {
     if (this.#rows.get(resource.key)?.terminal === true) return;
     this.#retain(resource.key, { source, texture });
@@ -440,7 +463,7 @@ export class OrdinaryTextureResidencyController {
       || resource.uploaded
     ) return;
     queueOrdinaryTextureUpload(this.#gpu, resource, { source, texture });
-    if (consumeOrdinaryTextureGpuWake(this.#gpu)) this.#options.invalidate();
+    if (consumeOrdinaryTextureGpuWake(this.#gpu) && scheduleWake) this.#options.invalidate();
   }
 
   #releaseSubscription(row: Row): void {

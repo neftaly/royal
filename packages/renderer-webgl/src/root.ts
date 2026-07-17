@@ -354,7 +354,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         if (released) return;
         released = true;
         reservation.cancel();
-        this.#capacityWakes.wakePreparation();
+        this.#capacityWakes.wakePreparationCapacity();
       },
     };
   };

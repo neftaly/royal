@@ -20,6 +20,7 @@ export class GltfReadyImagePublicationOwner {
   }
 
   applyPending(): void {
+    this.#options.runtime.images.acknowledgePublicationFrame();
     const outcomes = this.#options.runtime.images.pendingReadyOutcomes();
     if (outcomes.length === 0) return;
     for (const outcome of outcomes) {
@@ -34,7 +35,7 @@ export class GltfReadyImagePublicationOwner {
       }
       for (const binding of outcome.bindings) {
         const texture = gltfImageTextureRef(binding);
-        this.#options.ordinaryTextures.publishPrepared(texture, outcome.source);
+        this.#options.ordinaryTextures.publishPreparedBeforeUploadPass(texture, outcome.source);
       }
       if (outcome.iblSpecular !== undefined) {
         this.#options.ibl.settleSpecularImage(

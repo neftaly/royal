@@ -98,12 +98,12 @@ describe("WebGL resource-capacity wake owner", () => {
       wakeGpu: () => false,
     });
 
-    owner.wakePreparation();
-    owner.wakePreparation();
+    owner.wakePreparationCapacity();
+    owner.wakePreparationCapacity();
 
     expect(calls).toEqual([
-      "a", "b", "c", "invalidate",
-      "b", "c", "a", "invalidate",
+      "a", "b", "c",
+      "b", "c", "a",
     ]);
   });
 
@@ -129,7 +129,7 @@ describe("WebGL resource-capacity wake owner", () => {
     microtasks.shift()!();
     owner.scheduleCpuCapacityWake();
     owner.wakePersistentGpuCapacity();
-    owner.wakePreparation();
+    owner.wakePreparationCapacity();
 
     expect(wakes).toBe(0);
     expect(microtasks).toHaveLength(0);

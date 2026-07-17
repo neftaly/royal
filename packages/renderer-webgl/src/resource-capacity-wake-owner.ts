@@ -58,7 +58,8 @@ export class ResourceCapacityWakeOwner {
     if (this.#options.wakeGpu()) this.#options.invalidate();
   }
 
-  wakePreparation(): void {
+  /** Wakes admission peers; work owners invalidate only when visual state changes. */
+  wakePreparationCapacity(): void {
     const wakes = this.#options.preparation;
     if (this.#disposed) return;
     const start = this.#preparationWakeCursor % wakes.length;
@@ -66,6 +67,5 @@ export class ResourceCapacityWakeOwner {
     for (let offset = 0; offset < wakes.length; offset += 1) {
       wakes[(start + offset) % wakes.length]!();
     }
-    this.#options.invalidate();
   }
 }

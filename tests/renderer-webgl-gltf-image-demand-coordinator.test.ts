@@ -1,5 +1,6 @@
 import {
   GltfImageDemandCoordinator,
+  gltfImageRefinementWakeDelay,
   type GltfImageRecipeLease,
 } from "../packages/renderer-webgl/src/gltf/image-demand-coordinator";
 import {
@@ -180,7 +181,60 @@ const demandImages = (
 ): void => { coordinator.demandMaterial(assetKey, material(baseColorImage, emissiveImage)); };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
+});
+
+describe("glTF image refinement wake policy", () => {
+  it("wakes the first and final publications immediately and bounds intermediate latency", () => {
+    expect(gltfImageRefinementWakeDelay({ elapsedMs: 0, firstWake: true, urgent: false })).toBe(0);
+    expect(gltfImageRefinementWakeDelay({ elapsedMs: 0, firstWake: false, urgent: true })).toBe(0);
+    expect(gltfImageRefinementWakeDelay({ elapsedMs: 25, firstWake: false, urgent: false })).toBe(75);
+    expect(gltfImageRefinementWakeDelay({ elapsedMs: 100, firstWake: false, urgent: false })).toBe(0);
+    expect(gltfImageRefinementWakeDelay({ elapsedMs: 150, firstWake: false, urgent: false })).toBe(0);
+  });
+
+  it("cancels a deferred wake after an intervening frame and flushes final settlement", async () => {
+    vi.useFakeTimers();
+    let now = 0;
+    const jobs = new Map([
+      ["first", deferred<LoadedGltfImageSource>()],
+      ["second", deferred<LoadedGltfImageSource>()],
+      ["third", deferred<LoadedGltfImageSource>()],
+    ]);
+    loadRecipeMock.mockImplementation((value) => jobs.get(value.key)!.promise);
+    const harness = coordinatorHarness({ now: () => now });
+    const materials = [material("first"), material("second"), material("third")];
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load: metrics(),
+      materials,
+      recipeLease: recipeLease(),
+      recipes: [recipe("first"), recipe("second"), recipe("third")],
+      stateInstanceKey: 1,
+    });
+    for (const candidate of materials) harness.coordinator.demandMaterial("asset", candidate);
+    await flushMicrotasks();
+
+    jobs.get("first")!.resolve(loaded("first"));
+    await flushMicrotasks();
+    expect(harness.invalidate).toHaveBeenCalledOnce();
+    harness.coordinator.acknowledgePublicationFrame();
+
+    now = 10;
+    jobs.get("second")!.resolve(loaded("second"));
+    await flushMicrotasks();
+    expect(harness.invalidate).toHaveBeenCalledOnce();
+    harness.coordinator.acknowledgePublicationFrame();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(harness.invalidate).toHaveBeenCalledOnce();
+
+    now = 20;
+    jobs.get("third")!.resolve(loaded("third"));
+    await flushMicrotasks();
+    expect(harness.invalidate).toHaveBeenCalledTimes(2);
+    harness.coordinator.dispose();
+  });
 });
 
 describe("GltfImageDemandCoordinator lifecycle", () => {

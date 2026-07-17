@@ -150,6 +150,24 @@ const successfulAdmission = {
 };
 
 describe("ordinary texture residency controller", () => {
+  it("does not schedule a stale frame when prepared publication precedes the current upload pass", () => {
+    const decoded = source(8, 2, 2);
+    const texture: TextureAssetUploadRef = { kind: "asset", src: "/current-frame.png" };
+    let invalidations = 0;
+    const { arena, controller } = harness({ invalidate: () => { invalidations += 1; } });
+    retainTexture(arena, texture);
+    controller.request(texture);
+
+    controller.publishPreparedBeforeUploadPass(texture, decoded);
+    expect(invalidations).toBe(0);
+    expect(settle(controller, controller.process(0, 1, successfulAdmission))).toBeUndefined();
+    expect(controller.assetSnapshot(texture)).toEqual({ state: "ready" });
+    expect(invalidations).toBe(0);
+
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
   it("drops an explicitly re-fetchable decoded source after successful upload", () => {
     const decoded = source(9, 2, 2);
     const texture: TextureAssetUploadRef = {
