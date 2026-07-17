@@ -134,6 +134,7 @@ type CompressedBasisuTarget = Exclude<GltfBasisuTranscodeTarget, "rgba32">;
 type BasisuDecodeTarget = GltfBasisuTranscodeTarget | "astc-4x4" | "bc7-m5";
 type BasisuParseOptions = Readonly<{
   basis: Readonly<{ containerFormat: "auto"; format: BasisuDecodeTarget }>;
+  core: Readonly<{ CDN: string }>;
   worker: boolean;
 }>;
 
@@ -270,6 +271,7 @@ export const parseGltfBasisuWithRuntime = async (
 ): Promise<unknown> => {
   const options = (worker: boolean) => ({
     basis: { containerFormat: "auto" as const, format },
+    core: { CDN: LOADERS_GL_CDN },
     worker,
   });
   if (!runtime.workerAvailable || !runtime.supportsWorker()) {

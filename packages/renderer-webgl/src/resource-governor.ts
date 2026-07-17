@@ -238,7 +238,7 @@ const durable = (gpuFloor: number, cpuFloor: number) => Object.freeze({
   persistentGpuBytes: Object.freeze({ mandatoryFloor: mib(gpuFloor) }),
 });
 
-/** Conservative desktop defaults; device-derived policy can replace this later. */
+/** Desktop admission ceilings (not preallocations); device-derived policy can replace this later. */
 export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.freeze({
   classes: Object.freeze({
     "asset-decode": durable(0, 32),
@@ -250,7 +250,7 @@ export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.f
   limits: Object.freeze({
     cpuDecodedBytes: mib(512),
     jobs: 8,
-    persistentGpuBytes: mib(864),
+    persistentGpuBytes: mib(1280),
     transientPeakBytes: mib(192),
     uploadBytes: mib(16),
   }),

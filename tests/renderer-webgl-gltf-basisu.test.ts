@@ -143,7 +143,10 @@ describe("glTF BasisU RGBA normalization", () => {
 
     await expect(parseGltfBasisuWithRuntime(runtime, firstBytes, "rgba32")).resolves.toBe("worker");
     expect(parseMock.mock.calls[0]?.[0]).not.toBe(firstBytes);
-    expect(parseMock.mock.calls[0]?.[2]).toMatchObject({ worker: true });
+    expect(parseMock.mock.calls[0]?.[2]).toMatchObject({
+      core: { CDN: "https://unpkg.com/@loaders.gl" },
+      worker: true,
+    });
     expect(firstBytes.byteLength).toBe(32);
 
     const fallbackBytes = new ArrayBuffer(24);
@@ -154,7 +157,10 @@ describe("glTF BasisU RGBA normalization", () => {
     expect(parseMock.mock.calls[1]?.[0]).not.toBe(fallbackBytes);
     expect(parseMock.mock.calls[1]?.[2]).toMatchObject({ worker: true });
     expect(parseMock.mock.calls[2]?.[0]).toBe(fallbackBytes);
-    expect(parseMock.mock.calls[2]?.[2]).toMatchObject({ worker: false });
+    expect(parseMock.mock.calls[2]?.[2]).toMatchObject({
+      core: { CDN: "https://unpkg.com/@loaders.gl" },
+      worker: false,
+    });
 
     const cachedFallbackBytes = new ArrayBuffer(16);
     parseMock.mockResolvedValueOnce("cached fallback");
