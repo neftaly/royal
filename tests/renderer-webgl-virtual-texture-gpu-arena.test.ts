@@ -27,6 +27,7 @@ import {
   touchVirtualTextureGpuResidency,
   virtualTextureGpuArenaSnapshot,
   virtualTextureGpuAdmission,
+  virtualTextureGpuAvailableBytes,
   virtualTextureGpuCachedResidency,
   virtualTextureGpuCoverage,
   virtualTextureGpuDrawable,
@@ -34,6 +35,7 @@ import {
   virtualTextureGpuHasActionableUploads,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
+  virtualTextureGpuQuarantinedBytes,
   virtualTextureGpuResource,
   virtualTextureGpuResourceAllocated,
   virtualTextureGpuResourceEffectiveSlots,
@@ -579,6 +581,8 @@ describe("virtual texture GPU arena", () => {
       chargedBytes: 128,
       quarantinedBytes: 128,
     });
+    expect(virtualTextureGpuAvailableBytes(arena)).toBe(0);
+    expect(virtualTextureGpuQuarantinedBytes(arena)).toBe(128);
     const blocked = admitTestVirtualTextureGpuResource(arena, "b", 1, options());
     expect(virtualTextureGpuResourceSnapshot(blocked).admissionKind).toBe("dormant");
     releaseTextureHandleContextHandles(handles);
@@ -586,6 +590,8 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuArenaSnapshot(arena).chargedBytes).toBe(128);
     dropVirtualTextureGpuContext(arena);
     expect(virtualTextureGpuArenaSnapshot(arena).chargedBytes).toBe(0);
+    expect(virtualTextureGpuAvailableBytes(arena)).toBe(128);
+    expect(virtualTextureGpuQuarantinedBytes(arena)).toBe(0);
   });
 
   it("keeps atlas failures transactional, including a thrown undefined", () => {

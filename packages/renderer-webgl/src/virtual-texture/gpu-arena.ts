@@ -1477,6 +1477,16 @@ export const virtualTextureGpuArenaSnapshot = (
   };
 };
 
+/** Allocation-free physical bytes still available to new VT resources. */
+export const virtualTextureGpuAvailableBytes = (arena: VirtualTextureGpuArena): number => {
+  const state = stateOf(arena);
+  return Math.max(0, state.budgetBytes - state.allocatedBytes - state.quarantinedBytes);
+};
+
+/** Allocation-free rollback quarantine query for governor settlement. */
+export const virtualTextureGpuQuarantinedBytes = (arena: VirtualTextureGpuArena): number =>
+  stateOf(arena).quarantinedBytes;
+
 const releaseVirtualTextureAllocation = (
   state: State,
   resource: MutableResource,

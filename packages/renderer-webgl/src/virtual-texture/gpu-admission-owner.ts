@@ -22,7 +22,8 @@ import {
   releaseVirtualTextureGpuAllocation,
   releaseVirtualTextureGpuResource,
   virtualTextureGpuAdmission,
-  virtualTextureGpuArenaSnapshot,
+  virtualTextureGpuAvailableBytes,
+  virtualTextureGpuQuarantinedBytes,
   virtualTextureGpuResource,
   virtualTextureGpuResourceAllocated,
   type VirtualTextureGpuArena,
@@ -129,12 +130,11 @@ export class VirtualTextureGpuAdmissionOwner {
     } as const;
     let governorReservation: ResourceGovernorReservation | undefined;
     if (!this.#options.runtime.hasGpuLease(state.key)) {
-      const gpuArena = virtualTextureGpuArenaSnapshot(this.#options.gpu);
       const capabilities = this.#options.capabilities();
       const admission = virtualTextureGpuAdmission(
         admissionOptions,
         capabilities.maxTextureSize,
-        gpuArena.budgetBytes - gpuArena.chargedBytes,
+        virtualTextureGpuAvailableBytes(this.#options.gpu),
         capabilities.maxTextureImageUnits,
       );
       const persistentGpuMaximum = this.#options.maximumPersistentGpuBytes;
@@ -203,7 +203,7 @@ export class VirtualTextureGpuAdmissionOwner {
     let result: ReturnType<typeof admitVirtualTextureGpuResource> | undefined;
     let admissionFailure: CapturedFailure | undefined;
     let reservationCancelled = false;
-    const quarantineBeforeAdmission = virtualTextureGpuArenaSnapshot(this.#options.gpu).quarantinedBytes;
+    const quarantineBeforeAdmission = virtualTextureGpuQuarantinedBytes(this.#options.gpu);
     this.#options.blockGpuWake(1);
     try {
       try {
@@ -217,9 +217,7 @@ export class VirtualTextureGpuAdmissionOwner {
         admissionFailure = { value };
       }
       if (governorReservation !== undefined) {
-        const quarantineAfterAdmission = virtualTextureGpuArenaSnapshot(
-          this.#options.gpu,
-        ).quarantinedBytes;
+        const quarantineAfterAdmission = virtualTextureGpuQuarantinedBytes(this.#options.gpu);
         const settlementFailure = captureFailure(() => {
           if (quarantineAfterAdmission > quarantineBeforeAdmission) {
             this.#options.runtime.commitQuarantinedGpuLease(governorReservation!);
