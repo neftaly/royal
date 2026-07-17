@@ -629,6 +629,7 @@ const installBenchmarkHooks = async (session) => {
     bufferSubDataCalls: 0,
     copyTexImage2D: 0,
     copyTexSubImage2D: 0,
+    copyTexSubImage2DPixels: 0,
     drawArrays: 0,
     drawArraysInstanced: 0,
     drawElements: 0,
@@ -1036,7 +1037,14 @@ const installBenchmarkHooks = async (session) => {
       counters.bufferSubDataBytes += bufferSubDataByteLength(args);
     });
     patch(prototype, 'copyTexImage2D', () => { counters.copyTexImage2D += 1; });
-    patch(prototype, 'copyTexSubImage2D', () => { counters.copyTexSubImage2D += 1; });
+    patch(prototype, 'copyTexSubImage2D', (args) => {
+      counters.copyTexSubImage2D += 1;
+      const width = Number(args[6]);
+      const height = Number(args[7]);
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        counters.copyTexSubImage2DPixels += width * height;
+      }
+    });
     patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
     patch(prototype, 'texSubImage2D', () => { counters.texSubImage2D += 1; });
     patch(prototype, 'useProgram', (args) => {
@@ -2226,6 +2234,7 @@ const routeSummary = (route) => {
   const bindVertexArrayPerFrame = route.gl.bindVertexArray / sampledFrameCount;
   const copyTexImage2DPerFrame = route.gl.copyTexImage2D / sampledFrameCount;
   const copyTexSubImage2DPerFrame = route.gl.copyTexSubImage2D / sampledFrameCount;
+  const copyTexSubImage2DPixelsPerFrame = route.gl.copyTexSubImage2DPixels / sampledFrameCount;
   const uniformCallsPerFrame = route.gl.uniformCalls / sampledFrameCount;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
@@ -2248,6 +2257,10 @@ const routeSummary = (route) => {
   const cameraDragUniformCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.uniformCalls / cameraDragSampleCount;
+  const cameraDragCopyTexSubImage2DPixelsPerFrame =
+    cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+      ? undefined
+      : route.cameraDrag.gl.copyTexSubImage2DPixels / cameraDragSampleCount;
   const cameraDragFailure = cameraDragFrameStats?.failed === true
     ? cameraDragFrameStats.reason
     : cameraDragFrameStats?.timedOut === true
@@ -2296,6 +2309,7 @@ const routeSummary = (route) => {
     bindVertexArrayPerFrame: round(bindVertexArrayPerFrame),
     copyTexImage2DPerFrame: round(copyTexImage2DPerFrame),
     copyTexSubImage2DPerFrame: round(copyTexSubImage2DPerFrame),
+    copyTexSubImage2DPixelsPerFrame: round(copyTexSubImage2DPixelsPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
     uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / sampledFrameCount),
     ...(typeof route.xr?.frameStats?.callbackDurationMs?.p95Ms === 'number'
@@ -2364,6 +2378,10 @@ const routeSummary = (route) => {
           : {}),
         ...(typeof cameraDragUniformCallsPerFrame === 'number' && cameraDragUniformCallsPerFrame !== 0
           ? { cameraDragUniformCallsPerFrame: round(cameraDragUniformCallsPerFrame) }
+          : {}),
+        ...(typeof cameraDragCopyTexSubImage2DPixelsPerFrame === 'number'
+          && cameraDragCopyTexSubImage2DPixelsPerFrame !== 0
+          ? { cameraDragCopyTexSubImage2DPixelsPerFrame: round(cameraDragCopyTexSubImage2DPixelsPerFrame) }
           : {}),
         ...(typeof cameraDragBufferSubDataBytesPerFrame === 'number' && cameraDragBufferSubDataBytesPerFrame !== 0
           ? { cameraDragBufferSubDataBytesPerFrame: round(cameraDragBufferSubDataBytesPerFrame) }
