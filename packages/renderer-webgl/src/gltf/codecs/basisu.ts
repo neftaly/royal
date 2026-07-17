@@ -139,24 +139,78 @@ export type BasisuParseRuntime = {
 type BasisuWorkerLease = Readonly<{ release(): void }>;
 
 let basisuWorkerLeaseCount = 0;
-let basisuWorkerOwner: BasisuWorkerOwner | undefined;
+let basisuWorkerPool: BasisuWorkerPool | undefined;
 
 class BasisuWorkerDisposedError extends Error {}
+
+const BASISU_WORKER_LANES = 2;
+
+class BasisuWorkerPool {
+  readonly #owners: BasisuWorkerOwner[] = [];
+
+  parse(bytes: ArrayBuffer, target: BasisuDecodeTarget): Promise<unknown> {
+    let owner = this.#owners[0];
+    if (owner === undefined) {
+      owner = this.#createOwner();
+      this.#owners.push(owner);
+    } else {
+      for (let index = 1; index < this.#owners.length; index += 1) {
+        const candidate = this.#owners[index]!;
+        if (candidate.queued < owner.queued) owner = candidate;
+      }
+      if (owner.queued > 0 && this.#owners.length < BASISU_WORKER_LANES) {
+        owner = this.#createOwner();
+        this.#owners.push(owner);
+      }
+    }
+    return owner.parse(bytes, target);
+  }
+
+  dispose(): void {
+    for (const owner of this.#owners) owner.dispose();
+    this.#owners.length = 0;
+  }
+
+  #createOwner(): BasisuWorkerOwner {
+    return new BasisuWorkerOwner((owner) => {
+      const index = this.#owners.indexOf(owner);
+      // Retain one warm lane; burst-only lanes release their WASM high-water
+      // memory as soon as their assigned queue drains.
+      if (index <= 0) return;
+      this.#owners.splice(index, 1);
+      owner.dispose();
+    });
+  }
+}
 
 class BasisuWorkerOwner {
   #disposed = false;
   #failed: unknown;
   #nextRequestId = 0;
+  readonly #onIdle: (owner: BasisuWorkerOwner) => void;
+  #queued = 0;
   #tail: Promise<unknown> = Promise.resolve();
   #worker: Worker | undefined;
+
+  constructor(onIdle: (owner: BasisuWorkerOwner) => void) {
+    this.#onIdle = onIdle;
+  }
 
   static supported(): boolean {
     return typeof globalThis.Worker === "function";
   }
 
+  get queued(): number {
+    return this.#queued;
+  }
+
   parse(bytes: ArrayBuffer, target: BasisuDecodeTarget): Promise<unknown> {
     if (this.#disposed) return Promise.reject(new BasisuWorkerDisposedError());
-    const parsed = this.#tail.then(() => this.#parse(bytes, target));
+    this.#queued += 1;
+    const parsed = this.#tail.then(() => this.#parse(bytes, target)).finally(() => {
+      this.#queued -= 1;
+      if (this.#queued === 0) this.#onIdle(this);
+    });
     this.#tail = parsed.catch(() => undefined);
     return parsed;
   }
@@ -217,8 +271,8 @@ const parseBasisuOnWorker = async (
   bytes: ArrayBuffer,
   target: BasisuDecodeTarget,
 ): Promise<unknown> => {
-  basisuWorkerOwner ??= new BasisuWorkerOwner();
-  return basisuWorkerOwner.parse(bytes, target);
+  basisuWorkerPool ??= new BasisuWorkerPool();
+  return basisuWorkerPool.parse(bytes, target);
 };
 
 const basisuParseRuntime: BasisuParseRuntime = {
@@ -236,8 +290,8 @@ export const retainGltfBasisuWorker = (): BasisuWorkerLease => {
       released = true;
       basisuWorkerLeaseCount -= 1;
       if (basisuWorkerLeaseCount !== 0) return;
-      basisuWorkerOwner?.dispose();
-      basisuWorkerOwner = undefined;
+      basisuWorkerPool?.dispose();
+      basisuWorkerPool = undefined;
     },
   };
 };

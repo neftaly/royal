@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  decodeGltfBasisuTexture,
   decodedGltfBasisuEtc2,
   decodedGltfBasisuRgba,
   parseGltfBasisuWithRuntime,
+  retainGltfBasisuWorker,
   type BasisuParseRuntime,
 } from "../packages/renderer-webgl/src/gltf/codecs/basisu";
 
@@ -154,5 +156,58 @@ describe("glTF BasisU RGBA normalization", () => {
     await expect(parseGltfBasisuWithRuntime(runtime, new ArrayBuffer(24), "etc2"))
       .rejects.toThrow("requires Web Worker support");
     expect(parseMock).not.toHaveBeenCalled();
+  });
+
+  it("adds one burst lane and terminates it when concurrent work drains", async () => {
+    type Request = Readonly<{ id: number; target: string }>;
+    class MockWorker {
+      static readonly instances: MockWorker[] = [];
+      onerror: ((event: ErrorEvent) => void) | null = null;
+      onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+      request?: Request;
+      terminated = false;
+
+      constructor() {
+        MockWorker.instances.push(this);
+      }
+
+      postMessage(request: Request): void {
+        this.request = request;
+      }
+
+      respond(fill: number): void {
+        this.onmessage?.({
+          data: {
+            id: this.request?.id,
+            result: [[level(1, 1, fill)]],
+          },
+        } as MessageEvent<unknown>);
+      }
+
+      terminate(): void {
+        this.terminated = true;
+      }
+    }
+
+    vi.stubGlobal("Worker", MockWorker);
+    const lease = retainGltfBasisuWorker();
+    try {
+      const first = decodeGltfBasisuTexture(ktx2Header(1, 1), "first.ktx2");
+      const second = decodeGltfBasisuTexture(ktx2Header(1, 1), "second.ktx2");
+      await Promise.resolve();
+      expect(MockWorker.instances).toHaveLength(2);
+      expect(MockWorker.instances.map((worker) => worker.request?.target)).toEqual(["rgba32", "rgba32"]);
+
+      MockWorker.instances[0]!.respond(1);
+      MockWorker.instances[1]!.respond(2);
+      await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+      expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([false, true]);
+    } finally {
+      lease.release();
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.unstubAllGlobals();
+    }
+    expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([true, true]);
   });
 });
