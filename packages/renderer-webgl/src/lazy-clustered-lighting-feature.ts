@@ -108,7 +108,7 @@ export class LazyClusteredLightingFeature implements ClusteredLightingFeature {
   }
 
   #fail(error: unknown): void {
-    if (this.#failure !== undefined) return;
+    if (this.#failure !== undefined || this.#options.disposed()) return;
     this.#failure = error;
     this.#options.diagnostic(
       `Clustered-lighting runtime failed to load: ${failureMessage(error)}`,

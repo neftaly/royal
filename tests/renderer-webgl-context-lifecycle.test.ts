@@ -276,6 +276,7 @@ describe("WebGL root context lifecycle contracts", () => {
     ]);
     expect(observerErrors).toHaveBeenCalledTimes(1);
     stopObservingContext();
+    root.dispose();
   });
 
   it("publishes a terminal restore failure without reacquiring a different context", () => {

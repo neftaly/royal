@@ -171,7 +171,7 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
   }
 
   #fail(error: unknown): void {
-    if (this.#failure !== undefined) return;
+    if (this.#failure !== undefined || this.#options.disposed()) return;
     this.#failure = error;
     this.#options.diagnostic(
       `Image-based-lighting runtime failed to load: ${failureMessage(error)}`,

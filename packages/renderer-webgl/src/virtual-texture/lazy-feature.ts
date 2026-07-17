@@ -273,7 +273,7 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
   }
 
   #fail(error: unknown): void {
-    if (this.#failure !== undefined) return;
+    if (this.#failure !== undefined || this.#disposed || this.#options.disposed()) return;
     this.#failure = error;
     const message = failureMessage(error);
     this.#options.diagnostic(
