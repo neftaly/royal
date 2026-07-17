@@ -11,12 +11,12 @@ import {
 type OrdinaryTextureGpuOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;
   readonly contextGeneration: () => number;
-  readonly frame: () => number;
-  readonly invalidate: () => void;
   readonly maximumPersistentGpuBytes: number;
   readonly policy: ResourceGovernorPolicy;
   readonly residencyIntent: FrameTextureResidencyIntent;
+  readonly requestRefinement: () => void;
   readonly resourceGovernor: ResourceGovernor;
+  readonly scheduleUploadPass: () => void;
   readonly textures: OrdinaryTextureResidencyController;
 };
 
@@ -25,6 +25,7 @@ export class OrdinaryTextureGpuOwner {
   readonly #evictionKeys: string[] = [];
   readonly #options: OrdinaryTextureGpuOwnerOptions;
   readonly #releaseKeys: string[] = [];
+  #uploadPass = 0;
 
   constructor(options: OrdinaryTextureGpuOwnerOptions) {
     this.#options = options;
@@ -82,7 +83,7 @@ export class OrdinaryTextureGpuOwner {
     let processFailure: CapturedFailure | undefined;
     try {
       report = this.#options.textures.process(
-        this.#options.frame(),
+        this.#uploadPass += 1,
         this.#options.contextGeneration(),
         {
           reserve: (cost) => {
@@ -131,7 +132,8 @@ export class OrdinaryTextureGpuOwner {
       && report.quarantinedBytesAfter === report.quarantinedBytesBefore
     ) this.#options.capacityWakes.wakePersistentGpuCapacity();
     const settlement = this.#options.textures.settleGpuReport(report);
-    if (report.wakeRequested) this.#options.invalidate();
+    if (report.drawablePublished) this.#options.requestRefinement();
+    if (report.wakeRequested) this.#options.scheduleUploadPass();
     if (processFailure !== undefined) throw processFailure.value;
     if (settlement !== undefined) throw settlement.error;
   }

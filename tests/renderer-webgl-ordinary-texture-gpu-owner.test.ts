@@ -16,6 +16,36 @@ describe("ordinary texture GPU owner", () => {
     expect(blockGpuWake).not.toHaveBeenCalled();
   });
 
+  it("routes upload continuation and visible residency through separate clocks", () => {
+    const requestRefinement = vi.fn();
+    const scheduleUploadPass = vi.fn();
+    const owner = new OrdinaryTextureGpuOwner({
+      capacityWakes: { blockGpuWake: () => undefined },
+      contextGeneration: () => 1,
+      maximumPersistentGpuBytes: 1024,
+      policy: { limits: { uploadBytes: 1024 } },
+      requestRefinement,
+      resourceGovernor: {},
+      scheduleUploadPass,
+      textures: {
+        hasPendingWork: () => true,
+        process: () => ({
+          drawablePublished: true,
+          operationFailure: undefined,
+          quarantinedBytesAfter: 0,
+          quarantinedBytesBefore: 0,
+          wakeRequested: true,
+        }),
+        settleGpuReport: () => undefined,
+      },
+    } as never);
+
+    owner.processUploads();
+
+    expect(requestRefinement).toHaveBeenCalledOnce();
+    expect(scheduleUploadPass).toHaveBeenCalledOnce();
+  });
+
   it("settles every suppression after preserving the first failure", () => {
     const firstFailure = new Error("first suppression failed");
     const suppressed: string[] = [];

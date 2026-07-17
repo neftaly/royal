@@ -200,6 +200,7 @@ import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
+import { ResourceRefinementWakeOwner } from "./resource-refinement-wake-owner";
 import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
 import { LazyImageBasedLightingFeature } from "./lazy-image-based-lighting-feature";
 import type { ImageBasedLightingRootFeature } from "./image-based-lighting-feature";
@@ -424,10 +425,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
     reconcileBulkInstances: (changes) => this.#gltfInstanceTransforms.reconcile(changes),
     reconcileRenderObjectRefs: (plan, changes) => this.#sceneBindings.reconcile(plan, changes),
   });
+  readonly #resourceRefinementWakes = new ResourceRefinementWakeOwner({
+    invalidate: () => this.invalidate(),
+    now: this.#now,
+  });
   readonly #renderClock = new WebGlRenderClockOwner({
     contextGeneration: () => this.#context.generation,
     hasScene: () => this.#scenePlan.latestScene !== undefined,
     isContextActive: () => this.#context.lifecycle === "active",
+    prepareLatest: () => this.#prepareLatestResources(),
     renderLatest: () => this.#renderLatestScene(),
     reportScheduledFailure: (failure) => this.#framePublication.reportRenderFailure(failure),
   });
@@ -567,9 +573,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
           { basisuTarget: this.#basisuTarget },
         ),
         diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
-        invalidate: () => this.invalidate(),
         now: this.#now,
         progress: (assetKey) => this.#preparedGltf.publishStateChange(assetKey),
+        requestPreparation: () => this.#renderClock.invalidatePreparation(),
+        requestRefinement: (urgent) => this.#resourceRefinementWakes.request(urgent),
         retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
         reserveTransportBytes: (bytes) => this.#reserveDecodedCpuBytes(
           "asset-decode",
@@ -691,8 +698,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#ordinaryTextureGpu = new OrdinaryTextureGpuOwner({
         capacityWakes: this.#capacityWakes,
         contextGeneration: () => this.#context.generation,
-        frame: () => this.#framePublication.frame,
-        invalidate: () => this.invalidate(),
         maximumPersistentGpuBytes: maximumResourceGovernorClassDurableBytes(
           this.#resourceGovernorPolicy,
           "ordinary-texture",
@@ -700,7 +705,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         ),
         policy: this.#resourceGovernorPolicy,
         residencyIntent: this.#textureResidencyIntent,
+        requestRefinement: () => this.#resourceRefinementWakes.request(),
         resourceGovernor: this.#resourceGovernor,
+        scheduleUploadPass: () => this.#renderClock.invalidatePreparation(),
         textures: this.#ordinaryTextures,
       });
       this.#readyGltfImages = new GltfReadyImagePublicationOwner({
@@ -992,6 +999,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // An immediate render consumes any queued demand render. The queued
     // callback checks its generation before drawing.
     this.#renderClock.beginRender();
+    this.#resourceRefinementWakes.acknowledgeFrame();
     beginResourceGovernorFrame(this.#resourceGovernor);
     this.#preparedAssetEvents.applyPending();
     const gl = this.#gl;
@@ -1339,6 +1347,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       firstFailure = captureFirstFailure(firstFailure, operation);
     };
     this.#framePublication.dispose();
+    this.#resourceRefinementWakes.dispose();
     this.#renderClock.dispose();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
@@ -1858,6 +1867,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       height,
     );
     this.#renderScene(plan, this.#frameViews);
+  }
+
+  #prepareLatestResources(): void {
+    if (this.#context.lifecycle !== "active" || this.#scenePlan.plan === undefined) return;
+    this.#renderClock.beginPreparation();
+    beginResourceGovernorFrame(this.#resourceGovernor);
+    this.#readyGltfImages.applyPending();
+    this.#ordinaryTextureGpu.processUploads();
   }
 
   #presentHdrRenderTarget(

@@ -29,6 +29,7 @@ type ClockHarness = {
   contextGeneration: number;
   failures: unknown[];
   owner: WebGlRenderClockOwner;
+  preparations: number;
   renders: number;
   scene: boolean;
 };
@@ -39,6 +40,7 @@ const clockHarness = (renderFailure?: unknown): ClockHarness => {
     contextGeneration: 1,
     failures: [],
     owner: undefined as unknown as WebGlRenderClockOwner,
+    preparations: 0,
     renders: 0,
     scene: true,
   };
@@ -46,6 +48,10 @@ const clockHarness = (renderFailure?: unknown): ClockHarness => {
     contextGeneration: () => harness.contextGeneration,
     hasScene: () => harness.scene,
     isContextActive: () => harness.active,
+    prepareLatest: () => {
+      harness.owner.beginPreparation();
+      harness.preparations += 1;
+    },
     renderLatest: () => {
       harness.owner.beginRender();
       harness.renders += 1;
@@ -141,6 +147,24 @@ describe("WebGL render-clock ownership", () => {
 });
 
 describe("WebGL render clock owner", () => {
+  it("runs preparation-only work unless a visual invalidation subsumes it", () => {
+    const scheduled = scheduledFrames();
+    const harness = clockHarness();
+
+    harness.owner.invalidatePreparation();
+    expect(scheduled).toHaveLength(1);
+    scheduled.shift()?.(16);
+    expect({ preparations: harness.preparations, renders: harness.renders })
+      .toEqual({ preparations: 1, renders: 0 });
+
+    harness.owner.invalidatePreparation();
+    harness.owner.invalidate();
+    expect(scheduled).toHaveLength(1);
+    scheduled.shift()?.(32);
+    expect({ preparations: harness.preparations, renders: harness.renders })
+      .toEqual({ preparations: 1, renders: 1 });
+  });
+
   it("coalesces invalidations and cancels a queued generation on immediate render", () => {
     const scheduled = scheduledFrames();
     const harness = clockHarness();

@@ -20,7 +20,6 @@ export class GltfReadyImagePublicationOwner {
   }
 
   applyPending(): void {
-    this.#options.runtime.images.acknowledgePublicationFrame();
     const outcomes = this.#options.runtime.images.pendingReadyOutcomes();
     if (outcomes.length === 0) return;
     for (const outcome of outcomes) {

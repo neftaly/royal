@@ -4,6 +4,7 @@ export type WebGlRenderClockOwnerOptions = Readonly<{
   contextGeneration(): number;
   hasScene(): boolean;
   isContextActive(): boolean;
+  prepareLatest(): void;
   renderLatest(): void;
   reportScheduledFailure(failure: unknown): void;
 }>;
@@ -14,6 +15,7 @@ export class WebGlRenderClockOwner {
   readonly #options: WebGlRenderClockOwnerOptions;
   #dirty = false;
   #disposed = false;
+  #preparationDirty = false;
   #scheduleGeneration = 0;
   #scheduledGeneration = 0;
 
@@ -52,6 +54,13 @@ export class WebGlRenderClockOwner {
   /** Consumes queued demand before an immediate render begins. */
   beginRender(): void {
     this.#dirty = false;
+    this.#preparationDirty = false;
+    this.#scheduledGeneration = 0;
+  }
+
+  /** Consumes queued resource work before a preparation-only pass begins. */
+  beginPreparation(): void {
+    this.#preparationDirty = false;
     this.#scheduledGeneration = 0;
   }
 
@@ -59,18 +68,27 @@ export class WebGlRenderClockOwner {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#dirty = false;
+    this.#preparationDirty = false;
     this.#scheduledGeneration = 0;
     this.#externalClocks.clear();
   }
 
   flushInvalidated(): void {
-    if (!this.#canRender() || !this.#dirty) return;
-    this.#options.renderLatest();
+    if (!this.#canRender()) return;
+    if (this.#dirty) this.#options.renderLatest();
+    else if (this.#preparationDirty) this.#options.prepareLatest();
   }
 
   invalidate(): void {
     if (this.#disposed || !this.#options.hasScene()) return;
     this.#dirty = true;
+    this.#schedule();
+  }
+
+  /** Schedules resource publication/upload work that does not itself require a redraw. */
+  invalidatePreparation(): void {
+    if (this.#disposed || !this.#options.hasScene()) return;
+    this.#preparationDirty = true;
     this.#schedule();
   }
 
@@ -99,7 +117,7 @@ export class WebGlRenderClockOwner {
   #schedule(): void {
     if (
       !this.#canRender()
-      || !this.#dirty
+      || (!this.#dirty && !this.#preparationDirty)
       || this.#externalClocks.size > 0
       || this.#scheduledGeneration !== 0
     ) return;
@@ -113,13 +131,14 @@ export class WebGlRenderClockOwner {
         this.#scheduledGeneration !== generation
         || this.#options.contextGeneration() !== contextGeneration
         || !this.#options.isContextActive()
-        || !this.#dirty
+        || (!this.#dirty && !this.#preparationDirty)
         || this.#externalClocks.size > 0
       ) return;
       this.#scheduledGeneration = 0;
       if (!this.#canRender()) return;
       try {
-        this.#options.renderLatest();
+        if (this.#dirty) this.#options.renderLatest();
+        else this.#options.prepareLatest();
       } catch (failure) {
         this.#options.reportScheduledFailure(failure);
       }

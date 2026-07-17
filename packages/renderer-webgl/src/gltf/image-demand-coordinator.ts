@@ -146,13 +146,6 @@ const EMPTY_IMAGE_KEYS: ReadonlySet<string> = new Set();
 const GLTF_IBL_IMAGE_CONCURRENCY = 1;
 const GLTF_ORDINARY_IMAGE_CONCURRENCY = 2;
 const GLTF_IMAGE_TRANSPORT_CONCURRENCY = 4;
-const GLTF_IMAGE_REFINEMENT_WAKE_INTERVAL_MS = 100;
-
-export const gltfImageRefinementWakeDelay = (
-  input: Readonly<{ elapsedMs: number; firstWake: boolean; urgent: boolean }>,
-): number => input.firstWake || input.urgent
-  ? 0
-  : Math.max(0, GLTF_IMAGE_REFINEMENT_WAKE_INTERVAL_MS - input.elapsedMs);
 
 export const gltfImageDemandKeys = (
   materials: readonly LoadedGltfMaterial[],
@@ -180,14 +173,15 @@ export class GltfImageDemandCoordinator {
   readonly #diagnostic: (message: string, key: string) => void;
   readonly #iblScheduler: GltfPreparationScheduler;
   readonly #iblTransportScheduler: GltfPreparationScheduler;
-  readonly #invalidate: () => void;
   readonly #now: MonotonicClock;
   readonly #ordinaryScheduler: GltfPreparationScheduler;
   readonly #ordinaryTransportScheduler: GltfPreparationScheduler;
   readonly #ordinaryTransport: TransportLane = { head: 0, queue: [] };
   readonly #pendingOutcomes: Row[] = [];
+  readonly #prepare: () => void;
   readonly #prepareRecipe: typeof prepareGltfImageSourceRecipe;
   readonly #progress: (assetKey: string) => void;
+  readonly #refine: (urgent: boolean) => void;
   readonly #recipeCleanupDebt = new Set<RecipeOwnership>();
   readonly #registrationClaims = new Map<string, object>();
   readonly #retainSource: (source: LoadedTextureSource) => SourceLease;
@@ -198,9 +192,6 @@ export class GltfImageDemandCoordinator {
   readonly #iblTransport: TransportLane = { head: 0, queue: [] };
   #cleanupRetryScheduled = false;
   #disposed = false;
-  #imageWakeRequested = false;
-  #imageWakeTimer: ReturnType<typeof setTimeout> | undefined;
-  #lastImageWakeAt = Number.NEGATIVE_INFINITY;
 
   constructor(options: {
     readonly admit?: GltfPreparationJobAdmitter;
@@ -208,11 +199,12 @@ export class GltfImageDemandCoordinator {
     readonly admitOrdinaryTransport?: GltfPreparationJobAdmitter;
     readonly closeSource: (source: LoadedTextureSource) => void;
     readonly diagnostic: (message: string, key: string) => void;
-    readonly invalidate: () => void;
     readonly now?: MonotonicClock;
     readonly decodeRecipe?: typeof decodePreparedGltfImageSourceRecipe;
     readonly prepareRecipe?: typeof prepareGltfImageSourceRecipe;
     readonly progress?: (assetKey: string) => void;
+    readonly requestPreparation: () => void;
+    readonly requestRefinement: (urgent: boolean) => void;
     readonly retainSource: (source: LoadedTextureSource) => SourceLease;
     readonly reserveTransportBytes?: (bytes: number) => TransportLease;
     readonly requiresTransport?: (recipe: GltfImageSourceRecipe) => boolean;
@@ -224,7 +216,6 @@ export class GltfImageDemandCoordinator {
       GLTF_IMAGE_TRANSPORT_CONCURRENCY,
       options.admit,
     );
-    this.#invalidate = options.invalidate;
     this.#now = options.now ?? monotonicNowMs;
     this.#ordinaryScheduler = new GltfPreparationScheduler(
       GLTF_ORDINARY_IMAGE_CONCURRENCY,
@@ -235,8 +226,10 @@ export class GltfImageDemandCoordinator {
       options.admitOrdinaryTransport ?? options.admit,
     );
     this.#decodeRecipe = options.decodeRecipe ?? decodePreparedGltfImageSourceRecipe;
+    this.#prepare = options.requestPreparation;
     this.#prepareRecipe = options.prepareRecipe ?? prepareGltfImageSourceRecipe;
     this.#progress = options.progress ?? (() => undefined);
+    this.#refine = options.requestRefinement;
     this.#retainSource = options.retainSource;
     this.#reserveTransportBytes = options.reserveTransportBytes;
     this.#requiresTransport = options.requiresTransport
@@ -454,12 +447,6 @@ export class GltfImageDemandCoordinator {
     return outcomes;
   }
 
-  /** Cancels a deferred resource-only wake after any frame publishes current outcomes. */
-  acknowledgePublicationFrame(): void {
-    this.#cancelImageWakeTimer();
-    if (this.#imageWakeRequested) this.#lastImageWakeAt = this.#now();
-  }
-
   releaseAsset(key: string): void {
     this.#registrationClaims.delete(key);
     const asset = this.#assets.get(key);
@@ -469,7 +456,6 @@ export class GltfImageDemandCoordinator {
       failure = captureFirstFailure(failure, operation);
     };
     this.#assets.delete(key);
-    if (this.#assets.size === 0) this.#cancelImageWakeTimer();
     asset.controller.abort();
     const ownership = asset.recipeOwnership;
     ownership.releaseRequested = true;
@@ -507,7 +493,6 @@ export class GltfImageDemandCoordinator {
       return;
     }
     this.#disposed = true;
-    this.#cancelImageWakeTimer();
     this.#registrationClaims.clear();
     for (const key of this.#assets.keys()) {
       cleanup(() => this.releaseAsset(key));
@@ -772,7 +757,8 @@ export class GltfImageDemandCoordinator {
       row.outcomeQueued = true;
       this.#pendingOutcomes.push(row);
     }
-    this.#requestImageInvalidate(row.key, this.#assetDemandSettled(asset));
+    this.#requestPreparation(row.key);
+    this.#requestRefinement(row.key, this.#assetImagesComplete(asset));
   }
 
   #settleImageFailure(row: Row, error: unknown): void {
@@ -786,7 +772,7 @@ export class GltfImageDemandCoordinator {
     this.#demandSettledBaseRefinements(row);
     this.#recordSettled(asset, true);
     this.#diagnose(`glTF image load failed for ${row.key}: ${row.error}`, row.key);
-    this.#requestImageInvalidate(row.key, this.#assetDemandSettled(asset));
+    this.#requestRefinement(row.key, this.#assetImagesComplete(asset));
   }
 
   #finishImageJob(row: Row, recipe: GltfImageSourceRecipe): void {
@@ -1017,44 +1003,27 @@ export class GltfImageDemandCoordinator {
     }
   }
 
-  #assetDemandSettled(asset: Asset): boolean {
-    return asset.load.imageLoaded + asset.load.imageFailures >= asset.load.imageRequests;
+  #assetImagesComplete(asset: Asset): boolean {
+    return asset.load.imageLoaded + asset.load.imageFailures >= asset.rows.size;
   }
 
-  #cancelImageWakeTimer(): void {
-    const timer = this.#imageWakeTimer;
-    if (timer === undefined) return;
-    this.#imageWakeTimer = undefined;
-    clearTimeout(timer);
-  }
-
-  #requestImageInvalidate(key: string, urgent: boolean): void {
-    const now = this.#now();
-    const delay = gltfImageRefinementWakeDelay({
-      elapsedMs: now - this.#lastImageWakeAt,
-      firstWake: !this.#imageWakeRequested,
-      urgent,
-    });
-    if (delay > 0) {
-      if (this.#imageWakeTimer !== undefined) return;
-      this.#imageWakeTimer = setTimeout(() => {
-        this.#imageWakeTimer = undefined;
-        if (!this.#disposed) this.#performImageInvalidate(key);
-      }, delay);
-      return;
-    }
-    this.#cancelImageWakeTimer();
-    this.#performImageInvalidate(key);
-  }
-
-  #performImageInvalidate(key: string): void {
-    this.#imageWakeRequested = true;
-    this.#lastImageWakeAt = this.#now();
+  #requestPreparation(key: string): void {
     try {
-      this.#invalidate();
+      this.#prepare();
     } catch (error) {
       this.#diagnose(
-        `glTF image invalidation failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        `glTF image preparation wake failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        key,
+      );
+    }
+  }
+
+  #requestRefinement(key: string, urgent: boolean): void {
+    try {
+      this.#refine(urgent);
+    } catch (error) {
+      this.#diagnose(
+        `glTF image refinement wake failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
         key,
       );
     }

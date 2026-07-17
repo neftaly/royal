@@ -55,6 +55,7 @@ export type OrdinaryTextureResidencyFailure = Readonly<{ error: unknown }>;
 /** Raw GPU work is settled after root-level governor observation. */
 export type OrdinaryTextureResidencyGpuReport = Readonly<{
   capacityReleased: boolean;
+  drawablePublished: boolean;
   operationFailure?: OrdinaryTextureResidencyFailure;
   quarantinedBytesAfter: number;
   quarantinedBytesBefore: number;
@@ -505,6 +506,7 @@ export class OrdinaryTextureResidencyController {
     clearOrdinaryTextureGpuOutcomes(this.#gpu);
     return {
       capacityReleased,
+      drawablePublished: outcomes.some((outcome) => outcome.kind === "completed"),
       operationFailure,
       outcomes,
       quarantinedBytesAfter: ordinaryTextureGpuQuarantinedBytes(this.#gpu),
