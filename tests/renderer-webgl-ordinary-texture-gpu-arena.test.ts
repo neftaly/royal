@@ -60,6 +60,7 @@ class FakeGl {
   uploadFaultPresent = false;
   samplerFaultPresent = false;
   readonly uploads: number[] = [];
+  readonly uploadByteLengths: number[] = [];
   #serial = 1;
   activeTexture = (): void => undefined;
   bindTexture = (_target: number, texture: WebGLTexture): void => {
@@ -70,6 +71,12 @@ class FakeGl {
     const serial = this.#serial++;
     this.created.push(serial);
     return { serial } as unknown as WebGLTexture;
+  };
+  compressedTexSubImage2D = (...args: readonly unknown[]): void => {
+    const data = args[7];
+    if (!(data instanceof Uint8Array)) throw new Error("Expected compressed upload bytes");
+    this.uploadByteLengths.push(data.byteLength);
+    this.uploads.push(this.#bound);
   };
   deleteTexture = (texture: WebGLTexture): void => {
     const serial = (texture as unknown as Handle).serial;
@@ -94,6 +101,7 @@ class FakeGl {
       throw new Error("sampler failure");
     }
   };
+  texStorage2D = (): void => undefined;
 }
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
 const source = (serial: number, width = 1, height = 1): LoadedTextureSource => ({
@@ -179,6 +187,62 @@ const runOperationTrace = (trace: readonly Operation[], label: string): void => 
   }
 };
 describe("ordinary texture GPU arena", () => {
+  it("advances large compressed uploads through bounded commands across frames", () => {
+    const { arena, gl } = setup();
+    const data = new Uint8Array(2048 * 2048);
+    const resource = ensureOrdinaryTextureGpuResource(arena, "large-compressed", 1);
+    queueOrdinaryTextureUpload(arena, resource, {
+      source: {
+        data,
+        format: 0x9278,
+        height: 2048,
+        kind: "compressed-texture",
+        levels: [{ data, height: 2048, width: 2048 }],
+        srgbFormat: 0x9279,
+        width: 2048,
+      },
+      texture,
+    });
+
+    processOrdinaryTextureUploads(arena, 1, 1);
+    expect(resource.uploaded).toBe(false);
+    expect(gl.uploadByteLengths).toEqual([524288, 524288, 524288, 524288]);
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(2 * 1024 * 1024);
+
+    processOrdinaryTextureUploads(arena, 2, 1);
+    expect(resource.uploaded).toBe(true);
+    expect(gl.uploadByteLengths).toHaveLength(8);
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(0);
+    expect(ordinaryTextureGpuOutcome(arena, 0)?.kind).toBe("completed");
+  });
+
+  it("releases a partially allocated compressed texture when its upload is discarded", () => {
+    const { arena, gl } = setup();
+    const data = new Uint8Array(2048 * 2048);
+    const resource = ensureOrdinaryTextureGpuResource(arena, "discard-compressed", 1);
+    const upload = {
+      source: {
+        data,
+        format: 0x9278,
+        height: 2048,
+        kind: "compressed-texture" as const,
+        levels: [{ data, height: 2048, width: 2048 }],
+        srgbFormat: 0x9279,
+        width: 2048,
+      },
+      texture,
+    };
+    queueOrdinaryTextureUpload(arena, resource, upload);
+    processOrdinaryTextureUploads(arena, 1, 1);
+    expect(resource.texture).toBeDefined();
+
+    discardOrdinaryTexturePendingUpload(arena, resource);
+    expect(resource.texture).toBeUndefined();
+    expect(ordinaryTextureGpuPendingUploadBytes(arena)).toBe(0);
+    expect(gl.deleted).toHaveLength(1);
+    expect(queueOrdinaryTextureUpload(arena, resource, upload)).toBe(true);
+  });
+
   it("accounts compressed mip storage and upload bytes without RGBA inflation", () => {
     const levels = [
       { data: new Uint8Array(16), height: 4, width: 4 },

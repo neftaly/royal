@@ -13,13 +13,21 @@ import {
   releaseOwnedTexture,
   type TextureHandleArena,
 } from "../webgl/texture-handle-arena";
-import { uploadTexture, usesMipmaps } from "../webgl/texture-upload";
+import {
+  beginCompressedTextureUpload,
+  compressedTextureUploadChunk,
+  uploadCompressedTextureChunk,
+  uploadTexture,
+  usesMipmaps,
+  type CompressedTextureUploadCursor,
+} from "../webgl/texture-upload";
 import { captureFailure, type CapturedFailure } from "../captured-failure";
 
 // The byte governor remains the authoritative frame budget. Keep a separate
 // command-count ceiling so a collection of tiny images cannot monopolize a
 // frame, while allowing one material's common texture set to settle together.
-const MAX_UPLOADS_PER_FRAME = 4;
+const MAX_UPLOAD_COMMANDS_PER_FRAME = 4;
+const MAX_COMPRESSED_UPLOAD_COMMAND_BYTES = 512 * 1024;
 
 declare const authority: unique symbol;
 
@@ -34,7 +42,7 @@ interface OrdinaryTextureGpuResourceBase {
 
 export type OrdinaryTextureGpuResource = OrdinaryTextureGpuResourceBase & (
   | { readonly texture: WebGLTexture; readonly uploaded: true }
-  | { readonly texture: undefined; readonly uploaded: false }
+  | { readonly texture: WebGLTexture | undefined; readonly uploaded: false }
 );
 
 export interface OrdinaryTexturePendingUpload {
@@ -91,10 +99,12 @@ type MutableResource = {
   gpuBytes: number;
   readonly key: string;
   lease?: OrdinaryTextureGpuLease;
-  pending?: Readonly<{
+  pending?: {
     cost: ReturnType<typeof ordinaryTextureUploadCost>;
+    cursor?: CompressedTextureUploadCursor;
+    remainingUploadBytes: number;
     upload: OrdinaryTexturePendingUpload;
-  }>;
+  };
   texture?: WebGLTexture;
   uploaded: boolean;
 };
@@ -111,7 +121,7 @@ type State = {
   quarantinedBytes: number;
   readonly resources: Map<string, MutableResource>;
   uploadFrame: number;
-  uploadsThisFrame: number;
+  uploadCommandsThisFrame: number;
   wakeRequested: boolean;
 };
 
@@ -134,7 +144,7 @@ export const createOrdinaryTextureGpuArena = (
   quarantinedBytes: 0,
   resources: new Map(),
   uploadFrame: -1,
-  uploadsThisFrame: 0,
+  uploadCommandsThisFrame: 0,
   wakeRequested: false,
 } as unknown as OrdinaryTextureGpuArena);
 
@@ -209,7 +219,7 @@ const takePendingUpload = (
   const pending = resource.pending;
   if (pending === undefined) return undefined;
   delete resource.pending;
-  state.pendingUploadBytes -= pending.cost.uploadBytes;
+  state.pendingUploadBytes -= pending.remainingUploadBytes;
   return pending.upload;
 };
 
@@ -223,6 +233,26 @@ export const discardOrdinaryTexturePendingUpload = (
   if (pending === undefined) return;
   clearQueuedResource(state, mutable);
   publishOutcome(state, "discarded", mutable, pending);
+  const texture = mutable.texture;
+  if (texture === undefined || mutable.uploaded) return;
+  const lease = mutable.lease;
+  delete mutable.texture;
+  delete mutable.lease;
+  const gpuBytes = mutable.gpuBytes;
+  mutable.gpuBytes = 0;
+  try {
+    releaseOwnedTexture(state.handles, texture);
+  } catch (error) {
+    state.quarantinedBytes += gpuBytes;
+    if (lease !== undefined) state.orphanedLeases.push(lease);
+    throw error;
+  }
+  try {
+    lease?.release();
+  } catch (error) {
+    if (lease !== undefined) state.orphanedLeases.push(lease);
+    throw error;
+  }
 };
 
 export const queueOrdinaryTextureUpload = (
@@ -239,7 +269,7 @@ export const queueOrdinaryTextureUpload = (
     || (mutable.texture !== undefined && !ownsTexture(state.handles, mutable.texture))
   ) return false;
   const cost = ordinaryTextureUploadCost(upload);
-  mutable.pending = { cost, upload };
+  mutable.pending = { cost, remainingUploadBytes: cost.uploadBytes, upload };
   state.pendingUploadBytes += cost.uploadBytes;
   state.pendingUploads.push(mutable);
   state.wakeRequested = true;
@@ -249,9 +279,9 @@ export const queueOrdinaryTextureUpload = (
 const canUpload = (state: State, frame: number, budget: number): boolean => {
   if (state.uploadFrame !== frame) {
     state.uploadFrame = frame;
-    state.uploadsThisFrame = 0;
+    state.uploadCommandsThisFrame = 0;
   }
-  return state.uploadsThisFrame < budget;
+  return state.uploadCommandsThisFrame < budget;
 };
 
 export const processOrdinaryTextureUploads = (
@@ -264,7 +294,7 @@ export const processOrdinaryTextureUploads = (
   let remainingAttempts = state.pendingUploads.length - state.pendingUploadHead;
   while (
     state.pendingUploadHead < state.pendingUploads.length
-    && canUpload(state, frame, MAX_UPLOADS_PER_FRAME)
+    && canUpload(state, frame, MAX_UPLOAD_COMMANDS_PER_FRAME)
     && remainingAttempts > 0
   ) {
     remainingAttempts -= 1;
@@ -291,7 +321,20 @@ export const processOrdinaryTextureUploads = (
     }
 
     const { cost, upload } = pending;
-    const admissionResult = admission?.reserve(cost);
+    const compressed = isDecodedCompressedTexture(upload.source);
+    const chunk = compressed
+      ? compressedTextureUploadChunk(
+          upload.source,
+          usesMipmaps(upload.texture.sampler?.minFilter),
+          pending.cursor,
+          MAX_COMPRESSED_UPLOAD_COMMAND_BYTES,
+        )
+      : undefined;
+    const commandCost = {
+      persistentGpuBytes: resource.texture === undefined ? cost.persistentGpuBytes : 0,
+      uploadBytes: chunk?.bytes ?? cost.uploadBytes,
+    };
+    const admissionResult = admission?.reserve(commandCost);
     if (admissionResult !== undefined && "reason" in admissionResult) {
       state.pendingUploadHead += 1;
       if (
@@ -304,7 +347,7 @@ export const processOrdinaryTextureUploads = (
           resource,
           upload,
           admissionResult.reason === "upload-cost-exceeds-limit"
-            ? cost.uploadBytes
+            ? commandCost.uploadBytes
             : cost.persistentGpuBytes,
           admissionResult.limit,
           admissionResult.reason === "upload-cost-exceeds-limit" ? "upload" : "persistent GPU",
@@ -317,10 +360,27 @@ export const processOrdinaryTextureUploads = (
       continue;
     }
     const reservation = admissionResult;
-    let texture: WebGLTexture | undefined;
+    const existingTexture = resource.texture;
+    let texture = existingTexture;
     try {
-      texture = createOwnedTexture(state.handles);
-      uploadTexture(state.gl, texture, upload.source, upload.texture);
+      if (texture === undefined) {
+        texture = createOwnedTexture(state.handles);
+        if (compressed) {
+          beginCompressedTextureUpload(state.gl, texture, upload.source, upload.texture);
+        }
+      }
+      if (chunk === undefined) {
+        uploadTexture(state.gl, texture, upload.source, upload.texture);
+      } else if (isDecodedCompressedTexture(upload.source)) {
+        uploadCompressedTextureChunk(
+          state.gl,
+          texture,
+          upload.texture.colorSpace === "srgb" ? upload.source.srgbFormat : upload.source.format,
+          chunk,
+        );
+      } else {
+        throw new Error("Compressed texture upload chunk lost its source type");
+      }
     } catch (error) {
       if (texture === undefined) {
         reservation?.cancel();
@@ -329,28 +389,59 @@ export const processOrdinaryTextureUploads = (
         // upload budget. A failed deletion retains the durable lease until
         // context loss proves that the driver allocation is gone.
         const failedLease = reservation?.commit();
+        const durableLease = resource.lease;
+        delete resource.lease;
+        delete resource.texture;
+        resource.gpuBytes = 0;
+        delete pending.cursor;
+        state.pendingUploadBytes += cost.uploadBytes - pending.remainingUploadBytes;
+        pending.remainingUploadBytes = cost.uploadBytes;
         try {
           releaseOwnedTexture(state.handles, texture);
         } catch {
           state.quarantinedBytes += cost.persistentGpuBytes;
           if (failedLease !== undefined) state.orphanedLeases.push(failedLease);
+          if (durableLease !== undefined) state.orphanedLeases.push(durableLease);
           throw error;
         }
-        try {
-          failedLease?.release();
-        } catch {
-          if (failedLease !== undefined) state.orphanedLeases.push(failedLease);
+        for (const lease of [failedLease, durableLease]) {
+          try {
+            lease?.release();
+          } catch {
+            if (lease !== undefined) state.orphanedLeases.push(lease);
+          }
         }
       }
       throw error;
     }
-    resource.texture = texture;
-    resource.gpuBytes = cost.persistentGpuBytes;
-    if (reservation !== undefined) resource.lease = reservation.commit();
+    const committedLease = reservation?.commit();
+    if (existingTexture === undefined) {
+      resource.texture = texture;
+      resource.gpuBytes = cost.persistentGpuBytes;
+      if (committedLease !== undefined) resource.lease = committedLease;
+    } else if (committedLease !== undefined) {
+      try {
+        committedLease.release();
+      } catch {
+        state.orphanedLeases.push(committedLease);
+      }
+    }
     state.pendingUploadHead += 1;
+    pending.remainingUploadBytes -= commandCost.uploadBytes;
+    state.pendingUploadBytes -= commandCost.uploadBytes;
+    state.uploadCommandsThisFrame += 1;
+    if (chunk?.next !== undefined) {
+      pending.cursor = chunk.next;
+      // Finish the current allocation before starting another large texture.
+      // This minimizes partial GPU residency and publishes useful images
+      // sooner while the per-frame command ceiling still bounds monopolization.
+      state.pendingUploadHead -= 1;
+      state.wakeRequested = true;
+      remainingAttempts += 1;
+      continue;
+    }
     takePendingUpload(state, resource);
     resource.uploaded = true;
-    state.uploadsThisFrame += 1;
     publishOutcome(state, "completed", resource, upload);
   }
   if (state.pendingUploadHead >= state.pendingUploads.length) {
@@ -362,7 +453,7 @@ export const processOrdinaryTextureUploads = (
   }
   if (
     state.pendingUploadHead < state.pendingUploads.length
-    && !canUpload(state, frame, MAX_UPLOADS_PER_FRAME)
+    && !canUpload(state, frame, MAX_UPLOAD_COMMANDS_PER_FRAME)
   ) state.wakeRequested = true;
 };
 
@@ -546,7 +637,7 @@ export const dropOrdinaryTextureGpuContext = (
   state.pendingUploadBytes = 0;
   state.quarantinedBytes = 0;
   state.uploadFrame = -1;
-  state.uploadsThisFrame = 0;
+  state.uploadCommandsThisFrame = 0;
   state.wakeRequested = false;
   let failure: CapturedFailure | undefined;
   for (const lease of leases) {

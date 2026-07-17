@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture/sources";
 import type { TextureAssetUploadRef } from "../packages/renderer-webgl/src/webgl/materials";
 import {
+  compressedTextureUploadChunk,
   samplerConstant,
   textureUploadInternalFormat,
   uploadTexture,
   usesMipmaps,
+  type CompressedTextureUploadCursor,
 } from "../packages/renderer-webgl/src/webgl/texture-upload";
 
 type Call = { readonly args: readonly unknown[]; readonly name: string };
@@ -75,6 +77,34 @@ const decoded = (): Extract<LoadedTextureSource, { readonly kind: "rgba-texture"
 });
 
 describe("texture upload kernel", () => {
+  it("plans block-aligned compressed row chunks without copying payload bytes", () => {
+    const data = new Uint8Array(3 * 3 * 16);
+    const source = {
+      data,
+      format: 0x9278,
+      height: 9,
+      kind: "compressed-texture" as const,
+      levels: [{ data, height: 9, width: 10 }],
+      srgbFormat: 0x9279,
+      width: 10,
+    };
+    const chunks = [];
+    let cursor: CompressedTextureUploadCursor | undefined;
+    do {
+      const chunk = compressedTextureUploadChunk(source, false, cursor, 60);
+      chunks.push(chunk);
+      cursor = chunk.next;
+    } while (cursor !== undefined);
+
+    expect(chunks.map(({ bytes, height, y }) => ({ bytes, height, y }))).toEqual([
+      { bytes: 48, height: 4, y: 0 },
+      { bytes: 48, height: 4, y: 4 },
+      { bytes: 48, height: 1, y: 8 },
+    ]);
+    expect(chunks[0]?.data.buffer).toBe(data.buffer);
+    expect(chunks[2]?.data.byteOffset).toBe(96);
+  });
+
   it("maps every authored sampler constant and mipmap filter", () => {
     const gl = new FakeGl();
     const values = [
