@@ -191,6 +191,36 @@ describe("IBL texture arena", () => {
     expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
   });
 
+  it("can retain stable irradiance uniforms while refreshing specular bindings", () => {
+    const gl = new FakeGl();
+    const arena = createIblTextureArena(context(gl));
+    const lightSet: SurfaceLightSet = {
+      directionals: [],
+      irradiance: {
+        coefficients: Array.from({ length: 9 }, () => [1, 1, 1]),
+        intensity: 2,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+      lights: [],
+      punctuals: [],
+    };
+
+    bindSurfaceIbl(
+      arena,
+      createProgramArena(context(gl)),
+      {} as WebGLProgram,
+      lightSet,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+
+    expect(uniform4fvValues(gl, "u_iblIrradianceSettings")).toEqual([]);
+    expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([0]);
+    expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([0]);
+  });
+
   it("binds planned specular and BRDF units without aliasing them", () => {
     const gl = new FakeGl();
     const arena = createIblTextureArena(context(gl));

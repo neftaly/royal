@@ -45,6 +45,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
+    bindIrradiance: boolean,
   ): void {
     bindSurfaceIbl(
       this.#textures,
@@ -54,6 +55,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
       specularTextureUnit,
       brdfLutTextureUnit,
       bindings,
+      bindIrradiance,
     );
   }
 

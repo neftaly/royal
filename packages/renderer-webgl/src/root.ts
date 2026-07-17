@@ -753,7 +753,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
       this.#surfaceExecution = new SurfaceExecutionArena({
-        bindIbl: (bindings, program, lightSet, specularTextureUnit, brdfLutTextureUnit) => {
+        bindIbl: (
+          bindings,
+          program,
+          lightSet,
+          specularTextureUnit,
+          brdfLutTextureUnit,
+          bindIrradiance,
+        ) => {
           this.#ibl.bindSurface(
             bindings,
             this.#programArena,
@@ -761,6 +768,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             lightSet,
             specularTextureUnit,
             brdfLutTextureUnit,
+            bindIrradiance,
           );
         },
         bindVirtualTexture: (bindings, key, atlasTextureUnit, pageTableTextureUnit) => (

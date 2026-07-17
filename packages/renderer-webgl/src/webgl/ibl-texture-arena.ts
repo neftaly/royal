@@ -486,9 +486,10 @@ export const bindSurfaceIbl = (
   bindings: WebGlTextureBindingShell = new WebGlTextureBindingShell(
     (arena as unknown as State).gl,
   ),
+  bindIrradiance = true,
 ): void => {
   const state = arena as unknown as State;
-  bindSurfaceIblIrradiance(programArena, program, lightSet);
+  if (bindIrradiance) bindSurfaceIblIrradiance(programArena, program, lightSet);
   const specular = lightSet.specular;
   const useSpecular = specular !== undefined && specularTextureUnit !== undefined;
   if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");

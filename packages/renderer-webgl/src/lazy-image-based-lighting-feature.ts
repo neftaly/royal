@@ -52,6 +52,7 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
+    bindIrradiance: boolean,
   ): void {
     this.#activate();
     if (this.#feature !== undefined) {
@@ -62,10 +63,11 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
         lightSet,
         specularTextureUnit,
         brdfLutTextureUnit,
+        bindIrradiance,
       );
       return;
     }
-    bindSurfaceIblFallback(programs, program, lightSet);
+    bindSurfaceIblFallback(programs, program, lightSet, bindIrradiance);
   }
 
   consumeSurfaceSignals(): SurfaceExecutionSignals {

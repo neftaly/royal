@@ -274,6 +274,7 @@ export interface SurfaceSingleExecution {
   readonly material: Material;
   readonly model: Mat4;
   readonly projection: Mat4;
+  readonly stableLightUniformRevision?: number;
   readonly toneMapping: SurfaceToneMappingState;
   readonly transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   readonly view: Mat4;
@@ -300,6 +301,7 @@ export interface SurfaceExecutionArenaOptions {
     lightSet: SurfaceLightSet,
     specularTextureUnit: number | undefined,
     brdfLutTextureUnit: number | undefined,
+    bindIrradiance: boolean,
   ) => void;
   readonly bindVirtualTexture: (
     bindings: WebGlTextureBindingShell,
@@ -340,6 +342,7 @@ export class SurfaceExecutionArena {
   readonly #publicationGroups: SurfaceMaterialPublication[] = [];
   #publicationEpoch = 0;
   readonly #programViewRevisions = new WeakMap<WebGLProgram, number>();
+  readonly #stableLightUniformRevisions = new WeakMap<WebGLProgram, number>();
   readonly #prepareIblBrdfLut: SurfaceExecutionArenaOptions["prepareIblBrdfLut"];
   readonly #renderTargets: SurfaceRenderTargetArena;
   readonly #singleGltfModel = identityMat4();
@@ -526,7 +529,16 @@ export class SurfaceExecutionArena {
           this.#bindEmissiveColor(program, surfaceMaterial);
           this.#bindMaterialFactors(program, surfaceMaterial, input.transmissionScreenColorTexture, plan);
           this.#bindToneMapping(program, input.toneMapping);
-          this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+          this.#bindLights(
+            program,
+            surfaceLights,
+            plan,
+            input.projection,
+            input.view,
+            input.viewportSize,
+            input.frame,
+            input.stableLightUniformRevision ?? 0,
+          );
         } else {
           this.#bindUnlitMaterial(program, surfaceMaterial, plan, input.toneMapping);
         }
@@ -556,6 +568,7 @@ export class SurfaceExecutionArena {
           material: batch.material,
           model: multiplyMat4Into(this.#singleGltfModel, batch.rootModels[0]!, batch.localModels[0]!),
           projection: input.projection,
+          stableLightUniformRevision: batch.sceneLightPlanRevision,
           toneMapping: input.toneMapping,
           transmissionScreenColorTexture: input.transmissionScreenColorTexture,
           view: input.view,
@@ -597,7 +610,16 @@ export class SurfaceExecutionArena {
         this.#bindEmissiveColor(program, batch.material);
         this.#bindMaterialFactors(program, batch.material, input.transmissionScreenColorTexture, plan);
         this.#bindToneMapping(program, input.toneMapping);
-        this.#bindLights(program, surfaceLights, plan, input.projection, input.view, input.viewportSize, input.frame);
+        this.#bindLights(
+          program,
+          surfaceLights,
+          plan,
+          input.projection,
+          input.view,
+          input.viewportSize,
+          input.frame,
+          batch.sceneLightPlanRevision,
+        );
       } else if (!loading) {
         this.#bindUnlitMaterial(program, batch.material, plan, input.toneMapping);
       }
@@ -1173,7 +1195,10 @@ export class SurfaceExecutionArena {
     view: Mat4,
     viewportSize: ViewportSize,
     frame: number,
+    stableUniformRevision: number,
   ): void {
+    const bindStableUniforms = stableUniformRevision === 0
+      || this.#stableLightUniformRevisions.get(program) !== stableUniformRevision;
     try {
       this.#bindIbl(
         this.#textureBindings,
@@ -1181,6 +1206,7 @@ export class SurfaceExecutionArena {
         lightSet,
         plan.textureUnits.get("iblSpecularCube"),
         plan.textureUnits.get("iblBrdfLut"),
+        bindStableUniforms,
       );
     } finally {
       this.#captureIblSignals();
@@ -1189,13 +1215,17 @@ export class SurfaceExecutionArena {
     if (lights.length > MAX_SURFACE_LIGHTS) {
       throw new Error(`Royal supports at most ${MAX_SURFACE_LIGHTS} directional lights per pass`);
     }
-    uniform1i(this.#programs, program, "u_surfaceLightCount", lights.length);
-    for (let index = 0; index < lights.length; index += 1) {
-      const light = lights[index]!;
-      const uniforms = DIRECTIONAL_LIGHT_UNIFORMS[index]!;
-      uniformColor(this.#programs, program, uniforms[0], light.color);
-      uniform4f(this.#programs, program, uniforms[1],
-        light.direction[0], light.direction[1], light.direction[2], 0);
+    if (bindStableUniforms) {
+      uniform1i(this.#programs, program, "u_surfaceLightCount", lights.length);
+      for (let index = 0; index < lights.length; index += 1) {
+        const light = lights[index]!;
+        const uniforms = DIRECTIONAL_LIGHT_UNIFORMS[index]!;
+        uniformColor(this.#programs, program, uniforms[0], light.color);
+        uniform4f(this.#programs, program, uniforms[1],
+          light.direction[0], light.direction[1], light.direction[2], 0);
+      }
+      if (stableUniformRevision === 0) this.#stableLightUniformRevisions.delete(program);
+      else this.#stableLightUniformRevisions.set(program, stableUniformRevision);
     }
     if (lightSet.punctuals.length > 0) {
       this.#textureBindings.invalidate();
