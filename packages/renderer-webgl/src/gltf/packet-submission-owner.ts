@@ -122,7 +122,9 @@ export class GltfPacketSubmissionOwner {
   }
 
   beginFrame(planRevision: number): void {
-    this.#frameGeometryIdentityIds.length = 0;
+    // Geometry IDs are frame-local, but the scene's high-water ID range is
+    // stable. Clear semantic entries without discarding the array capacity.
+    this.#frameGeometryIdentityIds.fill(undefined);
     resetGltfPacketSubmissionWorkspaceForFrame(
       this.#batches.workspace,
       planRevision,
