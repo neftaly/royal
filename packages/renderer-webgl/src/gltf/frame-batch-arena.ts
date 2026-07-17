@@ -113,6 +113,7 @@ export class GltfFrameBatchArena {
   readonly #registry: GltfPacketBatchRegistry = createGltfPacketBatchRegistry();
   readonly #groups: GltfPacketBatchSegmentGroups = createGltfPacketBatchSegmentGroups();
   readonly #localModels: Array<MutableMat4 | undefined> = [];
+  readonly #localModelSemanticIds: Array<number | undefined> = [];
   readonly #vertexInputs: VertexInputArena;
   #localModelResourceRevision = -1;
 
@@ -143,6 +144,7 @@ export class GltfFrameBatchArena {
     );
     if (this.#localModelResourceRevision !== localModelResourceRevision) {
       this.#localModels.length = 0;
+      this.#localModelSemanticIds.length = 0;
       this.#localModelResourceRevision = localModelResourceRevision;
     }
     groupPreparedGltfPacketSubmissionSegment(
@@ -214,6 +216,7 @@ export class GltfFrameBatchArena {
   dispose(): void {
     this.#batches.length = 0;
     this.#localModels.length = 0;
+    this.#localModelSemanticIds.length = 0;
     this.#localModelResourceRevision = -1;
     let failure: CapturedFailure | undefined;
     const clear = (action: () => void): void => {
@@ -283,15 +286,17 @@ export class GltfFrameBatchArena {
         batch.geometry = geometry;
         batch.geometryId = geometryId;
       }
-      batch.localModelSignatureDirty ||= batch.localModelSignature.length !== memberCount;
-      batch.rootLayoutDirty ||= batch.rootInstanceViews.length !== memberCount
-        || batch.rootLogicalIndices.length !== memberCount;
-      batch.localModelSignature.length = memberCount;
-      batch.localModels.length = memberCount;
-      batch.rootModels.length = memberCount;
-      batch.rootInstanceViews.length = memberCount;
-      batch.rootLogicalIndices.length = memberCount;
-      batch.rootTransforms.length = memberCount;
+      // These parallel arrays are resized as one owned layout.
+      if (batch.localModels.length !== memberCount) {
+        batch.localModelSignatureDirty = true;
+        batch.rootLayoutDirty = true;
+        batch.localModelSignature.length = memberCount;
+        batch.localModels.length = memberCount;
+        batch.rootModels.length = memberCount;
+        batch.rootInstanceViews.length = memberCount;
+        batch.rootLogicalIndices.length = memberCount;
+        batch.rootTransforms.length = memberCount;
+      }
       if (
         assetLights !== undefined
         || batch.sceneLightPlanRevision !== planRevision
@@ -320,10 +325,14 @@ export class GltfFrameBatchArena {
         const localModelId = workspace.localModelIds[index]!;
         if (localModelId !== previousLocalModelId) {
           previousLocalModelId = localModelId;
-          localModelSemanticId = packetLocalModelSemanticId(
+          const cachedSemanticId = this.#localModelSemanticIds[localModelId];
+          localModelSemanticId = cachedSemanticId ?? packetLocalModelSemanticId(
             this.#prepared.packetTopology.resources,
             localModelId,
           );
+          if (cachedSemanticId === undefined) {
+            this.#localModelSemanticIds[localModelId] = localModelSemanticId;
+          }
           localModel = this.#localModels[localModelId];
           if (localModel === undefined) {
             localModel = identityMat4();
