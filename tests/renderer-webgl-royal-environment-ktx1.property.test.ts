@@ -3,7 +3,7 @@ import {
   parseRoyalEnvironmentKtx1,
   ROYAL_ENVIRONMENT_METADATA_KEY,
   RoyalEnvironmentArtifactError,
-} from "../packages/renderer-webgl/src/gltf/royal-environment-ktx1";
+} from "../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { assertFuzz, assertFuzzEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const KTX1_IDENTIFIER = [

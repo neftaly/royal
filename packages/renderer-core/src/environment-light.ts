@@ -1,15 +1,33 @@
-import { frozenVec3, nonNegativeFiniteNumber, objectWithAllowedFields } from './descriptor-values';
+import {
+  frozenVec3,
+  identityScalar,
+  nonEmptyString,
+  nonNegativeFiniteNumber,
+  objectWithAllowedFields,
+} from './descriptor-values';
 import type { EulerRads } from './primitives';
 
-export type EnvironmentLightPreset = 'studio';
-
-export interface EnvironmentLight {
+interface EnvironmentLightBase {
   readonly kind: 'environment-light';
-  readonly preset: EnvironmentLightPreset;
   /** Linear scene-referred environment radiance scale in cd/m² per preset unit. */
   readonly radianceScaleNits: number;
   readonly rotation: EulerRads;
 }
+
+export interface StudioEnvironmentLight extends EnvironmentLightBase {
+  readonly source: 'studio';
+}
+
+/** Offline-prefiltered Royal environment artifact. Raw HDR images are not accepted at runtime. */
+export interface PrefilteredEnvironmentLight extends EnvironmentLightBase {
+  readonly source: 'royal-prefiltered-v1';
+  /** URL of a Royal prefiltered KTX 1 environment artifact. */
+  readonly src: string;
+  /** Non-empty string or finite number identifying one revision of source bytes. */
+  readonly version?: number | string;
+}
+
+export type EnvironmentLight = StudioEnvironmentLight | PrefilteredEnvironmentLight;
 
 export interface StudioEnvironmentOptions {
   /** Linear scene-referred environment radiance scale in cd/m² per preset unit. @defaultValue `1` */
@@ -21,11 +39,45 @@ export interface StudioEnvironmentOptions {
 const DEFAULT_ENVIRONMENT_ROTATION = frozenVec3([0, 0, 0], 'environment rotation') as EulerRads;
 const STUDIO_ENVIRONMENT_FIELDS = ['radianceScaleNits', 'rotation'] as const;
 
-export const studioEnvironment = (options: StudioEnvironmentOptions = {}): EnvironmentLight => {
+export const studioEnvironment = (options: StudioEnvironmentOptions = {}): StudioEnvironmentLight => {
   objectWithAllowedFields(options, STUDIO_ENVIRONMENT_FIELDS, 'studio environment');
   return Object.freeze({
     kind: 'environment-light',
-    preset: 'studio',
+    source: 'studio',
+    radianceScaleNits: nonNegativeFiniteNumber(
+      options.radianceScaleNits ?? 1,
+      'environment radianceScaleNits',
+    ),
+    rotation: options.rotation === undefined
+      ? DEFAULT_ENVIRONMENT_ROTATION
+      : frozenVec3(options.rotation, 'environment rotation') as EulerRads,
+  });
+};
+
+export interface PrefilteredEnvironmentOptions extends StudioEnvironmentOptions {
+  /** URL of a Royal prefiltered KTX 1 environment artifact. */
+  readonly src: string;
+  /** Preferred source-version override for cache identity. */
+  readonly version?: number | string;
+}
+
+const PREFILTERED_ENVIRONMENT_FIELDS = [
+  'radianceScaleNits', 'rotation', 'src', 'version',
+] as const;
+
+/** Uses an offline-filtered cubemap and spherical harmonics without runtime convolution. */
+export const prefilteredEnvironment = (
+  options: PrefilteredEnvironmentOptions,
+): PrefilteredEnvironmentLight => {
+  objectWithAllowedFields(options, PREFILTERED_ENVIRONMENT_FIELDS, 'prefiltered environment');
+  const version = options.version === undefined
+    ? undefined
+    : identityScalar(options.version, 'prefiltered environment version');
+  return Object.freeze({
+    kind: 'environment-light',
+    source: 'royal-prefiltered-v1',
+    src: nonEmptyString(options.src, 'prefiltered environment source'),
+    ...(version === undefined ? {} : { version }),
     radianceScaleNits: nonNegativeFiniteNumber(
       options.radianceScaleNits ?? 1,
       'environment radianceScaleNits',

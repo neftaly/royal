@@ -203,6 +203,7 @@ describe("renderer-core public API", () => {
     expect(reactSceneApi.defaultImageTextureSampler).toBe(rendererCore.defaultImageTextureSampler);
     expect(reactSceneApi).toHaveProperty("linearRgbaFromSrgb");
     expect(reactSceneApi).toHaveProperty("mesh");
+    expect(reactSceneApi).toHaveProperty("prefilteredEnvironment");
     expect(reactSceneApi).toHaveProperty("scene");
     expect(reactSceneApi).toHaveProperty("solidTexture");
     expect(reactSceneApi).toHaveProperty("textureAsset");
@@ -214,10 +215,11 @@ describe("renderer-core public API", () => {
       reactSceneApi.solidTexture({ color: [1, 0, 0, 1] });
     const asset: import("@royal/react/scene").TextureAssetRef =
       reactSceneApi.textureAsset({ src: "/albedo.png" });
-    const preset: import("@royal/react/scene").EnvironmentLightPreset = "studio";
+    const environment: import("@royal/react/scene").StudioEnvironmentLight =
+      reactSceneApi.studioEnvironment();
     const materialInput: import("@royal/react/scene").MaterialSurfaceOptions = { texture: asset };
     expect([solid.kind, asset.kind]).toEqual(["solid", "asset"]);
-    expect([preset, materialInput.texture]).toEqual(["studio", asset]);
+    expect([environment.source, materialInput.texture]).toEqual(["studio", asset]);
   });
 
   it("keeps internal texture helpers out of the renderer-core barrel", () => {

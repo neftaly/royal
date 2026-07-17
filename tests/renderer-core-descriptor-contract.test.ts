@@ -12,6 +12,7 @@ import {
   perspectiveCamera,
   planeGeometry,
   pointLight,
+  prefilteredEnvironment,
   scene,
   solidTexture,
   spotLight,
@@ -43,7 +44,7 @@ describe("renderer-core descriptor contract", () => {
 
     expect(environment).toEqual({
       kind: "environment-light",
-      preset: "studio",
+      source: "studio",
       radianceScaleNits: 80,
       rotation: [0, Math.PI / 4, 0],
     });
@@ -78,6 +79,25 @@ describe("renderer-core descriptor contract", () => {
       nodes: [],
       clearColor: [0, Number.NaN, 0, 1],
     })).toThrow(/clearColor.*finite/);
+  });
+
+  it("describes offline-prefiltered environment identity explicitly", () => {
+    expect(prefilteredEnvironment({
+      radianceScaleNits: 2,
+      rotation: [0, 1, 0],
+      src: "/environments/warehouse.royal.ktx",
+      version: "sha256:abc",
+    })).toEqual({
+      kind: "environment-light",
+      radianceScaleNits: 2,
+      rotation: [0, 1, 0],
+      source: "royal-prefiltered-v1",
+      src: "/environments/warehouse.royal.ktx",
+      version: "sha256:abc",
+    });
+    expect(() => prefilteredEnvironment({ src: "" })).toThrow(/non-empty/);
+    expect(() => prefilteredEnvironment({ src: "/environment.ktx", version: Number.NaN }))
+      .toThrow(/finite/);
   });
 
   it("preserves picking identity and geometry on every pickable descriptor", () => {

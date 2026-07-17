@@ -1,6 +1,6 @@
 # Royal feature inventory
 
-Date: 2026-07-15
+Date: 2026-07-18
 
 This is a product inventory, not an inventory of internal helper functions.
 The status column distinguishes deliberate Royal behavior from compatibility
@@ -57,7 +57,7 @@ Status meanings:
 | Unlit material | product | Essential for authored artwork and diagnostic parity. Keep. |
 | Wireframe material | product | Useful authoring, inspection, selection, and diagnostic surface. Keep its portable one-device-pixel lines; native WebGL line width is not a cross-device feature. |
 | Directional, point and spot lights | product | Standard compact light set. Keep unless environment-only lighting becomes an explicit product restriction. |
-| Studio environment preset | product | Currently the one scene environment authority. Keep; expand by data, not new environment classes. |
+| Studio and offline-prefiltered scene environments | product | `studioEnvironment` is the zero-network default. `prefilteredEnvironment` accepts Royal's pinned KTX 1 cubemap + SH artifact with source/version identity, lazy transport, cancellation, and governed GPU upload. Raw HDR decoding and convolution stay offline so scene startup and memory costs remain explicit. |
 | Render-object refs and imperative transform updates | product | Important high-frequency React DX. Keep. |
 
 ## Textures and sampling

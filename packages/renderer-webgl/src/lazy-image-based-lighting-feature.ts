@@ -17,6 +17,8 @@ import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/li
 import type { ProgramArena } from "./webgl/program-arena";
 import { bindSurfaceIblFallback } from "./webgl/surface-ibl-uniforms";
 import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
+import type { PrefilteredEnvironmentLight } from "@royal/renderer-core";
+import type { ResolvedPrefilteredEnvironment } from "./environment/prefiltered-environment-owner";
 
 type ImageBasedLightingFeatureModule = typeof import("./image-based-lighting-feature-owner");
 const EMPTY_SIGNALS: SurfaceExecutionSignals = { diagnostics: [], wakeRequested: false };
@@ -35,6 +37,7 @@ const failureMessage = (failure: unknown): string => failure instanceof Error
 export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeature {
   readonly #options: LazyImageBasedLightingFeatureOptions;
   readonly #pendingImages = new Map<string, SurfaceImageBasedLightSpecular>();
+  #prefilteredEnvironment: PrefilteredEnvironmentLight | undefined;
   #failure: unknown;
   #feature: ImageBasedLightingFeature | undefined;
   #loading: Promise<void> | undefined;
@@ -110,6 +113,14 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
     this.#feature?.refreshRetainedSpecular(specular);
   }
 
+  resolvePrefilteredEnvironment(
+    environment: PrefilteredEnvironmentLight | undefined,
+  ): ResolvedPrefilteredEnvironment | undefined {
+    this.#prefilteredEnvironment = environment;
+    if (environment !== undefined) this.#request();
+    return this.#feature?.resolvePrefilteredEnvironment(environment);
+  }
+
   settleSpecularImage(
     specular: SurfaceImageBasedLightSpecular,
     key: string,
@@ -158,6 +169,9 @@ export class LazyImageBasedLightingFeature implements ImageBasedLightingRootFeat
       for (const [pendingKey, specular] of this.#pendingImages) {
         feature.refreshRetainedSpecular(specular);
         this.#pendingImages.delete(pendingKey);
+      }
+      if (this.#prefilteredEnvironment !== undefined) {
+        feature.resolvePrefilteredEnvironment(this.#prefilteredEnvironment);
       }
       this.#feature = feature;
       this.#options.invalidate();

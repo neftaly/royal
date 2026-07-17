@@ -11,10 +11,13 @@ import type {
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
 import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
+import type { PrefilteredEnvironmentLight } from "@royal/renderer-core";
+import type { ResolvedPrefilteredEnvironment } from "./environment/prefiltered-environment-owner";
 
 export type ImageBasedLightingFeatureOptions = {
   readonly contextLifecycle: () => WebGlContextLifecycle;
   readonly diagnostic: (message: string, key: string) => void;
+  readonly disposed: () => boolean;
   readonly gl: WebGL2RenderingContext;
   readonly governor: IblTextureGpuGovernor;
   readonly invalidate: () => void;
@@ -39,6 +42,9 @@ export interface ImageBasedLightingFeature {
   releaseSpecular(key: string): void;
   /** Rebuilds a GPU resource after its source table was synchronously retained. */
   refreshRetainedSpecular(specular: SurfaceImageBasedLightSpecular): void;
+  resolvePrefilteredEnvironment(
+    environment: PrefilteredEnvironmentLight | undefined,
+  ): ResolvedPrefilteredEnvironment | undefined;
   studioSpecular(): StudioEnvironmentSpecularResource | undefined;
   wakeDurablePressure(): boolean;
 }
@@ -46,7 +52,6 @@ export interface ImageBasedLightingFeature {
 export type LazyImageBasedLightingFeatureOptions = ImageBasedLightingFeatureOptions & {
   readonly active: () => boolean;
   readonly decodedTextureSources: DecodedTextureSourceLifetime;
-  readonly disposed: () => boolean;
 };
 
 /** Root-facing feature boundary, including synchronous decoded-source publication. */

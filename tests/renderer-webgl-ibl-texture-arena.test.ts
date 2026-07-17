@@ -7,14 +7,17 @@ import {
   createIblTextureArena,
   dropIblTextureContext,
   ensureGltfIblSpecularTexture,
+  ensurePrefilteredEnvironmentSpecularTexture,
   ensureStudioEnvironmentSpecularTexture,
   iblTextureArenaSnapshot,
   markGltfIblSpecularTextureDirty,
   releaseGltfIblSpecularTexture,
+  releasePrefilteredEnvironmentSpecularTexture,
   releaseIblTextureContextHandles,
   type IblTextureGpuGovernor,
   wakeIblTextureDurablePressure,
 } from "../packages/renderer-webgl/src/webgl/ibl-texture-arena";
+import type { PreparedRoyalEnvironment } from "../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { IBL_BRDF_LUT_BYTES } from "../packages/renderer-webgl/src/webgl/ibl-brdf-lut";
 import { decodeIblBrdfLutRg8 } from "../packages/renderer-webgl/src/webgl/ibl-brdf-lut-data";
 import {
@@ -35,6 +38,7 @@ class FakeGl {
   readonly MAX_TEXTURE_IMAGE_UNITS = 0x8872;
   readonly RGB = 0x1907;
   readonly RGB9_E5 = 0x8c3d;
+  readonly R11F_G11F_B10F = 0x8c3a;
   readonly RG = 0x8227;
   readonly RG8 = 0x822b;
   readonly RGBA = 0x1908;
@@ -59,6 +63,7 @@ class FakeGl {
   readonly UNPACK_SKIP_PIXELS = 0x0cf4;
   readonly UNPACK_SKIP_ROWS = 0x0cf3;
   readonly UNSIGNED_BYTE = 0x1401;
+  readonly UNSIGNED_INT_10F_11F_11F_REV = 0x8c3b;
   readonly calls: Call[] = [];
   readonly deleteFailures = new Set<number>();
   readonly maxTextureImageUnits: number;
@@ -96,6 +101,8 @@ class FakeGl {
       throw new Error("upload failed");
     }
   };
+  texStorage2D = (...args: readonly unknown[]): void => this.#record("texStorage2D", ...args);
+  texSubImage2D = (...args: readonly unknown[]): void => this.#record("texSubImage2D", ...args);
   texParameteri = (...args: readonly unknown[]): void => this.#record("texParameteri", ...args);
   uniform1i = (...args: readonly unknown[]): void => this.#record("uniform1i", ...args);
   uniform4fv = (...args: readonly unknown[]): void => this.#record("uniform4fv", ...args);
@@ -122,6 +129,26 @@ const specular: SurfaceImageBasedLightSpecular = {
 const completeSources = (seed = 1): Map<string, LoadedTextureSource> =>
   new Map(keys.map((key) => [key, source(4, seed)]));
 
+const preparedEnvironment = (): PreparedRoyalEnvironment => {
+  const source = new ArrayBuffer(24);
+  new Uint32Array(source).set([1, 2, 3, 4, 5, 6]);
+  const faces = Array.from({ length: 6 }, (_unused, face) => ({
+    byteLength: 4,
+    byteOffset: face * 4,
+    face: face as 0 | 1 | 2 | 3 | 4 | 5,
+  })) as unknown as PreparedRoyalEnvironment["levels"][number]["faces"];
+  return {
+    levels: [{ faces, imageSize: 4, level: 0, size: 1 }],
+    metadata: {
+      provenance: "test",
+      sh: Array.from({ length: 9 }, () => [0, 0, 0]) as unknown as PreparedRoyalEnvironment["metadata"]["sh"],
+      version: 1,
+    },
+    size: 1,
+    source,
+  };
+};
+
 const recordingGovernor = () => {
   const state = {
     cancels: 0,
@@ -147,6 +174,40 @@ const recordingGovernor = () => {
 };
 
 describe("IBL texture arena", () => {
+  it("uploads and releases the pinned prefiltered environment format under governor accounting", () => {
+    const gl = new FakeGl();
+    const { governor, state } = recordingGovernor();
+    const arena = createIblTextureArena(context(gl), governor);
+    const resource = ensurePrefilteredEnvironmentSpecularTexture(
+      arena,
+      "environment:test",
+      preparedEnvironment(),
+    );
+
+    expect(resource.uploaded).toBe(true);
+    expect(calls(gl, "texStorage2D")[0]?.args).toEqual([
+      gl.TEXTURE_CUBE_MAP, 1, gl.R11F_G11F_B10F, 1, 1,
+    ]);
+    expect(calls(gl, "texSubImage2D")).toHaveLength(6);
+    expect(state.costs).toEqual([
+      { persistentGpuBytes: 0, uploadBytes: 4 },
+      { persistentGpuBytes: 24, uploadBytes: 0 },
+      ...Array.from({ length: 6 }, () => ({ persistentGpuBytes: 0, uploadBytes: 4 })),
+    ]);
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 1,
+      prefilteredSpecularCount: 1,
+      retainedLeaseCount: 1,
+    });
+
+    releasePrefilteredEnvironmentSpecularTexture(arena, "environment:test");
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 0,
+      prefilteredSpecularCount: 0,
+      retainedLeaseCount: 0,
+    });
+  });
+
   it("keeps the offline BRDF integration oracle intact", () => {
     const data = decodeIblBrdfLutRg8();
     let hash = 0x811c9dc5;

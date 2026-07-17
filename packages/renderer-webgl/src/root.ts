@@ -646,6 +646,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => this.#ibl.releaseContextHandles());
       this.#lightResolver = new SurfaceLightResolver({
         ensureGltfSpecular: (specular) => this.#ibl.ensureSpecular(specular),
+        resolvePrefilteredEnvironment: (environment) => (
+          this.#ibl.resolvePrefilteredEnvironment(environment)
+        ),
         studioSpecular: () => this.#ibl.studioSpecular(),
       });
       this.#gltfPacketSubmissions = new GltfPacketSubmissionOwner({

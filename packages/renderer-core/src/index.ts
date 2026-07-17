@@ -108,8 +108,14 @@ export type { PointLightNode, PointLightOptions } from './point-light';
 export { pointLight } from './point-light';
 export type { SpotLightNode, SpotLightOptions } from './spot-light';
 export { spotLight } from './spot-light';
-export type { EnvironmentLight, EnvironmentLightPreset, StudioEnvironmentOptions } from './environment-light';
-export { studioEnvironment } from './environment-light';
+export type {
+  EnvironmentLight,
+  PrefilteredEnvironmentLight,
+  PrefilteredEnvironmentOptions,
+  StudioEnvironmentLight,
+  StudioEnvironmentOptions,
+} from './environment-light';
+export { prefilteredEnvironment, studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type {

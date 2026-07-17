@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { studioEnvironment } from "@royal/renderer-core";
+import { prefilteredEnvironment, studioEnvironment } from "@royal/renderer-core";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
   hasGltfAssetLights,
@@ -46,6 +46,7 @@ describe("SurfaceLightResolver", () => {
     const studioSpecular = vi.fn(() => studioResource);
     const resolver = new SurfaceLightResolver({
       ensureGltfSpecular: vi.fn(),
+      resolvePrefilteredEnvironment: vi.fn(),
       studioSpecular,
     });
     const compiled = surfaceLightSet([directional]);
@@ -77,6 +78,43 @@ describe("SurfaceLightResolver", () => {
     expect(resolver.resolveScene(environment, compiled.lights, compiled)).not.toBe(resolved);
   });
 
+  it("uses a prefiltered artifact only after its diffuse data is available", () => {
+    const environment = prefilteredEnvironment({ src: "/warehouse.royal.ktx" });
+    const coefficients = [
+      [0.5, 0.25, 0.125], [0, 0, 0], [0, 0, 0],
+      [0, 0, 0], [0, 0, 0], [0, 0, 0],
+      [0, 0, 0], [0, 0, 0], [0, 0, 0],
+    ] as const;
+    let ready = false;
+    const resolvePrefilteredEnvironment = vi.fn(() => ready ? {
+      coefficients,
+      specular: { key: "environment:warehouse", mipCount: 9, texture },
+    } : undefined);
+    const studioSpecular = vi.fn();
+    const compiled = surfaceLightSet([directional]);
+    const resolver = new SurfaceLightResolver({
+      ensureGltfSpecular: vi.fn(),
+      resolvePrefilteredEnvironment,
+      studioSpecular,
+    });
+
+    expect(resolver.resolveScene(environment, compiled.lights, compiled)).toBe(compiled);
+    ready = true;
+    expect(resolver.resolveScene(environment, compiled.lights, compiled)).toMatchObject({
+      irradiance: { coefficients, intensity: 1 },
+      specular: {
+        encoding: "linear",
+        key: "environment:warehouse",
+        mipCount: 9,
+        texture,
+      },
+    });
+    expect(studioSpecular).not.toHaveBeenCalled();
+
+    resolver.resolveScene(undefined, compiled.lights, compiled);
+    expect(resolvePrefilteredEnvironment).toHaveBeenLastCalledWith(undefined);
+  });
+
   it("resolves transformed glTF lights and exposes specular only after upload", () => {
     let uploaded = false;
     const ensureGltfSpecular = vi.fn(() => uploaded
@@ -97,6 +135,7 @@ describe("SurfaceLightResolver", () => {
         });
     const resolver = new SurfaceLightResolver({
       ensureGltfSpecular,
+      resolvePrefilteredEnvironment: vi.fn(),
       studioSpecular: vi.fn(),
     });
     const source = state();
@@ -126,6 +165,7 @@ describe("SurfaceLightResolver", () => {
   it("owns stable glTF light-scope identity and resets it on clear", () => {
     const resolver = new SurfaceLightResolver({
       ensureGltfSpecular: vi.fn(),
+      resolvePrefilteredEnvironment: vi.fn(),
       studioSpecular: vi.fn(),
     });
 

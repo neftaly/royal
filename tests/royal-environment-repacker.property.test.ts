@@ -4,7 +4,7 @@ import {
   repackRoyalEnvironmentKtx1,
   RoyalEnvironmentRepackError,
 } from "../scripts/repack-royal-environment";
-import { parseRoyalEnvironmentKtx1 } from "../packages/renderer-webgl/src/gltf/royal-environment-ktx1";
+import { parseRoyalEnvironmentKtx1 } from "../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { assertFuzz, forEachFuzzCase, SeededRandom } from "./fuzz";
 
 const IDENTIFIER = new Uint8Array([

@@ -24,6 +24,11 @@ import {
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./webgl/lights";
 import type { ProgramArena } from "./webgl/program-arena";
 import type { WebGlTextureBindingShell } from "./webgl/texture-binding-shell";
+import type { PrefilteredEnvironmentLight } from "@royal/renderer-core";
+import {
+  PrefilteredEnvironmentOwner,
+  type ResolvedPrefilteredEnvironment,
+} from "./environment/prefiltered-environment-owner";
 
 /** Owns IBL GPU resources, surface binding, and lifecycle over retained sources. */
 export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature {
@@ -32,11 +37,14 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
     this.#diagnostics.push({ key: `ibl-governor:${message}`, message });
   };
   readonly #runtime: IblRuntimeOwner;
+  readonly #prefilteredEnvironment: PrefilteredEnvironmentOwner;
+  readonly #optionsDisposed: () => boolean;
   readonly #signals: { diagnostics: readonly SurfaceExecutionDiagnostic[]; wakeRequested: boolean };
   readonly #textures: IblTextureArena;
   readonly #uniformBindings = new WeakSet<WebGLProgram>();
 
   constructor(options: ImageBasedLightingFeatureOptions) {
+    this.#optionsDisposed = options.disposed;
     this.#textures = createIblTextureArena(options.gl, options.governor);
     this.#signals = { diagnostics: this.#diagnostics, wakeRequested: false };
     this.#runtime = new IblRuntimeOwner({
@@ -44,6 +52,11 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
       diagnostics: options.diagnostic,
       invalidate: options.invalidate,
       resourceArena: options.resourceArena,
+      textures: this.#textures,
+    });
+    this.#prefilteredEnvironment = new PrefilteredEnvironmentOwner({
+      diagnostic: options.diagnostic,
+      invalidate: options.invalidate,
       textures: this.#textures,
     });
   }
@@ -91,6 +104,7 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
   }
 
   releaseContextHandles(): void {
+    if (this.#optionsDisposed()) this.#prefilteredEnvironment.release();
     releaseIblTextureContextHandles(this.#textures);
   }
 
@@ -100,6 +114,16 @@ export class ImageBasedLightingFeatureOwner implements ImageBasedLightingFeature
 
   refreshRetainedSpecular(specular: SurfaceImageBasedLightSpecular): void {
     this.#runtime.refreshRetainedSpecular(specular);
+  }
+
+  resolvePrefilteredEnvironment(
+    environment: PrefilteredEnvironmentLight | undefined,
+  ): ResolvedPrefilteredEnvironment | undefined {
+    try {
+      return this.#prefilteredEnvironment.resolve(environment);
+    } finally {
+      this.#runtime.consumeSignals();
+    }
   }
 
   studioSpecular(): StudioEnvironmentSpecularResource | undefined {

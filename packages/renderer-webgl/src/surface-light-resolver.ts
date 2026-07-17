@@ -1,4 +1,5 @@
-import type { EnvironmentLight } from "@royal/renderer-core";
+import type { EnvironmentLight, PrefilteredEnvironmentLight } from "@royal/renderer-core";
+import type { ResolvedPrefilteredEnvironment } from "./environment/prefiltered-environment-owner";
 import type { PreparedGltfState } from "./gltf/prepared-runtime";
 import {
   identityMat4,
@@ -30,6 +31,9 @@ export interface SurfaceLightResolverOptions {
   readonly ensureGltfSpecular: (
     specular: SurfaceImageBasedLightSpecular,
   ) => IblSpecularTextureResource;
+  readonly resolvePrefilteredEnvironment: (
+    environment: PrefilteredEnvironmentLight | undefined,
+  ) => ResolvedPrefilteredEnvironment | undefined;
   readonly studioSpecular: () => StudioEnvironmentSpecularResource | undefined;
 }
 
@@ -64,7 +68,7 @@ export class SurfaceLightResolver {
     readonly compiledLights: readonly SurfaceLight[];
     readonly environment: EnvironmentLight;
     readonly resolved: SurfaceLightSet;
-    readonly specular: StudioEnvironmentSpecularResource | undefined;
+    readonly specular: StudioEnvironmentSpecularResource | ResolvedPrefilteredEnvironment["specular"];
   } | undefined;
 
   constructor(options: SurfaceLightResolverOptions) {
@@ -76,8 +80,19 @@ export class SurfaceLightResolver {
     compiledLights: readonly SurfaceLight[],
     compiledLightSet: SurfaceLightSet | undefined,
   ): SurfaceLightSet | undefined {
+    const prefiltered = this.#options.resolvePrefilteredEnvironment(
+      environment?.source === "royal-prefiltered-v1" ? environment : undefined,
+    );
     if (environment === undefined) return compiledLightSet;
-    const specular = this.#options.studioSpecular();
+    if (environment.source === "royal-prefiltered-v1" && prefiltered === undefined) {
+      return compiledLightSet;
+    }
+    const specular = environment.source === "studio"
+      ? this.#options.studioSpecular()
+      : prefiltered?.specular;
+    const coefficients = environment.source === "studio"
+      ? STUDIO_ENVIRONMENT_IRRADIANCE
+      : prefiltered!.coefficients;
     const cached = this.#sceneCache;
     if (
       cached !== undefined
@@ -95,7 +110,7 @@ export class SurfaceLightResolver {
     const resolved = surfaceLightSet(
       compiledLights,
       {
-        coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
+        coefficients,
         intensity: environment.radianceScaleNits,
         worldToIbl,
       },

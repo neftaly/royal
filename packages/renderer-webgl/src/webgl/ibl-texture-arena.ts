@@ -8,6 +8,7 @@ import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import { IBL_BRDF_LUT_BYTES, uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
 import { prepareTextureUpload } from "./imperative-state";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./lights";
+import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 import {
   uniform1i,
   uniform4f,
@@ -57,6 +58,7 @@ export interface IblTextureArenaSnapshot {
   readonly brdfLut: boolean;
   readonly gltfSpecularCount: number;
   readonly ownedTextureCount: number;
+  readonly prefilteredSpecularCount: number;
   readonly retainedLeaseCount: number;
   readonly studioSpecular: boolean;
 }
@@ -82,6 +84,7 @@ type State = {
   readonly maxTextureImageUnits: number;
   readonly gltfSpecular: Map<string, MutableIblSpecularTextureResource>;
   readonly ownedTextures: Set<WebGLTexture>;
+  readonly prefilteredSpecular: Map<string, MutableIblSpecularTextureResource>;
   readonly governor?: IblTextureGpuGovernor;
   readonly retiredGltfSpecular: Map<string, WebGLTexture>;
   readonly textureLeases: Map<WebGLTexture, IblTextureGpuLease>;
@@ -116,11 +119,14 @@ export const createIblTextureArena = (
   gltfSpecular: new Map(),
   maxTextureImageUnits: maxTextureImageUnits(gl),
   ...(governor === undefined ? {} : { governor }),
-  ownedTextures: new Set(),
+    ownedTextures: new Set(),
+    prefilteredSpecular: new Map(),
   retiredGltfSpecular: new Map(),
   textureLeases: new Map(),
   terminalDenials: new Map(),
 } as unknown as IblTextureArena);
+
+export type PrefilteredEnvironmentSpecularResource = IblSpecularTextureResource;
 
 const NOOP_LEASE: IblTextureGpuLease = { release: () => undefined };
 const NOOP_RESERVATION: IblTextureGpuReservation = {
@@ -433,6 +439,160 @@ export const releaseGltfIblSpecularTexture = (arena: IblTextureArena, key: strin
   }
 };
 
+const prefilteredEnvironmentIdentity = (key: string): string =>
+  `Prefiltered environment cubemap ${key}`;
+
+const preparedEnvironmentLayoutMatches = (
+  resource: MutableIblSpecularTextureResource,
+  prepared: PreparedRoyalEnvironment,
+): boolean => resource.imageSize === prepared.size
+  && resource.mipCount === prepared.levels.length;
+
+const uploadPrefilteredEnvironmentIfReady = (
+  state: State,
+  key: string,
+  prepared: PreparedRoyalEnvironment,
+  resource: MutableIblSpecularTextureResource,
+): void => {
+  if (resource.uploaded) return;
+  let persistentGpuBytes = 0;
+  let maximumUploadBytes = 0;
+  for (const level of prepared.levels) {
+    for (const face of level.faces) {
+      persistentGpuBytes += face.byteLength;
+      maximumUploadBytes = Math.max(maximumUploadBytes, face.byteLength);
+    }
+  }
+  const identity = prefilteredEnvironmentIdentity(key);
+  const uploadPreflight = reserve(state, identity, 0, maximumUploadBytes);
+  if (uploadPreflight === undefined) return;
+  uploadPreflight.cancel();
+
+  let texture = resource.texture;
+  if (texture === undefined) {
+    const allocation = reserve(state, identity, persistentGpuBytes, 0);
+    if (allocation === undefined) return;
+    try {
+      texture = createTexture(state);
+      resource.texture = texture;
+      prepareTextureUpload(state.gl);
+      state.gl.bindTexture(state.gl.TEXTURE_CUBE_MAP, texture);
+      state.gl.texStorage2D(
+        state.gl.TEXTURE_CUBE_MAP,
+        prepared.levels.length,
+        state.gl.R11F_G11F_B10F,
+        prepared.size,
+        prepared.size,
+      );
+    } catch (error) {
+      allocation.cancel();
+      if (texture !== undefined) rollbackTexture(state, texture);
+      delete resource.texture;
+      throw error;
+    }
+    state.textureLeases.set(texture, allocation.commit());
+  } else {
+    prepareTextureUpload(state.gl);
+    state.gl.bindTexture(state.gl.TEXTURE_CUBE_MAP, texture);
+  }
+
+  let uploadOrdinal = 0;
+  for (const level of prepared.levels) {
+    for (const face of level.faces) {
+      if (uploadOrdinal < resource.uploadCursor) {
+        uploadOrdinal += 1;
+        continue;
+      }
+      const reservation = reserve(state, identity, 0, face.byteLength);
+      if (reservation === undefined) return;
+      try {
+        state.gl.texSubImage2D(
+          state.gl.TEXTURE_CUBE_MAP_POSITIVE_X + face.face,
+          level.level,
+          0,
+          0,
+          level.size,
+          level.size,
+          state.gl.RGB,
+          state.gl.UNSIGNED_INT_10F_11F_11F_REV,
+          new Uint32Array(prepared.source, face.byteOffset, face.byteLength / 4),
+        );
+      } catch (error) {
+        reservation.commit().release();
+        throw error;
+      }
+      reservation.commit().release();
+      uploadOrdinal += 1;
+      resource.uploadCursor = uploadOrdinal;
+    }
+  }
+  state.gl.texParameteri(state.gl.TEXTURE_CUBE_MAP, state.gl.TEXTURE_MAG_FILTER, state.gl.LINEAR);
+  state.gl.texParameteri(
+    state.gl.TEXTURE_CUBE_MAP,
+    state.gl.TEXTURE_MIN_FILTER,
+    state.gl.LINEAR_MIPMAP_LINEAR,
+  );
+  state.gl.texParameteri(state.gl.TEXTURE_CUBE_MAP, state.gl.TEXTURE_WRAP_S, state.gl.CLAMP_TO_EDGE);
+  state.gl.texParameteri(state.gl.TEXTURE_CUBE_MAP, state.gl.TEXTURE_WRAP_T, state.gl.CLAMP_TO_EDGE);
+  state.gl.texParameteri(state.gl.TEXTURE_CUBE_MAP, state.gl.TEXTURE_WRAP_R, state.gl.CLAMP_TO_EDGE);
+  state.gl.texParameteri(
+    state.gl.TEXTURE_CUBE_MAP,
+    state.gl.TEXTURE_MAX_LEVEL,
+    prepared.levels.length - 1,
+  );
+  resource.uploaded = true;
+};
+
+export const ensurePrefilteredEnvironmentSpecularTexture = (
+  arena: IblTextureArena,
+  key: string,
+  prepared: PreparedRoyalEnvironment,
+): PrefilteredEnvironmentSpecularResource => {
+  const state = arena as unknown as State;
+  let resource = state.prefilteredSpecular.get(key);
+  if (resource === undefined) {
+    resource = {
+      encoding: "linear",
+      imageLoadKeys: [],
+      imageSize: prepared.size,
+      key,
+      mipCount: prepared.levels.length,
+      uploadCursor: 0,
+      uploaded: false,
+    };
+    state.prefilteredSpecular.set(key, resource);
+  } else if (!preparedEnvironmentLayoutMatches(resource, prepared)) {
+    resource.unsupportedMessage = `Prefiltered environment ${key} changed its image layout.`;
+    resource.uploaded = false;
+    return resource as PrefilteredEnvironmentSpecularResource;
+  }
+  delete resource.unsupportedMessage;
+  delete resource.uploadError;
+  if (resource.uploaded) return resource as PrefilteredEnvironmentSpecularResource;
+  const terminalMessage = state.terminalDenials.get(prefilteredEnvironmentIdentity(key));
+  if (terminalMessage !== undefined) {
+    resource.unsupportedMessage = terminalMessage;
+    return resource as PrefilteredEnvironmentSpecularResource;
+  }
+  try {
+    uploadPrefilteredEnvironmentIfReady(state, key, prepared, resource);
+  } catch (uploadError) {
+    resource.uploadError = uploadError;
+  }
+  return resource as PrefilteredEnvironmentSpecularResource;
+};
+
+export const releasePrefilteredEnvironmentSpecularTexture = (
+  arena: IblTextureArena,
+  key: string,
+): void => {
+  const state = arena as unknown as State;
+  clearTerminalDenial(state, prefilteredEnvironmentIdentity(key));
+  const resource = state.prefilteredSpecular.get(key);
+  state.prefilteredSpecular.delete(key);
+  if (resource?.texture !== undefined) deleteTexture(state, resource.texture);
+};
+
 export const markGltfIblSpecularTextureDirty = (arena: IblTextureArena, key: string): void => {
   const resource = (arena as unknown as State).gltfSpecular.get(key);
   if (resource !== undefined) {
@@ -533,6 +693,7 @@ const clearPublished = (state: State, clearPolicyState: boolean): void => {
   delete state.brdfLut;
   delete state.studio;
   state.gltfSpecular.clear();
+  state.prefilteredSpecular.clear();
   state.retiredGltfSpecular.clear();
   if (clearPolicyState) {
     state.terminalDenials.clear();
@@ -608,6 +769,7 @@ export const iblTextureArenaSnapshot = (arena: IblTextureArena): IblTextureArena
     brdfLut: state.brdfLut !== undefined,
     gltfSpecularCount: state.gltfSpecular.size,
     ownedTextureCount: state.ownedTextures.size,
+    prefilteredSpecularCount: state.prefilteredSpecular.size,
     retainedLeaseCount: state.textureLeases.size,
     studioSpecular: state.studio?.key === STUDIO_ENVIRONMENT_SPECULAR_KEY,
   };
