@@ -89,6 +89,7 @@ type UniformSlots = Record<string, UniformSlot | undefined>;
 
 type State = {
   activeProgram?: WebGLProgram;
+  activeUniforms?: UniformSlots;
   readonly gl: WebGL2RenderingContext;
   linkFrame: number;
   linksThisFrame: number;
@@ -149,7 +150,10 @@ const deleteProgram = (state: State, program: WebGLProgram): void => {
   if (!state.ownedPrograms.has(program)) return;
   state.gl.deleteProgram(program);
   state.ownedPrograms.delete(program);
-  if (state.activeProgram === program) delete state.activeProgram;
+  if (state.activeProgram === program) {
+    delete state.activeProgram;
+    delete state.activeUniforms;
+  }
   state.uniforms.delete(program);
 };
 
@@ -347,10 +351,13 @@ const uniformSlot = (
   program: WebGLProgram,
   name: string,
 ): UniformSlot => {
-  let uniforms = state.uniforms.get(program);
+  let uniforms = state.activeProgram === program
+    ? state.activeUniforms
+    : state.uniforms.get(program);
   if (uniforms === undefined) {
     uniforms = Object.create(null) as UniformSlots;
     state.uniforms.set(program, uniforms);
+    if (state.activeProgram === program) state.activeUniforms = uniforms;
   }
   let slot = uniforms[name];
   if (slot !== undefined) return slot;
@@ -414,6 +421,12 @@ export const useProgram = (arena: ProgramArena, program: WebGLProgram): void => 
   if (state.activeProgram === program) return;
   state.gl.useProgram(program);
   state.activeProgram = program;
+  let uniforms = state.uniforms.get(program);
+  if (uniforms === undefined) {
+    uniforms = Object.create(null) as UniformSlots;
+    state.uniforms.set(program, uniforms);
+  }
+  state.activeUniforms = uniforms;
 };
 
 export const uniformMatrix = (arena: ProgramArena, program: WebGLProgram, name: string, value: Mat4): void => {
@@ -529,6 +542,7 @@ export const uniform2f = (
 
 const clearState = (state: State): void => {
   delete state.activeProgram;
+  delete state.activeUniforms;
   delete state.parallel;
   state.requests.clear();
   state.pendingRequests.length = 0;
