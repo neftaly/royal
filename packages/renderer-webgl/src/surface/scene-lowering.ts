@@ -28,6 +28,11 @@ import type { TextureSourceRef } from "../texture/asset-owner";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
+  instances?: Readonly<{
+    count: number;
+    key: string;
+    localModels: Float32Array;
+  }>;
   material: CanonicalSurfaceMaterial;
   model: Mat4;
   modelHandedness: 1 | -1;
@@ -65,6 +70,13 @@ const modelHandedness = (model: Mat4): 1 | -1 => {
     + model[8] * (model[1] * model[6] - model[2] * model[5]);
   return determinant < 0 ? -1 : 1;
 };
+
+const mat4At = (values: Float32Array, offset: number): Mat4 => [
+  values[offset]!, values[offset + 1]!, values[offset + 2]!, values[offset + 3]!,
+  values[offset + 4]!, values[offset + 5]!, values[offset + 6]!, values[offset + 7]!,
+  values[offset + 8]!, values[offset + 9]!, values[offset + 10]!, values[offset + 11]!,
+  values[offset + 12]!, values[offset + 13]!, values[offset + 14]!, values[offset + 15]!,
+];
 
 const staticCamera = (scene: RenderRoot): CanonicalCamera => {
   if (scene.camera.kind === "perspective-camera" || scene.camera.kind === "orthographic-camera") {
@@ -121,23 +133,48 @@ export const prepareCanonicalSurfaceScene = (
       if (prepared === undefined) continue;
       textureAssets.push(...prepared.textureAssets);
       for (const primitive of prepared.primitives) {
-        const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
+        const instanceBatch = primitive.instanceBatch;
+        const model = instanceBatch === undefined
+          ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
+          : rootModel;
         const surface: CanonicalDrawSurface = {
           geometry: primitive.geometry,
+          ...(instanceBatch === undefined ? {} : {
+            instances: {
+              count: instanceBatch.localModels.length / 16,
+              key: instanceBatch.key,
+              localModels: instanceBatch.localModels,
+            },
+          }),
           material: resolveCanonicalMaterialTexture(primitive.material, decodedTexture),
           model,
-          modelHandedness: modelHandedness(model),
+          modelHandedness: instanceBatch === undefined
+            ? modelHandedness(model)
+            : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1,
           node,
         };
         if (proxyGeometry === undefined) {
-          const pickableSurface = {
-            ...surface,
-            inverseModel: inverseMat4(model),
-            modelHandedness: surface.modelHandedness,
-            pickingGeometry: primitive.geometry,
-          };
-          surfaces.push(pickableSurface);
-          pickSurfaces.push(pickableSurface);
+          if (instanceBatch === undefined) {
+            pickSurfaces.push({
+              inverseModel: inverseMat4(model),
+              modelHandedness: surface.modelHandedness,
+              node,
+              pickingGeometry: primitive.geometry,
+            });
+          } else {
+            const localModels = instanceBatch.localModels;
+            for (let offset = 0; offset < localModels.length; offset += 16) {
+              const localModel = mat4At(localModels, offset);
+              const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
+              pickSurfaces.push({
+                inverseModel: inverseMat4(instanceModel),
+                modelHandedness: surface.modelHandedness,
+                node,
+                pickingGeometry: primitive.geometry,
+              });
+            }
+          }
+          surfaces.push(surface);
         } else {
           surfaces.push(surface);
         }

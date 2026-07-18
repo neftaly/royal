@@ -5,6 +5,7 @@ import {
 } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import {
   glbFromDocument,
+  staticInstancedTriangleGlb,
   staticTriangleDocument,
   staticTriangleGlb,
   staticTriangleGltf,
@@ -96,7 +97,7 @@ describe("static glTF preparation core", () => {
     }];
     expect(prepareStaticGlb(staticTriangleGlb(standard), "standard").primitives[0]!.material)
       .toEqual({
-        baseColor: [0.1, 0.2, 0.3, 1],
+        baseColor: [0.1, 0.2, 0.3, 0.4],
         kind: "standard",
         metallicFactor: 0.25,
         requiresTextureCoordinates: false,
@@ -113,6 +114,26 @@ describe("static glTF preparation core", () => {
         metallicFactor: 1,
         requiresTextureCoordinates: false,
         roughnessFactor: 1,
+      });
+  });
+
+  it("preserves alpha-mask and double-sided raster intent", () => {
+    const document = staticTriangleDocument();
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials[0] = {
+      alphaCutoff: 0.25,
+      alphaMode: "MASK",
+      doubleSided: true,
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [1, 0.5, 0.25, 0.4] },
+    };
+    expect(prepareStaticGlb(staticTriangleGlb(document), "masked").primitives[0]!.material)
+      .toEqual({
+        alphaCutoff: 0.25,
+        baseColor: [1, 0.5, 0.25, 0.4],
+        doubleSided: true,
+        kind: "unlit",
+        requiresTextureCoordinates: false,
       });
   });
 
@@ -202,6 +223,25 @@ describe("static glTF preparation core", () => {
       kind: "embedded-asset",
       mimeType: "image/avif",
     });
+  });
+
+  it("lowers EXT_mesh_gpu_instancing accessors into one compact draw batch", async () => {
+    const prepared = await prepareStaticGltfSource(
+      staticInstancedTriangleGlb(),
+      "instances-v1",
+      "instances.glb",
+      "/models/instances.glb",
+      async () => new Uint8Array(),
+    );
+    expect(prepared.primitives).toHaveLength(1);
+    expect(prepared.primitives[0]!.instanceBatch).toMatchObject({
+      handedness: 1,
+      key: "instances-v1:node:1:instances:0",
+    });
+    const models = prepared.primitives[0]!.instanceBatch!.localModels;
+    expect(models.length).toBe(32);
+    expect([models[12], models[13], models[14], models[28], models[29], models[30]])
+      .toEqual([11, 2, 0, -9, 2, 0]);
   });
 
   it("borrows validated normal and primary-UV streams into the canonical ABI", () => {

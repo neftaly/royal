@@ -12,9 +12,14 @@ import type {
 } from "../texture/asset-owner";
 import type { DecodedDracoPrimitive } from "./draco";
 import { parseGlb } from "./glb";
+import {
+  prepareStaticInstanceBatches,
+  type StaticInstanceBatch,
+} from "./instance-transforms";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
+  instanceBatch?: StaticInstanceBatch & Readonly<{ key: string }>;
   localModel: Mat4;
   material: CanonicalSurfaceMaterial;
 }>;
@@ -147,12 +152,15 @@ const accessorLayout = (
   expectedType: string,
   componentBytes: number,
   componentCount: number,
+  allowNormalized = false,
 ): AccessorLayout & { accessor: JsonObject } => {
   const path = `accessors[${accessorIndex}]`;
   const accessor = object(context.accessors[accessorIndex], context.label, path);
   if (accessor.type !== expectedType) fail(context.label, `${path}.type`, `must be ${expectedType}`);
   if (accessor.sparse !== undefined) fail(context.label, `${path}.sparse`, "is not in the static profile yet");
-  if (accessor.normalized === true) fail(context.label, `${path}.normalized`, "is invalid for this accessor");
+  if (accessor.normalized === true && !allowNormalized) {
+    fail(context.label, `${path}.normalized`, "is invalid for this accessor");
+  }
   const count = nonNegativeInteger(accessor.count, context.label, `${path}.count`);
   const viewIndex = index(
     accessor.bufferView, context.bufferViews, context.label, `${path}.bufferView`,
@@ -197,6 +205,68 @@ const accessorLayout = (
     ),
     stride,
   };
+};
+
+type InstanceVectorStream = Readonly<{
+  count: number;
+  values: Float32Array;
+}>;
+
+const readInstanceVectors = (
+  context: AccessorContext,
+  accessorIndex: number,
+  expectedType: "VEC3" | "VEC4",
+  componentCount: 3 | 4,
+  semantic: "ROTATION" | "SCALE" | "TRANSLATION",
+): InstanceVectorStream => {
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  const componentType = integer(accessor.componentType, context.label, `${path}.componentType`);
+  const normalizedInteger = semantic === "ROTATION"
+    && accessor.normalized === true
+    && (componentType === 5120 || componentType === 5122);
+  if (componentType !== 5126 && !normalizedInteger) {
+    fail(
+      context.label,
+      `${path}.componentType`,
+      semantic === "ROTATION"
+        ? "must be FLOAT or normalized BYTE/SHORT"
+        : `must be FLOAT for ${semantic}`,
+    );
+  }
+  if (componentType === 5126 && accessor.normalized === true) {
+    fail(context.label, `${path}.normalized`, "must be omitted for FLOAT");
+  }
+  const componentBytes = componentType === 5120 ? 1 : componentType === 5122 ? 2 : 4;
+  const layout = accessorLayout(
+    context,
+    accessorIndex,
+    expectedType,
+    componentBytes,
+    componentCount,
+    true,
+  );
+  if (layout.count === 0) fail(context.label, `${path}.count`, "must be positive");
+  const values = new Float32Array(layout.count * componentCount);
+  const divisor = componentType === 5120 ? 127 : componentType === 5122 ? 32_767 : 1;
+  for (let item = 0; item < layout.count; item += 1) {
+    const source = layout.absoluteOffset + item * layout.stride;
+    const target = item * componentCount;
+    for (let component = 0; component < componentCount; component += 1) {
+      const componentOffset = source + component * componentBytes;
+      const raw = componentType === 5120
+        ? layout.dataView.getInt8(componentOffset)
+        : componentType === 5122
+          ? layout.dataView.getInt16(componentOffset, true)
+          : layout.dataView.getFloat32(componentOffset, true);
+      const value = normalizedInteger ? Math.max(raw / divisor, -1) : raw;
+      if (!Number.isFinite(value)) {
+        fail(context.label, path, `${semantic} ${item} is not finite`);
+      }
+      values[target + component] = value;
+    }
+  }
+  return { count: layout.count, values };
 };
 
 const readPositions = (
@@ -550,12 +620,19 @@ const prepareMaterial = (
     label,
     `${materialPath}.extensions.KHR_materials_unlit`,
   );
-  if (material.alphaMode !== undefined && material.alphaMode !== "OPAQUE") {
-    fail(label, `${materialPath}.alphaMode`, "must be OPAQUE in the static profile");
+  if (
+    material.alphaMode !== undefined
+    && material.alphaMode !== "OPAQUE"
+    && material.alphaMode !== "MASK"
+  ) {
+    fail(label, `${materialPath}.alphaMode`, "must be OPAQUE or MASK");
   }
-  if (material.doubleSided === true) {
-    fail(label, `${materialPath}.doubleSided`, "is not in the static profile yet");
+  if (material.doubleSided !== undefined && typeof material.doubleSided !== "boolean") {
+    fail(label, `${materialPath}.doubleSided`, "must be boolean");
   }
+  const alphaCutoff = material.alphaMode === "MASK"
+    ? factor01(material.alphaCutoff, 0.5, label, `${materialPath}.alphaCutoff`)
+    : undefined;
   const pbr = material.pbrMetallicRoughness === undefined
     ? {}
     : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
@@ -583,14 +660,20 @@ const prepareMaterial = (
       fail(label, `${materialPath}.pbrMetallicRoughness.baseColorFactor[${channel}]`, "must be within 0..1");
     }
   }
-  const baseColor = [color[0]!, color[1]!, color[2]!, 1] as const;
+  const baseColor = [color[0]!, color[1]!, color[2]!, color[3]!] as const;
+  const presentation = {
+    ...(alphaCutoff === undefined ? {} : { alphaCutoff }),
+    ...(material.doubleSided === true ? { doubleSided: true as const } : {}),
+  };
   if (unlit) return {
+    ...presentation,
     baseColor,
     ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
     kind: "unlit",
     requiresTextureCoordinates: baseColorAsset !== undefined,
   };
   return {
+    ...presentation,
     baseColor,
     ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
     kind: "standard",
@@ -632,6 +715,7 @@ const prepareStaticDocument = (
     if (
       extension !== "KHR_materials_unlit"
       && extension !== "EXT_texture_avif"
+      && extension !== "EXT_mesh_gpu_instancing"
       && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
       && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
     ) {
@@ -789,6 +873,72 @@ const prepareStaticDocument = (
     return prepared;
   };
 
+  const prepareNodeInstances = (
+    node: JsonObject,
+    nodeModel: Mat4,
+    path: string,
+  ): readonly StaticInstanceBatch[] | undefined => {
+    if (node.extensions === undefined) return undefined;
+    const extensions = object(node.extensions, label, `${path}.extensions`);
+    if (extensions.EXT_mesh_gpu_instancing === undefined) return undefined;
+    const extensionPath = `${path}.extensions.EXT_mesh_gpu_instancing`;
+    const extension = object(extensions.EXT_mesh_gpu_instancing, label, extensionPath);
+    const attributes = object(extension.attributes, label, `${extensionPath}.attributes`);
+    for (const semantic of Object.keys(attributes)) {
+      if (semantic !== "TRANSLATION" && semantic !== "ROTATION" && semantic !== "SCALE") {
+        fail(label, `${extensionPath}.attributes.${semantic}`, "is unsupported");
+      }
+    }
+    const translation = attributes.TRANSLATION === undefined
+      ? undefined
+      : readInstanceVectors(
+        context,
+        index(attributes.TRANSLATION, accessors, label, `${extensionPath}.attributes.TRANSLATION`),
+        "VEC3",
+        3,
+        "TRANSLATION",
+      );
+    const rotation = attributes.ROTATION === undefined
+      ? undefined
+      : readInstanceVectors(
+        context,
+        index(attributes.ROTATION, accessors, label, `${extensionPath}.attributes.ROTATION`),
+        "VEC4",
+        4,
+        "ROTATION",
+      );
+    const scale = attributes.SCALE === undefined
+      ? undefined
+      : readInstanceVectors(
+        context,
+        index(attributes.SCALE, accessors, label, `${extensionPath}.attributes.SCALE`),
+        "VEC3",
+        3,
+        "SCALE",
+      );
+    const count = translation?.count ?? rotation?.count ?? scale?.count
+      ?? fail(label, `${extensionPath}.attributes`, "must not be empty");
+    if (
+      (translation !== undefined && translation.count !== count)
+      || (rotation !== undefined && rotation.count !== count)
+      || (scale !== undefined && scale.count !== count)
+    ) fail(label, `${extensionPath}.attributes`, "accessor counts must match");
+    try {
+      return prepareStaticInstanceBatches(nodeModel, {
+        count,
+        ...(rotation === undefined ? {} : { rotations: rotation.values }),
+        ...(scale === undefined ? {} : { scales: scale.values }),
+        ...(translation === undefined ? {} : { translations: translation.values }),
+      });
+    } catch (error) {
+      return fail(
+        label,
+        extensionPath,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  };
+
   const sceneIndex = document.scene === undefined ? 0 : index(document.scene, scenes, label, "scene");
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
@@ -802,10 +952,24 @@ const prepareStaticDocument = (
     if (node.skin !== undefined) fail(label, `${path}.skin`, "is not supported yet");
     const localModel = nodeLocalMatrix(node, label, path);
     const worldModel = multiplyMat4Into(identityMat4(), parentModel, localModel);
+    const instanceBatches = prepareNodeInstances(node, worldModel, path);
     if (node.mesh !== undefined) {
       const meshIndex = index(node.mesh, meshes, label, `${path}.mesh`);
       for (const primitive of prepareMesh(meshIndex)) {
-        primitives.push({ ...primitive, localModel: worldModel });
+        if (instanceBatches === undefined) {
+          primitives.push({ ...primitive, localModel: worldModel });
+          continue;
+        }
+        for (let batch = 0; batch < instanceBatches.length; batch += 1) {
+          primitives.push({
+            ...primitive,
+            instanceBatch: {
+              ...instanceBatches[batch]!,
+              key: `${contentKey}:node:${nodeIndex}:instances:${batch}`,
+            },
+            localModel: worldModel,
+          });
+        }
       }
     }
     const children = optionalArray(node.children, label, `${path}.children`);

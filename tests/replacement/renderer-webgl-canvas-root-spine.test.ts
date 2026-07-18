@@ -18,6 +18,7 @@ import {
   type CanvasRootPlatform,
 } from "../../packages/renderer-webgl/src/runtime/canvas-root";
 import {
+  staticInstancedTriangleGlb,
   staticTriangleDocument,
   staticTriangleGlb,
   staticTexturedTriangleGlb,
@@ -29,6 +30,7 @@ type FakeGl = WebGL2RenderingContext & {
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
+  readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
@@ -121,6 +123,7 @@ const fakeGl = (): FakeGl => {
     disable: vi.fn(),
     disableVertexAttribArray: vi.fn(),
     drawElements: vi.fn(),
+    drawElementsInstanced: vi.fn(),
     enable: vi.fn(),
     enableVertexAttribArray: vi.fn(),
     frontFace: vi.fn(),
@@ -145,6 +148,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: vi.fn(),
     useProgram: vi.fn(),
     vertexAttribPointer: vi.fn(),
+    vertexAttribDivisor: vi.fn(),
     vertexAttrib3f: vi.fn(),
     viewport: vi.fn(),
   };
@@ -499,6 +503,30 @@ describe("clear-only canvas root", () => {
       node,
       pickingId: "triangle",
     });
+  });
+
+  it("renders glTF extension instances as one shared GPU draw", async () => {
+    const readGltf = vi.fn(async () => staticInstancedTriangleGlb());
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const node = gltf({ src: "/instances.glb", version: "v1" });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledWith(
+      canvas.gl.TRIANGLES,
+      3,
+      canvas.gl.UNSIGNED_SHORT,
+      0,
+      2,
+    );
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
   });
 
   it("streams external glTF color images through the ordinary texture path", async () => {

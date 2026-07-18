@@ -30,12 +30,26 @@ type GpuGeometry = Readonly<{
 
 type GpuSurface = Readonly<{
   geometry: GpuGeometry;
+  instanceCount: number;
   sampler: WebGLSampler | null;
   surface: CanonicalDrawSurface;
   texture: WebGLTexture | null;
+  vertexArray: WebGLVertexArrayObject;
+}>;
+
+type GpuInstanceData = Readonly<{
+  buffer: WebGLBuffer;
+  count: number;
+  key: string;
+}>;
+
+type GpuInstanceVertexArray = Readonly<{
+  key: string;
+  vertexArray: WebGLVertexArrayObject;
 }>;
 
 type MutableOpaqueDrawIntent = {
+  cullBackFaces: boolean;
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
@@ -46,15 +60,16 @@ type MutableOpaqueDrawIntent = {
 };
 
 type UnlitProgram = Readonly<{
+  alphaCutoff: WebGLUniformLocation | null;
   color: WebGLUniformLocation;
   kind: "unlit";
   program: WebGLProgram;
   texture: WebGLUniformLocation | null;
-  textured: boolean;
   viewProjectionModel: WebGLUniformLocation;
 }>;
 
 type StandardProgram = Readonly<{
+  alphaMasked: boolean;
   baseColor: WebGLUniformLocation;
   cameraWorldPosition: WebGLUniformLocation;
   directionalLightColors: WebGLUniformLocation;
@@ -67,12 +82,14 @@ type StandardProgram = Readonly<{
   program: WebGLProgram;
   presentation: WebGLUniformLocation;
   texture: WebGLUniformLocation | null;
-  textured: boolean;
   viewProjection: WebGLUniformLocation;
 }>;
 
 const UNLIT_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
+#ifdef INSTANCED
+layout(location = 3) in mat4 instanceModel;
+#endif
 #ifdef TEXTURED
 layout(location = 2) in vec2 textureCoordinate0;
 out vec2 surfaceTextureCoordinate0;
@@ -82,13 +99,20 @@ void main() {
 #ifdef TEXTURED
   surfaceTextureCoordinate0 = textureCoordinate0;
 #endif
-  gl_Position = viewProjectionModel * vec4(position, 1.0);
+  vec4 localPosition = vec4(position, 1.0);
+#ifdef INSTANCED
+  localPosition = instanceModel * localPosition;
+#endif
+  gl_Position = viewProjectionModel * localPosition;
 }
 `;
 
 const UNLIT_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 uniform vec4 linearColor;
+#ifdef ALPHA_MASK
+uniform float alphaCutoff;
+#endif
 #ifdef TEXTURED
 in vec2 surfaceTextureCoordinate0;
 uniform sampler2D baseColorTexture;
@@ -105,6 +129,9 @@ void main() {
 #ifdef TEXTURED
   color *= texture(baseColorTexture, surfaceTextureCoordinate0);
 #endif
+#ifdef ALPHA_MASK
+  if (color.a < alphaCutoff) discard;
+#endif
   outputColor = vec4(linearToSrgb(color.rgb), 1.0);
 }
 `;
@@ -112,6 +139,12 @@ void main() {
 const STANDARD_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
+#ifdef INSTANCED
+layout(location = 3) in mat4 instanceModel;
+layout(location = 7) in vec3 instanceNormal0;
+layout(location = 8) in vec3 instanceNormal1;
+layout(location = 9) in vec3 instanceNormal2;
+#endif
 #ifdef TEXTURED
 layout(location = 2) in vec2 textureCoordinate0;
 out vec2 surfaceTextureCoordinate0;
@@ -125,9 +158,18 @@ void main() {
 #ifdef TEXTURED
   surfaceTextureCoordinate0 = textureCoordinate0;
 #endif
-  vec4 world = model * vec4(position, 1.0);
+  vec4 localPosition = vec4(position, 1.0);
+#ifdef INSTANCED
+  localPosition = instanceModel * localPosition;
+#endif
+  vec4 world = model * localPosition;
   worldPosition = world.xyz;
+#ifdef INSTANCED
+  mat3 instanceNormal = mat3(instanceNormal0, instanceNormal1, instanceNormal2);
+  worldNormal = mat3(normalTransform) * instanceNormal * normal;
+#else
   worldNormal = mat3(normalTransform) * normal;
+#endif
   gl_Position = viewProjection * world;
 }
 `;
@@ -197,6 +239,9 @@ void main() {
   vec4 surfaceBaseColor = baseColor;
 #ifdef TEXTURED
   surfaceBaseColor *= texture(baseColorTexture, surfaceTextureCoordinate0);
+#endif
+#ifdef ALPHA_MASK
+  if (surfaceBaseColor.a < materialFactors.z) discard;
 #endif
   vec3 normal = worldNormal;
   if (dot(normal, normal) <= 0.00000001) {
@@ -287,9 +332,15 @@ const createProgram = (
   return program;
 };
 
-const shaderVariant = (source: string, textured: boolean): string => textured
-  ? source.replace("\n", "\n#define TEXTURED\n")
-  : source;
+const shaderVariant = (
+  source: string,
+  textured: boolean,
+  instanced: boolean,
+  alphaMasked: boolean,
+): string => source.replace(
+  "\n",
+  `\n${textured ? "#define TEXTURED\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}`,
+);
 
 const uniform = (
   gl: WebGL2RenderingContext,
@@ -307,18 +358,20 @@ const uniform = (
 const createUnlitProgram = (
   gl: WebGL2RenderingContext,
   textured: boolean,
+  instanced: boolean,
+  alphaMasked: boolean,
 ): UnlitProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(UNLIT_VERTEX_SHADER, textured),
-    shaderVariant(UNLIT_FRAGMENT_SHADER, textured),
+    shaderVariant(UNLIT_VERTEX_SHADER, textured, instanced, alphaMasked),
+    shaderVariant(UNLIT_FRAGMENT_SHADER, textured, instanced, alphaMasked),
   );
   return {
+    alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
     color: uniform(gl, program, "linearColor"),
     kind: "unlit",
     program,
     texture: textured ? uniform(gl, program, "baseColorTexture") : null,
-    textured,
     viewProjectionModel: uniform(gl, program, "viewProjectionModel"),
   };
 };
@@ -326,13 +379,16 @@ const createUnlitProgram = (
 const createStandardProgram = (
   gl: WebGL2RenderingContext,
   textured: boolean,
+  instanced: boolean,
+  alphaMasked: boolean,
 ): StandardProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(STANDARD_VERTEX_SHADER, textured),
-    shaderVariant(STANDARD_FRAGMENT_SHADER, textured),
+    shaderVariant(STANDARD_VERTEX_SHADER, textured, instanced, alphaMasked),
+    shaderVariant(STANDARD_FRAGMENT_SHADER, textured, instanced, alphaMasked),
   );
   return {
+    alphaMasked,
     baseColor: uniform(gl, program, "baseColor"),
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
     directionalLightColors: uniform(gl, program, "directionalLightColors"),
@@ -345,7 +401,6 @@ const createStandardProgram = (
     presentation: uniform(gl, program, "presentation"),
     program,
     texture: textured ? uniform(gl, program, "baseColorTexture") : null,
-    textured,
     viewProjection: uniform(gl, program, "viewProjection"),
   };
 };
@@ -368,14 +423,13 @@ export class SurfaceGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   #geometryResources: readonly GpuGeometry[] = [];
   #gpuSurfaces: readonly GpuSurface[] = [];
+  #instanceResources: readonly GpuInstanceData[] = [];
+  #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #normalTransform: MutableMat4 = identityMat4();
+  readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
   #scene: CanonicalSurfaceScene | null = null;
-  #solidStandardProgram: StandardProgram | null = null;
-  #solidUnlitProgram: UnlitProgram | null = null;
   readonly #textureGpu: TextureGpuOwner;
-  #texturedStandardProgram: StandardProgram | null = null;
-  #texturedUnlitProgram: UnlitProgram | null = null;
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
 
   constructor(gl: WebGL2RenderingContext) {
@@ -394,11 +448,10 @@ export class SurfaceGpuOwner {
   invalidate(): void {
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
+    this.#instanceResources = [];
+    this.#instanceVertexArrays = [];
     this.#textureGpu.invalidate();
-    this.#solidStandardProgram = null;
-    this.#solidUnlitProgram = null;
-    this.#texturedStandardProgram = null;
-    this.#texturedUnlitProgram = null;
+    this.#programs.clear();
     this.#drawIntent = null;
     this.#dirty = this.#scene !== null;
   }
@@ -431,14 +484,17 @@ export class SurfaceGpuOwner {
       const first = this.#programFor(
         firstSurface.surface.material.kind,
         firstSurface.texture !== null,
+        firstSurface.instanceCount > 0,
+        firstSurface.surface.material.alphaCutoff !== undefined,
       );
       drawIntent = {
+        cullBackFaces: firstSurface.surface.material.doubleSided !== true,
         framebuffer: null,
         frontFace: this.#gl.CCW,
         program: first.program,
         sampler0: firstSurface.sampler,
         texture0: firstSurface.texture,
-        vertexArray: this.#gpuSurfaces[0]!.geometry.vertexArray,
+        vertexArray: firstSurface.vertexArray,
         viewport: { height: 0, width: 0, x: 0, y: 0 },
       };
       this.#drawIntent = drawIntent;
@@ -451,17 +507,26 @@ export class SurfaceGpuOwner {
     const gl = this.#gl;
     for (const resource of this.#gpuSurfaces) {
       const surface = resource.surface;
-      const program = this.#programFor(surface.material.kind, resource.texture !== null);
+      const program = this.#programFor(
+        surface.material.kind,
+        resource.texture !== null,
+        resource.instanceCount > 0,
+        surface.material.alphaCutoff !== undefined,
+      );
+      drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
       drawIntent.sampler0 = resource.sampler;
       drawIntent.texture0 = resource.texture;
-      drawIntent.vertexArray = resource.geometry.vertexArray;
+      drawIntent.vertexArray = resource.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
       if (program.kind === "unlit") {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
         gl.uniform4fv(program.color, surface.material.baseColor);
+        if (program.alphaCutoff !== null) {
+          gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
+        }
         if (program.texture !== null) gl.uniform1i(program.texture, 0);
       } else {
         const material = surface.material;
@@ -486,16 +551,26 @@ export class SurfaceGpuOwner {
         if (program.texture !== null) gl.uniform1i(program.texture, 0);
         this.#materialFactors[0] = material.metallicFactor;
         this.#materialFactors[1] = material.roughnessFactor;
-        this.#materialFactors[2] = 0;
+        this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
         this.#materialFactors[3] = 0;
         gl.uniform4fv(program.materialFactors, this.#materialFactors);
       }
-      gl.drawElements(
-        gl.TRIANGLES,
-        resource.geometry.indexCount,
-        resource.geometry.indexType,
-        0,
-      );
+      if (resource.instanceCount > 0) {
+        gl.drawElementsInstanced(
+          gl.TRIANGLES,
+          resource.geometry.indexCount,
+          resource.geometry.indexType,
+          0,
+          resource.instanceCount,
+        );
+      } else {
+        gl.drawElements(
+          gl.TRIANGLES,
+          resource.geometry.indexCount,
+          resource.geometry.indexType,
+          0,
+        );
+      }
     }
   }
 
@@ -510,25 +585,20 @@ export class SurfaceGpuOwner {
   }
 
   #deleteResources(): void {
+    for (const resource of this.#instanceVertexArrays) {
+      this.#gl.deleteVertexArray(resource.vertexArray);
+    }
+    for (const resource of this.#instanceResources) this.#gl.deleteBuffer(resource.buffer);
     for (const resource of this.#geometryResources) this.#deleteGeometry(resource);
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
+    this.#instanceResources = [];
+    this.#instanceVertexArrays = [];
   }
 
   #deletePrograms(): void {
-    const programs = [
-      this.#solidStandardProgram,
-      this.#solidUnlitProgram,
-      this.#texturedStandardProgram,
-      this.#texturedUnlitProgram,
-    ];
-    for (const program of programs) {
-      if (program !== null) this.#gl.deleteProgram(program.program);
-    }
-    this.#solidStandardProgram = null;
-    this.#solidUnlitProgram = null;
-    this.#texturedStandardProgram = null;
-    this.#texturedUnlitProgram = null;
+    for (const program of this.#programs.values()) this.#gl.deleteProgram(program.program);
+    this.#programs.clear();
   }
 
   #createGeometry(surface: CanonicalDrawSurface, key: string): GpuGeometry {
@@ -604,24 +674,114 @@ export class SurfaceGpuOwner {
     }
   }
 
+  #createInstanceData(surface: CanonicalDrawSurface): GpuInstanceData {
+    const instances = surface.instances;
+    if (
+      instances === undefined
+      || !Number.isSafeInteger(instances.count)
+      || instances.count < 1
+      || instances.localModels.length !== instances.count * 16
+    ) throw new Error("Royal instanced surface has invalid matrix storage");
+    const values = new Float32Array(instances.count * 28);
+    const model = identityMat4();
+    const normal = identityMat4();
+    for (let instance = 0; instance < instances.count; instance += 1) {
+      const sourceOffset = instance * 16;
+      const targetOffset = instance * 28;
+      for (let component = 0; component < 16; component += 1) {
+        const value = instances.localModels[sourceOffset + component];
+        if (value === undefined || !Number.isFinite(value)) {
+          throw new Error(`Royal instance ${instance} matrix is not finite`);
+        }
+        model[component] = value;
+        values[targetOffset + component] = value;
+      }
+      affineSurfaceNormalTransformInto(normal, model);
+      for (let column = 0; column < 3; column += 1) {
+        const normalSource = column * 4;
+        const normalTarget = targetOffset + 16 + column * 4;
+        values[normalTarget] = normal[normalSource]!;
+        values[normalTarget + 1] = normal[normalSource + 1]!;
+        values[normalTarget + 2] = normal[normalSource + 2]!;
+        values[normalTarget + 3] = 0;
+      }
+    }
+    const buffer = this.#gl.createBuffer();
+    if (buffer === null) throw new Error("Royal could not allocate instance transforms");
+    try {
+      this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, buffer);
+      this.#gl.bufferData(this.#gl.ARRAY_BUFFER, values, this.#gl.STATIC_DRAW);
+      return { buffer, count: instances.count, key: instances.key };
+    } catch (error) {
+      this.#gl.deleteBuffer(buffer);
+      throw error;
+    }
+  }
+
+  #createInstanceVertexArray(
+    geometry: GpuGeometry,
+    instances: GpuInstanceData,
+    key: string,
+  ): GpuInstanceVertexArray {
+    const gl = this.#gl;
+    const vertexArray = gl.createVertexArray();
+    if (vertexArray === null) throw new Error("Royal could not allocate an instanced vertex array");
+    try {
+      gl.bindVertexArray(vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, geometry.vertexBuffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      if (geometry.normalBuffer === null) {
+        gl.disableVertexAttribArray(1);
+        gl.vertexAttrib3f(1, 0, 0, 0);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+      }
+      if (geometry.textureCoordinateBuffer === null) {
+        gl.disableVertexAttribArray(2);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.textureCoordinateBuffer);
+        gl.enableVertexAttribArray(2);
+        gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, instances.buffer);
+      const stride = 28 * 4;
+      for (let column = 0; column < 4; column += 1) {
+        const location = 3 + column;
+        gl.enableVertexAttribArray(location);
+        gl.vertexAttribPointer(location, 4, gl.FLOAT, false, stride, column * 16);
+        gl.vertexAttribDivisor(location, 1);
+      }
+      for (let column = 0; column < 3; column += 1) {
+        const location = 7 + column;
+        gl.enableVertexAttribArray(location);
+        gl.vertexAttribPointer(location, 3, gl.FLOAT, false, stride, 64 + column * 16);
+        gl.vertexAttribDivisor(location, 1);
+      }
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
+      return { key, vertexArray };
+    } catch (error) {
+      gl.deleteVertexArray(vertexArray);
+      throw error;
+    }
+  }
+
   #programFor(
     kind: "standard" | "unlit",
     textured: boolean,
+    instanced: boolean,
+    alphaMasked: boolean,
   ): StandardProgram | UnlitProgram {
-    if (kind === "unlit") {
-      if (textured) {
-        this.#texturedUnlitProgram ??= createUnlitProgram(this.#gl, true);
-        return this.#texturedUnlitProgram;
-      }
-      this.#solidUnlitProgram ??= createUnlitProgram(this.#gl, false);
-      return this.#solidUnlitProgram;
-    }
-    if (textured) {
-      this.#texturedStandardProgram ??= createStandardProgram(this.#gl, true);
-      return this.#texturedStandardProgram;
-    }
-    this.#solidStandardProgram ??= createStandardProgram(this.#gl, false);
-    return this.#solidStandardProgram;
+    const key = `${kind}:${textured ? "texture" : "solid"}:${instanced ? "instances" : "single"}:${alphaMasked ? "mask" : "opaque"}`;
+    const retained = this.#programs.get(key);
+    if (retained !== undefined) return retained;
+    const created = kind === "unlit"
+      ? createUnlitProgram(this.#gl, textured, instanced, alphaMasked)
+      : createStandardProgram(this.#gl, textured, instanced, alphaMasked);
+    this.#programs.set(key, created);
+    return created;
   }
 
   #reconcile(): void {
@@ -645,15 +805,29 @@ export class SurfaceGpuOwner {
     const previousByKey = new Map(
       this.#geometryResources.map((resource) => [resource.key, resource] as const),
     );
+    const previousInstancesByKey = new Map(
+      this.#instanceResources.map((resource) => [resource.key, resource] as const),
+    );
+    const previousInstanceVaosByKey = new Map(
+      this.#instanceVertexArrays.map((resource) => [resource.key, resource] as const),
+    );
     const nextByKey = new Map<string, GpuGeometry>();
+    const nextInstancesByKey = new Map<string, GpuInstanceData>();
+    const nextInstanceVaosByKey = new Map<string, GpuInstanceVertexArray>();
     const nextGeometryResources: GpuGeometry[] = [];
+    const nextInstanceResources: GpuInstanceData[] = [];
+    const nextInstanceVertexArrays: GpuInstanceVertexArray[] = [];
     const pendingSurfaces: Array<Readonly<{
       geometry: GpuGeometry;
+      instanceCount: number;
       surface: CanonicalDrawSurface;
+      vertexArray: WebGLVertexArrayObject;
     }>> = [];
     const textureInputs: Array<CanonicalTextureBinding | undefined> = [];
     const nextSurfaces: GpuSurface[] = [];
-    const created: GpuGeometry[] = [];
+    const createdGeometry: GpuGeometry[] = [];
+    const createdInstances: GpuInstanceData[] = [];
+    const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     let textureBindings: readonly GpuTextureBinding[];
     try {
       for (const surface of scene.surfaces) {
@@ -665,18 +839,48 @@ export class SurfaceGpuOwner {
         let geometry = nextByKey.get(key) ?? previousByKey.get(key);
         if (geometry === undefined) {
           geometry = this.#createGeometry(surface, key);
-          created.push(geometry);
+          createdGeometry.push(geometry);
         }
         if (!nextByKey.has(key)) {
           nextByKey.set(key, geometry);
           nextGeometryResources.push(geometry);
         }
-        pendingSurfaces.push({ geometry, surface });
+        let instanceCount = 0;
+        let vertexArray = geometry.vertexArray;
+        const instances = surface.instances;
+        if (instances !== undefined) {
+          let instanceData = nextInstancesByKey.get(instances.key)
+            ?? previousInstancesByKey.get(instances.key);
+          if (instanceData === undefined) {
+            instanceData = this.#createInstanceData(surface);
+            createdInstances.push(instanceData);
+          }
+          if (!nextInstancesByKey.has(instances.key)) {
+            nextInstancesByKey.set(instances.key, instanceData);
+            nextInstanceResources.push(instanceData);
+          }
+          const vaoKey = JSON.stringify([key, instances.key]);
+          let instanceVao = nextInstanceVaosByKey.get(vaoKey)
+            ?? previousInstanceVaosByKey.get(vaoKey);
+          if (instanceVao === undefined) {
+            instanceVao = this.#createInstanceVertexArray(geometry, instanceData, vaoKey);
+            createdInstanceVaos.push(instanceVao);
+          }
+          if (!nextInstanceVaosByKey.has(vaoKey)) {
+            nextInstanceVaosByKey.set(vaoKey, instanceVao);
+            nextInstanceVertexArrays.push(instanceVao);
+          }
+          instanceCount = instanceData.count;
+          vertexArray = instanceVao.vertexArray;
+        }
+        pendingSurfaces.push({ geometry, instanceCount, surface, vertexArray });
         textureInputs.push(surface.material.baseColorTexture);
       }
       textureBindings = this.#textureGpu.reconcile(textureInputs);
     } catch (error) {
-      for (const resource of created) this.#deleteGeometry(resource);
+      for (const resource of createdInstanceVaos) this.#gl.deleteVertexArray(resource.vertexArray);
+      for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
+      for (const resource of createdGeometry) this.#deleteGeometry(resource);
       throw error;
     }
     for (let index = 0; index < pendingSurfaces.length; index += 1) {
@@ -684,16 +888,28 @@ export class SurfaceGpuOwner {
       const binding = textureBindings[index]!;
       nextSurfaces.push({
         geometry: pending.geometry,
+        instanceCount: pending.instanceCount,
         sampler: binding.sampler,
         surface: pending.surface,
         texture: binding.texture,
+        vertexArray: pending.vertexArray,
       });
+    }
+    for (const resource of this.#instanceVertexArrays) {
+      if (nextInstanceVaosByKey.get(resource.key) !== resource) {
+        this.#gl.deleteVertexArray(resource.vertexArray);
+      }
+    }
+    for (const resource of this.#instanceResources) {
+      if (nextInstancesByKey.get(resource.key) !== resource) this.#gl.deleteBuffer(resource.buffer);
     }
     for (const resource of this.#geometryResources) {
       if (nextByKey.get(resource.key) !== resource) this.#deleteGeometry(resource);
     }
     this.#geometryResources = nextGeometryResources;
     this.#gpuSurfaces = nextSurfaces;
+    this.#instanceResources = nextInstanceResources;
+    this.#instanceVertexArrays = nextInstanceVertexArrays;
     this.#drawIntent = null;
   }
 }

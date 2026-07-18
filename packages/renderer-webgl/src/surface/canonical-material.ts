@@ -29,17 +29,21 @@ export type CanonicalTextureBinding = Readonly<{
 }>;
 
 export type CanonicalUnlitMaterial = Readonly<{
+  alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
+  doubleSided?: true;
   kind: "unlit";
   requiresTextureCoordinates: boolean;
 }>;
 
 export type CanonicalStandardMaterial = Readonly<{
+  alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
+  doubleSided?: true;
   kind: "standard";
   metallicFactor: number;
   requiresTextureCoordinates: boolean;
@@ -94,7 +98,7 @@ export const resolveCanonicalMaterialTexture = (
         material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY[0],
         material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY[1],
         material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY[2],
-        1,
+        material.baseColor[3],
       ],
     };
   }

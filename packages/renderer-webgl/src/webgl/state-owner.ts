@@ -20,6 +20,7 @@ export class WebGlStateOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #state: AppliedOpaqueDrawState = {
     ...createUnknownClearState(),
+    cullBackFaces: null,
     fixedOpaquePipelineKnown: false,
     frontFace: null,
     program: null,
@@ -36,6 +37,7 @@ export class WebGlStateOwner {
   invalidate(): void {
     this.#state.known = false;
     this.#state.fixedOpaquePipelineKnown = false;
+    this.#state.cullBackFaces = null;
     this.#state.frontFace = null;
     this.#state.program = null;
     this.#state.sampler0 = null;
@@ -99,10 +101,16 @@ export class WebGlStateOwner {
         gl.disable(gl.BLEND);
         gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.STENCIL_TEST);
-        gl.enable(gl.CULL_FACE);
-        gl.cullFace(gl.BACK);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
+      }
+      if (transition.cullMode) {
+        if (intent.cullBackFaces) {
+          gl.enable(gl.CULL_FACE);
+          gl.cullFace(gl.BACK);
+        } else {
+          gl.disable(gl.CULL_FACE);
+        }
       }
       if (transition.frontFace) gl.frontFace(intent.frontFace);
       if (transition.writeMasks) {

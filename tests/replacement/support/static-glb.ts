@@ -137,3 +137,34 @@ export const staticTexturedTriangleGlb = (
   if (embeddedImage !== undefined) binary.set(embeddedImage, 68);
   return glbFromDocument(document, binary);
 };
+
+export const staticInstancedTriangleGlb = (): Uint8Array => {
+  const document = staticTriangleDocument();
+  document.extensionsRequired = ["KHR_materials_unlit", "EXT_mesh_gpu_instancing"];
+  document.extensionsUsed = ["KHR_materials_unlit", "EXT_mesh_gpu_instancing"];
+  document.accessors = [
+    ...(document.accessors as unknown[]),
+    { bufferView: 2, componentType: 5126, count: 2, type: "VEC3" },
+    { bufferView: 3, componentType: 5120, count: 2, normalized: true, type: "VEC4" },
+    { bufferView: 4, componentType: 5126, count: 2, type: "VEC3" },
+  ];
+  document.bufferViews = [
+    ...(document.bufferViews as unknown[]),
+    { buffer: 0, byteLength: 24, byteOffset: 44 },
+    { buffer: 0, byteLength: 8, byteOffset: 68 },
+    { buffer: 0, byteLength: 24, byteOffset: 76 },
+  ];
+  document.buffers = [{ byteLength: 100 }];
+  const nodes = document.nodes as Array<Record<string, unknown>>;
+  nodes[1]!.extensions = {
+    EXT_mesh_gpu_instancing: {
+      attributes: { ROTATION: 3, SCALE: 4, TRANSLATION: 2 },
+    },
+  };
+  const binary = new Uint8Array(100);
+  binary.set(staticTriangleBinary());
+  new Float32Array(binary.buffer, 44, 6).set([10, 0, 0, -10, 0, 0]);
+  new Int8Array(binary.buffer, 68, 8).set([0, 0, 0, 127, 0, 0, 0, 127]);
+  new Float32Array(binary.buffer, 76, 6).set([1, 1, 1, 2, 2, 2]);
+  return glbFromDocument(document, binary);
+};

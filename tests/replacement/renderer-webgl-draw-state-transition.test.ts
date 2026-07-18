@@ -12,6 +12,7 @@ const handle = <Value>(): Value => ({}) as Value;
 
 const state = (): AppliedOpaqueDrawState => ({
   ...createUnknownClearState(),
+  cullBackFaces: null,
   fixedOpaquePipelineKnown: false,
   frontFace: null,
   program: null,
@@ -22,6 +23,7 @@ const state = (): AppliedOpaqueDrawState => ({
 });
 
 const intent = (): OpaqueDrawStateIntent => ({
+  cullBackFaces: true,
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
@@ -38,6 +40,7 @@ describe("opaque draw state transition core", () => {
     const transition = createOpaqueDrawStateTransition();
     planOpaqueDrawStateTransition(previous, next, transition);
     expect(transition).toEqual({
+      cullMode: true,
       fixedPipeline: true,
       framebuffer: true,
       frontFace: true,
@@ -61,6 +64,7 @@ describe("opaque draw state transition core", () => {
     const transition = createOpaqueDrawStateTransition();
     planOpaqueDrawStateTransition(previous, next, transition);
     expect(transition).toEqual({
+      cullMode: false,
       fixedPipeline: false,
       framebuffer: false,
       frontFace: false,
@@ -82,6 +86,18 @@ describe("opaque draw state transition core", () => {
     expect(transition.frontFace).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "frontFace")
+      .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("isolates double-sided culling changes from the rest of the pipeline", () => {
+    const previous = state();
+    const first = intent();
+    commitAppliedOpaqueDrawState(previous, first);
+    const transition = createOpaqueDrawStateTransition();
+    planOpaqueDrawStateTransition(previous, { ...first, cullBackFaces: false }, transition);
+    expect(transition.cullMode).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "cullMode")
       .every(([, value]) => !value)).toBe(true);
   });
 

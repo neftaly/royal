@@ -2,6 +2,7 @@ import type { AppliedClearState } from "./clear-state-transition";
 
 export type OpaqueDrawStateIntent = Readonly<{
   framebuffer: WebGLFramebuffer | null;
+  cullBackFaces: boolean;
   frontFace: number;
   program: WebGLProgram;
   sampler0: WebGLSampler | null;
@@ -12,6 +13,7 @@ export type OpaqueDrawStateIntent = Readonly<{
 
 export type OpaqueDrawStateTransition = {
   fixedPipeline: boolean;
+  cullMode: boolean;
   framebuffer: boolean;
   frontFace: boolean;
   program: boolean;
@@ -24,6 +26,7 @@ export type OpaqueDrawStateTransition = {
 
 export type AppliedOpaqueDrawState = AppliedClearState & {
   fixedOpaquePipelineKnown: boolean;
+  cullBackFaces: boolean | null;
   frontFace: number | null;
   program: WebGLProgram | null;
   sampler0: WebGLSampler | null;
@@ -33,6 +36,7 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
 };
 
 export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => ({
+  cullMode: false,
   fixedPipeline: false,
   framebuffer: false,
   frontFace: false,
@@ -58,6 +62,9 @@ export const planOpaqueDrawStateTransition = (
     || previous.viewportWidth !== next.viewport.width
     || previous.viewportHeight !== next.viewport.height;
   output.fixedPipeline = unknown || !previous.fixedOpaquePipelineKnown || previous.scissorEnabled;
+  output.cullMode = unknown
+    || !previous.fixedOpaquePipelineKnown
+    || previous.cullBackFaces !== next.cullBackFaces;
   output.frontFace = unknown || previous.frontFace !== next.frontFace;
   output.writeMasks = unknown || !previous.writeMasksKnown;
   output.program = unknown || previous.program !== next.program;
@@ -75,6 +82,7 @@ export const commitAppliedOpaqueDrawState = (
   intent: OpaqueDrawStateIntent,
 ): void => {
   state.fixedOpaquePipelineKnown = true;
+  state.cullBackFaces = intent.cullBackFaces;
   state.framebuffer = intent.framebuffer;
   state.frontFace = intent.frontFace;
   state.known = true;
