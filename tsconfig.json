@@ -3,6 +3,7 @@
     "target": "ES2022",
     "incremental": true,
     "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
     "strict": true,
     "erasableSyntaxOnly": true,
     "exactOptionalPropertyTypes": true,
