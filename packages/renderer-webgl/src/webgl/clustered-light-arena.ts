@@ -53,12 +53,11 @@ declare const authority: unique symbol;
 export interface ClusteredLightArena { readonly [authority]: "ClusteredLightArena" }
 
 type MutableTextureUnits = { grid: number; indices: number; lights: number };
-type ClusterGridMetadata = Omit<ClusterGrid, "indices" | "offsetsAndCounts">;
 type ClusteredLightResource = {
   gpuBytes: number;
   gpuValid: boolean;
   gpuLease?: ClusteredLightGpuLease;
-  grid?: ClusterGridMetadata;
+  grid?: ClusterGrid;
   readonly gridTexture: WebGLTexture;
   gridTextureHeight: number;
   gridTextureWidth: number;
@@ -615,9 +614,8 @@ export const bindClusteredLights = (
     if (cpuLease !== undefined) state.cpuLease = cpuLease;
     state.cpuBytes = nextCpuBytes;
     state.buildScratch = nextScratch;
-    const { indices: _indices, offsetsAndCounts: _offsetsAndCounts, ...metadata } = builtGrid;
-    grid = metadata;
-    resource.grid = metadata;
+    grid = builtGrid;
+    resource.grid = builtGrid;
     copyMat4ValuesInto(resource.projection, projection);
     copyMat4ValuesInto(resource.view, view);
     resource.viewportWidth = width;
