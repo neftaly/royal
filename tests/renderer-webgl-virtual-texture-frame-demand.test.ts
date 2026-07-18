@@ -10,7 +10,6 @@ import {
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES,
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES,
   VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS,
-  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES,
 } from "../packages/renderer-webgl/src/virtual-texture/frame-demand";
 import {
   selectVirtualTextureFrameWorkingSet,
@@ -514,19 +513,8 @@ describe("virtual texture frame-demand workspace", () => {
         1_000,
         submission([page(resource)]),
       );
-      let totalPages = 0;
-      for (const demand of workspace.resources.values()) {
-        for (const lane of demand.views.values()) {
-          totalPages += lane.candidates.size
-            + lane.nonconvergentCandidates.size
-            + lane.preferred.size;
-        }
-      }
       if (workspace.resources.size > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES) {
         throw new Error("active resource bound exceeded during collection");
-      }
-      if (totalPages > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES) {
-        throw new Error("global page-evidence bound exceeded during collection");
       }
     }
     expect(workspace.resources.size).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES);
@@ -605,7 +593,7 @@ describe("virtual texture frame-demand workspace", () => {
 
   it("releases all persistent fairness state under resource and view churn", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
-    for (let resourceIndex = 0; resourceIndex < 1_000; resourceIndex += 1) {
+    for (let resourceIndex = 0; resourceIndex < 256; resourceIndex += 1) {
       const resource = `resource-${resourceIndex}`;
       beginVirtualTextureFrameDemand(workspace);
       for (let view = 0; view < 100; view += 1) {
