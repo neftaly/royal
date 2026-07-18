@@ -1,3 +1,4 @@
+import type { RenderRoot } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
 import type { ClearFrameIntent, LinearRgba } from "../frame/clear-frame";
@@ -198,6 +199,23 @@ export class CanvasRoot {
     this.#clock.invalidate();
   }
 
+  render(scene: RenderRoot): void {
+    this.#assertLive("render");
+    if (
+      typeof scene !== "object"
+      || scene === null
+      || scene.kind !== "scene"
+      || !Array.isArray(scene.nodes)
+    ) {
+      throw new TypeError("Royal renderer render requires a validated scene descriptor");
+    }
+    if (scene.nodes.length !== 0) {
+      throw new Error("Royal renderer scene nodes are not supported by the clear-only implementation slice");
+    }
+    this.setClearColor(scene.clearColor);
+    this.#clock.invalidate();
+  }
+
   setClearColor(color: LinearRgba): void {
     this.#assertLive("set clear color");
     validateLinearRgba(color);
@@ -328,7 +346,7 @@ export class CanvasRoot {
   }
 }
 
-export const createCanvasRoot = (
+export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options: CanvasRootOptions = {},
 ): CanvasRoot => new CanvasRoot(canvas, options);

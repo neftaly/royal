@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { RenderRoot } from "@royal/renderer-core";
 import { resolveCanvasSize } from "../packages/renderer-webgl/src/frame/canvas-size";
 import {
   CanvasRoot,
@@ -69,6 +70,13 @@ const harness = () => {
   return { callbacks, canvas, listenerErrors, root, scheduledFailures };
 };
 
+const emptyScene = (clearColor: RenderRoot["clearColor"] = [0, 0, 0, 0]): RenderRoot => ({
+  camera: {} as RenderRoot["camera"],
+  clearColor,
+  kind: "scene",
+  nodes: [],
+});
+
 describe("canvas size selection", () => {
   it("preserves aspect while fitting the capability ceiling", () => {
     expect(resolveCanvasSize(
@@ -109,6 +117,19 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.viewport).toHaveBeenCalledTimes(1);
     expect(canvas.gl.clearColor).toHaveBeenCalledTimes(1);
     expect(canvas.gl.clear).toHaveBeenCalledTimes(2);
+  });
+
+  it("lowers an empty semantic scene and rejects unsupported nodes explicitly", () => {
+    const { callbacks, root } = harness();
+    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    root.render(emptyScene([0.2, 0.3, 0.4, 1]));
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(root.getSnapshot().frame).toBe(1);
+    expect(() => root.render({
+      ...emptyScene(),
+      nodes: [{ kind: "not-implemented" }],
+    } as unknown as RenderRoot)).toThrow("scene nodes are not supported");
   });
 
   it("does not allocate a new public snapshot until observable state changes", () => {
