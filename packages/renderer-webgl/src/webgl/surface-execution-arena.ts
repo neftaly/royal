@@ -327,8 +327,10 @@ export interface SurfaceSingleExecution {
   readonly lights: SurfaceLightSet | undefined;
   readonly material: Material;
   readonly model: Mat4;
-  /** Retained composed glTF model identity; omitted for direct geometry. */
+  /** Retained glTF local-model identity; omitted for direct geometry. */
   readonly modelIdentity?: Mat4;
+  /** Retained glTF root-model identity paired with `modelIdentity`. */
+  readonly rootModelIdentity?: Mat4;
   /** Retained glTF normal transform; direct geometry computes into its draw workspace. */
   readonly normalTransform?: Mat4;
   readonly projection: Mat4;
@@ -421,7 +423,11 @@ export class SurfaceExecutionArena {
   readonly #singleNormalTransform = identityMat4();
   readonly #cameraWorldPosition: MutableVec3 = [0, 0, 0];
   readonly #materialTextureCatalogs = new WeakMap<SurfaceMaterial, SurfaceMaterialTextureCatalog>();
-  readonly #programGltfModels = new WeakMap<WebGLProgram, { frame: number; model: Mat4 }>();
+  readonly #programGltfModels = new WeakMap<WebGLProgram, {
+    frame: number;
+    localModel: Mat4;
+    rootModel: Mat4;
+  }>();
   readonly #programMaterials = new WeakMap<WebGLProgram, StableMaterialBinding>();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
@@ -638,9 +644,10 @@ export class SurfaceExecutionArena {
             lights: batch.lights,
             material: batch.material,
             model: singleModel.model,
-            modelIdentity: singleModel.model,
+            modelIdentity: singleModel.local,
             normalTransform: singleModel.normalTransform,
             projection: input.projection,
+            rootModelIdentity: batch.rootModels[0]!,
             stableLightUniformRevision: batch.sceneLightPlanRevision,
             toneMapping: input.toneMapping,
             transmissionScreenColorTexture: input.transmissionScreenColorTexture,
@@ -656,9 +663,10 @@ export class SurfaceExecutionArena {
           execution.lights = batch.lights;
           execution.material = batch.material;
           execution.model = singleModel.model;
-          execution.modelIdentity = singleModel.model;
+          execution.modelIdentity = singleModel.local;
           execution.normalTransform = singleModel.normalTransform;
           execution.projection = input.projection;
+          execution.rootModelIdentity = batch.rootModels[0]!;
           execution.stableLightUniformRevision = batch.sceneLightPlanRevision;
           execution.toneMapping = input.toneMapping;
           execution.transmissionScreenColorTexture = input.transmissionScreenColorTexture;
@@ -809,22 +817,36 @@ export class SurfaceExecutionArena {
     }
 
     const retained = this.#programGltfModels.get(program);
-    if (retained?.frame === input.frame && retained.model === modelIdentity) {
+    const rootModelIdentity = input.rootModelIdentity;
+    if (rootModelIdentity === undefined) {
+      throw new Error("Royal glTF surface execution has no retained root-model identity");
+    }
+    if (
+      retained?.frame === input.frame
+      && retained.localModel === modelIdentity
+      && retained.rootModel === rootModelIdentity
+    ) {
       return false;
     }
 
     if (retained?.frame === input.frame) {
       uniformMatrix(this.#programs, program, "u_model", input.model);
-      retained.model = modelIdentity;
+      retained.localModel = modelIdentity;
+      retained.rootModel = rootModelIdentity;
       return true;
     }
 
     uniformMatrix(this.#programs, program, "u_model", input.model);
     if (retained === undefined) {
-      this.#programGltfModels.set(program, { frame: input.frame, model: modelIdentity });
+      this.#programGltfModels.set(program, {
+        frame: input.frame,
+        localModel: modelIdentity,
+        rootModel: rootModelIdentity,
+      });
     } else {
       retained.frame = input.frame;
-      retained.model = modelIdentity;
+      retained.localModel = modelIdentity;
+      retained.rootModel = rootModelIdentity;
     }
     return true;
   }
