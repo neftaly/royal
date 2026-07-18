@@ -357,15 +357,42 @@ const captureCompositedCanvas = async (session) => {
     (async () => {
       const canvas = document.querySelector('canvas');
       if (!(canvas instanceof HTMLCanvasElement)) return null;
-      const restore = { x: scrollX, y: scrollY };
+      const ancestorScroll = [];
+      for (let ancestor = canvas.parentElement, depth = 0; ancestor !== null; ancestor = ancestor.parentElement, depth += 1) {
+        ancestorScroll.push({ depth, left: ancestor.scrollLeft, top: ancestor.scrollTop });
+      }
+      const restore = { ancestorScroll, x: scrollX, y: scrollY };
       canvas.scrollIntoView({ block: 'start', inline: 'nearest' });
       await globalThis.__royalExamplesRenderNow?.();
       for (let frame = 0; frame < 2; frame += 1) {
         await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       }
       const rect = canvas.getBoundingClientRect();
+      let left = Math.max(0, rect.left);
+      let top = Math.max(0, rect.top);
+      let right = Math.min(innerWidth, rect.right);
+      let bottom = Math.min(innerHeight, rect.bottom);
+      for (let ancestor = canvas.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        const ancestorRect = ancestor.getBoundingClientRect();
+        if (/(auto|clip|hidden|scroll)/.test(style.overflowX)) {
+          left = Math.max(left, ancestorRect.left);
+          right = Math.min(right, ancestorRect.right);
+        }
+        if (/(auto|clip|hidden|scroll)/.test(style.overflowY)) {
+          top = Math.max(top, ancestorRect.top);
+          bottom = Math.min(bottom, ancestorRect.bottom);
+        }
+      }
+      if (right <= left || bottom <= top) return null;
       return {
-        clip: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, scale: 1 },
+        clip: {
+          x: left + scrollX,
+          y: top + scrollY,
+          width: right - left,
+          height: bottom - top,
+          scale: 1,
+        },
         restore,
       };
     })()
@@ -380,7 +407,19 @@ const captureCompositedCanvas = async (session) => {
     });
     return capture.data;
   } finally {
-    await evaluate(session, `scrollTo(${JSON.stringify(captureState.restore.x)}, ${JSON.stringify(captureState.restore.y)})`);
+    await evaluate(session, `
+      (() => {
+        const canvas = document.querySelector('canvas');
+        if (canvas instanceof HTMLCanvasElement) {
+          const positions = ${JSON.stringify(captureState.restore.ancestorScroll)};
+          for (let ancestor = canvas.parentElement, depth = 0; ancestor !== null; ancestor = ancestor.parentElement, depth += 1) {
+            const position = positions[depth];
+            if (position !== undefined) ancestor.scrollTo(position.left, position.top);
+          }
+        }
+        scrollTo(${JSON.stringify(captureState.restore.x)}, ${JSON.stringify(captureState.restore.y)});
+      })()
+    `);
   }
 };
 
@@ -1688,15 +1727,15 @@ const runReactLifecycleSmoke = async (session) => {
   if (!(initialCanvas instanceof HTMLCanvasElement)) return { error: 'initial Canvas element was missing' };
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-  let queuedPointerMoveFrame;
+  const queuedPointerMoveFrames = new Set();
   let queuedPointerMoveCancelled = false;
   globalThis.requestAnimationFrame = (callback) => {
     const frame = originalRequestAnimationFrame(callback);
-    queuedPointerMoveFrame ??= frame;
+    queuedPointerMoveFrames.add(frame);
     return frame;
   };
   globalThis.cancelAnimationFrame = (frame) => {
-    if (frame === queuedPointerMoveFrame) queuedPointerMoveCancelled = true;
+    if (queuedPointerMoveFrames.has(frame)) queuedPointerMoveCancelled = true;
     originalCancelAnimationFrame(frame);
   };
   initialCanvas.dispatchEvent(new PointerEvent('pointermove', {
@@ -1873,6 +1912,7 @@ const main = async () => {
       '--ignore-gpu-blocklist',
       '--disable-software-rasterizer',
       '--use-gpu-in-tests',
+      '--window-size=1200,800',
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${profileDir}`,
       'about:blank',

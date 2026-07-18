@@ -30,8 +30,12 @@ const ordinaryScene = scene({
   nodes: [mesh({
     geometry: boxGeometry([1.5, 1.5, 1.5]),
     material: unlitMaterial({ texture: solidTexture({ color: [0.2, 0.55, 0.95, 1] }) }),
+    pickingId: 'lifecycle-probe',
   })],
 });
+const lifecycleScenePointerEvents = {
+  'lifecycle-probe': { onPointerMove: (): void => undefined },
+} as const;
 const virtualTextureScene = scene({
   camera,
   nodes: [mesh({
@@ -150,6 +154,7 @@ export const ReactLifecycleProbe = (): ReactNode => {
             ref={observeCanvasRef}
             rendererOptions={{ antialias }}
             scene={mode === 'virtual-texture' ? virtualTextureScene : ordinaryScene}
+            {...(mode === 'ordinary' ? { scenePointerEvents: lifecycleScenePointerEvents } : {})}
             style={{ height: 320, width: 480 }}
           >
             <BenchmarkRendererSnapshot />
