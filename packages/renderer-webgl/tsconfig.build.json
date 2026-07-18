@@ -24,6 +24,7 @@
     "src/runtime/canvas-root.ts",
     "src/runtime/root-options.ts",
     "src/math/mat4.ts",
+    "src/surface/camera-source-owner.ts",
     "src/surface/canonical-geometry.ts",
     "src/surface/canonical-material.ts",
     "src/surface/picking-query.ts",

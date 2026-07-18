@@ -1,5 +1,4 @@
 import type {
-  Camera,
   Direction3,
   GltfNode,
   LinearRgba,
@@ -22,6 +21,7 @@ import {
   prepareCanonicalGeometry,
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
+import type { CanonicalCamera } from "./camera-source-owner";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -39,7 +39,7 @@ export type CanonicalPickSurface = Readonly<{
 }>;
 
 export type CanonicalSurfaceScene = Readonly<{
-  camera: Camera;
+  camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
   exposure: number;
   pickSurfaces: readonly CanonicalPickSurface[];
@@ -61,7 +61,7 @@ const modelHandedness = (model: Mat4): 1 | -1 => {
   return determinant < 0 ? -1 : 1;
 };
 
-const staticCamera = (scene: RenderRoot): Camera => {
+const staticCamera = (scene: RenderRoot): CanonicalCamera => {
   if (scene.camera.kind === "perspective-camera" || scene.camera.kind === "orthographic-camera") {
     return scene.camera;
   }
@@ -76,6 +76,7 @@ const sceneExposure = (scene: RenderRoot): number => scene.exposureEv100 === und
 export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
   preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
+  camera: CanonicalCamera = staticCamera(scene),
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {
@@ -174,7 +175,7 @@ export const prepareCanonicalSurfaceScene = (
     pickSurfaces.push(surface);
   }
   return {
-    camera: staticCamera(scene),
+    camera,
     directionalLights,
     exposure: sceneExposure(scene),
     pickSurfaces,

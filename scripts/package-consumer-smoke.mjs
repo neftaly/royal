@@ -129,11 +129,12 @@ import {
   useRendererLifecycle,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { perspectiveCamera, scene } from '@royal/react/scene';
+import { createCameraViewResource, perspectiveCamera, scene } from '@royal/react/scene';
 import type { ReactNode } from 'react';
 
+const camera = createCameraViewResource(perspectiveCamera({ position: [0, 0, 3] }));
 const renderScene = scene({
-  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  camera,
   clearColor: [0.1, 0.15, 0.2, 1],
   nodes: [],
 });

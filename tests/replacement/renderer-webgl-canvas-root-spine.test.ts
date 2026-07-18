@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   mesh,
   directionalLight,
+  createCameraViewResource,
   gltf,
   perspectiveCamera,
   planeGeometry,
@@ -29,6 +30,7 @@ type FakeGl = WebGL2RenderingContext & {
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly uniform1i: ReturnType<typeof vi.fn>;
+  readonly uniformMatrix4fv: ReturnType<typeof vi.fn>;
   readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
 };
@@ -250,6 +252,38 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders committed camera-resource changes without rebuilding scene resources", () => {
+    const { callbacks, canvas, root } = harness();
+    const camera = createCameraViewResource(perspectiveCamera({ position: [0, 0, 3] }));
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera,
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    const firstMatrixCalls = canvas.gl.uniformMatrix4fv.mock.calls.length;
+
+    camera.position[0] = 0.5;
+    camera.commit();
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.uniformMatrix4fv.mock.calls.length).toBeGreaterThan(firstMatrixCalls);
+
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 4] }),
+      nodes: [],
+    }));
+    callbacks.shift()!();
+    camera.position[0] = 1;
+    camera.commit();
+    expect(callbacks).toHaveLength(0);
   });
 
   it("executes solid standard material lighting and mirrored winding through complete state", () => {

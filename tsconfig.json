@@ -59,6 +59,7 @@
     "packages/renderer-webgl/src/runtime/canvas-root.ts",
     "packages/renderer-webgl/src/runtime/root-options.ts",
     "packages/renderer-webgl/src/math/mat4.ts",
+    "packages/renderer-webgl/src/surface/camera-source-owner.ts",
     "packages/renderer-webgl/src/surface/canonical-geometry.ts",
     "packages/renderer-webgl/src/surface/canonical-material.ts",
     "packages/renderer-webgl/src/surface/picking-query.ts",

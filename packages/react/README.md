@@ -70,6 +70,8 @@ unrelated frames. `useInvalidate()` requests one coalesced frame.
 mount or when no visible triangle is hit.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact asset without polling or
 waking for unrelated frames.
+Scenes may also use `createCameraViewResource(...)`; committed camera changes
+flow directly to the root without a React render or geometry rebuild.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.

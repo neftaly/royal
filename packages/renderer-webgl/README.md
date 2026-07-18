@@ -47,6 +47,9 @@ creation. Invalid values and unknown option fields fail synchronously.
 `invalidate()` requests one coalesced frame. `flushInvalidated()` is available
 to deliberate imperative hosts, while `acquireExternalClock()` transfers frame
 authority to an external clock until its idempotent `release()`.
+`createCameraViewResource(...)` may be used as the scene camera; committed
+changes invalidate one frame and update retained camera storage without
+re-lowering the scene or rebuilding GPU resources.
 
 `getSnapshot()` and `subscribe()` expose the broad operational snapshot.
 `getLifecycleSnapshot()` / `subscribeLifecycle()` and

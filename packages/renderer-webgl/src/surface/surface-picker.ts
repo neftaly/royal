@@ -1,5 +1,4 @@
 import {
-  type Camera,
   type PickInput,
   type PickResult,
 } from "@royal/renderer-core";
@@ -10,6 +9,7 @@ import {
   type CanonicalPickRay,
 } from "./picking-query";
 import type { CanonicalSurfaceScene } from "./scene-lowering";
+import type { CanonicalCamera } from "./camera-source-owner";
 
 type CanvasClientRect = Readonly<{
   height: number;
@@ -90,7 +90,7 @@ export class SurfacePicker {
 
   #canvasRay(
     input: PickInput,
-    camera: Camera,
+    camera: CanonicalCamera,
     viewProjection: Mat4,
     rect: CanvasClientRect,
   ): CanonicalPickRay | undefined {

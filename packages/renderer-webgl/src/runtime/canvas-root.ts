@@ -28,6 +28,7 @@ import {
   projectionMat4Into,
   viewMat4Into,
 } from "../math/mat4";
+import { CameraSourceOwner } from "../surface/camera-source-owner";
 import { prepareCanonicalSurfaceScene } from "../surface/scene-lowering";
 import { SurfaceGpuOwner } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
@@ -127,6 +128,7 @@ const createContext = (
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot {
   readonly #canvas: HTMLCanvasElement;
+  readonly #cameraSource: CameraSourceOwner;
   readonly #clock: FrameClockOwner;
   readonly #context: ContextLifecycleOwner;
   #clearColor: LinearRgba = [0, 0, 0, 0];
@@ -183,12 +185,12 @@ export class CanvasRoot {
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
     this.#clock = new FrameClockOwner({
       render: () => this.#renderFrame(),
-      reportScheduledFailure: (error) => {
-        this.#lastFrameFailure = formatFailure(error);
-        this.#publish();
-        platform.reportScheduledFailure(error);
-      },
+      reportScheduledFailure: (error) => this.#captureScheduledFailure(error),
       requestFrame: platform.requestFrame,
+    });
+    this.#cameraSource = new CameraSourceOwner({
+      onCameraChanged: () => this.#clock.invalidate(),
+      onFailure: (error) => this.#captureScheduledFailure(error),
     });
     this.#onContextLost = (event) => {
       if (this.#disposed) return;
@@ -214,6 +216,7 @@ export class CanvasRoot {
     this.#canvas.removeEventListener("webglcontextlost", this.#onContextLost);
     this.#canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
     this.#clock.dispose();
+    this.#cameraSource.dispose();
     this.#gltfAssets.dispose();
     this.#surfaceGpu.dispose();
     this.#context.transition({ kind: "dispose" });
@@ -288,9 +291,11 @@ export class CanvasRoot {
       throw new TypeError("Royal renderer render requires a validated scene descriptor");
     }
     if (scene === this.#surfaceSceneInput) return;
+    const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
       scene,
       (node) => this.#gltfAssets.prepared(node.asset),
+      camera.camera,
     );
     const gltfNodes: GltfNode[] = [];
     for (const node of scene.nodes) if (node.kind === "gltf") gltfNodes.push(node);
@@ -298,6 +303,7 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#surfaceGpu.setScene(prepared);
+    this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(gltfNodes);
     this.#clock.invalidate();
   }
@@ -367,6 +373,12 @@ export class CanvasRoot {
     if (this.#disposed) throw new Error(`Cannot ${operation} on a disposed Royal renderer root`);
   }
 
+  #captureScheduledFailure(error: unknown): void {
+    this.#lastFrameFailure = formatFailure(error);
+    this.#publish();
+    this.#platform.reportScheduledFailure(error);
+  }
+
   #createFrameIntent(size: ResolvedCanvasSize, color: LinearRgba): ClearFrameIntent {
     return {
       clearColor: color,
@@ -432,12 +444,15 @@ export class CanvasRoot {
 
   #refreshPreparedScene(): void {
     if (this.#disposed || this.#surfaceSceneInput === null) return;
+    const camera = this.#cameraSource.prepare(this.#surfaceSceneInput.camera);
     const prepared = prepareCanonicalSurfaceScene(
       this.#surfaceSceneInput,
       (node) => this.#gltfAssets.prepared(node.asset),
+      camera.camera,
     );
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
+    this.#cameraSource.commit(camera);
     this.#clock.invalidate();
   }
 
