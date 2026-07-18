@@ -21,14 +21,16 @@ type MutableViewDemand = {
   readonly preferred: Map<VirtualTexturePageKey, PreferredItem>;
   readonly preferredOutput: VirtualTexturePageId[];
   readonly preferredSorted: PreferredItem[];
-  readonly submission: {
-    candidates: readonly VirtualTexturePageId[];
-    preferTargetMip: boolean;
-    preferredCandidates?: readonly VirtualTexturePageId[];
-    viewportDominant?: true;
-  };
+  readonly submission: MutableVirtualTextureDemandSubmission;
   readonly uniqueKeys: Set<VirtualTexturePageKey>;
   viewportDominant: boolean;
+};
+
+type MutableVirtualTextureDemandSubmission = {
+  candidates: readonly VirtualTexturePageId[];
+  preferTargetMip: boolean;
+  preferredCandidates: readonly VirtualTexturePageId[] | undefined;
+  viewportDominant: true | undefined;
 };
 
 type PreferredItem = {
@@ -44,7 +46,7 @@ type MutableResourceDemand<K> = {
   readonly nonconvergentOutput: VirtualTexturePageId[];
   order: number;
   readonly orderedViewIndices: number[];
-  resource?: K;
+  resource: K | undefined;
   readonly submissions: VirtualTextureDemandSubmission[];
   viewCursor: number;
   viewportDominant: boolean;
@@ -76,8 +78,9 @@ export interface VirtualTextureFrameDemandCommit<K> {
 }
 
 type MutableVirtualTextureFrameDemandCommit<K> = {
-  -readonly [Key in keyof VirtualTextureFrameDemandCommit<K>]: VirtualTextureFrameDemandCommit<K>[Key];
-};
+  -readonly [Key in Exclude<keyof VirtualTextureFrameDemandCommit<K>, "viewCursorUpdate">]:
+    VirtualTextureFrameDemandCommit<K>[Key];
+} & { viewCursorUpdate: number | undefined };
 
 const EMPTY_FRAME_DEMAND_COMMITS: readonly VirtualTextureFrameDemandCommit<never>[] = Object.freeze([]);
 
@@ -143,8 +146,8 @@ const clearView = (view: MutableViewDemand): void => {
   view.candidateOutput.length = 0;
   view.preferredOutput.length = 0;
   view.preferredSorted.length = 0;
-  delete view.submission.preferredCandidates;
-  delete view.submission.viewportDominant;
+  view.submission.preferredCandidates = undefined;
+  view.submission.viewportDominant = undefined;
   view.uniqueKeys.clear();
 };
 
@@ -161,7 +164,12 @@ const acquireView = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): Mutab
       preferred: new Map(),
       preferredOutput: [],
       preferredSorted: [],
-      submission: { candidates: [], preferTargetMip: false },
+      submission: {
+        candidates: [],
+        preferTargetMip: false,
+        preferredCandidates: undefined,
+        viewportDominant: undefined,
+      },
       uniqueKeys: new Set(),
       viewportDominant: false,
     };
@@ -433,7 +441,7 @@ const releasePools = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): void
   for (let index = 0; index < workspace.resourcePoolIndex; index += 1) {
     const pooled = workspace.resourcePool[index];
     if (pooled === undefined) continue;
-    delete pooled.resource;
+    pooled.resource = undefined;
     pooled.views.clear();
   }
   for (let index = 0; index < workspace.viewPoolIndex; index += 1) {
@@ -509,11 +517,11 @@ export const finalizeVirtualTextureFrameDemand = <K>(
       view.submission.candidates = view.candidateOutput;
       view.submission.preferTargetMip = view.preferTargetMip;
       if (!view.preferTargetMip || view.preferredOutput.length === 0) {
-        delete view.submission.preferredCandidates;
+        view.submission.preferredCandidates = undefined;
       } else view.submission.preferredCandidates = view.preferredOutput;
       if (view.viewportDominant) view.submission.viewportDominant = true;
-      else delete view.submission.viewportDominant;
-      submissions.push(view.submission);
+      else view.submission.viewportDominant = undefined;
+      submissions.push(view.submission as VirtualTextureDemandSubmission);
     }
     const startSubmission = submissions.length <= 1
       ? 0
@@ -535,6 +543,7 @@ export const finalizeVirtualTextureFrameDemand = <K>(
         resourceCursorUpdate,
         startSubmission: 0,
         submissions,
+        viewCursorUpdate: undefined,
       };
       resourceDemand.commit = publication;
     }
@@ -546,9 +555,8 @@ export const finalizeVirtualTextureFrameDemand = <K>(
     publication.resourceCursorUpdate = resourceCursorUpdate;
     publication.startSubmission = startSubmission;
     publication.submissions = submissions;
-    if (lastCyclicViewIndex === undefined) delete publication.viewCursorUpdate;
-    else publication.viewCursorUpdate = lastCyclicViewIndex;
-    commits.push(publication);
+    publication.viewCursorUpdate = lastCyclicViewIndex;
+    commits.push(publication as VirtualTextureFrameDemandCommit<K>);
   }
   for (const resource of workspace.viewCursors.keys()) {
     if (!workspace.resources.has(resource)) workspace.viewCursors.delete(resource);
