@@ -4,7 +4,13 @@ Royal's imperative WebGL2 renderer root. React applications normally use
 `@royal/react`; this package is for hosts that already own an HTML canvas.
 
 ```ts
-import { perspectiveCamera, scene } from "@royal/renderer-core";
+import {
+  boxGeometry,
+  mesh,
+  perspectiveCamera,
+  scene,
+  unlitMaterial,
+} from "@royal/renderer-core";
 import { createRendererRoot } from "@royal/renderer-webgl";
 
 const root = createRendererRoot(document.querySelector("canvas")!, {
@@ -20,8 +26,15 @@ root.setSize({
 root.render(scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
   clearColor: [0.03, 0.06, 0.12, 1],
-  nodes: [],
+  nodes: [mesh({
+    geometry: boxGeometry(1),
+    material: unlitMaterial({ color: [0.04, 0.32, 0.9, 1] }),
+    pickingId: "hero",
+  })],
 }));
+
+const hit = root.pick({ clientX: pointer.clientX, clientY: pointer.clientY });
+console.log(hit?.target.pickingId, hit?.point);
 
 root.dispose();
 ```
@@ -40,7 +53,9 @@ authority to an external clock until its idempotent `release()`.
 `getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
 unrelated frames.
 
-The replacement is being implemented in vertical slices. This package currently
-accepts empty scenes and rejects non-empty scene nodes explicitly; it does not
-silently call the legacy renderer. Optional capability and WebXR subpaths will
-return only with their working feature slices.
+The current vertical slice renders opaque solid unlit planes and boxes through
+one canonical indexed-triangle path. Exact picking consumes those same retained
+transforms and triangles; optional `pickingGeometry` replaces only CPU exact
+intersection and never allocates a GPU buffer. Other nodes and materials fail
+explicitly rather than calling the legacy renderer. Optional capability and
+WebXR subpaths return only with their working feature slices.

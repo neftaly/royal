@@ -9,20 +9,31 @@ Royal is a source-level prerelease at `0.0.1`. Its accepted behavior and clean
 replacement architecture are defined in [docs/specs](docs/specs/README.md).
 The implementation is landing as independently verified vertical slices; the
 current executable slice owns a CSS-sized canvas, WebGL2 context lifecycle,
-coalesced frame clock, complete clear state, and focused React observation.
-Non-empty scene nodes fail explicitly until their canonical rendering slice
-lands. The old renderer is evidence and oracle material, not a fallback path.
+coalesced frame clock, complete opaque state, direct unlit planes and boxes,
+exact CPU picking, and focused React observation. Unsupported nodes and
+materials fail explicitly. The old renderer is evidence and oracle material,
+not a fallback path.
 
 ## Current React API
 
 ```tsx
 import { Canvas, useRendererLifecycle } from "@royal/react";
-import { perspectiveCamera, scene } from "@royal/react/scene";
+import {
+  boxGeometry,
+  mesh,
+  perspectiveCamera,
+  scene,
+  unlitMaterial,
+} from "@royal/react/scene";
 
 const renderScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
   clearColor: [0.035, 0.07, 0.14, 1],
-  nodes: [],
+  nodes: [mesh({
+    geometry: boxGeometry(1),
+    material: unlitMaterial({ color: [0.04, 0.32, 0.9, 1] }),
+    pickingId: "hero",
+  })],
 });
 
 function Status() {
@@ -54,7 +65,7 @@ pnpm check:bundle-size:details
 ```
 
 The default example exercises the replacement root under React StrictMode.
-The clear-root bundle baseline tracks total initial gzip and the incremental
+The Royal bundle baseline tracks total initial gzip and the incremental
 Royal cost separately. glTF, VT, IBL, codecs, and XR receive their own reachable
 and lazy-byte gates when their actual slices land; unused features are not
 counted as working merely because legacy source still exists.

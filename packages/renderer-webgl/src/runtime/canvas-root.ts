@@ -1,4 +1,9 @@
-import type { RenderRoot } from "@royal/renderer-core";
+import {
+  validatePickInput,
+  type PickInput,
+  type PickResult,
+  type RenderRoot,
+} from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
 import type { ClearFrameIntent, LinearRgba } from "../frame/clear-frame";
@@ -10,7 +15,16 @@ import {
   type ResolvedCanvasSize,
 } from "../frame/canvas-size";
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
-import { ClearStateOwner } from "../webgl/clear-state-owner";
+import {
+  identityMat4,
+  multiplyMat4Into,
+  projectionMat4Into,
+  viewMat4Into,
+} from "../math/mat4";
+import { prepareCanonicalSurfaceScene } from "../surface/scene-lowering";
+import { SurfaceGpuOwner } from "../surface/surface-gpu-owner";
+import { SurfacePicker } from "../surface/surface-picker";
+import { WebGlStateOwner } from "../webgl/state-owner";
 import {
   rendererRootOptionsSemanticKey,
   type CanvasRootOptions,
@@ -82,10 +96,10 @@ const readSizeLimits = (gl: WebGL2RenderingContext): CanvasSizeLimits => {
   ) {
     throw new Error("Royal renderer received invalid WebGL2 size limits");
   }
-  return Object.freeze({
+  return {
     maxHeight: Math.min(viewport[1]!, renderbuffer),
     maxWidth: Math.min(viewport[0]!, renderbuffer),
-  });
+  };
 };
 
 const createContext = (
@@ -102,13 +116,12 @@ const createContext = (
   return gl;
 };
 
-/** Clear-only root used to prove the replacement lifecycle and frame spine. */
+/** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot {
   readonly #canvas: HTMLCanvasElement;
-  readonly #clearState: ClearStateOwner;
   readonly #clock: FrameClockOwner;
   readonly #context: ContextLifecycleOwner;
-  #clearColor: LinearRgba = Object.freeze([0, 0, 0, 0]);
+  #clearColor: LinearRgba = [0, 0, 0, 0];
   #disposed = false;
   #frame = 0;
   #frameIntent: ClearFrameIntent | null = null;
@@ -125,7 +138,15 @@ export class CanvasRoot {
   readonly #sizeListeners = new Set<() => void>();
   #snapshot: CanvasRootSnapshot | undefined;
   #snapshotRevision = -1;
+  readonly #state: WebGlStateOwner;
+  readonly #surfaceGpu: SurfaceGpuOwner;
+  readonly #surfacePicker = new SurfacePicker();
   readonly #unsubscribeContext: () => void;
+  readonly #projection = identityMat4();
+  readonly #view = identityMat4();
+  readonly #viewProjection = identityMat4();
+  #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
+  #surfaceSceneInput: RenderRoot | null = null;
 
   /** Canvas whose context and backing dimensions are owned by this root. */
   get canvas(): HTMLCanvasElement {
@@ -142,7 +163,8 @@ export class CanvasRoot {
     this.#platform = platform;
     this.#gl = createContext(canvas, options);
     this.#sizeLimits = readSizeLimits(this.#gl);
-    this.#clearState = new ClearStateOwner(this.#gl);
+    this.#state = new WebGlStateOwner(this.#gl);
+    this.#surfaceGpu = new SurfaceGpuOwner(this.#gl);
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
     this.#clock = new FrameClockOwner({
@@ -158,7 +180,8 @@ export class CanvasRoot {
       if (this.#disposed) return;
       event.preventDefault();
       this.#clock.block();
-      this.#clearState.invalidate();
+      this.#state.invalidate();
+      this.#surfaceGpu.invalidate();
       this.#context.transition({ kind: "context-lost" });
     };
     this.#onContextRestored = () => this.#restoreContext();
@@ -177,6 +200,7 @@ export class CanvasRoot {
     this.#canvas.removeEventListener("webglcontextlost", this.#onContextLost);
     this.#canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
     this.#clock.dispose();
+    this.#surfaceGpu.dispose();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
     this.#listeners.clear();
@@ -214,6 +238,26 @@ export class CanvasRoot {
     this.#clock.invalidate();
   }
 
+  pick(input: PickInput): PickResult | undefined {
+    this.#assertLive("pick");
+    validatePickInput(input);
+    if (this.#context.getSnapshot().phase !== "active") return undefined;
+    const scene = this.#surfaceScene;
+    const size = this.#size;
+    if (scene === null || size === null || size.backingWidth === 0 || size.backingHeight === 0) {
+      return undefined;
+    }
+    projectionMat4Into(this.#projection, scene.camera, size.backingWidth, size.backingHeight);
+    viewMat4Into(this.#view, scene.camera);
+    multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
+    return this.#surfacePicker.pick(
+      input,
+      scene,
+      this.#viewProjection,
+      this.#canvas.getBoundingClientRect(),
+    );
+  }
+
   render(scene: RenderRoot): void {
     this.#assertLive("render");
     if (
@@ -224,27 +268,24 @@ export class CanvasRoot {
     ) {
       throw new TypeError("Royal renderer render requires a validated scene descriptor");
     }
-    if (scene.nodes.length !== 0) {
-      throw new Error("Royal renderer scene nodes are not supported by the clear-only implementation slice");
-    }
-    this.setClearColor(scene.clearColor);
+    if (scene === this.#surfaceSceneInput) return;
+    const prepared = prepareCanonicalSurfaceScene(scene);
+    this.#updateClearColor(scene.clearColor);
+    this.#surfaceScene = prepared;
+    this.#surfaceSceneInput = scene;
+    this.#surfaceGpu.setScene(prepared);
     this.#clock.invalidate();
   }
 
   setClearColor(color: LinearRgba): void {
     this.#assertLive("set clear color");
-    validateLinearRgba(color);
-    if (sameColor(this.#clearColor, color)) return;
-    const candidate = Object.freeze([...color]) as unknown as LinearRgba;
-    this.#clearColor = candidate;
-    this.#rebuildFrameIntent();
-    this.#clock.invalidate();
+    if (this.#updateClearColor(color)) this.#clock.invalidate();
   }
 
   setSize(input: CanvasSizeInput): void {
     this.#assertLive("set size");
     const resolved = resolveCanvasSize(input, this.#sizeLimits);
-    this.#sizeInput = Object.freeze({ ...input });
+    this.#sizeInput = { ...input };
     const previous = this.#size;
     const backingChanged = this.#canvas.width !== resolved.backingWidth
       || this.#canvas.height !== resolved.backingHeight;
@@ -257,7 +298,7 @@ export class CanvasRoot {
       || previous?.backingHeight !== resolved.backingHeight;
     if (!semanticChanged) return;
     this.#size = resolved;
-    this.#clearState.invalidate();
+    this.#state.invalidate();
     this.#rebuildFrameIntent();
     this.#publishSize();
     this.#publish();
@@ -298,20 +339,20 @@ export class CanvasRoot {
   }
 
   #createFrameIntent(size: ResolvedCanvasSize, color: LinearRgba): ClearFrameIntent {
-    return Object.freeze({
+    return {
       clearColor: color,
       clearDepth: 1,
       clearStencil: 0,
       framebuffer: null,
       scissor: null,
-      size: Object.freeze({ height: size.backingHeight, width: size.backingWidth }),
-      viewport: Object.freeze({
+      size: { height: size.backingHeight, width: size.backingWidth },
+      viewport: {
         height: size.backingHeight,
         width: size.backingWidth,
         x: 0,
         y: 0,
-      }),
-    });
+      },
+    };
   }
 
   #publish(): void {
@@ -363,7 +404,15 @@ export class CanvasRoot {
   #renderFrame(): void {
     const intent = this.#frameIntent;
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
-    this.#clearState.clear(intent);
+    this.#state.clear(intent);
+    const surfaceScene = this.#surfaceScene;
+    const size = this.#size;
+    if (surfaceScene !== null && size !== null && surfaceScene.surfaces.length > 0) {
+      projectionMat4Into(this.#projection, surfaceScene.camera, size.backingWidth, size.backingHeight);
+      viewMat4Into(this.#view, surfaceScene.camera);
+      multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
+      this.#surfaceGpu.draw(this.#viewProjection, size, this.#state);
+    }
     this.#frame += 1;
     this.#lastFrameFailure = undefined;
     this.#publish();
@@ -373,7 +422,8 @@ export class CanvasRoot {
     if (this.#disposed || !this.#context.transition({ kind: "restoration-started" })) return;
     try {
       this.#sizeLimits = readSizeLimits(this.#gl);
-      this.#clearState.invalidate();
+      this.#state.invalidate();
+      this.#surfaceGpu.invalidate();
       if (this.#sizeInput !== null) {
         const previousSize = this.#size;
         this.#size = resolveCanvasSize(this.#sizeInput, this.#sizeLimits);
@@ -401,6 +451,14 @@ export class CanvasRoot {
         kind: "restoration-failed",
       });
     }
+  }
+
+  #updateClearColor(color: LinearRgba): boolean {
+    validateLinearRgba(color);
+    if (sameColor(this.#clearColor, color)) return false;
+    this.#clearColor = [color[0], color[1], color[2], color[3]];
+    this.#rebuildFrameIntent();
+    return true;
   }
 }
 

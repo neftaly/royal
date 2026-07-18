@@ -8,12 +8,12 @@ import {
   type FrameClockState,
 } from "./frame-clock";
 
-const INVALIDATE_EVENT = Object.freeze({ kind: "invalidate" } as const);
-const FLUSH_INTERNAL_EVENT = Object.freeze({ kind: "flush-internal" } as const);
-const ACQUIRE_EXTERNAL_EVENT = Object.freeze({ kind: "acquire-external" } as const);
-const CONTEXT_BLOCKED_EVENT = Object.freeze({ kind: "context-blocked" } as const);
-const CONTEXT_RESUMED_EVENT = Object.freeze({ kind: "context-resumed" } as const);
-const DISPOSE_EVENT = Object.freeze({ kind: "dispose" } as const);
+const INVALIDATE_EVENT = { kind: "invalidate" } as const;
+const FLUSH_INTERNAL_EVENT = { kind: "flush-internal" } as const;
+const ACQUIRE_EXTERNAL_EVENT = { kind: "acquire-external" } as const;
+const CONTEXT_BLOCKED_EVENT = { kind: "context-blocked" } as const;
+const CONTEXT_RESUMED_EVENT = { kind: "context-resumed" } as const;
+const DISPOSE_EVENT = { kind: "dispose" } as const;
 
 export type ExternalFrameClock = Readonly<{
   flushInvalidated(): void;
@@ -42,8 +42,8 @@ export class FrameClockOwner {
       throw new Error("Royal renderer already has an external frame clock or is disposed");
     }
     const token = this.#transition.token;
-    const flushEvent = Object.freeze({ kind: "flush-external", token } as const);
-    const releaseEvent = Object.freeze({ kind: "release-external", token } as const);
+    const flushEvent = { kind: "flush-external", token } as const;
+    const releaseEvent = { kind: "release-external", token } as const;
     let released = false;
     return Object.freeze({
       flushInvalidated: () => {
@@ -87,7 +87,7 @@ export class FrameClockOwner {
 
     if (this.#transition.effect === FRAME_CLOCK_EFFECT_SCHEDULE) {
       const token = this.#transition.token;
-      const frameEvent = Object.freeze({ kind: "scheduled-frame", token } as const);
+      const frameEvent = { kind: "scheduled-frame", token } as const;
       try {
         this.#options.requestFrame(() => {
           try {
@@ -97,7 +97,7 @@ export class FrameClockOwner {
           }
         });
       } catch (error) {
-        this.#apply(Object.freeze({ kind: "schedule-failed", token } as const));
+        this.#apply({ kind: "schedule-failed", token });
         this.#reportScheduledFailure(error);
       }
     } else if (this.#transition.effect === FRAME_CLOCK_EFFECT_RENDER) {

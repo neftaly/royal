@@ -153,14 +153,14 @@ const formatBytes = (bytes) => `${(bytes / 1000).toFixed(1)} kB`;
 
 try {
   const react = await buildFixture('react');
-  const clear = await buildFixture('royal');
-  const incrementalGzipBytes = clear.initialGzipBytes - react.initialGzipBytes;
+  const royal = await buildFixture('royal');
+  const incrementalGzipBytes = royal.initialGzipBytes - react.initialGzipBytes;
 
   console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
-  console.log(`Clear-root initial:   ${formatBytes(clear.initialGzipBytes)} gzip`);
+  console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
   console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
   if (showDetails) {
-    const royalModules = Array.from(clear.initialRenderedBytesByModule)
+    const royalModules = Array.from(royal.initialRenderedBytesByModule)
       .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
       .sort((left, right) => right[1] - left[1]);
     console.log('Initial Royal modules by rendered bytes:');
@@ -182,14 +182,14 @@ try {
   }
 
   const failures = [];
-  if (clear.initialGzipBytes > budget.clearInitialGzipBytes) {
+  if (royal.initialGzipBytes > budget.royalInitialGzipBytes) {
     failures.push(
-      `Clear-root initial gzip ${clear.initialGzipBytes} exceeds ${budget.clearInitialGzipBytes}`,
+      `Royal initial gzip ${royal.initialGzipBytes} exceeds ${budget.royalInitialGzipBytes}`,
     );
   }
-  if (incrementalGzipBytes > budget.clearIncrementalGzipBytes) {
+  if (incrementalGzipBytes > budget.royalIncrementalGzipBytes) {
     failures.push(
-      `Clear-root incremental gzip ${incrementalGzipBytes} exceeds ${budget.clearIncrementalGzipBytes}`,
+      `Royal incremental gzip ${incrementalGzipBytes} exceeds ${budget.royalIncrementalGzipBytes}`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));

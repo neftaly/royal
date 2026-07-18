@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RenderRoot } from "@royal/renderer-core";
+import {
+  mesh,
+  perspectiveCamera,
+  planeGeometry,
+  scene,
+  unlitMaterial,
+  type RenderRoot,
+} from "@royal/renderer-core";
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
 import {
   CanvasRoot,
@@ -10,32 +17,81 @@ type FakeGl = WebGL2RenderingContext & {
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
+  readonly bufferData: ReturnType<typeof vi.fn>;
+  readonly drawElements: ReturnType<typeof vi.fn>;
+  readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
 };
 
 const fakeGl = (): FakeGl => {
   const gl = {
     COLOR_BUFFER_BIT: 0x4000,
+    ARRAY_BUFFER: 0x8892,
+    BACK: 0x0405,
+    BLEND: 0x0be2,
+    CCW: 0x0901,
+    COMPILE_STATUS: 0x8b81,
+    CULL_FACE: 0x0b44,
+    DEPTH_TEST: 0x0b71,
     DEPTH_BUFFER_BIT: 0x0100,
+    ELEMENT_ARRAY_BUFFER: 0x8893,
+    FLOAT: 0x1406,
+    FRAGMENT_SHADER: 0x8b30,
     FRAMEBUFFER: 0x8d40,
+    LEQUAL: 0x0203,
+    LINK_STATUS: 0x8b82,
     MAX_RENDERBUFFER_SIZE: 0x84e8,
     MAX_VIEWPORT_DIMS: 0x0d3a,
     SCISSOR_TEST: 0x0c11,
+    STATIC_DRAW: 0x88e4,
+    STENCIL_TEST: 0x0b90,
     STENCIL_BUFFER_BIT: 0x0400,
+    TRIANGLES: 0x0004,
+    UNSIGNED_SHORT: 0x1403,
+    VERTEX_SHADER: 0x8b31,
+    attachShader: vi.fn(),
     bindFramebuffer: vi.fn(),
+    bindBuffer: vi.fn(),
+    bindVertexArray: vi.fn(),
+    bufferData: vi.fn(),
     clear: vi.fn(),
     clearColor: vi.fn(),
     clearDepth: vi.fn(),
     clearStencil: vi.fn(),
     colorMask: vi.fn(),
+    compileShader: vi.fn(),
+    createBuffer: vi.fn(() => ({})),
+    createProgram: vi.fn(() => ({})),
+    createShader: vi.fn(() => ({})),
+    createVertexArray: vi.fn(() => ({})),
+    cullFace: vi.fn(),
+    deleteBuffer: vi.fn(),
+    deleteProgram: vi.fn(),
+    deleteShader: vi.fn(),
+    deleteVertexArray: vi.fn(),
     depthMask: vi.fn(),
+    depthFunc: vi.fn(),
     disable: vi.fn(),
+    drawElements: vi.fn(),
     enable: vi.fn(),
+    enableVertexAttribArray: vi.fn(),
+    frontFace: vi.fn(),
+    getProgramInfoLog: vi.fn(() => ""),
+    getProgramParameter: vi.fn(() => true),
+    getShaderInfoLog: vi.fn(() => ""),
+    getShaderParameter: vi.fn(() => true),
     getParameter: vi.fn((parameter: number) => parameter === 0x0d3a
       ? new Int32Array([4096, 4096])
       : 4096),
+    getUniformLocation: vi.fn(() => ({})),
+    linkProgram: vi.fn(),
     scissor: vi.fn(),
+    shaderSource: vi.fn(),
     stencilMask: vi.fn(),
+    uniform4fv: vi.fn(),
+    uniformMatrix4fv: vi.fn(),
+    useProgram: vi.fn(),
+    vertexAttribPointer: vi.fn(),
     viewport: vi.fn(),
   };
   return gl as unknown as FakeGl;
@@ -54,6 +110,20 @@ class FakeCanvas extends EventTarget {
   getContext(kind: string): WebGL2RenderingContext | null {
     return kind === "webgl2" ? this.gl : null;
   }
+
+  getBoundingClientRect(): DOMRect {
+    return {
+      bottom: 220,
+      height: 200,
+      left: 10,
+      right: 310,
+      top: 20,
+      width: 300,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    };
+  }
 }
 
 const harness = () => {
@@ -71,7 +141,7 @@ const harness = () => {
 };
 
 const emptyScene = (clearColor: RenderRoot["clearColor"] = [0, 0, 0, 0]): RenderRoot => ({
-  camera: {} as RenderRoot["camera"],
+  camera: perspectiveCamera({}),
   clearColor,
   kind: "scene",
   nodes: [],
@@ -131,7 +201,79 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.clear).toHaveBeenCalledTimes(2);
   });
 
-  it("lowers an empty semantic scene and rejects unsupported nodes explicitly", () => {
+  it("uploads one canonical surface once and reuses it across frames", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+    root.invalidate();
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+
+    const rebuiltScene = scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ color: [0.8, 0.2, 0.4, 1] }),
+      })],
+    });
+    root.render(rebuiltScene);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses one canonical transform and identity for visible and exact picking work", () => {
+    const { callbacks, canvas, root } = harness();
+    const node = mesh({
+      geometry: planeGeometry([1, 1]),
+      material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      pickingGeometry: planeGeometry([4, 1]),
+      pickingId: "wide-hit-area",
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+
+    const hit = root.pick({ clientX: 240.4, clientY: 120 });
+    expect(hit?.point[0]).toBeCloseTo(1, 2);
+    expect(hit?.target).toMatchObject({ kind: "mesh", node, pickingId: "wide-hit-area" });
+    expect(root.pick({ clientX: 311, clientY: 120 })).toBeUndefined();
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+  });
+
+  it("matches visible backface culling during picking", () => {
+    const { root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 2]),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        transform: { rotation: [0, Math.PI, 0] },
+      })],
+    }));
+    expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+  });
+
+  it("lowers a semantic scene and rejects unsupported node kinds explicitly", () => {
     const { callbacks, root } = harness();
     root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
     root.render(emptyScene([0.2, 0.3, 0.4, 1]));
@@ -141,7 +283,7 @@ describe("clear-only canvas root", () => {
     expect(() => root.render({
       ...emptyScene(),
       nodes: [{ kind: "not-implemented" }],
-    } as unknown as RenderRoot)).toThrow("scene nodes are not supported");
+    } as unknown as RenderRoot)).toThrow("does not yet support not-implemented nodes");
   });
 
   it("does not allocate a new public snapshot until observable state changes", () => {

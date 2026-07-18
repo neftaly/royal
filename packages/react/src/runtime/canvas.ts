@@ -1,4 +1,4 @@
-import type { RenderRoot } from "@royal/renderer-core";
+import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createRendererRoot,
   rendererRootOptionsSemanticKey,
@@ -41,7 +41,7 @@ type CanvasRuntime = Readonly<{
   root: RoyalRendererRoot | null;
 }>;
 
-const EMPTY_RUNTIME: CanvasRuntime = Object.freeze({ error: null, root: null });
+const EMPTY_RUNTIME: CanvasRuntime = { error: null, root: null };
 
 const assignRef = <Value>(
   ref: Ref<Value> | undefined,
@@ -108,6 +108,12 @@ export const useInvalidate = (): (() => void) => {
   return useCallback(() => root?.invalidate(), [root]);
 };
 
+/** Returns the Canvas root's exact picker; pre-mount calls have no hit. */
+export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
+  const root = useCanvasRoot();
+  return useCallback((input: PickInput) => root?.pick(input), [root]);
+};
+
 /** Renders one pure Royal scene into one ordinary, CSS-sized canvas. */
 export const Canvas = ({
   children,
@@ -143,10 +149,10 @@ export const Canvas = ({
     try {
       root = createRendererRoot(canvas, rendererOptions);
     } catch (error) {
-      setRuntime(Object.freeze({ error, root: null }));
+      setRuntime({ error, root: null });
       return undefined;
     }
-    setRuntime(Object.freeze({ error: null, root }));
+    setRuntime({ error: null, root });
     return () => root.dispose();
   }, [canvas, optionsKey]);
 

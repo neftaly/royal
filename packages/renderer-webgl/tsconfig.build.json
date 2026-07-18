@@ -20,8 +20,15 @@
     "src/frame/frame-clock.ts",
     "src/runtime/canvas-root.ts",
     "src/runtime/root-options.ts",
-    "src/webgl/clear-state-owner.ts",
-    "src/webgl/clear-state-transition.ts"
+    "src/math/mat4.ts",
+    "src/surface/canonical-geometry.ts",
+    "src/surface/picking-query.ts",
+    "src/surface/scene-lowering.ts",
+    "src/surface/surface-gpu-owner.ts",
+    "src/surface/surface-picker.ts",
+    "src/webgl/clear-state-transition.ts",
+    "src/webgl/draw-state-transition.ts",
+    "src/webgl/state-owner.ts"
   ],
   "include": []
 }

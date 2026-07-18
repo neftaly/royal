@@ -1,6 +1,7 @@
 export {
   Canvas,
   useCanvasElement,
+  useCanvasPick,
   useCanvasRoot,
   useInvalidate,
 } from "./runtime/canvas";
@@ -12,6 +13,8 @@ export type { RendererLifecycleSnapshot } from "./observation/renderer-lifecycle
 export type { RendererObservationOptions } from "./observation/select-root";
 export { createRendererRoot } from "@royal/renderer-webgl";
 export type {
+  PickInput,
+  PickResult,
   RendererRootOptions,
   RendererRootSnapshot,
   RoyalRendererRoot,

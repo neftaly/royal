@@ -1,4 +1,4 @@
 {
-  "clearInitialGzipBytes": 70000,
-  "clearIncrementalGzipBytes": 8000
+  "royalInitialGzipBytes": 72000,
+  "royalIncrementalGzipBytes": 12000
 }

@@ -10,6 +10,7 @@ import {
   Canvas,
   type CanvasProps,
   createRendererRoot,
+  useCanvasPick,
   useCanvasSize,
   useRendererLifecycle,
 } from "../../packages/react/src/index";
@@ -45,6 +46,7 @@ describe("replacement React public API", () => {
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(useCanvasSize).toBeFunction();
+    expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
   });
 

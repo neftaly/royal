@@ -6,13 +6,39 @@ import {
   useCanvasSize,
   useRendererLifecycle,
 } from "@royal/react";
-import { perspectiveCamera, scene } from "@royal/react/scene";
+import {
+  boxGeometry,
+  mesh,
+  perspectiveCamera,
+  planeGeometry,
+  scene,
+  unlitMaterial,
+} from "@royal/react/scene";
 import "./style.css";
 
-const clearScene = scene({
-  camera: perspectiveCamera({ position: [0, 0, 3] }),
+const blue = unlitMaterial({ color: [0.04, 0.32, 0.9, 1] });
+const coral = unlitMaterial({ color: [0.9, 0.12, 0.07, 1] });
+const gold = unlitMaterial({ color: [0.95, 0.55, 0.06, 1] });
+const directScene = scene({
+  camera: perspectiveCamera({ position: [0, 0, 6] }),
   clearColor: [0.035, 0.07, 0.14, 1],
-  nodes: [],
+  nodes: [
+    mesh({
+      geometry: boxGeometry([1.5, 1.5, 1.5]),
+      material: blue,
+      transform: { position: [-1.35, 0.2, 0], rotation: [0.35, 0.55, 0.1] },
+    }),
+    mesh({
+      geometry: boxGeometry([1.1, 2.1, 0.8]),
+      material: coral,
+      transform: { position: [1.2, 0, -0.5], rotation: [-0.2, -0.45, 0.15] },
+    }),
+    mesh({
+      geometry: planeGeometry([5.2, 0.32]),
+      material: gold,
+      transform: { position: [0, -1.55, -0.2] },
+    }),
+  ],
 });
 
 const RendererStatus = (): ReactNode => {
@@ -31,11 +57,11 @@ const App = (): ReactNode => (
   <main>
     <header>
       <p className="eyebrow">Royal renderer replacement</p>
-      <h1>One lifecycle. One frame spine.</h1>
-      <p>The first vertical slice proves canvas ownership, sizing, recovery, and clear-state execution.</p>
+      <h1>One canonical surface path.</h1>
+      <p>Direct planes and boxes lower to the same retained triangle ABI and root-owned WebGL state.</p>
     </header>
     <section className="viewport" aria-label="Renderer lifecycle example">
-      <Canvas aria-label="Royal clear scene" scene={clearScene}>
+      <Canvas aria-label="Royal direct surface scene" scene={directScene}>
         <RendererStatus />
       </Canvas>
     </section>

@@ -10,12 +10,22 @@ import {
   useCanvasSize,
   useRendererLifecycle,
 } from "@royal/react";
-import { perspectiveCamera, scene } from "@royal/react/scene";
+import {
+  planeGeometry,
+  mesh,
+  perspectiveCamera,
+  scene,
+  unlitMaterial,
+} from "@royal/react/scene";
 
 const renderScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
   clearColor: [0.03, 0.06, 0.12, 1],
-  nodes: [],
+  nodes: [mesh({
+    geometry: planeGeometry([2, 1]),
+    material: unlitMaterial({ color: [0.04, 0.32, 0.9, 1] }),
+    pickingId: "panel",
+  })],
 });
 
 function Status() {
@@ -47,8 +57,11 @@ Focused hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents
 pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake for
 unrelated frames. `useInvalidate()` requests one coalesced frame.
+`useCanvasPick()` calls the root's exact picker and returns `undefined` before
+mount or when no visible triangle is hit.
 
 The replacement is being implemented in vertical slices. The current slice
-renders empty scene clear color and proves canvas ownership, sizing, recovery,
-and frame scheduling. Unsupported render nodes, picking, controls, assets, and
-XR are absent rather than exposed as compatibility shims.
+renders opaque solid unlit planes and boxes and proves canvas ownership, sizing,
+recovery, frame scheduling, and exact shared-path picking. Scene pointer-event
+bindings, controls, assets, other materials, and XR remain absent rather than
+being exposed as compatibility shims.
