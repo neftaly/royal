@@ -45,8 +45,10 @@ export type CanonicalSurfaceScene = Readonly<{
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
   exposure: number;
+  gltfNodes: readonly GltfNode[];
   pickSurfaces: readonly CanonicalPickSurface[];
   surfaces: readonly CanonicalDrawSurface[];
+  textureAssets: readonly TextureSourceRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
 
@@ -93,10 +95,13 @@ export const prepareCanonicalSurfaceScene = (
     throw new Error("Royal canonical surface slice does not yet support scene environments");
   }
   const directionalLights: CanonicalDirectionalLight[] = [];
+  const gltfNodes: GltfNode[] = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
+  const textureAssets: TextureSourceRef[] = [];
   for (const node of scene.nodes) {
     if (node.kind === "gltf") {
+      gltfNodes.push(node);
       if (node.materialVariant !== undefined) {
         throw new Error("Royal static glTF slice does not yet support materialVariant");
       }
@@ -114,6 +119,7 @@ export const prepareCanonicalSurfaceScene = (
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
+      textureAssets.push(...prepared.textureAssets);
       for (const primitive of prepared.primitives) {
         const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
         const surface: CanonicalDrawSurface = {
@@ -163,6 +169,7 @@ export const prepareCanonicalSurfaceScene = (
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
     }
     const material = prepareCanonicalMaterial(node.material, decodedTexture);
+    if (node.material.baseColor.kind === "asset") textureAssets.push(node.material.baseColor);
     const geometry = prepareCanonicalGeometry(
       node.geometry,
       material.requiresTextureCoordinates,
@@ -186,8 +193,10 @@ export const prepareCanonicalSurfaceScene = (
     camera,
     directionalLights,
     exposure: sceneExposure(scene),
+    gltfNodes,
     pickSurfaces,
     surfaces,
+    textureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
   };
 };

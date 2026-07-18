@@ -1,7 +1,6 @@
 import {
   validatePickInput,
   type GltfAssetRef,
-  type GltfNode,
   type PickInput,
   type PickResult,
   type RenderRoot,
@@ -325,25 +324,13 @@ export class CanvasRoot {
       camera.camera,
       (asset) => this.#textureAssets.decoded(asset),
     );
-    const gltfNodes: GltfNode[] = [];
-    const textureAssets: TextureSourceRef[] = [];
-    for (const node of scene.nodes) {
-      if (node.kind === "gltf") {
-        gltfNodes.push(node);
-        const preparedGltf = this.#gltfAssets.prepared(node.asset);
-        if (preparedGltf !== undefined) textureAssets.push(...preparedGltf.textureAssets);
-      }
-      if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
-        textureAssets.push(node.material.baseColor);
-      }
-    }
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
-    this.#gltfAssets.reconcile(gltfNodes);
-    this.#textureAssets.reconcile(textureAssets);
+    this.#gltfAssets.reconcile(prepared.gltfNodes);
+    this.#textureAssets.reconcile(prepared.textureAssets);
     this.#clock.invalidate();
   }
 
@@ -497,16 +484,7 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
-    const textureAssets: TextureSourceRef[] = [];
-    for (const node of this.#surfaceSceneInput.nodes) {
-      if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
-        textureAssets.push(node.material.baseColor);
-      } else if (node.kind === "gltf") {
-        const preparedGltf = this.#gltfAssets.prepared(node.asset);
-        if (preparedGltf !== undefined) textureAssets.push(...preparedGltf.textureAssets);
-      }
-    }
-    this.#textureAssets.reconcile(textureAssets);
+    this.#textureAssets.reconcile(prepared.textureAssets);
     this.#clock.invalidate();
   }
 

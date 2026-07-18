@@ -9,6 +9,7 @@ import {
 import type { ResolvedCanvasSize } from "../frame/canvas-size";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type { OpaqueDrawStateIntent } from "../webgl/draw-state-transition";
+import { TextureGpuOwner, type GpuTextureBinding } from "../texture/gpu-owner";
 import {
   MAX_CANONICAL_DIRECTIONAL_LIGHTS,
   type CanonicalDrawSurface,
@@ -33,9 +34,6 @@ type GpuSurface = Readonly<{
   surface: CanonicalDrawSurface;
   texture: WebGLTexture | null;
 }>;
-
-type GpuTexture = { key: string; mipmapped: boolean; texture: WebGLTexture };
-type GpuSampler = Readonly<{ key: string; sampler: WebGLSampler }>;
 
 type MutableOpaqueDrawIntent = {
   framebuffer: WebGLFramebuffer | null;
@@ -359,29 +357,6 @@ const indexType = (
   ? gl.UNSIGNED_INT
   : indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
 
-const samplerFilter = (gl: WebGL2RenderingContext, filter: string): number => {
-  switch (filter) {
-    case "linear": return gl.LINEAR;
-    case "linear-mipmap-linear": return gl.LINEAR_MIPMAP_LINEAR;
-    case "linear-mipmap-nearest": return gl.LINEAR_MIPMAP_NEAREST;
-    case "nearest": return gl.NEAREST;
-    case "nearest-mipmap-linear": return gl.NEAREST_MIPMAP_LINEAR;
-    case "nearest-mipmap-nearest": return gl.NEAREST_MIPMAP_NEAREST;
-    default: throw new Error(`Royal received unsupported texture filter ${filter}`);
-  }
-};
-
-const samplerWrap = (gl: WebGL2RenderingContext, wrap: string): number => {
-  switch (wrap) {
-    case "clamp-to-edge": return gl.CLAMP_TO_EDGE;
-    case "mirrored-repeat": return gl.MIRRORED_REPEAT;
-    case "repeat": return gl.REPEAT;
-    default: throw new Error(`Royal received unsupported texture wrap ${wrap}`);
-  }
-};
-
-const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
-
 /** Owns surface programs and geometry allocations for one context generation. */
 export class SurfaceGpuOwner {
   readonly #cameraPosition = new Float32Array(4);
@@ -396,20 +371,21 @@ export class SurfaceGpuOwner {
   readonly #materialFactors = new Float32Array(4);
   readonly #normalTransform: MutableMat4 = identityMat4();
   #scene: CanonicalSurfaceScene | null = null;
-  #samplerResources: readonly GpuSampler[] = [];
   #solidStandardProgram: StandardProgram | null = null;
   #solidUnlitProgram: UnlitProgram | null = null;
-  #textureResources: readonly GpuTexture[] = [];
+  readonly #textureGpu: TextureGpuOwner;
   #texturedStandardProgram: StandardProgram | null = null;
   #texturedUnlitProgram: UnlitProgram | null = null;
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
+    this.#textureGpu = new TextureGpuOwner(gl);
   }
 
   dispose(): void {
     this.#deleteResources();
+    this.#textureGpu.dispose();
     this.#deletePrograms();
     this.#drawIntent = null;
     this.#scene = null;
@@ -418,8 +394,7 @@ export class SurfaceGpuOwner {
   invalidate(): void {
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
-    this.#samplerResources = [];
-    this.#textureResources = [];
+    this.#textureGpu.invalidate();
     this.#solidStandardProgram = null;
     this.#solidUnlitProgram = null;
     this.#texturedStandardProgram = null;
@@ -536,12 +511,8 @@ export class SurfaceGpuOwner {
 
   #deleteResources(): void {
     for (const resource of this.#geometryResources) this.#deleteGeometry(resource);
-    for (const resource of this.#samplerResources) this.#gl.deleteSampler(resource.sampler);
-    for (const resource of this.#textureResources) this.#gl.deleteTexture(resource.texture);
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
-    this.#samplerResources = [];
-    this.#textureResources = [];
   }
 
   #deletePrograms(): void {
@@ -633,58 +604,6 @@ export class SurfaceGpuOwner {
     }
   }
 
-  #createSampler(binding: CanonicalTextureBinding): GpuSampler {
-    const gl = this.#gl;
-    const sampler = gl.createSampler();
-    if (sampler === null) throw new Error("Royal could not allocate a texture sampler");
-    try {
-      gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, samplerFilter(gl, binding.sampler.magFilter));
-      gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, samplerFilter(gl, binding.sampler.minFilter));
-      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, samplerWrap(gl, binding.sampler.wrapS));
-      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, samplerWrap(gl, binding.sampler.wrapT));
-      return { key: binding.samplerKey, sampler };
-    } catch (error) {
-      gl.deleteSampler(sampler);
-      throw error;
-    }
-  }
-
-  #createTexture(binding: CanonicalTextureBinding): GpuTexture {
-    const gl = this.#gl;
-    const texture = gl.createTexture();
-    if (texture === null) throw new Error("Royal could not allocate an ordinary texture");
-    try {
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        binding.decoded.source,
-      );
-      const mipmapped = usesMipmaps(binding.sampler.minFilter);
-      if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
-      return { key: binding.storageKey, mipmapped, texture };
-    } catch (error) {
-      gl.deleteTexture(texture);
-      throw error;
-    }
-  }
-
-  #ensureMipmaps(resource: GpuTexture): void {
-    if (resource.mipmapped) return;
-    const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    resource.mipmapped = true;
-  }
-
   #programFor(
     kind: "standard" | "unlit",
     textured: boolean,
@@ -710,6 +629,7 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     if (scene === null || scene.surfaces.length === 0) {
       this.#deleteResources();
+      this.#textureGpu.reconcile([]);
       this.#drawIntent = null;
       return;
     }
@@ -725,22 +645,16 @@ export class SurfaceGpuOwner {
     const previousByKey = new Map(
       this.#geometryResources.map((resource) => [resource.key, resource] as const),
     );
-    const previousTextures = new Map(
-      this.#textureResources.map((resource) => [resource.key, resource] as const),
-    );
-    const previousSamplers = new Map(
-      this.#samplerResources.map((resource) => [resource.key, resource] as const),
-    );
     const nextByKey = new Map<string, GpuGeometry>();
-    const nextTextures = new Map<string, GpuTexture>();
-    const nextSamplers = new Map<string, GpuSampler>();
     const nextGeometryResources: GpuGeometry[] = [];
-    const nextTextureResources: GpuTexture[] = [];
-    const nextSamplerResources: GpuSampler[] = [];
+    const pendingSurfaces: Array<Readonly<{
+      geometry: GpuGeometry;
+      surface: CanonicalDrawSurface;
+    }>> = [];
+    const textureInputs: Array<CanonicalTextureBinding | undefined> = [];
     const nextSurfaces: GpuSurface[] = [];
     const created: GpuGeometry[] = [];
-    const createdTextures: GpuTexture[] = [];
-    const createdSamplers: GpuSampler[] = [];
+    let textureBindings: readonly GpuTextureBinding[];
     try {
       for (const surface of scene.surfaces) {
         const geometryBaseKey = surface.material.kind === "standard"
@@ -757,56 +671,29 @@ export class SurfaceGpuOwner {
           nextByKey.set(key, geometry);
           nextGeometryResources.push(geometry);
         }
-        const binding = surface.material.baseColorTexture;
-        let texture: GpuTexture | undefined;
-        let sampler: GpuSampler | undefined;
-        if (binding !== undefined) {
-          texture = nextTextures.get(binding.storageKey) ?? previousTextures.get(binding.storageKey);
-          if (texture === undefined) {
-            texture = this.#createTexture(binding);
-            createdTextures.push(texture);
-          }
-          if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
-          if (!nextTextures.has(binding.storageKey)) {
-            nextTextures.set(binding.storageKey, texture);
-            nextTextureResources.push(texture);
-          }
-          sampler = nextSamplers.get(binding.samplerKey) ?? previousSamplers.get(binding.samplerKey);
-          if (sampler === undefined) {
-            sampler = this.#createSampler(binding);
-            createdSamplers.push(sampler);
-          }
-          if (!nextSamplers.has(binding.samplerKey)) {
-            nextSamplers.set(binding.samplerKey, sampler);
-            nextSamplerResources.push(sampler);
-          }
-        }
-        nextSurfaces.push({
-          geometry,
-          sampler: sampler?.sampler ?? null,
-          surface,
-          texture: texture?.texture ?? null,
-        });
+        pendingSurfaces.push({ geometry, surface });
+        textureInputs.push(surface.material.baseColorTexture);
       }
+      textureBindings = this.#textureGpu.reconcile(textureInputs);
     } catch (error) {
       for (const resource of created) this.#deleteGeometry(resource);
-      for (const resource of createdSamplers) this.#gl.deleteSampler(resource.sampler);
-      for (const resource of createdTextures) this.#gl.deleteTexture(resource.texture);
       throw error;
+    }
+    for (let index = 0; index < pendingSurfaces.length; index += 1) {
+      const pending = pendingSurfaces[index]!;
+      const binding = textureBindings[index]!;
+      nextSurfaces.push({
+        geometry: pending.geometry,
+        sampler: binding.sampler,
+        surface: pending.surface,
+        texture: binding.texture,
+      });
     }
     for (const resource of this.#geometryResources) {
       if (nextByKey.get(resource.key) !== resource) this.#deleteGeometry(resource);
     }
-    for (const resource of this.#samplerResources) {
-      if (nextSamplers.get(resource.key) !== resource) this.#gl.deleteSampler(resource.sampler);
-    }
-    for (const resource of this.#textureResources) {
-      if (nextTextures.get(resource.key) !== resource) this.#gl.deleteTexture(resource.texture);
-    }
     this.#geometryResources = nextGeometryResources;
     this.#gpuSurfaces = nextSurfaces;
-    this.#samplerResources = nextSamplerResources;
-    this.#textureResources = nextTextureResources;
     this.#drawIntent = null;
   }
 }
