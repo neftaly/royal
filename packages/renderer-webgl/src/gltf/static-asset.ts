@@ -10,6 +10,7 @@ import type {
   EmbeddedTextureAssetRef,
   TextureSourceRef,
 } from "../texture/asset-owner";
+import type { DecodedDracoPrimitive } from "./draco";
 import { parseGlb } from "./glb";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
@@ -25,6 +26,10 @@ export type PreparedStaticGltf = Readonly<{
 
 type JsonObject = Record<string, unknown>;
 type IndexArray = Uint8Array | Uint16Array | Uint32Array;
+type StaticDracoDecoder = (
+  primitive: JsonObject,
+  path: string,
+) => DecodedDracoPrimitive;
 
 const fail = (label: string, path: string, detail: string): never => {
   throw new Error(`${label} ${path}: ${detail}`);
@@ -233,6 +238,47 @@ const readPositions = (
     bounds: { max: [maxX, maxY, maxZ], min: [minX, minY, minZ] },
     positions,
   };
+};
+
+const decodedPositions = (
+  values: Float32Array,
+  label: string,
+  path: string,
+): Pick<CanonicalTriangleGeometry, "bounds" | "positions"> => {
+  if (values.length === 0 || values.length % 3 !== 0) {
+    fail(label, path, "decoded POSITION size is invalid");
+  }
+  let minX = Infinity; let minY = Infinity; let minZ = Infinity;
+  let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
+  for (let offset = 0; offset < values.length; offset += 3) {
+    const x = values[offset]!; const y = values[offset + 1]!; const z = values[offset + 2]!;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      fail(label, path, `decoded position ${offset / 3} is not finite`);
+    }
+    minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+  }
+  return {
+    bounds: { max: [maxX, maxY, maxZ], min: [minX, minY, minZ] },
+    positions: values,
+  };
+};
+
+const validateDecodedVectors = (
+  values: Float32Array,
+  componentCount: 2 | 3,
+  label: string,
+  path: string,
+): Float32Array => {
+  if (values.length === 0 || values.length % componentCount !== 0) {
+    fail(label, path, "decoded attribute size is invalid");
+  }
+  for (let offset = 0; offset < values.length; offset += 1) {
+    if (!Number.isFinite(values[offset])) {
+      fail(label, path, `decoded component ${offset} is not finite`);
+    }
+  }
+  return values;
 };
 
 const readFloatVectors = (
@@ -548,13 +594,15 @@ const prepareStaticDocument = (
   contentKey: string,
   label: string,
   sourceUri: string,
+  decodeDraco?: StaticDracoDecoder,
 ): PreparedStaticGltf => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
   const asset = object(document.asset, label, "asset");
   if (asset.version !== "2.0") fail(label, "asset.version", "must be 2.0");
-  if (optionalArray(document.animations, label, "animations").length > 0) {
-    fail(label, "animations", "are not supported yet");
-  }
+  // Static ingestion intentionally ignores animation declarations. The current
+  // node transforms are the bind/default pose; animation support can layer over
+  // this canonical result without making otherwise renderable assets fail.
+  optionalArray(document.animations, label, "animations");
   if (optionalArray(document.skins, label, "skins").length > 0) {
     fail(label, "skins", "are not supported yet");
   }
@@ -562,7 +610,12 @@ const prepareStaticDocument = (
     document.extensionsRequired, label, "extensionsRequired",
   );
   for (let extensionIndex = 0; extensionIndex < requiredExtensions.length; extensionIndex += 1) {
-    if (requiredExtensions[extensionIndex] !== "KHR_materials_unlit") {
+    const extension = requiredExtensions[extensionIndex];
+    if (
+      extension !== "KHR_materials_unlit"
+      && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
+      && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
+    ) {
       fail(label, `extensionsRequired[${extensionIndex}]`, "is unsupported");
     }
   }
@@ -623,46 +676,73 @@ const prepareStaticDocument = (
       }
       if (primitive.targets !== undefined) fail(label, `${path}.targets`, "are not supported yet");
       const attributes = object(primitive.attributes, label, `${path}.attributes`);
-      for (const semantic of Object.keys(attributes)) {
-        if (semantic !== "POSITION" && semantic !== "NORMAL" && semantic !== "TEXCOORD_0") {
-          fail(label, `${path}.attributes.${semantic}`, "is not in the static profile yet");
-        }
-      }
+      const extensions = primitive.extensions === undefined
+        ? {}
+        : object(primitive.extensions, label, `${path}.extensions`);
+      const hasDraco = extensions.KHR_draco_mesh_compression !== undefined;
+      const decoded = hasDraco
+        ? decodeDraco?.(primitive, path)
+          ?? fail(label, `${path}.extensions.KHR_draco_mesh_compression`, "is unsupported")
+        : undefined;
       const positionAccessor = index(
         attributes.POSITION, accessors, label, `${path}.attributes.POSITION`,
       );
-      const { bounds, positions } = readPositions(context, positionAccessor);
+      const decodedPositionValues = decoded?.attributes.get("POSITION");
+      const { bounds, positions } = decodedPositionValues === undefined
+        ? readPositions(context, positionAccessor)
+        : decodedPositions(decodedPositionValues, label, `${path}.attributes.POSITION`);
       const vertexCount = positions.length / 3;
+      const decodedNormalValues = decoded?.attributes.get("NORMAL");
       const normals = attributes.NORMAL === undefined
         ? undefined
-        : readFloatVectors(
-          context,
-          index(attributes.NORMAL, accessors, label, `${path}.attributes.NORMAL`),
-          "VEC3",
-          3,
-          "NORMAL",
-        );
+        : decodedNormalValues === undefined
+          ? readFloatVectors(
+            context,
+            index(attributes.NORMAL, accessors, label, `${path}.attributes.NORMAL`),
+            "VEC3",
+            3,
+            "NORMAL",
+          )
+          : validateDecodedVectors(
+            decodedNormalValues,
+            3,
+            label,
+            `${path}.attributes.NORMAL`,
+          );
       if (normals !== undefined && normals.length / 3 !== vertexCount) {
         fail(label, `${path}.attributes.NORMAL`, "count must match POSITION");
       }
+      const decodedTextureCoordinates = decoded?.attributes.get("TEXCOORD_0");
       const textureCoordinates0 = attributes.TEXCOORD_0 === undefined
         ? undefined
-        : readFloatVectors(
-          context,
-          index(attributes.TEXCOORD_0, accessors, label, `${path}.attributes.TEXCOORD_0`),
-          "VEC2",
-          2,
-          "TEXCOORD_0",
-        );
+        : decodedTextureCoordinates === undefined
+          ? readFloatVectors(
+            context,
+            index(attributes.TEXCOORD_0, accessors, label, `${path}.attributes.TEXCOORD_0`),
+            "VEC2",
+            2,
+            "TEXCOORD_0",
+          )
+          : validateDecodedVectors(
+            decodedTextureCoordinates,
+            2,
+            label,
+            `${path}.attributes.TEXCOORD_0`,
+          );
       if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
       const indexAccessor = primitive.indices === undefined
         ? undefined
         : index(primitive.indices, accessors, label, `${path}.indices`);
-      const indices = readIndices(context, indexAccessor, vertexCount);
+      const indices = decoded?.indices ?? readIndices(context, indexAccessor, vertexCount);
       if (indices.length < 3 || indices.length % 3 !== 0) {
         fail(label, path, "triangle index count must be a positive multiple of 3");
+      }
+      for (let item = 0; item < indices.length; item += 1) {
+        if (indices[item]! >= vertexCount) {
+          fail(label, `${path}.indices[${item}]`, "decoded vertex index is out of range");
+        }
       }
       const material = prepareMaterial(
         materials,
@@ -740,6 +820,36 @@ export const prepareStaticGlb = (
   return prepareStaticDocument(document, binary, "glb", contentKey, label, sourceUri);
 };
 
+const prepareDocumentWithCodecs = async (
+  document: JsonObject,
+  binary: Uint8Array,
+  container: "glb" | "gltf",
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+): Promise<PreparedStaticGltf> => {
+  const extensionsUsed = optionalArray(document.extensionsUsed, label, "extensionsUsed");
+  const extensionsRequired = optionalArray(
+    document.extensionsRequired,
+    label,
+    "extensionsRequired",
+  );
+  const usesDraco = extensionsUsed.includes("KHR_draco_mesh_compression")
+    || extensionsRequired.includes("KHR_draco_mesh_compression");
+  const decodeDraco = usesDraco
+    ? (await import("./draco")).createStaticDracoDecoder(document, binary, label)
+    : undefined;
+  return prepareStaticDocument(
+    document,
+    binary,
+    container,
+    contentKey,
+    label,
+    sourceUri,
+    decodeDraco,
+  );
+};
+
 const parseJsonDocument = (bytes: Uint8Array, label: string): JsonObject => {
   let value: unknown;
   try {
@@ -764,7 +874,18 @@ export const prepareStaticGltfSource = async (
     bytes.byteLength >= 4
     && new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true) === 0x46_54_6c_67
   ) {
-    return prepareStaticGlb(bytes, contentKey, label, sourceUri);
+    const parsed = parseGlb(bytes, label);
+    const document = object(parsed.document, label, "document");
+    const binary = parsed.binaryChunk
+      ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
+    return prepareDocumentWithCodecs(
+      document,
+      binary,
+      "glb",
+      contentKey,
+      label,
+      sourceUri,
+    );
   }
   const document = parseJsonDocument(bytes, label);
   const buffers = array(document.buffers, label, "buffers");
@@ -774,5 +895,12 @@ export const prepareStaticGltfSource = async (
     fail(label, "buffers[0].uri", "must be a non-empty external or data URI");
   }
   const binary = await read(resolveAssetUri(sourceUri, buffer.uri as string));
-  return prepareStaticDocument(document, binary, "gltf", contentKey, label, sourceUri);
+  return prepareDocumentWithCodecs(
+    document,
+    binary,
+    "gltf",
+    contentKey,
+    label,
+    sourceUri,
+  );
 };

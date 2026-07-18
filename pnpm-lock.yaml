@@ -18,6 +18,9 @@ catalogs:
     '@vitejs/plugin-react':
       specifier: ^6.0.3
       version: 6.0.3
+    minidraco:
+      specifier: 0.3.0
+      version: 0.3.0
     oxlint:
       specifier: 1.70.0
       version: 1.70.0
@@ -172,6 +175,9 @@ importers:
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
+      minidraco:
+        specifier: 'catalog:'
+        version: 0.3.0
     devDependencies:
       oxlint:
         specifier: 'catalog:'
@@ -687,6 +693,14 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  minidraco@0.3.0:
+    resolution: {integrity: sha512-Xq2jRdht22I4RCAagtE835ogtsNks7GIFHgVPg1SXLbS0u7k9shVxYNtl4QsfaZOcvG22W7RbsGX2lckf6waJg==}
+    peerDependencies:
+      three: '>=0.170'
+    peerDependenciesMeta:
+      three:
+        optional: true
 
   nanoid@3.3.15:
     resolution: {integrity: sha512-y7Wygv/7mEOvxTuEQDB8StXdMRBWf1kR/tlhAzBRUFkB2jfcLOAxO/SHmOO2zgz1pVgK29/kyupn059/bCHdjA==}
@@ -1258,6 +1272,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  minidraco@0.3.0: {}
 
   nanoid@3.3.15: {}
 

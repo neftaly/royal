@@ -31,6 +31,29 @@ describe("static glTF preparation core", () => {
     ]));
   });
 
+  it("loads the Draco codec only for a document that declares compressed geometry", async () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_draco_mesh_compression"];
+    document.extensionsUsed = ["KHR_draco_mesh_compression"];
+    const meshes = document.meshes as Array<{
+      primitives: Array<Record<string, unknown>>;
+    }>;
+    meshes[0]!.primitives[0]!.extensions = {
+      KHR_draco_mesh_compression: {
+        attributes: { POSITION: 0 },
+        bufferView: 0,
+      },
+    };
+
+    await expect(prepareStaticGltfSource(
+      staticTriangleGlb(document),
+      "invalid-draco",
+      "invalid-draco.glb",
+      "/models/invalid-draco.glb",
+      async () => new Uint8Array(),
+    )).rejects.toThrow("Draco decode failed");
+  });
+
   it("lowers one unlit GLB triangle into the canonical surface ABI", () => {
     const bytes = staticTriangleGlb();
     const prepared = prepareStaticGlb(bytes, "asset:v1", "triangle.glb");
@@ -198,12 +221,12 @@ describe("static glTF preparation core", () => {
     expect(geometry.textureCoordinates0?.buffer).toBe(bytes.buffer);
   });
 
-  it("rejects unsupported vertex semantics and mismatched stream counts", () => {
-    const unsupported = staticTriangleDocument();
-    const meshes = unsupported.meshes as Array<{ primitives: Array<{ attributes: object }> }>;
-    meshes[0]!.primitives[0]!.attributes = { COLOR_0: 0, POSITION: 0 };
-    expect(() => prepareStaticGlb(staticTriangleGlb(unsupported), "colored"))
-      .toThrow("attributes.COLOR_0: is not in the static profile yet");
+  it("ignores unconsumed vertex streams but rejects mismatched consumed streams", () => {
+    const extended = staticTriangleDocument();
+    const meshes = extended.meshes as Array<{ primitives: Array<{ attributes: object }> }>;
+    meshes[0]!.primitives[0]!.attributes = { COLOR_0: 0, POSITION: 0, TANGENT: 0 };
+    expect(prepareStaticGlb(staticTriangleGlb(extended), "extended").primitives)
+      .toHaveLength(1);
 
     const mismatched = staticTriangleDocument();
     mismatched.accessors = [
@@ -219,7 +242,7 @@ describe("static glTF preparation core", () => {
       .toThrow("attributes.NORMAL: count must match POSITION");
   });
 
-  it("rejects texture, transparency, deformation, and hierarchy ambiguity explicitly", () => {
+  it("renders static animation poses but rejects texture and hierarchy ambiguity explicitly", () => {
     const textured = staticTriangleDocument();
     const materials = textured.materials as Array<Record<string, unknown>>;
     materials[0]!.pbrMetallicRoughness = { baseColorTexture: { index: 0 } };
@@ -228,8 +251,11 @@ describe("static glTF preparation core", () => {
 
     const animated = staticTriangleDocument();
     animated.animations = [{}];
-    expect(() => prepareStaticGlb(staticTriangleGlb(animated), "animated", "animated.glb"))
-      .toThrow("animations: are not supported yet");
+    expect(prepareStaticGlb(
+      staticTriangleGlb(animated),
+      "animated",
+      "animated.glb",
+    ).primitives).toHaveLength(1);
 
     const shared = staticTriangleDocument();
     shared.scenes = [{ nodes: [0, 1] }];
