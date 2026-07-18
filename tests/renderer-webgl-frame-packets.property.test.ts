@@ -368,6 +368,9 @@ describe("retained frame packets", () => {
       catalog, requirements, 0, selectedLevels, selectedLevelEpochs, epoch,
     )).toBe(true);
     expect(framePacketLodRequirementsMatch(
+      catalog, requirements, 0, new Uint32Array(), new Uint32Array(), 0,
+    ), "a packet without predicates must not enter the shared-LOD lifecycle").toBe(true);
+    expect(framePacketLodRequirementsMatch(
       catalog, requirements, 1, selectedLevels, selectedLevelEpochs, epoch,
     )).toBe(false);
     selectedLevels[2] = 1;

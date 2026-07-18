@@ -90,6 +90,11 @@ export type GltfPacketTopology = {
   readonly resources: PacketResourceTables;
 };
 
+/** Whether packet selection needs the shared-view LOD observation phases. */
+export const gltfPacketTopologyRequiresLodSelection = (
+  topology: GltfPacketTopology,
+): boolean => topology.requirements.count !== 0;
+
 const positiveCapacity = (capacity: number): number => {
   if (!Number.isSafeInteger(capacity) || capacity < 1) {
     throw new Error("Royal glTF packet-topology capacity must be a positive safe integer");

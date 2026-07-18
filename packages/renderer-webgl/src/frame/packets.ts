@@ -352,14 +352,17 @@ export const framePacketLodRequirementsMatch = (
   if (!Number.isSafeInteger(packetIndex) || packetIndex < 0 || packetIndex >= catalog.count) {
     throw new Error("Royal frame-packet LOD match index must reference a populated catalog row");
   }
-  const normalizedSentinel = uint32(noSelectedLevel, "LOD selected-level sentinel");
-  const normalizedEpoch = positiveUint32(selectedLevelValidityEpoch, "LOD selected-level validity epoch");
   const first = catalog.lodRequirementFirsts[packetIndex]!;
   const count = catalog.lodRequirementCounts[packetIndex]!;
   const end = first + count;
   if (end > requirements.count) {
     throw new Error("Royal frame-packet LOD-requirement span exceeds populated requirement rows");
   }
+  // A packet without LOD predicates is independent of selection storage and
+  // its frame epoch. This keeps the ordinary packet path out of the LOD shell.
+  if (count === 0) return true;
+  const normalizedSentinel = uint32(noSelectedLevel, "LOD selected-level sentinel");
+  const normalizedEpoch = positiveUint32(selectedLevelValidityEpoch, "LOD selected-level validity epoch");
   for (let index = first; index < end; index += 1) {
     const selectionId = requirements.selectionIds[index]!;
     if (selectionId >= selectedLevels.length || selectionId >= selectedLevelValidityEpochs.length) {

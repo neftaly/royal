@@ -41,6 +41,7 @@ import {
 } from "../math/projected-bounds";
 import { readPacketBoundsInto } from "../packet-resource-tables";
 import { SceneBindingRegistry } from "../scene-binding-registry";
+import { gltfPacketTopologyRequiresLodSelection } from "../gltf-packet-topology";
 
 export const gltfMaterialLodSelectionKey = (
   state: PreparedGltfState,
@@ -92,6 +93,7 @@ export class GltfPacketSelectionOwner {
   }
 
   #prepareSharedViewLodSelections(plan: FramePlan, frameViews: FrameViews): void {
+    if (!gltfPacketTopologyRequiresLodSelection(this.#runtime.packetTopology)) return;
     this.#runtime.sharedViewLods.beginFrame();
     for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
       copyFrameViewMatrixInto(this.#viewProjection, frameViews.viewProjections, viewIndex);

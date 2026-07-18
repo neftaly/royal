@@ -3,6 +3,7 @@ import {
   appendReadyGltfPacketOccurrence,
   clearGltfPacketOccurrence,
   createGltfPacketTopology,
+  gltfPacketTopologyRequiresLodSelection,
   GLTF_PACKET_OCCURRENCE_STATUS,
   GLTF_PACKET_ROOT_SOURCE_KIND,
   rebuildGltfPacketTopology,
@@ -78,6 +79,25 @@ const occurrence = (
 });
 
 describe("pure retained glTF packet topology", () => {
+  it("only requires shared-view observation when emitted packets constrain an LOD", () => {
+    const topology = createGltfPacketTopology();
+    rebuildGltfPacketTopology(topology, 1, [occurrence(0, 0, [
+      primitive(1, [material()]),
+    ])]);
+    expect(gltfPacketTopologyRequiresLodSelection(topology)).toBe(false);
+
+    rebuildGltfPacketTopology(topology, 2, [occurrence(0, 0, [{
+      ...primitive(1, [material()]),
+      nodeLod: { level: 0, selectionIds: [7] },
+    }])]);
+    expect(gltfPacketTopologyRequiresLodSelection(topology)).toBe(true);
+
+    rebuildGltfPacketTopology(topology, 3, [occurrence(0, 0, [
+      primitive(1, [material()]),
+    ])]);
+    expect(gltfPacketTopologyRequiresLodSelection(topology)).toBe(false);
+  });
+
   it("classifies alpha masks separately without stealing transmissive materials", () => {
     const topology = createGltfPacketTopology();
 
