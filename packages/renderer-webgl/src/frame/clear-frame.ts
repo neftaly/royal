@@ -70,13 +70,20 @@ export const validateClearFrameIntent = (intent: ClearFrameIntent): void => {
   requireDimension(intent.size.height, "size.height");
   requireViewport(intent.viewport, intent.size, "viewport");
   if (intent.scissor !== null) requireViewport(intent.scissor, intent.size, "scissor");
-  requireFinite(intent.clearColor[0], "clearColor[0]");
-  requireFinite(intent.clearColor[1], "clearColor[1]");
-  requireFinite(intent.clearColor[2], "clearColor[2]");
-  requireFiniteUnit(intent.clearColor[3], "clearColor[3]");
+  validateLinearRgba(intent.clearColor);
   requireFiniteUnit(intent.clearDepth, "clearDepth");
   requireInteger(intent.clearStencil, "clearStencil");
   if (intent.clearStencil < -0x8000_0000 || intent.clearStencil > 0x7fff_ffff) {
     throw new RangeError("Royal clear frame clearStencil must fit a signed 32-bit integer");
   }
+};
+
+export const validateLinearRgba = (color: readonly number[]): void => {
+  if (color.length !== 4) {
+    throw new TypeError("Royal clear frame clearColor must contain exactly four components");
+  }
+  requireFinite(color[0]!, "clearColor[0]");
+  requireFinite(color[1]!, "clearColor[1]");
+  requireFinite(color[2]!, "clearColor[2]");
+  requireFiniteUnit(color[3]!, "clearColor[3]");
 };
