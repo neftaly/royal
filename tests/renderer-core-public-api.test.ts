@@ -180,6 +180,7 @@ describe("renderer-core public API", () => {
 
     expect(Object.keys(reactRoyal).sort()).toEqual([
       "Canvas",
+      "GltfOrbitCameraFit",
       "OrbitControls",
       "createRendererRoot",
       "useCanvasElement",
@@ -207,6 +208,7 @@ describe("renderer-core public API", () => {
     expect(reactSceneApi).toHaveProperty("scene");
     expect(reactSceneApi).toHaveProperty("solidTexture");
     expect(reactSceneApi).toHaveProperty("textureAsset");
+    expect(reactSceneApi.transformGltfAssetBounds).toBe(rendererCore.transformGltfAssetBounds);
     expect(reactSceneApi).not.toHaveProperty("pass");
     expect(reactSceneApi).not.toHaveProperty("Canvas");
     expect(reactSceneApi).not.toHaveProperty("useInvalidate");

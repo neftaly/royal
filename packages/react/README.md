@@ -30,6 +30,7 @@ Required `KHR_animation_pointer` assets fail explicitly.
 ```tsx
 import {
   Canvas,
+  GltfOrbitCameraFit,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
@@ -48,6 +49,7 @@ import { useMemo } from 'react';
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.2, 0.16, 1]) });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
+const helmet = gltf({ src: helmetSrc, materialVariant: 'display' });
 
 export function App() {
   const orbit = useOrbitCamera({ initial: { distance: 5 } });
@@ -56,7 +58,7 @@ export function App() {
     nodes: [
       directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
       mesh({ geometry: cube, material: red }),
-      gltf({ src: helmetSrc, materialVariant: 'display' }),
+      helmet,
     ],
   }), [orbit.cameraResource]);
 
@@ -65,6 +67,7 @@ export function App() {
       aria-label="Royal scene"
       scene={renderScene}
     >
+      <GltfOrbitCameraFit node={helmet} orbit={orbit} padding={1.1} />
       <OrbitControls orbit={orbit} />
     </Canvas>
   );
@@ -107,6 +110,13 @@ polling. A parent that owns `Canvas.rendererRef` can pass the same root to
 asset-driven camera fitting does not need a child-to-parent bridge or `window`
 dimensions. The size is `undefined` before attachment or while layout gives
 the canvas no area, and composes directly with `orbit.fit(...)`.
+
+`<GltfOrbitCameraFit node={node} orbit={orbit} />` is the declarative form of
+that composition. Place it under `Canvas`; it fits when prepared bounds arrive
+and when the canvas aspect ratio changes. It preserves the current orbit yaw
+and pitch unless either is supplied explicitly, while owning the target and
+distance for the selected asset. Near and far clipping remain explicit on
+`useOrbitCamera`, so responsive layout does not silently change depth precision.
 
 ### WebXR
 

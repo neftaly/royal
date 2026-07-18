@@ -53,7 +53,7 @@ export type {
   GltfNode,
   GltfOptions
 } from './gltf';
-export { gltf } from './gltf';
+export { gltf, transformGltfAssetBounds } from './gltf';
 export {
   createGltfInstanceTransforms,
   gltfInstances,

@@ -22,6 +22,7 @@ export {
   standardMaterial,
   studioEnvironment,
   textureAsset,
+  transformGltfAssetBounds,
   unlitMaterial,
   virtualTexture,
   wireframeMaterial,

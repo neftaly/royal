@@ -40,6 +40,8 @@ export { useRendererDiagnostics } from './renderer-diagnostics';
 export {
   OrbitControls,
 } from './orbit/controls';
+export { GltfOrbitCameraFit } from './orbit/gltf-camera-fit';
+export type { GltfOrbitCameraFitProps } from './orbit/gltf-camera-fit';
 export {
   useOrbitCamera,
   useOrbitCameraView,

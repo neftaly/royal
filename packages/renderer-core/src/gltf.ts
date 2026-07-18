@@ -64,6 +64,55 @@ export interface GltfOptions {
 
 export type GltfInput = GltfOptions | GltfOptions['src'];
 
+/** Returns the world-aligned bounds produced by one Royal node transform. */
+export const transformGltfAssetBounds = (
+  bounds: GltfAssetBounds,
+  transform?: TransformOptions,
+): GltfAssetBounds => {
+  const validatedBounds = frozenBounds3(bounds, 'glTF asset bounds');
+  const { position, rotation, scale } = resolveTransform(transform ?? {});
+  const [rotationX, rotationY, rotationZ] = rotation;
+  const cosX = Math.cos(rotationX);
+  const sinX = Math.sin(rotationX);
+  const cosY = Math.cos(rotationY);
+  const sinY = Math.sin(rotationY);
+  const cosZ = Math.cos(rotationZ);
+  const sinZ = Math.sin(rotationZ);
+  const matrix00 = cosZ * cosY * scale[0];
+  const matrix01 = (cosZ * sinY * sinX - sinZ * cosX) * scale[1];
+  const matrix02 = (cosZ * sinY * cosX + sinZ * sinX) * scale[2];
+  const matrix10 = sinZ * cosY * scale[0];
+  const matrix11 = (sinZ * sinY * sinX + cosZ * cosX) * scale[1];
+  const matrix12 = (sinZ * sinY * cosX - cosZ * sinX) * scale[2];
+  const matrix20 = -sinY * scale[0];
+  const matrix21 = cosY * sinX * scale[1];
+  const matrix22 = cosY * cosX * scale[2];
+  const centerX = (validatedBounds.min[0] + validatedBounds.max[0]) * 0.5;
+  const centerY = (validatedBounds.min[1] + validatedBounds.max[1]) * 0.5;
+  const centerZ = (validatedBounds.min[2] + validatedBounds.max[2]) * 0.5;
+  const extentX = (validatedBounds.max[0] - validatedBounds.min[0]) * 0.5;
+  const extentY = (validatedBounds.max[1] - validatedBounds.min[1]) * 0.5;
+  const extentZ = (validatedBounds.max[2] - validatedBounds.min[2]) * 0.5;
+  const transformedCenterX = matrix00 * centerX + matrix01 * centerY + matrix02 * centerZ + position[0];
+  const transformedCenterY = matrix10 * centerX + matrix11 * centerY + matrix12 * centerZ + position[1];
+  const transformedCenterZ = matrix20 * centerX + matrix21 * centerY + matrix22 * centerZ + position[2];
+  const transformedExtentX = Math.abs(matrix00) * extentX + Math.abs(matrix01) * extentY + Math.abs(matrix02) * extentZ;
+  const transformedExtentY = Math.abs(matrix10) * extentX + Math.abs(matrix11) * extentY + Math.abs(matrix12) * extentZ;
+  const transformedExtentZ = Math.abs(matrix20) * extentX + Math.abs(matrix21) * extentY + Math.abs(matrix22) * extentZ;
+  return frozenBounds3({
+    max: [
+      transformedCenterX + transformedExtentX,
+      transformedCenterY + transformedExtentY,
+      transformedCenterZ + transformedExtentZ,
+    ],
+    min: [
+      transformedCenterX - transformedExtentX,
+      transformedCenterY - transformedExtentY,
+      transformedCenterZ - transformedExtentZ,
+    ],
+  }, 'transformed glTF asset bounds');
+};
+
 const GLTF_FIELDS = [
   'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'src', 'transform', 'version',
 ] as const;

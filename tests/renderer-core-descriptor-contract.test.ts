@@ -19,6 +19,7 @@ import {
   standardMaterial,
   studioEnvironment,
   textureAsset,
+  transformGltfAssetBounds,
   type TextureRef,
   unlitMaterial,
   virtualTexture,
@@ -36,6 +37,28 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
+  it("transforms glTF bounds with the same affine convention as scene nodes", () => {
+    expect(transformGltfAssetBounds({
+      max: [1, 2, 3],
+      min: [-1, -2, -3],
+    }, {
+      position: [5, 6, 7],
+      scale: [2, -0.5, 3],
+    })).toEqual({
+      max: [7, 7, 16],
+      min: [3, 5, -2],
+    });
+
+    const rotated = transformGltfAssetBounds({
+      max: [2, 1, 1],
+      min: [0, 0, 0],
+    }, { rotation: [0, 0, Math.PI / 2] });
+    expect(rotated.min[0]).toBeCloseTo(-1);
+    expect(rotated.min[1]).toBeCloseTo(0);
+    expect(rotated.max[0]).toBeCloseTo(0);
+    expect(rotated.max[1]).toBeCloseTo(2);
+  });
+
   it("builds one direct scene with authored presentation", () => {
     const environment = studioEnvironment({
       radianceScaleNits: 80,

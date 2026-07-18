@@ -124,13 +124,15 @@ try {
   writeFileSync(path.join(temporaryRoot, 'app.tsx'), `
 import {
   Canvas,
+  GltfOrbitCameraFit,
   useGltfAssetStatus,
+  useOrbitCamera,
   useRendererDiagnostics,
   useRendererLifecycle,
   type RendererResourceBudgetOptions,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { gltf, perspectiveCamera, scene } from '@royal/react/scene';
+import { gltf, scene } from '@royal/react/scene';
 import {
   createXrSessionRuntime,
   createXrSessionStore,
@@ -143,10 +145,6 @@ const asset = gltf({ src: '/model.glb' });
 const largeAssetBudgets = {
   cpuDecodedBytes: 1024 * 1024 * 1024,
 } satisfies RendererResourceBudgetOptions;
-const renderScene = scene({
-  camera: perspectiveCamera({ position: [0, 0, 3] }),
-  nodes: [asset],
-});
 
 const Status = (): ReactNode => {
   const assetStatus = useGltfAssetStatus(asset.asset);
@@ -164,11 +162,16 @@ const Status = (): ReactNode => {
   return <output>{renderer}: {label}, {images}, fit {framing}, {warnings} warnings</output>;
 };
 
-export const App = (): ReactNode => (
-  <Canvas rendererOptions={{ resourceBudgets: largeAssetBudgets }} scene={renderScene}>
-    <Status />
-  </Canvas>
-);
+export const App = (): ReactNode => {
+  const orbit = useOrbitCamera({ initial: { distance: 3 } });
+  const renderScene = scene({ camera: orbit.cameraResource, nodes: [asset] });
+  return (
+    <Canvas rendererOptions={{ resourceBudgets: largeAssetBudgets }} scene={renderScene}>
+      <GltfOrbitCameraFit node={asset} orbit={orbit} padding={1.1} />
+      <Status />
+    </Canvas>
+  );
+};
 
 const xrStore = createXrSessionStore<XrSession>();
 export const startXr = (root: RoyalRendererRoot, session: XrSession) =>

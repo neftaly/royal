@@ -1,5 +1,6 @@
 import {
   Canvas,
+  GltfOrbitCameraFit,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
@@ -10,6 +11,14 @@ import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, materialEnvironment, materialFillLight, materialKeyLight, materialPass } from '../presentation';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const helmetNode = gltf({
+  src: helmetSrc,
+  transform: {
+    position: [0, -0.08, 0],
+    rotation: [0, 0.34, 0],
+    scale: [1.1, 1.1, 1.1],
+  },
+});
 
 export const GltfHelmet = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -22,14 +31,7 @@ export const GltfHelmet = (): ReactNode => {
     nodes: [
       directionalLight(materialKeyLight),
       directionalLight(materialFillLight),
-      gltf({
-        src: helmetSrc,
-        transform: {
-          position: [0, -0.08, 0],
-          rotation: [0, 0.34, 0],
-          scale: [1.1, 1.1, 1.1],
-        },
-      }),
+      helmetNode,
     ],
   }), [orbit.cameraResource]);
 
@@ -41,6 +43,7 @@ export const GltfHelmet = (): ReactNode => {
       scene={renderScene}
     >
       <BenchmarkRendererSnapshot />
+      <GltfOrbitCameraFit node={helmetNode} orbit={orbit} padding={1.15} />
       <OrbitControls orbit={orbit} />
     </Canvas>
   );
