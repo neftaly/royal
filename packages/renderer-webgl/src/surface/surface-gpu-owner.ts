@@ -14,6 +14,7 @@ import {
   type CanonicalDrawSurface,
   type CanonicalSurfaceScene,
 } from "./scene-lowering";
+import type { CanonicalTextureBinding } from "./canonical-material";
 
 type GpuGeometry = Readonly<{
   indexBuffer: WebGLBuffer;
@@ -21,19 +22,27 @@ type GpuGeometry = Readonly<{
   indexType: number;
   key: string;
   normalBuffer: WebGLBuffer | null;
+  textureCoordinateBuffer: WebGLBuffer | null;
   vertexArray: WebGLVertexArrayObject;
   vertexBuffer: WebGLBuffer;
 }>;
 
 type GpuSurface = Readonly<{
   geometry: GpuGeometry;
+  sampler: WebGLSampler | null;
   surface: CanonicalDrawSurface;
+  texture: WebGLTexture | null;
 }>;
+
+type GpuTexture = { key: string; mipmapped: boolean; texture: WebGLTexture };
+type GpuSampler = Readonly<{ key: string; sampler: WebGLSampler }>;
 
 type MutableOpaqueDrawIntent = {
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
+  sampler0: WebGLSampler | null;
+  texture0: WebGLTexture | null;
   vertexArray: WebGLVertexArrayObject;
   viewport: { height: number; width: number; x: number; y: number };
 };
@@ -42,6 +51,8 @@ type UnlitProgram = Readonly<{
   color: WebGLUniformLocation;
   kind: "unlit";
   program: WebGLProgram;
+  texture: WebGLUniformLocation | null;
+  textured: boolean;
   viewProjectionModel: WebGLUniformLocation;
 }>;
 
@@ -57,18 +68,33 @@ type StandardProgram = Readonly<{
   normalTransform: WebGLUniformLocation;
   program: WebGLProgram;
   presentation: WebGLUniformLocation;
+  texture: WebGLUniformLocation | null;
+  textured: boolean;
   viewProjection: WebGLUniformLocation;
 }>;
 
 const UNLIT_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
+#ifdef TEXTURED
+layout(location = 2) in vec2 textureCoordinate0;
+out vec2 surfaceTextureCoordinate0;
+#endif
 uniform mat4 viewProjectionModel;
-void main() { gl_Position = viewProjectionModel * vec4(position, 1.0); }
+void main() {
+#ifdef TEXTURED
+  surfaceTextureCoordinate0 = textureCoordinate0;
+#endif
+  gl_Position = viewProjectionModel * vec4(position, 1.0);
+}
 `;
 
 const UNLIT_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 uniform vec4 linearColor;
+#ifdef TEXTURED
+in vec2 surfaceTextureCoordinate0;
+uniform sampler2D baseColorTexture;
+#endif
 out vec4 outputColor;
 vec3 linearToSrgb(vec3 value) {
   bvec3 low = lessThanEqual(value, vec3(0.0031308));
@@ -76,18 +102,31 @@ vec3 linearToSrgb(vec3 value) {
   vec3 upper = 1.055 * pow(max(value, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
   return mix(upper, lower, low);
 }
-void main() { outputColor = vec4(linearToSrgb(linearColor.rgb), linearColor.a); }
+void main() {
+  vec4 color = linearColor;
+#ifdef TEXTURED
+  color *= texture(baseColorTexture, surfaceTextureCoordinate0);
+#endif
+  outputColor = vec4(linearToSrgb(color.rgb), 1.0);
+}
 `;
 
 const STANDARD_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
+#ifdef TEXTURED
+layout(location = 2) in vec2 textureCoordinate0;
+out vec2 surfaceTextureCoordinate0;
+#endif
 uniform mat4 viewProjection;
 uniform mat4 model;
 uniform mat4 normalTransform;
 out vec3 worldNormal;
 out vec3 worldPosition;
 void main() {
+#ifdef TEXTURED
+  surfaceTextureCoordinate0 = textureCoordinate0;
+#endif
   vec4 world = model * vec4(position, 1.0);
   worldPosition = world.xyz;
   worldNormal = mat3(normalTransform) * normal;
@@ -100,6 +139,10 @@ precision highp float;
 #define MAX_DIRECTIONAL_LIGHTS ${MAX_CANONICAL_DIRECTIONAL_LIGHTS}
 in vec3 worldNormal;
 in vec3 worldPosition;
+#ifdef TEXTURED
+in vec2 surfaceTextureCoordinate0;
+uniform sampler2D baseColorTexture;
+#endif
 uniform vec4 baseColor;
 uniform vec4 cameraWorldPosition;
 uniform vec4 directionalLightColors[MAX_DIRECTIONAL_LIGHTS];
@@ -153,6 +196,10 @@ vec3 linearToSrgb(vec3 value) {
   return mix(upper, lower, low);
 }
 void main() {
+  vec4 surfaceBaseColor = baseColor;
+#ifdef TEXTURED
+  surfaceBaseColor *= texture(baseColorTexture, surfaceTextureCoordinate0);
+#endif
   vec3 normal = worldNormal;
   if (dot(normal, normal) <= 0.00000001) {
     normal = cross(dFdx(worldPosition), dFdy(worldPosition));
@@ -165,8 +212,8 @@ void main() {
   float metallic = materialFactors.x;
   float roughness = clamp(materialFactors.y, 0.04, 1.0);
   vec3 dielectric = vec3(0.04);
-  vec3 f0 = mix(dielectric, baseColor.rgb, metallic);
-  vec3 diffuseColor = baseColor.rgb * (1.0 - metallic);
+  vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
+  vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
   vec3 lit = vec3(0.0);
   for (int index = 0; index < MAX_DIRECTIONAL_LIGHTS; index += 1) {
     if (index >= directionalLightCount) break;
@@ -242,6 +289,10 @@ const createProgram = (
   return program;
 };
 
+const shaderVariant = (source: string, textured: boolean): string => textured
+  ? source.replace("\n", "\n#define TEXTURED\n")
+  : source;
+
 const uniform = (
   gl: WebGL2RenderingContext,
   program: WebGLProgram,
@@ -255,18 +306,34 @@ const uniform = (
   return location;
 };
 
-const createUnlitProgram = (gl: WebGL2RenderingContext): UnlitProgram => {
-  const program = createProgram(gl, UNLIT_VERTEX_SHADER, UNLIT_FRAGMENT_SHADER);
+const createUnlitProgram = (
+  gl: WebGL2RenderingContext,
+  textured: boolean,
+): UnlitProgram => {
+  const program = createProgram(
+    gl,
+    shaderVariant(UNLIT_VERTEX_SHADER, textured),
+    shaderVariant(UNLIT_FRAGMENT_SHADER, textured),
+  );
   return {
     color: uniform(gl, program, "linearColor"),
     kind: "unlit",
     program,
+    texture: textured ? uniform(gl, program, "baseColorTexture") : null,
+    textured,
     viewProjectionModel: uniform(gl, program, "viewProjectionModel"),
   };
 };
 
-const createStandardProgram = (gl: WebGL2RenderingContext): StandardProgram => {
-  const program = createProgram(gl, STANDARD_VERTEX_SHADER, STANDARD_FRAGMENT_SHADER);
+const createStandardProgram = (
+  gl: WebGL2RenderingContext,
+  textured: boolean,
+): StandardProgram => {
+  const program = createProgram(
+    gl,
+    shaderVariant(STANDARD_VERTEX_SHADER, textured),
+    shaderVariant(STANDARD_FRAGMENT_SHADER, textured),
+  );
   return {
     baseColor: uniform(gl, program, "baseColor"),
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
@@ -279,6 +346,8 @@ const createStandardProgram = (gl: WebGL2RenderingContext): StandardProgram => {
     normalTransform: uniform(gl, program, "normalTransform"),
     presentation: uniform(gl, program, "presentation"),
     program,
+    texture: textured ? uniform(gl, program, "baseColorTexture") : null,
+    textured,
     viewProjection: uniform(gl, program, "viewProjection"),
   };
 };
@@ -289,6 +358,29 @@ const indexType = (
 ): number => indices instanceof Uint32Array
   ? gl.UNSIGNED_INT
   : indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
+
+const samplerFilter = (gl: WebGL2RenderingContext, filter: string): number => {
+  switch (filter) {
+    case "linear": return gl.LINEAR;
+    case "linear-mipmap-linear": return gl.LINEAR_MIPMAP_LINEAR;
+    case "linear-mipmap-nearest": return gl.LINEAR_MIPMAP_NEAREST;
+    case "nearest": return gl.NEAREST;
+    case "nearest-mipmap-linear": return gl.NEAREST_MIPMAP_LINEAR;
+    case "nearest-mipmap-nearest": return gl.NEAREST_MIPMAP_NEAREST;
+    default: throw new Error(`Royal received unsupported texture filter ${filter}`);
+  }
+};
+
+const samplerWrap = (gl: WebGL2RenderingContext, wrap: string): number => {
+  switch (wrap) {
+    case "clamp-to-edge": return gl.CLAMP_TO_EDGE;
+    case "mirrored-repeat": return gl.MIRRORED_REPEAT;
+    case "repeat": return gl.REPEAT;
+    default: throw new Error(`Royal received unsupported texture wrap ${wrap}`);
+  }
+};
+
+const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 
 /** Owns surface programs and geometry allocations for one context generation. */
 export class SurfaceGpuOwner {
@@ -304,8 +396,12 @@ export class SurfaceGpuOwner {
   readonly #materialFactors = new Float32Array(4);
   readonly #normalTransform: MutableMat4 = identityMat4();
   #scene: CanonicalSurfaceScene | null = null;
-  #standardProgram: StandardProgram | null = null;
-  #unlitProgram: UnlitProgram | null = null;
+  #samplerResources: readonly GpuSampler[] = [];
+  #solidStandardProgram: StandardProgram | null = null;
+  #solidUnlitProgram: UnlitProgram | null = null;
+  #textureResources: readonly GpuTexture[] = [];
+  #texturedStandardProgram: StandardProgram | null = null;
+  #texturedUnlitProgram: UnlitProgram | null = null;
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
 
   constructor(gl: WebGL2RenderingContext) {
@@ -314,10 +410,7 @@ export class SurfaceGpuOwner {
 
   dispose(): void {
     this.#deleteResources();
-    if (this.#standardProgram !== null) this.#gl.deleteProgram(this.#standardProgram.program);
-    if (this.#unlitProgram !== null) this.#gl.deleteProgram(this.#unlitProgram.program);
-    this.#standardProgram = null;
-    this.#unlitProgram = null;
+    this.#deletePrograms();
     this.#drawIntent = null;
     this.#scene = null;
   }
@@ -325,8 +418,12 @@ export class SurfaceGpuOwner {
   invalidate(): void {
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
-    this.#standardProgram = null;
-    this.#unlitProgram = null;
+    this.#samplerResources = [];
+    this.#textureResources = [];
+    this.#solidStandardProgram = null;
+    this.#solidUnlitProgram = null;
+    this.#texturedStandardProgram = null;
+    this.#texturedUnlitProgram = null;
     this.#drawIntent = null;
     this.#dirty = this.#scene !== null;
   }
@@ -344,18 +441,28 @@ export class SurfaceGpuOwner {
     state: WebGlStateOwner,
   ): void {
     if (this.#dirty) {
-      this.#reconcile();
-      state.invalidateVertexArray();
+      try {
+        this.#reconcile();
+      } finally {
+        state.invalidateVertexArray();
+        state.invalidateTextureBindings();
+      }
     }
     const scene = this.#scene;
     if (scene === null || this.#gpuSurfaces.length === 0) return;
     let drawIntent = this.#drawIntent;
     if (drawIntent === null) {
-      const first = this.#programFor(this.#gpuSurfaces[0]!.surface.material.kind);
+      const firstSurface = this.#gpuSurfaces[0]!;
+      const first = this.#programFor(
+        firstSurface.surface.material.kind,
+        firstSurface.texture !== null,
+      );
       drawIntent = {
         framebuffer: null,
         frontFace: this.#gl.CCW,
         program: first.program,
+        sampler0: firstSurface.sampler,
+        texture0: firstSurface.texture,
         vertexArray: this.#gpuSurfaces[0]!.geometry.vertexArray,
         viewport: { height: 0, width: 0, x: 0, y: 0 },
       };
@@ -365,25 +472,28 @@ export class SurfaceGpuOwner {
     drawIntent.viewport.width = size.backingWidth;
     cameraWorldPositionFromViewInto(this.#cameraPosition, view);
     this.#cameraPosition[3] = 1;
-    let standardGlobalsBound = false;
+    let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     for (const resource of this.#gpuSurfaces) {
       const surface = resource.surface;
-      const program = this.#programFor(surface.material.kind);
+      const program = this.#programFor(surface.material.kind, resource.texture !== null);
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
+      drawIntent.sampler0 = resource.sampler;
+      drawIntent.texture0 = resource.texture;
       drawIntent.vertexArray = resource.geometry.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
       if (program.kind === "unlit") {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
         gl.uniform4fv(program.color, surface.material.baseColor);
+        if (program.texture !== null) gl.uniform1i(program.texture, 0);
       } else {
         const material = surface.material;
         if (material.kind !== "standard") {
           throw new Error("Royal standard surface program received a non-standard material");
         }
-        if (!standardGlobalsBound) {
+        if (standardGlobalsProgram !== program.program) {
           gl.uniformMatrix4fv(program.viewProjection, false, viewProjection);
           gl.uniform4fv(program.cameraWorldPosition, this.#cameraPosition);
           gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
@@ -392,12 +502,13 @@ export class SurfaceGpuOwner {
           this.#materialFactors[2] = scene.exposure;
           this.#materialFactors[3] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
           gl.uniform4fv(program.presentation, this.#materialFactors);
-          standardGlobalsBound = true;
+          standardGlobalsProgram = program.program;
         }
         gl.uniformMatrix4fv(program.model, false, surface.model);
         affineSurfaceNormalTransformInto(this.#normalTransform, surface.model);
         gl.uniformMatrix4fv(program.normalTransform, false, this.#normalTransform);
         gl.uniform4fv(program.baseColor, material.baseColor);
+        if (program.texture !== null) gl.uniform1i(program.texture, 0);
         this.#materialFactors[0] = material.metallicFactor;
         this.#materialFactors[1] = material.roughnessFactor;
         this.#materialFactors[2] = 0;
@@ -416,33 +527,65 @@ export class SurfaceGpuOwner {
   #deleteGeometry(resource: GpuGeometry): void {
     this.#gl.deleteBuffer(resource.indexBuffer);
     if (resource.normalBuffer !== null) this.#gl.deleteBuffer(resource.normalBuffer);
+    if (resource.textureCoordinateBuffer !== null) {
+      this.#gl.deleteBuffer(resource.textureCoordinateBuffer);
+    }
     this.#gl.deleteBuffer(resource.vertexBuffer);
     this.#gl.deleteVertexArray(resource.vertexArray);
   }
 
   #deleteResources(): void {
     for (const resource of this.#geometryResources) this.#deleteGeometry(resource);
+    for (const resource of this.#samplerResources) this.#gl.deleteSampler(resource.sampler);
+    for (const resource of this.#textureResources) this.#gl.deleteTexture(resource.texture);
     this.#geometryResources = [];
     this.#gpuSurfaces = [];
+    this.#samplerResources = [];
+    this.#textureResources = [];
+  }
+
+  #deletePrograms(): void {
+    const programs = [
+      this.#solidStandardProgram,
+      this.#solidUnlitProgram,
+      this.#texturedStandardProgram,
+      this.#texturedUnlitProgram,
+    ];
+    for (const program of programs) {
+      if (program !== null) this.#gl.deleteProgram(program.program);
+    }
+    this.#solidStandardProgram = null;
+    this.#solidUnlitProgram = null;
+    this.#texturedStandardProgram = null;
+    this.#texturedUnlitProgram = null;
   }
 
   #createGeometry(surface: CanonicalDrawSurface, key: string): GpuGeometry {
     const gl = this.#gl;
     const normals = surface.material.kind === "standard" ? surface.geometry.normals : undefined;
+    const textureCoordinates = surface.material.requiresTextureCoordinates
+      ? surface.geometry.textureCoordinates0
+      : undefined;
+    if (surface.material.requiresTextureCoordinates && textureCoordinates === undefined) {
+      throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
+    }
     const vertexArray = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
     const normalBuffer = normals === undefined ? null : gl.createBuffer();
+    const textureCoordinateBuffer = textureCoordinates === undefined ? null : gl.createBuffer();
     if (
       vertexArray === null
       || vertexBuffer === null
       || indexBuffer === null
       || (normals !== undefined && normalBuffer === null)
+      || (textureCoordinates !== undefined && textureCoordinateBuffer === null)
     ) {
       if (vertexArray !== null) gl.deleteVertexArray(vertexArray);
       if (vertexBuffer !== null) gl.deleteBuffer(vertexBuffer);
       if (indexBuffer !== null) gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       throw new Error("Royal could not allocate surface geometry");
     }
     try {
@@ -460,6 +603,14 @@ export class SurfaceGpuOwner {
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
       }
+      if (textureCoordinates === undefined) {
+        gl.disableVertexAttribArray(2);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinateBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(2);
+        gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+      }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, surface.geometry.indices, gl.STATIC_DRAW);
       return {
@@ -468,25 +619,90 @@ export class SurfaceGpuOwner {
         indexType: indexType(gl, surface.geometry.indices),
         key,
         normalBuffer,
+        textureCoordinateBuffer,
         vertexArray,
         vertexBuffer,
       };
     } catch (error) {
       gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       gl.deleteBuffer(vertexBuffer);
       gl.deleteVertexArray(vertexArray);
       throw error;
     }
   }
 
-  #programFor(kind: "standard" | "unlit"): StandardProgram | UnlitProgram {
-    if (kind === "unlit") {
-      this.#unlitProgram ??= createUnlitProgram(this.#gl);
-      return this.#unlitProgram;
+  #createSampler(binding: CanonicalTextureBinding): GpuSampler {
+    const gl = this.#gl;
+    const sampler = gl.createSampler();
+    if (sampler === null) throw new Error("Royal could not allocate a texture sampler");
+    try {
+      gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, samplerFilter(gl, binding.sampler.magFilter));
+      gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, samplerFilter(gl, binding.sampler.minFilter));
+      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, samplerWrap(gl, binding.sampler.wrapS));
+      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, samplerWrap(gl, binding.sampler.wrapT));
+      return { key: binding.samplerKey, sampler };
+    } catch (error) {
+      gl.deleteSampler(sampler);
+      throw error;
     }
-    this.#standardProgram ??= createStandardProgram(this.#gl);
-    return this.#standardProgram;
+  }
+
+  #createTexture(binding: CanonicalTextureBinding): GpuTexture {
+    const gl = this.#gl;
+    const texture = gl.createTexture();
+    if (texture === null) throw new Error("Royal could not allocate an ordinary texture");
+    try {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        binding.decoded.source,
+      );
+      const mipmapped = usesMipmaps(binding.sampler.minFilter);
+      if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
+      return { key: binding.storageKey, mipmapped, texture };
+    } catch (error) {
+      gl.deleteTexture(texture);
+      throw error;
+    }
+  }
+
+  #ensureMipmaps(resource: GpuTexture): void {
+    if (resource.mipmapped) return;
+    const gl = this.#gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    resource.mipmapped = true;
+  }
+
+  #programFor(
+    kind: "standard" | "unlit",
+    textured: boolean,
+  ): StandardProgram | UnlitProgram {
+    if (kind === "unlit") {
+      if (textured) {
+        this.#texturedUnlitProgram ??= createUnlitProgram(this.#gl, true);
+        return this.#texturedUnlitProgram;
+      }
+      this.#solidUnlitProgram ??= createUnlitProgram(this.#gl, false);
+      return this.#solidUnlitProgram;
+    }
+    if (textured) {
+      this.#texturedStandardProgram ??= createStandardProgram(this.#gl, true);
+      return this.#texturedStandardProgram;
+    }
+    this.#solidStandardProgram ??= createStandardProgram(this.#gl, false);
+    return this.#solidStandardProgram;
   }
 
   #reconcile(): void {
@@ -509,15 +725,29 @@ export class SurfaceGpuOwner {
     const previousByKey = new Map(
       this.#geometryResources.map((resource) => [resource.key, resource] as const),
     );
+    const previousTextures = new Map(
+      this.#textureResources.map((resource) => [resource.key, resource] as const),
+    );
+    const previousSamplers = new Map(
+      this.#samplerResources.map((resource) => [resource.key, resource] as const),
+    );
     const nextByKey = new Map<string, GpuGeometry>();
+    const nextTextures = new Map<string, GpuTexture>();
+    const nextSamplers = new Map<string, GpuSampler>();
     const nextGeometryResources: GpuGeometry[] = [];
+    const nextTextureResources: GpuTexture[] = [];
+    const nextSamplerResources: GpuSampler[] = [];
     const nextSurfaces: GpuSurface[] = [];
     const created: GpuGeometry[] = [];
+    const createdTextures: GpuTexture[] = [];
+    const createdSamplers: GpuSampler[] = [];
     try {
       for (const surface of scene.surfaces) {
-        const key = surface.material.kind === "standard" && surface.geometry.normals !== undefined
+        const geometryBaseKey = surface.material.kind === "standard"
+          && surface.geometry.normals !== undefined
           ? `${surface.geometry.key}:normal`
           : `${surface.geometry.key}:position`;
+        const key = `${geometryBaseKey}:${surface.material.requiresTextureCoordinates ? "uv0" : "no-uv"}`;
         let geometry = nextByKey.get(key) ?? previousByKey.get(key);
         if (geometry === undefined) {
           geometry = this.#createGeometry(surface, key);
@@ -527,17 +757,56 @@ export class SurfaceGpuOwner {
           nextByKey.set(key, geometry);
           nextGeometryResources.push(geometry);
         }
-        nextSurfaces.push({ geometry, surface });
+        const binding = surface.material.baseColorTexture;
+        let texture: GpuTexture | undefined;
+        let sampler: GpuSampler | undefined;
+        if (binding !== undefined) {
+          texture = nextTextures.get(binding.storageKey) ?? previousTextures.get(binding.storageKey);
+          if (texture === undefined) {
+            texture = this.#createTexture(binding);
+            createdTextures.push(texture);
+          }
+          if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
+          if (!nextTextures.has(binding.storageKey)) {
+            nextTextures.set(binding.storageKey, texture);
+            nextTextureResources.push(texture);
+          }
+          sampler = nextSamplers.get(binding.samplerKey) ?? previousSamplers.get(binding.samplerKey);
+          if (sampler === undefined) {
+            sampler = this.#createSampler(binding);
+            createdSamplers.push(sampler);
+          }
+          if (!nextSamplers.has(binding.samplerKey)) {
+            nextSamplers.set(binding.samplerKey, sampler);
+            nextSamplerResources.push(sampler);
+          }
+        }
+        nextSurfaces.push({
+          geometry,
+          sampler: sampler?.sampler ?? null,
+          surface,
+          texture: texture?.texture ?? null,
+        });
       }
     } catch (error) {
       for (const resource of created) this.#deleteGeometry(resource);
+      for (const resource of createdSamplers) this.#gl.deleteSampler(resource.sampler);
+      for (const resource of createdTextures) this.#gl.deleteTexture(resource.texture);
       throw error;
     }
     for (const resource of this.#geometryResources) {
       if (nextByKey.get(resource.key) !== resource) this.#deleteGeometry(resource);
     }
+    for (const resource of this.#samplerResources) {
+      if (nextSamplers.get(resource.key) !== resource) this.#gl.deleteSampler(resource.sampler);
+    }
+    for (const resource of this.#textureResources) {
+      if (nextTextures.get(resource.key) !== resource) this.#gl.deleteTexture(resource.texture);
+    }
     this.#geometryResources = nextGeometryResources;
     this.#gpuSurfaces = nextSurfaces;
+    this.#samplerResources = nextSamplerResources;
+    this.#textureResources = nextTextureResources;
     this.#drawIntent = null;
   }
 }

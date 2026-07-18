@@ -4,6 +4,8 @@ export type OpaqueDrawStateIntent = Readonly<{
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
+  sampler0: WebGLSampler | null;
+  texture0: WebGLTexture | null;
   vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
@@ -13,6 +15,8 @@ export type OpaqueDrawStateTransition = {
   framebuffer: boolean;
   frontFace: boolean;
   program: boolean;
+  sampler0: boolean;
+  texture0: boolean;
   vertexArray: boolean;
   viewport: boolean;
   writeMasks: boolean;
@@ -22,6 +26,9 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
   fixedOpaquePipelineKnown: boolean;
   frontFace: number | null;
   program: WebGLProgram | null;
+  sampler0: WebGLSampler | null;
+  texture0: WebGLTexture | null;
+  textureBindingsKnown: boolean;
   vertexArray: WebGLVertexArrayObject | null;
 };
 
@@ -30,6 +37,8 @@ export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => 
   framebuffer: false,
   frontFace: false,
   program: false,
+  sampler0: false,
+  texture0: false,
   vertexArray: false,
   viewport: false,
   writeMasks: false,
@@ -52,6 +61,12 @@ export const planOpaqueDrawStateTransition = (
   output.frontFace = unknown || previous.frontFace !== next.frontFace;
   output.writeMasks = unknown || !previous.writeMasksKnown;
   output.program = unknown || previous.program !== next.program;
+  output.texture0 = unknown
+    || !previous.textureBindingsKnown
+    || previous.texture0 !== next.texture0;
+  output.sampler0 = unknown
+    || !previous.textureBindingsKnown
+    || previous.sampler0 !== next.sampler0;
   output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
 };
 
@@ -64,8 +79,11 @@ export const commitAppliedOpaqueDrawState = (
   state.frontFace = intent.frontFace;
   state.known = true;
   state.program = intent.program;
+  state.sampler0 = intent.sampler0;
   state.scissorEnabled = false;
   state.vertexArray = intent.vertexArray;
+  state.texture0 = intent.texture0;
+  state.textureBindingsKnown = true;
   state.viewportHeight = intent.viewport.height;
   state.viewportWidth = intent.viewport.width;
   state.viewportX = intent.viewport.x;

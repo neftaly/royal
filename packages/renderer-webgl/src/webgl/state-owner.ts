@@ -23,6 +23,9 @@ export class WebGlStateOwner {
     fixedOpaquePipelineKnown: false,
     frontFace: null,
     program: null,
+    sampler0: null,
+    texture0: null,
+    textureBindingsKnown: false,
     vertexArray: null,
   };
 
@@ -35,12 +38,20 @@ export class WebGlStateOwner {
     this.#state.fixedOpaquePipelineKnown = false;
     this.#state.frontFace = null;
     this.#state.program = null;
+    this.#state.sampler0 = null;
+    this.#state.texture0 = null;
+    this.#state.textureBindingsKnown = false;
     this.#state.vertexArray = null;
   }
 
   /** Resource preparation binds VAOs without disturbing the remaining pipeline shadow. */
   invalidateVertexArray(): void {
     this.#state.vertexArray = null;
+  }
+
+  /** Resource preparation may bind texture unit zero without owning draw state. */
+  invalidateTextureBindings(): void {
+    this.#state.textureBindingsKnown = false;
   }
 
   clear(intent: ClearFrameIntent): void {
@@ -100,6 +111,11 @@ export class WebGlStateOwner {
         gl.stencilMask(0xff_ff_ff_ff);
       }
       if (transition.program) gl.useProgram(intent.program);
+      if (transition.texture0) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, intent.texture0);
+      }
+      if (transition.sampler0) gl.bindSampler(0, intent.sampler0);
       if (transition.vertexArray) gl.bindVertexArray(intent.vertexArray);
       commitAppliedOpaqueDrawState(this.#state, intent);
     } catch (error) {

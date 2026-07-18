@@ -31,6 +31,7 @@
     "src/surface/scene-lowering.ts",
     "src/surface/surface-gpu-owner.ts",
     "src/surface/surface-picker.ts",
+    "src/texture/asset-owner.ts",
     "src/webgl/clear-state-transition.ts",
     "src/webgl/draw-state-transition.ts",
     "src/webgl/state-owner.ts"

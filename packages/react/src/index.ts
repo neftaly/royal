@@ -24,6 +24,11 @@ export type {
   GltfAssetStatus,
   GltfAssetStatusInput,
 } from "./observation/gltf-asset";
+export { useTextureAssetStatus } from "./observation/texture-asset";
+export type {
+  TextureAssetStatus,
+  TextureAssetStatusInput,
+} from "./observation/texture-asset";
 export {
   createOrbitCameraController,
   createOrbitControls,

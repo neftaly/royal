@@ -4,6 +4,7 @@ import type {
   LinearRgba,
   MeshNode,
   RenderRoot,
+  TextureAssetRef,
 } from "@royal/renderer-core";
 import {
   identityMat4,
@@ -14,7 +15,7 @@ import {
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
-  prepareSolidCanonicalMaterial,
+  prepareCanonicalMaterial,
   type CanonicalSurfaceMaterial,
 } from "./canonical-material";
 import {
@@ -22,6 +23,7 @@ import {
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
 import type { CanonicalCamera } from "./camera-source-owner";
+import type { DecodedTextureSource } from "../texture/asset-owner";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -77,6 +79,7 @@ export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
   preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
   camera: CanonicalCamera = staticCamera(scene),
+  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined = () => undefined,
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {
@@ -158,14 +161,18 @@ export const prepareCanonicalSurfaceScene = (
       }
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
     }
-    const geometry = prepareCanonicalGeometry(node.geometry);
+    const material = prepareCanonicalMaterial(node.material, decodedTexture);
+    const geometry = prepareCanonicalGeometry(
+      node.geometry,
+      material.requiresTextureCoordinates,
+    );
     const model = transformMat4(node.transform);
     const surface = {
       geometry,
       inverseModel: inverseMat4(model),
       model,
       modelHandedness: modelHandedness(model),
-      material: prepareSolidCanonicalMaterial(node.material),
+      material,
       node,
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry

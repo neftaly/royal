@@ -15,6 +15,7 @@ describe("static glTF preparation core", () => {
     expect(primitive.material).toEqual({
       baseColor: [0.2, 0.4, 0.8, 1],
       kind: "unlit",
+      requiresTextureCoordinates: false,
     });
     expect(primitive.geometry.key).toBe("asset:v1:mesh:0:primitive:0");
     expect(primitive.geometry.positions).toEqual(new Float32Array([
@@ -51,6 +52,7 @@ describe("static glTF preparation core", () => {
         baseColor: [0.1, 0.2, 0.3, 1],
         kind: "standard",
         metallicFactor: 0.25,
+        requiresTextureCoordinates: false,
         roughnessFactor: 0.75,
       });
 
@@ -62,6 +64,7 @@ describe("static glTF preparation core", () => {
         baseColor: [1, 1, 1, 1],
         kind: "standard",
         metallicFactor: 1,
+        requiresTextureCoordinates: false,
         roughnessFactor: 1,
       });
   });

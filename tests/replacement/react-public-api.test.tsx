@@ -16,6 +16,7 @@ import {
   useCanvasPick,
   useCanvasSize,
   useGltfAssetStatus,
+  useTextureAssetStatus,
   useOrbitCamera,
   useOrbitCameraView,
   useRendererLifecycle,
@@ -53,6 +54,7 @@ describe("replacement React public API", () => {
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
+    expectTypeOf(useTextureAssetStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitControls).toBeFunction();
     expectTypeOf(OrbitControls).toBeFunction();

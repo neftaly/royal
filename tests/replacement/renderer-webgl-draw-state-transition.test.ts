@@ -15,6 +15,9 @@ const state = (): AppliedOpaqueDrawState => ({
   fixedOpaquePipelineKnown: false,
   frontFace: null,
   program: null,
+  sampler0: null,
+  texture0: null,
+  textureBindingsKnown: false,
   vertexArray: null,
 });
 
@@ -22,6 +25,8 @@ const intent = (): OpaqueDrawStateIntent => ({
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
+  sampler0: null,
+  texture0: null,
   vertexArray: handle<WebGLVertexArrayObject>(),
   viewport: { height: 360, width: 640, x: 0, y: 0 },
 });
@@ -37,6 +42,8 @@ describe("opaque draw state transition core", () => {
       framebuffer: true,
       frontFace: true,
       program: true,
+      sampler0: true,
+      texture0: true,
       vertexArray: true,
       viewport: true,
       writeMasks: true,
@@ -58,6 +65,8 @@ describe("opaque draw state transition core", () => {
       framebuffer: false,
       frontFace: false,
       program: false,
+      sampler0: false,
+      texture0: false,
       vertexArray: true,
       viewport: false,
       writeMasks: false,
@@ -73,6 +82,23 @@ describe("opaque draw state transition core", () => {
     expect(transition.frontFace).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "frontFace")
+      .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("isolates texture and sampler binding changes from fixed pipeline state", () => {
+    const previous = state();
+    const first = intent();
+    commitAppliedOpaqueDrawState(previous, first);
+    const transition = createOpaqueDrawStateTransition();
+    planOpaqueDrawStateTransition(previous, {
+      ...first,
+      sampler0: handle<WebGLSampler>(),
+      texture0: handle<WebGLTexture>(),
+    }, transition);
+    expect(transition.sampler0).toBe(true);
+    expect(transition.texture0).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "sampler0" && key !== "texture0")
       .every(([, value]) => !value)).toBe(true);
   });
 });

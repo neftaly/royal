@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   mesh,
+  imageTexture,
   directionalLight,
   createCameraViewResource,
   gltf,
@@ -29,6 +30,7 @@ type FakeGl = WebGL2RenderingContext & {
   readonly drawElements: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
+  readonly texImage2D: ReturnType<typeof vi.fn>;
   readonly uniform1i: ReturnType<typeof vi.fn>;
   readonly uniformMatrix4fv: ReturnType<typeof vi.fn>;
   readonly useProgram: ReturnType<typeof vi.fn>;
@@ -38,6 +40,7 @@ type FakeGl = WebGL2RenderingContext & {
 const fakeGl = (): FakeGl => {
   const gl = {
     COLOR_BUFFER_BIT: 0x4000,
+    CLAMP_TO_EDGE: 0x812f,
     ARRAY_BUFFER: 0x8892,
     BACK: 0x0405,
     BLEND: 0x0be2,
@@ -52,19 +55,43 @@ const fakeGl = (): FakeGl => {
     FRAGMENT_SHADER: 0x8b30,
     FRAMEBUFFER: 0x8d40,
     LEQUAL: 0x0203,
+    LINEAR: 0x2601,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
+    LINEAR_MIPMAP_NEAREST: 0x2701,
     LINK_STATUS: 0x8b82,
     MAX_RENDERBUFFER_SIZE: 0x84e8,
     MAX_VIEWPORT_DIMS: 0x0d3a,
+    MIRRORED_REPEAT: 0x8370,
+    NEAREST: 0x2600,
+    NEAREST_MIPMAP_LINEAR: 0x2702,
+    NEAREST_MIPMAP_NEAREST: 0x2700,
+    NONE: 0,
+    REPEAT: 0x2901,
+    RGBA: 0x1908,
+    RGBA8: 0x8058,
     SCISSOR_TEST: 0x0c11,
     STATIC_DRAW: 0x88e4,
     STENCIL_TEST: 0x0b90,
     STENCIL_BUFFER_BIT: 0x0400,
+    SRGB8_ALPHA8: 0x8c43,
+    TEXTURE0: 0x84c0,
+    TEXTURE_2D: 0x0de1,
+    TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_WRAP_S: 0x2802,
+    TEXTURE_WRAP_T: 0x2803,
     TRIANGLES: 0x0004,
     UNSIGNED_BYTE: 0x1401,
     UNSIGNED_INT: 0x1405,
     UNSIGNED_SHORT: 0x1403,
+    UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
     VERTEX_SHADER: 0x8b31,
+    activeTexture: vi.fn(),
     attachShader: vi.fn(),
+    bindSampler: vi.fn(),
+    bindTexture: vi.fn(),
     bindFramebuffer: vi.fn(),
     bindBuffer: vi.fn(),
     bindVertexArray: vi.fn(),
@@ -77,12 +104,16 @@ const fakeGl = (): FakeGl => {
     compileShader: vi.fn(),
     createBuffer: vi.fn(() => ({})),
     createProgram: vi.fn(() => ({})),
+    createSampler: vi.fn(() => ({})),
     createShader: vi.fn(() => ({})),
     createVertexArray: vi.fn(() => ({})),
+    createTexture: vi.fn(() => ({})),
     cullFace: vi.fn(),
     deleteBuffer: vi.fn(),
     deleteProgram: vi.fn(),
     deleteShader: vi.fn(),
+    deleteSampler: vi.fn(),
+    deleteTexture: vi.fn(),
     deleteVertexArray: vi.fn(),
     depthMask: vi.fn(),
     depthFunc: vi.fn(),
@@ -92,6 +123,7 @@ const fakeGl = (): FakeGl => {
     enable: vi.fn(),
     enableVertexAttribArray: vi.fn(),
     frontFace: vi.fn(),
+    generateMipmap: vi.fn(),
     getProgramInfoLog: vi.fn(() => ""),
     getProgramParameter: vi.fn(() => true),
     getShaderInfoLog: vi.fn(() => ""),
@@ -101,9 +133,12 @@ const fakeGl = (): FakeGl => {
       : 4096),
     getUniformLocation: vi.fn(() => ({})),
     linkProgram: vi.fn(),
+    pixelStorei: vi.fn(),
+    samplerParameteri: vi.fn(),
     scissor: vi.fn(),
     shaderSource: vi.fn(),
     stencilMask: vi.fn(),
+    texImage2D: vi.fn(),
     uniform4fv: vi.fn(),
     uniform1i: vi.fn(),
     uniformMatrix4fv: vi.fn(),
@@ -252,6 +287,49 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps textured geometry stable while neutral content progresses to one shared upload", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const { callbacks, canvas, root } = harness({ decodeTexture });
+    const texture = imageTexture("/checker.png");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+    expect(root.getTextureAssetSnapshot(texture)).toEqual({ state: "loading" });
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+
+    const source = {} as ImageBitmap;
+    resolveDecode?.({ height: 32, source, width: 64 });
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture)).toEqual({
+      height: 32,
+      state: "ready",
+      width: 64,
+    }));
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texImage2D.mock.calls[0]!.at(-1)).toBe(source);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
+      String(shader).includes("#define TEXTURED"))).toBe(true);
   });
 
   it("renders committed camera-resource changes without rebuilding scene resources", () => {

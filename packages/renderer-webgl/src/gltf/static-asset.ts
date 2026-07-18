@@ -332,6 +332,7 @@ const prepareMaterial = (
       baseColor: [1, 1, 1, 1],
       kind: "standard",
       metallicFactor: 1,
+      requiresTextureCoordinates: false,
       roughnessFactor: 1,
     };
   }
@@ -372,11 +373,12 @@ const prepareMaterial = (
     }
   }
   const baseColor = [color[0]!, color[1]!, color[2]!, 1] as const;
-  if (unlit) return { baseColor, kind: "unlit" };
+  if (unlit) return { baseColor, kind: "unlit", requiresTextureCoordinates: false };
   return {
     baseColor,
     kind: "standard",
     metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
+    requiresTextureCoordinates: false,
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
   };
 };

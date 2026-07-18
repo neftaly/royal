@@ -5,6 +5,7 @@ import {
   type PickInput,
   type PickResult,
   type RenderRoot,
+  type TextureAssetRef,
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
@@ -32,6 +33,11 @@ import { CameraSourceOwner } from "../surface/camera-source-owner";
 import { prepareCanonicalSurfaceScene } from "../surface/scene-lowering";
 import { SurfaceGpuOwner } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
+import {
+  TextureAssetOwner,
+  type DecodedTextureSource,
+  type TextureAssetSnapshot,
+} from "../texture/asset-owner";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
   rendererRootOptionsSemanticKey,
@@ -51,6 +57,10 @@ export type CanvasRootPlatform = Readonly<{
   onListenerError(error: unknown): void;
   reportScheduledFailure(error: unknown): void;
   requestFrame(callback: () => void): void;
+  decodeTexture?(
+    asset: TextureAssetRef,
+    signal: AbortSignal,
+  ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
 }>;
 
@@ -77,6 +87,11 @@ const defaultPlatform = (): CanvasRootPlatform => ({
     }
   },
 });
+
+const decodeTextureWithBrowser: NonNullable<CanvasRootPlatform["decodeTexture"]> = async (
+  asset,
+  signal,
+) => (await import("../texture/browser-decode")).decodeTextureWithBrowser(asset, signal);
 
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
@@ -152,6 +167,7 @@ export class CanvasRoot {
   readonly #state: WebGlStateOwner;
   readonly #surfaceGpu: SurfaceGpuOwner;
   readonly #surfacePicker = new SurfacePicker();
+  readonly #textureAssets: TextureAssetOwner;
   readonly #unsubscribeContext: () => void;
   readonly #projection = identityMat4();
   readonly #view = identityMat4();
@@ -180,6 +196,11 @@ export class CanvasRoot {
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
       read: platform.readGltf ?? readGltfWithFetch,
+    });
+    this.#textureAssets = new TextureAssetOwner({
+      decode: platform.decodeTexture ?? decodeTextureWithBrowser,
+      onAssetChanged: () => this.#refreshPreparedScene(),
+      onListenerError: (error) => platform.onListenerError(error),
     });
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
@@ -218,6 +239,7 @@ export class CanvasRoot {
     this.#clock.dispose();
     this.#cameraSource.dispose();
     this.#gltfAssets.dispose();
+    this.#textureAssets.dispose();
     this.#surfaceGpu.dispose();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
@@ -254,6 +276,10 @@ export class CanvasRoot {
   /** Focused readiness for one exact source/version identity. */
   getGltfAssetSnapshot = (asset: GltfAssetRef): GltfAssetSnapshot =>
     this.#gltfAssets.getSnapshot(asset);
+
+  /** Focused readiness for one exact decoded texture identity. */
+  getTextureAssetSnapshot = (asset: TextureAssetRef): TextureAssetSnapshot =>
+    this.#textureAssets.getSnapshot(asset);
 
   invalidate(): void {
     this.#assertLive("invalidate");
@@ -296,15 +322,23 @@ export class CanvasRoot {
       scene,
       (node) => this.#gltfAssets.prepared(node.asset),
       camera.camera,
+      (asset) => this.#textureAssets.decoded(asset),
     );
     const gltfNodes: GltfNode[] = [];
-    for (const node of scene.nodes) if (node.kind === "gltf") gltfNodes.push(node);
+    const textureAssets: TextureAssetRef[] = [];
+    for (const node of scene.nodes) {
+      if (node.kind === "gltf") gltfNodes.push(node);
+      if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
+        textureAssets.push(node.material.baseColor);
+      }
+    }
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(gltfNodes);
+    this.#textureAssets.reconcile(textureAssets);
     this.#clock.invalidate();
   }
 
@@ -368,6 +402,10 @@ export class CanvasRoot {
   /** Subscribes only to one exact glTF source/version identity. */
   subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) =>
     this.#gltfAssets.subscribe(asset, listener);
+
+  /** Subscribes only to one exact decoded texture identity. */
+  subscribeTextureAsset = (asset: TextureAssetRef, listener: () => void): (() => void) =>
+    this.#textureAssets.subscribe(asset, listener);
 
   #assertLive(operation: string): void {
     if (this.#disposed) throw new Error(`Cannot ${operation} on a disposed Royal renderer root`);
@@ -449,6 +487,7 @@ export class CanvasRoot {
       this.#surfaceSceneInput,
       (node) => this.#gltfAssets.prepared(node.asset),
       camera.camera,
+      (asset) => this.#textureAssets.decoded(asset),
     );
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);

@@ -2,6 +2,7 @@ import {
   boxGeometry,
   directionalLight,
   gltf,
+  imageTexture,
   mesh,
   perspectiveCamera,
   planeGeometry,
@@ -25,6 +26,35 @@ describe("canonical direct surface lowering", () => {
     expect(box.positions).toHaveLength(24);
     expect(box.indices).toHaveLength(36);
     expect(box.bounds).toEqual({ max: [1, 2, 3], min: [-1, -2, -3] });
+  });
+
+  it("uses one upper-left UV convention and retains textured geometry during fallback", () => {
+    const texture = imageTexture("/checker.png");
+    const renderScene = scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ texture }),
+      })],
+    });
+    const pending = prepareCanonicalSurfaceScene(renderScene);
+    expect(pending.surfaces[0]!.geometry.textureCoordinates0).toEqual(
+      new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
+    );
+    expect(pending.surfaces[0]!.material).toMatchObject({
+      baseColor: [0.214_041, 0.214_041, 0.214_041, 1],
+      requiresTextureCoordinates: true,
+    });
+
+    const source = { height: 8, source: {} as ImageBitmap, width: 16 };
+    const ready = prepareCanonicalSurfaceScene(
+      renderScene,
+      undefined,
+      undefined,
+      () => source,
+    );
+    expect(ready.surfaces[0]!.geometry.key).toBe(pending.surfaces[0]!.geometry.key);
+    expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(source);
   });
 
   it("keeps one node transform and identity while replacing only exact pick triangles", () => {
@@ -99,6 +129,7 @@ describe("canonical direct surface lowering", () => {
       baseColor: [1, 0.5, 0.25, 1],
       kind: "standard",
       metallicFactor: 0.2,
+      requiresTextureCoordinates: false,
       roughnessFactor: 0.7,
     });
   });
