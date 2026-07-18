@@ -1089,6 +1089,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
               );
               this.#gltfPacketSubmissions.resetSegment(plan.revision, orderingSegment);
             }
+            this.#gltfPacketSubmissions.demandNodeMaterials(
+              node,
+              nodeIndex,
+              packetCursor,
+              packetEnd,
+            );
             packetCursor = this.#gltfPacketSubmissions.appendNode(
               node,
               nodeIndex,

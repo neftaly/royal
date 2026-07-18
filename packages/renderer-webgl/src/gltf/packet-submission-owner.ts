@@ -85,6 +85,8 @@ export class GltfPacketSubmissionOwner {
   readonly #lightResolver: SurfaceLightResolver;
   readonly #materials: GltfMaterialPreparationArena;
   readonly #materialBindings = new WeakMap<SurfaceMaterial, GltfFrameMaterialBinding>();
+  #materialDemandEpoch = 0;
+  #materialDemandEpochs = new Uint32Array(1);
   readonly #rootBindings: Array<MutableGltfFrameRootBinding | undefined> = [];
   readonly #runtime: PreparedGltfRuntime;
   readonly #sceneBindings: SceneBindingRegistry;
@@ -134,6 +136,44 @@ export class GltfPacketSubmissionOwner {
       this.#runtime.packetTopology.catalog,
     );
     this.#batches.beginFrame();
+    this.#materialDemandEpoch += 1;
+    if (this.#materialDemandEpoch > 0xffff_ffff) {
+      this.#materialDemandEpochs.fill(0);
+      this.#materialDemandEpoch = 1;
+    }
+  }
+
+  /** Demands every selected material for one plan node before fallible geometry upload. */
+  demandNodeMaterials(
+    node: AnyGltfNode,
+    nodeIndex: number,
+    packetCursor: number,
+    packetEnd: number,
+  ): void {
+    const selected = this.#selection.selected;
+    const selectedPlanNodeIndices = this.#selection.selectedPlanNodeIndices;
+    if (packetCursor >= packetEnd || selectedPlanNodeIndices[packetCursor] !== nodeIndex) return;
+    const topology = this.#runtime.packetTopology;
+    const state = this.#runtime.stateForNode(node);
+    for (let cursor = packetCursor; cursor < packetEnd; cursor += 1) {
+      if (selectedPlanNodeIndices[cursor] !== nodeIndex) break;
+      const packetIndex = selected.orderedPacketIndices[cursor]!;
+      const materialId = topology.catalog.materialIds[packetIndex]!;
+      if (materialId >= this.#materialDemandEpochs.length) {
+        let capacity = this.#materialDemandEpochs.length;
+        while (capacity <= materialId) capacity *= 2;
+        const epochs = new Uint32Array(capacity);
+        epochs.set(this.#materialDemandEpochs);
+        this.#materialDemandEpochs = epochs;
+      }
+      if (this.#materialDemandEpochs[materialId] === this.#materialDemandEpoch) continue;
+      this.#materialDemandEpochs[materialId] = this.#materialDemandEpoch;
+      this.#runtime.images.demandMaterial(
+        state.key,
+        resolvePacketMaterial(topology.resources, materialId),
+      );
+    }
+    this.#runtime.images.publishDemandProgress(state.key);
   }
 
   beginView(planRevision: number, viewIndex: number): GltfPacketViewSelection {

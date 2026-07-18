@@ -133,6 +133,7 @@ type Asset = {
   readonly key: string;
   readonly load: GltfLoadMetrics;
   readonly pendingMaterialRows: WeakMap<LoadedGltfMaterial, number>;
+  publishedImageRequests: number;
   readonly publications: WeakMap<LoadedGltfMaterial, SurfaceMaterialPublication>;
   readonly recipeOwnership: RecipeOwnership;
   readonly readyKeys: Set<string>;
@@ -275,6 +276,7 @@ export class GltfImageDemandCoordinator {
       key: input.key,
       load: input.load,
       pendingMaterialRows: new WeakMap(),
+      publishedImageRequests: 0,
       publications,
       recipeOwnership: {
         activeRecipes: new Set(),
@@ -370,6 +372,14 @@ export class GltfImageDemandCoordinator {
     }
     this.#demandMaterialRefinements(asset, material);
     return false;
+  }
+
+  /** Publishes a coalesced status update after a caller has demanded a material set. */
+  publishDemandProgress(assetKey: string): void {
+    const asset = this.#assets.get(assetKey);
+    if (asset === undefined || asset.publishedImageRequests === asset.load.imageRequests) return;
+    asset.publishedImageRequests = asset.load.imageRequests;
+    this.#requestProgress(asset.key);
   }
 
   /** Re-decodes an embedded image after its durable GPU copy was lost. */
@@ -803,6 +813,7 @@ export class GltfImageDemandCoordinator {
     if (asset.load.imageLoaded + asset.load.imageFailures >= asset.load.imageRequests) {
       asset.load.imagesSettledAt = this.#now();
     }
+    asset.publishedImageRequests = asset.load.imageRequests;
     this.#requestProgress(asset.key);
   }
 

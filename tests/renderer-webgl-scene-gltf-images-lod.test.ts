@@ -194,6 +194,74 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(matrixUniformPayloads(readyCalls, "u_modelNormalTransform")).toHaveLength(1);
   });
 
+  it("demands every visible material before geometry upload backpressure", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceBudgets: { uploadBytes: 150 },
+    });
+    const graph = renderScene([gltf({ src: triangleGltfSrc, version: "material-demand-before-geometry" })]);
+
+    root.render(graph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) => {
+      const document = triangleDocument();
+      const primitive = document.meshes[0]!.primitives[0]!;
+      return responseWithJson(url, {
+        ...document,
+        accessors: [
+          ...document.accessors,
+          { ...document.accessors[0], bufferView: 4 },
+          { ...document.accessors[0], bufferView: 5 },
+        ],
+        buffers: [{ byteLength: 176, uri: triangleBinUri }],
+        bufferViews: [
+          ...document.bufferViews,
+          { buffer: 0, byteLength: 36, byteOffset: 104, target: 34962 },
+          { buffer: 0, byteLength: 36, byteOffset: 140, target: 34962 },
+        ],
+        images: [{ uri: "first.png" }, { uri: "second.png" }, { uri: "third.png" }],
+        materials: [0, 1, 2].map((index) => ({
+          pbrMetallicRoughness: { baseColorTexture: { index } },
+        })),
+        meshes: [{
+          primitives: [
+            primitive,
+            { ...primitive, attributes: { ...primitive.attributes, POSITION: 4 }, material: 1 },
+            { ...primitive, attributes: { ...primitive.attributes, POSITION: 5 }, material: 2 },
+          ],
+        }],
+        textures: [0, 1, 2].map((source) => ({ sampler: 0, source })),
+      });
+    })).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) => {
+      const bytes = new Uint8Array(176);
+      bytes.set(new Uint8Array(triangleBin()));
+      new Float32Array(bytes.buffer, 104, 9).set([
+        0, 0.4, 0,
+        -0.4, -0.5, 0,
+        0.4, -0.5, 0,
+      ]);
+      new Float32Array(bytes.buffer, 140, 9).set([
+        0, 0.3, 0,
+        -0.3, -0.5, 0,
+        0.3, -0.5, 0,
+      ]);
+      return responseWithBuffer(url, bytes.buffer);
+    })).toBe(true);
+    await flushPreparedAssetBoundary();
+
+    expect(ControlledImage.instances.map((image) => new URL(image.src).pathname).sort()).toEqual([
+      "/fixtures/first.png",
+      "/fixtures/second.png",
+      "/fixtures/third.png",
+    ]);
+    expect(viewport.animationFrames.length, "geometry upload should remain deferred after one frame")
+      .toBeGreaterThan(0);
+  });
+
   it("loads glTF bufferView base-color images on primitives without normals", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

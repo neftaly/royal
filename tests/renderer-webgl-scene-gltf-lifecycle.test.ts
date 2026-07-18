@@ -70,8 +70,10 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const node = gltf({ src: triangleGltfSrc, version: "focused-observer" });
-    const statuses: Array<string | undefined> = [];
-    const stop = root.observeGltfAsset(node.asset, (snapshot) => statuses.push(snapshot?.status));
+    const statuses: Array<readonly [string | undefined, number | undefined]> = [];
+    const stop = root.observeGltfAsset(node.asset, (snapshot) => {
+      statuses.push([snapshot?.status, snapshot?.imageRequests]);
+    });
 
     expect(root.gltfAssetSnapshot(node.asset)).toBeUndefined();
     root.render(renderScene([node]));
@@ -82,7 +84,13 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     );
     root.render(renderScene([]));
 
-    expect(statuses).toEqual([undefined, "loading", "sceneReady", undefined]);
+    expect(statuses).toEqual([
+      [undefined, undefined],
+      ["loading", 0],
+      ["sceneReady", 0],
+      ["sceneReady", 1],
+      [undefined, undefined],
+    ]);
     stop();
     root.dispose();
   });

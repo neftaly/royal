@@ -188,6 +188,34 @@ afterEach(() => {
 });
 
 describe("GltfImageDemandCoordinator lifecycle", () => {
+  it("publishes one status update for a coalesced material-demand set", () => {
+    loadRecipeMock.mockImplementation(() => new Promise(() => undefined));
+    const harness = coordinatorHarness();
+    const first = material("first");
+    const second = material("second");
+    const load = metrics();
+    harness.coordinator.registerAsset({
+      key: "asset",
+      load,
+      materials: [first, second],
+      publicationGroups: [[first], [second]],
+      recipeLease: recipeLease(),
+      recipes: [recipe("first"), recipe("second")],
+      stateInstanceKey: 1,
+    });
+
+    harness.coordinator.demandMaterial("asset", first);
+    harness.coordinator.demandMaterial("asset", second);
+    expect(load.imageRequests).toBe(2);
+    expect(harness.progress).not.toHaveBeenCalled();
+
+    harness.coordinator.publishDemandProgress("asset");
+    harness.coordinator.publishDemandProgress("asset");
+    expect(harness.progress).toHaveBeenCalledOnce();
+    expect(harness.progress).toHaveBeenCalledWith("asset");
+    harness.coordinator.dispose();
+  });
+
   it("owns an independent initial publication barrier for each material", () => {
     const harness = coordinatorHarness();
     const first = material("first");
