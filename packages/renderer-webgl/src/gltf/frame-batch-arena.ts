@@ -27,7 +27,9 @@ import { FRAME_PACKET_SIDEDNESS, NO_FRAME_PACKET_ID } from "../frame/packets";
 import type { CpuGeometry } from "../geometry-recipes";
 import {
   affineSurfaceNormalTransformInto,
+  copyMat4ValuesInto,
   identityMat4,
+  mat4ValuesEqual,
   multiplyMat4Into,
   type Mat4,
   type MutableMat4,
@@ -121,12 +123,10 @@ const synchronizeSingleModel = (batch: GltfFrameDrawBatch): void => {
     batch.singleModel = single;
   }
   changed ||= single.local !== local;
-  for (let index = 0; index < 16; index += 1) {
-    if (!Object.is(single.rootSnapshot[index], root[index])) changed = true;
-  }
+  changed ||= !mat4ValuesEqual(single.rootSnapshot, root);
   if (!changed) return;
   single.local = local;
-  for (let index = 0; index < 16; index += 1) single.rootSnapshot[index] = root[index]!;
+  copyMat4ValuesInto(single.rootSnapshot, root);
   multiplyMat4Into(single.model, root, local);
   affineSurfaceNormalTransformInto(single.normalTransform, single.model);
 };

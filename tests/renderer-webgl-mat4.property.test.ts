@@ -12,7 +12,9 @@ import { gltfNodeMat4 } from "../packages/renderer-webgl/src/gltf/transforms";
 import {
   affineSurfaceNormalTransformInto,
   cameraWorldPositionFromViewInto,
+  copyMat4ValuesInto,
   identityMat4,
+  mat4ValuesEqual,
   multiplyMat4,
   rotationXMat4,
   rotationYMat4,
@@ -62,6 +64,16 @@ const referenceTransformVector = (
 };
 
 describe("renderer-webgl transform matrix properties", () => {
+  it("compares and copies retained matrix values without aliasing", () => {
+    const source = translationMat4([1, 2, 3]);
+    const snapshot = new Float64Array(16);
+    expect(mat4ValuesEqual(snapshot, source)).toBe(false);
+    expect(copyMat4ValuesInto(snapshot, source)).toBe(snapshot);
+    expect(mat4ValuesEqual(snapshot, source)).toBe(true);
+    snapshot[3] = -0;
+    expect(mat4ValuesEqual(snapshot, source), "signed zero remains an exact cache value").toBe(false);
+  });
+
   it("builds reusable signed cofactor normal transforms", () => {
     const output = identityMat4();
     forEachFuzzCase({ cases: 64, seed: 0xc0fa_c701 }, ({ label, random }) => {

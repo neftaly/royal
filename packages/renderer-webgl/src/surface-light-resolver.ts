@@ -2,8 +2,10 @@ import type { EnvironmentLight, PrefilteredEnvironmentLight } from "@royal/rende
 import type { ResolvedPrefilteredEnvironment } from "./environment/prefiltered-environment-owner";
 import type { PreparedGltfState } from "./gltf/prepared-runtime";
 import {
+  copyMat4ValuesInto,
   identityMat4,
   inverseMat4,
+  mat4ValuesEqual,
   transformMat4,
   type Mat4,
   type MutableMat4,
@@ -61,37 +63,6 @@ type GltfAssetLightWorkspace = {
   sourceLights: readonly SurfaceLight[] | undefined;
   specular?: MutableSurfaceIblSpecular;
   transformReady: boolean;
-};
-
-const gltfLightTransformInputsChanged = (
-  workspace: GltfAssetLightWorkspace,
-  rootModel: Mat4,
-  imageBasedLight: SurfaceImageBasedLight | undefined,
-  lights: readonly SurfaceLight[],
-): boolean => {
-  if (
-    !workspace.transformReady
-    || workspace.sourceImageBasedLight !== imageBasedLight
-    || workspace.sourceLights !== lights
-  ) return true;
-  for (let index = 0; index < 16; index += 1) {
-    if (!Object.is(workspace.rootSnapshot[index], rootModel[index])) return true;
-  }
-  return false;
-};
-
-const retainGltfLightTransformInputs = (
-  workspace: GltfAssetLightWorkspace,
-  rootModel: Mat4,
-  imageBasedLight: SurfaceImageBasedLight | undefined,
-  lights: readonly SurfaceLight[],
-): void => {
-  for (let index = 0; index < 16; index += 1) {
-    workspace.rootSnapshot[index] = rootModel[index]!;
-  }
-  workspace.sourceImageBasedLight = imageBasedLight;
-  workspace.sourceLights = lights;
-  workspace.transformReady = true;
 };
 
 /** Owns scene/asset light-set resolution and stable glTF light-scope identity. */
@@ -170,12 +141,10 @@ export class SurfaceLightResolver {
     const imageBasedLight = state.imageBasedLight;
     if (!hasGltfAssetLights(state)) return undefined;
     const workspace = this.#gltfAssetWorkspace(state, rootModel);
-    const transformInputsChanged = gltfLightTransformInputsChanged(
-      workspace,
-      rootModel,
-      imageBasedLight,
-      state.lights,
-    );
+    const transformInputsChanged = !workspace.transformReady
+      || workspace.sourceImageBasedLight !== imageBasedLight
+      || workspace.sourceLights !== state.lights
+      || !mat4ValuesEqual(workspace.rootSnapshot, rootModel);
     const irradiance = imageBasedLight === undefined
       ? undefined
       : transformInputsChanged
@@ -192,7 +161,10 @@ export class SurfaceLightResolver {
         irradiance,
         specular,
       );
-      retainGltfLightTransformInputs(workspace, rootModel, imageBasedLight, state.lights);
+      copyMat4ValuesInto(workspace.rootSnapshot, rootModel);
+      workspace.sourceImageBasedLight = imageBasedLight;
+      workspace.sourceLights = state.lights;
+      workspace.transformReady = true;
       return resolved;
     }
     const resolved = workspace.lights.resolved;

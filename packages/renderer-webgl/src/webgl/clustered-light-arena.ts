@@ -1,4 +1,4 @@
-import type { Mat4 } from "../math/mat4";
+import { copyMat4ValuesInto, mat4ValuesEqual, type Mat4 } from "../math/mat4";
 import { GpuUploadCapacityError } from "../gpu-upload-capacity-error";
 import {
   buildClusterGrid,
@@ -172,13 +172,6 @@ const configureTexture = (state: State, unit: number, texture: WebGLTexture): vo
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-};
-
-const matrixMatches = (left: ArrayLike<number>, right: Mat4): boolean => {
-  for (let index = 0; index < 16; index += 1) {
-    if (!Object.is(left[index], right[index])) return false;
-  }
-  return true;
 };
 
 const snapshotMatches = (
@@ -532,8 +525,8 @@ export const bindClusteredLights = (
   let resource = state.resource;
   const lightsChanged = resource === undefined || !resource.gpuValid || !snapshotMatches(resource, lights);
   const viewChanged = resource?.gpuValid !== true || resource.grid === undefined
-    || !matrixMatches(resource.projection, projection)
-    || !matrixMatches(resource.view, view)
+    || !mat4ValuesEqual(resource.projection, projection)
+    || !mat4ValuesEqual(resource.view, view)
     || resource.viewportWidth !== width
     || resource.viewportHeight !== height;
   let grid = resource?.grid;
@@ -625,10 +618,8 @@ export const bindClusteredLights = (
     const { indices: _indices, offsetsAndCounts: _offsetsAndCounts, ...metadata } = builtGrid;
     grid = metadata;
     resource.grid = metadata;
-    for (let index = 0; index < 16; index += 1) {
-      resource.projection[index] = projection[index]!;
-      resource.view[index] = view[index]!;
-    }
+    copyMat4ValuesInto(resource.projection, projection);
+    copyMat4ValuesInto(resource.view, view);
     resource.viewportWidth = width;
     resource.viewportHeight = height;
     resource.lastUsedFrame = frame;

@@ -35,6 +35,23 @@ export const identityMat4 = (): MutableMat4 => [
   0, 0, 0, 1,
 ];
 
+/** Exact retained-value comparison for matrix snapshot caches. */
+export const mat4ValuesEqual = (left: ArrayLike<number>, right: Mat4): boolean => {
+  for (let index = 0; index < 16; index += 1) {
+    if (!Object.is(left[index], right[index])) return false;
+  }
+  return true;
+};
+
+/** Copies a matrix into caller-owned numeric storage without allocating. */
+export const copyMat4ValuesInto = <Target extends { [index: number]: number }>(
+  target: Target,
+  source: Mat4,
+): Target => {
+  for (let index = 0; index < 16; index += 1) target[index] = source[index]!;
+  return target;
+};
+
 export const multiplyMat4Into = (
   out: MutableMat4,
   left: Mat4,
