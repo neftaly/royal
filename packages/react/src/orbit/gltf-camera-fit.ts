@@ -30,7 +30,8 @@ export interface GltfOrbitCameraFitProps {
 /**
  * Fits an orbit camera when glTF bounds become available and whenever the
  * surrounding Canvas aspect ratio changes. The current orientation is
- * preserved unless `pitch` or `yaw` is supplied.
+ * preserved unless `pitch` or `yaw` is supplied, and the controller's far
+ * plane expands when necessary to keep the fitted asset inside the frustum.
  */
 export const GltfOrbitCameraFit = ({
   fovY,

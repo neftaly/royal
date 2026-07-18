@@ -31,7 +31,10 @@ export interface OrbitCameraProjection {
 export interface OrbitCameraController {
   /** Stable scene camera resource; include it in `scene({ camera })`. */
   readonly cameraResource: PerspectiveCameraViewResource;
-  /** Fits the complete view to bounds, using the current field of view unless `fovY` is passed. */
+  /**
+   * Fits the complete view to bounds, using the current field of view unless
+   * `fovY` is passed. Expands the far plane when the fitted bounds require it.
+   */
   readonly fit: (bounds: GltfAssetBounds, options: OrbitCameraFitOptions) => void;
   /** Reads the latest committed projection without subscribing React. */
   readonly getProjection: () => OrbitCameraProjection;
@@ -121,7 +124,21 @@ const writeOrbitCamera = (resource: PerspectiveCameraViewResource, view: OrbitCa
   resource.rotation[0] = -view.pitch;
   resource.rotation[1] = -view.yaw;
   resource.rotation[2] = 0;
-  resource.commit();
+};
+
+/** Pure conservative far-plane requirement for a view fitted to these bounds. */
+const fittedOrbitFar = (
+  bounds: GltfAssetBounds,
+  fittedView: OrbitCameraView,
+  padding: number,
+): number => {
+  const halfX = (bounds.max[0] - bounds.min[0]) * 0.5;
+  const halfY = (bounds.max[1] - bounds.min[1]) * 0.5;
+  const halfZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+  const paddedRadius = Math.hypot(halfX, halfY, halfZ) * padding;
+  // Keep the sphere strictly inside the clip boundary despite matrix and
+  // authored-bound rounding. Degenerate bounds still receive distance margin.
+  return (fittedView.distance + paddedRadius) * 1.01;
 };
 
 export const createOrbitCameraController = (
@@ -139,14 +156,29 @@ export const createOrbitCameraController = (
     if (sameOrbitCameraView(view, resolved)) return;
     view = resolved;
     writeOrbitCamera(cameraResource, view);
+    cameraResource.commit();
   };
   return {
     cameraResource,
     fit: (bounds, options) => {
-      setView(fitOrbitCameraView(bounds, {
+      const fittedView = fitOrbitCameraView(bounds, {
         ...options,
         fovY: options.fovY ?? currentProjection.fovY,
-      }));
+      });
+      const far = Math.max(
+        currentProjection.far,
+        fittedOrbitFar(bounds, fittedView, options.padding ?? 1),
+      );
+      const viewChanged = !sameOrbitCameraView(view, fittedView);
+      const projectionChanged = currentProjection.far !== far;
+      if (!viewChanged && !projectionChanged) return;
+      view = fittedView;
+      if (projectionChanged) {
+        currentProjection = Object.freeze({ ...currentProjection, far });
+        cameraResource.far = far;
+      }
+      writeOrbitCamera(cameraResource, view);
+      cameraResource.commit();
     },
     getProjection: () => currentProjection,
     getView: () => view,

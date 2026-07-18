@@ -253,6 +253,47 @@ describe("OrbitControls", () => {
     expect(orbit.getView().distance).toBeGreaterThan(8);
   });
 
+  it("expands fitted clipping once without sacrificing the authored near plane", () => {
+    const orbit = createOrbitCameraController(
+      { distance: 1 },
+      { far: 2_000, fovY: Math.PI / 4, near: 0.02 },
+    );
+    const listener = vi.fn();
+    orbit.subscribeView(listener);
+    const version = orbit.cameraResource.version;
+
+    orbit.fit({
+      max: [6_956, 2_721, 6_030],
+      min: [-3_904, -473, -5_497],
+    }, {
+      aspectRatio: 16 / 9,
+      padding: 1.08,
+      pitch: 0.28,
+      yaw: 0.7,
+    });
+
+    expect(orbit.getProjection().far).toBeGreaterThan(20_000);
+    expect(orbit.getProjection().near).toBe(0.02);
+    expect(orbit.cameraResource).toMatchObject({
+      far: orbit.getProjection().far,
+      near: 0.02,
+    });
+    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    orbit.fit({
+      max: [6_956, 2_721, 6_030],
+      min: [-3_904, -473, -5_497],
+    }, {
+      aspectRatio: 16 / 9,
+      padding: 1.08,
+      pitch: 0.28,
+      yaw: 0.7,
+    });
+    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("zooms in and out from wheel input", () => {
     const canvas = fakeCanvas();
     const changes: OrbitCameraView[] = [];
