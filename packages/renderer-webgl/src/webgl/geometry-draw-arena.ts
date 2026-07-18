@@ -10,7 +10,7 @@ import { VERTEX_ATTRIBUTE } from "../vertex-input/attribute-abi";
 declare const authority: unique symbol;
 export interface GeometryDrawArena { readonly [authority]: "GeometryDrawArena" }
 type State = {
-  activeVertexArray?: WebGLVertexArrayObject;
+  activeVertexArray: WebGLVertexArrayObject | undefined;
   initializedDefaults: number;
   readonly gl: WebGL2RenderingContext;
   readonly vertexInputs: VertexInputArena;
@@ -23,6 +23,7 @@ export const createGeometryDrawArena = (
   gl: WebGL2RenderingContext,
   vertexInputs: VertexInputArena,
 ): GeometryDrawArena => ({
+  activeVertexArray: undefined,
   gl,
   initializedDefaults: 0,
   vertexInputs,
@@ -71,7 +72,7 @@ const bindVertexArray = (state: State, vertexArray: WebGLVertexArrayObject): voi
 
 /** Invalidates the VAO cache after non-geometry passes may have changed it. */
 export const beginGeometryDrawFrame = (arena: GeometryDrawArena): void => {
-  delete (arena as unknown as State).activeVertexArray;
+  (arena as unknown as State).activeVertexArray = undefined;
 };
 
 export const drawGeometry = (
@@ -111,6 +112,6 @@ export const submitGeometryInstancedDraw = (
 
 export const clearGeometryDrawArenaContext = (arena: GeometryDrawArena): void => {
   const state = arena as unknown as State;
-  delete state.activeVertexArray;
+  state.activeVertexArray = undefined;
   state.initializedDefaults = 0;
 };
