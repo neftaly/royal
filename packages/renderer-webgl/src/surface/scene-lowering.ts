@@ -4,7 +4,6 @@ import type {
   LinearRgba,
   MeshNode,
   RenderRoot,
-  TextureAssetRef,
 } from "@royal/renderer-core";
 import {
   identityMat4,
@@ -25,6 +24,7 @@ import {
 } from "./canonical-geometry";
 import type { CanonicalCamera } from "./camera-source-owner";
 import type { DecodedTextureSource } from "../texture/asset-owner";
+import type { TextureSourceRef } from "../texture/asset-owner";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -80,7 +80,7 @@ export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
   preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
   camera: CanonicalCamera = staticCamera(scene),
-  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined = () => undefined,
+  decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined = () => undefined,
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {

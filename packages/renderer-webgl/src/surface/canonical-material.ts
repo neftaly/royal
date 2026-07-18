@@ -10,6 +10,7 @@ import {
 import {
   decodedTextureKey,
   type DecodedTextureSource,
+  type TextureSourceRef,
 } from "../texture/asset-owner";
 
 export type CanonicalTextureSampler = Readonly<{
@@ -29,7 +30,7 @@ export type CanonicalTextureBinding = Readonly<{
 
 export type CanonicalUnlitMaterial = Readonly<{
   baseColor: LinearRgba;
-  baseColorAsset?: TextureAssetRef;
+  baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
   kind: "unlit";
   requiresTextureCoordinates: boolean;
@@ -37,7 +38,7 @@ export type CanonicalUnlitMaterial = Readonly<{
 
 export type CanonicalStandardMaterial = Readonly<{
   baseColor: LinearRgba;
-  baseColorAsset?: TextureAssetRef;
+  baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
   kind: "standard";
   metallicFactor: number;
@@ -49,7 +50,7 @@ export type CanonicalSurfaceMaterial = CanonicalStandardMaterial | CanonicalUnli
 
 const NEUTRAL_PERCEPTUAL_GREY: LinearRgba = [0.214_041, 0.214_041, 0.214_041, 1];
 
-const canonicalSampler = (asset: TextureAssetRef): CanonicalTextureSampler => ({
+const canonicalSampler = (asset: TextureSourceRef): CanonicalTextureSampler => ({
   magFilter: asset.sampler?.magFilter ?? defaultImageTextureSampler.magFilter ?? "linear",
   minFilter: asset.sampler?.minFilter
     ?? defaultImageTextureSampler.minFilter
@@ -59,7 +60,7 @@ const canonicalSampler = (asset: TextureAssetRef): CanonicalTextureSampler => ({
 });
 
 const textureBinding = (
-  asset: TextureAssetRef,
+  asset: TextureSourceRef,
   decoded: DecodedTextureSource,
 ): CanonicalTextureBinding => {
   const colorSpace = asset.colorSpace ?? "srgb";
@@ -81,7 +82,7 @@ const textureBinding = (
 /** Resolves a cold glTF texture recipe through the same ordinary-texture binding contract. */
 export const resolveCanonicalMaterialTexture = (
   material: CanonicalSurfaceMaterial,
-  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined,
+  decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
 ): CanonicalSurfaceMaterial => {
   const asset = material.baseColorAsset;
   if (asset === undefined) return material;

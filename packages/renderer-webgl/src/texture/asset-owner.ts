@@ -11,6 +11,19 @@ export type DecodedTextureSource = Readonly<{
   width: number;
 }>;
 
+export type EmbeddedTextureAssetRef = Readonly<{
+  bytes: Uint8Array;
+  colorSpace?: "linear" | "srgb";
+  contentKey: string;
+  kind: "embedded-asset";
+  label: string;
+  mimeType: "image/jpeg" | "image/png";
+  sampler?: TextureAssetRef["sampler"];
+}>;
+
+/** Cold source recipe shared by direct assets and container-embedded images. */
+export type TextureSourceRef = TextureAssetRef | EmbeddedTextureAssetRef;
+
 export type TextureAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
@@ -18,13 +31,13 @@ export type TextureAssetSnapshot =
   | Readonly<{ error: string; state: "error" }>;
 
 export type TextureAssetOwnerPlatform = Readonly<{
-  decode(asset: TextureAssetRef, signal: AbortSignal): Promise<DecodedTextureSource>;
+  decode(asset: TextureSourceRef, signal: AbortSignal): Promise<DecodedTextureSource>;
   onAssetChanged(): void;
   onListenerError(error: unknown): void;
 }>;
 
 type AssetEntry = {
-  readonly asset: TextureAssetRef;
+  readonly asset: TextureSourceRef;
   readonly controller: AbortController;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
@@ -53,9 +66,18 @@ const identityPart = (
   return ["string", value];
 };
 
-const validateAsset = (asset: TextureAssetRef): void => {
+const validateAsset = (asset: TextureSourceRef): void => {
   if (typeof asset !== "object" || asset === null || Array.isArray(asset)) {
     throw new TypeError("Royal texture asset identity must be an object");
+  }
+  if (asset.kind === "embedded-asset") {
+    if (asset.contentKey.length === 0) {
+      throw new TypeError("Royal embedded texture contentKey must not be empty");
+    }
+    if (asset.bytes.byteLength === 0) {
+      throw new TypeError("Royal embedded texture bytes must not be empty");
+    }
+    return;
   }
   if (asset.kind !== "asset") throw new TypeError("Royal ordinary texture asset kind must be asset");
   if (typeof asset.src !== "string" || asset.src.length === 0) {
@@ -64,15 +86,17 @@ const validateAsset = (asset: TextureAssetRef): void => {
 };
 
 /** Identity of decoded pixels; color interpretation and sampling deliberately do not participate. */
-export const decodedTextureKey = (asset: TextureAssetRef): string => {
+export const decodedTextureKey = (asset: TextureSourceRef): string => {
   validateAsset(asset);
+  if (asset.kind === "embedded-asset") return JSON.stringify(["content", asset.contentKey]);
   const content = asset.contentKey === undefined
     ? ["src", asset.src] as const
     : ["content", ...identityPart(asset.contentKey, "contentKey")] as const;
   return JSON.stringify([content, identityPart(asset.version, "version")]);
 };
 
-const diagnosticLabel = (asset: TextureAssetRef): string => {
+const diagnosticLabel = (asset: TextureSourceRef): string => {
+  if (asset.kind === "embedded-asset") return asset.label;
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
   return `texture ${JSON.stringify(source)}`;
 };
@@ -99,7 +123,7 @@ export class TextureAssetOwner {
     this.#listeners.clear();
   }
 
-  decoded(asset: TextureAssetRef): DecodedTextureSource | undefined {
+  decoded(asset: TextureSourceRef): DecodedTextureSource | undefined {
     return this.#entries.get(decodedTextureKey(asset))?.decoded;
   }
 
@@ -107,7 +131,7 @@ export class TextureAssetOwner {
     return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
   }
 
-  reconcile(assets: readonly TextureAssetRef[]): void {
+  reconcile(assets: readonly TextureSourceRef[]): void {
     if (this.#disposed) return;
     const claimed = new Set<string>();
     for (const asset of assets) {
@@ -163,7 +187,7 @@ export class TextureAssetOwner {
     }
   }
 
-  #start(asset: TextureAssetRef, key: string): void {
+  #start(asset: TextureSourceRef, key: string): void {
     const entry: AssetEntry = {
       asset,
       controller: new AbortController(),

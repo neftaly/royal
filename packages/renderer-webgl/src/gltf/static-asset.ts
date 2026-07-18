@@ -5,7 +5,11 @@ import {
 } from "../math/mat4";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
-import type { TextureAssetRef, TextureSampler } from "@royal/renderer-core";
+import type { TextureSampler } from "@royal/renderer-core";
+import type {
+  EmbeddedTextureAssetRef,
+  TextureSourceRef,
+} from "../texture/asset-owner";
 import { parseGlb } from "./glb";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
@@ -16,7 +20,7 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 
 export type PreparedStaticGltf = Readonly<{
   primitives: readonly PreparedStaticGltfPrimitive[];
-  textureAssets: readonly TextureAssetRef[];
+  textureAssets: readonly TextureSourceRef[];
 }>;
 
 type JsonObject = Record<string, unknown>;
@@ -330,7 +334,9 @@ const resolveAssetUri = (baseUri: string, uri: string): string => {
     const base = baseUri.split("#", 1)[0]!.split("?", 1)[0]!;
     const directory = base.slice(0, base.lastIndexOf("/") + 1);
     const resolved = new URL(uri, `https://royal.invalid/${directory.replace(/^\/+/, "")}`);
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    return resolved.origin === "https://royal.invalid"
+      ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+      : resolved.href;
   }
 };
 
@@ -368,14 +374,17 @@ const gltfSampler = (value: JsonObject, label: string, path: string): TextureSam
 
 const createTextureAssetReader = (
   document: JsonObject,
+  binary: Uint8Array,
+  bufferByteLength: number,
+  bufferViews: readonly unknown[],
   contentKey: string,
   sourceUri: string,
   label: string,
-): ((value: unknown, path: string) => TextureAssetRef) => {
+): ((value: unknown, path: string) => TextureSourceRef) => {
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
   const textures = optionalArray(document.textures, label, "textures");
-  const prepared: Array<TextureAssetRef | undefined> = [];
+  const prepared: Array<TextureSourceRef | undefined> = [];
   return (value, path) => {
     const textureIndex = index(value, textures, label, path);
     const retained = prepared[textureIndex];
@@ -386,13 +395,9 @@ const createTextureAssetReader = (
     const imageIndex = index(texture.source, images, label, `${texturePath}.source`);
     const imagePath = `images[${imageIndex}]`;
     const image = object(images[imageIndex], label, imagePath);
-    if (image.bufferView !== undefined) {
-      fail(label, `${imagePath}.bufferView`, "embedded images are not supported yet");
+    if ((image.uri === undefined) === (image.bufferView === undefined)) {
+      fail(label, imagePath, "must contain exactly one of uri or bufferView");
     }
-    if (typeof image.uri !== "string" || image.uri.length === 0) {
-      fail(label, `${imagePath}.uri`, "must be a non-empty external URI");
-    }
-    const imageUri = image.uri as string;
     let sampler: TextureSampler;
     if (texture.sampler === undefined) {
       sampler = gltfSampler({}, label, `${texturePath}.sampler`);
@@ -405,13 +410,49 @@ const createTextureAssetReader = (
         samplerPath,
       );
     }
-    const asset: TextureAssetRef = {
-      colorSpace: "srgb",
-      contentKey: `${contentKey}:image:${imageIndex}`,
-      kind: "asset",
-      sampler,
-      src: resolveAssetUri(sourceUri, imageUri),
-    };
+    let asset: TextureSourceRef;
+    if (image.bufferView === undefined) {
+      if (typeof image.uri !== "string" || image.uri.length === 0) {
+        fail(label, `${imagePath}.uri`, "must be a non-empty URI");
+      }
+      asset = {
+        colorSpace: "srgb",
+        contentKey: `${contentKey}:image:${imageIndex}`,
+        kind: "asset",
+        sampler,
+        src: resolveAssetUri(sourceUri, image.uri as string),
+      };
+    } else {
+      if (image.mimeType !== "image/jpeg" && image.mimeType !== "image/png") {
+        fail(label, `${imagePath}.mimeType`, "must be image/jpeg or image/png");
+      }
+      const mimeType = image.mimeType as "image/jpeg" | "image/png";
+      const viewIndex = index(image.bufferView, bufferViews, label, `${imagePath}.bufferView`);
+      const viewPath = `bufferViews[${viewIndex}]`;
+      const view = object(bufferViews[viewIndex], label, viewPath);
+      if (view.buffer !== 0) fail(label, `${viewPath}.buffer`, "must reference GLB buffer 0");
+      const byteOffset = view.byteOffset === undefined
+        ? 0
+        : nonNegativeInteger(view.byteOffset, label, `${viewPath}.byteOffset`);
+      const byteLength = nonNegativeInteger(view.byteLength, label, `${viewPath}.byteLength`);
+      if (byteLength === 0 || byteOffset + byteLength > bufferByteLength) {
+        fail(label, viewPath, "embedded image bytes exceed the declared GLB buffer");
+      }
+      const bytes = new Uint8Array(
+        binary.buffer,
+        binary.byteOffset + byteOffset,
+        byteLength,
+      );
+      asset = {
+        bytes,
+        colorSpace: "srgb",
+        contentKey: `${contentKey}:image:${imageIndex}`,
+        kind: "embedded-asset",
+        label: `${label} ${imagePath}`,
+        mimeType,
+        sampler,
+      } satisfies EmbeddedTextureAssetRef;
+    }
     prepared[textureIndex] = asset;
     return asset;
   };
@@ -419,7 +460,7 @@ const createTextureAssetReader = (
 
 const prepareMaterial = (
   materials: unknown[],
-  textureAsset: (value: unknown, path: string) => TextureAssetRef,
+  textureAsset: (value: unknown, path: string) => TextureSourceRef,
   materialIndex: unknown,
   label: string,
   path: string,
@@ -454,7 +495,7 @@ const prepareMaterial = (
   const pbr = material.pbrMetallicRoughness === undefined
     ? {}
     : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
-  let baseColorAsset: TextureAssetRef | undefined;
+  let baseColorAsset: TextureSourceRef | undefined;
   if (pbr.baseColorTexture !== undefined) {
     const textureInfoPath = `${materialPath}.pbrMetallicRoughness.baseColorTexture`;
     const textureInfo = object(pbr.baseColorTexture, label, textureInfoPath);
@@ -541,7 +582,15 @@ export const prepareStaticGlb = (
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
   const materials = optionalArray(document.materials, label, "materials");
-  const textureAsset = createTextureAssetReader(document, contentKey, sourceUri, label);
+  const textureAsset = createTextureAssetReader(
+    document,
+    binary,
+    bufferByteLength,
+    bufferViews,
+    contentKey,
+    sourceUri,
+    label,
+  );
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
   const context: AccessorContext = {
@@ -662,7 +711,7 @@ export const prepareStaticGlb = (
     visit(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`), identityMat4());
   }
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
-  const claimedTextures = new Map<string, TextureAssetRef>();
+  const claimedTextures = new Map<string, TextureSourceRef>();
   for (const primitive of primitives) {
     const asset = primitive.material.baseColorAsset;
     if (asset !== undefined) claimedTextures.set(asset.contentKey as string, asset);

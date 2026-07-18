@@ -61,7 +61,10 @@ export const staticTriangleGlb = (
   return glbFromDocument(document, binary);
 };
 
-export const staticTexturedTriangleGlb = (): Uint8Array => {
+export const staticTexturedTriangleGlb = (
+  embeddedImage?: Uint8Array,
+  imageUri = "albedo.png",
+): Uint8Array => {
   const document = staticTriangleDocument();
   document.accessors = [
     { bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
@@ -73,8 +76,15 @@ export const staticTexturedTriangleGlb = (): Uint8Array => {
     { buffer: 0, byteLength: 6, byteOffset: 36 },
     { buffer: 0, byteLength: 24, byteOffset: 44 },
   ];
-  document.buffers = [{ byteLength: 68 }];
-  document.images = [{ uri: "albedo.png" }];
+  const byteLength = 68 + (embeddedImage?.byteLength ?? 0);
+  document.buffers = [{ byteLength }];
+  if (embeddedImage === undefined) {
+    document.images = [{ uri: imageUri }];
+  } else {
+    const bufferViews = document.bufferViews as unknown[];
+    bufferViews.push({ buffer: 0, byteLength: embeddedImage.byteLength, byteOffset: 68 });
+    document.images = [{ bufferView: 3, mimeType: "image/png" }];
+  }
   document.textures = [{ source: 0 }];
   document.materials = [{
     extensions: { KHR_materials_unlit: {} },
@@ -88,7 +98,7 @@ export const staticTexturedTriangleGlb = (): Uint8Array => {
     indices: 1,
     material: 0,
   }] }];
-  const binary = new Uint8Array(68);
+  const binary = new Uint8Array(byteLength);
   new Float32Array(binary.buffer, 0, 9).set([
     -1, -1, 0,
     1, -1, 0,
@@ -96,5 +106,6 @@ export const staticTexturedTriangleGlb = (): Uint8Array => {
   ]);
   new Uint16Array(binary.buffer, 36, 3).set([0, 1, 2]);
   new Float32Array(binary.buffer, 44, 6).set([0, 1, 1, 1, 0.5, 0]);
+  if (embeddedImage !== undefined) binary.set(embeddedImage, 68);
   return glbFromDocument(document, binary);
 };

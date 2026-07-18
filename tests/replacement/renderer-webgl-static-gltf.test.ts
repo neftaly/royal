@@ -104,6 +104,37 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets).toEqual([]);
   });
 
+  it("borrows reachable embedded image bytes as another cold source recipe", () => {
+    const image = new Uint8Array([137, 80, 78, 71]);
+    const prepared = prepareStaticGlb(
+      staticTexturedTriangleGlb(image),
+      "embedded-v1",
+      "embedded.glb",
+    );
+    const source = prepared.textureAssets[0]!;
+    expect(source).toMatchObject({
+      contentKey: "embedded-v1:image:0",
+      kind: "embedded-asset",
+      label: "embedded.glb images[0]",
+      mimeType: "image/png",
+    });
+    if (source.kind === "embedded-asset") {
+      expect(source.bytes).toEqual(image);
+      expect(source.bytes.buffer).toBe(prepared.primitives[0]!.geometry.positions.buffer);
+    }
+  });
+
+  it("preserves data image URIs without applying container-relative resolution", () => {
+    const uri = "data:image/png;base64,iVBORw0KGgo=";
+    const prepared = prepareStaticGlb(
+      staticTexturedTriangleGlb(undefined, uri),
+      "data-image",
+      "/models/data.glb",
+      "/models/data.glb",
+    );
+    expect(prepared.textureAssets[0]).toMatchObject({ kind: "asset", src: uri });
+  });
+
   it("borrows validated normal and primary-UV streams into the canonical ABI", () => {
     const document = staticTriangleDocument();
     document.accessors = [

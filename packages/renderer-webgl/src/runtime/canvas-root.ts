@@ -37,6 +37,7 @@ import {
   TextureAssetOwner,
   type DecodedTextureSource,
   type TextureAssetSnapshot,
+  type TextureSourceRef,
 } from "../texture/asset-owner";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
@@ -58,7 +59,7 @@ export type CanvasRootPlatform = Readonly<{
   reportScheduledFailure(error: unknown): void;
   requestFrame(callback: () => void): void;
   decodeTexture?(
-    asset: TextureAssetRef,
+    asset: TextureSourceRef,
     signal: AbortSignal,
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
@@ -325,7 +326,7 @@ export class CanvasRoot {
       (asset) => this.#textureAssets.decoded(asset),
     );
     const gltfNodes: GltfNode[] = [];
-    const textureAssets: TextureAssetRef[] = [];
+    const textureAssets: TextureSourceRef[] = [];
     for (const node of scene.nodes) {
       if (node.kind === "gltf") {
         gltfNodes.push(node);
@@ -496,7 +497,7 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
-    const textureAssets: TextureAssetRef[] = [];
+    const textureAssets: TextureSourceRef[] = [];
     for (const node of this.#surfaceSceneInput.nodes) {
       if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
         textureAssets.push(node.material.baseColor);

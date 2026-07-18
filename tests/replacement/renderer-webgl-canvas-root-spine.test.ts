@@ -540,6 +540,39 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
+  it("streams embedded GLB images through that same texture owner and GPU path", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      new Uint8Array([137, 80, 78, 71]),
+    ));
+    const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
+    const node = gltf("/models/embedded.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({ camera: perspectiveCamera({ position: [1, 2, 3] }), nodes: [node] }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(decodeTexture).toHaveBeenCalled());
+    expect(decodeTexture).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "embedded-asset", mimeType: "image/png" }),
+      expect.any(AbortSignal),
+    );
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    resolveDecode?.({ height: 8, source: {} as ImageBitmap, width: 8 });
+    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+  });
+
   it("lowers a semantic scene and rejects unsupported node kinds explicitly", () => {
     const { callbacks, root } = harness();
     root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
