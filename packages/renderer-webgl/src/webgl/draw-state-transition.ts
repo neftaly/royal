@@ -5,8 +5,8 @@ export type OpaqueDrawStateIntent = Readonly<{
   cullBackFaces: boolean;
   frontFace: number;
   program: WebGLProgram;
-  sampler0: WebGLSampler | null;
-  texture0: WebGLTexture | null;
+  samplers: readonly (WebGLSampler | null)[];
+  textures: readonly (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
@@ -17,8 +17,7 @@ export type OpaqueDrawStateTransition = {
   framebuffer: boolean;
   frontFace: boolean;
   program: boolean;
-  sampler0: boolean;
-  texture0: boolean;
+  textureUnits: number;
   vertexArray: boolean;
   viewport: boolean;
   writeMasks: boolean;
@@ -29,8 +28,8 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
   cullBackFaces: boolean | null;
   frontFace: number | null;
   program: WebGLProgram | null;
-  sampler0: WebGLSampler | null;
-  texture0: WebGLTexture | null;
+  samplers: (WebGLSampler | null)[];
+  textures: (WebGLTexture | null)[];
   textureBindingsKnown: boolean;
   vertexArray: WebGLVertexArrayObject | null;
 };
@@ -41,8 +40,7 @@ export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => 
   framebuffer: false,
   frontFace: false,
   program: false,
-  sampler0: false,
-  texture0: false,
+  textureUnits: 0,
   vertexArray: false,
   viewport: false,
   writeMasks: false,
@@ -68,12 +66,16 @@ export const planOpaqueDrawStateTransition = (
   output.frontFace = unknown || previous.frontFace !== next.frontFace;
   output.writeMasks = unknown || !previous.writeMasksKnown;
   output.program = unknown || previous.program !== next.program;
-  output.texture0 = unknown
-    || !previous.textureBindingsKnown
-    || previous.texture0 !== next.texture0;
-  output.sampler0 = unknown
-    || !previous.textureBindingsKnown
-    || previous.sampler0 !== next.sampler0;
+  output.textureUnits = 0;
+  const unitCount = Math.max(next.textures.length, next.samplers.length);
+  for (let unit = 0; unit < unitCount; unit += 1) {
+    if (
+      unknown
+      || !previous.textureBindingsKnown
+      || previous.textures[unit] !== next.textures[unit]
+      || previous.samplers[unit] !== next.samplers[unit]
+    ) output.textureUnits |= 1 << unit;
+  }
   output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
 };
 
@@ -87,10 +89,16 @@ export const commitAppliedOpaqueDrawState = (
   state.frontFace = intent.frontFace;
   state.known = true;
   state.program = intent.program;
-  state.sampler0 = intent.sampler0;
+  state.samplers.length = intent.samplers.length;
+  for (let unit = 0; unit < intent.samplers.length; unit += 1) {
+    state.samplers[unit] = intent.samplers[unit] ?? null;
+  }
   state.scissorEnabled = false;
   state.vertexArray = intent.vertexArray;
-  state.texture0 = intent.texture0;
+  state.textures.length = intent.textures.length;
+  for (let unit = 0; unit < intent.textures.length; unit += 1) {
+    state.textures[unit] = intent.textures[unit] ?? null;
+  }
   state.textureBindingsKnown = true;
   state.viewportHeight = intent.viewport.height;
   state.viewportWidth = intent.viewport.width;

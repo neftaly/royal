@@ -134,7 +134,7 @@ export const createStaticDracoDecoder = (
       throw new Error(`${label} ${path} Draco attributes must include POSITION`);
     }
     const attributes = new Map<string, Float32Array>();
-    for (const semantic of ["POSITION", "NORMAL", "TEXCOORD_0"] as const) {
+    for (const semantic of ["POSITION", "NORMAL", "TANGENT", "TEXCOORD_0"] as const) {
       if (attributeIds[semantic] === undefined) continue;
       const uniqueId = Number(attributeIds[semantic]);
       if (!Number.isSafeInteger(uniqueId) || uniqueId < 0) {

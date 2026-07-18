@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseGlb } from "../../packages/renderer-webgl/src/gltf/glb";
 import {
   prepareStaticGlb,
   prepareStaticGltfSource,
@@ -98,8 +99,11 @@ describe("static glTF preparation core", () => {
     expect(prepareStaticGlb(staticTriangleGlb(standard), "standard").primitives[0]!.material)
       .toEqual({
         baseColor: [0.1, 0.2, 0.3, 0.4],
+        emissiveFactor: [0, 0, 0],
         kind: "standard",
         metallicFactor: 0.25,
+        normalScale: 1,
+        occlusionStrength: 1,
         requiresTextureCoordinates: false,
         roughnessFactor: 0.75,
       });
@@ -110,8 +114,11 @@ describe("static glTF preparation core", () => {
     expect(prepareStaticGlb(staticTriangleGlb(standard), "implicit").primitives[0]!.material)
       .toEqual({
         baseColor: [1, 1, 1, 1],
+        emissiveFactor: [0, 0, 0],
         kind: "standard",
         metallicFactor: 1,
+        normalScale: 1,
+        occlusionStrength: 1,
         requiresTextureCoordinates: false,
         roughnessFactor: 1,
       });
@@ -225,6 +232,54 @@ describe("static glTF preparation core", () => {
     });
   });
 
+  it("converges core material texture channels on color-space-aware source recipes", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "material.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.images = [
+      { uri: "base.png" },
+      { uri: "normal.png" },
+      { uri: "metal-rough.png" },
+      { uri: "emissive.png" },
+    ];
+    document.textures = [{ source: 0 }, { source: 1 }, { source: 2 }, { source: 3 }];
+    document.materials = [{
+      emissiveFactor: [0.25, 0.5, 1],
+      emissiveTexture: { index: 3 },
+      normalTexture: { index: 1, scale: 0.75 },
+      occlusionTexture: { index: 2, strength: 0.4 },
+      pbrMetallicRoughness: {
+        baseColorTexture: { index: 0 },
+        metallicFactor: 0.2,
+        metallicRoughnessTexture: { index: 2 },
+        roughnessFactor: 0.6,
+      },
+    }];
+    delete document.extensionsRequired;
+    delete document.extensionsUsed;
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "material-v1",
+      "material.glb",
+      "/models/material.glb",
+    );
+    expect(prepared.textureAssets.map((asset) => [asset.colorSpace, asset.kind === "asset"
+      ? asset.src
+      : asset.label])).toEqual([
+      ["srgb", "/models/base.png"],
+      ["linear", "/models/metal-rough.png"],
+      ["linear", "/models/normal.png"],
+      ["srgb", "/models/emissive.png"],
+    ]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      emissiveFactor: [0.25, 0.5, 1],
+      metallicFactor: 0.2,
+      normalScale: 0.75,
+      occlusionStrength: 0.4,
+      requiresTextureCoordinates: true,
+      roughnessFactor: 0.6,
+    });
+  });
+
   it("lowers EXT_mesh_gpu_instancing accessors into one compact draw batch", async () => {
     const prepared = await prepareStaticGltfSource(
       staticInstancedTriangleGlb(),
@@ -287,7 +342,7 @@ describe("static glTF preparation core", () => {
   it("ignores unconsumed vertex streams but rejects mismatched consumed streams", () => {
     const extended = staticTriangleDocument();
     const meshes = extended.meshes as Array<{ primitives: Array<{ attributes: object }> }>;
-    meshes[0]!.primitives[0]!.attributes = { COLOR_0: 0, POSITION: 0, TANGENT: 0 };
+    meshes[0]!.primitives[0]!.attributes = { COLOR_0: 0, POSITION: 0, TEXCOORD_1: 0 };
     expect(prepareStaticGlb(staticTriangleGlb(extended), "extended").primitives)
       .toHaveLength(1);
 

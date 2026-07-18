@@ -44,8 +44,19 @@ export type CanonicalStandardMaterial = Readonly<{
   baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
   doubleSided?: true;
+  emissiveAsset?: TextureSourceRef;
+  emissiveFactor: readonly [number, number, number];
+  emissiveTexture?: CanonicalTextureBinding;
   kind: "standard";
   metallicFactor: number;
+  metallicRoughnessAsset?: TextureSourceRef;
+  metallicRoughnessTexture?: CanonicalTextureBinding;
+  normalAsset?: TextureSourceRef;
+  normalScale: number;
+  normalTexture?: CanonicalTextureBinding;
+  occlusionAsset?: TextureSourceRef;
+  occlusionStrength: number;
+  occlusionTexture?: CanonicalTextureBinding;
   requiresTextureCoordinates: boolean;
   roughnessFactor: number;
 }>;
@@ -88,23 +99,39 @@ export const resolveCanonicalMaterialTexture = (
   material: CanonicalSurfaceMaterial,
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
 ): CanonicalSurfaceMaterial => {
-  const asset = material.baseColorAsset;
-  if (asset === undefined) return material;
-  const decoded = decodedTexture(asset);
-  if (decoded === undefined) {
-    return {
-      ...material,
+  const baseColorAsset = material.baseColorAsset;
+  const baseColorDecoded = baseColorAsset === undefined ? undefined : decodedTexture(baseColorAsset);
+  const baseColorTexture = baseColorAsset === undefined || baseColorDecoded === undefined
+    ? undefined
+    : textureBinding(baseColorAsset, baseColorDecoded);
+  const common = {
+    ...material,
+    ...(baseColorTexture === undefined ? {} : { baseColorTexture }),
+    ...(baseColorAsset !== undefined && baseColorDecoded === undefined ? {
       baseColor: [
         material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY[0],
         material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY[1],
         material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY[2],
         material.baseColor[3],
-      ],
-    };
-  }
+      ] as LinearRgba,
+    } : {}),
+  };
+  if (material.kind === "unlit") return common;
+  const resolve = (asset: TextureSourceRef | undefined): CanonicalTextureBinding | undefined => {
+    if (asset === undefined) return undefined;
+    const decoded = decodedTexture(asset);
+    return decoded === undefined ? undefined : textureBinding(asset, decoded);
+  };
+  const metallicRoughnessTexture = resolve(material.metallicRoughnessAsset);
+  const normalTexture = resolve(material.normalAsset);
+  const occlusionTexture = resolve(material.occlusionAsset);
+  const emissiveTexture = resolve(material.emissiveAsset);
   return {
-    ...material,
-    baseColorTexture: textureBinding(asset, decoded),
+    ...common,
+    ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
+    ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
+    ...(normalTexture === undefined ? {} : { normalTexture }),
+    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
   };
 };
 
@@ -139,8 +166,11 @@ export const prepareCanonicalMaterial = (
     ? { ...common, kind: "unlit" }
     : {
       ...common,
+      emissiveFactor: [0, 0, 0],
       kind: "standard",
       metallicFactor: material.metallicFactor,
+      normalScale: 1,
+      occlusionStrength: 1,
       roughnessFactor: material.roughnessFactor,
     };
 };

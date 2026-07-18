@@ -127,8 +127,11 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.exposure).toBeCloseTo(1 / 4.8);
     expect(prepared.surfaces[0]!.material).toEqual({
       baseColor: [1, 0.5, 0.25, 1],
+      emissiveFactor: [0, 0, 0],
       kind: "standard",
       metallicFactor: 0.2,
+      normalScale: 1,
+      occlusionStrength: 1,
       requiresTextureCoordinates: false,
       roughnessFactor: 0.7,
     });

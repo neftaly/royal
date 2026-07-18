@@ -336,7 +336,7 @@ const decodedPositions = (
 
 const validateDecodedVectors = (
   values: Float32Array,
-  componentCount: 2 | 3,
+  componentCount: 2 | 3 | 4,
   label: string,
   path: string,
 ): Float32Array => {
@@ -354,8 +354,8 @@ const validateDecodedVectors = (
 const readFloatVectors = (
   context: AccessorContext,
   accessorIndex: number,
-  expectedType: "VEC2" | "VEC3",
-  componentCount: 2 | 3,
+  expectedType: "VEC2" | "VEC3" | "VEC4",
+  componentCount: 2 | 3 | 4,
   semantic: string,
 ): Float32Array => {
   const layout = accessorLayout(context, accessorIndex, expectedType, 4, componentCount);
@@ -443,6 +443,19 @@ const factor01 = (
   return value;
 };
 
+const finiteFactor = (
+  value: unknown,
+  fallback: number,
+  label: string,
+  path: string,
+): number => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fail(label, path, "must be finite");
+  }
+  return value;
+};
+
 const resolveAssetUri = (baseUri: string, uri: string): string => {
   try {
     return new URL(uri, baseUri).href;
@@ -496,14 +509,19 @@ const createTextureAssetReader = (
   contentKey: string,
   sourceUri: string,
   label: string,
-): ((value: unknown, path: string) => TextureSourceRef) => {
+): ((
+  value: unknown,
+  path: string,
+  colorSpace?: "linear" | "srgb",
+) => TextureSourceRef) => {
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
   const textures = optionalArray(document.textures, label, "textures");
-  const prepared: Array<TextureSourceRef | undefined> = [];
-  return (value, path) => {
+  const prepared = new Map<string, TextureSourceRef>();
+  return (value, path, colorSpace = "srgb") => {
     const textureIndex = index(value, textures, label, path);
-    const retained = prepared[textureIndex];
+    const preparedKey = `${textureIndex}:${colorSpace}`;
+    const retained = prepared.get(preparedKey);
     if (retained !== undefined) return retained;
     const textureValue = textures[textureIndex];
     const texturePath = `textures[${textureIndex}]`;
@@ -546,7 +564,7 @@ const createTextureAssetReader = (
         fail(label, `${imagePath}.uri`, "must be a non-empty URI");
       }
       asset = {
-        colorSpace: "srgb",
+        colorSpace,
         contentKey: `${contentKey}:image:${imageIndex}`,
         kind: "asset",
         sampler,
@@ -579,7 +597,7 @@ const createTextureAssetReader = (
       );
       asset = {
         bytes,
-        colorSpace: "srgb",
+        colorSpace,
         contentKey: `${contentKey}:image:${imageIndex}`,
         kind: "embedded-asset",
         label: `${label} ${imagePath}`,
@@ -587,14 +605,18 @@ const createTextureAssetReader = (
         sampler,
       } satisfies EmbeddedTextureAssetRef;
     }
-    prepared[textureIndex] = asset;
+    prepared.set(preparedKey, asset);
     return asset;
   };
 };
 
 const prepareMaterial = (
   materials: unknown[],
-  textureAsset: (value: unknown, path: string) => TextureSourceRef,
+  textureAsset: (
+    value: unknown,
+    path: string,
+    colorSpace?: "linear" | "srgb",
+  ) => TextureSourceRef,
   materialIndex: unknown,
   label: string,
   path: string,
@@ -602,8 +624,11 @@ const prepareMaterial = (
   if (materialIndex === undefined) {
     return {
       baseColor: [1, 1, 1, 1],
+      emissiveFactor: [0, 0, 0],
       kind: "standard",
       metallicFactor: 1,
+      normalScale: 1,
+      occlusionStrength: 1,
       requiresTextureCoordinates: false,
       roughnessFactor: 1,
     };
@@ -636,18 +661,27 @@ const prepareMaterial = (
   const pbr = material.pbrMetallicRoughness === undefined
     ? {}
     : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
-  let baseColorAsset: TextureSourceRef | undefined;
-  if (pbr.baseColorTexture !== undefined) {
-    const textureInfoPath = `${materialPath}.pbrMetallicRoughness.baseColorTexture`;
-    const textureInfo = object(pbr.baseColorTexture, label, textureInfoPath);
+  const materialTexture = (
+    value: unknown,
+    textureInfoPath: string,
+    colorSpace: "linear" | "srgb",
+  ): TextureSourceRef | undefined => {
+    if (value === undefined) return undefined;
+    const textureInfo = object(value, label, textureInfoPath);
     if (textureInfo.texCoord !== undefined && textureInfo.texCoord !== 0) {
       fail(label, `${textureInfoPath}.texCoord`, "must select TEXCOORD_0");
     }
-    baseColorAsset = textureAsset(
+    return textureAsset(
       textureInfo.index,
       `${textureInfoPath}.index`,
+      colorSpace,
     );
-  }
+  };
+  const baseColorAsset = materialTexture(
+    pbr.baseColorTexture,
+    `${materialPath}.pbrMetallicRoughness.baseColorTexture`,
+    "srgb",
+  );
   const color = finiteTuple(
     pbr.baseColorFactor,
     4,
@@ -672,13 +706,90 @@ const prepareMaterial = (
     kind: "unlit",
     requiresTextureCoordinates: baseColorAsset !== undefined,
   };
+  const metallicRoughnessAsset = materialTexture(
+    pbr.metallicRoughnessTexture,
+    `${materialPath}.pbrMetallicRoughness.metallicRoughnessTexture`,
+    "linear",
+  );
+  const normalAsset = materialTexture(
+    material.normalTexture,
+    `${materialPath}.normalTexture`,
+    "linear",
+  );
+  const occlusionAsset = materialTexture(
+    material.occlusionTexture,
+    `${materialPath}.occlusionTexture`,
+    "linear",
+  );
+  const emissiveAsset = materialTexture(
+    material.emissiveTexture,
+    `${materialPath}.emissiveTexture`,
+    "srgb",
+  );
+  const emissive = finiteTuple(
+    material.emissiveFactor,
+    3,
+    [0, 0, 0],
+    label,
+    `${materialPath}.emissiveFactor`,
+  );
+  for (let channel = 0; channel < 3; channel += 1) {
+    if (emissive[channel]! < 0 || emissive[channel]! > 1) {
+      fail(label, `${materialPath}.emissiveFactor[${channel}]`, "must be within 0..1");
+    }
+  }
+  const emissiveStrengthExtension = extensions.KHR_materials_emissive_strength === undefined
+    ? undefined
+    : object(
+      extensions.KHR_materials_emissive_strength,
+      label,
+      `${materialPath}.extensions.KHR_materials_emissive_strength`,
+    );
+  const emissiveStrength = finiteFactor(
+    emissiveStrengthExtension?.emissiveStrength,
+    1,
+    label,
+    `${materialPath}.extensions.KHR_materials_emissive_strength.emissiveStrength`,
+  );
+  if (emissiveStrength < 0) {
+    fail(
+      label,
+      `${materialPath}.extensions.KHR_materials_emissive_strength.emissiveStrength`,
+      "must not be negative",
+    );
+  }
+  const normalTexture = material.normalTexture === undefined
+    ? undefined
+    : object(material.normalTexture, label, `${materialPath}.normalTexture`);
+  const occlusionTexture = material.occlusionTexture === undefined
+    ? undefined
+    : object(material.occlusionTexture, label, `${materialPath}.occlusionTexture`);
   return {
     ...presentation,
     baseColor,
     ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
+    emissiveFactor: [
+      emissive[0]! * emissiveStrength,
+      emissive[1]! * emissiveStrength,
+      emissive[2]! * emissiveStrength,
+    ],
+    ...(emissiveAsset === undefined ? {} : { emissiveAsset }),
     kind: "standard",
     metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
-    requiresTextureCoordinates: baseColorAsset !== undefined,
+    ...(metallicRoughnessAsset === undefined ? {} : { metallicRoughnessAsset }),
+    ...(normalAsset === undefined ? {} : { normalAsset }),
+    normalScale: normalTexture === undefined
+      ? 1
+      : finiteFactor(normalTexture.scale, 1, label, `${materialPath}.normalTexture.scale`),
+    ...(occlusionAsset === undefined ? {} : { occlusionAsset }),
+    occlusionStrength: occlusionTexture === undefined
+      ? 1
+      : factor01(occlusionTexture.strength, 1, label, `${materialPath}.occlusionTexture.strength`),
+    requiresTextureCoordinates: baseColorAsset !== undefined
+      || metallicRoughnessAsset !== undefined
+      || normalAsset !== undefined
+      || occlusionAsset !== undefined
+      || emissiveAsset !== undefined,
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
   };
 };
@@ -714,6 +825,7 @@ const prepareStaticDocument = (
     const extension = requiredExtensions[extensionIndex];
     if (
       extension !== "KHR_materials_unlit"
+      && extension !== "KHR_materials_emissive_strength"
       && extension !== "EXT_texture_avif"
       && extension !== "EXT_mesh_gpu_instancing"
       && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
@@ -835,6 +947,26 @@ const prepareStaticDocument = (
       if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
+      const decodedTangents = decoded?.attributes.get("TANGENT");
+      const tangents = attributes.TANGENT === undefined
+        ? undefined
+        : decodedTangents === undefined
+          ? readFloatVectors(
+            context,
+            index(attributes.TANGENT, accessors, label, `${path}.attributes.TANGENT`),
+            "VEC4",
+            4,
+            "TANGENT",
+          )
+          : validateDecodedVectors(
+            decodedTangents,
+            4,
+            label,
+            `${path}.attributes.TANGENT`,
+          );
+      if (tangents !== undefined && tangents.length / 4 !== vertexCount) {
+        fail(label, `${path}.attributes.TANGENT`, "count must match POSITION");
+      }
       const indexAccessor = primitive.indices === undefined
         ? undefined
         : index(primitive.indices, accessors, label, `${path}.indices`);
@@ -864,6 +996,7 @@ const prepareStaticDocument = (
           key: `${contentKey}:mesh:${meshIndex}:primitive:${primitiveIndex}`,
           ...(normals === undefined ? {} : { normals }),
           positions,
+          ...(tangents === undefined ? {} : { tangents }),
           ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
         },
         material,
@@ -983,8 +1116,21 @@ const prepareStaticDocument = (
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
   const claimedTextures = new Map<string, TextureSourceRef>();
   for (const primitive of primitives) {
-    const asset = primitive.material.baseColorAsset;
-    if (asset !== undefined) claimedTextures.set(asset.contentKey as string, asset);
+    const material = primitive.material;
+    const assets = material.kind === "unlit"
+      ? [material.baseColorAsset]
+      : [
+        material.baseColorAsset,
+        material.metallicRoughnessAsset,
+        material.normalAsset,
+        material.occlusionAsset,
+        material.emissiveAsset,
+      ];
+    for (const asset of assets) {
+      if (asset !== undefined) {
+        claimedTextures.set(`${asset.contentKey as string}:${asset.colorSpace ?? "srgb"}`, asset);
+      }
+    }
   }
   return { primitives, textureAssets: [...claimedTextures.values()] };
 };

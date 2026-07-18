@@ -23,17 +23,17 @@ type GpuGeometry = Readonly<{
   indexType: number;
   key: string;
   normalBuffer: WebGLBuffer | null;
+  tangentBuffer: WebGLBuffer | null;
   textureCoordinateBuffer: WebGLBuffer | null;
   vertexArray: WebGLVertexArrayObject;
   vertexBuffer: WebGLBuffer;
 }>;
 
 type GpuSurface = Readonly<{
+  bindings: readonly GpuTextureBinding[];
   geometry: GpuGeometry;
   instanceCount: number;
-  sampler: WebGLSampler | null;
   surface: CanonicalDrawSurface;
-  texture: WebGLTexture | null;
   vertexArray: WebGLVertexArrayObject;
 }>;
 
@@ -53,8 +53,8 @@ type MutableOpaqueDrawIntent = {
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
-  sampler0: WebGLSampler | null;
-  texture0: WebGLTexture | null;
+  samplers: (WebGLSampler | null)[];
+  textures: (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: { height: number; width: number; x: number; y: number };
 };
@@ -75,10 +75,14 @@ type StandardProgram = Readonly<{
   directionalLightColors: WebGLUniformLocation;
   directionalLightCount: WebGLUniformLocation;
   directionalLightDirections: WebGLUniformLocation;
+  emissive: WebGLUniformLocation | null;
+  emissiveFactor: WebGLUniformLocation;
   kind: "standard";
   materialFactors: WebGLUniformLocation;
+  metallicRoughness: WebGLUniformLocation | null;
   model: WebGLUniformLocation;
   normalTransform: WebGLUniformLocation;
+  normalTexture: WebGLUniformLocation | null;
   program: WebGLProgram;
   presentation: WebGLUniformLocation;
   texture: WebGLUniformLocation | null;
@@ -139,11 +143,15 @@ void main() {
 const STANDARD_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
+#ifdef TANGENT
+layout(location = 10) in vec4 tangent;
+out vec4 worldTangent;
+#endif
 #ifdef INSTANCED
 layout(location = 3) in mat4 instanceModel;
 layout(location = 7) in vec3 instanceNormal0;
 layout(location = 8) in vec3 instanceNormal1;
-layout(location = 9) in vec3 instanceNormal2;
+layout(location = 9) in vec4 instanceNormal2;
 #endif
 #ifdef TEXTURED
 layout(location = 2) in vec2 textureCoordinate0;
@@ -165,10 +173,22 @@ void main() {
   vec4 world = model * localPosition;
   worldPosition = world.xyz;
 #ifdef INSTANCED
-  mat3 instanceNormal = mat3(instanceNormal0, instanceNormal1, instanceNormal2);
+  mat3 instanceNormal = mat3(instanceNormal0, instanceNormal1, instanceNormal2.xyz);
   worldNormal = mat3(normalTransform) * instanceNormal * normal;
 #else
   worldNormal = mat3(normalTransform) * normal;
+#endif
+#ifdef TANGENT
+  vec3 localTangent = tangent.xyz;
+  float tangentHandedness = tangent.w;
+#ifdef INSTANCED
+  localTangent = mat3(instanceModel) * localTangent;
+  tangentHandedness *= instanceNormal2.w;
+#endif
+  worldTangent = vec4(
+    normalize(mat3(model) * localTangent),
+    tangentHandedness * normalTransform[3][3]
+  );
 #endif
   gl_Position = viewProjection * world;
 }
@@ -181,13 +201,28 @@ in vec3 worldNormal;
 in vec3 worldPosition;
 #ifdef TEXTURED
 in vec2 surfaceTextureCoordinate0;
+#endif
+#ifdef BASE_COLOR_TEXTURED
 uniform sampler2D baseColorTexture;
+#endif
+#ifdef METALLIC_ROUGHNESS_TEXTURED
+uniform sampler2D metallicRoughnessTexture;
+#endif
+#ifdef NORMAL_TEXTURED
+uniform sampler2D normalTexture;
+#ifdef TANGENT
+in vec4 worldTangent;
+#endif
+#endif
+#ifdef EMISSIVE_TEXTURED
+uniform sampler2D emissiveTexture;
 #endif
 uniform vec4 baseColor;
 uniform vec4 cameraWorldPosition;
 uniform vec4 directionalLightColors[MAX_DIRECTIONAL_LIGHTS];
 uniform int directionalLightCount;
 uniform vec4 directionalLightDirections[MAX_DIRECTIONAL_LIGHTS];
+uniform vec4 emissiveFactor;
 uniform vec4 materialFactors;
 uniform vec4 presentation;
 out vec4 outputColor;
@@ -237,7 +272,7 @@ vec3 linearToSrgb(vec3 value) {
 }
 void main() {
   vec4 surfaceBaseColor = baseColor;
-#ifdef TEXTURED
+#ifdef BASE_COLOR_TEXTURED
   surfaceBaseColor *= texture(baseColorTexture, surfaceTextureCoordinate0);
 #endif
 #ifdef ALPHA_MASK
@@ -248,12 +283,40 @@ void main() {
     normal = cross(dFdx(worldPosition), dFdy(worldPosition));
   }
   normal = normalize(normal);
+#ifdef NORMAL_TEXTURED
+  vec3 mappedNormal = texture(normalTexture, surfaceTextureCoordinate0).xyz * 2.0 - 1.0;
+  mappedNormal.xy *= materialFactors.w;
+#ifdef TANGENT
+  vec3 tangent = normalize(worldTangent.xyz - normal * dot(normal, worldTangent.xyz));
+  vec3 bitangent = cross(normal, tangent) * worldTangent.w;
+#else
+  vec3 positionDx = dFdx(worldPosition);
+  vec3 positionDy = dFdy(worldPosition);
+  vec2 uvDx = dFdx(surfaceTextureCoordinate0);
+  vec2 uvDy = dFdy(surfaceTextureCoordinate0);
+  vec3 tangent = normalize(positionDx * uvDy.y - positionDy * uvDx.y);
+  vec3 bitangent = normalize(-positionDx * uvDy.x + positionDy * uvDx.x);
+#endif
+  normal = normalize(mat3(tangent, bitangent, normal) * mappedNormal);
+#endif
+#ifdef DOUBLE_SIDED
+  if (!gl_FrontFacing) normal = -normal;
+#endif
   vec3 viewVector = cameraWorldPosition.xyz - worldPosition;
   vec3 viewDirection = dot(viewVector, viewVector) <= 0.00000001
     ? normal
     : normalize(viewVector);
   float metallic = materialFactors.x;
-  float roughness = clamp(materialFactors.y, 0.04, 1.0);
+  float roughness = materialFactors.y;
+#ifdef METALLIC_ROUGHNESS_TEXTURED
+  vec4 metallicRoughnessSample = texture(
+    metallicRoughnessTexture,
+    surfaceTextureCoordinate0
+  );
+  metallic *= metallicRoughnessSample.b;
+  roughness *= metallicRoughnessSample.g;
+#endif
+  roughness = clamp(roughness, 0.04, 1.0);
   vec3 dielectric = vec3(0.04);
   vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
@@ -277,7 +340,11 @@ void main() {
       * smithVisibility(normalLight, normalView, roughness);
     lit += (diffuse + specular) * directionalLightColors[index].rgb * normalLight;
   }
-  vec3 exposed = lit * max(presentation.x, 0.0);
+  vec3 emissive = emissiveFactor.rgb;
+#ifdef EMISSIVE_TEXTURED
+  emissive *= texture(emissiveTexture, surfaceTextureCoordinate0).rgb;
+#endif
+  vec3 exposed = (lit + emissive) * max(presentation.x, 0.0);
   vec3 mapped = presentation.y > 0.5 ? pbrNeutral(exposed) : clamp(exposed, 0.0, 1.0);
   outputColor = vec4(linearToSrgb(mapped), 1.0);
 }
@@ -334,12 +401,13 @@ const createProgram = (
 
 const shaderVariant = (
   source: string,
-  textured: boolean,
+  features: number,
   instanced: boolean,
   alphaMasked: boolean,
+  doubleSided: boolean,
 ): string => source.replace(
   "\n",
-  `\n${textured ? "#define TEXTURED\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}`,
+  `\n${features === 0 ? "" : "#define TEXTURED\n"}${features & 1 ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & 2 ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & 4 ? "#define NORMAL_TEXTURED\n" : ""}${features & 8 ? "#define EMISSIVE_TEXTURED\n" : ""}${features & 16 ? "#define TANGENT\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -357,35 +425,37 @@ const uniform = (
 
 const createUnlitProgram = (
   gl: WebGL2RenderingContext,
-  textured: boolean,
+  features: number,
   instanced: boolean,
   alphaMasked: boolean,
+  doubleSided: boolean,
 ): UnlitProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(UNLIT_VERTEX_SHADER, textured, instanced, alphaMasked),
-    shaderVariant(UNLIT_FRAGMENT_SHADER, textured, instanced, alphaMasked),
+    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided),
+    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided),
   );
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
     color: uniform(gl, program, "linearColor"),
     kind: "unlit",
     program,
-    texture: textured ? uniform(gl, program, "baseColorTexture") : null,
+    texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
     viewProjectionModel: uniform(gl, program, "viewProjectionModel"),
   };
 };
 
 const createStandardProgram = (
   gl: WebGL2RenderingContext,
-  textured: boolean,
+  features: number,
   instanced: boolean,
   alphaMasked: boolean,
+  doubleSided: boolean,
 ): StandardProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(STANDARD_VERTEX_SHADER, textured, instanced, alphaMasked),
-    shaderVariant(STANDARD_FRAGMENT_SHADER, textured, instanced, alphaMasked),
+    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided),
+    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided),
   );
   return {
     alphaMasked,
@@ -394,13 +464,19 @@ const createStandardProgram = (
     directionalLightColors: uniform(gl, program, "directionalLightColors"),
     directionalLightCount: uniform(gl, program, "directionalLightCount"),
     directionalLightDirections: uniform(gl, program, "directionalLightDirections"),
+    emissive: features & 8 ? uniform(gl, program, "emissiveTexture") : null,
+    emissiveFactor: uniform(gl, program, "emissiveFactor"),
     kind: "standard",
     materialFactors: uniform(gl, program, "materialFactors"),
+    metallicRoughness: features & 2
+      ? uniform(gl, program, "metallicRoughnessTexture")
+      : null,
     model: uniform(gl, program, "model"),
     normalTransform: uniform(gl, program, "normalTransform"),
+    normalTexture: features & 4 ? uniform(gl, program, "normalTexture") : null,
     presentation: uniform(gl, program, "presentation"),
     program,
-    texture: textured ? uniform(gl, program, "baseColorTexture") : null,
+    texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
     viewProjection: uniform(gl, program, "viewProjection"),
   };
 };
@@ -411,6 +487,18 @@ const indexType = (
 ): number => indices instanceof Uint32Array
   ? gl.UNSIGNED_INT
   : indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
+
+const MATERIAL_TEXTURE_UNITS = 5;
+
+const materialTextureFeatures = (surface: GpuSurface): number => {
+  let features = surface.bindings[0]!.texture === null ? 0 : 1;
+  if (surface.surface.material.kind !== "standard") return features;
+  if (surface.bindings[1]!.texture !== null) features |= 2;
+  if (surface.bindings[2]!.texture !== null) features |= 4;
+  if ((features & 4) !== 0 && surface.geometry.tangentBuffer !== null) features |= 16;
+  if (surface.bindings[4]!.texture !== null) features |= 8;
+  return features;
+};
 
 /** Owns surface programs and geometry allocations for one context generation. */
 export class SurfaceGpuOwner {
@@ -426,6 +514,7 @@ export class SurfaceGpuOwner {
   #instanceResources: readonly GpuInstanceData[] = [];
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
   readonly #materialFactors = new Float32Array(4);
+  readonly #emissiveFactor = new Float32Array(4);
   readonly #normalTransform: MutableMat4 = identityMat4();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
   #scene: CanonicalSurfaceScene | null = null;
@@ -483,17 +572,18 @@ export class SurfaceGpuOwner {
       const firstSurface = this.#gpuSurfaces[0]!;
       const first = this.#programFor(
         firstSurface.surface.material.kind,
-        firstSurface.texture !== null,
+        materialTextureFeatures(firstSurface),
         firstSurface.instanceCount > 0,
         firstSurface.surface.material.alphaCutoff !== undefined,
+        firstSurface.surface.material.doubleSided === true,
       );
       drawIntent = {
         cullBackFaces: firstSurface.surface.material.doubleSided !== true,
         framebuffer: null,
         frontFace: this.#gl.CCW,
         program: first.program,
-        sampler0: firstSurface.sampler,
-        texture0: firstSurface.texture,
+        samplers: [null, null, null, null, null],
+        textures: [null, null, null, null, null],
         vertexArray: firstSurface.vertexArray,
         viewport: { height: 0, width: 0, x: 0, y: 0 },
       };
@@ -509,15 +599,19 @@ export class SurfaceGpuOwner {
       const surface = resource.surface;
       const program = this.#programFor(
         surface.material.kind,
-        resource.texture !== null,
+        materialTextureFeatures(resource),
         resource.instanceCount > 0,
         surface.material.alphaCutoff !== undefined,
+        surface.material.doubleSided === true,
       );
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
-      drawIntent.sampler0 = resource.sampler;
-      drawIntent.texture0 = resource.texture;
+      for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+        const binding = resource.bindings[unit]!;
+        drawIntent.samplers[unit] = binding.sampler;
+        drawIntent.textures[unit] = binding.texture;
+      }
       drawIntent.vertexArray = resource.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
       if (program.kind === "unlit") {
@@ -549,10 +643,18 @@ export class SurfaceGpuOwner {
         gl.uniformMatrix4fv(program.normalTransform, false, this.#normalTransform);
         gl.uniform4fv(program.baseColor, material.baseColor);
         if (program.texture !== null) gl.uniform1i(program.texture, 0);
+        if (program.metallicRoughness !== null) gl.uniform1i(program.metallicRoughness, 1);
+        if (program.normalTexture !== null) gl.uniform1i(program.normalTexture, 2);
+        if (program.emissive !== null) gl.uniform1i(program.emissive, 4);
+        this.#emissiveFactor[0] = material.emissiveFactor[0];
+        this.#emissiveFactor[1] = material.emissiveFactor[1];
+        this.#emissiveFactor[2] = material.emissiveFactor[2];
+        this.#emissiveFactor[3] = 0;
+        gl.uniform4fv(program.emissiveFactor, this.#emissiveFactor);
         this.#materialFactors[0] = material.metallicFactor;
         this.#materialFactors[1] = material.roughnessFactor;
         this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
-        this.#materialFactors[3] = 0;
+        this.#materialFactors[3] = material.normalScale;
         gl.uniform4fv(program.materialFactors, this.#materialFactors);
       }
       if (resource.instanceCount > 0) {
@@ -577,6 +679,7 @@ export class SurfaceGpuOwner {
   #deleteGeometry(resource: GpuGeometry): void {
     this.#gl.deleteBuffer(resource.indexBuffer);
     if (resource.normalBuffer !== null) this.#gl.deleteBuffer(resource.normalBuffer);
+    if (resource.tangentBuffer !== null) this.#gl.deleteBuffer(resource.tangentBuffer);
     if (resource.textureCoordinateBuffer !== null) {
       this.#gl.deleteBuffer(resource.textureCoordinateBuffer);
     }
@@ -604,6 +707,10 @@ export class SurfaceGpuOwner {
   #createGeometry(surface: CanonicalDrawSurface, key: string): GpuGeometry {
     const gl = this.#gl;
     const normals = surface.material.kind === "standard" ? surface.geometry.normals : undefined;
+    const tangents = surface.material.kind === "standard"
+      && surface.material.normalAsset !== undefined
+      ? surface.geometry.tangents
+      : undefined;
     const textureCoordinates = surface.material.requiresTextureCoordinates
       ? surface.geometry.textureCoordinates0
       : undefined;
@@ -614,18 +721,21 @@ export class SurfaceGpuOwner {
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
     const normalBuffer = normals === undefined ? null : gl.createBuffer();
+    const tangentBuffer = tangents === undefined ? null : gl.createBuffer();
     const textureCoordinateBuffer = textureCoordinates === undefined ? null : gl.createBuffer();
     if (
       vertexArray === null
       || vertexBuffer === null
       || indexBuffer === null
       || (normals !== undefined && normalBuffer === null)
+      || (tangents !== undefined && tangentBuffer === null)
       || (textureCoordinates !== undefined && textureCoordinateBuffer === null)
     ) {
       if (vertexArray !== null) gl.deleteVertexArray(vertexArray);
       if (vertexBuffer !== null) gl.deleteBuffer(vertexBuffer);
       if (indexBuffer !== null) gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       throw new Error("Royal could not allocate surface geometry");
     }
@@ -652,6 +762,14 @@ export class SurfaceGpuOwner {
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
       }
+      if (tangents === undefined) {
+        gl.disableVertexAttribArray(10);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, tangents, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(10);
+        gl.vertexAttribPointer(10, 4, gl.FLOAT, false, 0, 0);
+      }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, surface.geometry.indices, gl.STATIC_DRAW);
       return {
@@ -660,6 +778,7 @@ export class SurfaceGpuOwner {
         indexType: indexType(gl, surface.geometry.indices),
         key,
         normalBuffer,
+        tangentBuffer,
         textureCoordinateBuffer,
         vertexArray,
         vertexBuffer,
@@ -667,6 +786,7 @@ export class SurfaceGpuOwner {
     } catch (error) {
       gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       gl.deleteBuffer(vertexBuffer);
       gl.deleteVertexArray(vertexArray);
@@ -703,7 +823,7 @@ export class SurfaceGpuOwner {
         values[normalTarget] = normal[normalSource]!;
         values[normalTarget + 1] = normal[normalSource + 1]!;
         values[normalTarget + 2] = normal[normalSource + 2]!;
-        values[normalTarget + 3] = 0;
+        values[normalTarget + 3] = column === 2 ? normal[15] : 0;
       }
     }
     const buffer = this.#gl.createBuffer();
@@ -746,6 +866,13 @@ export class SurfaceGpuOwner {
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
       }
+      if (geometry.tangentBuffer === null) {
+        gl.disableVertexAttribArray(10);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.tangentBuffer);
+        gl.enableVertexAttribArray(10);
+        gl.vertexAttribPointer(10, 4, gl.FLOAT, false, 0, 0);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, instances.buffer);
       const stride = 28 * 4;
       for (let column = 0; column < 4; column += 1) {
@@ -757,7 +884,14 @@ export class SurfaceGpuOwner {
       for (let column = 0; column < 3; column += 1) {
         const location = 7 + column;
         gl.enableVertexAttribArray(location);
-        gl.vertexAttribPointer(location, 3, gl.FLOAT, false, stride, 64 + column * 16);
+        gl.vertexAttribPointer(
+          location,
+          column === 2 ? 4 : 3,
+          gl.FLOAT,
+          false,
+          stride,
+          64 + column * 16,
+        );
         gl.vertexAttribDivisor(location, 1);
       }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
@@ -770,16 +904,18 @@ export class SurfaceGpuOwner {
 
   #programFor(
     kind: "standard" | "unlit",
-    textured: boolean,
+    features: number,
     instanced: boolean,
     alphaMasked: boolean,
+    doubleSided: boolean,
   ): StandardProgram | UnlitProgram {
-    const key = `${kind}:${textured ? "texture" : "solid"}:${instanced ? "instances" : "single"}:${alphaMasked ? "mask" : "opaque"}`;
+    const twoSided = kind === "standard" && doubleSided;
+    const key = `${kind}:${features}:${instanced ? "instances" : "single"}:${alphaMasked ? "mask" : "opaque"}:${twoSided ? "two-sided" : "one-sided"}`;
     const retained = this.#programs.get(key);
     if (retained !== undefined) return retained;
     const created = kind === "unlit"
-      ? createUnlitProgram(this.#gl, textured, instanced, alphaMasked)
-      : createStandardProgram(this.#gl, textured, instanced, alphaMasked);
+      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false)
+      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided);
     this.#programs.set(key, created);
     return created;
   }
@@ -821,6 +957,7 @@ export class SurfaceGpuOwner {
       geometry: GpuGeometry;
       instanceCount: number;
       surface: CanonicalDrawSurface;
+      textureOffset: number;
       vertexArray: WebGLVertexArrayObject;
     }>> = [];
     const textureInputs: Array<CanonicalTextureBinding | undefined> = [];
@@ -835,7 +972,12 @@ export class SurfaceGpuOwner {
           && surface.geometry.normals !== undefined
           ? `${surface.geometry.key}:normal`
           : `${surface.geometry.key}:position`;
-        const key = `${geometryBaseKey}:${surface.material.requiresTextureCoordinates ? "uv0" : "no-uv"}`;
+        const tangentKey = surface.material.kind === "standard"
+          && surface.material.normalAsset !== undefined
+          && surface.geometry.tangents !== undefined
+          ? "tangent"
+          : "no-tangent";
+        const key = `${geometryBaseKey}:${surface.material.requiresTextureCoordinates ? "uv0" : "no-uv"}:${tangentKey}`;
         let geometry = nextByKey.get(key) ?? previousByKey.get(key);
         if (geometry === undefined) {
           geometry = this.#createGeometry(surface, key);
@@ -873,8 +1015,22 @@ export class SurfaceGpuOwner {
           instanceCount = instanceData.count;
           vertexArray = instanceVao.vertexArray;
         }
-        pendingSurfaces.push({ geometry, instanceCount, surface, vertexArray });
-        textureInputs.push(surface.material.baseColorTexture);
+        const material = surface.material;
+        const textureOffset = textureInputs.length;
+        textureInputs.push(
+          material.baseColorTexture,
+          material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
+          material.kind === "standard" ? material.normalTexture : undefined,
+          material.kind === "standard" ? material.occlusionTexture : undefined,
+          material.kind === "standard" ? material.emissiveTexture : undefined,
+        );
+        pendingSurfaces.push({
+          geometry,
+          instanceCount,
+          surface,
+          textureOffset,
+          vertexArray,
+        });
       }
       textureBindings = this.#textureGpu.reconcile(textureInputs);
     } catch (error) {
@@ -885,13 +1041,18 @@ export class SurfaceGpuOwner {
     }
     for (let index = 0; index < pendingSurfaces.length; index += 1) {
       const pending = pendingSurfaces[index]!;
-      const binding = textureBindings[index]!;
+      const offset = pending.textureOffset;
       nextSurfaces.push({
+        bindings: [
+          textureBindings[offset]!,
+          textureBindings[offset + 1]!,
+          textureBindings[offset + 2]!,
+          textureBindings[offset + 3]!,
+          textureBindings[offset + 4]!,
+        ],
         geometry: pending.geometry,
         instanceCount: pending.instanceCount,
-        sampler: binding.sampler,
         surface: pending.surface,
-        texture: binding.texture,
         vertexArray: pending.vertexArray,
       });
     }

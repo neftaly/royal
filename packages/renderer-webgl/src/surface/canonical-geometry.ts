@@ -9,6 +9,7 @@ export type CanonicalTriangleGeometry = Readonly<{
   key: string;
   normals?: Float32Array;
   positions: Float32Array;
+  tangents?: Float32Array;
   textureCoordinates0?: Float32Array;
 }>;
 

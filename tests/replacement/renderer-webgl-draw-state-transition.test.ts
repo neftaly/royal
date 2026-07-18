@@ -16,8 +16,8 @@ const state = (): AppliedOpaqueDrawState => ({
   fixedOpaquePipelineKnown: false,
   frontFace: null,
   program: null,
-  sampler0: null,
-  texture0: null,
+  samplers: [],
+  textures: [],
   textureBindingsKnown: false,
   vertexArray: null,
 });
@@ -27,8 +27,8 @@ const intent = (): OpaqueDrawStateIntent => ({
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
-  sampler0: null,
-  texture0: null,
+  samplers: [null],
+  textures: [null],
   vertexArray: handle<WebGLVertexArrayObject>(),
   viewport: { height: 360, width: 640, x: 0, y: 0 },
 });
@@ -45,8 +45,7 @@ describe("opaque draw state transition core", () => {
       framebuffer: true,
       frontFace: true,
       program: true,
-      sampler0: true,
-      texture0: true,
+      textureUnits: 1,
       vertexArray: true,
       viewport: true,
       writeMasks: true,
@@ -69,8 +68,7 @@ describe("opaque draw state transition core", () => {
       framebuffer: false,
       frontFace: false,
       program: false,
-      sampler0: false,
-      texture0: false,
+      textureUnits: 0,
       vertexArray: true,
       viewport: false,
       writeMasks: false,
@@ -108,13 +106,12 @@ describe("opaque draw state transition core", () => {
     const transition = createOpaqueDrawStateTransition();
     planOpaqueDrawStateTransition(previous, {
       ...first,
-      sampler0: handle<WebGLSampler>(),
-      texture0: handle<WebGLTexture>(),
+      samplers: [null, handle<WebGLSampler>()],
+      textures: [null, handle<WebGLTexture>()],
     }, transition);
-    expect(transition.sampler0).toBe(true);
-    expect(transition.texture0).toBe(true);
+    expect(transition.textureUnits).toBe(2);
     expect(Object.entries(transition)
-      .filter(([key]) => key !== "sampler0" && key !== "texture0")
+      .filter(([key]) => key !== "textureUnits")
       .every(([, value]) => !value)).toBe(true);
   });
 });
