@@ -107,15 +107,31 @@ export class CdpSession {
   }
 
   once(method) {
+    return this.wait(method, () => true);
+  }
+
+  wait(method, predicate, { timeoutMs } = {}) {
     return new Promise((resolve) => {
-      const handler = (params) => {
+      let timeout;
+      const remove = (handler) => {
         this.#handlers.set(
           method,
           (this.#handlers.get(method) ?? []).filter((entry) => entry !== handler),
         );
+        if (timeout !== undefined) clearTimeout(timeout);
+      };
+      const handler = (params) => {
+        if (!predicate(params)) return;
+        remove(handler);
         resolve(params);
       };
       this.on(method, handler);
+      if (timeoutMs !== undefined) {
+        timeout = setTimeout(() => {
+          remove(handler);
+          resolve(undefined);
+        }, timeoutMs);
+      }
     });
   }
 

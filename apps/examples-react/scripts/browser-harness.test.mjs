@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CdpSession,
   captureBrowserDiagnostics,
   replaceWebSocketAuthority,
   selectCdpPage,
@@ -38,6 +39,39 @@ const fakeSession = () => {
 };
 
 describe('browser harness', () => {
+  it('waits for the first CDP event matching a lifecycle predicate', async () => {
+    const socket = new EventTarget();
+    socket.send = () => undefined;
+    const session = new CdpSession(socket);
+    const loaded = session.wait('Page.lifecycleEvent', (event) => event.name === 'DOMContentLoaded');
+    socket.dispatchEvent(new MessageEvent('message', {
+      data: JSON.stringify({ method: 'Page.lifecycleEvent', params: { name: 'init' } }),
+    }));
+    let settled = false;
+    void loaded.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    socket.dispatchEvent(new MessageEvent('message', {
+      data: JSON.stringify({ method: 'Page.lifecycleEvent', params: { name: 'DOMContentLoaded' } }),
+    }));
+    await expect(loaded).resolves.toEqual({ name: 'DOMContentLoaded' });
+  });
+
+  it('removes a CDP event wait after its timeout', async () => {
+    const socket = new EventTarget();
+    socket.send = () => undefined;
+    const session = new CdpSession(socket);
+    const loaded = session.wait(
+      'Page.lifecycleEvent',
+      (event) => event.name === 'DOMContentLoaded',
+      { timeoutMs: 0 },
+    );
+    await expect(loaded).resolves.toBeUndefined();
+    socket.dispatchEvent(new MessageEvent('message', {
+      data: JSON.stringify({ method: 'Page.lifecycleEvent', params: { name: 'DOMContentLoaded' } }),
+    }));
+  });
+
   it('rewrites a remote CDP authority without changing the target path', () => {
     expect(replaceWebSocketAuthority(
       'ws://127.0.0.1:9222/devtools/page/abc?token=123',

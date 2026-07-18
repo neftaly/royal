@@ -2224,12 +2224,17 @@ const startCpuProfiler = async (session) => {
 const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }) => {
   await session.call('Page.bringToFront');
   if (clearCachePerRoute) await session.call('Network.clearBrowserCache');
-  const loaded = session.once('Page.loadEventFired');
+  const domContentLoaded = session.wait(
+    'Page.lifecycleEvent',
+    (event) => event.name === 'DOMContentLoaded',
+    { timeoutMs: 10_000 },
+  );
   const start = performance.now();
   const routeUrl = new URL(baseUrl + route.path);
   routeUrl.searchParams.set('__royalBenchRun', `${Date.now()}-${Math.random()}`);
   await session.call('Page.navigate', { url: routeUrl.href });
-  await Promise.race([loaded, sleep(10_000)]);
+  await domContentLoaded;
+  const navigationSynchronizationMs = performance.now() - start;
   const ready = await waitForBenchmarkReady(
     session,
     !(realXrEnabled && route.id === 'webxr-vr'),
@@ -2247,6 +2252,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
     session = await connectPage();
     const diagnostics = captureBrowserDiagnostics(session);
     await session.call('Page.enable');
+    await session.call('Page.setLifecycleEventsEnabled', { enabled: true });
     await session.call('Runtime.enable');
     await session.call('Log.enable');
     await session.call('HeapProfiler.enable');
@@ -2288,6 +2294,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
       ...(activationFailure === undefined || !fakeXrEnabled
         ? {}
         : { fakeXrActivationFailure: activationFailure }),
+      navigationSynchronizationMs,
       ready,
       wallNavigationAndReadyMs: performance.now() - start,
       ...measured,
@@ -2728,14 +2735,19 @@ const main = async () => {
     session = await connectPage();
     browserDiagnostics = captureBrowserDiagnostics(session);
     await session.call('Page.enable');
+    await session.call('Page.setLifecycleEventsEnabled', { enabled: true });
     await session.call('Runtime.enable');
     await session.call('Log.enable');
     await session.call('HeapProfiler.enable');
     await session.call('Network.enable');
     await session.call('Performance.enable');
-    const blankLoaded = session.once('Page.loadEventFired');
+    const blankLoaded = session.wait(
+      'Page.lifecycleEvent',
+      (event) => event.name === 'DOMContentLoaded',
+      { timeoutMs: 10_000 },
+    );
     await session.call('Page.navigate', { url: 'about:blank' });
-    await Promise.race([blankLoaded, sleep(10_000)]);
+    await blankLoaded;
     browserDiagnostics.reset();
     await installBenchmarkHooks(session);
     const gpu = await readWebGlGpu(session);
@@ -2812,6 +2824,7 @@ const main = async () => {
         route.id.padEnd(28),
         ...(profile === undefined ? [] : [profile]),
         `load=${(result.performance.navigation?.duration ?? 0).toFixed(1)}ms`,
+        `nav=${result.navigationSynchronizationMs.toFixed(1)}ms`,
         `ready=${result.wallNavigationAndReadyMs.toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,

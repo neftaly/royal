@@ -205,6 +205,10 @@ const checkIdleFrameStats = (value, label) => {
 
 const checkRouteFrameEvidence = (route, routeLabel) => {
   requireBoolean(route.ready, `${routeLabel}.ready`);
+  requireNonNegativeNumber(
+    route.navigationSynchronizationMs,
+    `${routeLabel}.navigationSynchronizationMs`,
+  );
   requireNumber(route.wallNavigationAndReadyMs, `${routeLabel}.wallNavigationAndReadyMs`);
   checkFrameStats(route.frameStats, `${routeLabel}.frameStats`);
   if (route.ready === false) {

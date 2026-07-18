@@ -7,7 +7,8 @@ renderer. `EXAMPLES_BENCH_GPU=hardware-headed` remains available when a visible
 desktop Chromium window is preferable.
 
 `benchmark-examples.mjs` builds a route-by-route browser report for the examples app.
-It records load timing, frame pacing, heap growth, WebGL draw/upload counters,
+It records browser load timing, DevTools navigation synchronization, renderer
+readiness, frame pacing, heap growth, WebGL draw/upload counters,
 low-overhead GL state counters (`useProgram`, `bindTexture`, `bindBuffer`,
 `bindVertexArray`, and uniform calls), renderer glTF instancing deltas exposed
 by the examples-only benchmark bridge, and instancing-focused summaries for
