@@ -6,6 +6,7 @@ import {
   inverseMat4,
   transformMat4,
   type Mat4,
+  type MutableMat4,
 } from "./math/mat4";
 import type {
   IblSpecularTextureResource,
@@ -17,6 +18,7 @@ import {
   surfaceLightSet,
   writeTransformedSurfaceIblIrradiance,
   writeTransformedSurfaceLightSet,
+  type SurfaceImageBasedLight,
   type SurfaceImageBasedLightSpecular,
   type SurfaceIblIrradianceTransformWorkspace,
   type SurfaceIblIrradiance,
@@ -54,7 +56,42 @@ type MutableSurfaceIblSpecular = {
 type GltfAssetLightWorkspace = {
   readonly irradiance: SurfaceIblIrradianceTransformWorkspace;
   readonly lights: SurfaceLightTransformWorkspace;
+  readonly rootSnapshot: MutableMat4;
+  sourceImageBasedLight: SurfaceImageBasedLight | undefined;
+  sourceLights: readonly SurfaceLight[] | undefined;
   specular?: MutableSurfaceIblSpecular;
+  transformReady: boolean;
+};
+
+const gltfLightTransformInputsChanged = (
+  workspace: GltfAssetLightWorkspace,
+  rootModel: Mat4,
+  imageBasedLight: SurfaceImageBasedLight | undefined,
+  lights: readonly SurfaceLight[],
+): boolean => {
+  if (
+    !workspace.transformReady
+    || workspace.sourceImageBasedLight !== imageBasedLight
+    || workspace.sourceLights !== lights
+  ) return true;
+  for (let index = 0; index < 16; index += 1) {
+    if (!Object.is(workspace.rootSnapshot[index], rootModel[index])) return true;
+  }
+  return false;
+};
+
+const retainGltfLightTransformInputs = (
+  workspace: GltfAssetLightWorkspace,
+  rootModel: Mat4,
+  imageBasedLight: SurfaceImageBasedLight | undefined,
+  lights: readonly SurfaceLight[],
+): void => {
+  for (let index = 0; index < 16; index += 1) {
+    workspace.rootSnapshot[index] = rootModel[index]!;
+  }
+  workspace.sourceImageBasedLight = imageBasedLight;
+  workspace.sourceLights = lights;
+  workspace.transformReady = true;
 };
 
 /** Owns scene/asset light-set resolution and stable glTF light-scope identity. */
@@ -133,19 +170,35 @@ export class SurfaceLightResolver {
     const imageBasedLight = state.imageBasedLight;
     if (!hasGltfAssetLights(state)) return undefined;
     const workspace = this.#gltfAssetWorkspace(state, rootModel);
+    const transformInputsChanged = gltfLightTransformInputsChanged(
+      workspace,
+      rootModel,
+      imageBasedLight,
+      state.lights,
+    );
     const irradiance = imageBasedLight === undefined
       ? undefined
-      : writeTransformedSurfaceIblIrradiance(workspace.irradiance, rootModel, imageBasedLight);
+      : transformInputsChanged
+        ? writeTransformedSurfaceIblIrradiance(workspace.irradiance, rootModel, imageBasedLight)
+        : workspace.irradiance.resolved;
     const specular = imageBasedLight?.specular === undefined || irradiance === undefined
       ? undefined
       : this.#resolveGltfSpecular(workspace, imageBasedLight.specular, irradiance);
-    return writeTransformedSurfaceLightSet(
-      workspace.lights,
-      rootModel,
-      state.lights,
-      irradiance,
-      specular,
-    );
+    if (transformInputsChanged) {
+      const resolved = writeTransformedSurfaceLightSet(
+        workspace.lights,
+        rootModel,
+        state.lights,
+        irradiance,
+        specular,
+      );
+      retainGltfLightTransformInputs(workspace, rootModel, imageBasedLight, state.lights);
+      return resolved;
+    }
+    const resolved = workspace.lights.resolved;
+    resolved.irradiance = irradiance;
+    resolved.specular = specular;
+    return resolved;
   }
 
   /** Stable batching identity for one retained transformed light workspace. */
@@ -207,6 +260,10 @@ export class SurfaceLightResolver {
     workspace = {
       irradiance: createSurfaceIblIrradianceTransformWorkspace(),
       lights: createSurfaceLightTransformWorkspace(),
+      rootSnapshot: identityMat4(),
+      sourceImageBasedLight: undefined,
+      sourceLights: undefined,
+      transformReady: false,
     };
     models.set(rootModel, workspace);
     return workspace;

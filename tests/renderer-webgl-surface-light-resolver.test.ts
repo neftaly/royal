@@ -162,6 +162,63 @@ describe("SurfaceLightResolver", () => {
     expect(ensureGltfSpecular).toHaveBeenCalledTimes(2);
   });
 
+  it("retains static asset-light transforms and invalidates them on source or matrix changes", () => {
+    let directionReads = 0;
+    const trackedDirection = new Proxy([0, -1, 0], {
+      get(target, property, receiver) {
+        if (property === "0" || property === "1" || property === "2") directionReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    }) as unknown as readonly [number, number, number];
+    const source: GltfSurfaceLightSource = {
+      lights: [{ ...directional, direction: trackedDirection }],
+    };
+    const resolver = new SurfaceLightResolver({
+      ensureGltfSpecular: vi.fn(),
+      resolvePrefilteredEnvironment: vi.fn(),
+      studioSpecular: vi.fn(),
+    });
+    const rootModel = identityMat4();
+
+    resolver.resolveGltfAsset(source, rootModel);
+    const firstReads = directionReads;
+    expect(firstReads).toBeGreaterThan(0);
+    resolver.resolveGltfAsset(source, rootModel);
+    expect(directionReads).toBe(firstReads);
+
+    rootModel[12] = 2;
+    resolver.resolveGltfAsset(source, rootModel);
+    expect(directionReads).toBeGreaterThan(firstReads);
+    const matrixReads = directionReads;
+
+    source.lights = [{ ...directional, direction: trackedDirection }];
+    resolver.resolveGltfAsset(source, rootModel);
+    expect(directionReads).toBeGreaterThan(matrixReads);
+  });
+
+  it("publishes a transform snapshot only after its writer succeeds", () => {
+    let fail = true;
+    const direction = new Proxy([0, -1, 0], {
+      get(target, property, receiver) {
+        if (fail && property === "0") throw new Error("direction read failed");
+        return Reflect.get(target, property, receiver);
+      },
+    }) as unknown as readonly [number, number, number];
+    const source: GltfSurfaceLightSource = {
+      lights: [{ ...directional, direction }],
+    };
+    const resolver = new SurfaceLightResolver({
+      ensureGltfSpecular: vi.fn(),
+      resolvePrefilteredEnvironment: vi.fn(),
+      studioSpecular: vi.fn(),
+    });
+    const rootModel = identityMat4();
+
+    expect(() => resolver.resolveGltfAsset(source, rootModel)).toThrow("direction read failed");
+    fail = false;
+    expect(resolver.resolveGltfAsset(source, rootModel)?.lights).toHaveLength(1);
+  });
+
   it("owns stable glTF light-scope identity and resets it on clear", () => {
     const resolver = new SurfaceLightResolver({
       ensureGltfSpecular: vi.fn(),
