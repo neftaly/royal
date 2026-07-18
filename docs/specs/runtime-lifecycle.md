@@ -111,6 +111,7 @@ MUST leave no listener, RAF, session callback, renderer root, observer, or
 resource claim alive.
 
 Hooks that observe external renderer state MUST use stable subscription
-semantics and immutable snapshots. Observer callbacks that are documented as
-immediate MUST synchronously receive the current detached snapshot on
-subscription, then receive later transitions without polling.
+semantics and detached TypeScript-readonly snapshots. Runtime freezing is not
+part of the contract. Observer callbacks that are documented as immediate MUST
+synchronously receive the current snapshot on subscription, then receive later
+transitions without polling.

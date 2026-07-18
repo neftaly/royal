@@ -70,7 +70,7 @@ In those paths Royal SHOULD:
   inside per-object/per-draw loops;
 - grow capacity geometrically and report high-water values;
 - avoid assignments that merely mirror another mutable source of truth;
-- publish immutable snapshots only on cold observer paths.
+- publish detached TypeScript-readonly snapshots only on cold observer paths.
 
 Allocation-free is not absolute. A retained allocation that adds ownership or
 cache complexity must beat the simpler form in representative profiling.

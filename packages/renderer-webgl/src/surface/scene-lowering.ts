@@ -1,10 +1,18 @@
 import type {
   Camera,
+  GltfNode,
   LinearRgba,
   MeshNode,
   RenderRoot,
 } from "@royal/renderer-core";
-import { inverseMat4, transformMat4, type Mat4 } from "../math/mat4";
+import {
+  identityMat4,
+  inverseMat4,
+  multiplyMat4Into,
+  transformMat4,
+  type Mat4,
+} from "../math/mat4";
+import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
   prepareCanonicalGeometry,
   type CanonicalTriangleGeometry,
@@ -16,7 +24,7 @@ export type CanonicalSurface = Readonly<{
   inverseModel: Mat4 | undefined;
   model: Mat4;
   modelHandedness: 1 | -1;
-  node: MeshNode;
+  node: MeshNode | GltfNode;
   pickingGeometry: CanonicalTriangleGeometry;
 }>;
 
@@ -54,9 +62,36 @@ const solidUnlitColor = (node: MeshNode): LinearRgba => {
 };
 
 /** Validates and lowers a complete direct scene before any GL resource work. */
-export const prepareCanonicalSurfaceScene = (scene: RenderRoot): CanonicalSurfaceScene => {
+export const prepareCanonicalSurfaceScene = (
+  scene: RenderRoot,
+  preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
+): CanonicalSurfaceScene => {
   const surfaces: CanonicalSurface[] = [];
   for (const node of scene.nodes) {
+    if (node.kind === "gltf") {
+      if (node.pickingGeometry !== undefined) {
+        throw new Error("Royal static glTF slice does not yet support pickingGeometry");
+      }
+      if (node.materialVariant !== undefined) {
+        throw new Error("Royal static glTF slice does not yet support materialVariant");
+      }
+      const prepared = preparedGltf(node);
+      if (prepared === undefined) continue;
+      const rootModel = transformMat4(node.transform);
+      for (const primitive of prepared.primitives) {
+        const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
+        surfaces.push({
+          color: primitive.color,
+          geometry: primitive.geometry,
+          inverseModel: inverseMat4(model),
+          model,
+          modelHandedness: modelHandedness(model),
+          node,
+          pickingGeometry: primitive.geometry,
+        });
+      }
+      continue;
+    }
     if (node.kind !== "mesh") {
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
     }

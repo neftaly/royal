@@ -20,6 +20,7 @@
     "src/interaction/picking-events.ts",
     "src/interaction/scene-interactions.ts",
     "src/observation/canvas-size.ts",
+    "src/observation/gltf-asset.ts",
     "src/observation/renderer-lifecycle.ts",
     "src/observation/root-snapshot.ts",
     "src/observation/select-root.ts"

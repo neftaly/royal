@@ -68,6 +68,8 @@ pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake fo
 unrelated frames. `useInvalidate()` requests one coalesced frame.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
+`useGltfAssetStatus(sourceOrAsset)` observes one exact asset without polling or
+waking for unrelated frames.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
@@ -75,5 +77,6 @@ pointer, imperative, and future XR inputs share the root's exact query.
 The replacement is being implemented in vertical slices. The current slice
 renders opaque solid unlit planes and boxes and proves canvas ownership, sizing,
 recovery, frame scheduling, exact shared-path picking, and React scene pointer
-bindings. Controls, assets, other materials, and XR remain absent rather than
-being exposed as compatibility shims.
+bindings. Demand-loaded static unlit GLB geometry is the first asset profile;
+controls, textures, other materials, complete glTF compatibility, and XR remain
+absent rather than being exposed as compatibility shims.

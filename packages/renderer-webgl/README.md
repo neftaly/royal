@@ -53,9 +53,18 @@ authority to an external clock until its idempotent `release()`.
 `getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
 unrelated frames.
 
+`getGltfAssetSnapshot(asset)` and `subscribeGltfAsset(asset, listener)` expose
+focused `idle` / `loading` / `ready` / `error` state for one exact source and
+version. Loading and content errors stay on that asset lifecycle; they are not
+reported as scheduled-frame failures.
+
 The current vertical slice renders opaque solid unlit planes and boxes through
 one canonical indexed-triangle path. Exact picking consumes those same retained
 transforms and triangles; optional `pickingGeometry` replaces only CPU exact
-intersection and never allocates a GPU buffer. Other nodes and materials fail
+intersection and never allocates a GPU buffer. Static `.glb` assets containing
+triangle geometry and `KHR_materials_unlit` solid base-color factors demand-load
+into that same path; preparation code loads concurrently with the asset request.
+Textures, standard materials, external `.gltf` resources, sparse/quantized
+accessors, variants, deformation, animation, and glTF picking proxies still fail
 explicitly rather than calling the legacy renderer. Optional capability and
 WebXR subpaths return only with their working feature slices.

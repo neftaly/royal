@@ -12,6 +12,7 @@ import {
   createRendererRoot,
   useCanvasPick,
   useCanvasSize,
+  useGltfAssetStatus,
   useRendererLifecycle,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
@@ -46,8 +47,19 @@ describe("replacement React public API", () => {
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(useCanvasSize).toBeFunction();
+    expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
+  });
+
+  it("server-renders exact glTF status as idle before root mount", () => {
+    const Status = () => createElement("output", null, useGltfAssetStatus("/model.glb").state);
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle</output>");
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {

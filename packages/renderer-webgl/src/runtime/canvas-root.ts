@@ -1,5 +1,7 @@
 import {
   validatePickInput,
+  type GltfAssetRef,
+  type GltfNode,
   type PickInput,
   type PickResult,
   type RenderRoot,
@@ -15,6 +17,11 @@ import {
   type ResolvedCanvasSize,
 } from "../frame/canvas-size";
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
+import {
+  GltfAssetOwner,
+  readGltfWithFetch,
+  type GltfAssetSnapshot,
+} from "../gltf/asset-owner";
 import {
   identityMat4,
   multiplyMat4Into,
@@ -43,6 +50,7 @@ export type CanvasRootPlatform = Readonly<{
   onListenerError(error: unknown): void;
   reportScheduledFailure(error: unknown): void;
   requestFrame(callback: () => void): void;
+  readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
 }>;
 
 const defaultPlatform = (): CanvasRootPlatform => ({
@@ -126,6 +134,7 @@ export class CanvasRoot {
   #frame = 0;
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
+  readonly #gltfAssets: GltfAssetOwner;
   #lastFrameFailure: string | undefined;
   readonly #listeners = new Set<() => void>();
   readonly #onContextLost: (event: Event) => void;
@@ -165,6 +174,11 @@ export class CanvasRoot {
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
     this.#surfaceGpu = new SurfaceGpuOwner(this.#gl);
+    this.#gltfAssets = new GltfAssetOwner({
+      onAssetChanged: () => this.#refreshPreparedScene(),
+      onListenerError: (error) => platform.onListenerError(error),
+      read: platform.readGltf ?? readGltfWithFetch,
+    });
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
     this.#clock = new FrameClockOwner({
@@ -200,6 +214,7 @@ export class CanvasRoot {
     this.#canvas.removeEventListener("webglcontextlost", this.#onContextLost);
     this.#canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
     this.#clock.dispose();
+    this.#gltfAssets.dispose();
     this.#surfaceGpu.dispose();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
@@ -232,6 +247,10 @@ export class CanvasRoot {
 
   /** Focused canvas-size snapshot for product observation. */
   getSizeSnapshot = (): ResolvedCanvasSize | null => this.#size;
+
+  /** Focused readiness for one exact source/version identity. */
+  getGltfAssetSnapshot = (asset: GltfAssetRef): GltfAssetSnapshot =>
+    this.#gltfAssets.getSnapshot(asset);
 
   invalidate(): void {
     this.#assertLive("invalidate");
@@ -269,11 +288,17 @@ export class CanvasRoot {
       throw new TypeError("Royal renderer render requires a validated scene descriptor");
     }
     if (scene === this.#surfaceSceneInput) return;
-    const prepared = prepareCanonicalSurfaceScene(scene);
+    const prepared = prepareCanonicalSurfaceScene(
+      scene,
+      (node) => this.#gltfAssets.prepared(node.asset),
+    );
+    const gltfNodes: GltfNode[] = [];
+    for (const node of scene.nodes) if (node.kind === "gltf") gltfNodes.push(node);
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#surfaceGpu.setScene(prepared);
+    this.#gltfAssets.reconcile(gltfNodes);
     this.#clock.invalidate();
   }
 
@@ -333,6 +358,10 @@ export class CanvasRoot {
       this.#sizeListeners.delete(listener);
     };
   };
+
+  /** Subscribes only to one exact glTF source/version identity. */
+  subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) =>
+    this.#gltfAssets.subscribe(asset, listener);
 
   #assertLive(operation: string): void {
     if (this.#disposed) throw new Error(`Cannot ${operation} on a disposed Royal renderer root`);
@@ -399,6 +428,17 @@ export class CanvasRoot {
     const intent = this.#createFrameIntent(size, this.#clearColor);
     validateClearFrameIntent(intent);
     this.#frameIntent = intent;
+  }
+
+  #refreshPreparedScene(): void {
+    if (this.#disposed || this.#surfaceSceneInput === null) return;
+    const prepared = prepareCanonicalSurfaceScene(
+      this.#surfaceSceneInput,
+      (node) => this.#gltfAssets.prepared(node.asset),
+    );
+    this.#surfaceScene = prepared;
+    this.#surfaceGpu.setScene(prepared);
+    this.#clock.invalidate();
   }
 
   #renderFrame(): void {

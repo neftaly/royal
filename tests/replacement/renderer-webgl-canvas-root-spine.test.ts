@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   mesh,
+  gltf,
   perspectiveCamera,
   planeGeometry,
   scene,
@@ -12,6 +13,10 @@ import {
   CanvasRoot,
   type CanvasRootPlatform,
 } from "../../packages/renderer-webgl/src/runtime/canvas-root";
+import {
+  staticTriangleDocument,
+  staticTriangleGlb,
+} from "./support/static-glb";
 
 type FakeGl = WebGL2RenderingContext & {
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
@@ -128,7 +133,7 @@ class FakeCanvas extends EventTarget {
   }
 }
 
-const harness = () => {
+const harness = (platformOverrides: Partial<CanvasRootPlatform> = {}) => {
   const callbacks: Array<() => void> = [];
   const canvas = new FakeCanvas();
   const listenerErrors: unknown[] = [];
@@ -137,6 +142,7 @@ const harness = () => {
     onListenerError: (error) => listenerErrors.push(error),
     reportScheduledFailure: (error) => scheduledFailures.push(error),
     requestFrame: (callback) => callbacks.push(callback),
+    ...platformOverrides,
   };
   const root = new CanvasRoot(canvas as unknown as HTMLCanvasElement, {}, platform);
   return { callbacks, canvas, listenerErrors, root, scheduledFailures };
@@ -273,6 +279,39 @@ describe("clear-only canvas root", () => {
       })],
     }));
     expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+  });
+
+  it("publishes one asynchronously prepared GLB into the same draw and pick path", async () => {
+    const document = staticTriangleDocument();
+    document.nodes = [{ mesh: 0 }];
+    document.scenes = [{ nodes: [0] }];
+    const bytes = staticTriangleGlb(document);
+    const readGltf = vi.fn(async () => bytes);
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const node = gltf({ pickingId: "triangle", src: "/triangle.glb", version: "v1" });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    expect(root.getGltfAssetSnapshot(node.asset)).toEqual({ state: "loading" });
+
+    await vi.waitFor(() => {
+      expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
+        primitiveCount: 1,
+        state: "ready",
+      });
+    });
+    expect(readGltf).toHaveBeenCalledTimes(1);
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+    expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({
+      kind: "gltf",
+      node,
+      pickingId: "triangle",
+    });
   });
 
   it("lowers a semantic scene and rejects unsupported node kinds explicitly", () => {

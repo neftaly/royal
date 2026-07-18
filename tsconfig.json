@@ -54,6 +54,7 @@
     "packages/renderer-webgl/src/frame/frame-clock.ts",
     "packages/renderer-webgl/src/frame/frame-clock-owner.ts",
     "packages/renderer-webgl/src/gltf/glb.ts",
+    "packages/renderer-webgl/src/gltf/asset-owner.ts",
     "packages/renderer-webgl/src/gltf/static-asset.ts",
     "packages/renderer-webgl/src/runtime/canvas-root.ts",
     "packages/renderer-webgl/src/runtime/root-options.ts",

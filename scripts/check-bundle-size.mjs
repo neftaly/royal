@@ -129,6 +129,9 @@ const buildFixture = async (name) => {
     file,
     gzipBytes(path.join(outputDirectory, 'assets', file)),
   ]));
+  const initialJsNames = new Set(
+    Array.from(initialFiles).filter((file) => file.endsWith('.js')).map((file) => path.basename(file)),
+  );
   const initialRenderedBytesByModule = new Map();
   for (const file of initialFiles) {
     for (const [id, bytes] of renderedModulesByFile.get(file) ?? []) {
@@ -144,6 +147,9 @@ const buildFixture = async (name) => {
     initialGzipBytes: Array.from(initialFiles)
       .filter((file) => file.endsWith('.js'))
       .reduce((sum, file) => sum + gzipBytes(path.join(outputDirectory, file)), 0),
+    lazyGzipBytes: jsFiles
+      .filter((file) => !initialJsNames.has(file))
+      .reduce((sum, file) => sum + gzipByFile[file], 0),
     initialRenderedBytesByModule,
     renderedModulesByFile,
   };
@@ -159,6 +165,7 @@ try {
   console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
   console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
   console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
+  console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
   if (showDetails) {
     const royalModules = Array.from(royal.initialRenderedBytesByModule)
       .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
@@ -190,6 +197,11 @@ try {
   if (incrementalGzipBytes > budget.royalIncrementalGzipBytes) {
     failures.push(
       `Royal incremental gzip ${incrementalGzipBytes} exceeds ${budget.royalIncrementalGzipBytes}`,
+    );
+  }
+  if (royal.lazyGzipBytes > budget.royalLazyGzipBytes) {
+    failures.push(
+      `Royal lazy gzip ${royal.lazyGzipBytes} exceeds ${budget.royalLazyGzipBytes}`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));

@@ -97,8 +97,9 @@ Attack: optimize for V8 folklore, pool every object, or allocate maps/sets and
 strings in per-object/per-draw loops.
 
 Resolution: stable shapes, retained coherent workspaces, dense numeric storage
-where natural, and cold immutable snapshots. Readability and ownership outrank
-microbenchmarks. JavaScriptCore/Safari 17 and Quest Chromium are primary traces.
+where natural, and cold detached TypeScript-readonly snapshots without runtime
+freeze walks. Readability and ownership outrank microbenchmarks.
+JavaScriptCore/Safari 17 and Quest Chromium are primary traces.
 
 ### 10. Async race and lifecycle pass
 

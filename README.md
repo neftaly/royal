@@ -10,7 +10,8 @@ replacement architecture are defined in [docs/specs](docs/specs/README.md).
 The implementation is landing as independently verified vertical slices; the
 current executable slice owns a CSS-sized canvas, WebGL2 context lifecycle,
 coalesced frame clock, complete opaque state, direct unlit planes and boxes,
-exact CPU picking, and focused React observation. Unsupported nodes and
+exact CPU picking, focused React observation, and demand-loaded static GLB
+geometry using `KHR_materials_unlit`. Unsupported glTF features, nodes, and
 materials fail explicitly. The old renderer is evidence and oracle material,
 not a fallback path.
 

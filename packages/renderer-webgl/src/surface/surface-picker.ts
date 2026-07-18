@@ -74,11 +74,17 @@ export class SurfacePicker {
         ray.origin[1] + ray.direction[1] * distance,
         ray.origin[2] + ray.direction[2] * distance,
       ],
-      target: {
-        kind: "mesh",
-        node: surface.node,
-        ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
-      },
+      target: surface.node.kind === "mesh"
+        ? {
+          kind: "mesh",
+          node: surface.node,
+          ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
+        }
+        : {
+          kind: "gltf",
+          node: surface.node,
+          ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
+        },
     };
   }
 

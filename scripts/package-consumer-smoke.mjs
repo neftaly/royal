@@ -125,6 +125,7 @@ try {
 import {
   Canvas,
   useCanvasSize,
+  useGltfAssetStatus,
   useRendererLifecycle,
   type RoyalRendererRoot,
 } from '@royal/react';
@@ -140,8 +141,9 @@ const renderScene = scene({
 const Status = (): ReactNode => {
   const size = useCanvasSize();
   const lifecycle = useRendererLifecycle();
+  const model = useGltfAssetStatus('/model.glb');
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: {size?.width ?? 0} by {size?.height ?? 0}</output>;
+  return <output>{renderer}: {size?.width ?? 0} by {size?.height ?? 0}; model {model.state}</output>;
 };
 
 export const App = (): ReactNode => {

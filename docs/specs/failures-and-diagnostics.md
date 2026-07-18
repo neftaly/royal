@@ -58,9 +58,11 @@ fit, variants, or renderer lifecycle.
 
 ## Snapshot rules
 
-Public snapshots MUST be detached and immutable. Reading them MUST NOT mutate
-the renderer, allocate GPU resources, start work, or subscribe. Focused asset
-reads SHOULD avoid building the full diagnostics payload.
+Public snapshots MUST be detached from mutable renderer-owned state and exposed
+through TypeScript `readonly` contracts. Runtime freezing is not required and
+MUST NOT be added solely to restate the type contract. Reading a snapshot MUST
+NOT mutate the renderer, allocate GPU resources, start work, or subscribe.
+Focused asset reads SHOULD avoid building the full diagnostics payload.
 
 Observer subscriptions validate callbacks, immediately publish the current
 snapshot where documented, return idempotent unsubscribe functions, and never
