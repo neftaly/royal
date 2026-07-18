@@ -47,17 +47,35 @@ export const glbFromDocument = (
   return bytes;
 };
 
-export const staticTriangleGlb = (
-  document: Record<string, unknown> = staticTriangleDocument(),
-  lastIndex = 2,
-): Uint8Array => {
-  const binary = new Uint8Array(44);
+export const staticTriangleBinary = (lastIndex = 2): Uint8Array => {
+  const binary = new Uint8Array(42);
   new Float32Array(binary.buffer, 0, 9).set([
     -1, -1, 0,
     1, -1, 0,
     0, 1, 0,
   ]);
   new Uint16Array(binary.buffer, 36, 3).set([0, 1, lastIndex]);
+  return binary;
+};
+
+export const staticTriangleGltf = (): Readonly<{
+  binary: Uint8Array;
+  document: Uint8Array;
+}> => {
+  const value = staticTriangleDocument();
+  value.buffers = [{ byteLength: 42, uri: "triangle.bin" }];
+  return {
+    binary: staticTriangleBinary(),
+    document: new TextEncoder().encode(JSON.stringify(value)),
+  };
+};
+
+export const staticTriangleGlb = (
+  document: Record<string, unknown> = staticTriangleDocument(),
+  lastIndex = 2,
+): Uint8Array => {
+  const binary = new Uint8Array(44);
+  binary.set(staticTriangleBinary(lastIndex));
   return glbFromDocument(document, binary);
 };
 

@@ -11,6 +11,7 @@ export type GltfAssetOwnerPlatform = Readonly<{
   onAssetChanged(): void;
   onListenerError(error: unknown): void;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
+  readResource(uri: string, signal: AbortSignal): Promise<Uint8Array>;
 }>;
 
 type AssetEntry = {
@@ -66,6 +67,15 @@ export const readGltfWithFetch = async (
   if (!response.ok) {
     throw new Error(`${diagnosticLabel(asset)} fetch failed with HTTP ${response.status}`);
   }
+  return new Uint8Array(await response.arrayBuffer());
+};
+
+export const readGltfResourceWithFetch = async (
+  uri: string,
+  signal: AbortSignal,
+): Promise<Uint8Array> => {
+  const response = await fetch(uri, { signal });
+  if (!response.ok) throw new Error(`glTF resource ${JSON.stringify(uri)} failed with HTTP ${response.status}`);
   return new Uint8Array(await response.arrayBuffer());
 };
 
@@ -164,9 +174,16 @@ export class GltfAssetOwner {
     void Promise.all([
       (async () => this.#platform.read(asset, entry.controller.signal))(),
       import("./static-asset"),
-    ]).then(([bytes, preparation]) => {
+    ]).then(async ([bytes, preparation]) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
-      const prepared = preparation.prepareStaticGlb(bytes, key, diagnosticLabel(asset), asset.src);
+      const prepared = await preparation.prepareStaticGltfSource(
+        bytes,
+        key,
+        diagnosticLabel(asset),
+        asset.src,
+        (uri) => this.#platform.readResource(uri, entry.controller.signal),
+      );
+      if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.prepared = prepared;
       entry.snapshot = { primitiveCount: prepared.primitives.length, state: "ready" };
       this.#platform.onAssetChanged();

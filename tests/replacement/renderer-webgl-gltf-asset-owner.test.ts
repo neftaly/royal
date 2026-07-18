@@ -1,9 +1,27 @@
 import { gltf } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
-import { staticTriangleGlb } from "./support/static-glb";
+import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
 
 describe("glTF asset lifecycle owner", () => {
+  it("keeps external JSON buffer IO in the same cancellable asset lifecycle", async () => {
+    const fixture = staticTriangleGltf();
+    const readResource = vi.fn(async () => fixture.binary);
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      read: vi.fn(async () => fixture.document),
+      readResource,
+    });
+    const node = gltf("/models/triangle.gltf");
+    owner.reconcile([node]);
+    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    expect(readResource).toHaveBeenCalledWith(
+      "/models/triangle.bin",
+      expect.any(AbortSignal),
+    );
+  });
+
   it("deduplicates exact identities and publishes loading then ready once", async () => {
     const changes = vi.fn();
     const listener = vi.fn();
@@ -12,6 +30,7 @@ describe("glTF asset lifecycle owner", () => {
       onAssetChanged: changes,
       onListenerError: vi.fn(),
       read,
+      readResource: vi.fn(),
     });
     const first = gltf({ src: "/model.glb", version: "v1" });
     const second = gltf({ src: "/model.glb", version: "v1" });
@@ -44,6 +63,7 @@ describe("glTF asset lifecycle owner", () => {
       onAssetChanged: changes,
       onListenerError: vi.fn(),
       read,
+      readResource: vi.fn(),
     });
     const node = gltf("/slow.glb");
     owner.subscribe(node.asset, listener);
@@ -65,6 +85,7 @@ describe("glTF asset lifecycle owner", () => {
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
       read,
+      readResource: vi.fn(),
     });
     const node = gltf("/broken.glb");
     owner.reconcile([node]);

@@ -19,6 +19,7 @@ import {
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
 import {
   GltfAssetOwner,
+  readGltfResourceWithFetch,
   readGltfWithFetch,
   type GltfAssetSnapshot,
 } from "../gltf/asset-owner";
@@ -62,6 +63,7 @@ export type CanvasRootPlatform = Readonly<{
     signal: AbortSignal,
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
+  readGltfResource?(uri: string, signal: AbortSignal): Promise<Uint8Array>;
 }>;
 
 const defaultPlatform = (): CanvasRootPlatform => ({
@@ -196,6 +198,7 @@ export class CanvasRoot {
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
       read: platform.readGltf ?? readGltfWithFetch,
+      readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
     });
     this.#textureAssets = new TextureAssetOwner({
       decode: platform.decodeTexture ?? decodeTextureWithBrowser,

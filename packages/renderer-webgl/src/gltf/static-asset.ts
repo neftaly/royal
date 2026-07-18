@@ -541,16 +541,15 @@ type PreparedMeshPrimitive = Readonly<{
   material: CanonicalSurfaceMaterial;
 }>;
 
-/** Validates and lowers the first static GLB profile without creating browser or GL resources. */
-export const prepareStaticGlb = (
-  bytes: Uint8Array,
+const prepareStaticDocument = (
+  document: JsonObject,
+  binary: Uint8Array,
+  container: "glb" | "gltf",
   contentKey: string,
-  label = "glTF asset",
-  sourceUri = "asset.glb",
+  label: string,
+  sourceUri: string,
 ): PreparedStaticGltf => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
-  const parsed = parseGlb(bytes, label);
-  const document = object(parsed.document, label, "document");
   const asset = object(document.asset, label, "asset");
   if (asset.version !== "2.0") fail(label, "asset.version", "must be 2.0");
   if (optionalArray(document.animations, label, "animations").length > 0) {
@@ -568,15 +567,23 @@ export const prepareStaticGlb = (
     }
   }
 
-  const binary = parsed.binaryChunk
-    ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
   const buffers = array(document.buffers, label, "buffers");
-  if (buffers.length !== 1) fail(label, "buffers", "must contain exactly the GLB buffer");
+  if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");
   const buffer = object(buffers[0], label, "buffers[0]");
-  if (buffer.uri !== undefined) fail(label, "buffers[0].uri", "must be omitted for a GLB BIN chunk");
+  if (container === "glb" && buffer.uri !== undefined) {
+    fail(label, "buffers[0].uri", "must be omitted for a GLB BIN chunk");
+  }
+  if (container === "gltf" && (typeof buffer.uri !== "string" || buffer.uri.length === 0)) {
+    fail(label, "buffers[0].uri", "must be a non-empty external or data URI");
+  }
   const bufferByteLength = nonNegativeInteger(buffer.byteLength, label, "buffers[0].byteLength");
-  if (bufferByteLength > binary.byteLength || binary.byteLength - bufferByteLength > 3) {
-    fail(label, "buffers[0].byteLength", "does not match the padded GLB BIN chunk");
+  const padding = binary.byteLength - bufferByteLength;
+  if (padding < 0 || (container === "glb" ? padding > 3 : padding !== 0)) {
+    fail(
+      label,
+      "buffers[0].byteLength",
+      container === "glb" ? "does not match the padded GLB BIN chunk" : "does not match the external buffer",
+    );
   }
   const accessors = array(document.accessors, label, "accessors");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
@@ -717,4 +724,55 @@ export const prepareStaticGlb = (
     if (asset !== undefined) claimedTextures.set(asset.contentKey as string, asset);
   }
   return { primitives, textureAssets: [...claimedTextures.values()] };
+};
+
+/** Validates and lowers the first static GLB profile without browser or GL resource work. */
+export const prepareStaticGlb = (
+  bytes: Uint8Array,
+  contentKey: string,
+  label = "glTF asset",
+  sourceUri = "asset.glb",
+): PreparedStaticGltf => {
+  const parsed = parseGlb(bytes, label);
+  const document = object(parsed.document, label, "document");
+  const binary = parsed.binaryChunk
+    ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
+  return prepareStaticDocument(document, binary, "glb", contentKey, label, sourceUri);
+};
+
+const parseJsonDocument = (bytes: Uint8Array, label: string): JsonObject => {
+  let value: unknown;
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    value = JSON.parse(text.replace(/^\uFEFF/, ""));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return fail(label, "document", `is not valid UTF-8 JSON: ${detail}`);
+  }
+  return object(value, label, "document");
+};
+
+/** Selects GLB or JSON glTF ingestion and fetches only the declared external buffer. */
+export const prepareStaticGltfSource = async (
+  bytes: Uint8Array,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  read: (uri: string) => Promise<Uint8Array>,
+): Promise<PreparedStaticGltf> => {
+  if (
+    bytes.byteLength >= 4
+    && new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true) === 0x46_54_6c_67
+  ) {
+    return prepareStaticGlb(bytes, contentKey, label, sourceUri);
+  }
+  const document = parseJsonDocument(bytes, label);
+  const buffers = array(document.buffers, label, "buffers");
+  if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");
+  const buffer = object(buffers[0], label, "buffers[0]");
+  if (typeof buffer.uri !== "string" || buffer.uri.length === 0) {
+    fail(label, "buffers[0].uri", "must be a non-empty external or data URI");
+  }
+  const binary = await read(resolveAssetUri(sourceUri, buffer.uri as string));
+  return prepareStaticDocument(document, binary, "gltf", contentKey, label, sourceUri);
 };

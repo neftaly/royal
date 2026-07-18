@@ -1,13 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
+import {
+  prepareStaticGlb,
+  prepareStaticGltfSource,
+} from "../../packages/renderer-webgl/src/gltf/static-asset";
 import {
   glbFromDocument,
   staticTriangleDocument,
   staticTriangleGlb,
+  staticTriangleGltf,
   staticTexturedTriangleGlb,
 } from "./support/static-glb";
 
 describe("static glTF preparation core", () => {
+  it("loads a JSON glTF external buffer relative to the document", async () => {
+    const fixture = staticTriangleGltf();
+    const read = async (uri: string): Promise<Uint8Array> => {
+      expect(uri).toBe("/models/triangle.bin");
+      return fixture.binary;
+    };
+    const prepared = await prepareStaticGltfSource(
+      fixture.document,
+      "json-v1",
+      "triangle.gltf",
+      "/models/triangle.gltf",
+      read,
+    );
+    expect(prepared.primitives).toHaveLength(1);
+    expect(prepared.primitives[0]!.geometry.positions).toEqual(new Float32Array([
+      -1, -1, 0, 1, -1, 0, 0, 1, 0,
+    ]));
+  });
+
   it("lowers one unlit GLB triangle into the canonical surface ABI", () => {
     const bytes = staticTriangleGlb();
     const prepared = prepareStaticGlb(bytes, "asset:v1", "triangle.glb");
