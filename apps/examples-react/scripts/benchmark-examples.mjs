@@ -2240,6 +2240,8 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
     !(realXrEnabled && route.id === 'webxr-vr'),
     route.expectsGltf === true,
   );
+  // End readiness timing before route preparation, warmup, and frame sampling.
+  const wallNavigationAndReadyMs = performance.now() - start;
   if (realXrEnabled && route.id === 'webxr-vr') {
     // Quest can ignore trusted Input commands on the CDP attachment that
     // performed Page.navigate. Transfer sole debugger ownership after load so
@@ -2296,7 +2298,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
         : { fakeXrActivationFailure: activationFailure }),
       navigationSynchronizationMs,
       ready,
-      wallNavigationAndReadyMs: performance.now() - start,
+      wallNavigationAndReadyMs,
       ...measured,
     };
   } catch (error) {
