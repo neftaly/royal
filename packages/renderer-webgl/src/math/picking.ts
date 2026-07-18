@@ -136,19 +136,34 @@ export const isAffineBoundsVisibleAgainstPlanes = (
   const extentX = (bounds.max[0] - bounds.min[0]) * 0.5;
   const extentY = (bounds.max[1] - bounds.min[1]) * 0.5;
   const extentZ = (bounds.max[2] - bounds.min[2]) * 0.5;
+  const worldCenterX = model[0] * centerX + model[4] * centerY + model[8] * centerZ + model[12];
+  const worldCenterY = model[1] * centerX + model[5] * centerY + model[9] * centerZ + model[13];
+  const worldCenterZ = model[2] * centerX + model[6] * centerY + model[10] * centerZ + model[14];
+  const extentAxisX0 = model[0] * extentX;
+  const extentAxisX1 = model[1] * extentX;
+  const extentAxisX2 = model[2] * extentX;
+  const extentAxisY0 = model[4] * extentY;
+  const extentAxisY1 = model[5] * extentY;
+  const extentAxisY2 = model[6] * extentY;
+  const extentAxisZ0 = model[8] * extentZ;
+  const extentAxisZ1 = model[9] * extentZ;
+  const extentAxisZ2 = model[10] * extentZ;
 
   for (let offset = 0; offset < 24; offset += 4) {
     const planeX = planes[offset]!;
     const planeY = planes[offset + 1]!;
     const planeZ = planes[offset + 2]!;
-    const localX = planeX * model[0] + planeY * model[1] + planeZ * model[2];
-    const localY = planeX * model[4] + planeY * model[5] + planeZ * model[6];
-    const localZ = planeX * model[8] + planeY * model[9] + planeZ * model[10];
-    const localW = planeX * model[12] + planeY * model[13] + planeZ * model[14] + planes[offset + 3]!;
-    if (localX * centerX + localY * centerY + localZ * centerZ + localW
-      + Math.abs(localX) * extentX
-      + Math.abs(localY) * extentY
-      + Math.abs(localZ) * extentZ < 0) return false;
+    const radius = Math.abs(
+      planeX * extentAxisX0 + planeY * extentAxisX1 + planeZ * extentAxisX2,
+    ) + Math.abs(
+      planeX * extentAxisY0 + planeY * extentAxisY1 + planeZ * extentAxisY2,
+    ) + Math.abs(
+      planeX * extentAxisZ0 + planeY * extentAxisZ1 + planeZ * extentAxisZ2,
+    );
+    if (
+      planeX * worldCenterX + planeY * worldCenterY + planeZ * worldCenterZ
+      + planes[offset + 3]! + radius < 0
+    ) return false;
   }
   return true;
 };
