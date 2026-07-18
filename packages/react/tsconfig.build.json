@@ -1,22 +1,24 @@
 {
   "extends": "../../tsconfig.build.json",
   "compilerOptions": {
-    "composite": true,
+    "composite": false,
+    "incremental": false,
     "isolatedDeclarations": true,
     "outDir": "dist",
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
-      "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"],
-      "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"],
-      "@royal/renderer-webgl/capabilities": ["../renderer-webgl/dist/capabilities.d.ts"],
-      "@royal/renderer-webgl/webxr": ["../renderer-webgl/dist/webxr.d.ts"]
+      "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"]
     },
-    "rootDir": "src",
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "rootDir": "src"
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../renderer-core/tsconfig.build.json" },
-    { "path": "../renderer-webgl/tsconfig.build.json" }
-  ]
+  "files": [
+    "src/index.ts",
+    "src/scene.ts",
+    "src/runtime/canvas.ts",
+    "src/observation/canvas-size.ts",
+    "src/observation/renderer-lifecycle.ts",
+    "src/observation/root-snapshot.ts",
+    "src/observation/select-root.ts"
+  ],
+  "include": []
 }

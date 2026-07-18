@@ -1,38 +1,46 @@
 # @royal/renderer-webgl
 
-Royal's WebGL2 backend for pure `@royal/renderer-core` scene descriptors.
-
-React applications should normally use `@royal/react`, which owns canvas and
-renderer lifetimes. Use `createWebGlRoot` directly when the host already owns a
-canvas and needs imperative rendering.
+Royal's imperative WebGL2 renderer root. React applications normally use
+`@royal/react`; this package is for hosts that already own an HTML canvas.
 
 ```ts
-import { perspectiveCamera, scene } from '@royal/renderer-core';
-import { createWebGlRoot } from '@royal/renderer-webgl';
+import { perspectiveCamera, scene } from "@royal/renderer-core";
+import { createRendererRoot } from "@royal/renderer-webgl";
 
-const root = createWebGlRoot(document.querySelector('canvas')!);
+const root = createRendererRoot(document.querySelector("canvas")!, {
+  alpha: true,
+  antialias: true,
+});
+
+root.setSize({
+  cssWidth: 800,
+  cssHeight: 450,
+  devicePixelRatio: window.devicePixelRatio,
+});
 root.render(scene({
-  camera: perspectiveCamera({ position: [0, 0, 4] }),
+  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  clearColor: [0.03, 0.06, 0.12, 1],
   nodes: [],
 }));
 
-// Later, when the host releases the canvas:
 root.dispose();
 ```
 
-The root owns its WebGL2 context and GPU resources. Renderer creation options
-are fixed for its lifetime. Use `invalidate()` for imperative changes,
-`snapshot()` for lifecycle and planning state, and bounded operational
-diagnostics from the root snapshot. Its `diagnosticLog.entries` carry stable
-keys, text, and deduplicated occurrence counts. Always call `dispose()`.
+The root owns one WebGL2 context, its backing dimensions, frame scheduling,
+context-loss recovery, and WebGL state. `alpha` and `antialias` default to
+`true`; they are immutable because browsers fix context attributes at context
+creation. Invalid values and unknown option fields fail synchronously.
 
-## Entrypoints
+`invalidate()` requests one coalesced frame. `flushInvalidated()` is available
+to deliberate imperative hosts, while `acquireExternalClock()` transfers frame
+authority to an external clock until its idempotent `release()`.
 
-- `@royal/renderer-webgl` — root creation, renderer policies, snapshots, and
-  imperative rendering types.
-- `@royal/renderer-webgl/capabilities` — explicit WebGL/WebGPU capability
-  probing and summaries.
-- `@royal/renderer-webgl/webxr` — low-level WebXR render-layer integration.
+`getSnapshot()` and `subscribe()` expose the broad operational snapshot.
+`getLifecycleSnapshot()` / `subscribeLifecycle()` and
+`getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
+unrelated frames.
 
-Royal is currently a private source-level prerelease. See the repository
-[README](../../README.md) and [changelog](../../CHANGELOG.md).
+The replacement is being implemented in vertical slices. This package currently
+accepts empty scenes and rejects non-empty scene nodes explicitly; it does not
+silently call the legacy renderer. Optional capability and WebXR subpaths will
+return only with their working feature slices.

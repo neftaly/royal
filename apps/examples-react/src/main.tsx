@@ -1,23 +1,47 @@
 /** @jsxImportSource react */
-import { lazy, StrictMode, Suspense } from 'react';
-import { createRoot } from 'react-dom/client';
-import { Router } from './router';
-import './style.css';
+import { StrictMode, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Canvas,
+  useCanvasSize,
+  useRendererLifecycle,
+} from "@royal/react";
+import { perspectiveCamera, scene } from "@royal/react/scene";
+import "./style.css";
 
-const rootElement = document.getElementById('root');
-const lifecycleProbeEnabled = new URLSearchParams(globalThis.location.search)
-  .has('__royalReactLifecycleProbe');
-const ReactLifecycleProbe = lazy(() => import('./testing/ReactLifecycleProbe')
-  .then((module) => ({ default: module.ReactLifecycleProbe })));
+const clearScene = scene({
+  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  clearColor: [0.035, 0.07, 0.14, 1],
+  nodes: [],
+});
 
-if (rootElement === null) {
-  throw new Error('Expected #root element');
-}
+const RendererStatus = (): ReactNode => {
+  const lifecycle = useRendererLifecycle();
+  const size = useCanvasSize();
+  return (
+    <output className="status" data-royal-lifecycle={lifecycle.state}>
+      {lifecycle.state} · {size === undefined
+        ? "waiting for layout"
+        : `${size.backingWidth}×${size.backingHeight} backing pixels`}
+    </output>
+  );
+};
 
-createRoot(rootElement).render(
-  <StrictMode>
-    {lifecycleProbeEnabled
-      ? <Suspense fallback={<output>Loading lifecycle probe…</output>}><ReactLifecycleProbe /></Suspense>
-      : <Router />}
-  </StrictMode>
+const App = (): ReactNode => (
+  <main>
+    <header>
+      <p className="eyebrow">Royal renderer replacement</p>
+      <h1>One lifecycle. One frame spine.</h1>
+      <p>The first vertical slice proves canvas ownership, sizing, recovery, and clear-state execution.</p>
+    </header>
+    <section className="viewport" aria-label="Renderer lifecycle example">
+      <Canvas aria-label="Royal clear scene" scene={clearScene}>
+        <RendererStatus />
+      </Canvas>
+    </section>
+  </main>
 );
+
+const rootElement = document.getElementById("root");
+if (rootElement === null) throw new Error("Expected #root element");
+createRoot(rootElement).render(<StrictMode><App /></StrictMode>);

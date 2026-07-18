@@ -35,9 +35,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     external: ['@royal/renderer-core', '@royal/renderer-core/render-object'],
     lib: {
       entry: {
-        index: 'src/index.ts',
-        capabilities: 'src/capabilities.ts',
-        webxr: 'src/webxr.ts'
+        index: 'src/index.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -53,8 +51,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        scene: 'src/scene.ts',
-        xr: 'src/xr.ts'
+        scene: 'src/scene.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -64,19 +61,15 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
 
 const appPackageNames = new Set(['@royal/examples-react']);
 const reactAppPackageNames = new Set(['@royal/examples-react']);
-const fixtureAppPackageNames = new Set(['@royal/examples-react']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as PackageManifest;
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
-  { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
-  { find: '@royal/renderer-webgl/webxr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/webxr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },
   { find: '@royal/react/scene', replacement: path.join(repoRoot, 'packages/react/src/scene.ts') },
-  { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') }
 ];
@@ -117,7 +110,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
     return {
       base: appBase,
       clearScreen: false,
-      publicDir: fixtureAppPackageNames.has(manifest.name ?? '') ? path.join(repoRoot, 'fixtures') : undefined,
+      publicDir: false,
       plugins: [...(reactAppPackageNames.has(manifest.name ?? '') ? [react()] : []), ...sharedPlugins],
       resolve: { alias: sourceAliases },
       build: sharedBuildOptions

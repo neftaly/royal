@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RenderRoot } from "@royal/renderer-core";
-import { resolveCanvasSize } from "../packages/renderer-webgl/src/frame/canvas-size";
+import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
 import {
   CanvasRoot,
   type CanvasRootPlatform,
-} from "../packages/renderer-webgl/src/runtime/canvas-root";
+} from "../../packages/renderer-webgl/src/runtime/canvas-root";
 
 type FakeGl = WebGL2RenderingContext & {
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
@@ -98,6 +98,18 @@ describe("canvas size selection", () => {
 });
 
 describe("clear-only canvas root", () => {
+  it("rejects invalid and unknown creation options at the public boundary", () => {
+    const canvas = new FakeCanvas();
+    expect(() => new CanvasRoot(
+      canvas as unknown as HTMLCanvasElement,
+      { alpha: "yes" } as unknown as { alpha: boolean },
+    )).toThrow("alpha must be a boolean");
+    expect(() => new CanvasRoot(
+      canvas as unknown as HTMLCanvasElement,
+      { powerPreference: "high-performance" } as unknown as { alpha: boolean },
+    )).toThrow("unsupported field powerPreference");
+  });
+
   it("coalesces commits and applies only changed clear state", () => {
     const { callbacks, canvas, root } = harness();
     root.setSize({ cssHeight: 360, cssWidth: 640, devicePixelRatio: 1 });
@@ -144,6 +156,22 @@ describe("clear-only canvas root", () => {
     expect(root.getSnapshot()).toBe(sized);
     callbacks.shift()!();
     expect(root.getSnapshot()).not.toBe(sized);
+  });
+
+  it("keeps lifecycle and size observers asleep during unrelated frames", () => {
+    const { callbacks, canvas, root } = harness();
+    const lifecycleListener = vi.fn();
+    const sizeListener = vi.fn();
+    root.subscribeLifecycle(lifecycleListener);
+    root.subscribeSize(sizeListener);
+    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    expect(sizeListener).toHaveBeenCalledTimes(1);
+    callbacks.shift()!();
+    expect(sizeListener).toHaveBeenCalledTimes(1);
+    expect(lifecycleListener).not.toHaveBeenCalled();
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    expect(lifecycleListener).toHaveBeenCalledTimes(1);
+    expect(sizeListener).toHaveBeenCalledTimes(1);
   });
 
   it("blocks stale work on loss and reconstructs the current clear intent on restore", () => {

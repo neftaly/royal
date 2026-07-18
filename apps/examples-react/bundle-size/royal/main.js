@@ -1,24 +1,14 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@royal/react';
-import {
-  boxGeometry,
-  mesh,
-  perspectiveCamera,
-  scene,
-  standardMaterial,
-} from '@royal/react/scene';
+import { perspectiveCamera, scene } from '@royal/react/scene';
 
-const cubeScene = scene({
+const clearScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
-  children: [
-    mesh({
-      geometry: boxGeometry(),
-      material: standardMaterial({ color: 'royalblue' }),
-    }),
-  ],
+  clearColor: [0.05, 0.1, 0.2, 1],
+  nodes: [],
 });
 
 createRoot(document.getElementById('root')).render(
-  React.createElement(Canvas, { scene: cubeScene }),
+  React.createElement(Canvas, { scene: clearScene }),
 );

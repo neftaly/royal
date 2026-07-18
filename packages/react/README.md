@@ -1,408 +1,54 @@
 # @royal/react
 
-React adapter for Royal. It renders Royal scene descriptors into a canvas
-without using the DOM as the scene model.
-
-Examples and documentation should import React adapter APIs from `@royal/react`
-and render graph primitives from `@royal/react/scene`.
-
-## Example
-
-`<Canvas>` is the primary React API. It owns the canvas element, requires one
-pure Royal `scene` prop, and can host React-only control components such as
-`<OrbitControls>`.
-
-The WebGL renderer currently supports a practical glTF subset: `.gltf` and
-`.glb` documents, external/data URI/GLB BIN buffers, bufferView images, node
-hierarchies and transforms, mesh primitives with `POSITION`/`NORMAL`/selected
-`TEXCOORD_n` accessors, sparse and strided accessors, normalized integer
-attributes, `UNSIGNED_BYTE`/`UNSIGNED_SHORT`/`UNSIGNED_INT` indices, triangle
-and line drawing, rigid node transforms, base color factor/texture/sampler data,
-and selected required extensions. Assets requiring skeletal or morph
-deformation fail explicitly until a prepared deformation runtime is added.
-That supported required-extension set includes meshopt-compressed bufferViews
-via `EXT_meshopt_compression` and KTX2/Basis base-color textures via
-`KHR_texture_basisu`. Complete authored mip chains transcode to ETC2/EAC and
-stay GPU-compressed; incomplete chains use the RGBA8 fallback so Royal can
-generate required missing mips.
-Required `KHR_animation_pointer` assets fail explicitly.
+The React-first host for Royal. `Canvas` renders an ordinary `<canvas>` and
+ordinary React children; scene data remains pure and lives in
+`@royal/react/scene`.
 
 ```tsx
 import {
   Canvas,
-  GltfOrbitCameraFit,
-  OrbitControls,
-  useOrbitCamera,
-} from '@royal/react';
-import {
-  boxGeometry,
-  directionalLight,
-  gltf,
-  gltfInstances,
-  linearRgbaFromSrgb,
-  mesh,
-  scene,
-  standardMaterial,
-} from '@royal/react/scene';
-import { useMemo } from 'react';
+  useCanvasSize,
+  useRendererLifecycle,
+} from "@royal/react";
+import { perspectiveCamera, scene } from "@royal/react/scene";
 
-const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.2, 0.16, 1]) });
-const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
-const helmet = gltf({ src: helmetSrc, materialVariant: 'display' });
+const renderScene = scene({
+  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  clearColor: [0.03, 0.06, 0.12, 1],
+  nodes: [],
+});
+
+function Status() {
+  const lifecycle = useRendererLifecycle();
+  const size = useCanvasSize();
+  return <output>{lifecycle.state}: {size?.backingWidth ?? 0}px</output>;
+}
 
 export function App() {
-  const orbit = useOrbitCamera({ initial: { distance: 5 } });
-  const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
-    nodes: [
-      directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
-      mesh({ geometry: cube, material: red }),
-      helmet,
-    ],
-  }), [orbit.cameraResource]);
-
   return (
-    <Canvas
-      aria-label="Royal scene"
-      scene={renderScene}
-    >
-      <GltfOrbitCameraFit node={helmet} orbit={orbit} padding={1.1} />
-      <OrbitControls orbit={orbit} />
+    <Canvas aria-label="Royal scene" scene={renderScene}>
+      <Status />
     </Canvas>
   );
 }
 ```
 
-Public color fields use scene-linear `LinearRgba` tuples. Convert normalized
-artist-authored sRGB values with `linearRgbaFromSrgb(...)`; image textures use
-sRGB by default. Mesh and glTF transforms default omitted `position` and
-`rotation` to `[0, 0, 0]` and omitted `scale` to `[1, 1, 1]`.
+CSS owns layout. Royal measures that layout and owns the canvas backing size, so
+native `width` and `height` props are intentionally excluded. Native canvas
+props, ARIA attributes, event handlers, class/style, refs, and application
+`data-*` attributes pass through; `data-*` is not a Royal scene protocol.
 
-`useOrbitCamera({ initial: ... })` reads `initial` once. It returns a stable,
-explicit `cameraResource`; orbit gestures stage pose values and commit them
-directly to every renderer root using the scene, without a React render or scene
-reconstruction. Use `orbit.getView()` for an imperative read, or
-`useOrbitCameraView(orbit)` only when React UI must observe the view. Read the
-projection with `orbit.getProjection()`. `orbit.fit(bounds, { aspectRatio })`
-commits a complete fitted view and uses the controller's current `fovY` unless
-one is passed explicitly; near and far clipping remain explicit projection
-choices.
+`rendererOptions` contains immutable `alpha` and `antialias` context requests,
+both defaulting to `true`. A semantic option change replaces both the root and
+canvas. `rendererRef` exposes the active lower-level root or `null` during the
+mount lifecycle.
 
-Camera resources expose writable `Float64Array` pose staging. Renderer roots
-continue using the last committed view until `commit()` succeeds; an unchanged
-commit is silent and preserves the version. Immutable `perspectiveCamera()` and
-`orthographicCamera()` descriptors remain the simpler path for static or
-Tarstate-derived scene snapshots.
+Focused hooks use one placement rule: call them under `Canvas`, or pass
+`{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents
+pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake for
+unrelated frames. `useInvalidate()` requests one coalesced frame.
 
-The imperative `createRendererRoot(canvas)` path accepts the same pure scene
-descriptors as `Canvas.scene`. It does not create or evaluate React elements.
-
-`Canvas` forwards ordinary native canvas props, including `className`, `style`,
-ARIA attributes, native React event handlers, and application-owned `data-*`
-metadata. Royal does not use `data-*` as renderer state or a scene protocol.
-Native `width` and `height` props are intentionally excluded: size the element
-with CSS and Royal keeps its backing buffer synchronized to CSS pixels and the
-current device-pixel ratio. A child of `Canvas` can call `useCanvasSize()` to
-observe the positive CSS-pixel `width`, `height`, and `aspectRatio` without
-polling. A parent that owns `Canvas.rendererRef` can pass the same root to
-`useCanvasSize({ root })` and `useGltfAssetStatus(asset, { root })`, so
-asset-driven camera fitting does not need a child-to-parent bridge or `window`
-dimensions. The size is `undefined` before attachment or while layout gives
-the canvas no area, and composes directly with `orbit.fit(...)`.
-
-`<GltfOrbitCameraFit node={node} orbit={orbit} />` is the declarative form of
-that composition. Place it under `Canvas`; it fits when prepared bounds arrive
-and when the canvas aspect ratio changes. It preserves the current orbit yaw
-and pitch unless either is supplied explicitly, while owning the target and
-distance for the selected asset. Near and far clipping remain explicit on
-`useOrbitCamera`, so responsive layout does not silently change depth precision.
-
-### WebXR
-
-`@royal/react/xr` provides an explicit session store and session runtime; it
-does not own an application's WebXR acquisition policy.
-`createXrSessionStore()` keeps
-serializable UI state separate from the live session object and exposes
-semantic actions for availability, blocked acquisition, live-session lifecycle
-transitions, and optional frame telemetry. A live session moves through
-`starting`, `active` or `suspended`, and `ending`; `blocked` means no session was
-acquired, with a closed `blockReason` that UI can inspect. The serializable
-snapshot exposes only lifecycle data, while `selectXrSessionControlSnapshot()`
-exposes the browser-owned session object.
-
-After the application acquires a browser session, `createXrSessionRuntime()`
-owns Royal's render layer, reference space, session RAF, visibility/end
-listeners, renderer-root lifecycle observation, and exactly-once cleanup. Its
-`end()` method retains a usable live runtime if the browser rejects the end
-request; `dispose()` releases Royal resources immediately and requests a
-best-effort browser end. `createXrSessionRenderer()` remains the lower-level
-bridge for applications that intentionally own a custom frame loop.
-
-The store's initial state accepts only `available` and `mode`, because a newly
-created store cannot already own a browser session. Omit `available` to begin in
-`checking`; pass it explicitly to begin in `available` or `unavailable`.
-`status` is the lifecycle authority: a session is actively presenting exactly
-when `status === "active"`; `available` remains independent capability state.
-
-The application owns support detection, the user gesture and request policy,
-and controller or input picking. Use `blockSession()` only when a request failed
-before ownership, such as another immersive session already being active.
-Frame snapshots are opt-in telemetry: connect the runtime renderer's
-`onFrameSnapshot` to `recordFrame` only when UI or diagnostics consume per-frame
-viewport data.
-
-```ts
-const store = createXrSessionStore<XrSession>({ available: true });
-const runtime = await createXrSessionRuntime(root, store, session, {
-  mode: "immersive-vr",
-  rendererOptions: { referenceSpacePreference: ["local-floor", "local"] },
-});
-
-await runtime.end();
-```
-
-### Canvas renderer options
-
-Pass renderer creation options through `Canvas.rendererOptions`, or through
-`createRendererRoot(canvas, options)` when you own the canvas. These values are
-fixed for an imperative root and are available as `root.options`. Changing them
-on `<Canvas>` recreates its renderer root.
-
-```tsx
-<Canvas
-  rendererOptions={{
-    automaticVirtualTextures: true,
-    resourceBudgets: {
-      cpuDecodedBytes: 1024 * 1024 * 1024,
-    },
-  }}
-  scene={renderScene}
-/>
-```
-
-The imperative root separates its two observational models:
-
-- `root.snapshot()` returns the current frame, normalized creation `options`,
-  and a backend-neutral `lifecycle` with `state`, `generation`,
-  `interruptions`, and `recoveries`.
-- `root.diagnostics()` returns a bounded `messageLog` whose entries carry their
-  stable key and occurrence count, plus operational counters. It does not
-  repeat root state or retain the submitted scene graph.
-
-- `alpha` and `antialias` both default to `true` and are requests made when the
-  WebGL context is created.
-- `automaticVirtualTextures` defaults to `false`. Enable it to generate
-  VTs for ordinary base-color image textures used by triangle geometry with
-  `TEXCOORD_0`. Decoded raster sources qualify when their longest dimension is
-  at least 257 px. SVG uses the same page-source boundary, but rasterizes each
-  requested vector page independently at a 16,384-texel long edge; Safari
-  retains the ordinary fallback for its incompatible Canvas-derived page path.
-  The ordinary texture remains active
-  until generated coverage is ready. Authored `virtualTexture(...)` resources
-  are unaffected.
-- `resourceBudgets` accepts root-wide CPU, GPU, per-frame upload,
-  transient-memory, and concurrent-job ceilings. They are admission guardrails,
-  not memory preallocations. The defaults are 512 MiB decoded CPU, 1280 MiB
-  persistent GPU, 192 MiB concurrent transient data, 16 MiB of upload traffic
-  per rendered frame, and 8 preparation jobs. Byte-named fields are bytes.
-  Royal keeps per-resource lending policy internal. The normalized complete
-  limits are available as `root.options.resourceBudgets`.
-- Manifest `physicalByteBudget` and `physicalSlots` remain the authored VT
-  quality and footprint ceilings; renderer resource budgets do not rewrite them.
-
-Use `virtualTexture('/terrain.vt.json')` from `@royal/react/scene` for an
-authored manifest. The string and the object form
-`virtualTexture({ manifestUri: '/terrain.vt.json' })` are equivalent. Object
-forms deliberately have one source field: image constructors use `src`, while
-the authored-VT constructor uses `manifestUri`. There are no `uri`/`src`
-compatibility aliases to guess between.
-
-For very close inspection, keep the perspective near plane below the closest
-camera-to-surface distance. For example,
-`useOrbitCamera({ initial: { distance: 1 }, near: 0.01 })` pairs safely with
-`<OrbitControls orbit={orbit} minDistance={0.1} />`. This is geometric camera
-clipping and applies equally to ordinary textures, authored VTs, generated
-raster VTs, and untextured meshes.
-
-The main `@royal/react` JSX runtime is ordinary React. Royal does not create a
-second React root, so outer Context, ErrorBoundary, and Suspense semantics stay
-normal. Read app state in React, pass immutable snapshots to pure scene
-builders, and keep imperative frame work in control children.
-
-React commits render the latest descriptor graph immediately. Use
-`useInvalidate()` inside `<Canvas>` only for changes React did not commit, such
-as external store mutations, imperative animation state, or host integration
-events. Royal render-object refs already invalidate the current canvas when
-their transform changes. `useFrame()` supplies animation timing but does not
-redraw by itself: a React state commit, a render-object mutation, or an explicit
-`useInvalidate()` call requests the next render. Multiple invalidations before
-that render are coalesced. Pass `useFrame(callback, { active: false })` to
-release the continuous frame subscription and renderer clock without calling a
-hook conditionally. Named `priority` values order callbacks from lower to
-higher priority.
-
-glTF material variants from `KHR_materials_variants` can be selected with
-`gltf({ src, materialVariant })`. Pass the exact authored variant name.
-Unknown selections render the primitive's base material and emit one bounded
-diagnostic message. Inside the surrounding Canvas,
-`useGltfAssetStatus(src).variantNames` returns the ordered names once the exact
-scene is prepared, so asset-driven controls do not need a second glTF parser or a
-duplicated manifest. The list is empty while the scene is loading. Pass `node.asset`
-when using an explicit asset `version`.
-
-`useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
-and returns a status discriminated by `state`. `loading` is not renderable;
-`streaming` is renderable with images outstanding; `ready` has settled every
-relevant image; and `degraded` is renderable with at least one image failure.
-Non-idle snapshots include immutable `images`, `scene`, and `phaseMs` details,
-plus `variantNames`. `images.failures` contains the stable image-demand key and
-failure message for each failed transport, decode, or admission, so a degraded
-asset can explain itself without scanning root-wide renderer diagnostics. Once
-prepared, `bounds` is the aggregate loaded asset-space
-bound after authored node and instance transforms, so camera fitting and framing
-do not need to parse the glTF again. Pass it to renderer-core's pure
-`fitOrbitCameraView(bounds, { aspectRatio })` helper to produce a conservative
-orbit target and distance, or use `orbit.fit(bounds, { aspectRatio })` with
-`useCanvasSize()` inside `Canvas` when an imperative controller owns the camera.
-Image progress includes dormant material images in `total`,
-so a large scene cannot report complete merely because those images have not
-been requested yet. Prepared-asset and image transitions push focused snapshots;
-the hook neither waits for unrelated frames nor allocates the full renderer
-diagnostics payload. Pass the normalized `node.asset` instead of a string when
-using an explicit asset `version`. Imperative hosts can use
-`root.gltfAssetSnapshot(asset)` and `root.observeGltfAsset(asset, callback)` for
-the same exact asset identity. The React hook validates source and version
-identity immediately, including before the Canvas root exists.
-
-`useTextureAssetStatus(texture)` observes the exact `imageTexture(...)` or
-`virtualTexture(...)` descriptor retained by the surrounding Canvas. Ordinary
-textures report `idle`, `loading`, `ready`, or `error`. Authored virtual
-textures additionally report `unsupported` and `pendingPages`; their `ready`
-state means the manifest was accepted, while visible detail may continue to
-stream. Imperative hosts can use `root.textureAssetSnapshot(texture)` and
-`root.observeTextureAsset(texture, callback)` without polling diagnostics.
-
-Both asset and renderer lifecycle results are discriminated unions: `error` is
-required only when `state === 'error'` for an asset or `state === 'failed'` for
-the renderer. Both hooks use React's external-store snapshot contract and
-return stable `idle`/`unavailable` snapshots during server rendering and before
-the Canvas root exists. `useRendererLifecycle()` observes the surrounding
-Canvas without polling and returns its availability, generation, interruption,
-and recovery counters. This makes status UI exhaustive and keeps recovery
-details out of the imperative root path:
-
-```tsx
-import { useRendererLifecycle } from '@royal/react';
-
-function RendererStatus() {
-  const lifecycle = useRendererLifecycle();
-  return <output>{lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state}</output>;
-}
-```
-
-`useRendererDiagnostics()` subscribes to the root-wide bounded message log,
-resource pressure, texture residency, glTF load counters, and other operational
-diagnostics after completed frames. It returns `undefined` until the Canvas root
-exists, so diagnostic UI does not need a polling timer:
-
-```tsx
-import { useRendererDiagnostics } from '@royal/react';
-
-function RendererWarnings() {
-  const diagnostics = useRendererDiagnostics();
-  return <output>{diagnostics?.messageLog.entries.at(-1)?.message ?? 'No warnings'}</output>;
-}
-```
-
-Interactive nodes provide an explicit `pickingId`; React handlers live in the
-separate `Canvas.scenePointerEvents` map under that ID. The ID is the logical gesture
-identity, so handler-only changes do not resubmit the scene and pointer-down/up
-and hover stay coherent across immutable scene replacement. Every map entry must
-contain at least one supported function handler; invalid or misspelled handlers
-throw during render instead of becoming silent no-ops.
-Imperative picks and pointer-event hits return the same name as
-`hit.target.pickingId`; Royal does not rename it to a generic `id` at the result
-boundary.
-
-By default Royal tests the rendered mesh or loaded glTF triangles. Set
-`pickingGeometry` when interaction needs a simpler or more forgiving exact
-triangle proxy. Mesh and glTF proxies use node-local coordinates; a
-`gltfInstances` proxy is repeated in each instance's local coordinates. A glTF
-proxy is pickable before the asset finishes loading. It goes through the same
-geometry normalization, bounds rejection, and ray/triangle path as ordinary
-picking and does not allocate GPU geometry.
-
-```tsx
-const helmet = gltf({
-  pickingGeometry: boxGeometry([1.45, 1.55, 1.35]),
-  pickingId: 'helmet',
-  src: '/DamagedHelmet/DamagedHelmet.gltf',
-});
-
-<Canvas
-  scene={scene({ camera, nodes: [helmet] })}
-  scenePointerEvents={{
-    helmet: { onClick: ({ hit }) => select(hit.target) },
-  }}
-/>
-```
-
-For many copies of one asset, create one stable transform resource and render
-one `gltfInstances(...)` node instead of thousands of individual nodes.
-The position, rotation, and scale arrays use three consecutive numbers per
-instance. Positions are metres, rotations are radians, and scales are
-dimensionless multipliers. Mutate them outside React render, then commit the
-channel once:
-
-```tsx
-import { createGltfInstanceTransforms } from '@royal/react/scene';
-
-const instances = useMemo(() => createGltfInstanceTransforms({
-  count: 4096,
-  positions,
-  rotations,
-  scales,
-}), []);
-
-const renderScene = useMemo(() => scene({
-  camera,
-  nodes: [gltfInstances({ src: '/cube.gltf', instances })],
-}), [camera, instances]);
-
-function InstanceAnimation() {
-  useFrame(({ elapsedSeconds }) => {
-    for (let index = 0; index < instances.count; index += 1) {
-      instances.rotations[index * 3 + 1] = elapsedSeconds;
-    }
-    instances.commitRotation();
-  });
-  return null;
-}
-
-return <Canvas scene={renderScene}><InstanceAnimation /></Canvas>;
-```
-
-Use `commitPosition(start, count)`, `commitRotation(start, count)`, or
-`commitScale(start, count)` to identify the exact channel and logical rows
-changed. Use `commitPose(start, count)` after changing both positions and
-rotations. Royal coalesces adjacent packed uploads independently in every
-attached renderer root; commits never render React objects per instance.
-Position, rotation, and signed scale values must be finite. Negative scale
-components reflect an instance; Royal preserves its winding and normal handedness.
-Optional unique `logicalIds` remain stable picking identity when
-culling repacks GPU slots. Canvas coalesces commit invalidations at the end of
-the active frame.
-
-## Workflows
-
-From the repository root:
-
-```bash
-pnpm install
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm check:package-consumer
-pnpm --filter @royal/examples-react test:browser
-```
+The replacement is being implemented in vertical slices. The current slice
+renders empty scene clear color and proves canvas ownership, sizing, recovery,
+and frame scheduling. Unsupported render nodes, picking, controls, assets, and
+XR are absent rather than exposed as compatibility shims.

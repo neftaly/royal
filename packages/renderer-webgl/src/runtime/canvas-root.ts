@@ -11,11 +11,12 @@ import {
 } from "../frame/canvas-size";
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
 import { ClearStateOwner } from "../webgl/clear-state-owner";
+import {
+  rendererRootOptionsSemanticKey,
+  type CanvasRootOptions,
+} from "./root-options";
 
-export type CanvasRootOptions = Readonly<{
-  alpha?: boolean;
-  antialias?: boolean;
-}>;
+export type { CanvasRootOptions } from "./root-options";
 
 export type CanvasRootSnapshot = Readonly<{
   context: ContextLifecycleSnapshot;
@@ -121,15 +122,22 @@ export class CanvasRoot {
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
   #sizeLimits: CanvasSizeLimits;
+  readonly #sizeListeners = new Set<() => void>();
   #snapshot: CanvasRootSnapshot | undefined;
   #snapshotRevision = -1;
   readonly #unsubscribeContext: () => void;
+
+  /** Canvas whose context and backing dimensions are owned by this root. */
+  get canvas(): HTMLCanvasElement {
+    return this.#canvas;
+  }
 
   constructor(
     canvas: HTMLCanvasElement,
     options: CanvasRootOptions = {},
     platform: CanvasRootPlatform = defaultPlatform(),
   ) {
+    rendererRootOptionsSemanticKey(options);
     this.#canvas = canvas;
     this.#platform = platform;
     this.#gl = createContext(canvas, options);
@@ -172,6 +180,7 @@ export class CanvasRoot {
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
     this.#listeners.clear();
+    this.#sizeListeners.clear();
   }
 
   flushInvalidated(): void {
@@ -193,6 +202,12 @@ export class CanvasRoot {
     }
     return this.#snapshot;
   };
+
+  /** Focused context lifecycle snapshot for product observation. */
+  getLifecycleSnapshot = (): ContextLifecycleSnapshot => this.#context.getSnapshot();
+
+  /** Focused canvas-size snapshot for product observation. */
+  getSizeSnapshot = (): ResolvedCanvasSize | null => this.#size;
 
   invalidate(): void {
     this.#assertLive("invalidate");
@@ -219,8 +234,8 @@ export class CanvasRoot {
   setClearColor(color: LinearRgba): void {
     this.#assertLive("set clear color");
     validateLinearRgba(color);
+    if (sameColor(this.#clearColor, color)) return;
     const candidate = Object.freeze([...color]) as unknown as LinearRgba;
-    if (sameColor(this.#clearColor, candidate)) return;
     this.#clearColor = candidate;
     this.#rebuildFrameIntent();
     this.#clock.invalidate();
@@ -244,6 +259,7 @@ export class CanvasRoot {
     this.#size = resolved;
     this.#clearState.invalidate();
     this.#rebuildFrameIntent();
+    this.#publishSize();
     this.#publish();
     if (backingChanged && resolved.backingWidth > 0 && resolved.backingHeight > 0) {
       this.#clock.invalidate();
@@ -258,6 +274,22 @@ export class CanvasRoot {
       if (!active) return;
       active = false;
       this.#listeners.delete(listener);
+    };
+  };
+
+  /** Subscribes only to context lifecycle changes. */
+  subscribeLifecycle = (listener: () => void): (() => void) =>
+    this.#context.subscribe(listener);
+
+  /** Subscribes only to semantic canvas-size changes. */
+  subscribeSize = (listener: () => void): (() => void) => {
+    if (this.#disposed) return () => undefined;
+    this.#sizeListeners.add(listener);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      this.#sizeListeners.delete(listener);
     };
   };
 
@@ -284,9 +316,27 @@ export class CanvasRoot {
 
   #publish(): void {
     this.#revision += 1;
+    if (this.#listeners.size === 0) return;
     const listeners = [...this.#listeners];
     for (const listener of listeners) {
       if (!this.#listeners.has(listener)) continue;
+      try {
+        listener();
+      } catch (error) {
+        try {
+          this.#platform.onListenerError(error);
+        } catch {
+          // A failing diagnostic sink must not interrupt later listeners.
+        }
+      }
+    }
+  }
+
+  #publishSize(): void {
+    if (this.#sizeListeners.size === 0) return;
+    const listeners = [...this.#sizeListeners];
+    for (const listener of listeners) {
+      if (!this.#sizeListeners.has(listener)) continue;
       try {
         listener();
       } catch (error) {
@@ -325,6 +375,7 @@ export class CanvasRoot {
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#clearState.invalidate();
       if (this.#sizeInput !== null) {
+        const previousSize = this.#size;
         this.#size = resolveCanvasSize(this.#sizeInput, this.#sizeLimits);
         if (this.#canvas.width !== this.#size.backingWidth) {
           this.#canvas.width = this.#size.backingWidth;
@@ -332,6 +383,13 @@ export class CanvasRoot {
         if (this.#canvas.height !== this.#size.backingHeight) {
           this.#canvas.height = this.#size.backingHeight;
         }
+        if (
+          previousSize?.cssWidth !== this.#size.cssWidth
+          || previousSize?.cssHeight !== this.#size.cssHeight
+          || previousSize?.devicePixelRatio !== this.#size.devicePixelRatio
+          || previousSize?.backingWidth !== this.#size.backingWidth
+          || previousSize?.backingHeight !== this.#size.backingHeight
+        ) this.#publishSize();
       }
       this.#rebuildFrameIntent();
       this.#context.transition({ kind: "restored" });

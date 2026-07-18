@@ -153,40 +153,19 @@ const formatBytes = (bytes) => `${(bytes / 1000).toFixed(1)} kB`;
 
 try {
   const react = await buildFixture('react');
-  const primitive = await buildFixture('royal');
-  const gltf = await buildFixture('gltf');
-  const incrementalGzipBytes = gltf.initialGzipBytes - react.initialGzipBytes;
-  const reachableGzipBytes = Object.values(gltf.gzipByFile)
-    .reduce((sum, bytes) => sum + bytes, 0);
-  const lazyChunks = Object.entries(gltf.gzipByFile)
-    .filter(([file]) => !gltf.initialFiles.has(`assets/${file}`))
-    .sort(([left], [right]) => left.localeCompare(right));
+  const clear = await buildFixture('royal');
+  const incrementalGzipBytes = clear.initialGzipBytes - react.initialGzipBytes;
 
   console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
-  console.log(`Primitive initial:    ${formatBytes(primitive.initialGzipBytes)} gzip`);
-  console.log(`glTF initial:         ${formatBytes(gltf.initialGzipBytes)} gzip`);
-  console.log(`glTF incremental:     ${formatBytes(incrementalGzipBytes)} gzip`);
-  console.log(`glTF all reachable:   ${formatBytes(reachableGzipBytes)} gzip`);
-  for (const [file, bytes] of lazyChunks) {
-    console.log(`Lazy ${file.padEnd(28)} ${formatBytes(bytes)} gzip`);
-  }
+  console.log(`Clear-root initial:   ${formatBytes(clear.initialGzipBytes)} gzip`);
+  console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
   if (showDetails) {
-    const royalModules = Array.from(gltf.initialRenderedBytesByModule)
+    const royalModules = Array.from(clear.initialRenderedBytesByModule)
       .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
       .sort((left, right) => right[1] - left[1]);
     console.log('Initial Royal modules by rendered bytes:');
     for (const [id, bytes] of royalModules.slice(0, 30)) {
       console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
-    }
-    console.log('Lazy Royal modules by rendered bytes:');
-    for (const [file] of lazyChunks) {
-      const modules = (gltf.renderedModulesByFile.get(`assets/${file}`) ?? [])
-        .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
-        .sort((left, right) => right[1] - left[1]);
-      console.log(`  ${file}`);
-      for (const [id, bytes] of modules.slice(0, 12)) {
-        console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
-      }
     }
     const rendererAttribution = await buildRendererAttribution();
     console.log('Initial renderer sources by rendered bytes:');
@@ -203,24 +182,14 @@ try {
   }
 
   const failures = [];
-  if (primitive.initialGzipBytes > budget.primitiveInitialGzipBytes) {
+  if (clear.initialGzipBytes > budget.clearInitialGzipBytes) {
     failures.push(
-      `Primitive initial gzip ${primitive.initialGzipBytes} exceeds ${budget.primitiveInitialGzipBytes}`,
+      `Clear-root initial gzip ${clear.initialGzipBytes} exceeds ${budget.clearInitialGzipBytes}`,
     );
   }
-  if (gltf.initialGzipBytes > budget.gltfInitialGzipBytes) {
+  if (incrementalGzipBytes > budget.clearIncrementalGzipBytes) {
     failures.push(
-      `glTF initial gzip ${gltf.initialGzipBytes} exceeds ${budget.gltfInitialGzipBytes}`,
-    );
-  }
-  if (incrementalGzipBytes > budget.gltfIncrementalGzipBytes) {
-    failures.push(
-      `glTF incremental gzip ${incrementalGzipBytes} exceeds ${budget.gltfIncrementalGzipBytes}`,
-    );
-  }
-  if (reachableGzipBytes > budget.gltfReachableGzipBytes) {
-    failures.push(
-      `glTF reachable gzip ${reachableGzipBytes} exceeds ${budget.gltfReachableGzipBytes}`,
+      `Clear-root incremental gzip ${incrementalGzipBytes} exceeds ${budget.clearIncrementalGzipBytes}`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));

@@ -1,15 +1,27 @@
 {
   "extends": "../../tsconfig.build.json",
   "compilerOptions": {
-    "composite": true,
+    "composite": false,
+    "incremental": false,
     "outDir": "dist",
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
       "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"]
     },
-    "rootDir": "src",
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "rootDir": "src"
   },
-  "include": ["src"],
-  "references": [{ "path": "../renderer-core/tsconfig.build.json" }]
+  "files": [
+    "src/index.ts",
+    "src/context/context-lifecycle-owner.ts",
+    "src/context/context-lifecycle.ts",
+    "src/frame/canvas-size.ts",
+    "src/frame/clear-frame.ts",
+    "src/frame/frame-clock-owner.ts",
+    "src/frame/frame-clock.ts",
+    "src/runtime/canvas-root.ts",
+    "src/runtime/root-options.ts",
+    "src/webgl/clear-state-owner.ts",
+    "src/webgl/clear-state-transition.ts"
+  ],
+  "include": []
 }

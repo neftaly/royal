@@ -88,16 +88,29 @@ export class FrameClockOwner {
     if (this.#transition.effect === FRAME_CLOCK_EFFECT_SCHEDULE) {
       const token = this.#transition.token;
       const frameEvent = Object.freeze({ kind: "scheduled-frame", token } as const);
-      this.#options.requestFrame(() => {
-        try {
-          this.#apply(frameEvent);
-        } catch (error) {
-          this.#options.reportScheduledFailure(error);
-        }
-      });
+      try {
+        this.#options.requestFrame(() => {
+          try {
+            this.#apply(frameEvent);
+          } catch (error) {
+            this.#reportScheduledFailure(error);
+          }
+        });
+      } catch (error) {
+        this.#apply(Object.freeze({ kind: "schedule-failed", token } as const));
+        this.#reportScheduledFailure(error);
+      }
     } else if (this.#transition.effect === FRAME_CLOCK_EFFECT_RENDER) {
       this.#options.render();
     }
     return true;
+  }
+
+  #reportScheduledFailure(error: unknown): void {
+    try {
+      this.#options.reportScheduledFailure(error);
+    } catch {
+      // A diagnostic sink cannot corrupt frame-clock ownership.
+    }
   }
 }

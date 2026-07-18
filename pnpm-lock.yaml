@@ -47,15 +47,15 @@ importers:
 
   .:
     devDependencies:
-      '@royal/renderer-webgl':
-        specifier: workspace:*
-        version: link:packages/renderer-webgl
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.17
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.0.3(babel-plugin-react-compiler@1.0.0)(vite@8.1.0(@types/node@24.13.2)(terser@5.48.0)(yaml@2.9.0))
@@ -68,6 +68,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.7
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -169,15 +172,6 @@ importers:
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
-      gl-matrix:
-        specifier: ^3.4.4
-        version: 3.4.4
-      meshoptimizer:
-        specifier: ^1.2.0
-        version: 1.2.0
-      minidraco:
-        specifier: ^0.3.0
-        version: 0.3.0
     devDependencies:
       oxlint:
         specifier: 'catalog:'
@@ -617,9 +611,6 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  gl-matrix@3.4.4:
-    resolution: {integrity: sha512-latSnyDNt/8zYUB6VIJ6PCh2jBjJX6gnDsoCZ7LyW7GkqrD51EWwa9qCoGixj8YqBtETQK/xY7OmpTF8xz1DdQ==}
-
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
     engines: {node: '>= 12.0.0'}
@@ -696,17 +687,6 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
-
-  meshoptimizer@1.2.0:
-    resolution: {integrity: sha512-davRZeIJbxJrE24cwQle7ZDsxjdk/OphNOV83oX+efQinyoHY9Jcyz3MHbaoG0qySZajldGztNZ1RN/T19PZsg==}
-
-  minidraco@0.3.0:
-    resolution: {integrity: sha512-Xq2jRdht22I4RCAagtE835ogtsNks7GIFHgVPg1SXLbS0u7k9shVxYNtl4QsfaZOcvG22W7RbsGX2lckf6waJg==}
-    peerDependencies:
-      three: '>=0.170'
-    peerDependenciesMeta:
-      three:
-        optional: true
 
   nanoid@3.3.15:
     resolution: {integrity: sha512-y7Wygv/7mEOvxTuEQDB8StXdMRBWf1kR/tlhAzBRUFkB2jfcLOAxO/SHmOO2zgz1pVgK29/kyupn059/bCHdjA==}
@@ -1226,8 +1206,6 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  gl-matrix@3.4.4: {}
-
   lightningcss-android-arm64@1.32.0:
     optional: true
 
@@ -1280,10 +1258,6 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
-
-  meshoptimizer@1.2.0: {}
-
-  minidraco@0.3.0: {}
 
   nanoid@3.3.15: {}
 

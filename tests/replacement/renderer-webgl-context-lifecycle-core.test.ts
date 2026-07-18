@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createActiveContextLifecycle,
   reduceContextLifecycle,
-} from "../packages/renderer-webgl/src/context/context-lifecycle";
-import { ContextLifecycleOwner } from "../packages/renderer-webgl/src/context/context-lifecycle-owner";
+} from "../../packages/renderer-webgl/src/context/context-lifecycle";
+import { ContextLifecycleOwner } from "../../packages/renderer-webgl/src/context/context-lifecycle-owner";
 
 describe("context lifecycle core", () => {
   it("invalidates allocation generation on loss and disposal only", () => {

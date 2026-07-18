@@ -1,156 +1,76 @@
 # Royal
 
-Royal is a DOM-free renderer core with a thin React authoring layer for canvas
-interface scenes. `@royal/react` exposes `<Canvas>` as the primary React API:
-it owns the canvas element, renders one Royal scene, and lets React-only
-controls live beside that scene.
+Royal is a WebGL2 renderer with a React-first public API and pure scene
+descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
+hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
+canvas rendering.
 
-## Development status
+Royal is a source-level prerelease at `0.0.1`. Its accepted behavior and clean
+replacement architecture are defined in [docs/specs](docs/specs/README.md).
+The implementation is landing as independently verified vertical slices; the
+current executable slice owns a CSS-sized canvas, WebGL2 context lifecycle,
+coalesced frame clock, complete clear state, and focused React observation.
+Non-empty scene nodes fail explicitly until their canonical rendering slice
+lands. The old renderer is evidence and oracle material, not a fallback path.
 
-Royal is currently a source-level pre-release: its packages are private and
-versioned `0.0.1`. Develop against it inside this pnpm workspace, using
-`apps/examples-react` as the starter application. A normal registry install is
-not available yet.
-
-The intended renderer behavior and architecture are defined in the
-[Royal specifications](docs/specs/README.md). Their conformance ledger separates
-current implementation, known gaps, deferred work, and the proposed SVG glTF
-extension.
-
-From the repository root:
-
-```bash
-pnpm install
-pnpm dev
-```
-
-## React quickstart
-
-`@royal/react` uses the ordinary React JSX runtime. Scenes are explicit pure
-data; build and memoize them separately from React controls.
+## Current React API
 
 ```tsx
-import { Canvas, OrbitControls, useOrbitCamera } from '@royal/react';
-import {
-  boxGeometry,
-  directionalLight,
-  linearRgbaFromSrgb,
-  mesh,
-  scene,
-  standardMaterial,
-} from '@royal/react/scene';
-import { useMemo } from 'react';
+import { Canvas, useRendererLifecycle } from "@royal/react";
+import { perspectiveCamera, scene } from "@royal/react/scene";
 
-const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.2, 0.16, 1]) });
+const renderScene = scene({
+  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  clearColor: [0.035, 0.07, 0.14, 1],
+  nodes: [],
+});
+
+function Status() {
+  const lifecycle = useRendererLifecycle();
+  return <output>{lifecycle.state}</output>;
+}
 
 export function App() {
-  const orbit = useOrbitCamera({ initial: { distance: 5 } });
-  const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
-    nodes: [
-      directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
-      mesh({ geometry: cube, material: red }),
-    ],
-  }), [orbit.cameraResource]);
-
-  return (
-    <Canvas
-      aria-label="Royal scene"
-      scene={renderScene}
-    >
-      <OrbitControls orbit={orbit} />
-    </Canvas>
-  );
+  return <Canvas scene={renderScene}><Status /></Canvas>;
 }
 ```
 
-The orbit hook's `initial` view is initial-only. Its stable `cameraResource` is
-an explicit versioned resource, so controls can commit camera motion without
-causing React renders or rebuilding the scene.
+`Canvas` is an ordinary React/DOM boundary: CSS owns layout, Royal owns backing
+resolution, and native canvas/ARIA/event/ref/`data-*` props pass through where
+they do not conflict with renderer ownership. Pure constructors stay in
+`@royal/react/scene`; the imperative escape hatch is
+`createRendererRoot(canvas, options)`.
 
-There is no second React root. Read Context or external stores in the React
-component, then pass immutable snapshots to pure scene builders. Controls and
-imperative `useFrame` controllers remain ordinary children under `<Canvas>`.
-Interactive nodes declare a stable `pickingId`; React handlers are supplied
-separately through `Canvas.scenePointerEvents` under that ID.
-
-## Local Development
-
-From the repository root:
+## Development
 
 ```bash
 pnpm install
 pnpm dev
-pnpm typecheck
-pnpm test
 pnpm build
+pnpm test
 pnpm check:package-imports
 pnpm check:package-consumer
+pnpm check:bundle-size:details
 ```
 
-The example app runs through `pnpm dev` and contains the main task-oriented
-React scenes.
+The default example exercises the replacement root under React StrictMode.
+The clear-root bundle baseline tracks total initial gzip and the incremental
+Royal cost separately. glTF, VT, IBL, codecs, and XR receive their own reachable
+and lazy-byte gates when their actual slices land; unused features are not
+counted as working merely because legacy source still exists.
 
-`pnpm check:bundle-size` builds minimal React primitive and glTF consumers and
-enforces their initial and reachable gzip budgets. Use
-`pnpm check:bundle-size:details` to attribute the initial bundle to packaged
-Royal modules and individual renderer source files before choosing a split or
-LOC-reduction target.
+## Core conventions
 
-## API Shape
+- One Royal world unit is one metre.
+- Public colors are explicit linear or sRGB tuple domains.
+- Scene descriptors are immutable intent, not render passes or mutation logs.
+- Functional cores plan transitions; narrow imperative owners perform browser
+  and WebGL effects.
+- WebGL state is complete for each operation and diffed by one root-local owner.
+- Optional features converge on canonical render paths instead of alternate
+  renderers.
+- Consumer DX comes before backend vocabulary; focused observation comes before
+  broad diagnostics.
 
-`createRendererRoot(canvas)` is the lower-level host and testing escape hatch
-for code that already owns a canvas and lowered renderer descriptors. App
-examples and docs should start with `<Canvas>`. React root snapshots stay
-backend-neutral; the imperative root exposes a bounded, backend-neutral
-`diagnostics()` payload for profiling and integration checks. Creation options
-are accepted directly by `createRendererRoot(canvas, options)` and exposed as
-`root.options`; interruptions and recoveries live in the snapshot's neutral
-`lifecycle` model.
-
-Royal renderer APIs stop at renderer primitives. App-specific surface
-descriptors, placement contracts, product panels, and event rows belong in
-Patchpit/Opshop lab or example integration code, not in the product renderer
-API.
-
-## Units
-
-Royal world space is metric: **one Royal world unit is exactly one metre**.
-Geometry sizes, positions and translations, camera clipping distances and
-orthographic bounds, orbit targets/distances, punctual-light ranges, glTF
-bounds and instance positions, and picking points/distances all use metres.
-glTF and WebXR enter Royal at their native metre scale, so adapters must not
-apply a hidden scene-scale conversion.
-
-Transform scales and directions are dimensionless. Rotations, fields of view,
-and spotlight cone angles are radians. Light quantities keep their named SI
-units (`intensityCandela`, `illuminanceLux`); colors are normalized values.
-Pointer coordinates and gesture deltas are CSS pixels, frame timing is seconds,
-API durations named `Ms` are milliseconds, texture dimensions are texels, and
-memory/storage budgets are bytes. These domains never redefine world scale.
-
-glTF support is first-class. Optional and draft features should stay isolated
-until they are useful through the public renderer and React APIs.
-
-## SVG textures (beta)
-
-Royal supports direct `.svg` texture images and SVG images referenced directly
-by a glTF texture's core `source`. SVG is not a required glTF 2.0 image format,
-so this is an explicit Royal ingestion extension rather than a pretend glTF
-extension. The renderer validates finite root SVG dimensions. SVGs must be
-self-contained; Royal does not parse, sanitize, or resolve their nested
-resource graph.
-
-Example: [apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx](apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx)
-
-```json
-{
-  "textures": [{
-    "source": 0
-  }],
-  "images": [
-    { "uri": "label.svg", "mimeType": "image/svg+xml" }
-  ]
-}
-```
+Royal remains AGPL-3.0-only. The proposed Royal SVG glTF extension and its
+security/texture behavior are retained in the specification set.

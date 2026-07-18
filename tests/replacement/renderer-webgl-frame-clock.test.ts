@@ -7,8 +7,8 @@ import {
   planFrameClockTransition,
   type FrameClockEvent,
   type FrameClockState,
-} from "../packages/renderer-webgl/src/frame/frame-clock";
-import { FrameClockOwner } from "../packages/renderer-webgl/src/frame/frame-clock-owner";
+} from "../../packages/renderer-webgl/src/frame/frame-clock";
+import { FrameClockOwner } from "../../packages/renderer-webgl/src/frame/frame-clock-owner";
 
 const transition = (
   current: FrameClockState,
@@ -93,5 +93,25 @@ describe("frame clock shell", () => {
     expect(callbacks).toHaveLength(1);
     callbacks[0]!();
     expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains demand and permits retry when the host scheduler throws synchronously", () => {
+    const callbacks: Array<() => void> = [];
+    const failure = new Error("scheduler unavailable");
+    const reportScheduledFailure = vi.fn();
+    let attempts = 0;
+    const owner = new FrameClockOwner({
+      render: vi.fn(),
+      reportScheduledFailure,
+      requestFrame: (callback) => {
+        attempts += 1;
+        if (attempts === 1) throw failure;
+        callbacks.push(callback);
+      },
+    });
+    expect(() => owner.invalidate()).not.toThrow();
+    expect(reportScheduledFailure).toHaveBeenCalledWith(failure);
+    owner.invalidate();
+    expect(callbacks).toHaveLength(1);
   });
 });

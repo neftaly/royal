@@ -24,6 +24,7 @@ export type FrameClockEvent =
   | Readonly<{ kind: "flush-internal" }>
   | Readonly<{ kind: "invalidate" }>
   | Readonly<{ kind: "release-external"; token: number }>
+  | Readonly<{ kind: "schedule-failed"; token: number }>
   | Readonly<{ kind: "scheduled-frame"; token: number }>
   | Readonly<{ kind: "flush-external"; token: number }>;
 
@@ -89,7 +90,12 @@ export const planFrameClockTransition = (
 
   switch (event.kind) {
     case "invalidate":
-      if (current.demand) return;
+      if (current.demand) {
+        copyState(current, next);
+        scheduleIfNeeded(next, transition);
+        transition.accepted = next.scheduledToken !== current.scheduledToken;
+        return;
+      }
       copyState(current, next);
       next.demand = true;
       transition.accepted = true;
@@ -104,6 +110,12 @@ export const planFrameClockTransition = (
         next.demand = false;
         transition.effect = FRAME_CLOCK_EFFECT_RENDER;
       }
+      return;
+    case "schedule-failed":
+      if (event.token === 0 || event.token !== current.scheduledToken) return;
+      copyState(current, next);
+      next.scheduledToken = 0;
+      transition.accepted = true;
       return;
     case "flush-internal":
       if (!current.available || !current.demand || current.externalToken !== 0) return;

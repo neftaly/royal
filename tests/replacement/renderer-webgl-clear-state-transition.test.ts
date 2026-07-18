@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { ClearFrameIntent } from "../packages/renderer-webgl/src/frame/clear-frame";
-import { validateClearFrameIntent } from "../packages/renderer-webgl/src/frame/clear-frame";
+import type { ClearFrameIntent } from "../../packages/renderer-webgl/src/frame/clear-frame";
+import { validateClearFrameIntent } from "../../packages/renderer-webgl/src/frame/clear-frame";
 import {
   commitAppliedClearState,
   createClearStateTransition,
   createUnknownClearState,
   planClearStateTransition,
-} from "../packages/renderer-webgl/src/webgl/clear-state-transition";
+} from "../../packages/renderer-webgl/src/webgl/clear-state-transition";
 
 const frame = (overrides: Partial<ClearFrameIntent> = {}): ClearFrameIntent => ({
   clearColor: [0.1, 0.2, 0.3, 1],

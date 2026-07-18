@@ -1,35 +1,9 @@
-export { createWebGlRoot } from "./root";
-export { resolveWebGlRootOptions } from "./root-options";
+export { createRendererRoot } from "./runtime/canvas-root";
+export { rendererRootOptionsSemanticKey } from "./runtime/root-options";
 export type {
-  WebGlContextSnapshot,
-  WebGlContextLifecycle,
-  WebGlDiagnosticLogSnapshot,
-  WebGlDiagnosticMessage,
-  WebGlExternalRenderClock,
-  WebGlFramePlanningSnapshot,
-  WebGlResourceLifetimeSnapshot,
-  WebGlPickingSnapshot,
-  WebGlRoot,
-  WebGlRootOptions,
-  WebGlRenderView,
-  WebGlRenderViewport,
-  WebGlRenderViewsOptions,
-  WebGlGltfInstancingSnapshot,
-  WebGlGltfImageFailureDetail,
-  WebGlGltfLoadDiagnosticsAssetSnapshot,
-  WebGlGltfLoadDiagnosticsPhaseKey,
-  WebGlGltfLoadDiagnosticsSnapshot,
-  WebGlResourcePressureSnapshot,
-  WebGlResourceBudgetOptions,
-  WebGlResourceBudgets,
-  ResolvedWebGlRootOptions,
-  WebGlRootSnapshot,
-  WebGlTextureResidencySnapshot,
-  WebGlTextureAssetSnapshot,
-  WebGlVirtualTexturingSnapshot,
-} from "./root-types";
-export type {
-  WebGlResourceClass,
-  WebGlResourceDenialReason,
-  WebGlResourceUsage,
-} from "./resource-pressure";
+  CanvasRoot as RoyalRendererRoot,
+  CanvasRootOptions as RendererRootOptions,
+  CanvasRootSnapshot as RendererRootSnapshot,
+} from "./runtime/canvas-root";
+export type { CanvasSizeInput, ResolvedCanvasSize } from "./frame/canvas-size";
+export type { ExternalFrameClock } from "./frame/frame-clock-owner";

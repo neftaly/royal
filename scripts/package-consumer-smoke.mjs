@@ -24,9 +24,9 @@ const packageDirectories = [
 ];
 
 const packageSizeBudgets = {
-  '@royal/react': 1024 * 1024,
+  '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 8 * 1024 * 1024,
+  '@royal/renderer-webgl': 128 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -124,69 +124,43 @@ try {
   writeFileSync(path.join(temporaryRoot, 'app.tsx'), `
 import {
   Canvas,
-  GltfOrbitCameraFit,
-  useGltfAssetStatus,
-  useOrbitCamera,
-  useRendererDiagnostics,
+  useCanvasSize,
   useRendererLifecycle,
-  type RendererResourceBudgetOptions,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { gltf, scene } from '@royal/react/scene';
-import {
-  createXrSessionRuntime,
-  createXrSessionStore,
-  type XrSession,
-} from '@royal/react/xr';
-import { fitOrbitCameraView } from '@royal/renderer-core';
+import { perspectiveCamera, scene } from '@royal/react/scene';
 import type { ReactNode } from 'react';
 
-const asset = gltf({ src: '/model.glb' });
-const largeAssetBudgets = {
-  cpuDecodedBytes: 1024 * 1024 * 1024,
-} satisfies RendererResourceBudgetOptions;
+const renderScene = scene({
+  camera: perspectiveCamera({ position: [0, 0, 3] }),
+  clearColor: [0.1, 0.15, 0.2, 1],
+  nodes: [],
+});
 
 const Status = (): ReactNode => {
-  const assetStatus = useGltfAssetStatus(asset.asset);
-  const diagnostics = useRendererDiagnostics();
+  const size = useCanvasSize();
   const lifecycle = useRendererLifecycle();
-  const label = assetStatus.state === 'error' ? assetStatus.error : assetStatus.state;
-  const images = assetStatus.state === 'idle'
-    ? 'not retained'
-    : \`\${assetStatus.images.loaded}/\${assetStatus.images.total} images\`;
-  const framing = assetStatus.state !== 'idle' && assetStatus.bounds !== undefined
-    ? fitOrbitCameraView(assetStatus.bounds, { aspectRatio: 16 / 9 }).distance
-    : 'unavailable';
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  const warnings = diagnostics?.messageLog.entries.length ?? 0;
-  return <output>{renderer}: {label}, {images}, fit {framing}, {warnings} warnings</output>;
+  return <output>{renderer}: {size?.width ?? 0} by {size?.height ?? 0}</output>;
 };
 
 export const App = (): ReactNode => {
-  const orbit = useOrbitCamera({ initial: { distance: 3 } });
-  const renderScene = scene({ camera: orbit.cameraResource, nodes: [asset] });
   return (
-    <Canvas rendererOptions={{ resourceBudgets: largeAssetBudgets }} scene={renderScene}>
-      <GltfOrbitCameraFit node={asset} orbit={orbit} padding={1.1} />
+    <Canvas aria-label="Royal preview" data-testid="royal-canvas" scene={renderScene}>
       <Status />
     </Canvas>
   );
 };
 
-const xrStore = createXrSessionStore<XrSession>();
-export const startXr = (root: RoyalRendererRoot, session: XrSession) =>
-  createXrSessionRuntime(root, xrStore, session, { mode: 'immersive-vr' });
+export const requestAnotherFrame = (root: RoyalRendererRoot | null) => root?.invalidate();
 `);
   writeFileSync(path.join(temporaryRoot, 'imports.mjs'), `
 const entrypoints = [
   '@royal/renderer-core',
   '@royal/renderer-core/render-object',
   '@royal/renderer-webgl',
-  '@royal/renderer-webgl/capabilities',
-  '@royal/renderer-webgl/webxr',
   '@royal/react',
   '@royal/react/scene',
-  '@royal/react/xr',
 ];
 for (const entrypoint of entrypoints) await import(entrypoint);
 console.log('ok packed Royal entrypoints');
