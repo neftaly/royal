@@ -304,6 +304,7 @@ interface ResourceGovernorState {
   readonly policy: ResourceGovernorPolicy;
   readonly reservations: Set<ResourceGovernorReservationRecord>;
   readonly total: MutableUsage;
+  uploadReservationCount: number;
 }
 
 interface ResourceGovernorLeaseRecord {
@@ -313,8 +314,7 @@ interface ResourceGovernorLeaseRecord {
 }
 
 interface ResourceGovernorReservationRecord {
-  readonly cost: ResourceGovernorUsage;
-  readonly resourceClass: ResourceGovernorClass;
+  readonly uploadBearing: boolean;
 }
 
 declare const governorAuthority: unique symbol;
@@ -401,6 +401,7 @@ export const createResourceGovernor = (
     policy,
     reservations: new Set(),
     total: { ...ZERO_USAGE },
+    uploadReservationCount: 0,
   } as unknown as ResourceGovernor;
 };
 
@@ -473,9 +474,32 @@ const createLease = (
 };
 
 const updateHighWater = (state: ResourceGovernorState): void => {
-  for (const key of Object.keys(state.highWater) as (keyof MutableUsage)[]) {
-    state.highWater[key] = Math.max(state.highWater[key], state.total[key]);
-  }
+  const highWater = state.highWater;
+  const total = state.total;
+  highWater.cpuDecodedBytes = Math.max(highWater.cpuDecodedBytes, total.cpuDecodedBytes);
+  highWater.jobs = Math.max(highWater.jobs, total.jobs);
+  highWater.persistentGpuBytes = Math.max(highWater.persistentGpuBytes, total.persistentGpuBytes);
+  highWater.transientPeakBytes = Math.max(highWater.transientPeakBytes, total.transientPeakBytes);
+  highWater.uploadBytes = Math.max(highWater.uploadBytes, total.uploadBytes);
+};
+
+const registerReservation = (
+  state: ResourceGovernorState,
+  uploadBytes: number,
+): ResourceGovernorReservationRecord => {
+  const reservation = { uploadBearing: uploadBytes !== 0 };
+  state.reservations.add(reservation);
+  if (reservation.uploadBearing) state.uploadReservationCount += 1;
+  return reservation;
+};
+
+const settleReservation = (
+  state: ResourceGovernorState,
+  reservation: ResourceGovernorReservationRecord,
+): boolean => {
+  if (!state.reservations.delete(reservation)) return false;
+  if (reservation.uploadBearing) state.uploadReservationCount -= 1;
+  return true;
 };
 
 export const subscribeResourceGovernorDurableCapacityRelease = (
@@ -490,10 +514,8 @@ export const subscribeResourceGovernorDurableCapacityRelease = (
 /** Starts a new upload-accounting frame. Upload-bearing reservations may not straddle frames. */
 export const beginResourceGovernorFrame = (governor: ResourceGovernor): void => {
   const state = stateOf(governor);
-  for (const reservation of state.reservations) {
-    if (reservation.cost.uploadBytes !== 0) {
-      throw new Error("Resource governor upload reservations cannot straddle frames");
-    }
+  if (state.uploadReservationCount !== 0) {
+    throw new Error("Resource governor upload reservations cannot straddle frames");
   }
   state.frame += 1;
   state.total.uploadBytes = 0;
@@ -522,28 +544,22 @@ export const reserveResourceGovernor = (
     return reason;
   }
   state.admissions += 1;
-  const reservation = { cost, resourceClass };
-  state.reservations.add(reservation);
+  const reservation = registerReservation(state, cost.uploadBytes);
   addUsage(state.total, cost, 1);
   addUsage(state.byClass[resourceClass], cost, 1);
   updateHighWater(state);
-  let settled = false;
-  const settleReservation = (): boolean => {
-    if (settled) return false;
-    settled = true;
-    state.reservations.delete(reservation);
-    return true;
-  };
   return {
     cancel: (): boolean => {
-      if (!settleReservation()) return false;
+      if (!settleReservation(state, reservation)) return false;
       addUsage(state.total, cost, -1);
       addUsage(state.byClass[resourceClass], cost, -1);
       notifyDurableCapacityReleased(state, durableUsage(cost));
       return true;
     },
     commit: (): ResourceGovernorLease => {
-      if (!settleReservation()) throw new Error("Resource governor reservation is already settled");
+      if (!settleReservation(state, reservation)) {
+        throw new Error("Resource governor reservation is already settled");
+      }
       // Jobs and transient memory exist only around the admitted transaction.
       // Upload bytes stay spent until the next frame; durable bytes become a lease.
       state.total.jobs -= cost.jobs;
@@ -607,17 +623,13 @@ export const replaceResourceGovernorLease = (
     transientPeakBytes: cost.transientPeakBytes,
     uploadBytes: cost.uploadBytes,
   };
-  const reservation = { cost, resourceClass: previous.resourceClass };
-  state.reservations.add(reservation);
+  const reservation = registerReservation(state, cost.uploadBytes);
   previous.replacementPending = true;
   addUsage(state.total, transactionCost, 1);
   addUsage(state.byClass[previous.resourceClass], transactionCost, 1);
   updateHighWater(state);
-  let settled = false;
   const settle = (): boolean => {
-    if (settled) return false;
-    settled = true;
-    state.reservations.delete(reservation);
+    if (!settleReservation(state, reservation)) return false;
     previous.replacementPending = false;
     return true;
   };
