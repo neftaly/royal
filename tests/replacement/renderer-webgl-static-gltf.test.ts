@@ -181,6 +181,29 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets[0]).toMatchObject({ kind: "asset", src: uri });
   });
 
+  it("selects EXT_texture_avif sources through the ordinary texture lifecycle", () => {
+    const external = prepareStaticGlb(
+      staticTexturedTriangleGlb(undefined, "albedo.avif", "avif"),
+      "avif-external",
+      "/models/asset.glb",
+      "/models/asset.glb",
+    );
+    expect(external.textureAssets[0]).toMatchObject({
+      kind: "asset",
+      src: "/models/albedo.avif",
+    });
+
+    const embedded = prepareStaticGlb(
+      staticTexturedTriangleGlb(new Uint8Array([0, 0, 0, 1]), "unused", "avif"),
+      "avif-embedded",
+      "embedded.glb",
+    );
+    expect(embedded.textureAssets[0]).toMatchObject({
+      kind: "embedded-asset",
+      mimeType: "image/avif",
+    });
+  });
+
   it("borrows validated normal and primary-UV streams into the canonical ABI", () => {
     const document = staticTriangleDocument();
     document.accessors = [

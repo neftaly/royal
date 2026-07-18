@@ -438,7 +438,21 @@ const createTextureAssetReader = (
     const textureValue = textures[textureIndex];
     const texturePath = `textures[${textureIndex}]`;
     const texture = object(textureValue, label, texturePath);
-    const imageIndex = index(texture.source, images, label, `${texturePath}.source`);
+    const textureExtensions = texture.extensions === undefined
+      ? {}
+      : object(texture.extensions, label, `${texturePath}.extensions`);
+    const avifExtension = textureExtensions.EXT_texture_avif === undefined
+      ? undefined
+      : object(
+        textureExtensions.EXT_texture_avif,
+        label,
+        `${texturePath}.extensions.EXT_texture_avif`,
+      );
+    const sourceValue = avifExtension?.source ?? texture.source;
+    const sourcePath = avifExtension === undefined
+      ? `${texturePath}.source`
+      : `${texturePath}.extensions.EXT_texture_avif.source`;
+    const imageIndex = index(sourceValue, images, label, sourcePath);
     const imagePath = `images[${imageIndex}]`;
     const image = object(images[imageIndex], label, imagePath);
     if ((image.uri === undefined) === (image.bufferView === undefined)) {
@@ -469,10 +483,14 @@ const createTextureAssetReader = (
         src: resolveAssetUri(sourceUri, image.uri as string),
       };
     } else {
-      if (image.mimeType !== "image/jpeg" && image.mimeType !== "image/png") {
-        fail(label, `${imagePath}.mimeType`, "must be image/jpeg or image/png");
+      if (
+        image.mimeType !== "image/avif"
+        && image.mimeType !== "image/jpeg"
+        && image.mimeType !== "image/png"
+      ) {
+        fail(label, `${imagePath}.mimeType`, "must be image/avif, image/jpeg, or image/png");
       }
-      const mimeType = image.mimeType as "image/jpeg" | "image/png";
+      const mimeType = image.mimeType as "image/avif" | "image/jpeg" | "image/png";
       const viewIndex = index(image.bufferView, bufferViews, label, `${imagePath}.bufferView`);
       const viewPath = `bufferViews[${viewIndex}]`;
       const view = object(bufferViews[viewIndex], label, viewPath);
@@ -613,6 +631,7 @@ const prepareStaticDocument = (
     const extension = requiredExtensions[extensionIndex];
     if (
       extension !== "KHR_materials_unlit"
+      && extension !== "EXT_texture_avif"
       && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
       && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
     ) {
