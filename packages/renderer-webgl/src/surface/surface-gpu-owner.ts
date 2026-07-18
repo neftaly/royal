@@ -8,6 +8,7 @@ import type { CanonicalSurface, CanonicalSurfaceScene } from "./scene-lowering";
 type GpuGeometry = Readonly<{
   indexBuffer: WebGLBuffer;
   indexCount: number;
+  indexType: number;
   key: string;
   vertexArray: WebGLVertexArrayObject;
   vertexBuffer: WebGLBuffer;
@@ -83,6 +84,13 @@ const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
   return program;
 };
 
+const indexType = (
+  gl: WebGL2RenderingContext,
+  indices: Uint8Array | Uint16Array | Uint32Array,
+): number => indices instanceof Uint32Array
+  ? gl.UNSIGNED_INT
+  : indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
+
 /** Owns direct-surface program and geometry allocations for one context generation. */
 export class SurfaceGpuOwner {
   readonly #gl: WebGL2RenderingContext;
@@ -152,7 +160,12 @@ export class SurfaceGpuOwner {
       multiplyMat4Into(this.#viewProjectionModel, viewProjection, resource.surface.model);
       gl.uniformMatrix4fv(matrixLocation, false, this.#viewProjectionModel);
       gl.uniform4fv(colorLocation, resource.surface.color);
-      gl.drawElements(gl.TRIANGLES, resource.geometry.indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.drawElements(
+        gl.TRIANGLES,
+        resource.geometry.indexCount,
+        resource.geometry.indexType,
+        0,
+      );
     }
   }
 
@@ -188,6 +201,7 @@ export class SurfaceGpuOwner {
       return {
         indexBuffer,
         indexCount: surface.geometry.indices.length,
+        indexType: indexType(gl, surface.geometry.indices),
         key: surface.geometry.key,
         vertexArray,
         vertexBuffer,

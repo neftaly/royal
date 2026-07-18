@@ -47,6 +47,8 @@ const fakeGl = (): FakeGl => {
     STENCIL_TEST: 0x0b90,
     STENCIL_BUFFER_BIT: 0x0400,
     TRIANGLES: 0x0004,
+    UNSIGNED_BYTE: 0x1401,
+    UNSIGNED_INT: 0x1405,
     UNSIGNED_SHORT: 0x1403,
     VERTEX_SHADER: 0x8b31,
     attachShader: vi.fn(),

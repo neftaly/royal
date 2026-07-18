@@ -53,6 +53,8 @@
     "packages/renderer-webgl/src/frame/clear-frame.ts",
     "packages/renderer-webgl/src/frame/frame-clock.ts",
     "packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+    "packages/renderer-webgl/src/gltf/glb.ts",
+    "packages/renderer-webgl/src/gltf/static-asset.ts",
     "packages/renderer-webgl/src/runtime/canvas-root.ts",
     "packages/renderer-webgl/src/runtime/root-options.ts",
     "packages/renderer-webgl/src/math/mat4.ts",

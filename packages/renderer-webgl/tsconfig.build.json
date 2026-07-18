@@ -18,6 +18,8 @@
     "src/frame/clear-frame.ts",
     "src/frame/frame-clock-owner.ts",
     "src/frame/frame-clock.ts",
+    "src/gltf/glb.ts",
+    "src/gltf/static-asset.ts",
     "src/runtime/canvas-root.ts",
     "src/runtime/root-options.ts",
     "src/math/mat4.ts",

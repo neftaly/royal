@@ -5,7 +5,7 @@ export type CanonicalTriangleGeometry = Readonly<{
     max: readonly [number, number, number];
     min: readonly [number, number, number];
   }>;
-  indices: Uint16Array;
+  indices: Uint8Array | Uint16Array | Uint32Array;
   key: string;
   positions: Float32Array;
 }>;
