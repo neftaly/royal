@@ -37,6 +37,22 @@ The public scene is one description, never a sequence of render passes. HDR,
 transmission, tone mapping, picking, virtual-texture feedback, LOD, stereo
 views, and intermediate targets remain renderer-private consequences.
 
+## DX priority
+
+Consumer DX is the first API constraint. A common React task SHOULD have one
+obvious documented path, editor-visible types and defaults, a small import
+surface, actionable author errors, and no requirement to understand backend
+owners, frame packets, caches, or WebGL. Similar observations and lifecycle
+operations SHOULD use consistent names and result shapes. Pre-release aliases
+are worse than one direct correction when no real consumer needs them.
+
+Codebase and agent DX is second. Source layout, ownership maps, focused files,
+and subsystem documentation SHOULD make the implementation navigable, but MUST
+NOT introduce public abstractions or extra runtime layers merely to organize
+source. An internal name should describe the semantic owner or transition it
+contains; generic utility or manager modules require a demonstrably cohesive
+boundary.
+
 ## React contract
 
 `Canvas` MUST use the ordinary React tree. It MUST NOT create a hidden React

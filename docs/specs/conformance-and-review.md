@@ -214,6 +214,32 @@ format families belong in fuzz/property boundaries; Khronos assets and physical
 devices prove visual/capability behavior. Tests should be cleaned with the same
 functional-core and iteration-speed discipline as source.
 
+### 21. Clean-reimplementation pass
+
+Attack: refactor legacy owners behind new names, keep two renderers, copy whole
+subsystems, let old screenshots define correctness, defer performance until
+parity, or keep old modules as an automatic fallback.
+
+Resolution: implement the specs on an isolated branch/worktree using coherent
+vertical slices and no legacy runtime dependency. Existing behavior is the
+lowest evidence authority. Only reviewed leaf algorithms may be transplanted
+into destination-first interfaces. Each slice must pass consumer, lifecycle,
+browser, resource, and conformance gates before breadth continues.
+
+### 22. Pattern and write-discipline pass
+
+Attack: pattern soup, a universal state-machine framework, false decoupling,
+eager feature registries, a god imperative root, mirrored derived state,
+unconditional assignments/invalidations, or immutable allocation used merely
+to avoid local mutation.
+
+Resolution: select the smallest pattern from domain properties. Use closed
+domain reducers only for real temporal lifecycles, one writer per mutable
+domain, transactional publication only for coherence, revisioned derived data,
+single-owner caller storage in hot paths, import-time-pure optional modules, and
+measured tree-shaking. Count total writes, allocations, invalidations, uploads,
+ownership, and clarity—not assignment tokens.
+
 ## Current conformance ledger
 
 | Area | Status | Evidence and next architectural action |
@@ -247,19 +273,23 @@ functional-core and iteration-speed discipline as source.
 
 ## Accepted architecture work order
 
-This review does not authorize implementing every candidate. If implementation
-resumes from these specs, the order is:
+Implementation follows the [clean implementation strategy](implementation-strategy.md):
+consumer contract, root/frame/state spine, one canonical visible/pickable
+surface, progressive asset/resources, ordinary textures/PBR,
+instances/LOD/variants, XR, VT, then static fidelity breadth and optimization.
+Existing source is not incrementally converted into these boundaries.
 
-1. design and prove one functional WebGL state-transition core/imperative owner;
-2. apply it without changing rendering semantics, then measure calls/frame and
-   CPU/GPU timing on Safari/A10-class and Quest 2;
-3. profile actual sampler-driven texture duplication and decide sampler objects;
-4. clarify the canonical prepared texture storage/upload contract without
-   forcing copies or removing useful native compression;
-5. continue correctness/perf/GC passes on existing source and tests;
-6. only later consider static `KHR_node_visibility`;
-7. later still, prove basic TRS animation;
-8. all other glTF/WebGL/meshlet features remain below those priorities.
+Within those slices, the first architecture proof remains one functional WebGL
+state-transition core and imperative owner. Sampler objects and physical texture
+storage choices remain measurement decisions after the canonical texture
+contract exists. Optional glTF features and animation stay below the accepted
+static feature profile.
+
+Until replacement execution begins, the ledger above describes the current
+renderer only. The replacement branch MUST add a distinct replacement status
+and evidence column rather than overwrite or ambiguously reuse legacy evidence.
+Strategy and review-policy acceptance are not recorded as implementation
+`conforms` rows.
 
 ## Exit criteria for a future review
 
