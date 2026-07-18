@@ -1,11 +1,13 @@
 import {
   boxGeometry,
+  directionalLight,
   gltf,
   mesh,
   perspectiveCamera,
   planeGeometry,
   scene,
   standardMaterial,
+  studioEnvironment,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
@@ -66,16 +68,65 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
   });
 
-  it("rejects unsupported material work before touching WebGL", () => {
+  it("normalizes standard material and directional-light state before touching WebGL", () => {
     const renderScene = scene({
       camera: perspectiveCamera({}),
+      exposureEv100: 2,
+      nodes: [
+        {
+          kind: "directional-light",
+          color: [0.5, 0.25, 1, 1],
+          direction: [0, -1, 0],
+          illuminanceLux: 8,
+        },
+        mesh({
+          geometry: planeGeometry(1),
+          material: standardMaterial({
+            color: [1, 0.5, 0.25, 1],
+            metallic: 0.2,
+            roughness: 0.7,
+          }),
+        }),
+      ],
+    });
+    const prepared = prepareCanonicalSurfaceScene(renderScene);
+    expect(prepared.directionalLights).toEqual([{
+      color: [4, 2, 8, 1],
+      direction: [0, -1, 0],
+    }]);
+    expect(prepared.exposure).toBeCloseTo(1 / 4.8);
+    expect(prepared.surfaces[0]!.material).toEqual({
+      baseColor: [1, 0.5, 0.25, 1],
+      kind: "standard",
+      metallicFactor: 0.2,
+      roughnessFactor: 0.7,
+    });
+  });
+
+  it("erases inert lighting state from unlit-only scenes", () => {
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      environment: studioEnvironment(),
+      nodes: [
+        directionalLight({ direction: [0, -1, 0], illuminanceLux: 100 }),
+        mesh({
+          geometry: planeGeometry(1),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    }));
+    expect(prepared.directionalLights).toEqual([]);
+    expect(prepared.surfaces[0]!.material.kind).toBe("unlit");
+  });
+
+  it("fails unsupported environment work when a lit surface demands it", () => {
+    expect(() => prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      environment: studioEnvironment(),
       nodes: [mesh({
         geometry: planeGeometry(1),
         material: standardMaterial({ color: [1, 1, 1, 1] }),
       })],
-    });
-    expect(() => prepareCanonicalSurfaceScene(renderScene)).toThrow(
-      "does not yet support standard materials",
-    );
+    }))).toThrow("does not yet support scene environments");
   });
 });

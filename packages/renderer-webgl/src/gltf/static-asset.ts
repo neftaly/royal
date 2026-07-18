@@ -1,16 +1,16 @@
-import type { LinearRgba } from "@royal/renderer-core";
 import {
   identityMat4,
   multiplyMat4Into,
   type Mat4,
 } from "../math/mat4";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
+import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import { parseGlb } from "./glb";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
-  color: LinearRgba;
   geometry: CanonicalTriangleGeometry;
   localModel: Mat4;
+  material: CanonicalSurfaceMaterial;
 }>;
 
 export type PreparedStaticGltf = Readonly<{
@@ -307,50 +307,83 @@ const readIndices = (
   return indices;
 };
 
-const materialColor = (
+const factor01 = (
+  value: unknown,
+  fallback: number,
+  label: string,
+  path: string,
+): number => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fail(label, path, "must be finite");
+  }
+  if (value < 0 || value > 1) fail(label, path, "must be within 0..1");
+  return value;
+};
+
+const prepareMaterial = (
   materials: unknown[],
   materialIndex: unknown,
   label: string,
   path: string,
-): LinearRgba => {
+): CanonicalSurfaceMaterial => {
+  if (materialIndex === undefined) {
+    return {
+      baseColor: [1, 1, 1, 1],
+      kind: "standard",
+      metallicFactor: 1,
+      roughnessFactor: 1,
+    };
+  }
   const resolvedIndex = index(materialIndex, materials, label, `${path}.material`);
   const material = object(materials[resolvedIndex], label, `materials[${resolvedIndex}]`);
-  const extensions = object(material.extensions, label, `materials[${resolvedIndex}].extensions`);
-  object(
+  const materialPath = `materials[${resolvedIndex}]`;
+  const extensions = material.extensions === undefined
+    ? {}
+    : object(material.extensions, label, `${materialPath}.extensions`);
+  const unlit = extensions.KHR_materials_unlit !== undefined;
+  if (unlit) object(
     extensions.KHR_materials_unlit,
     label,
-    `materials[${resolvedIndex}].extensions.KHR_materials_unlit`,
+    `${materialPath}.extensions.KHR_materials_unlit`,
   );
   if (material.alphaMode !== undefined && material.alphaMode !== "OPAQUE") {
-    fail(label, `materials[${resolvedIndex}].alphaMode`, "must be OPAQUE in the static profile");
+    fail(label, `${materialPath}.alphaMode`, "must be OPAQUE in the static profile");
   }
   if (material.doubleSided === true) {
-    fail(label, `materials[${resolvedIndex}].doubleSided`, "is not in the static profile yet");
+    fail(label, `${materialPath}.doubleSided`, "is not in the static profile yet");
   }
   const pbr = material.pbrMetallicRoughness === undefined
     ? {}
-    : object(material.pbrMetallicRoughness, label, `materials[${resolvedIndex}].pbrMetallicRoughness`);
+    : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
   if (pbr.baseColorTexture !== undefined) {
-    fail(label, `materials[${resolvedIndex}].pbrMetallicRoughness.baseColorTexture`, "is not in the static profile yet");
+    fail(label, `${materialPath}.pbrMetallicRoughness.baseColorTexture`, "is not in the static profile yet");
   }
   const color = finiteTuple(
     pbr.baseColorFactor,
     4,
     [1, 1, 1, 1],
     label,
-    `materials[${resolvedIndex}].pbrMetallicRoughness.baseColorFactor`,
+    `${materialPath}.pbrMetallicRoughness.baseColorFactor`,
   );
   for (let channel = 0; channel < 4; channel += 1) {
     if (color[channel]! < 0 || color[channel]! > 1) {
-      fail(label, `materials[${resolvedIndex}].pbrMetallicRoughness.baseColorFactor[${channel}]`, "must be within 0..1");
+      fail(label, `${materialPath}.pbrMetallicRoughness.baseColorFactor[${channel}]`, "must be within 0..1");
     }
   }
-  return color as unknown as LinearRgba;
+  const baseColor = [color[0]!, color[1]!, color[2]!, 1] as const;
+  if (unlit) return { baseColor, kind: "unlit" };
+  return {
+    baseColor,
+    kind: "standard",
+    metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
+    roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
+  };
 };
 
 type PreparedMeshPrimitive = Readonly<{
-  color: LinearRgba;
   geometry: CanonicalTriangleGeometry;
+  material: CanonicalSurfaceMaterial;
 }>;
 
 /** Validates and lowers the first static GLB profile without creating browser or GL resources. */
@@ -392,7 +425,7 @@ export const prepareStaticGlb = (
   const accessors = array(document.accessors, label, "accessors");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
-  const materials = array(document.materials, label, "materials");
+  const materials = optionalArray(document.materials, label, "materials");
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
   const context: AccessorContext = {
@@ -460,7 +493,6 @@ export const prepareStaticGlb = (
         fail(label, path, "triangle index count must be a positive multiple of 3");
       }
       return {
-        color: materialColor(materials, primitive.material, label, path),
         geometry: {
           bounds,
           indices,
@@ -469,6 +501,7 @@ export const prepareStaticGlb = (
           positions,
           ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
         },
+        material: prepareMaterial(materials, primitive.material, label, path),
       };
     });
     preparedMeshes[meshIndex] = prepared;

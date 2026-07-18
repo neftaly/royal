@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   mesh,
+  directionalLight,
   gltf,
   perspectiveCamera,
   planeGeometry,
   scene,
+  standardMaterial,
   unlitMaterial,
   type RenderRoot,
 } from "@royal/renderer-core";
@@ -24,6 +26,9 @@ type FakeGl = WebGL2RenderingContext & {
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
+  readonly frontFace: ReturnType<typeof vi.fn>;
+  readonly shaderSource: ReturnType<typeof vi.fn>;
+  readonly uniform1i: ReturnType<typeof vi.fn>;
   readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
 };
@@ -35,6 +40,7 @@ const fakeGl = (): FakeGl => {
     BACK: 0x0405,
     BLEND: 0x0be2,
     CCW: 0x0901,
+    CW: 0x0900,
     COMPILE_STATUS: 0x8b81,
     CULL_FACE: 0x0b44,
     DEPTH_TEST: 0x0b71,
@@ -79,6 +85,7 @@ const fakeGl = (): FakeGl => {
     depthMask: vi.fn(),
     depthFunc: vi.fn(),
     disable: vi.fn(),
+    disableVertexAttribArray: vi.fn(),
     drawElements: vi.fn(),
     enable: vi.fn(),
     enableVertexAttribArray: vi.fn(),
@@ -96,9 +103,11 @@ const fakeGl = (): FakeGl => {
     shaderSource: vi.fn(),
     stencilMask: vi.fn(),
     uniform4fv: vi.fn(),
+    uniform1i: vi.fn(),
     uniformMatrix4fv: vi.fn(),
     useProgram: vi.fn(),
     vertexAttribPointer: vi.fn(),
+    vertexAttrib3f: vi.fn(),
     viewport: vi.fn(),
   };
   return gl as unknown as FakeGl;
@@ -243,6 +252,39 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
   });
 
+  it("executes solid standard material lighting and mirrored winding through complete state", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      exposureEv100: 2,
+      nodes: [
+        directionalLight({
+          direction: [0, 0, -1],
+          illuminanceLux: 8,
+        }),
+        mesh({
+          geometry: planeGeometry([2, 1]),
+          material: standardMaterial({
+            color: [0.2, 0.4, 0.8, 1],
+            metallic: 0.25,
+            roughness: 0.75,
+          }),
+          transform: { scale: [-1, 1, 1] },
+        }),
+      ],
+      toneMapping: "pbr-neutral",
+    }));
+    callbacks.shift()!();
+
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.uniform1i).toHaveBeenCalledWith(expect.anything(), 1);
+    expect(canvas.gl.frontFace).toHaveBeenLastCalledWith(canvas.gl.CW);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("ggxDistribution"))).toBe(true);
+  });
+
   it("uses one canonical transform and identity for visible and exact picking work", () => {
     const { callbacks, canvas, root } = harness();
     const node = mesh({
@@ -283,6 +325,19 @@ describe("clear-only canvas root", () => {
 
   it("publishes one asynchronously prepared GLB into the same draw and pick path", async () => {
     const document = staticTriangleDocument();
+    delete document.extensionsRequired;
+    delete document.extensionsUsed;
+    document.materials = [{
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.2, 0.4, 0.8, 1],
+        metallicFactor: 0.2,
+        roughnessFactor: 0.7,
+      },
+    }];
+    const meshes = document.meshes as Array<{
+      primitives: Array<{ attributes: Record<string, number> }>;
+    }>;
+    meshes[0]!.primitives[0]!.attributes.NORMAL = 0;
     document.nodes = [{ mesh: 0 }];
     document.scenes = [{ nodes: [0] }];
     const bytes = staticTriangleGlb(document);
@@ -297,7 +352,10 @@ describe("clear-only canvas root", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.render(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [node],
+      nodes: [
+        directionalLight({ direction: [0, 0, -1], illuminanceLux: 8 }),
+        node,
+      ],
     }));
     expect(root.getGltfAssetSnapshot(node.asset)).toEqual({ state: "loading" });
     expect(root.pick({ clientX: 260, clientY: 120 })?.target).toMatchObject({
@@ -316,7 +374,7 @@ describe("clear-only canvas root", () => {
     expect(readGltf).toHaveBeenCalledTimes(1);
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
-    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
     expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({
       kind: "gltf",

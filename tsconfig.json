@@ -60,6 +60,7 @@
     "packages/renderer-webgl/src/runtime/root-options.ts",
     "packages/renderer-webgl/src/math/mat4.ts",
     "packages/renderer-webgl/src/surface/canonical-geometry.ts",
+    "packages/renderer-webgl/src/surface/canonical-material.ts",
     "packages/renderer-webgl/src/surface/picking-query.ts",
     "packages/renderer-webgl/src/surface/scene-lowering.ts",
     "packages/renderer-webgl/src/surface/surface-gpu-owner.ts",

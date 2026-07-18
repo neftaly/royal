@@ -137,10 +137,10 @@ export const inverseMat4 = (matrix: Mat4): Mat4 | undefined =>
   inverseMat4Into(identityMat4(), matrix);
 
 /** Writes the world-space origin of an orthonormal world-to-view matrix. */
-export const cameraWorldPositionFromViewInto = (
-  out: MutableVec3,
+export const cameraWorldPositionFromViewInto = <Target extends { [index: number]: number }>(
+  out: Target,
   view: Mat4,
-): MutableVec3 => {
+): Target => {
   const translationX = view[12];
   const translationY = view[13];
   const translationZ = view[14];

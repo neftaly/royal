@@ -2,6 +2,7 @@ import type { AppliedClearState } from "./clear-state-transition";
 
 export type OpaqueDrawStateIntent = Readonly<{
   framebuffer: WebGLFramebuffer | null;
+  frontFace: number;
   program: WebGLProgram;
   vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
@@ -10,6 +11,7 @@ export type OpaqueDrawStateIntent = Readonly<{
 export type OpaqueDrawStateTransition = {
   fixedPipeline: boolean;
   framebuffer: boolean;
+  frontFace: boolean;
   program: boolean;
   vertexArray: boolean;
   viewport: boolean;
@@ -18,6 +20,7 @@ export type OpaqueDrawStateTransition = {
 
 export type AppliedOpaqueDrawState = AppliedClearState & {
   fixedOpaquePipelineKnown: boolean;
+  frontFace: number | null;
   program: WebGLProgram | null;
   vertexArray: WebGLVertexArrayObject | null;
 };
@@ -25,6 +28,7 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
 export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => ({
   fixedPipeline: false,
   framebuffer: false,
+  frontFace: false,
   program: false,
   vertexArray: false,
   viewport: false,
@@ -45,6 +49,7 @@ export const planOpaqueDrawStateTransition = (
     || previous.viewportWidth !== next.viewport.width
     || previous.viewportHeight !== next.viewport.height;
   output.fixedPipeline = unknown || !previous.fixedOpaquePipelineKnown || previous.scissorEnabled;
+  output.frontFace = unknown || previous.frontFace !== next.frontFace;
   output.writeMasks = unknown || !previous.writeMasksKnown;
   output.program = unknown || previous.program !== next.program;
   output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
@@ -56,6 +61,7 @@ export const commitAppliedOpaqueDrawState = (
 ): void => {
   state.fixedOpaquePipelineKnown = true;
   state.framebuffer = intent.framebuffer;
+  state.frontFace = intent.frontFace;
   state.known = true;
   state.program = intent.program;
   state.scissorEnabled = false;

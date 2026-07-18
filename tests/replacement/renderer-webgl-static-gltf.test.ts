@@ -12,7 +12,10 @@ describe("static glTF preparation core", () => {
     const prepared = prepareStaticGlb(bytes, "asset:v1", "triangle.glb");
     expect(prepared.primitives).toHaveLength(1);
     const primitive = prepared.primitives[0]!;
-    expect(primitive.color).toEqual([0.2, 0.4, 0.8, 1]);
+    expect(primitive.material).toEqual({
+      baseColor: [0.2, 0.4, 0.8, 1],
+      kind: "unlit",
+    });
     expect(primitive.geometry.key).toBe("asset:v1:mesh:0:primitive:0");
     expect(primitive.geometry.positions).toEqual(new Float32Array([
       -1, -1, 0, 1, -1, 0, 0, 1, 0,
@@ -30,6 +33,37 @@ describe("static glTF preparation core", () => {
       .toThrow("extensionsRequired[0]: is unsupported");
     expect(() => prepareStaticGlb(staticTriangleGlb(undefined, 3), "bad-index", "bad.glb"))
       .toThrow("vertex index is out of range");
+  });
+
+  it("normalizes core opaque metallic-roughness and the implicit glTF material", () => {
+    const standard = staticTriangleDocument();
+    delete standard.extensionsRequired;
+    delete standard.extensionsUsed;
+    standard.materials = [{
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.1, 0.2, 0.3, 0.4],
+        metallicFactor: 0.25,
+        roughnessFactor: 0.75,
+      },
+    }];
+    expect(prepareStaticGlb(staticTriangleGlb(standard), "standard").primitives[0]!.material)
+      .toEqual({
+        baseColor: [0.1, 0.2, 0.3, 1],
+        kind: "standard",
+        metallicFactor: 0.25,
+        roughnessFactor: 0.75,
+      });
+
+    delete standard.materials;
+    const meshes = standard.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    delete meshes[0]!.primitives[0]!.material;
+    expect(prepareStaticGlb(staticTriangleGlb(standard), "implicit").primitives[0]!.material)
+      .toEqual({
+        baseColor: [1, 1, 1, 1],
+        kind: "standard",
+        metallicFactor: 1,
+        roughnessFactor: 1,
+      });
   });
 
   it("borrows validated normal and primary-UV streams into the canonical ABI", () => {

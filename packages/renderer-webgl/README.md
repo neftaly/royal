@@ -58,17 +58,19 @@ focused `idle` / `loading` / `ready` / `error` state for one exact source and
 version. Loading and content errors stay on that asset lifecycle; they are not
 reported as scheduled-frame failures.
 
-The current vertical slice renders opaque solid unlit planes and boxes through
-one canonical indexed-triangle path. Exact picking consumes those same retained
+The current vertical slice renders opaque solid unlit and standard planes and
+boxes through one canonical indexed-triangle path. Standard materials support
+authored directional lights, metallic/roughness factors, exposure, and the
+selected terminal tone map. Exact picking consumes those same retained
 transforms and triangles; optional `pickingGeometry` replaces only CPU exact
 intersection and never allocates a GPU buffer. A glTF picking proxy is available
 while its asset is still loading and remains authoritative after visual geometry
-arrives. Static `.glb` assets containing
-triangle geometry and `KHR_materials_unlit` solid base-color factors demand-load
+arrives. Static `.glb` assets containing triangle geometry and either core
+opaque solid metallic-roughness or `KHR_materials_unlit` factors demand-load
 into that same path. Their float `NORMAL` and `TEXCOORD_0` streams lower into
 optional canonical attributes for later material slices; preparation code loads
 concurrently with the asset request.
-Textures, standard materials, external `.gltf` resources, sparse/quantized
-accessors, variants, deformation, animation, and glTF picking proxies still fail
+Textures, scene environments, point/spot lights, external `.gltf` resources,
+sparse/quantized accessors, variants, deformation, and animation still fail
 explicitly rather than calling the legacy renderer. Optional capability and
 WebXR subpaths return only with their working feature slices.

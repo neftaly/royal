@@ -21,6 +21,7 @@ export class WebGlStateOwner {
   readonly #state: AppliedOpaqueDrawState = {
     ...createUnknownClearState(),
     fixedOpaquePipelineKnown: false,
+    frontFace: null,
     program: null,
     vertexArray: null,
   };
@@ -32,6 +33,7 @@ export class WebGlStateOwner {
   invalidate(): void {
     this.#state.known = false;
     this.#state.fixedOpaquePipelineKnown = false;
+    this.#state.frontFace = null;
     this.#state.program = null;
     this.#state.vertexArray = null;
   }
@@ -88,10 +90,10 @@ export class WebGlStateOwner {
         gl.disable(gl.STENCIL_TEST);
         gl.enable(gl.CULL_FACE);
         gl.cullFace(gl.BACK);
-        gl.frontFace(gl.CCW);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
       }
+      if (transition.frontFace) gl.frontFace(intent.frontFace);
       if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
         gl.depthMask(true);

@@ -451,7 +451,7 @@ export class CanvasRoot {
       projectionMat4Into(this.#projection, surfaceScene.camera, size.backingWidth, size.backingHeight);
       viewMat4Into(this.#view, surfaceScene.camera);
       multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
-      this.#surfaceGpu.draw(this.#viewProjection, size, this.#state);
+      this.#surfaceGpu.draw(this.#viewProjection, this.#view, size, this.#state);
     }
     this.#frame += 1;
     this.#lastFrameFailure = undefined;

@@ -1,5 +1,6 @@
 import type {
   Camera,
+  Direction3,
   GltfNode,
   LinearRgba,
   MeshNode,
@@ -14,14 +15,19 @@ import {
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
+  prepareSolidCanonicalMaterial,
+  type CanonicalSurfaceMaterial,
+} from "./canonical-material";
+import {
   prepareCanonicalGeometry,
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
 
 export type CanonicalDrawSurface = Readonly<{
-  color: LinearRgba;
   geometry: CanonicalTriangleGeometry;
+  material: CanonicalSurfaceMaterial;
   model: Mat4;
+  modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
 }>;
 
@@ -34,9 +40,19 @@ export type CanonicalPickSurface = Readonly<{
 
 export type CanonicalSurfaceScene = Readonly<{
   camera: Camera;
+  directionalLights: readonly CanonicalDirectionalLight[];
+  exposure: number;
   pickSurfaces: readonly CanonicalPickSurface[];
   surfaces: readonly CanonicalDrawSurface[];
+  toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
+
+export type CanonicalDirectionalLight = Readonly<{
+  color: LinearRgba;
+  direction: Direction3;
+}>;
+
+export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
 
 const modelHandedness = (model: Mat4): 1 | -1 => {
   const determinant = model[0] * (model[5] * model[10] - model[6] * model[9])
@@ -52,25 +68,26 @@ const staticCamera = (scene: RenderRoot): Camera => {
   throw new Error("Royal direct-surface slice does not yet support camera view resources");
 };
 
-const solidUnlitColor = (node: MeshNode): LinearRgba => {
-  const material = node.material;
-  if (material.kind !== "unlit") {
-    throw new Error(`Royal direct-surface slice does not yet support ${material.kind} materials`);
-  }
-  if (material.baseColor.kind !== "solid") {
-    throw new Error("Royal direct-surface slice does not yet support image or virtual textures");
-  }
-  if (material.baseColor.color[3] !== 1) {
-    throw new Error("Royal direct-surface slice does not yet support non-opaque materials");
-  }
-  return material.baseColor.color;
-};
+const sceneExposure = (scene: RenderRoot): number => scene.exposureEv100 === undefined
+  ? 1 / 1.2
+  : 1 / (1.2 * 2 ** scene.exposureEv100);
 
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
   preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
 ): CanonicalSurfaceScene => {
+  let requiresLighting = false;
+  for (const node of scene.nodes) {
+    if (node.kind === "gltf" || (node.kind === "mesh" && node.material.kind === "standard")) {
+      requiresLighting = true;
+      break;
+    }
+  }
+  if (requiresLighting && scene.environment !== undefined) {
+    throw new Error("Royal canonical surface slice does not yet support scene environments");
+  }
+  const directionalLights: CanonicalDirectionalLight[] = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
   for (const node of scene.nodes) {
@@ -95,16 +112,17 @@ export const prepareCanonicalSurfaceScene = (
       for (const primitive of prepared.primitives) {
         const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
         const surface: CanonicalDrawSurface = {
-          color: primitive.color,
           geometry: primitive.geometry,
+          material: primitive.material,
           model,
+          modelHandedness: modelHandedness(model),
           node,
         };
         if (proxyGeometry === undefined) {
           const pickableSurface = {
             ...surface,
             inverseModel: inverseMat4(model),
-            modelHandedness: modelHandedness(model),
+            modelHandedness: surface.modelHandedness,
             pickingGeometry: primitive.geometry,
           };
           surfaces.push(pickableSurface);
@@ -116,16 +134,37 @@ export const prepareCanonicalSurfaceScene = (
       continue;
     }
     if (node.kind !== "mesh") {
+      if (node.kind === "directional-light") {
+        if (!requiresLighting) continue;
+        if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
+          throw new Error(
+            `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+          );
+        }
+        directionalLights.push({
+          color: [
+            node.color[0] * node.illuminanceLux,
+            node.color[1] * node.illuminanceLux,
+            node.color[2] * node.illuminanceLux,
+            1,
+          ],
+          direction: node.direction,
+        });
+        continue;
+      }
+      if (!requiresLighting && (node.kind === "point-light" || node.kind === "spot-light")) {
+        continue;
+      }
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
     }
     const geometry = prepareCanonicalGeometry(node.geometry);
     const model = transformMat4(node.transform);
     const surface = {
-      color: solidUnlitColor(node),
       geometry,
       inverseModel: inverseMat4(model),
       model,
       modelHandedness: modelHandedness(model),
+      material: prepareSolidCanonicalMaterial(node.material),
       node,
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry
@@ -136,7 +175,10 @@ export const prepareCanonicalSurfaceScene = (
   }
   return {
     camera: staticCamera(scene),
+    directionalLights,
+    exposure: sceneExposure(scene),
     pickSurfaces,
     surfaces,
+    toneMapping: scene.toneMapping ?? "pbr-neutral",
   };
 };

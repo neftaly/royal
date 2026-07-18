@@ -9,21 +9,32 @@ import {
 } from "@royal/react";
 import {
   boxGeometry,
+  directionalLight,
   mesh,
   perspectiveCamera,
   planeGeometry,
   scene,
+  standardMaterial,
   unlitMaterial,
 } from "@royal/react/scene";
 import "./style.css";
 
-const blue = unlitMaterial({ color: [0.04, 0.32, 0.9, 1] });
+const blue = standardMaterial({
+  color: [0.04, 0.32, 0.9, 1],
+  metallic: 0.1,
+  roughness: 0.45,
+});
 const coral = unlitMaterial({ color: [0.9, 0.12, 0.07, 1] });
 const gold = unlitMaterial({ color: [0.95, 0.55, 0.06, 1] });
 const directScene = scene({
   camera: perspectiveCamera({ position: [0, 0, 6] }),
   clearColor: [0.035, 0.07, 0.14, 1],
   nodes: [
+    directionalLight({
+      color: [1, 0.9, 0.75, 1],
+      direction: [0.4, -0.7, -0.55],
+      illuminanceLux: 5,
+    }),
     mesh({
       geometry: boxGeometry([1.5, 1.5, 1.5]),
       material: blue,
@@ -69,7 +80,7 @@ const App = (): ReactNode => {
       <header>
         <p className="eyebrow">Royal renderer replacement</p>
         <h1>One canonical surface path.</h1>
-        <p>Direct planes and boxes lower to the same retained triangle ABI and root-owned WebGL state.</p>
+        <p>Lit and unlit surfaces share one retained triangle ABI and root-owned WebGL state.</p>
       </header>
       <section className="viewport" aria-label="Renderer lifecycle example">
         <Canvas

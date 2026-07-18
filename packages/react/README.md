@@ -75,8 +75,9 @@ values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
 
 The replacement is being implemented in vertical slices. The current slice
-renders opaque solid unlit planes and boxes and proves canvas ownership, sizing,
-recovery, frame scheduling, exact shared-path picking, and React scene pointer
-bindings. Demand-loaded static unlit GLB geometry is the first asset profile;
-controls, textures, other materials, complete glTF compatibility, and XR remain
+renders opaque solid unlit and standard planes and boxes, including directional
+lighting, and proves canvas ownership, sizing, recovery, frame scheduling,
+exact shared-path picking, and React scene pointer bindings. Demand-loaded
+static unlit or core metallic-roughness GLB geometry is the first asset profile;
+controls, textures, environments, complete glTF compatibility, and XR remain
 absent rather than being exposed as compatibility shims.
