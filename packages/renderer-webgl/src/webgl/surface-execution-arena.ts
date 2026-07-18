@@ -60,7 +60,6 @@ import {
   uniformColor,
   uniform4f,
   uniformMatrix,
-  uniformMatrixUncached,
   useProgram,
   type ProgramArena,
 } from "./program-arena";
@@ -577,27 +576,16 @@ export class SurfaceExecutionArena {
         input.toneMapping,
         !loading && surfaceMaterial?.kind === "standard",
       );
-      const modelBinding = this.#bindModelMatrix(program, input);
-      if (!loading && surfaceMaterial?.kind === "standard") {
-        if (modelBinding !== undefined) {
-          const normalTransform = input.normalTransform
-            ?? affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model);
-          if (modelBinding) {
-            uniformMatrixUncached(
-              this.#programs,
-              program,
-              "u_modelNormalTransform",
-              normalTransform,
-            );
-          } else {
-            uniformMatrix(
-              this.#programs,
-              program,
-              "u_modelNormalTransform",
-              normalTransform,
-            );
-          }
-        }
+      const bindNormalTransform = this.#bindModelMatrix(program, input);
+      if (!loading && surfaceMaterial?.kind === "standard" && bindNormalTransform) {
+        const normalTransform = input.normalTransform
+          ?? affineSurfaceNormalTransformInto(this.#singleNormalTransform, input.model);
+        uniformMatrix(
+          this.#programs,
+          program,
+          "u_modelNormalTransform",
+          normalTransform,
+        );
       }
       if (loading) {
         this.#bindLoadingSurface(program);
@@ -809,24 +797,24 @@ export class SurfaceExecutionArena {
     this.#programViewRevisions.set(program, this.#viewRevision);
   }
 
-  /** Returns undefined for reuse, false for compared, and true for proven changed. */
-  #bindModelMatrix(program: WebGLProgram, input: SurfaceSingleExecution): boolean | undefined {
+  /** Returns whether the corresponding normal transform also needs a value comparison. */
+  #bindModelMatrix(program: WebGLProgram, input: SurfaceSingleExecution): boolean {
     const modelIdentity = input.modelIdentity;
     if (modelIdentity === undefined) {
       // A direct draw can share a shader program with glTF and therefore
       // invalidates any semantic proof retained for that program.
       this.#programGltfModels.delete(program);
       uniformMatrix(this.#programs, program, "u_model", input.model);
-      return false;
+      return true;
     }
 
     const retained = this.#programGltfModels.get(program);
     if (retained?.frame === input.frame && retained.model === modelIdentity) {
-      return undefined;
+      return false;
     }
 
     if (retained?.frame === input.frame) {
-      uniformMatrixUncached(this.#programs, program, "u_model", input.model);
+      uniformMatrix(this.#programs, program, "u_model", input.model);
       retained.model = modelIdentity;
       return true;
     }
@@ -838,7 +826,7 @@ export class SurfaceExecutionArena {
       retained.frame = input.frame;
       retained.model = modelIdentity;
     }
-    return false;
+    return true;
   }
 
   #textureBindingPlan(

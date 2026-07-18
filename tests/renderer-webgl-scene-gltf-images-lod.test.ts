@@ -140,7 +140,58 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
         0, 1, 0, 0,
         0, 0, 1, 0,
         0.25, 0, 0, 1,
-      ]);
+    ]);
+  });
+
+  it("reuses equal model uniforms across distinct glTF primitive batches", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene([gltf({ src: triangleGltfSrc, version: "shared-model-uniform" })]);
+
+    root.render(graph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) => {
+      const document = triangleDocument();
+      const primitive = document.meshes[0]!.primitives[0]!;
+      return responseWithJson(url, {
+        ...document,
+        images: [{ uri: "first.png" }, { uri: "second.png" }],
+        materials: [
+          { pbrMetallicRoughness: { baseColorTexture: { index: 0 } } },
+          { pbrMetallicRoughness: { baseColorTexture: { index: 1 } } },
+        ],
+        meshes: [{ primitives: [primitive, { ...primitive, material: 1 }] }],
+        textures: [
+          { sampler: 0, source: 0 },
+          { sampler: 0, source: 1 },
+        ],
+      });
+    })).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(ControlledImage.instances).toHaveLength(2);
+    const callsBeforeReady = calls.length;
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => {
+        const readyCalls = calls.slice(callsBeforeReady);
+        return drawCalls(readyCalls).length >= 2
+          && matrixUniformPayloads(readyCalls, "u_modelNormalTransform").length >= 1;
+      },
+    );
+
+    const readyCalls = calls.slice(callsBeforeReady);
+    // Loading and ready materials use separate programs, but each program
+    // should receive the shared transform only once for both primitives.
+    expect(matrixUniformPayloads(readyCalls, "u_model")).toHaveLength(2);
+    expect(matrixUniformPayloads(readyCalls, "u_modelNormalTransform")).toHaveLength(1);
   });
 
   it("loads glTF bufferView base-color images on primitives without normals", async () => {
