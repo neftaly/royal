@@ -1163,10 +1163,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       renderFailure = retainFirstFailure(renderFailure, value);
     }
     try {
-    } catch (value) {
-      renderFailure = retainFirstFailure(renderFailure, value);
-    }
-    try {
       this.#virtualTextures.finishFrame(renderFailure === undefined && !renderDeferred);
     } catch (value) {
       renderFailure = retainFirstFailure(renderFailure, value);

@@ -1013,12 +1013,7 @@ export class SurfaceExecutionArena {
     if (lightSet.specular !== undefined) {
       candidates.iblSpecularCube = "ready";
       if (admission.features.has("iblBrdfLut")) {
-        let ready = false;
-        try {
-          ready = this.#prepareIblBrdfLut();
-        } finally {
-          this.#captureIblSignals();
-        }
+        const ready = this.#prepareIblBrdfLut();
         candidates.iblBrdfLut = ready ? "ready" : "unavailable";
         if (!ready) admittedResourcesReady = false;
       }
@@ -1415,18 +1410,14 @@ export class SurfaceExecutionArena {
       || stableBinding.revision !== stableUniformRevision
       || stableBinding.specularTextureUnit !== specularTextureUnit
       || stableBinding.brdfLutTextureUnit !== brdfLutTextureUnit;
-    try {
-      this.#bindIbl(
-        this.#textureBindings,
-        program,
-        lightSet,
-        specularTextureUnit,
-        brdfLutTextureUnit,
-        bindStableUniforms,
-      );
-    } finally {
-      this.#captureIblSignals();
-    }
+    this.#bindIbl(
+      this.#textureBindings,
+      program,
+      lightSet,
+      specularTextureUnit,
+      brdfLutTextureUnit,
+      bindStableUniforms,
+    );
     const lights = lightSet.directionals;
     if (lights.length > MAX_SURFACE_LIGHTS) {
       throw new Error(`Royal supports at most ${MAX_SURFACE_LIGHTS} directional lights per pass`);
