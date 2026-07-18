@@ -220,8 +220,13 @@ describe("renderer-core public API", () => {
     const environment: import("@royal/react/scene").StudioEnvironmentLight =
       reactSceneApi.studioEnvironment();
     const materialInput: import("@royal/react/scene").MaterialSurfaceOptions = { texture: asset };
+    const readTarget = null as unknown as import("@royal/react/scene").CameraViewReadTarget;
+    const listener: import("@royal/react/scene").CameraViewResourceListener = () => undefined;
+    const nodeKind: import("@royal/react/scene").RenderNodeKind = "mesh";
+    const vector: import("@royal/react/scene").Vec4 = [1, 2, 3, 4];
     expect([solid.kind, asset.kind]).toEqual(["solid", "asset"]);
     expect([environment.source, materialInput.texture]).toEqual(["studio", asset]);
+    expect([readTarget, listener, nodeKind, vector]).toHaveLength(4);
   });
 
   it("keeps internal texture helpers out of the renderer-core barrel", () => {
