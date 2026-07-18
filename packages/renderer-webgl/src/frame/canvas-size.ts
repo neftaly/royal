@@ -46,14 +46,14 @@ export const resolveCanvasSize = (
   requirePositiveInteger(limits.maxHeight, "maxHeight");
 
   if (input.cssWidth === 0 || input.cssHeight === 0) {
-    return Object.freeze({
+    return {
       backingHeight: 0,
       backingWidth: 0,
       cssHeight: input.cssHeight,
       cssWidth: input.cssWidth,
       devicePixelRatio: input.devicePixelRatio,
       renderScale: 0,
-    });
+    };
   }
 
   const desiredWidth = input.cssWidth * input.devicePixelRatio;
@@ -66,12 +66,12 @@ export const resolveCanvasSize = (
     limits.maxWidth / desiredWidth,
     limits.maxHeight / desiredHeight,
   );
-  return Object.freeze({
+  return {
     backingHeight: Math.max(1, Math.floor(desiredHeight * renderScale)),
     backingWidth: Math.max(1, Math.floor(desiredWidth * renderScale)),
     cssHeight: input.cssHeight,
     cssWidth: input.cssWidth,
     devicePixelRatio: input.devicePixelRatio,
     renderScale,
-  });
+  };
 };

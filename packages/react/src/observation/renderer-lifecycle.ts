@@ -22,12 +22,12 @@ export type RendererLifecycleSnapshot =
     state: "failed";
   }>;
 
-const UNAVAILABLE: RendererLifecycleSnapshot = Object.freeze({
+const UNAVAILABLE: RendererLifecycleSnapshot = {
   generation: 0,
   interruptions: 0,
   recoveries: 0,
   state: "unavailable",
-});
+};
 
 /** Observes renderer availability without polling or subscribing to unrelated state. */
 export const useRendererLifecycle = (
@@ -42,11 +42,11 @@ export const useRendererLifecycle = (
       interruptions: context.interruptions,
       recoveries: context.recoveries,
     };
-    if (context.phase === "active") return Object.freeze({ ...shared, state: "available" });
-    if (context.phase === "disposed") return Object.freeze({ ...shared, state: "disposed" });
+    if (context.phase === "active") return { ...shared, state: "available" };
+    if (context.phase === "disposed") return { ...shared, state: "disposed" };
     if (context.failure !== undefined) {
-      return Object.freeze({ ...shared, error: context.failure, state: "failed" });
+      return { ...shared, error: context.failure, state: "failed" };
     }
-    return Object.freeze({ ...shared, state: "unavailable" });
+    return { ...shared, state: "unavailable" };
   }, [context]);
 };

@@ -75,9 +75,11 @@ Royal ownership. Royal does not invent an accessibility tree for arbitrary 3D
 content; the application owns semantic controls, labels, descriptions, and
 equivalent non-visual UI using ordinary React.
 
-`scene` is a complete immutable intent snapshot, not a mutation command or
-render-pass list. Equal rebuilt descriptors have equal meaning; callers are not
-required to preserve JavaScript object identity for semantic correctness.
+`scene` is a complete `readonly` intent snapshot, not a mutation command or
+render-pass list. Constructors defensively copy caller-owned tuples/arrays but
+do not pay for runtime freezing. Equal rebuilt descriptors have equal meaning;
+callers are not required to preserve JavaScript object identity for semantic
+correctness.
 
 ## Descriptors
 

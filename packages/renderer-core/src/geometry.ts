@@ -71,11 +71,11 @@ const boxSize = (input: BoxGeometryInput): WorldSize3 => {
     : objectWithAllowedFields(input, GEOMETRY_OPTION_FIELDS, 'box geometry').size;
 
   const resolved = typeof size === 'number' ? [size, size, size] as const : size;
-  return Object.freeze([
+  return [
     positiveFiniteNumber(resolved[0], 'box geometry width'),
     positiveFiniteNumber(resolved[1], 'box geometry height'),
     positiveFiniteNumber(resolved[2], 'box geometry depth'),
-  ]);
+  ];
 };
 
 const planeSize = (input: PlaneGeometryInput): readonly [width: Metres, height: Metres] => {
@@ -84,28 +84,28 @@ const planeSize = (input: PlaneGeometryInput): readonly [width: Metres, height: 
     : objectWithAllowedFields(input, GEOMETRY_OPTION_FIELDS, 'plane geometry').size;
 
   const resolved = typeof size === 'number' ? [size, size] as const : size;
-  return Object.freeze([
+  return [
     positiveFiniteNumber(resolved[0], 'plane geometry width'),
     positiveFiniteNumber(resolved[1], 'plane geometry height'),
-  ]);
+  ];
 };
 
 export function boxGeometry(size: Metres): BoxGeometry;
 export function boxGeometry(size: WorldSize3): BoxGeometry;
 export function boxGeometry(options: BoxGeometryOptions): BoxGeometry;
 export function boxGeometry(input: BoxGeometryInput): BoxGeometry {
-  return Object.freeze({
+  return {
     kind: 'box',
     size: boxSize(input)
-  });
+  };
 }
 
 export function planeGeometry(size: Metres): PlaneGeometry;
 export function planeGeometry(size: readonly [width: Metres, height: Metres]): PlaneGeometry;
 export function planeGeometry(options: PlaneGeometryOptions): PlaneGeometry;
 export function planeGeometry(input: PlaneGeometryInput): PlaneGeometry {
-  return Object.freeze({
+  return {
     kind: 'plane',
     size: planeSize(input)
-  });
+  };
 }

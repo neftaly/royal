@@ -54,7 +54,7 @@ export const mesh = (options: MeshOptions): MeshNode => {
     ...(options.ref === undefined ? {} : { ref: options.ref })
   } satisfies Omit<MeshNode, 'transform'>;
 
-  return Object.freeze(options.transform === undefined
+  return options.transform === undefined
     ? node
-    : { ...node, transform: resolveTransform(options.transform) });
+    : { ...node, transform: resolveTransform(options.transform) };
 };

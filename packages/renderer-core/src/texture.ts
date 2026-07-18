@@ -1,6 +1,6 @@
 import type { LinearRgba } from './primitives';
 import {
-  frozenRgba,
+  resolveRgba,
   identityScalar,
   nonEmptyString,
   objectWithAllowedFields,
@@ -102,12 +102,12 @@ export interface VirtualTextureAssetOptions extends VirtualTextureAssetBaseOptio
 /** A manifest URI string or the equivalent authored-manifest options object. */
 export type VirtualTextureInput = string | VirtualTextureAssetOptions;
 
-export const defaultImageTextureSampler: TextureSampler = Object.freeze({
+export const defaultImageTextureSampler: TextureSampler = {
   magFilter: 'linear',
   minFilter: 'linear-mipmap-linear',
   wrapS: 'clamp-to-edge',
   wrapT: 'clamp-to-edge'
-});
+};
 
 const TEXTURE_COLOR_SPACES = ['linear', 'srgb'] as const;
 const TEXTURE_MAG_FILTERS = ['linear', 'nearest'] as const;
@@ -134,7 +134,7 @@ const optionalChoice = <Choice extends string>(
   label: string,
 ): Choice | undefined => value === undefined ? undefined : stringChoice(value, choices, label);
 
-const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
+const resolveSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
   if (sampler === undefined) return undefined;
   objectWithAllowedFields(sampler, TEXTURE_SAMPLER_FIELDS, 'texture sampler');
   if (sampler.magFilter !== undefined) {
@@ -145,22 +145,22 @@ const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | un
   }
   if (sampler.wrapS !== undefined) stringChoice(sampler.wrapS, TEXTURE_WRAPS, 'texture sampler wrapS');
   if (sampler.wrapT !== undefined) stringChoice(sampler.wrapT, TEXTURE_WRAPS, 'texture sampler wrapT');
-  return Object.freeze({ ...sampler });
+  return { ...sampler };
 };
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
   objectWithAllowedFields(options, SOLID_TEXTURE_FIELDS, 'solid texture');
-  return Object.freeze({
+  return {
     kind: 'solid',
-    color: frozenRgba(options.color, 'solid texture color')
-  });
+    color: resolveRgba(options.color, 'solid texture color')
+  };
 };
 
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
   objectWithAllowedFields(options, TEXTURE_ASSET_FIELDS, 'texture asset');
   const uri = nonEmptyString(options.src, 'texture asset "src"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'texture asset colorSpace');
-  const sampler = frozenSampler(options.sampler);
+  const sampler = resolveSampler(options.sampler);
   const contentKey = options.contentKey === undefined
     ? undefined
     : identityScalar(options.contentKey, 'texture asset contentKey');
@@ -168,14 +168,14 @@ export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
     ? undefined
     : identityScalar(options.version, 'texture asset version');
 
-  return Object.freeze({
+  return {
     kind: 'asset',
     ...(colorSpace === undefined ? {} : { colorSpace }),
     ...(contentKey === undefined ? {} : { contentKey }),
     ...(sampler === undefined ? {} : { sampler }),
     src: uri,
     ...(version === undefined ? {} : { version })
-  });
+  };
 };
 
 export function imageTexture(src: string): TextureAssetRef;
@@ -201,7 +201,7 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
   objectWithAllowedFields(options, VIRTUAL_TEXTURE_FIELDS, 'virtual texture');
   const manifestUri = nonEmptyString(options.manifestUri, 'virtual texture "manifestUri"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'virtual texture colorSpace');
-  const sampler = frozenSampler(options.sampler);
+  const sampler = resolveSampler(options.sampler);
   const contentKey = options.contentKey === undefined
     ? undefined
     : identityScalar(options.contentKey, 'virtual texture contentKey');
@@ -209,14 +209,14 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
     ? undefined
     : identityScalar(options.version, 'virtual texture version');
 
-  return Object.freeze({
+  return {
     kind: 'virtual-asset',
     ...(colorSpace === undefined ? {} : { colorSpace }),
     ...(contentKey === undefined ? {} : { contentKey }),
     manifestUri,
     ...(sampler === undefined ? {} : { sampler }),
     ...(version === undefined ? {} : { version })
-  });
+  };
 };
 
 /** Creates an authored virtual-texture reference from its JSON manifest URI. */

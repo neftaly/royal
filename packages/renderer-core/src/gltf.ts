@@ -4,7 +4,7 @@ import {
   type TransformOptions
 } from './primitives';
 import {
-  frozenBounds3,
+  resolveBounds3,
   identityScalar,
   nonEmptyString,
   objectWithAllowedFields,
@@ -69,7 +69,7 @@ export const transformGltfAssetBounds = (
   bounds: GltfAssetBounds,
   transform?: TransformOptions,
 ): GltfAssetBounds => {
-  const validatedBounds = frozenBounds3(bounds, 'glTF asset bounds');
+  const validatedBounds = resolveBounds3(bounds, 'glTF asset bounds');
   const { position, rotation, scale } = resolveTransform(transform ?? {});
   const [rotationX, rotationY, rotationZ] = rotation;
   const cosX = Math.cos(rotationX);
@@ -99,7 +99,7 @@ export const transformGltfAssetBounds = (
   const transformedExtentX = Math.abs(matrix00) * extentX + Math.abs(matrix01) * extentY + Math.abs(matrix02) * extentZ;
   const transformedExtentY = Math.abs(matrix10) * extentX + Math.abs(matrix11) * extentY + Math.abs(matrix12) * extentZ;
   const transformedExtentZ = Math.abs(matrix20) * extentX + Math.abs(matrix21) * extentY + Math.abs(matrix22) * extentZ;
-  return frozenBounds3({
+  return resolveBounds3({
     max: [
       transformedCenterX + transformedExtentX,
       transformedCenterY + transformedExtentY,
@@ -128,11 +128,11 @@ export const resolveGltfAsset = (options: {
   const version = options.version === undefined
     ? undefined
     : identityScalar(options.version, 'glTF asset version');
-  return Object.freeze({
-    ...(options.bounds === undefined ? {} : { bounds: frozenBounds3(options.bounds, 'glTF asset bounds') }),
+  return {
+    ...(options.bounds === undefined ? {} : { bounds: resolveBounds3(options.bounds, 'glTF asset bounds') }),
     src: nonEmptyString(options.src, 'glTF source'),
     ...(version === undefined ? {} : { version })
-  });
+  };
 };
 
 export const validateGltfMaterialVariantName = (
@@ -161,7 +161,7 @@ export function gltf(input: GltfInput): GltfNode {
     ...(materialVariant === undefined ? {} : { materialVariant })
   } satisfies Omit<GltfNode, 'transform'>;
 
-  return Object.freeze(options.transform === undefined
+  return options.transform === undefined
     ? node
-    : { ...node, transform: resolveTransform(options.transform) });
+    : { ...node, transform: resolveTransform(options.transform) };
 }

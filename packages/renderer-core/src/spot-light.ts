@@ -1,7 +1,7 @@
 import {
-  frozenDirection3,
-  frozenRgba,
-  frozenVec3,
+  resolveDirection3,
+  resolveRgba,
+  resolveVec3,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
   positiveFiniteNumber,
@@ -38,7 +38,7 @@ export interface SpotLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'spot light color');
+const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'spot light color');
 const SPOT_LIGHT_FIELDS = [
   'color', 'direction', 'innerConeAngle', 'intensityCandela', 'outerConeAngle', 'position', 'range',
 ] as const;
@@ -52,19 +52,19 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   if (!Number.isFinite(innerConeAngle) || innerConeAngle < 0 || innerConeAngle >= outerConeAngle) {
     throw new Error('spot light innerConeAngle must be in [0, outerConeAngle)');
   }
-  return Object.freeze({
+  return {
     kind: 'spot-light',
-    color: options.color === undefined ? WHITE : frozenRgba(options.color, 'spot light color'),
-    direction: frozenDirection3(options.direction, 'spot light direction'),
+    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'spot light color'),
+    direction: resolveDirection3(options.direction, 'spot light direction'),
     innerConeAngle,
     intensityCandela: nonNegativeFiniteNumber(
       options.intensityCandela,
       'spot light intensityCandela',
     ),
     outerConeAngle,
-    position: frozenVec3(options.position, 'spot light position'),
+    position: resolveVec3(options.position, 'spot light position'),
     ...(options.range === undefined
       ? {}
       : { range: positiveFiniteNumber(options.range, 'spot light range') })
-  });
+  };
 };

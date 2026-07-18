@@ -68,26 +68,26 @@ const factor01 = (value: number | undefined, fallback: number, label: string): n
 
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   objectWithAllowedFields(options, STANDARD_MATERIAL_FIELDS, 'standard material');
-  return Object.freeze({
+  return {
     kind: 'standard',
     baseColor: toBaseColorTexture(options, 'standard material'),
     metallicFactor: factor01(options.metallic, 0, 'standard material metallic'),
     roughnessFactor: factor01(options.roughness, 1, 'standard material roughness')
-  });
+  };
 };
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   objectWithAllowedFields(options, UNLIT_MATERIAL_FIELDS, 'unlit material');
-  return Object.freeze({
+  return {
     kind: 'unlit',
     baseColor: toBaseColorTexture(options, 'unlit material')
-  });
+  };
 };
 
 export const wireframeMaterial = (options: WireframeMaterialOptions): WireframeMaterial => {
   objectWithAllowedFields(options, WIREFRAME_MATERIAL_FIELDS, 'wireframe material');
-  return Object.freeze({
+  return {
     kind: 'wireframe',
     baseColor: solidTexture({ color: options.color })
-  });
+  };
 };

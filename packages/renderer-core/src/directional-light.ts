@@ -1,6 +1,6 @@
 import {
-  frozenDirection3,
-  frozenRgba,
+  resolveDirection3,
+  resolveRgba,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
 } from './descriptor-values';
@@ -24,15 +24,15 @@ export interface DirectionalLightOptions {
   readonly illuminanceLux?: number;
 }
 
-const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'directional light color');
+const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'directional light color');
 const DIRECTIONAL_LIGHT_FIELDS = ['color', 'direction', 'illuminanceLux'] as const;
 
 export const directionalLight = (options: DirectionalLightOptions): DirectionalLightNode => {
   objectWithAllowedFields(options, DIRECTIONAL_LIGHT_FIELDS, 'directional light');
-  return Object.freeze({
+  return {
     kind: 'directional-light',
-    direction: frozenDirection3(options.direction, 'directional light direction'),
-    color: options.color === undefined ? WHITE : frozenRgba(options.color, 'directional light color'),
+    direction: resolveDirection3(options.direction, 'directional light direction'),
+    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'directional light color'),
     illuminanceLux: nonNegativeFiniteNumber(options.illuminanceLux ?? 1, 'directional light illuminanceLux')
-  });
+  };
 };

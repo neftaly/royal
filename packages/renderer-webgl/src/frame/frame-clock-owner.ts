@@ -45,7 +45,7 @@ export class FrameClockOwner {
     const flushEvent = { kind: "flush-external", token } as const;
     const releaseEvent = { kind: "release-external", token } as const;
     let released = false;
-    return Object.freeze({
+    return {
       flushInvalidated: () => {
         if (released) return;
         this.#apply(flushEvent);
@@ -55,7 +55,7 @@ export class FrameClockOwner {
         released = true;
         this.#apply(releaseEvent);
       },
-    });
+    };
   }
 
   block(): void {

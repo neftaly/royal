@@ -1,4 +1,4 @@
-import { frozenTransform } from './descriptor-values';
+import { resolveTransformDescriptor } from './descriptor-values';
 
 /** The single coordinate convention used by every Royal public scene value. */
 export interface RoyalCoordinateConvention {
@@ -11,13 +11,13 @@ export interface RoyalCoordinateConvention {
 }
 
 /** Royal is right-handed, +Y-up, -Z view-forward, metric, and radian-based. */
-export const royalCoordinateConvention: RoyalCoordinateConvention = Object.freeze({
+export const royalCoordinateConvention: RoyalCoordinateConvention = {
   angleUnit: 'radian',
   handedness: 'right',
   linearUnit: 'metre',
   up: '+y',
   viewForward: '-z'
-});
+};
 
 /** A scalar distance or length in Royal world space. One unit is one metre. */
 export type Metres = number;
@@ -64,12 +64,12 @@ export const linearRgbaFromSrgb = (color: SrgbRgba): LinearRgba => {
   if (!Array.isArray(color) || color.length !== 4) {
     throw new TypeError('sRGB color must be an array of exactly 4 numbers');
   }
-  return Object.freeze([
+  return [
     linearChannelFromSrgb(color[0]),
     linearChannelFromSrgb(color[1]),
     linearChannelFromSrgb(color[2]),
     normalizedAlpha(color[3]),
-  ]);
+  ];
 };
 
 export interface Transform {
@@ -89,4 +89,5 @@ export interface TransformOptions {
   readonly scale?: Scale3;
 }
 
-export const resolveTransform = (options: TransformOptions): Transform => frozenTransform(options);
+export const resolveTransform = (options: TransformOptions): Transform =>
+  resolveTransformDescriptor(options);

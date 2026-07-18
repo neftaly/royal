@@ -170,7 +170,7 @@ const logicalIdsFrom = (
     resolvePickingId(logicalId, `glTF instance logicalIds[${index}]`)!);
   const unique = new Set(copy);
   if (unique.size !== copy.length) throw new Error('glTF instance logicalIds must be unique');
-  return Object.freeze(copy);
+  return copy;
 };
 
 export const createGltfInstanceTransforms = (
@@ -286,7 +286,7 @@ export const createGltfInstanceTransforms = (
       };
     },
   };
-  return Object.freeze(transforms);
+  return transforms;
 };
 
 export interface GltfInstancesNode {
@@ -325,12 +325,12 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
-  return Object.freeze({
+  return {
     asset,
     instances,
     kind: 'gltf-instances',
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(materialVariant === undefined ? {} : { materialVariant }),
-  });
+  };
 };

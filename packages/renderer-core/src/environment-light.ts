@@ -1,5 +1,5 @@
 import {
-  frozenVec3,
+  resolveVec3,
   identityScalar,
   nonEmptyString,
   nonNegativeFiniteNumber,
@@ -36,12 +36,12 @@ export interface StudioEnvironmentOptions {
   readonly rotation?: EulerRads;
 }
 
-const DEFAULT_ENVIRONMENT_ROTATION = frozenVec3([0, 0, 0], 'environment rotation') as EulerRads;
+const DEFAULT_ENVIRONMENT_ROTATION = resolveVec3([0, 0, 0], 'environment rotation') as EulerRads;
 const STUDIO_ENVIRONMENT_FIELDS = ['radianceScaleNits', 'rotation'] as const;
 
 export const studioEnvironment = (options: StudioEnvironmentOptions = {}): StudioEnvironmentLight => {
   objectWithAllowedFields(options, STUDIO_ENVIRONMENT_FIELDS, 'studio environment');
-  return Object.freeze({
+  return {
     kind: 'environment-light',
     source: 'studio',
     radianceScaleNits: nonNegativeFiniteNumber(
@@ -50,8 +50,8 @@ export const studioEnvironment = (options: StudioEnvironmentOptions = {}): Studi
     ),
     rotation: options.rotation === undefined
       ? DEFAULT_ENVIRONMENT_ROTATION
-      : frozenVec3(options.rotation, 'environment rotation') as EulerRads,
-  });
+      : resolveVec3(options.rotation, 'environment rotation') as EulerRads,
+  };
 };
 
 export interface PrefilteredEnvironmentOptions extends StudioEnvironmentOptions {
@@ -73,7 +73,7 @@ export const prefilteredEnvironment = (
   const version = options.version === undefined
     ? undefined
     : identityScalar(options.version, 'prefiltered environment version');
-  return Object.freeze({
+  return {
     kind: 'environment-light',
     source: 'royal-prefiltered-v1',
     src: nonEmptyString(options.src, 'prefiltered environment source'),
@@ -84,6 +84,6 @@ export const prefilteredEnvironment = (
     ),
     rotation: options.rotation === undefined
       ? DEFAULT_ENVIRONMENT_ROTATION
-      : frozenVec3(options.rotation, 'environment rotation') as EulerRads,
-  });
+      : resolveVec3(options.rotation, 'environment rotation') as EulerRads,
+  };
 };

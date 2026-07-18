@@ -214,14 +214,14 @@ export class CanvasRoot {
 
   getSnapshot = (): CanvasRootSnapshot => {
     if (this.#snapshot === undefined || this.#snapshotRevision !== this.#revision) {
-      this.#snapshot = Object.freeze({
+      this.#snapshot = {
         context: this.#context.getSnapshot(),
         frame: this.#frame,
         ...(this.#lastFrameFailure === undefined
           ? {}
           : { lastFrameFailure: this.#lastFrameFailure }),
         size: this.#size,
-      });
+      };
       this.#snapshotRevision = this.#revision;
     }
     return this.#snapshot;

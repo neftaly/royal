@@ -76,7 +76,8 @@ Public scene constructors MUST:
 - validate at the authoring boundary;
 - reject unknown option fields rather than hiding misspellings;
 - normalize defaults once;
-- return detached immutable data;
+- return detached data with TypeScript `readonly` contracts; runtime freezing is
+  not part of the API;
 - avoid DOM, WebGL, React, fetch, and codec objects;
 - use discriminated unions and literal strings instead of runtime TypeScript
   enums;

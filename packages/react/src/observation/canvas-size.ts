@@ -33,7 +33,7 @@ export const useCanvasSize = (
     if (size === null || size === undefined || size.cssWidth === 0 || size.cssHeight === 0) {
       return undefined;
     }
-    return Object.freeze({
+    return {
       aspectRatio: size.cssWidth / size.cssHeight,
       backingHeight: size.backingHeight,
       backingWidth: size.backingWidth,
@@ -41,6 +41,6 @@ export const useCanvasSize = (
       height: size.cssHeight,
       renderScale: size.renderScale,
       width: size.cssWidth,
-    });
+    };
   }, [size]);
 };

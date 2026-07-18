@@ -1,5 +1,5 @@
 import type { EulerRads, Scale3, Transform, Vec3, WorldPosition3 } from './primitives';
-import { finiteNumber, frozenVec3, objectWithAllowedFields } from './descriptor-values';
+import { finiteNumber, resolveVec3, objectWithAllowedFields } from './descriptor-values';
 
 export interface RenderObjectVector3 {
   x: number;
@@ -128,13 +128,13 @@ const validatedRenderObjectTransformUpdate = (
   return {
     ...(transform.position === undefined
       ? {}
-      : { position: frozenVec3(transform.position, 'render object position') as WorldPosition3 }),
+      : { position: resolveVec3(transform.position, 'render object position') as WorldPosition3 }),
     ...(transform.rotation === undefined
       ? {}
-      : { rotation: frozenVec3(transform.rotation, 'render object rotation') as EulerRads }),
+      : { rotation: resolveVec3(transform.rotation, 'render object rotation') as EulerRads }),
     ...(transform.scale === undefined
       ? {}
-      : { scale: frozenVec3(transform.scale, 'render object scale') as Scale3 }),
+      : { scale: resolveVec3(transform.scale, 'render object scale') as Scale3 }),
   };
 };
 
@@ -268,7 +268,7 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
     this.#dispatch({
       type: 'set-vector',
       field: this.#field,
-      value: frozenVec3(value, `render object ${this.#field}`),
+      value: resolveVec3(value, `render object ${this.#field}`),
     });
   }
 

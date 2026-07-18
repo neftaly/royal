@@ -34,7 +34,7 @@ export const nonNegativeFiniteNumber = (value: number, label: string): number =>
   return value;
 };
 
-const frozenNumberTuple = (
+const resolveNumberTuple = (
   value: unknown,
   length: number,
   label: string,
@@ -42,47 +42,46 @@ const frozenNumberTuple = (
   if (!Array.isArray(value) || value.length !== length) {
     throw new TypeError(`${label} must be an array of exactly ${length} numbers`);
   }
-  return Object.freeze(value.map((component, index) =>
-    finiteNumber(component, `${label}[${index}]`)));
+  return value.map((component, index) => finiteNumber(component, `${label}[${index}]`));
 };
 
-export const frozenVec3 = (value: unknown, label: string): Vec3 =>
-  frozenNumberTuple(value, 3, label) as Vec3;
+export const resolveVec3 = (value: unknown, label: string): Vec3 =>
+  resolveNumberTuple(value, 3, label) as Vec3;
 
-export const frozenDirection3 = (value: Vec3, label: string): Vec3 => {
-  const direction = frozenVec3(value, label);
+export const resolveDirection3 = (value: Vec3, label: string): Vec3 => {
+  const direction = resolveVec3(value, label);
   if (!(Math.hypot(direction[0], direction[1], direction[2]) > 0)) {
     throw new Error(`${label} must be non-zero`);
   }
   return direction;
 };
 
-export const frozenRgba = (value: unknown, label: string): LinearRgba =>
-  frozenNumberTuple(value, 4, label) as LinearRgba;
+export const resolveRgba = (value: unknown, label: string): LinearRgba =>
+  resolveNumberTuple(value, 4, label) as LinearRgba;
 
 const TRANSFORM_FIELDS = ['position', 'rotation', 'scale'] as const;
 const BOUNDS_FIELDS = ['max', 'min'] as const;
 
-export const frozenTransform = (options: TransformOptions): Transform => {
+export const resolveTransformDescriptor = (options: TransformOptions): Transform => {
   objectWithAllowedFields(options, TRANSFORM_FIELDS, 'transform');
-  return Object.freeze({
-    position: frozenVec3(options.position ?? [0, 0, 0], 'transform position'),
-    rotation: frozenVec3(options.rotation ?? [0, 0, 0], 'transform rotation') as EulerRads,
-    scale: frozenVec3(options.scale ?? [1, 1, 1], 'transform scale'),
-  });
+  return {
+    position: resolveVec3(options.position ?? [0, 0, 0], 'transform position'),
+    rotation: resolveVec3(options.rotation ?? [0, 0, 0], 'transform rotation') as EulerRads,
+    scale: resolveVec3(options.scale ?? [1, 1, 1], 'transform scale'),
+  };
 };
 
-export const frozenBounds3 = <Bounds extends { readonly max: Vec3; readonly min: Vec3 }>(
+export const resolveBounds3 = <Bounds extends { readonly max: Vec3; readonly min: Vec3 }>(
   bounds: Bounds,
   label: string,
 ): Bounds => {
   objectWithAllowedFields(bounds, BOUNDS_FIELDS, label);
-  const min = frozenVec3(bounds.min, `${label} min`);
-  const max = frozenVec3(bounds.max, `${label} max`);
+  const min = resolveVec3(bounds.min, `${label} min`);
+  const max = resolveVec3(bounds.max, `${label} max`);
   for (let axis = 0; axis < 3; axis += 1) {
     if (min[axis]! > max[axis]!) throw new Error(`${label} min must not exceed max`);
   }
-  return Object.freeze({ min, max }) as Bounds;
+  return { min, max } as Bounds;
 };
 
 export const nonEmptyString = (value: unknown, label: string): string => {

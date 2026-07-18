@@ -29,9 +29,10 @@ const renderScene = scene({
 });
 ```
 
-Scene data is immutable and contains no WebGL or React objects. World-space
-positions and sizes are metres, rotations are radians, and public color fields
-are scene-linear `LinearRgba` values.
+Scene data is TypeScript-`readonly` intent and contains no WebGL or React
+objects. Constructors copy caller-owned tuples and arrays but do not add runtime
+freezing. World-space positions and sizes are metres, rotations are radians,
+and public color fields are scene-linear `LinearRgba` values.
 
 Source names remain stable across constructor inputs and normalized
 descriptors: glTF and ordinary image references expose `src`; authored virtual

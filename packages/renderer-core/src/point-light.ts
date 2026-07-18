@@ -1,6 +1,6 @@
 import {
-  frozenRgba,
-  frozenVec3,
+  resolveRgba,
+  resolveVec3,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
   positiveFiniteNumber,
@@ -29,21 +29,21 @@ export interface PointLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'point light color');
+const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'point light color');
 const POINT_LIGHT_FIELDS = ['color', 'intensityCandela', 'position', 'range'] as const;
 export const pointLight = (options: PointLightOptions): PointLightNode => {
   objectWithAllowedFields(options, POINT_LIGHT_FIELDS, 'point light');
   const range = options.range === undefined
     ? undefined
     : positiveFiniteNumber(options.range, 'point light range');
-  return Object.freeze({
+  return {
     kind: 'point-light',
-    color: options.color === undefined ? WHITE : frozenRgba(options.color, 'point light color'),
+    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'point light color'),
     intensityCandela: nonNegativeFiniteNumber(
       options.intensityCandela,
       'point light intensityCandela',
     ),
-    position: frozenVec3(options.position, 'point light position'),
+    position: resolveVec3(options.position, 'point light position'),
     ...(range === undefined ? {} : { range })
-  });
+  };
 };

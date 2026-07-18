@@ -244,7 +244,7 @@ ownership, and clarity—not assignment tokens.
 
 | Area | Status | Evidence and next architectural action |
 | --- | --- | --- |
-| Immutable validated descriptors | conforms | Renderer-core constructors freeze normalized data and reject unknown fields; descriptor/property tests cover the boundary. |
+| Readonly validated descriptors | conforms | Renderer-core constructors copy normalized tuple/array inputs, expose TypeScript `readonly` contracts, reject unknown fields, and avoid runtime freezing. |
 | React ordinary-tree ownership | conforms | `Canvas` owns one root and controls/hooks remain normal React children; cleanup and public API tests exist. |
 | Demand rendering and clock ownership | conforms | Root invalidation, frame loop, external-clock and XR runtime owners have focused tests. |
 | Context generation/lifecycle | conforms | Lifecycle owners, restoration integration, captured failures, and resource lifetime tests exercise loss/restore/disposal. |

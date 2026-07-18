@@ -1,10 +1,10 @@
 import type { CameraSource } from './camera-resource';
-import { frozenRgba, objectWithAllowedFields, stringChoice } from './descriptor-values';
+import { resolveRgba, objectWithAllowedFields, stringChoice } from './descriptor-values';
 import type { EnvironmentLight } from './environment-light';
 import type { LinearRgba } from './primitives';
 import type { RenderNode } from './render-node';
 
-const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
+const TRANSPARENT_BLACK = resolveRgba([0, 0, 0, 0], 'scene clearColor');
 const RENDER_TONE_MAPPINGS = ['linear-clamp', 'pbr-neutral'] as const;
 const MIN_EXPOSURE_EV100 = -128;
 const MAX_EXPOSURE_EV100 = 149;
@@ -56,15 +56,15 @@ export const scene = (options: SceneOptions): RenderRoot => {
     ? undefined
     : stringChoice(options.toneMapping, RENDER_TONE_MAPPINGS, 'scene toneMapping');
 
-  return Object.freeze({
+  return {
     kind: 'scene',
     camera: options.camera,
-    nodes: Object.freeze([...options.nodes]),
+    nodes: [...options.nodes],
     clearColor: options.clearColor === undefined
       ? TRANSPARENT_BLACK
-      : frozenRgba(options.clearColor, 'scene clearColor'),
+      : resolveRgba(options.clearColor, 'scene clearColor'),
     ...(options.environment === undefined ? {} : { environment: options.environment }),
     ...(exposureEv100 === undefined ? {} : { exposureEv100 }),
     ...(toneMapping === undefined ? {} : { toneMapping })
-  });
+  };
 };

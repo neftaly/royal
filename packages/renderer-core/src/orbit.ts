@@ -3,7 +3,7 @@ import { perspectiveCamera } from './camera';
 import type { GltfAssetBounds } from './gltf';
 import {
   finiteNumber,
-  frozenVec3,
+  resolveVec3,
   objectWithAllowedFields,
   positiveFiniteNumber,
 } from './descriptor-values';
@@ -62,7 +62,7 @@ export type OrbitPerspectiveCameraOptions =
     readonly view: OrbitCameraViewOptions;
   };
 
-const defaultTarget = frozenVec3([0, 0, 0], 'orbit target');
+const defaultTarget = resolveVec3([0, 0, 0], 'orbit target');
 const ORBIT_VIEW_FIELDS = ['distance', 'pitch', 'target', 'yaw'] as const;
 const ORBIT_CONSTRAINT_FIELDS = ['maxDistance', 'maxPitch', 'minDistance', 'minPitch'] as const;
 const ORBIT_FIT_FIELDS = ['aspectRatio', 'fovY', 'minDistance', 'padding', 'pitch', 'yaw'] as const;
@@ -73,7 +73,7 @@ const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 => {
   finiteNumber(target[0], 'orbit target[0]');
   finiteNumber(target[1], 'orbit target[1]');
   finiteNumber(target[2], 'orbit target[2]');
-  return Object.isFrozen(target) ? target : frozenVec3(target, 'orbit target');
+  return Object.isFrozen(target) ? target : resolveVec3(target, 'orbit target');
 };
 
 const clamp = (
@@ -110,7 +110,7 @@ const resolveOrbitCameraViewWithConstraints = (
   objectWithAllowedFields(view, ORBIT_VIEW_FIELDS, 'orbit view');
   const distance = positiveFiniteNumber(view.distance, 'orbit distance');
   const pitch = finiteNumber(view.pitch ?? 0, 'orbit pitch');
-  return Object.freeze({
+  return {
     distance: constraints === undefined
       ? distance
       : clamp(distance, constraints.minDistance, constraints.maxDistance),
@@ -119,7 +119,7 @@ const resolveOrbitCameraViewWithConstraints = (
       : clamp(pitch, constraints.minPitch, constraints.maxPitch),
     target: orbitTarget(view.target),
     yaw: finiteNumber(view.yaw ?? 0, 'orbit yaw')
-  });
+  };
 };
 
 export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView =>
@@ -187,10 +187,10 @@ export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis
   const cx = Math.cos(pitch);
   const sx = Math.sin(pitch);
 
-  return Object.freeze({
-    right: frozenVec3([cy, 0, sy], 'orbit right basis'),
-    up: frozenVec3([sx * sy, cx, -sx * cy], 'orbit up basis')
-  });
+  return {
+    right: resolveVec3([cy, 0, sy], 'orbit right basis'),
+    up: resolveVec3([sx * sy, cx, -sx * cy], 'orbit up basis')
+  };
 };
 
 export const rotateOrbitCameraView = (
@@ -207,12 +207,12 @@ export const rotateOrbitCameraView = (
   finiteNumber(deltaY, 'orbit rotation deltaY');
   finiteNumber(rotateSpeed, 'orbit rotateSpeed');
 
-  return Object.freeze({
+  return {
     distance: resolvedView.distance,
     pitch: finiteNumber(resolvedView.pitch + deltaY * rotateSpeed, 'orbit pitch'),
     target: resolvedView.target,
     yaw: finiteNumber(resolvedView.yaw + deltaX * rotateSpeed, 'orbit yaw'),
-  });
+  };
 };
 
 export const zoomOrbitCameraView = (
@@ -225,7 +225,7 @@ export const zoomOrbitCameraView = (
   finiteNumber(deltaPixels, 'orbit zoom deltaPixels');
   finiteNumber(zoomSpeed, 'orbit zoomSpeed');
 
-  return Object.freeze({
+  return {
     distance: positiveFiniteNumber(
       resolvedView.distance * Math.exp(deltaPixels * zoomSpeed),
       'orbit distance',
@@ -233,7 +233,7 @@ export const zoomOrbitCameraView = (
     pitch: resolvedView.pitch,
     target: resolvedView.target,
     yaw: resolvedView.yaw,
-  });
+  };
 };
 
 export const panOrbitCameraView = (
@@ -255,16 +255,16 @@ export const panOrbitCameraView = (
   const sx = Math.sin(resolvedView.pitch);
   const scale = resolvedView.distance * panSpeed;
 
-  return Object.freeze({
+  return {
     distance: resolvedView.distance,
     pitch: resolvedView.pitch,
-    target: frozenVec3([
+    target: resolveVec3([
       resolvedView.target[0] - cy * deltaX * scale + sx * sy * deltaY * scale,
       resolvedView.target[1] + cx * deltaY * scale,
       resolvedView.target[2] - sy * deltaX * scale - sx * cy * deltaY * scale,
     ], 'orbit target') as WorldPosition3,
     yaw: resolvedView.yaw,
-  });
+  };
 };
 
 export const orbitCameraTransform = (
@@ -273,14 +273,14 @@ export const orbitCameraTransform = (
   const { distance, pitch, target, yaw } = resolveOrbitCameraView(view);
   const cosPitch = Math.cos(pitch);
 
-  return Object.freeze({
-    position: frozenVec3([
+  return {
+    position: resolveVec3([
       target[0] - Math.sin(yaw) * cosPitch * distance,
       target[1] + Math.sin(pitch) * distance,
       target[2] + Math.cos(yaw) * cosPitch * distance
     ], 'orbit camera position'),
-    rotation: frozenVec3([-pitch, -yaw, 0], 'orbit camera rotation') as EulerRads
-  });
+    rotation: resolveVec3([-pitch, -yaw, 0], 'orbit camera rotation') as EulerRads
+  };
 };
 
 export const orbitPerspectiveCamera = (

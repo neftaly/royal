@@ -74,7 +74,8 @@ counted as working merely because legacy source still exists.
 
 - One Royal world unit is one metre.
 - Public colors are explicit linear or sRGB tuple domains.
-- Scene descriptors are immutable intent, not render passes or mutation logs.
+- Scene descriptors are TypeScript-`readonly` intent, not render passes or
+  mutation logs; constructors copy inputs without runtime freezing.
 - Functional cores plan transitions; narrow imperative owners perform browser
   and WebGL effects.
 - WebGL state is complete for each operation and diffed by one root-local owner.
