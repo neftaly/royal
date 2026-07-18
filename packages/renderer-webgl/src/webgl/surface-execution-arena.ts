@@ -1351,8 +1351,10 @@ export class SurfaceExecutionArena {
     const preparedCoordinates = material.textureCoordinates?.[key];
     const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
     uniform1i(this.#programs, program, uniforms.set, coordinates.set);
-    uniformColor(this.#programs, program, uniforms.row0, coordinates.row0);
-    uniformColor(this.#programs, program, uniforms.row1, coordinates.row1);
+    const row0 = coordinates.row0;
+    const row1 = coordinates.row1;
+    uniform4f(this.#programs, program, uniforms.row0, row0[0], row0[1], row0[2], row0[3]);
+    uniform4f(this.#programs, program, uniforms.row1, row1[0], row1[1], row1[2], row1[3]);
   }
 
   #bindCachedTexture2d(
