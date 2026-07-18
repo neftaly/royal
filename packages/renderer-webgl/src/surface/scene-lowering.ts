@@ -16,6 +16,7 @@ import {
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
   prepareCanonicalMaterial,
+  resolveCanonicalMaterialTexture,
   type CanonicalSurfaceMaterial,
 } from "./canonical-material";
 import {
@@ -117,7 +118,7 @@ export const prepareCanonicalSurfaceScene = (
         const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
         const surface: CanonicalDrawSurface = {
           geometry: primitive.geometry,
-          material: primitive.material,
+          material: resolveCanonicalMaterialTexture(primitive.material, decodedTexture),
           model,
           modelHandedness: modelHandedness(model),
           node,

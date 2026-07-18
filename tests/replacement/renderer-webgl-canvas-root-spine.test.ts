@@ -20,6 +20,7 @@ import {
 import {
   staticTriangleDocument,
   staticTriangleGlb,
+  staticTexturedTriangleGlb,
 } from "./support/static-glb";
 
 type FakeGl = WebGL2RenderingContext & {
@@ -498,6 +499,45 @@ describe("clear-only canvas root", () => {
       node,
       pickingId: "triangle",
     });
+  });
+
+  it("streams external glTF color images through the ordinary texture path", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb());
+    const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
+    const node = gltf({ src: "/models/textured.glb", version: "v2" });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [1, 2, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    expect(decodeTexture).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "asset", src: "/models/albedo.png" }),
+      expect.any(AbortSignal),
+    );
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+
+    resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 64 });
+    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
   it("lowers a semantic scene and rejects unsupported node kinds explicitly", () => {

@@ -4,6 +4,7 @@ import {
   glbFromDocument,
   staticTriangleDocument,
   staticTriangleGlb,
+  staticTexturedTriangleGlb,
 } from "./support/static-glb";
 
 describe("static glTF preparation core", () => {
@@ -67,6 +68,40 @@ describe("static glTF preparation core", () => {
         requiresTextureCoordinates: false,
         roughnessFactor: 1,
       });
+  });
+
+  it("lowers external base color images to the shared ordinary texture contract", () => {
+    const prepared = prepareStaticGlb(
+      staticTexturedTriangleGlb(),
+      "asset-v2",
+      "textured.glb",
+      "/models/textured.glb",
+    );
+    expect(prepared.textureAssets).toEqual([{
+      colorSpace: "srgb",
+      contentKey: "asset-v2:image:0",
+      kind: "asset",
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "repeat",
+        wrapT: "repeat",
+      },
+      src: "/models/albedo.png",
+    }]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      baseColor: [0.25, 0.5, 1, 1],
+      baseColorAsset: prepared.textureAssets[0],
+      requiresTextureCoordinates: true,
+    });
+  });
+
+  it("does not prepare or reject textures unreachable from the selected scene", () => {
+    const document = staticTriangleDocument();
+    document.images = [{ bufferView: 99, mimeType: "image/png" }];
+    document.textures = [{ source: 0 }];
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "unused", "unused.glb");
+    expect(prepared.textureAssets).toEqual([]);
   });
 
   it("borrows validated normal and primary-UV streams into the canonical ABI", () => {
@@ -135,7 +170,7 @@ describe("static glTF preparation core", () => {
     const materials = textured.materials as Array<Record<string, unknown>>;
     materials[0]!.pbrMetallicRoughness = { baseColorTexture: { index: 0 } };
     expect(() => prepareStaticGlb(staticTriangleGlb(textured), "textured", "textured.glb"))
-      .toThrow("baseColorTexture: is not in the static profile yet");
+      .toThrow("baseColorTexture.index: index 0 is out of range");
 
     const animated = staticTriangleDocument();
     animated.animations = [{}];

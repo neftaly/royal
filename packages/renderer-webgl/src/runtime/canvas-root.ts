@@ -327,7 +327,11 @@ export class CanvasRoot {
     const gltfNodes: GltfNode[] = [];
     const textureAssets: TextureAssetRef[] = [];
     for (const node of scene.nodes) {
-      if (node.kind === "gltf") gltfNodes.push(node);
+      if (node.kind === "gltf") {
+        gltfNodes.push(node);
+        const preparedGltf = this.#gltfAssets.prepared(node.asset);
+        if (preparedGltf !== undefined) textureAssets.push(...preparedGltf.textureAssets);
+      }
       if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
         textureAssets.push(node.material.baseColor);
       }
@@ -492,6 +496,16 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
+    const textureAssets: TextureAssetRef[] = [];
+    for (const node of this.#surfaceSceneInput.nodes) {
+      if (node.kind === "mesh" && node.material.baseColor.kind === "asset") {
+        textureAssets.push(node.material.baseColor);
+      } else if (node.kind === "gltf") {
+        const preparedGltf = this.#gltfAssets.prepared(node.asset);
+        if (preparedGltf !== undefined) textureAssets.push(...preparedGltf.textureAssets);
+      }
+    }
+    this.#textureAssets.reconcile(textureAssets);
     this.#clock.invalidate();
   }
 

@@ -29,6 +29,7 @@ export type CanonicalTextureBinding = Readonly<{
 
 export type CanonicalUnlitMaterial = Readonly<{
   baseColor: LinearRgba;
+  baseColorAsset?: TextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   kind: "unlit";
   requiresTextureCoordinates: boolean;
@@ -36,6 +37,7 @@ export type CanonicalUnlitMaterial = Readonly<{
 
 export type CanonicalStandardMaterial = Readonly<{
   baseColor: LinearRgba;
+  baseColorAsset?: TextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   kind: "standard";
   metallicFactor: number;
@@ -73,6 +75,31 @@ const textureBinding = (
       sampler.wrapT,
     ]),
     storageKey: JSON.stringify([decodedTextureKey(asset), colorSpace]),
+  };
+};
+
+/** Resolves a cold glTF texture recipe through the same ordinary-texture binding contract. */
+export const resolveCanonicalMaterialTexture = (
+  material: CanonicalSurfaceMaterial,
+  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined,
+): CanonicalSurfaceMaterial => {
+  const asset = material.baseColorAsset;
+  if (asset === undefined) return material;
+  const decoded = decodedTexture(asset);
+  if (decoded === undefined) {
+    return {
+      ...material,
+      baseColor: [
+        material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY[0],
+        material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY[1],
+        material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY[2],
+        1,
+      ],
+    };
+  }
+  return {
+    ...material,
+    baseColorTexture: textureBinding(asset, decoded),
   };
 };
 

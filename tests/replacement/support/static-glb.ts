@@ -60,3 +60,41 @@ export const staticTriangleGlb = (
   new Uint16Array(binary.buffer, 36, 3).set([0, 1, lastIndex]);
   return glbFromDocument(document, binary);
 };
+
+export const staticTexturedTriangleGlb = (): Uint8Array => {
+  const document = staticTriangleDocument();
+  document.accessors = [
+    { bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+    { bufferView: 1, componentType: 5123, count: 3, type: "SCALAR" },
+    { bufferView: 2, componentType: 5126, count: 3, type: "VEC2" },
+  ];
+  document.bufferViews = [
+    { buffer: 0, byteLength: 36, byteOffset: 0 },
+    { buffer: 0, byteLength: 6, byteOffset: 36 },
+    { buffer: 0, byteLength: 24, byteOffset: 44 },
+  ];
+  document.buffers = [{ byteLength: 68 }];
+  document.images = [{ uri: "albedo.png" }];
+  document.textures = [{ source: 0 }];
+  document.materials = [{
+    extensions: { KHR_materials_unlit: {} },
+    pbrMetallicRoughness: {
+      baseColorFactor: [0.25, 0.5, 1, 1],
+      baseColorTexture: { index: 0 },
+    },
+  }];
+  document.meshes = [{ primitives: [{
+    attributes: { POSITION: 0, TEXCOORD_0: 2 },
+    indices: 1,
+    material: 0,
+  }] }];
+  const binary = new Uint8Array(68);
+  new Float32Array(binary.buffer, 0, 9).set([
+    -1, -1, 0,
+    1, -1, 0,
+    0, 1, 0,
+  ]);
+  new Uint16Array(binary.buffer, 36, 3).set([0, 1, 2]);
+  new Float32Array(binary.buffer, 44, 6).set([0, 1, 1, 1, 0.5, 0]);
+  return glbFromDocument(document, binary);
+};

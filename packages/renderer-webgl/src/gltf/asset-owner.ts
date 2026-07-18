@@ -166,7 +166,7 @@ export class GltfAssetOwner {
       import("./static-asset"),
     ]).then(([bytes, preparation]) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
-      const prepared = preparation.prepareStaticGlb(bytes, key, diagnosticLabel(asset));
+      const prepared = preparation.prepareStaticGlb(bytes, key, diagnosticLabel(asset), asset.src);
       entry.prepared = prepared;
       entry.snapshot = { primitiveCount: prepared.primitives.length, state: "ready" };
       this.#platform.onAssetChanged();

@@ -5,6 +5,7 @@ import {
 } from "../math/mat4";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
+import type { TextureAssetRef, TextureSampler } from "@royal/renderer-core";
 import { parseGlb } from "./glb";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
@@ -15,6 +16,7 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 
 export type PreparedStaticGltf = Readonly<{
   primitives: readonly PreparedStaticGltfPrimitive[];
+  textureAssets: readonly TextureAssetRef[];
 }>;
 
 type JsonObject = Record<string, unknown>;
@@ -52,7 +54,7 @@ const nonNegativeInteger = (value: unknown, label: string, path: string): number
   return result;
 };
 
-const index = (value: unknown, values: unknown[], label: string, path: string): number => {
+const index = (value: unknown, values: readonly unknown[], label: string, path: string): number => {
   const result = nonNegativeInteger(value, label, path);
   if (result >= values.length) fail(label, path, `index ${result} is out of range`);
   return result;
@@ -321,8 +323,103 @@ const factor01 = (
   return value;
 };
 
+const resolveAssetUri = (baseUri: string, uri: string): string => {
+  try {
+    return new URL(uri, baseUri).href;
+  } catch {
+    const base = baseUri.split("#", 1)[0]!.split("?", 1)[0]!;
+    const directory = base.slice(0, base.lastIndexOf("/") + 1);
+    const resolved = new URL(uri, `https://royal.invalid/${directory.replace(/^\/+/, "")}`);
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  }
+};
+
+const gltfSampler = (value: JsonObject, label: string, path: string): TextureSampler => {
+  const magFilter = value.magFilter === undefined
+    ? "linear"
+    : value.magFilter === 9728 ? "nearest"
+      : value.magFilter === 9729 ? "linear"
+        : fail(label, `${path}.magFilter`, "must be NEAREST or LINEAR");
+  const minFilters = new Map<number, NonNullable<TextureSampler["minFilter"]>>([
+    [9728, "nearest"],
+    [9729, "linear"],
+    [9984, "nearest-mipmap-nearest"],
+    [9985, "linear-mipmap-nearest"],
+    [9986, "nearest-mipmap-linear"],
+    [9987, "linear-mipmap-linear"],
+  ]);
+  const minFilter = value.minFilter === undefined
+    ? "linear-mipmap-linear"
+    : minFilters.get(integer(value.minFilter, label, `${path}.minFilter`))
+      ?? fail(label, `${path}.minFilter`, "is not a core glTF filter");
+  const readWrap = (input: unknown, field: string): NonNullable<TextureSampler["wrapS"]> => {
+    if (input === undefined || input === 10497) return "repeat";
+    if (input === 33071) return "clamp-to-edge";
+    if (input === 33648) return "mirrored-repeat";
+    return fail(label, `${path}.${field}`, "is not a core glTF wrap mode");
+  };
+  return {
+    magFilter,
+    minFilter,
+    wrapS: readWrap(value.wrapS, "wrapS"),
+    wrapT: readWrap(value.wrapT, "wrapT"),
+  };
+};
+
+const createTextureAssetReader = (
+  document: JsonObject,
+  contentKey: string,
+  sourceUri: string,
+  label: string,
+): ((value: unknown, path: string) => TextureAssetRef) => {
+  const images = optionalArray(document.images, label, "images");
+  const samplers = optionalArray(document.samplers, label, "samplers");
+  const textures = optionalArray(document.textures, label, "textures");
+  const prepared: Array<TextureAssetRef | undefined> = [];
+  return (value, path) => {
+    const textureIndex = index(value, textures, label, path);
+    const retained = prepared[textureIndex];
+    if (retained !== undefined) return retained;
+    const textureValue = textures[textureIndex];
+    const texturePath = `textures[${textureIndex}]`;
+    const texture = object(textureValue, label, texturePath);
+    const imageIndex = index(texture.source, images, label, `${texturePath}.source`);
+    const imagePath = `images[${imageIndex}]`;
+    const image = object(images[imageIndex], label, imagePath);
+    if (image.bufferView !== undefined) {
+      fail(label, `${imagePath}.bufferView`, "embedded images are not supported yet");
+    }
+    if (typeof image.uri !== "string" || image.uri.length === 0) {
+      fail(label, `${imagePath}.uri`, "must be a non-empty external URI");
+    }
+    const imageUri = image.uri as string;
+    let sampler: TextureSampler;
+    if (texture.sampler === undefined) {
+      sampler = gltfSampler({}, label, `${texturePath}.sampler`);
+    } else {
+      const samplerIndex = index(texture.sampler, samplers, label, `${texturePath}.sampler`);
+      const samplerPath = `samplers[${samplerIndex}]`;
+      sampler = gltfSampler(
+        object(samplers[samplerIndex], label, samplerPath),
+        label,
+        samplerPath,
+      );
+    }
+    const asset: TextureAssetRef = {
+      colorSpace: "srgb",
+      contentKey: `${contentKey}:image:${imageIndex}`,
+      kind: "asset",
+      sampler,
+      src: resolveAssetUri(sourceUri, imageUri),
+    };
+    prepared[textureIndex] = asset;
+    return asset;
+  };
+};
+
 const prepareMaterial = (
   materials: unknown[],
+  textureAsset: (value: unknown, path: string) => TextureAssetRef,
   materialIndex: unknown,
   label: string,
   path: string,
@@ -357,8 +454,17 @@ const prepareMaterial = (
   const pbr = material.pbrMetallicRoughness === undefined
     ? {}
     : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
+  let baseColorAsset: TextureAssetRef | undefined;
   if (pbr.baseColorTexture !== undefined) {
-    fail(label, `${materialPath}.pbrMetallicRoughness.baseColorTexture`, "is not in the static profile yet");
+    const textureInfoPath = `${materialPath}.pbrMetallicRoughness.baseColorTexture`;
+    const textureInfo = object(pbr.baseColorTexture, label, textureInfoPath);
+    if (textureInfo.texCoord !== undefined && textureInfo.texCoord !== 0) {
+      fail(label, `${textureInfoPath}.texCoord`, "must select TEXCOORD_0");
+    }
+    baseColorAsset = textureAsset(
+      textureInfo.index,
+      `${textureInfoPath}.index`,
+    );
   }
   const color = finiteTuple(
     pbr.baseColorFactor,
@@ -373,12 +479,18 @@ const prepareMaterial = (
     }
   }
   const baseColor = [color[0]!, color[1]!, color[2]!, 1] as const;
-  if (unlit) return { baseColor, kind: "unlit", requiresTextureCoordinates: false };
+  if (unlit) return {
+    baseColor,
+    ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
+    kind: "unlit",
+    requiresTextureCoordinates: baseColorAsset !== undefined,
+  };
   return {
     baseColor,
+    ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
     kind: "standard",
     metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
-    requiresTextureCoordinates: false,
+    requiresTextureCoordinates: baseColorAsset !== undefined,
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
   };
 };
@@ -393,6 +505,7 @@ export const prepareStaticGlb = (
   bytes: Uint8Array,
   contentKey: string,
   label = "glTF asset",
+  sourceUri = "asset.glb",
 ): PreparedStaticGltf => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
   const parsed = parseGlb(bytes, label);
@@ -428,6 +541,7 @@ export const prepareStaticGlb = (
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
   const materials = optionalArray(document.materials, label, "materials");
+  const textureAsset = createTextureAssetReader(document, contentKey, sourceUri, label);
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
   const context: AccessorContext = {
@@ -494,6 +608,16 @@ export const prepareStaticGlb = (
       if (indices.length < 3 || indices.length % 3 !== 0) {
         fail(label, path, "triangle index count must be a positive multiple of 3");
       }
+      const material = prepareMaterial(
+        materials,
+        textureAsset,
+        primitive.material,
+        label,
+        path,
+      );
+      if (material.requiresTextureCoordinates && textureCoordinates0 === undefined) {
+        fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the base color texture");
+      }
       return {
         geometry: {
           bounds,
@@ -503,7 +627,7 @@ export const prepareStaticGlb = (
           positions,
           ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
         },
-        material: prepareMaterial(materials, primitive.material, label, path),
+        material,
       };
     });
     preparedMeshes[meshIndex] = prepared;
@@ -538,5 +662,10 @@ export const prepareStaticGlb = (
     visit(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`), identityMat4());
   }
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
-  return { primitives };
+  const claimedTextures = new Map<string, TextureAssetRef>();
+  for (const primitive of primitives) {
+    const asset = primitive.material.baseColorAsset;
+    if (asset !== undefined) claimedTextures.set(asset.contentKey as string, asset);
+  }
+  return { primitives, textureAssets: [...claimedTextures.values()] };
 };
