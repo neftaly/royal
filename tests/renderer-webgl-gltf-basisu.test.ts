@@ -212,7 +212,9 @@ describe("glTF BasisU RGBA normalization", () => {
       MockWorker.instances[1]!.respond(4);
       await expect(Promise.all([third, fourth])).resolves.toHaveLength(2);
 
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([false, false]);
+      await vi.advanceTimersByTimeAsync(1);
       expect(MockWorker.instances.map((worker) => worker.terminated)).toEqual([false, true]);
     } finally {
       lease.release();

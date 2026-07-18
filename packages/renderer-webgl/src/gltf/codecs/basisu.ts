@@ -144,10 +144,11 @@ let basisuWorkerPool: BasisuWorkerPool | undefined;
 class BasisuWorkerDisposedError extends Error {}
 
 const BASISU_WORKER_LANES = 3;
-// The glTF scheduler refills decode lanes on a later task. A short grace keeps
-// that sustained wave on its warm worker without retaining the burst heap once
-// the scene is actually idle.
-const BASISU_BURST_LANE_IDLE_MS = 100;
+// External image transport can leave seconds between decode waves on large
+// scenes. Keep burst lanes warm across those gaps so each wave does not reload
+// and initialize the Basis transcoder. Renderer disposal still releases every
+// lane immediately, and genuinely idle burst heaps retire after this grace.
+const BASISU_BURST_LANE_IDLE_MS = 30_000;
 
 class BasisuWorkerPool {
   readonly #owners: BasisuWorkerOwner[] = [];
