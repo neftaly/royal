@@ -9,20 +9,22 @@ import { VERTEX_ATTRIBUTE } from "../vertex-input/attribute-abi";
 
 declare const authority: unique symbol;
 export interface GeometryDrawArena { readonly [authority]: "GeometryDrawArena" }
-type Default = { readonly w: number; readonly x: number; readonly y: number; readonly z: number };
 type State = {
   activeVertexArray?: WebGLVertexArrayObject;
-  readonly defaults: Map<number, Default>;
+  initializedDefaults: number;
   readonly gl: WebGL2RenderingContext;
   readonly vertexInputs: VertexInputArena;
 };
+
+const TANGENT_DEFAULT_INITIALIZED = 1 << 0;
+const COLOR_DEFAULT_INITIALIZED = 1 << 1;
 
 export const createGeometryDrawArena = (
   gl: WebGL2RenderingContext,
   vertexInputs: VertexInputArena,
 ): GeometryDrawArena => ({
-  defaults: new Map(),
   gl,
+  initializedDefaults: 0,
   vertexInputs,
 } as unknown as GeometryDrawArena);
 
@@ -38,17 +40,17 @@ const mode = (gl: WebGL2RenderingContext, value: VertexInputGeometry["mode"]): n
   }
 };
 
-const default4f = (state: State, location: number, x: number, y: number, z: number, w: number): void => {
-  const cached = state.defaults.get(location);
-  if (cached !== undefined && Object.is(cached.x, x) && Object.is(cached.y, y)
-    && Object.is(cached.z, z) && Object.is(cached.w, w)) return;
-  state.gl.vertexAttrib4f(location, x, y, z, w);
-  state.defaults.set(location, { w, x, y, z });
-};
-
 const defaults = (state: State, geometry: VertexInputGeometry): void => {
-  if (geometry.tangentBuffer === undefined) default4f(state, VERTEX_ATTRIBUTE.tangent, 0, 0, 0, 0);
-  if (geometry.colorBuffer === undefined) default4f(state, VERTEX_ATTRIBUTE.color, 1, 1, 1, 1);
+  let initialized = state.initializedDefaults;
+  if (geometry.tangentBuffer === undefined && (initialized & TANGENT_DEFAULT_INITIALIZED) === 0) {
+    state.gl.vertexAttrib4f(VERTEX_ATTRIBUTE.tangent, 0, 0, 0, 0);
+    initialized |= TANGENT_DEFAULT_INITIALIZED;
+  }
+  if (geometry.colorBuffer === undefined && (initialized & COLOR_DEFAULT_INITIALIZED) === 0) {
+    state.gl.vertexAttrib4f(VERTEX_ATTRIBUTE.color, 1, 1, 1, 1);
+    initialized |= COLOR_DEFAULT_INITIALIZED;
+  }
+  state.initializedDefaults = initialized;
 };
 
 const draw = (state: State, geometry: VertexInputGeometry, instanceCount?: number): void => {
@@ -110,5 +112,5 @@ export const submitGeometryInstancedDraw = (
 export const clearGeometryDrawArenaContext = (arena: GeometryDrawArena): void => {
   const state = arena as unknown as State;
   delete state.activeVertexArray;
-  state.defaults.clear();
+  state.initializedDefaults = 0;
 };
