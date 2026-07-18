@@ -1762,7 +1762,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         contextGeneration: this.#context.generation,
         frame: this.#framePublication.frame,
         geometry,
-        geometryId,
         lights,
         material,
         model,
@@ -1778,7 +1777,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       execution.contextGeneration = this.#context.generation;
       execution.frame = this.#framePublication.frame;
       execution.geometry = geometry;
-      execution.geometryId = geometryId;
       execution.lights = lights;
       execution.material = material;
       execution.model = model;

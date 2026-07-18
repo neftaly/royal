@@ -325,7 +325,6 @@ export interface SurfaceSingleExecution {
   readonly contextGeneration: number;
   readonly frame: number;
   readonly geometry: VertexInputGeometry;
-  readonly geometryId: number;
   readonly lights: SurfaceLightSet | undefined;
   readonly material: Material;
   readonly model: Mat4;
@@ -627,7 +626,6 @@ export class SurfaceExecutionArena {
       drawGeometry(
         this.#geometry,
         input.contextGeneration,
-        input.geometryId,
         input.geometry,
       );
     }
@@ -649,7 +647,6 @@ export class SurfaceExecutionArena {
             contextGeneration: input.contextGeneration,
             frame: input.frame,
             geometry: batch.geometry,
-            geometryId: batch.geometryId,
             lights: batch.lights,
             material: batch.material,
             model: singleModel.model,
@@ -668,7 +665,6 @@ export class SurfaceExecutionArena {
           execution.contextGeneration = input.contextGeneration;
           execution.frame = input.frame;
           execution.geometry = batch.geometry;
-          execution.geometryId = batch.geometryId;
           execution.lights = batch.lights;
           execution.material = batch.material;
           execution.model = singleModel.model;

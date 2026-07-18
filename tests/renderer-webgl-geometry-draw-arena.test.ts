@@ -118,8 +118,8 @@ describe("geometry draw arena", () => {
     const arena = createGeometryDrawArena(context(gl), vertexInputs);
 
     gl.events.length = 0;
-    drawGeometry(arena, 7, 1, geometry);
-    drawGeometry(arena, 7, 1, geometry);
+    drawGeometry(arena, 7, geometry);
+    drawGeometry(arena, 7, geometry);
 
     expect(gl.boundVertexArrays.at(-1)).toEqual(expect.objectContaining({ kind: "vao" }));
     expect(gl.draws).toEqual([
@@ -133,7 +133,7 @@ describe("geometry draw arena", () => {
     expect(gl.events).not.toContain("lineWidth");
 
     clearGeometryDrawArenaContext(arena);
-    drawGeometry(arena, 7, 1, geometry);
+    drawGeometry(arena, 7, geometry);
     expect(gl.defaults).toHaveLength(4);
     expect(gl.defaults.slice(2)).toEqual(gl.defaults.slice(0, 2));
     disposeVertexInputArena(vertexInputs, context(gl), 7);
@@ -151,7 +151,7 @@ describe("geometry draw arena", () => {
     uploadVertexInputInstanceLane(vertexInputs, context(gl), 3, allocation, "models", 0);
     const arena = createGeometryDrawArena(context(gl), vertexInputs);
 
-    drawGeometry(arena, 3, 1, indexed);
+    drawGeometry(arena, 3, indexed);
     const baseVertexArray = gl.boundVertexArrays.at(-1);
     prepareGeometryInstancedDraw(arena, 3, 1, indexed, allocation);
     submitGeometryInstancedDraw(arena, indexed, 5);
@@ -183,13 +183,16 @@ describe("geometry draw arena", () => {
     const arena = createGeometryDrawArena(context(gl), vertexInputs);
     for (const [mode, expected] of modes) {
       const geometryId = modes.findIndex(([candidate]) => candidate === mode) + 1;
-      retainVertexInputGeometry(vertexInputs, { geometryId, recipe: recipe(mode, mode, false) });
-      const resolved = vertexInputGeometry(vertexInputs, context(gl), 11, geometryId);
-      drawGeometry(arena, 11, geometryId, {
-        ...resolved,
-        colorBuffer: { kind: "buffer", serial: 10_000 } as unknown as WebGLBuffer,
-        tangentBuffer: { kind: "buffer", serial: 10_001 } as unknown as WebGLBuffer,
+      retainVertexInputGeometry(vertexInputs, {
+        geometryId,
+        recipe: {
+          ...recipe(mode, mode, false),
+          colors: new Float32Array(12),
+          tangents: new Float32Array(12),
+        },
       });
+      const resolved = vertexInputGeometry(vertexInputs, context(gl), 11, geometryId);
+      drawGeometry(arena, 11, resolved);
       expect(gl.draws.at(-1)).toEqual({ count: 3, first: 0, kind: "arrays", mode: expected });
     }
     expect(gl.defaults).toHaveLength(0);

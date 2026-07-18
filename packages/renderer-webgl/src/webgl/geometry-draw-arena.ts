@@ -1,5 +1,5 @@
 import {
-  vertexInputBaseVertexArray,
+  vertexInputBaseVertexArrayForGeometry,
   vertexInputCompositeVertexArrayForInstance,
   type VertexInputArena,
   type VertexInputGeometry,
@@ -20,7 +20,11 @@ type State = {
 export const createGeometryDrawArena = (
   gl: WebGL2RenderingContext,
   vertexInputs: VertexInputArena,
-): GeometryDrawArena => ({ defaults: new Map(), gl, vertexInputs } as unknown as GeometryDrawArena);
+): GeometryDrawArena => ({
+  defaults: new Map(),
+  gl,
+  vertexInputs,
+} as unknown as GeometryDrawArena);
 
 const mode = (gl: WebGL2RenderingContext, value: VertexInputGeometry["mode"]): number => {
   switch (value) {
@@ -71,14 +75,15 @@ export const beginGeometryDrawFrame = (arena: GeometryDrawArena): void => {
 export const drawGeometry = (
   arena: GeometryDrawArena,
   contextGeneration: number,
-  geometryId: number,
   geometry: VertexInputGeometry,
 ): void => {
   const state = arena as unknown as State;
-  bindVertexArray(
-    state,
-    vertexInputBaseVertexArray(state.vertexInputs, state.gl, contextGeneration, geometryId),
-  );
+  bindVertexArray(state, vertexInputBaseVertexArrayForGeometry(
+    state.vertexInputs,
+    state.gl,
+    contextGeneration,
+    geometry,
+  ));
   defaults(state, geometry);
   draw(state, geometry);
 };

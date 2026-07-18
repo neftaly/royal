@@ -842,16 +842,11 @@ const configureStaticAttributes = (gl: WebGL2RenderingContext, geometry: StaticG
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer ?? null);
 };
 
-export const vertexInputBaseVertexArray = (
-  arena: VertexInputArena,
+const baseVertexArray = (
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
-  contextGeneration: number,
-  geometryId: number,
+  geometry: StaticGeometry,
 ): WebGLVertexArrayObject => {
-  const state = arena as unknown as VertexInputArenaState;
-  const semantic = state.semantics.get(geometryId);
-  if (semantic === undefined) throw new Error(`Vertex-input geometry ID ${geometryId} is not retained`);
-  const geometry = resolveStaticGeometry(state, gl, contextGeneration, semantic);
   if (geometry.baseVertexArray !== undefined) return geometry.baseVertexArray;
   const vertexArray = createVertexArray(gl);
   state.pendingVertexArrayDeletes.add(vertexArray);
@@ -870,6 +865,34 @@ export const vertexInputBaseVertexArray = (
     throwFailure(failure);
     throw new Error("Vertex-input base VAO creation failed without an error");
   }
+};
+
+export const vertexInputBaseVertexArray = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  geometryId: number,
+): WebGLVertexArrayObject => {
+  const state = arena as unknown as VertexInputArenaState;
+  const semantic = state.semantics.get(geometryId);
+  if (semantic === undefined) throw new Error(`Vertex-input geometry ID ${geometryId} is not retained`);
+  return baseVertexArray(
+    state,
+    gl,
+    resolveStaticGeometry(state, gl, contextGeneration, semantic),
+  );
+};
+
+/** Resolves a VAO from the physical geometry already carried by frame execution. */
+export const vertexInputBaseVertexArrayForGeometry = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  geometry: VertexInputGeometry,
+): WebGLVertexArrayObject => {
+  const state = arena as unknown as VertexInputArenaState;
+  requireContextGeneration(state, contextGeneration);
+  return baseVertexArray(state, gl, geometry as StaticGeometry);
 };
 
 const sameInstanceBuffers = (left: VertexInputInstanceBuffers, right: VertexInputInstanceBuffers): boolean =>
