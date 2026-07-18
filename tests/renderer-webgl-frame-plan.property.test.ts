@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   boxGeometry,
   createGltfInstanceTransforms,
@@ -24,7 +25,11 @@ import {
   type CountedReferenceDelta,
   type FramePlan,
 } from "../packages/renderer-webgl/src/frame/plan";
-import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+import { assertFuzz, assertFuzzEqual, forEachFuzzCase, type SeededRandom } from "./fuzz";
+
+const assertDeepEqual = (actual: unknown, expected: unknown, message: string): void => {
+  assertFuzz(isDeepStrictEqual(actual, expected), message);
+};
 
 const camera = perspectiveCamera({
   far: 1_000,
@@ -93,18 +98,22 @@ const expectReferenceCounts = <Resource>(
 ): void => {
   const expected = new Map<Resource, number>();
   for (const resource of rows) expected.set(resource, (expected.get(resource) ?? 0) + 1);
-  expect(counted.map(({ count, resource }) => [resource, count])).toEqual([...expected]);
+  assertDeepEqual(counted.map(({ count, resource }) => [resource, count]), [...expected], "reference counts");
 };
 
 const expectCompiledInvariants = (plan: FramePlan): void => {
-  expect(plan.nodeKinds).toEqual(plan.nodes.map((node) => node.kind));
-  expect(plan.occurrenceIndices).toEqual(plan.nodes.map((_node, index) => index));
-  expect(plan.pickingIds).toEqual(plan.nodes.map((node) => "pickingId" in node ? node.pickingId : undefined));
-  expect(plan.lightNodeIndices).toEqual(plan.nodes.flatMap((node, index) =>
+  assertDeepEqual(plan.nodeKinds, plan.nodes.map((node) => node.kind), "node-kind table");
+  assertDeepEqual(plan.occurrenceIndices, plan.nodes.map((_node, index) => index), "occurrence-index table");
+  assertDeepEqual(
+    plan.pickingIds,
+    plan.nodes.map((node) => "pickingId" in node ? node.pickingId : undefined),
+    "picking-id table",
+  );
+  assertDeepEqual(plan.lightNodeIndices, plan.nodes.flatMap((node, index) =>
     node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light"
       ? [index]
-      : []));
-  expect(plan.lightNodes).toEqual(plan.lightNodeIndices.map((index) => plan.nodes[index]));
+      : []), "light-node indices");
+  assertDeepEqual(plan.lightNodes, plan.lightNodeIndices.map((index) => plan.nodes[index]), "light-node table");
 
   let segment = 0;
   const segments = plan.nodes.map((node) => {
@@ -112,17 +121,27 @@ const expectCompiledInvariants = (plan: FramePlan): void => {
     if (node.kind === "mesh") segment += 1;
     return result;
   });
-  expect(plan.orderSegments).toEqual(segments);
+  assertDeepEqual(plan.orderSegments, segments, "order segments");
 
   const gltfCounts = new Map<string, number>();
   for (const row of plan.gltfRequestRows) {
     gltfCounts.set(row.requestKey, (gltfCounts.get(row.requestKey) ?? 0) + 1);
   }
-  expect(plan.manifest.gltfRequests.map(({ count, key }) => [key, count])).toEqual([...gltfCounts]);
-  expect(plan.manifest.directGeometries.reduce((sum, entry) => sum + entry.count, 0))
-    .toBe(plan.nodes.filter((node) => node.kind === "mesh").length);
-  expect(new Set(plan.manifest.directGeometries.map((entry) => entry.key)).size)
-    .toBe(plan.manifest.directGeometries.length);
+  assertDeepEqual(
+    plan.manifest.gltfRequests.map(({ count, key }) => [key, count]),
+    [...gltfCounts],
+    "glTF request counts",
+  );
+  assertFuzzEqual(
+    plan.manifest.directGeometries.reduce((sum, entry) => sum + entry.count, 0),
+    plan.nodes.filter((node) => node.kind === "mesh").length,
+    "direct geometry count",
+  );
+  assertFuzzEqual(
+    new Set(plan.manifest.directGeometries.map((entry) => entry.key)).size,
+    plan.manifest.directGeometries.length,
+    "direct geometry key count",
+  );
 
   const ordinaryCounts = new Map<string, number>();
   const virtualCounts = new Map<string, number>();
@@ -130,8 +149,16 @@ const expectCompiledInvariants = (plan: FramePlan): void => {
     const counts = row.texture.kind === "asset" ? ordinaryCounts : virtualCounts;
     counts.set(row.key, (counts.get(row.key) ?? 0) + 1);
   }
-  expect(plan.manifest.ordinaryTextures.map(({ count, key }) => [key, count])).toEqual([...ordinaryCounts]);
-  expect(plan.manifest.virtualTextures.map(({ count, key }) => [key, count])).toEqual([...virtualCounts]);
+  assertDeepEqual(
+    plan.manifest.ordinaryTextures.map(({ count, key }) => [key, count]),
+    [...ordinaryCounts],
+    "ordinary texture counts",
+  );
+  assertDeepEqual(
+    plan.manifest.virtualTextures.map(({ count, key }) => [key, count]),
+    [...virtualCounts],
+    "virtual texture counts",
+  );
   expectReferenceCounts(plan.renderObjectRefRows.map((row) => row.ref), plan.manifest.renderObjectRefs);
   expectReferenceCounts(plan.bulkInstanceRows.map((row) => row.source), plan.manifest.bulkInstances);
 };
@@ -150,14 +177,14 @@ const expectKeyDelta = <Entry extends { readonly count: number; readonly key: st
   const applied = keyCounts(previous);
   const nextCounts = keyCounts(next);
   for (const row of delta) {
-    expect(row.previousCount).toBe(applied.get(row.key) ?? 0);
-    expect(row.nextCount).toBe(nextCounts.get(row.key) ?? 0);
-    expect(row.delta).toBe(row.nextCount - row.previousCount);
-    expect(row.nextCount).toBeGreaterThanOrEqual(0);
+    assertFuzzEqual(row.previousCount, applied.get(row.key) ?? 0, "previous key count");
+    assertFuzzEqual(row.nextCount, nextCounts.get(row.key) ?? 0, "next key count");
+    assertFuzzEqual(row.delta, row.nextCount - row.previousCount, "key count delta");
+    assertFuzz(row.nextCount >= 0, "next key count is negative");
     if (row.nextCount === 0) applied.delete(row.key);
     else applied.set(row.key, row.nextCount);
   }
-  expect(applied).toEqual(nextCounts);
+  assertDeepEqual(applied, nextCounts, "applied key counts");
 };
 
 const expectReferenceDelta = <Resource>(
@@ -168,14 +195,14 @@ const expectReferenceDelta = <Resource>(
   const applied = referenceCounts(previous);
   const nextCounts = referenceCounts(next);
   for (const row of delta) {
-    expect(row.previousCount).toBe(applied.get(row.resource) ?? 0);
-    expect(row.nextCount).toBe(nextCounts.get(row.resource) ?? 0);
-    expect(row.delta).toBe(row.nextCount - row.previousCount);
-    expect(row.nextCount).toBeGreaterThanOrEqual(0);
+    assertFuzzEqual(row.previousCount, applied.get(row.resource) ?? 0, "previous reference count");
+    assertFuzzEqual(row.nextCount, nextCounts.get(row.resource) ?? 0, "next reference count");
+    assertFuzzEqual(row.delta, row.nextCount - row.previousCount, "reference count delta");
+    assertFuzz(row.nextCount >= 0, "next reference count is negative");
     if (row.nextCount === 0) applied.delete(row.resource);
     else applied.set(row.resource, row.nextCount);
   }
-  expect(applied).toEqual(nextCounts);
+  assertDeepEqual(applied, nextCounts, "applied reference counts");
 };
 
 describe("retained frame-plan properties", () => {
@@ -200,11 +227,11 @@ describe("retained frame-plan properties", () => {
       const planA = compileFramePlan(sceneA, 41);
       const planB = compileFramePlan(sceneB, 42);
 
-      expect(compileFramePlan(sceneA, 41)).toEqual(planA);
+      assertDeepEqual(compileFramePlan(sceneA, 41), planA, "deterministic frame plan");
       expectCompiledInvariants(planA);
       expectCompiledInvariants(planB);
-      expect(planA.camera).toBe(sceneA.camera);
-      expect(planA.clearColor).toBe(sceneA.clearColor);
+      assertFuzzEqual(planA.camera, sceneA.camera, "camera identity");
+      assertFuzzEqual(planA.clearColor, sceneA.clearColor, "clear-color identity");
 
       const scratch = createResourceManifestDiffScratch();
       const arrays = Object.values(scratch.delta);
@@ -222,7 +249,7 @@ describe("retained frame-plan properties", () => {
         planB.manifest,
         createResourceManifestDiffScratch(),
       );
-      expect(deterministic).toEqual(forward);
+      assertDeepEqual(deterministic, forward, "deterministic manifest delta");
 
       const reverse = diffResourceManifests(planB.manifest, planA.manifest, scratch);
       expectKeyDelta(planB.manifest.gltfRequests, planA.manifest.gltfRequests, reverse.gltfRequests);
@@ -235,18 +262,21 @@ describe("retained frame-plan properties", () => {
       const repeated = diffResourceManifests(planA.manifest, planB.manifest, scratch);
       for (const [arrayIndex, rows] of Object.values(repeated).entries()) {
         for (const [rowIndex, row] of rows.entries()) {
-          expect(row).toBe(retainedRows[arrayIndex]?.[rowIndex]);
+          assertFuzzEqual(row, retainedRows[arrayIndex]?.[rowIndex], "retained delta row identity");
         }
       }
       const unchanged = diffResourceManifests(planA.manifest, planA.manifest, scratch);
-      expect(Object.values(unchanged).every((rows) => rows.length === 0)).toBe(true);
+      assertFuzz(
+        Object.values(unchanged).every((rows) => rows.length === 0),
+        "unchanged manifest produced a delta",
+      );
       for (const [index, array] of Object.values(scratch.delta).entries()) {
-        expect(array).toBe(arrays[index]);
+        assertFuzzEqual(array, arrays[index], "retained delta array identity");
       }
       const repeatedAfterEmpty = diffResourceManifests(planA.manifest, planB.manifest, scratch);
       for (const [arrayIndex, rows] of Object.values(repeatedAfterEmpty).entries()) {
         for (const [rowIndex, row] of rows.entries()) {
-          expect(row).toBe(retainedRows[arrayIndex]?.[rowIndex]);
+          assertFuzzEqual(row, retainedRows[arrayIndex]?.[rowIndex], "reused delta row identity");
         }
       }
     });

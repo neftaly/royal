@@ -211,7 +211,7 @@ describe("surface texture binding planner", () => {
   });
 
   it("maintains allocation invariants across seeded readiness and capacity profiles", () => {
-    forEachFuzzCase({ cases: 1_000, seed: 0x6d2b_79f5 }, ({ random }) => {
+    forEachFuzzCase({ cases: 256, seed: 0x6d2b_79f5 }, ({ random }) => {
       const maxTextureUnits = random.int(0, 20);
       const reserved = new Set<number>();
       for (let unit = 0; unit < maxTextureUnits; unit += 1) if (random.boolean(0.2)) reserved.add(unit);

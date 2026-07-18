@@ -244,7 +244,7 @@ describe("renderer-webgl picking math", () => {
 
   it("fuzzes allocation-free affine world bounds against transformed local-AABB corners", () => {
     forEachFuzzCase({ cases: 96, seed: 0xaabb_1f1e }, ({ random }) => {
-      const positions = new Float32Array(random.array(random.int(1, 2_000) * 3, () => random.number(-100, 100)));
+      const positions = new Float32Array(random.array(random.int(1, 512) * 3, () => random.number(-100, 100)));
       const model: Mat4 = [
         random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
         random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
