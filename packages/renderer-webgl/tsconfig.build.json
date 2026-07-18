@@ -33,6 +33,7 @@
     "src/surface/picking-query.ts",
     "src/surface/scene-lowering.ts",
     "src/surface/surface-gpu-owner.ts",
+    "src/surface/surface-program-owner.ts",
     "src/surface/surface-picker.ts",
     "src/texture/asset-owner.ts",
     "src/texture/gpu-owner.ts",
