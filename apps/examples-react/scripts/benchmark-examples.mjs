@@ -19,6 +19,7 @@ import {
   exampleContract,
   rendererSnapshotExpression,
 } from './example-contract.mjs';
+import { selectBenchmarkRouteFilter } from './benchmark-route-selection.mjs';
 import { summarizeCpuProfile } from './cpu-profile-summary.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
@@ -331,12 +332,7 @@ const selectedRoutes = () => {
     ...sweepRoutes,
     ...fuzzRoutes,
   ];
-  const selected = allRoutes.filter((route) =>
-    route.id === routeFilter ||
-    route.path === routeFilter ||
-    route.path === `/${routeFilter}` ||
-    route.id.startsWith(`${routeFilter}-`)
-  );
+  const selected = selectBenchmarkRouteFilter(allRoutes, routeFilter);
   if (selected.length === 0) throw new Error(`Examples benchmark route filter did not match: ${routeFilter}`);
   return selected;
 };
