@@ -7,7 +7,9 @@ export type CanonicalTriangleGeometry = Readonly<{
   }>;
   indices: Uint8Array | Uint16Array | Uint32Array;
   key: string;
+  normals?: Float32Array;
   positions: Float32Array;
+  textureCoordinates0?: Float32Array;
 }>;
 
 const planeGeometry = (width: number, height: number): CanonicalTriangleGeometry => {

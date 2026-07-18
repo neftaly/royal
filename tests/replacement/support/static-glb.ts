@@ -24,17 +24,10 @@ export const staticTriangleDocument = (): Record<string, unknown> => ({
   scenes: [{ nodes: [0] }],
 });
 
-export const staticTriangleGlb = (
-  document: Record<string, unknown> = staticTriangleDocument(),
-  lastIndex = 2,
+export const glbFromDocument = (
+  document: Record<string, unknown>,
+  binary: Uint8Array,
 ): Uint8Array => {
-  const binary = new Uint8Array(44);
-  new Float32Array(binary.buffer, 0, 9).set([
-    -1, -1, 0,
-    1, -1, 0,
-    0, 1, 0,
-  ]);
-  new Uint16Array(binary.buffer, 36, 3).set([0, 1, lastIndex]);
   const json = new TextEncoder().encode(JSON.stringify(document));
   const jsonLength = Math.ceil(json.length / 4) * 4;
   const total = 12 + 8 + jsonLength + 8 + binary.length;
@@ -52,4 +45,18 @@ export const staticTriangleGlb = (
   view.setUint32(binaryHeader + 4, 0x00_4e_49_42, true);
   bytes.set(binary, binaryHeader + 8);
   return bytes;
+};
+
+export const staticTriangleGlb = (
+  document: Record<string, unknown> = staticTriangleDocument(),
+  lastIndex = 2,
+): Uint8Array => {
+  const binary = new Uint8Array(44);
+  new Float32Array(binary.buffer, 0, 9).set([
+    -1, -1, 0,
+    1, -1, 0,
+    0, 1, 0,
+  ]);
+  new Uint16Array(binary.buffer, 36, 3).set([0, 1, lastIndex]);
+  return glbFromDocument(document, binary);
 };

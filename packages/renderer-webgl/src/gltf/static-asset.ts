@@ -135,6 +135,7 @@ const accessorLayout = (
   accessorIndex: number,
   expectedType: string,
   componentBytes: number,
+  componentCount: number,
 ): AccessorLayout & { accessor: JsonObject } => {
   const path = `accessors[${accessorIndex}]`;
   const accessor = object(context.accessors[accessorIndex], context.label, path);
@@ -160,8 +161,7 @@ const accessorLayout = (
   const accessorOffset = accessor.byteOffset === undefined
     ? 0
     : nonNegativeInteger(accessor.byteOffset, context.label, `${path}.byteOffset`);
-  const elementComponents = expectedType === "VEC3" ? 3 : 1;
-  const elementBytes = elementComponents * componentBytes;
+  const elementBytes = componentCount * componentBytes;
   const stride = bufferView.byteStride === undefined
     ? elementBytes
     : nonNegativeInteger(bufferView.byteStride, context.label, `${bufferViewPath}.byteStride`);
@@ -192,7 +192,7 @@ const readPositions = (
   context: AccessorContext,
   accessorIndex: number,
 ): Pick<CanonicalTriangleGeometry, "bounds" | "positions"> => {
-  const layout = accessorLayout(context, accessorIndex, "VEC3", 4);
+  const layout = accessorLayout(context, accessorIndex, "VEC3", 4, 3);
   if (layout.componentType !== 5126) {
     fail(context.label, `accessors[${accessorIndex}].componentType`, "must be FLOAT");
   }
@@ -229,6 +229,42 @@ const readPositions = (
   };
 };
 
+const readFloatVectors = (
+  context: AccessorContext,
+  accessorIndex: number,
+  expectedType: "VEC2" | "VEC3",
+  componentCount: 2 | 3,
+  semantic: string,
+): Float32Array => {
+  const layout = accessorLayout(context, accessorIndex, expectedType, 4, componentCount);
+  if (layout.componentType !== 5126) {
+    fail(context.label, `accessors[${accessorIndex}].componentType`, `${semantic} must use FLOAT`);
+  }
+  if (layout.count === 0) {
+    fail(context.label, `accessors[${accessorIndex}].count`, "must be positive");
+  }
+  const elementBytes = componentCount * 4;
+  const values = layout.stride === elementBytes
+    ? new Float32Array(
+      context.binary.buffer,
+      context.binary.byteOffset + layout.absoluteOffset,
+      layout.count * componentCount,
+    )
+    : new Float32Array(layout.count * componentCount);
+  for (let item = 0; item < layout.count; item += 1) {
+    const source = layout.absoluteOffset + item * layout.stride;
+    const target = item * componentCount;
+    for (let component = 0; component < componentCount; component += 1) {
+      const value = layout.dataView.getFloat32(source + component * 4, true);
+      if (!Number.isFinite(value)) {
+        fail(context.label, `accessors[${accessorIndex}]`, `${semantic} ${item} is not finite`);
+      }
+      if (layout.stride !== elementBytes) values[target + component] = value;
+    }
+  }
+  return values;
+};
+
 const sequentialIndices = (count: number): IndexArray => {
   const indices: IndexArray = count <= 0x100
     ? new Uint8Array(count)
@@ -253,7 +289,7 @@ const readIndices = (
   if (componentType !== 5121 && componentType !== 5123 && componentType !== 5125) {
     fail(context.label, `accessors[${accessorIndex}].componentType`, "must be an unsigned integer");
   }
-  const layout = accessorLayout(context, accessorIndex, "SCALAR", componentBytes);
+  const layout = accessorLayout(context, accessorIndex, "SCALAR", componentBytes, 1);
   if (layout.stride !== componentBytes) {
     fail(context.label, `accessors[${accessorIndex}]`, "index accessors cannot be interleaved");
   }
@@ -382,14 +418,44 @@ export const prepareStaticGlb = (
       }
       if (primitive.targets !== undefined) fail(label, `${path}.targets`, "are not supported yet");
       const attributes = object(primitive.attributes, label, `${path}.attributes`);
+      for (const semantic of Object.keys(attributes)) {
+        if (semantic !== "POSITION" && semantic !== "NORMAL" && semantic !== "TEXCOORD_0") {
+          fail(label, `${path}.attributes.${semantic}`, "is not in the static profile yet");
+        }
+      }
       const positionAccessor = index(
         attributes.POSITION, accessors, label, `${path}.attributes.POSITION`,
       );
       const { bounds, positions } = readPositions(context, positionAccessor);
+      const vertexCount = positions.length / 3;
+      const normals = attributes.NORMAL === undefined
+        ? undefined
+        : readFloatVectors(
+          context,
+          index(attributes.NORMAL, accessors, label, `${path}.attributes.NORMAL`),
+          "VEC3",
+          3,
+          "NORMAL",
+        );
+      if (normals !== undefined && normals.length / 3 !== vertexCount) {
+        fail(label, `${path}.attributes.NORMAL`, "count must match POSITION");
+      }
+      const textureCoordinates0 = attributes.TEXCOORD_0 === undefined
+        ? undefined
+        : readFloatVectors(
+          context,
+          index(attributes.TEXCOORD_0, accessors, label, `${path}.attributes.TEXCOORD_0`),
+          "VEC2",
+          2,
+          "TEXCOORD_0",
+        );
+      if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
+        fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
+      }
       const indexAccessor = primitive.indices === undefined
         ? undefined
         : index(primitive.indices, accessors, label, `${path}.indices`);
-      const indices = readIndices(context, indexAccessor, positions.length / 3);
+      const indices = readIndices(context, indexAccessor, vertexCount);
       if (indices.length < 3 || indices.length % 3 !== 0) {
         fail(label, path, "triangle index count must be a positive multiple of 3");
       }
@@ -399,7 +465,9 @@ export const prepareStaticGlb = (
           bounds,
           indices,
           key: `${contentKey}:mesh:${meshIndex}:primitive:${primitiveIndex}`,
+          ...(normals === undefined ? {} : { normals }),
           positions,
+          ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
         },
       };
     });
