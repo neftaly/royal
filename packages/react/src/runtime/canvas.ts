@@ -11,12 +11,26 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
   type Ref,
 } from "react";
+import { createCanvasPointerInteractionState } from "../interaction/canvas-pointer-interaction";
+import {
+  attachCanvasPointerEventHandlers,
+  reconcileCanvasPointerInteractionScene,
+  type CanvasLastPointerEventRef,
+  type CanvasPointerInteractionStateRef,
+  type CanvasSceneInteractionsRef,
+} from "../interaction/canvas-pointer-events";
+import {
+  createRoyalScenePickingIndex,
+  createRoyalScenePointerEventRegistry,
+  type ScenePointerEvents,
+} from "../interaction/scene-interactions";
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
 const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
@@ -32,7 +46,9 @@ export interface CanvasProps
   readonly rendererOptions?: RendererRootOptions;
   /** Active root, or `null` before mount and after release. */
   readonly rendererRef?: Ref<RoyalRendererRoot>;
-  /** Complete immutable renderer intent. */
+  /** React handlers keyed by one stable `pickingId` declared in the scene. */
+  readonly scenePointerEvents?: ScenePointerEvents;
+  /** Complete readonly renderer intent. */
   readonly scene: RenderRoot;
 }
 
@@ -121,12 +137,27 @@ export const Canvas = ({
   rendererOptions,
   rendererRef,
   scene,
+  scenePointerEvents,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const optionsKey = rendererRootOptionsSemanticKey(rendererOptions);
+  const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
+  const sceneInteractions = useMemo(
+    () => createRoyalScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
+    [scenePickingIndex, scenePointerEvents],
+  );
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pointerInteractionStateRef] = useState<CanvasPointerInteractionStateRef>(() => ({
+    current: createCanvasPointerInteractionState(),
+  }));
+  const [sceneInteractionsRef] = useState<CanvasSceneInteractionsRef>(() => ({
+    current: sceneInteractions,
+  }));
+  const [lastPointerEventRef] = useState<CanvasLastPointerEventRef>(() => ({
+    current: undefined,
+  }));
 
   const attachCanvas = useCallback((element: HTMLCanvasElement | null) => {
     canvasRef.current = element;
@@ -165,6 +196,36 @@ export const Canvas = ({
   useLayoutEffect(() => {
     runtime.root?.render(scene);
   }, [runtime.root, scene]);
+
+  useLayoutEffect(() => {
+    reconcileCanvasPointerInteractionScene({
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractions,
+      sceneInteractionsRef,
+    });
+  }, [lastPointerEventRef, pointerInteractionStateRef, sceneInteractions, sceneInteractionsRef]);
+
+  useLayoutEffect(() => {
+    const root = runtime.root;
+    if (canvas === null || root === null || !sceneInteractions.hasPointerEventTargets) {
+      return undefined;
+    }
+    return attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      root,
+      sceneInteractionsRef,
+    });
+  }, [
+    canvas,
+    lastPointerEventRef,
+    pointerInteractionStateRef,
+    runtime.root,
+    sceneInteractions.hasPointerEventTargets,
+    sceneInteractionsRef,
+  ]);
 
   useLayoutEffect(() => {
     const releaseExternalRef = assignRef(rendererRef, runtime.root);

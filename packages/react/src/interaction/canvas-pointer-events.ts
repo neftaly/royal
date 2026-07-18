@@ -11,7 +11,7 @@ import {
   handlerForRoyalPointerEvent,
   type RoyalPointerEventTarget,
 } from "./picking-events";
-import type { RoyalRendererRoot } from "../root";
+import type { RoyalRendererRoot } from "@royal/renderer-webgl";
 import type { RoyalScenePointerEventRegistry } from "./scene-interactions";
 
 export type CanvasPointerInteractionStateRef = {

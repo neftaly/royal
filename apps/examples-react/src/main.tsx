@@ -1,8 +1,9 @@
 /** @jsxImportSource react */
-import { StrictMode, type ReactNode } from "react";
+import { StrictMode, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Canvas,
+  type ScenePointerEvents,
   useCanvasSize,
   useRendererLifecycle,
 } from "@royal/react";
@@ -26,16 +27,19 @@ const directScene = scene({
     mesh({
       geometry: boxGeometry([1.5, 1.5, 1.5]),
       material: blue,
+      pickingId: "blue-box",
       transform: { position: [-1.35, 0.2, 0], rotation: [0.35, 0.55, 0.1] },
     }),
     mesh({
       geometry: boxGeometry([1.1, 2.1, 0.8]),
       material: coral,
+      pickingId: "coral-box",
       transform: { position: [1.2, 0, -0.5], rotation: [-0.2, -0.45, 0.15] },
     }),
     mesh({
       geometry: planeGeometry([5.2, 0.32]),
       material: gold,
+      pickingId: "gold-plane",
       transform: { position: [0, -1.55, -0.2] },
     }),
   ],
@@ -53,20 +57,33 @@ const RendererStatus = (): ReactNode => {
   );
 };
 
-const App = (): ReactNode => (
-  <main>
-    <header>
-      <p className="eyebrow">Royal renderer replacement</p>
-      <h1>One canonical surface path.</h1>
-      <p>Direct planes and boxes lower to the same retained triangle ABI and root-owned WebGL state.</p>
-    </header>
-    <section className="viewport" aria-label="Renderer lifecycle example">
-      <Canvas aria-label="Royal direct surface scene" scene={directScene}>
-        <RendererStatus />
-      </Canvas>
-    </section>
-  </main>
-);
+const App = (): ReactNode => {
+  const [lastPick, setLastPick] = useState("click a surface");
+  const scenePointerEvents = useMemo<ScenePointerEvents>(() => ({
+    "blue-box": { onClick: () => setLastPick("blue box") },
+    "coral-box": { onClick: () => setLastPick("coral box") },
+    "gold-plane": { onClick: () => setLastPick("gold plane") },
+  }), []);
+  return (
+    <main>
+      <header>
+        <p className="eyebrow">Royal renderer replacement</p>
+        <h1>One canonical surface path.</h1>
+        <p>Direct planes and boxes lower to the same retained triangle ABI and root-owned WebGL state.</p>
+      </header>
+      <section className="viewport" aria-label="Renderer lifecycle example">
+        <Canvas
+          aria-label="Royal direct surface scene"
+          scene={directScene}
+          scenePointerEvents={scenePointerEvents}
+        >
+          <output className="pick-status">picked · {lastPick}</output>
+          <RendererStatus />
+        </Canvas>
+      </section>
+    </main>
+  );
+};
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) throw new Error("Expected #root element");

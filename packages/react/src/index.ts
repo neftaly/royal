@@ -6,6 +6,14 @@ export {
   useInvalidate,
 } from "./runtime/canvas";
 export type { CanvasProps } from "./runtime/canvas";
+export type {
+  RoyalPointerEvent,
+  RoyalPointerEventHandler,
+  RoyalPointerEventHandlers,
+  RoyalPointerEventProps,
+  RoyalPointerEventType,
+} from "./interaction/picking-events";
+export type { ScenePointerEvents } from "./interaction/scene-interactions";
 export { useCanvasSize } from "./observation/canvas-size";
 export type { CanvasSize } from "./observation/canvas-size";
 export { useRendererLifecycle } from "./observation/renderer-lifecycle";

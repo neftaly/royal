@@ -7,6 +7,7 @@ ordinary React children; scene data remains pure and lives in
 ```tsx
 import {
   Canvas,
+  type ScenePointerEvents,
   useCanvasSize,
   useRendererLifecycle,
 } from "@royal/react";
@@ -28,6 +29,10 @@ const renderScene = scene({
   })],
 });
 
+const pointerEvents: ScenePointerEvents = {
+  panel: { onClick: (event) => console.log(event.hit.point) },
+};
+
 function Status() {
   const lifecycle = useRendererLifecycle();
   const size = useCanvasSize();
@@ -36,7 +41,11 @@ function Status() {
 
 export function App() {
   return (
-    <Canvas aria-label="Royal scene" scene={renderScene}>
+    <Canvas
+      aria-label="Royal scene"
+      scene={renderScene}
+      scenePointerEvents={pointerEvents}
+    >
       <Status />
     </Canvas>
   );
@@ -48,7 +57,7 @@ native `width` and `height` props are intentionally excluded. Native canvas
 props, ARIA attributes, event handlers, class/style, refs, and application
 `data-*` attributes pass through; `data-*` is not a Royal scene protocol.
 
-`rendererOptions` contains immutable `alpha` and `antialias` context requests,
+`rendererOptions` contains readonly `alpha` and `antialias` context requests,
 both defaulting to `true`. A semantic option change replaces both the root and
 canvas. `rendererRef` exposes the active lower-level root or `null` during the
 mount lifecycle.
@@ -59,9 +68,12 @@ pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake fo
 unrelated frames. `useInvalidate()` requests one coalesced frame.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
+`scenePointerEvents` binds typed React handlers to unique scene `pickingId`
+values. Handler changes update the event registry without rebuilding the scene;
+pointer, imperative, and future XR inputs share the root's exact query.
 
 The replacement is being implemented in vertical slices. The current slice
 renders opaque solid unlit planes and boxes and proves canvas ownership, sizing,
-recovery, frame scheduling, and exact shared-path picking. Scene pointer-event
-bindings, controls, assets, other materials, and XR remain absent rather than
+recovery, frame scheduling, exact shared-path picking, and React scene pointer
+bindings. Controls, assets, other materials, and XR remain absent rather than
 being exposed as compatibility shims.

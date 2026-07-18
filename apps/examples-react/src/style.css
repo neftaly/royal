@@ -80,3 +80,15 @@ p {
   background: #06101bd9;
   font: 0.78rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
+
+.pick-status {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #ffffff24;
+  border-radius: 0.55rem;
+  color: #dbeaff;
+  background: #06101bd9;
+  font: 0.78rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
