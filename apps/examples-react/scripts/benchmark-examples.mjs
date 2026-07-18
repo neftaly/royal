@@ -719,7 +719,7 @@ const installBenchmarkHooks = async (session) => {
   let lastDrawGl;
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
-  const windowDrawCallbackDurations = [];
+  let windowDrawCallbackDurations = [];
   let windowFrameSample = null;
   const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
     const sorted = [...deltas].sort((left, right) => left - right);
@@ -1237,7 +1237,9 @@ const installBenchmarkHooks = async (session) => {
       });
     }
     const requestedSampleCount = Math.max(1, Math.floor(Number(frameDeltas) || 0));
-    const step = Math.max(1, Math.floor(Number(stepPixels) || 1));
+    const requestedStep = Number(stepPixels);
+    const stepMagnitude = Math.max(1, Math.floor(Math.abs(requestedStep) || 1));
+    const step = requestedStep < 0 ? -stepMagnitude : stepMagnitude;
     const pointerId = 913;
     let clientX = rect.left + rect.width * 0.5;
     const clientY = rect.top + rect.height * 0.5;
@@ -1494,12 +1496,13 @@ const installBenchmarkHooks = async (session) => {
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
       windowFrameSample = null;
-      xr.callbackDurations.length = 0;
-      xr.frameTimes.length = 0;
-      windowDrawCallbackDurations.length = 0;
+      xr.callbackDurations = [];
+      xr.frameTimes = [];
+      windowDrawCallbackDurations = [];
       gpuTimers.disjointSamples = 0;
-      gpuTimers.durations.length = 0;
+      gpuTimers.durations = [];
       gpuTimers.errors = 0;
+      gpuTimers.frameWork = [];
       gpuTimers.generation += 1;
       gpuTimers.windowEnabled = false;
     },
@@ -1617,7 +1620,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 (async () => globalThis.__royalBench?.sampleXrFrames?.(${frameWarmupCount}, ${fakeXrSampleTimeoutMs}) ?? null)()
 `), frameWarmupCount, 'missing-active-xr-session')
     : undefined;
-  const warmupComplete = xrOnly
+  const frameWarmupComplete = xrOnly
     ? xrWarmupStats.failed !== true && xrWarmupStats.sampleCount >= frameWarmupCount
     : await evaluate(session, `
 (async () => {
@@ -1640,12 +1643,33 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   return true;
 })()
 `);
+  // Royal only schedules work when a scene is dirty. RAF-only warmup leaves a
+  // static scene cold, so camera samples would include first-render pools and
+  // JIT work in both their timings and retained-heap delta. Exercise the same
+  // input-to-draw path before the baseline, then reverse the gesture to leave
+  // the measured view effectively unchanged.
+  const cameraWarmupForwardCount = Math.ceil(frameWarmupCount / 2);
+  const cameraWarmupReverseCount = Math.floor(frameWarmupCount / 2);
+  const cameraWarmupComplete = !cameraDragEnabled || xrOnly
+    ? true
+    : await evaluate(session, `
+(async () => {
+  const sample = globalThis.__royalBench?.cameraDragSample;
+  if (typeof sample !== 'function') return false;
+  const forward = await sample(${cameraWarmupForwardCount}, ${routeCameraDragStepPixels});
+  if (forward?.failed === true || (forward?.sampleCount ?? 0) < ${cameraWarmupForwardCount}) return false;
+  if (${cameraWarmupReverseCount} === 0) return true;
+  const reverse = await sample(${cameraWarmupReverseCount}, ${-routeCameraDragStepPixels});
+  return reverse?.failed !== true && reverse?.sampleCount >= ${cameraWarmupReverseCount};
+})()
+`);
+  const warmupComplete = frameWarmupComplete && cameraWarmupComplete;
+  await evaluate(session, 'globalThis.__royalBench?.reset?.()');
   const beforeGc = await session.call('Runtime.getHeapUsage');
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
   const rendererBeforeFrames = await evaluate(session, `
 (() => {
-  globalThis.__royalBench?.reset?.();
   ${xrOnly ? '' : 'globalThis.__royalBench?.startWindowFrameSample?.();'}
   performance.mark('royal-bench-measure-start');
   return ${rendererSnapshotExpression};
@@ -1827,6 +1851,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 })()
 `);
   const afterFrameGc = await session.call('Runtime.getHeapUsage');
+  await evaluate(session, 'globalThis.__royalBench?.reset?.()');
   await session.call('HeapProfiler.collectGarbage');
   const afterFinalGc = await session.call('Runtime.getHeapUsage');
   return {
