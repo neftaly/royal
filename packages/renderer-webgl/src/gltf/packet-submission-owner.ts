@@ -78,7 +78,9 @@ const createCounters = (): GltfInstancingCounters => ({
 export class GltfPacketSubmissionOwner {
   readonly #batches: GltfFrameBatchArena;
   readonly #counters = createCounters();
-  readonly #frameGeometryIdentityIds: Array<number | undefined> = [];
+  #geometryContextGeneration = -1;
+  readonly #geometryIdentityIds: Array<number | undefined> = [];
+  #geometryPlanRevision = -1;
   readonly #instanceTransforms: GltfInstanceTransformRegistry;
   readonly #lightResolver: SurfaceLightResolver;
   readonly #materials: GltfMaterialPreparationArena;
@@ -122,9 +124,10 @@ export class GltfPacketSubmissionOwner {
   }
 
   beginFrame(planRevision: number): void {
-    // Geometry IDs are frame-local, but the scene's high-water ID range is
-    // stable. Clear semantic entries without discarding the array capacity.
-    this.#frameGeometryIdentityIds.fill(undefined);
+    if (this.#geometryPlanRevision !== planRevision) {
+      this.#geometryIdentityIds.fill(undefined);
+      this.#geometryPlanRevision = planRevision;
+    }
     resetGltfPacketSubmissionWorkspaceForFrame(
       this.#batches.workspace,
       planRevision,
@@ -165,6 +168,10 @@ export class GltfPacketSubmissionOwner {
     gl: WebGL2RenderingContext,
     contextGeneration: number,
   ): number {
+    if (this.#geometryContextGeneration !== contextGeneration) {
+      this.#geometryIdentityIds.fill(undefined);
+      this.#geometryContextGeneration = contextGeneration;
+    }
     const renderInstanceOrdinal = this.#renderInstanceOrdinal;
     this.#renderInstanceOrdinal += 1;
     const topology = this.#runtime.packetTopology;
@@ -245,7 +252,7 @@ export class GltfPacketSubmissionOwner {
           materialBinding,
         );
       }
-      let geometryIdentityId = this.#frameGeometryIdentityIds[geometryId];
+      let geometryIdentityId = this.#geometryIdentityIds[geometryId];
       if (geometryIdentityId === undefined) {
         geometryIdentityId = vertexInputGeometry(
           this.#vertexInputs,
@@ -253,7 +260,7 @@ export class GltfPacketSubmissionOwner {
           contextGeneration,
           geometryId,
         ).staticIdentityId;
-        this.#frameGeometryIdentityIds[geometryId] = geometryIdentityId;
+        this.#geometryIdentityIds[geometryId] = geometryIdentityId;
       }
       const packetSidedness = catalog.sidedness[packetIndex]!;
       const firstRootSourceId = catalog.rootSourceIds[packetIndex]!;
