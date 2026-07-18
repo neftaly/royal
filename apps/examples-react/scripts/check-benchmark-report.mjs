@@ -123,6 +123,12 @@ const requireBoolean = (value, label) => {
   return false;
 };
 
+const requireExact = (value, expected, label) => {
+  if (value === expected) return true;
+  errors.push(`${label} must be ${JSON.stringify(expected)}`);
+  return false;
+};
+
 const requirePositiveNumber = (value, label) => {
   if (!requireNumber(value, label)) return;
   if (value <= 0) errors.push(`${label} must be greater than 0`);
@@ -216,6 +222,51 @@ const checkRouteFrameEvidence = (route, routeLabel) => {
       warnings.push(`${routeLabel}.ready is false; frame evidence exists but route readiness is incomplete`);
     } else {
       errors.push(`${routeLabel}.ready must be true when no frame samples are available`);
+    }
+  }
+};
+
+const checkRouteDisplay = (value, label) => {
+  if (!requireObject(value, label)) return;
+  requirePositiveNumber(value.devicePixelRatio, `${label}.devicePixelRatio`);
+  if (requireObject(value.viewport, `${label}.viewport`)) {
+    requirePositiveNumber(value.viewport.height, `${label}.viewport.height`);
+    requirePositiveNumber(value.viewport.width, `${label}.viewport.width`);
+  }
+  if (requireObject(value.canvas, `${label}.canvas`)) {
+    requirePositiveNumber(value.canvas.backingHeight, `${label}.canvas.backingHeight`);
+    requirePositiveNumber(value.canvas.backingWidth, `${label}.canvas.backingWidth`);
+    requirePositiveNumber(value.canvas.cssHeight, `${label}.canvas.cssHeight`);
+    requirePositiveNumber(value.canvas.cssWidth, `${label}.canvas.cssWidth`);
+  }
+};
+
+const checkBenchmarkEnvelope = (report) => {
+  requireExact(report.schema, 'royal-renderer-benchmark', 'report.schema');
+  requireExact(report.schemaVersion, 1, 'report.schemaVersion');
+  requireString(report.generatedAt, 'report.generatedAt');
+  if (requireObject(report.source, 'report.source')) {
+    requireString(report.source.architecture, 'report.source.architecture');
+    requireBoolean(report.source.dirty, 'report.source.dirty');
+    requireString(report.source.node, 'report.source.node');
+    requireString(report.source.platform, 'report.source.platform');
+    requireString(report.source.revision, 'report.source.revision');
+  }
+  if (requireObject(report.browser, 'report.browser')) {
+    requireString(report.browser.userAgent, 'report.browser.userAgent');
+    if (report.browser.hardwareConcurrency !== null) {
+      requirePositiveNumber(report.browser.hardwareConcurrency, 'report.browser.hardwareConcurrency');
+    }
+    if (report.browser.deviceMemoryGiB !== null) {
+      requirePositiveNumber(report.browser.deviceMemoryGiB, 'report.browser.deviceMemoryGiB');
+    }
+    if (requireObject(report.browser.screen, 'report.browser.screen')) {
+      if (report.browser.screen.height !== null) {
+        requirePositiveNumber(report.browser.screen.height, 'report.browser.screen.height');
+      }
+      if (report.browser.screen.width !== null) {
+        requirePositiveNumber(report.browser.screen.width, 'report.browser.screen.width');
+      }
     }
   }
 };
@@ -776,6 +827,7 @@ if (requireObject(report, 'report')) {
   if (isGltfLoadReport(report)) {
     checkGltfLoadReport(report);
   } else {
+    checkBenchmarkEnvelope(report);
     checkBrowserDiagnostics(report.browserDiagnostics, 'report.browserDiagnostics');
     checkTrace(report.trace, 'report.trace');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
@@ -786,6 +838,7 @@ if (requireObject(report, 'report')) {
       report.routes.forEach((route, index) => {
         const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
         if (!requireObject(route, routeLabel)) return;
+        checkRouteDisplay(route.display, `${routeLabel}.display`);
         checkRouteFrameEvidence(route, routeLabel);
         checkRendererCounterBridge(route, routeLabel);
         if (!requireGlCounters(route.gl, `${routeLabel}.gl`)) return;

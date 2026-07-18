@@ -3,6 +3,7 @@ import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { spawnSync } from 'node:child_process';
 import { createGzip } from 'node:zlib';
 
 import {
@@ -23,6 +24,9 @@ import { selectBenchmarkRouteFilter } from './benchmark-route-selection.mjs';
 import { summarizeCpuProfile } from './cpu-profile-summary.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const repoRoot = path.resolve(appRoot, '../..');
+const reportSchema = 'royal-renderer-benchmark';
+const reportSchemaVersion = 1;
 const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_BENCH_PORT ?? 4673);
 const debugPort = Number(process.env.EXAMPLES_BENCH_DEBUG_PORT ?? 4674);
@@ -344,6 +348,63 @@ const connectPage = () => connectCdpPage({
   debugPort,
   rewriteWebSocketAuthority: true,
 });
+
+const gitOutput = (args) => {
+  const result = spawnSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    const detail = result.stderr.trim() || `exit ${result.status ?? 'unknown'}`;
+    throw new Error(`Unable to capture benchmark repository state: git ${args.join(' ')}: ${detail}`);
+  }
+  return result.stdout.trim();
+};
+
+const readSourceEnvironment = () => ({
+  architecture: process.arch,
+  dirty: gitOutput(['status', '--porcelain', '--untracked-files=normal']) !== '',
+  node: process.version,
+  platform: process.platform,
+  revision: gitOutput(['rev-parse', 'HEAD']),
+});
+
+const readBrowserEnvironment = (session) => evaluate(session, `
+(() => ({
+  deviceMemoryGiB: Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null,
+  hardwareConcurrency: Number.isFinite(navigator.hardwareConcurrency)
+    ? navigator.hardwareConcurrency
+    : null,
+  language: navigator.language || null,
+  platform: navigator.userAgentData?.platform || navigator.platform || null,
+  screen: {
+    colorDepth: Number.isFinite(screen.colorDepth) ? screen.colorDepth : null,
+    height: Number.isFinite(screen.height) ? screen.height : null,
+    width: Number.isFinite(screen.width) ? screen.width : null,
+  },
+  userAgent: navigator.userAgent,
+}))()
+`);
+
+const readRouteDisplay = (session) => evaluate(session, `
+(() => {
+  const canvas = document.querySelector('canvas');
+  const rectangle = canvas?.getBoundingClientRect();
+  return {
+    canvas: canvas === null ? null : {
+      backingHeight: canvas.height,
+      backingWidth: canvas.width,
+      cssHeight: rectangle?.height ?? 0,
+      cssWidth: rectangle?.width ?? 0,
+    },
+    devicePixelRatio: window.devicePixelRatio,
+    viewport: {
+      height: window.innerHeight,
+      width: window.innerWidth,
+    },
+  };
+})()
+`);
 
 const mergeBrowserDiagnostics = (left, right) => ({
   reset: () => {
@@ -2261,6 +2322,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
     !(realXrEnabled && route.id === 'webxr-vr'),
     route.expectsGltf === true,
   );
+  const display = await readRouteDisplay(session);
   // End readiness timing before route preparation, warmup, and frame sampling.
   const wallNavigationAndReadyMs = performance.now() - start;
   if (realXrEnabled && route.id === 'webxr-vr') {
@@ -2318,6 +2380,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
         ? {}
         : { fakeXrActivationFailure: activationFailure }),
       navigationSynchronizationMs,
+      display,
       ready,
       wallNavigationAndReadyMs,
       ...measured,
@@ -2753,6 +2816,7 @@ const main = async () => {
   let cpuProfileWritten = false;
   const results = [];
   try {
+    const source = readSourceEnvironment();
     const size = await deploymentSize();
     await waitForHttp(baseUrl, 15_000);
     session = await connectPage();
@@ -2774,6 +2838,7 @@ const main = async () => {
     browserDiagnostics.reset();
     await installBenchmarkHooks(session);
     const gpu = await readWebGlGpu(session);
+    const browserEnvironment = await readBrowserEnvironment(session);
     assertRequestedGpu(gpu);
     console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
     // Real XR transfers debugger ownership after navigation so activation and
@@ -2945,7 +3010,11 @@ const main = async () => {
     const analysis = analyzeResults(results);
 
     const report = {
+      schema: reportSchema,
+      schemaVersion: reportSchemaVersion,
       generatedAt: new Date().toISOString(),
+      source,
+      browser: browserEnvironment,
       options: {
         frameSampleCount,
         frameWarmupCount,
