@@ -40,7 +40,11 @@ describe("glTF asset lifecycle owner", () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     await vi.waitFor(() => {
-      expect(owner.getSnapshot(first.asset)).toEqual({ primitiveCount: 1, state: "ready" });
+      expect(owner.getSnapshot(first.asset)).toEqual({
+        bounds: { max: [2, 3, 0], min: [0, 1, 0] },
+        primitiveCount: 1,
+        state: "ready",
+      });
     });
     expect(read).toHaveBeenCalledTimes(1);
     expect(changes).toHaveBeenCalledTimes(1);

@@ -5,7 +5,7 @@ import {
 } from "../math/mat4";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
-import type { TextureSampler } from "@royal/renderer-core";
+import type { GltfAssetBounds, TextureSampler } from "@royal/renderer-core";
 import type {
   EmbeddedTextureAssetRef,
   TextureSourceRef,
@@ -16,6 +16,7 @@ import {
   prepareStaticInstanceBatches,
   type StaticInstanceBatch,
 } from "./instance-transforms";
+import { staticGltfBounds } from "./static-bounds";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -25,6 +26,7 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 }>;
 
 export type PreparedStaticGltf = Readonly<{
+  bounds: GltfAssetBounds;
   primitives: readonly PreparedStaticGltfPrimitive[];
   textureAssets: readonly TextureSourceRef[];
 }>;
@@ -563,12 +565,13 @@ const createTextureAssetReader = (
       if (typeof image.uri !== "string" || image.uri.length === 0) {
         fail(label, `${imagePath}.uri`, "must be a non-empty URI");
       }
+      const resolvedUri = resolveAssetUri(sourceUri, image.uri as string);
       asset = {
         colorSpace,
-        contentKey: `${contentKey}:image:${imageIndex}`,
+        contentKey: `${contentKey}:external:${resolvedUri}`,
         kind: "asset",
         sampler,
-        src: resolveAssetUri(sourceUri, image.uri as string),
+        src: resolvedUri,
       };
     } else {
       if (
@@ -598,7 +601,7 @@ const createTextureAssetReader = (
       asset = {
         bytes,
         colorSpace,
-        contentKey: `${contentKey}:image:${imageIndex}`,
+        contentKey: `${contentKey}:bufferView:${viewIndex}`,
         kind: "embedded-asset",
         label: `${label} ${imagePath}`,
         mimeType,
@@ -1132,7 +1135,11 @@ const prepareStaticDocument = (
       }
     }
   }
-  return { primitives, textureAssets: [...claimedTextures.values()] };
+  return {
+    bounds: staticGltfBounds(primitives),
+    primitives,
+    textureAssets: [...claimedTextures.values()],
+  };
 };
 
 /** Validates and lowers the first static GLB profile without browser or GL resource work. */

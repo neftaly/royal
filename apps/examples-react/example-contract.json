@@ -54,6 +54,13 @@
       "title": "glTF Material Showcase"
     },
     {
+      "id": "gltf-bistro-web",
+      "maturity": "lab-probe",
+      "path": "/gltf-bistro-web",
+      "sourceFile": "examples/cases/GltfBistroWeb.tsx",
+      "title": "glTF Bistro Web Tier"
+    },
+    {
       "id": "gltf-scenes",
       "maturity": "product",
       "path": "/gltf-scenes",
@@ -139,6 +146,7 @@
     "gltfExampleIds": [
       "picking",
       "gltf-helmet",
+      "gltf-bistro-web",
       "gltf-scenes",
       "gltf-instancing",
       "gltf-lab",

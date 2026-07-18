@@ -45,6 +45,7 @@
   },
   "include": [
     "apps/examples-react/src/main.tsx",
+    "apps/examples-react/src/vite-env.d.ts",
     "packages/renderer-core/src",
     "packages/renderer-webgl/src/index.ts",
     "packages/renderer-webgl/src/context/context-lifecycle.ts",
@@ -56,6 +57,7 @@
     "packages/renderer-webgl/src/gltf/glb.ts",
     "packages/renderer-webgl/src/gltf/asset-owner.ts",
     "packages/renderer-webgl/src/gltf/static-asset.ts",
+    "packages/renderer-webgl/src/gltf/static-bounds.ts",
     "packages/renderer-webgl/src/runtime/canvas-root.ts",
     "packages/renderer-webgl/src/runtime/root-options.ts",
     "packages/renderer-webgl/src/math/mat4.ts",

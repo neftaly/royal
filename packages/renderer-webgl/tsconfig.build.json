@@ -23,6 +23,7 @@
     "src/gltf/asset-owner.ts",
     "src/gltf/draco.ts",
     "src/gltf/static-asset.ts",
+    "src/gltf/static-bounds.ts",
     "src/runtime/canvas-root.ts",
     "src/runtime/root-options.ts",
     "src/math/mat4.ts",

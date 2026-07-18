@@ -5,8 +5,8 @@ import {
   type Rads,
 } from "@royal/renderer-core";
 import { useLayoutEffect, type ReactNode } from "react";
-import { useCanvasSize } from "../canvas-size";
-import { useGltfAssetStatus } from "../gltf-status";
+import { useCanvasSize } from "../observation/canvas-size";
+import { useGltfAssetStatus } from "../observation/gltf-asset";
 import type { OrbitCameraController } from "./camera-controller";
 
 /** Declarative responsive framing for one glTF asset and orbit controller. */
@@ -44,9 +44,7 @@ export const GltfOrbitCameraFit = ({
 }: GltfOrbitCameraFitProps): ReactNode => {
   const status = useGltfAssetStatus(node.asset);
   const size = useCanvasSize();
-  const bounds = status.state === "idle"
-    ? node.asset.bounds
-    : status.bounds ?? node.asset.bounds;
+  const bounds = status.state === "ready" ? status.bounds : node.asset.bounds;
   const fitKey = bounds === undefined || size === undefined ? undefined : JSON.stringify([
     node.asset.src, node.asset.version, bounds.min, bounds.max, node.transform,
     size.aspectRatio, fovY, minDistance, padding, pitch, yaw,

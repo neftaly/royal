@@ -484,6 +484,7 @@ describe("clear-only canvas root", () => {
 
     await vi.waitFor(() => {
       expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
+        bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
         primitiveCount: 1,
         state: "ready",
       });

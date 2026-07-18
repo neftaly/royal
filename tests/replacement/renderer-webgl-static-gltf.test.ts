@@ -61,6 +61,7 @@ describe("static glTF preparation core", () => {
     const prepared = prepareStaticGlb(bytes, "asset:v1", "triangle.glb");
     expect(prepared.primitives).toHaveLength(1);
     const primitive = prepared.primitives[0]!;
+    expect(prepared.bounds).toEqual({ max: [2, 3, 0], min: [0, 1, 0] });
     expect(primitive.material).toEqual({
       baseColor: [0.2, 0.4, 0.8, 1],
       kind: "unlit",
@@ -153,7 +154,7 @@ describe("static glTF preparation core", () => {
     );
     expect(prepared.textureAssets).toEqual([{
       colorSpace: "srgb",
-      contentKey: "asset-v2:image:0",
+      contentKey: "asset-v2:external:/models/albedo.png",
       kind: "asset",
       sampler: {
         magFilter: "linear",
@@ -187,7 +188,7 @@ describe("static glTF preparation core", () => {
     );
     const source = prepared.textureAssets[0]!;
     expect(source).toMatchObject({
-      contentKey: "embedded-v1:image:0",
+      contentKey: "embedded-v1:bufferView:3",
       kind: "embedded-asset",
       label: "embedded.glb images[0]",
       mimeType: "image/png",
@@ -237,8 +238,8 @@ describe("static glTF preparation core", () => {
     const document = parsed.document as Record<string, unknown>;
     document.images = [
       { uri: "base.png" },
-      { uri: "normal.png" },
-      { uri: "metal-rough.png" },
+      { uri: "shared-data.png" },
+      { uri: "shared-data.png" },
       { uri: "emissive.png" },
     ];
     document.textures = [{ source: 0 }, { source: 1 }, { source: 2 }, { source: 3 }];
@@ -266,8 +267,7 @@ describe("static glTF preparation core", () => {
       ? asset.src
       : asset.label])).toEqual([
       ["srgb", "/models/base.png"],
-      ["linear", "/models/metal-rough.png"],
-      ["linear", "/models/normal.png"],
+      ["linear", "/models/shared-data.png"],
       ["srgb", "/models/emissive.png"],
     ]);
     expect(prepared.primitives[0]!.material).toMatchObject({
@@ -278,6 +278,10 @@ describe("static glTF preparation core", () => {
       requiresTextureCoordinates: true,
       roughnessFactor: 0.6,
     });
+    const material = prepared.primitives[0]!.material;
+    if (material.kind === "standard") {
+      expect(material.normalAsset?.contentKey).toBe(material.metallicRoughnessAsset?.contentKey);
+    }
   });
 
   it("lowers EXT_mesh_gpu_instancing accessors into one compact draw batch", async () => {
@@ -289,6 +293,7 @@ describe("static glTF preparation core", () => {
       async () => new Uint8Array(),
     );
     expect(prepared.primitives).toHaveLength(1);
+    expect(prepared.bounds).toEqual({ max: [12, 4, 0], min: [-11, 0, 0] });
     expect(prepared.primitives[0]!.instanceBatch).toMatchObject({
       handedness: 1,
       key: "instances-v1:node:1:instances:0",

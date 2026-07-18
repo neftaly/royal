@@ -12,6 +12,6 @@ export default (env: ConfigEnv): UserConfig => {
         checks: { pluginTimings: false },
       },
     },
-    publicDir: false,
+    publicDir: 'public',
   });
 };

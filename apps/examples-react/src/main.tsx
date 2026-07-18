@@ -18,6 +18,7 @@ import {
   standardMaterial,
   unlitMaterial,
 } from "@royal/react/scene";
+import { GltfBistroWeb } from "./examples/cases/GltfBistroWeb";
 import "./style.css";
 
 const blue = standardMaterial({
@@ -84,6 +85,7 @@ const App = (): ReactNode => {
         <p className="eyebrow">Royal renderer replacement</p>
         <h1>One canonical surface path.</h1>
         <p>Lit and unlit surfaces share one retained triangle ABI and root-owned WebGL state.</p>
+        <p><a href={`${import.meta.env.BASE_URL}gltf-bistro-web`}>Open the ~100 MB Bistro glTF workload</a>.</p>
       </header>
       <section className="viewport" aria-label="Renderer lifecycle example">
         <Canvas
@@ -102,4 +104,7 @@ const App = (): ReactNode => {
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) throw new Error("Expected #root element");
-createRoot(rootElement).render(<StrictMode><App /></StrictMode>);
+const Example = globalThis.location.pathname.endsWith("/gltf-bistro-web")
+  ? GltfBistroWeb
+  : App;
+createRoot(rootElement).render(<StrictMode><Example /></StrictMode>);

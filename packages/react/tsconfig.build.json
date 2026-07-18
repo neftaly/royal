@@ -30,6 +30,7 @@
     "src/orbit/controls-core.ts",
     "src/orbit/controls-runtime.ts",
     "src/orbit/controls.ts",
+    "src/orbit/gltf-camera-fit.ts",
     "src/validation.ts"
   ],
   "include": []

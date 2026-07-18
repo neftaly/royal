@@ -45,6 +45,10 @@ p {
   line-height: 1.6;
 }
 
+a {
+  color: #88c3ff;
+}
+
 .eyebrow {
   color: #77b8ff;
   font-size: 0.72rem;
@@ -67,6 +71,15 @@ p {
   display: block;
   width: 100%;
   height: min(62vh, 42rem);
+}
+
+.bistro-viewport,
+.bistro-viewport canvas {
+  height: min(72vh, 52rem);
+}
+
+.asset-attribution {
+  font-size: 0.8rem;
 }
 
 .status {

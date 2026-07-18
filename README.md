@@ -69,6 +69,8 @@ pnpm check:bundle-size:details
 ```
 
 The default example exercises the replacement root under React StrictMode.
+`/gltf-bistro-web` is the approximate 100 MB Draco + AVIF integration workload;
+its selected scene fetches only the texture sources it actually references.
 The Royal bundle baseline tracks total initial gzip and the incremental
 Royal cost separately. glTF, VT, IBL, codecs, and XR receive their own reachable
 and lazy-byte gates when their actual slices land; unused features are not

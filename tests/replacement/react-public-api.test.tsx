@@ -10,6 +10,7 @@ import {
   Canvas,
   createOrbitCameraController,
   createOrbitControls,
+  GltfOrbitCameraFit,
   OrbitControls,
   type CanvasProps,
   createRendererRoot,
@@ -57,6 +58,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useTextureAssetStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitControls).toBeFunction();
+    expectTypeOf(GltfOrbitCameraFit).toBeFunction();
     expectTypeOf(OrbitControls).toBeFunction();
     expectTypeOf(useOrbitCamera).toBeFunction();
     expectTypeOf(useOrbitCameraView).toBeFunction();

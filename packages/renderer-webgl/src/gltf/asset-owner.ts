@@ -1,10 +1,14 @@
-import type { GltfAssetRef, GltfNode } from "@royal/renderer-core";
+import type { GltfAssetBounds, GltfAssetRef, GltfNode } from "@royal/renderer-core";
 import type { PreparedStaticGltf } from "./static-asset";
 
 export type GltfAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
-  | Readonly<{ primitiveCount: number; state: "ready" }>
+  | Readonly<{
+    bounds: GltfAssetBounds;
+    primitiveCount: number;
+    state: "ready";
+  }>
   | Readonly<{ error: string; state: "error" }>;
 
 export type GltfAssetOwnerPlatform = Readonly<{
@@ -185,7 +189,11 @@ export class GltfAssetOwner {
       );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.prepared = prepared;
-      entry.snapshot = { primitiveCount: prepared.primitives.length, state: "ready" };
+      entry.snapshot = {
+        bounds: prepared.bounds,
+        primitiveCount: prepared.primitives.length,
+        state: "ready",
+      };
       this.#platform.onAssetChanged();
       this.#publish(key);
     }).catch((error: unknown) => {
