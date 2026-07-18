@@ -250,9 +250,7 @@ export const createOrbitControls = (
       canvas.removeEventListener("pointermove", moveDrag);
       canvas.removeEventListener("pointerup", endDrag);
       canvas.removeEventListener("wheel", zoomView);
-      if (canvasStyle !== undefined && previousTouchAction !== undefined) {
-        canvasStyle.touchAction = previousTouchAction;
-      }
+      if (canvasStyle !== undefined) canvasStyle.touchAction = previousTouchAction ?? "";
     },
     getView: () => core.getView(),
     setOptions: (nextOptions) => {

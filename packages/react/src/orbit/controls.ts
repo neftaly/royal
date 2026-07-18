@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useCanvasElement } from "../canvas";
+import { useCanvasElement } from "../runtime/canvas";
 import type { OrbitCameraController } from "./camera-controller";
 import {
   createOrbitControls,

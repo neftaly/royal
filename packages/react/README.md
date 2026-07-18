@@ -72,6 +72,10 @@ mount or when no visible triangle is hit.
 waking for unrelated frames.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
+`useOrbitCamera({ initial })` packages that resource with a stable controller;
+place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,
+pan, wheel, and pinch gestures. `useOrbitCameraView(orbit)` is opt-in UI
+observation; rendering itself does not subscribe React to camera motion.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
@@ -81,5 +85,5 @@ renders opaque solid unlit and standard planes and boxes, including directional
 lighting, and proves canvas ownership, sizing, recovery, frame scheduling,
 exact shared-path picking, and React scene pointer bindings. Demand-loaded
 static unlit or core metallic-roughness GLB geometry is the first asset profile;
-controls, textures, environments, complete glTF compatibility, and XR remain
+textures, environments, complete glTF compatibility, and XR remain
 absent rather than being exposed as compatibility shims.

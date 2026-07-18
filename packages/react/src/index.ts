@@ -24,6 +24,28 @@ export type {
   GltfAssetStatus,
   GltfAssetStatusInput,
 } from "./observation/gltf-asset";
+export {
+  createOrbitCameraController,
+  createOrbitControls,
+  OrbitControls,
+  useOrbitCamera,
+  useOrbitCameraView,
+} from "./orbit/controls";
+export type {
+  OrbitCameraController,
+  OrbitCameraProjection,
+  OrbitCameraTransform,
+  OrbitCameraView,
+  OrbitCameraViewOptions,
+  OrbitPerspectiveCameraOptions,
+  OrbitControlsBehaviorOptions,
+  OrbitControlsHandle,
+  OrbitControlsOptions,
+  OrbitControlsProps,
+  OrbitControlsSetViewOptions,
+  UseOrbitCameraOptions,
+  WorldPosition3,
+} from "./orbit/controls";
 export { createRendererRoot } from "@royal/renderer-webgl";
 export type {
   PickInput,

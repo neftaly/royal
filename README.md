@@ -11,7 +11,8 @@ The implementation is landing as independently verified vertical slices; the
 current executable slice owns a CSS-sized canvas, WebGL2 context lifecycle,
 coalesced frame clock, complete opaque state, direct unlit and solid standard
 surfaces, authored directional lighting, exact CPU picking, focused React
-observation, and demand-loaded static GLB geometry using core opaque
+observation, retained camera resources with React orbit controls, and
+demand-loaded static GLB geometry using core opaque
 metallic-roughness or `KHR_materials_unlit`. Optional glTF picking proxies work before
 asset readiness without entering the GPU path. Unsupported glTF features, nodes, and
 materials fail explicitly. The old renderer is evidence and oracle material,

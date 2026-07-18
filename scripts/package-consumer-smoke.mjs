@@ -124,17 +124,22 @@ try {
   writeFileSync(path.join(temporaryRoot, 'app.tsx'), `
 import {
   Canvas,
+  createOrbitCameraController,
+  OrbitControls,
   useCanvasSize,
   useGltfAssetStatus,
   useRendererLifecycle,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { createCameraViewResource, perspectiveCamera, scene } from '@royal/react/scene';
+import { scene } from '@royal/react/scene';
 import type { ReactNode } from 'react';
 
-const camera = createCameraViewResource(perspectiveCamera({ position: [0, 0, 3] }));
+const orbit = createOrbitCameraController(
+  { distance: 3 },
+  { far: 100, fovY: Math.PI / 4, near: 0.1 },
+);
 const renderScene = scene({
-  camera,
+  camera: orbit.cameraResource,
   clearColor: [0.1, 0.15, 0.2, 1],
   nodes: [],
 });
@@ -150,6 +155,7 @@ const Status = (): ReactNode => {
 export const App = (): ReactNode => {
   return (
     <Canvas aria-label="Royal preview" data-testid="royal-canvas" scene={renderScene}>
+      <OrbitControls orbit={orbit} />
       <Status />
     </Canvas>
   );

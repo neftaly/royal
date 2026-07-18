@@ -19,11 +19,17 @@
     "src/interaction/canvas-pointer-interaction.ts",
     "src/interaction/picking-events.ts",
     "src/interaction/scene-interactions.ts",
+    "src/interaction/canvas-pointer.ts",
     "src/observation/canvas-size.ts",
     "src/observation/gltf-asset.ts",
     "src/observation/renderer-lifecycle.ts",
     "src/observation/root-snapshot.ts",
-    "src/observation/select-root.ts"
+    "src/observation/select-root.ts",
+    "src/orbit/camera-controller.ts",
+    "src/orbit/controls-core.ts",
+    "src/orbit/controls-runtime.ts",
+    "src/orbit/controls.ts",
+    "src/validation.ts"
   ],
   "include": []
 }

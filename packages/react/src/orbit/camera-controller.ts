@@ -146,7 +146,7 @@ export const createOrbitCameraController = (
   projection: OrbitCameraProjection,
 ): OrbitCameraController => {
   let view = stableOrbitView(initial);
-  let currentProjection = Object.freeze(validOrbitCameraProjection(projection));
+  let currentProjection = validOrbitCameraProjection(projection);
   const cameraResource = createCameraViewResource(orbitPerspectiveCamera({
     ...currentProjection,
     view,
@@ -174,7 +174,7 @@ export const createOrbitCameraController = (
       if (!viewChanged && !projectionChanged) return;
       view = fittedView;
       if (projectionChanged) {
-        currentProjection = Object.freeze({ ...currentProjection, far });
+        currentProjection = { ...currentProjection, far };
         cameraResource.far = far;
       }
       writeOrbitCamera(cameraResource, view);
@@ -189,7 +189,7 @@ export const createOrbitCameraController = (
         && currentProjection.fovY === fovY
         && currentProjection.near === near
       ) return;
-      currentProjection = Object.freeze({ far, fovY, near });
+      currentProjection = { far, fovY, near };
       cameraResource.far = far;
       cameraResource.fovY = fovY;
       cameraResource.near = near;

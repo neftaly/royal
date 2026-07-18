@@ -8,11 +8,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   Canvas,
+  createOrbitCameraController,
+  createOrbitControls,
+  OrbitControls,
   type CanvasProps,
   createRendererRoot,
   useCanvasPick,
   useCanvasSize,
   useGltfAssetStatus,
+  useOrbitCamera,
+  useOrbitCameraView,
   useRendererLifecycle,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
@@ -48,6 +53,11 @@ describe("replacement React public API", () => {
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
+    expectTypeOf(createOrbitCameraController).toBeFunction();
+    expectTypeOf(createOrbitControls).toBeFunction();
+    expectTypeOf(OrbitControls).toBeFunction();
+    expectTypeOf(useOrbitCamera).toBeFunction();
+    expectTypeOf(useOrbitCameraView).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
   });

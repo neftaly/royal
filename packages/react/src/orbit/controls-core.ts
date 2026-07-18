@@ -52,7 +52,11 @@ export type OrbitGestureController = {
   wheel(deltaPixels: number): boolean;
 };
 
-type PointerContact = Pick<OrbitGesturePointer, "clientX" | "clientY" | "pointerId">;
+type PointerContact = {
+  clientX: number;
+  clientY: number;
+  pointerId: number;
+};
 type Interaction =
   | {
       readonly kind: "drag";
@@ -72,8 +76,8 @@ type Interaction =
 const DEFAULT_PAN_SPEED = 0.0016;
 const DEFAULT_ROTATE_SPEED = 0.006;
 const DEFAULT_ZOOM_SPEED = 0.0018;
-const IGNORED_DECISION: OrbitGestureDecision = Object.freeze({ preventDefault: false });
-const PREVENTED_DECISION: OrbitGestureDecision = Object.freeze({ preventDefault: true });
+const IGNORED_DECISION: OrbitGestureDecision = { preventDefault: false };
+const PREVENTED_DECISION: OrbitGestureDecision = { preventDefault: true };
 
 const constraintsFromBehavior = (
   behavior: OrbitGestureBehavior,
@@ -109,7 +113,7 @@ const clampResolvedView = (
     Math.max(constraints.minPitch ?? -Infinity, view.pitch),
   );
   if (distance === view.distance && pitch === view.pitch) return view;
-  return Object.freeze({ ...view, distance, pitch });
+  return { ...view, distance, pitch };
 };
 
 /** Environment-free orbit gesture state; DOM ownership belongs to the caller. */
@@ -161,7 +165,11 @@ export const createOrbitGestureController = (
         || ![0, 1, 2].includes(pointer.button)
         || pointers.size >= 2
       ) return IGNORED_DECISION;
-      pointers.set(pointer.pointerId, pointer);
+      pointers.set(pointer.pointerId, {
+        clientX: pointer.clientX,
+        clientY: pointer.clientY,
+        pointerId: pointer.pointerId,
+      });
       if (pointers.size >= 2) {
         if (startPinch()) return { capture: pointer.pointerId, preventDefault: true };
         pointers.delete(pointer.pointerId);
@@ -194,7 +202,9 @@ export const createOrbitGestureController = (
     },
     pointerMove: (pointer) => {
       if (!pointers.has(pointer.pointerId) || behavior.enabled === false) return IGNORED_DECISION;
-      pointers.set(pointer.pointerId, pointer);
+      const contact = pointers.get(pointer.pointerId)!;
+      contact.clientX = pointer.clientX;
+      contact.clientY = pointer.clientY;
       if (interaction?.kind === "pinch") {
         if (behavior.enableZoom === false) return PREVENTED_DECISION;
         const first = pointers.get(interaction.pointerIds[0]);

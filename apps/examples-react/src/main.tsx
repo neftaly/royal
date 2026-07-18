@@ -3,15 +3,16 @@ import { StrictMode, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Canvas,
+  OrbitControls,
   type ScenePointerEvents,
   useCanvasSize,
+  useOrbitCamera,
   useRendererLifecycle,
 } from "@royal/react";
 import {
   boxGeometry,
   directionalLight,
   mesh,
-  perspectiveCamera,
   planeGeometry,
   scene,
   standardMaterial,
@@ -26,10 +27,7 @@ const blue = standardMaterial({
 });
 const coral = unlitMaterial({ color: [0.9, 0.12, 0.07, 1] });
 const gold = unlitMaterial({ color: [0.95, 0.55, 0.06, 1] });
-const directScene = scene({
-  camera: perspectiveCamera({ position: [0, 0, 6] }),
-  clearColor: [0.035, 0.07, 0.14, 1],
-  nodes: [
+const directNodes = [
     directionalLight({
       color: [1, 0.9, 0.75, 1],
       direction: [0.4, -0.7, -0.55],
@@ -53,8 +51,7 @@ const directScene = scene({
       pickingId: "gold-plane",
       transform: { position: [0, -1.55, -0.2] },
     }),
-  ],
-});
+] as const;
 
 const RendererStatus = (): ReactNode => {
   const lifecycle = useRendererLifecycle();
@@ -69,6 +66,12 @@ const RendererStatus = (): ReactNode => {
 };
 
 const App = (): ReactNode => {
+  const orbit = useOrbitCamera({ initial: { distance: 6 } });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    clearColor: [0.035, 0.07, 0.14, 1],
+    nodes: directNodes,
+  }), [orbit.cameraResource]);
   const [lastPick, setLastPick] = useState("click a surface");
   const scenePointerEvents = useMemo<ScenePointerEvents>(() => ({
     "blue-box": { onClick: () => setLastPick("blue box") },
@@ -85,9 +88,10 @@ const App = (): ReactNode => {
       <section className="viewport" aria-label="Renderer lifecycle example">
         <Canvas
           aria-label="Royal direct surface scene"
-          scene={directScene}
+          scene={renderScene}
           scenePointerEvents={scenePointerEvents}
         >
+          <OrbitControls minDistance={2} orbit={orbit} />
           <output className="pick-status">picked · {lastPick}</output>
           <RendererStatus />
         </Canvas>
