@@ -1,17 +1,70 @@
 import type { DecodedTextureSource, TextureSourceRef } from "./asset-owner";
 
+export type BrowserTextureDecoder = (
+  asset: TextureSourceRef,
+  signal: AbortSignal,
+) => Promise<DecodedTextureSource>;
+
+type PendingDecode = {
+  readonly reject: (error: unknown) => void;
+  readonly resolve: (decoded: DecodedTextureSource) => void;
+  readonly run: () => Promise<DecodedTextureSource>;
+  readonly signal: AbortSignal;
+};
+
+const aborted = (): DOMException => new DOMException("Texture decode was aborted", "AbortError");
+
+/** Bounds only the CPU-heavy browser decode phase; source IO remains concurrent. */
+class BrowserDecodeQueue {
+  #active = 0;
+  readonly #limit: number;
+  readonly #pending: PendingDecode[] = [];
+
+  constructor(limit: number) {
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new RangeError("Royal browser texture decode concurrency must be a positive integer");
+    }
+    this.#limit = limit;
+  }
+
+  run(
+    signal: AbortSignal,
+    decode: () => Promise<DecodedTextureSource>,
+  ): Promise<DecodedTextureSource> {
+    if (signal.aborted) return Promise.reject(aborted());
+    return new Promise((resolve, reject) => {
+      this.#pending.push({ reject, resolve, run: decode, signal });
+      this.#drain();
+    });
+  }
+
+  #drain(): void {
+    while (this.#active < this.#limit) {
+      const pending = this.#pending.shift();
+      if (pending === undefined) return;
+      if (pending.signal.aborted) {
+        pending.reject(aborted());
+        continue;
+      }
+      this.#active += 1;
+      void pending.run().then(pending.resolve, pending.reject).finally(() => {
+        this.#active -= 1;
+        this.#drain();
+      });
+    }
+  }
+}
+
 const diagnosticLabel = (asset: TextureSourceRef): string => {
   if (asset.kind === "embedded-asset") return asset.label;
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
   return `texture ${JSON.stringify(source)}`;
 };
 
-/** Cold browser IO/decode adapter for the source-format-independent texture owner. */
-export const decodeTextureWithBrowser = async (
+const readTextureBlob = async (
   asset: TextureSourceRef,
   signal: AbortSignal,
-): Promise<DecodedTextureSource> => {
-  const blob = asset.kind === "embedded-asset"
+): Promise<Blob> => asset.kind === "embedded-asset"
     ? new Blob([asset.bytes.slice().buffer as ArrayBuffer], { type: asset.mimeType })
     : await (async () => {
       const response = await fetch(asset.src, { signal });
@@ -20,7 +73,13 @@ export const decodeTextureWithBrowser = async (
       }
       return response.blob();
     })();
-  if (signal.aborted) throw new DOMException("Texture decode was aborted", "AbortError");
+
+const decodeTextureBlob = async (
+  asset: TextureSourceRef,
+  blob: Blob,
+  signal: AbortSignal,
+): Promise<DecodedTextureSource> => {
+  if (signal.aborted) throw aborted();
   if (typeof globalThis.createImageBitmap !== "function") {
     throw new Error(`${diagnosticLabel(asset)} requires browser image decoding support`);
   }
@@ -31,7 +90,7 @@ export const decodeTextureWithBrowser = async (
   });
   if (signal.aborted) {
     bitmap.close();
-    throw new DOMException("Texture decode was aborted", "AbortError");
+    throw aborted();
   }
   if (bitmap.width < 1 || bitmap.height < 1) {
     bitmap.close();
@@ -44,3 +103,20 @@ export const decodeTextureWithBrowser = async (
     width: bitmap.width,
   };
 };
+
+/**
+ * Creates one root-local browser decoder. Fetch remains concurrent while AVIF,
+ * PNG, and JPEG bitmap creation is bounded to avoid decode-task bursts.
+ */
+export const createBrowserTextureDecoder = (
+  maxParallelDecodes = 4,
+): BrowserTextureDecoder => {
+  const queue = new BrowserDecodeQueue(maxParallelDecodes);
+  return async (asset, signal) => {
+    const blob = await readTextureBlob(asset, signal);
+    return queue.run(signal, () => decodeTextureBlob(asset, blob, signal));
+  };
+};
+
+/** Standalone adapter; renderer roots create their own queue through the factory. */
+export const decodeTextureWithBrowser = createBrowserTextureDecoder();

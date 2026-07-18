@@ -90,10 +90,14 @@ const defaultPlatform = (): CanvasRootPlatform => ({
   },
 });
 
-const decodeTextureWithBrowser: NonNullable<CanvasRootPlatform["decodeTexture"]> = async (
-  asset,
-  signal,
-) => (await import("../texture/browser-decode")).decodeTextureWithBrowser(asset, signal);
+const lazyBrowserTextureDecoder = (): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
+  let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
+  return async (asset, signal) => {
+    decoder ??= import("../texture/browser-decode")
+      .then((module) => module.createBrowserTextureDecoder());
+    return (await decoder)(asset, signal);
+  };
+};
 
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
@@ -201,7 +205,7 @@ export class CanvasRoot {
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
     });
     this.#textureAssets = new TextureAssetOwner({
-      decode: platform.decodeTexture ?? decodeTextureWithBrowser,
+      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
     });

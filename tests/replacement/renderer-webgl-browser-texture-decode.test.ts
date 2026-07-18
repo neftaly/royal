@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { decodeTextureWithBrowser } from "../../packages/renderer-webgl/src/texture/browser-decode";
+import {
+  createBrowserTextureDecoder,
+  decodeTextureWithBrowser,
+} from "../../packages/renderer-webgl/src/texture/browser-decode";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -37,5 +40,33 @@ describe("browser texture decode shell", () => {
       src: "/missing.png",
     }, new AbortController().signal)).rejects.toThrow("HTTP 404");
     expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it("keeps source fetch concurrent while bounding browser bitmap decode", async () => {
+    const releases: Array<(bitmap: ImageBitmap) => void> = [];
+    const createImageBitmap = vi.fn(() => new Promise<ImageBitmap>((resolve) => {
+      releases.push(resolve);
+    }));
+    const fetch = vi.fn(async () => ({
+      blob: async () => new Blob([new Uint8Array([1])]),
+      ok: true,
+      status: 200,
+    }));
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", fetch);
+    const decode = createBrowserTextureDecoder(2);
+    const signal = new AbortController().signal;
+    const requests = ["/a.avif", "/b.avif", "/c.avif"].map((src) => decode({
+      kind: "asset",
+      src,
+    }, signal));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
+    releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
+    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(3));
+    for (const release of releases) {
+      release({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
+    }
+    await expect(Promise.all(requests)).resolves.toHaveLength(3);
   });
 });
