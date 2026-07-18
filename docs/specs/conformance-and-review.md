@@ -1,0 +1,269 @@
+# Conformance and adversarial review
+
+Last review: 2026-07-19
+
+This ledger separates intended contracts from current implementation. It
+prevents aspirational documentation and accidental architecture from being
+treated as settled behavior.
+
+Statuses:
+
+- **conforms**: implementation and focused tests provide direct evidence;
+- **partial**: the main semantics exist but a named contract gap remains;
+- **gap**: implementation differs materially from the intended contract;
+- **deferred**: intentionally absent and not current product work;
+- **proposal**: design exists but has not been accepted as product behavior.
+
+## Adversarial review passes
+
+### 1. Scope and false-promise pass
+
+Attack: interpret every aspirational sentence as a shipped feature.
+
+Resolution: the specs contain decisions, and this ledger marks implementation
+status. Public shader primitives, occlusion, meshlets, automatic mesh
+generation, animation, and metadata APIs are not claimed. Accepted browser
+image examples do not add formats to glTF.
+
+### 2. Compatibility-alias pass
+
+Attack: preserve pre-release aliases and accidental behavior “just in case.”
+
+Resolution: no consumers justify aliases. Public descriptors use one field name,
+reject unknown fields, and can break coherently before release. Format fallbacks
+are interoperability behavior, not API compatibility layers.
+
+### 3. Canonicalization amplification pass
+
+Attack: make “one path” copy every asset into one texture/vertex layout.
+
+Resolution: rejected. Canonical contracts permit small physical layout families
+and borrow compatible source slices. Repacking requires a persistent measured
+benefit. One physical texture format and one interleaved float vertex format are
+explicitly rejected.
+
+### 4. Hot-path leakage pass
+
+Attack: find source formats, glTF extension names, React shapes, URLs, string
+variants, browser events, and capability probing inside frame/draw behavior.
+
+Resolution: each must stop at its cold normalization boundary. The desired hot
+vocabulary is numeric revisions, canonical records, compact packets, prepared
+upload/binding plans, and generation-safe handles. Current exceptions are
+listed below.
+
+### 5. Functional-core pass
+
+Attack: identify semantic choices hidden inside mutable owner methods or WebGL
+calls and “pure” functions that allocate uncontrolled graphs.
+
+Resolution: validation, lowering, transitions, visibility/LOD, demand,
+admission, packet identity, and picking meaning belong in deterministic cores.
+Caller-owned scratch is permitted. The imperative shell alone owns browser,
+async, cache, and GL effects. Simplicity wins over microbenchmark cleverness.
+
+### 6. WebGL-state pass
+
+Attack: count redundant baseline calls, competing state shadows, implicit draw
+inheritance, frame-time GL queries, and external-XR leakage.
+
+Resolution: packets provide complete intent; one root owner applies minimal
+transitions; its shadow is only call suppression and becomes unknown after
+external GL/context changes. Current distributed/baseline behavior is the most
+important implementation gap.
+
+### 7. CPU/GPU inversion pass
+
+Attack: move work to the GPU without counting readback/synchronization, or keep
+per-pixel work merely to save cold CPU preparation.
+
+Resolution: WebGL2 limitations are explicit. GPU culling/transform feedback,
+PBO staging, occlusion, multiview, and multi-draw are measurement-gated.
+Fragment/pass features activate only for visible demand.
+
+### 8. Memory and copy pass
+
+Attack: double-count one allocation, retain both source and canonical copies,
+hide transient peaks, or trade small CPU wins for large GPU waste.
+
+Resolution: one physical owner, separate CPU/GPU/transient/upload domains,
+overlap-labelled subsystem projections, admission before publication, and
+borrow/transfer before copy. Sampler objects and semantic texture formats are
+investigation targets because they may save real allocations.
+
+### 9. JavaScript-engine and GC pass
+
+Attack: optimize for V8 folklore, pool every object, or allocate maps/sets and
+strings in per-object/per-draw loops.
+
+Resolution: stable shapes, retained coherent workspaces, dense numeric storage
+where natural, and cold immutable snapshots. Readability and ownership outrank
+microbenchmarks. JavaScriptCore/Safari 17 and Quest Chromium are primary traces.
+
+### 10. Async race and lifecycle pass
+
+Attack: cache-hit reentrancy, stale completion after replacement/disposal,
+shared-work cancellation, permanent retry loops, Strict Mode remounts, and
+context generation reuse.
+
+Resolution: asynchronous publication boundary, consumer claims distinct from
+content entries, generation tags, idempotent cleanup, bounded wake conditions,
+and reconstruction from current recipes. The existing lifecycle-heavy tests
+provide broad evidence; new paths inherit the same review.
+
+### 11. Failure/fallback pass
+
+Attack: turn every failure grey, stall geometry for texture fidelity, flash
+white/debug colors, retry validation every frame, or silently ignore required
+semantics.
+
+Resolution: explicit failure taxonomy, progressive geometry, semantic-neutral
+per-slot fallbacks, stable component degradation, required extension/codec
+failure, and focused product status distinct from cold diagnostics.
+
+### 12. Security and authority pass
+
+Attack: let glTF/SVG/extensions execute application authority, advertise regex
+sanitization, recursively fetch unbounded dependencies, or leak remote payloads
+through diagnostics.
+
+Resolution: assets are untrusted data, SVG is self-contained and browser decode
+is not called sanitization, interactivity/physics/audio graphs stay outside
+Royal, and diagnostics are bounded. The GS proposal distinguishes profile rules
+from a security guarantee.
+
+### 13. glTF extension-honesty pass
+
+Attack: treat a name in `supportedGltfExtensions` as proof of every placement,
+field, required behavior, and quality strategy.
+
+Resolution: support profiles must state syntax, validation, lowering, runtime,
+fallback, required behavior, and oracle. `MSFT_lod` format semantics are broad;
+lowest-LOD-first loading is a missing optional optimization. Static
+`KHR_node_visibility` is the only strong new compatibility candidate, but is
+lower priority than deferred animation.
+
+### 14. GS SVG proposal pass
+
+Attack: unaware-consumer failure, conflicting core/extension source authority,
+MIME ambiguity, nested-resource execution, invalid intrinsic size, raster/SVG
+orientation drift, VT coupling, and required-extension fallback contradiction.
+
+Resolution: texture-level `{ source }` mirrors established image-format
+extensions; optional core fallback and required failure are distinct; buffer
+views require MIME; content is self-contained; viewport is finite; VT is a
+post-ingestion representation; unknown optional extension properties remain
+forward compatible. Data-texture color portability remains open.
+
+### 15. React DX and identity pass
+
+Attack: hidden reconciler, frame-rate React updates, callbacks in scene data,
+`data-*` as renderer state, object-reference identity, and handlers that force
+scene recompilation.
+
+Resolution: ordinary React tree, pure coarse descriptors, versioned imperative
+channels, separate picking handler map, stable logical IDs, and lower-level root
+escape hatch. Creation options alone recreate Canvas roots.
+
+### 16. Visible/picking equivalence pass
+
+Attack: bounding boxes as exact hits, compacted instance indices, separate proxy
+lifecycle, alpha-mask disagreement, or LOD changing identity.
+
+Resolution: canonical transforms/geometry/instances and optional exact proxy
+share one query. Current alpha-mask picking is a known gap; transparent per-texel
+alpha is an explicit limitation.
+
+### 17. Multi-view and XR pass
+
+Attack: left-eye-only LOD/VT demand, ordinary and XR RAFs racing, runtime-owned
+framebuffer deletion, background-session corruption, and cleanup after rejected
+session end.
+
+Resolution: one external-clock token, ordered multi-view frame transaction,
+max coverage across views, separate capability/session state, suspended live
+session semantics, and terminal cleanup. Multiview remains an optional executor
+acceleration only.
+
+### 18. Target-device capability pass
+
+Attack: accidentally require an optional desktop extension or “fix” FPS through
+resolution/example branches.
+
+Resolution: Safari 17/A10 and Quest 2 are explicit floors. Optional capabilities
+select sticky internal revisions with identical semantic fallback. Physical
+resolution, refresh, browser, thermal, and camera conditions are recorded.
+
+### 19. Bundle and lazy-boundary pass
+
+Attack: optional codecs, XR, VT, SVG paging, IBL transport, or workers execute at
+ordinary import/root creation.
+
+Resolution: side-effect-free modules, dedicated XR entrypoint, demand-selected
+lazy features, and bundle checks. Additional source splitting is accepted only
+when reachable-byte and coupling wins exceed chunk overhead.
+
+### 20. Testability and fuzzing pass
+
+Attack: test implementation shape instead of behavior, duplicate large fixture
+suites, let fuzzers lack assertions, or let physical visual tests have no oracle.
+
+Resolution: pure transition/planner/reference models invite property and
+differential tests; lifecycle/GL shells use focused contract tests; malformed
+format families belong in fuzz/property boundaries; Khronos assets and physical
+devices prove visual/capability behavior. Tests should be cleaned with the same
+functional-core and iteration-speed discipline as source.
+
+## Current conformance ledger
+
+| Area | Status | Evidence and next architectural action |
+| --- | --- | --- |
+| Immutable validated descriptors | conforms | Renderer-core constructors freeze normalized data and reject unknown fields; descriptor/property tests cover the boundary. |
+| React ordinary-tree ownership | conforms | `Canvas` owns one root and controls/hooks remain normal React children; cleanup and public API tests exist. |
+| Demand rendering and clock ownership | conforms | Root invalidation, frame loop, external-clock and XR runtime owners have focused tests. |
+| Context generation/lifecycle | conforms | Lifecycle owners, restoration integration, captured failures, and resource lifetime tests exercise loss/restore/disposal. |
+| Retained scene/packet path | partial | Canonical retained tables/workspaces exist, but some commit/topology construction still allocates arrays/maps and string identities. Profile before changing readable cold work. |
+| Functional-core boundaries | partial | Many pure modules and property tests exist (`lod`, frame packets, resource governor, VT demand/model, picking math, XR transitions); root and surface orchestration still contain semantic decisions worth extracting. |
+| Minimal single-owner GL state | gap | `prepareFrameBaseline` unconditionally emits broad state every frame; program, texture, surface, geometry, framebuffer and pass state have separate partial shadows. Design one complete-intent transition core/owner before micro-optimizing calls. |
+| Texture image/sampler separation | gap | No WebGL sampler objects are used; sampler state is applied to texture objects. Measure duplicate image allocations, then decide one clean migration. |
+| Canonical texture upload plan | partial | Ordinary images, compressed Basis and VT have explicit upload kernels/owners, but the semantic storage-class contract is not yet one obvious boundary. Current Basis target policy emits RGBA-class ASTC/BC/ETC or RGBA32, not scalar/two-channel EAC plans. |
+| Source formats absent from draw path | conforms | Prepared texture/material/geometry data and binding plans prevent PNG/SVG/KTX/glTF source parsing in the executor. |
+| glTF required-extension honesty | partial | Unknown names fail, deformation fails, and many format validators are strong; the name-level allowlist still overstates profile granularity for partially validated extensions and evolving diffuse transmission. |
+| `MSFT_lod` semantics | conforms | Node/material chains, variants, thresholds, terminal cull, hysteresis, stereo selection and readiness fallback are tested. Lowest-first geometry publication is only a deferred load optimization. |
+| `KHR_node_visibility` | deferred | Ratified but intentionally not in the allowlist. Static lowering is the only strong new extension candidate, below animation priority. |
+| Basic glTF transform animation | deferred | No runtime/public API. The spec reserves pure sampling, explicit controller and canonical transform revisions; skins/morphs remain separate. |
+| GS SVG extension | proposal | Behavior/security/fallback spec exists; prefix/schema/sample/implementation work is absent by design. Plain Royal SVG ingestion remains the current path. |
+| Progressive glTF image lifecycle | conforms | Loading/streaming/ready/degraded states and per-image demand/publication are implemented and tested. |
+| Neutral texture fallbacks | partial | Stable neutral/error texture contracts exist; ongoing visual oracles must ensure every material slot and VT transition avoids white/debug flashes. |
+| VT demand/publication lifecycle | conforms | Pure demand/model/orchestration, transactional GPU arena, scheduling/admission/property tests and close-view stress cases provide broad evidence. Physical Safari/Quest quality remains ongoing. |
+| Exact picking geometry path | conforms | Mesh/glTF/instance proxies enter the same CPU geometry/query and do not allocate GPU resources. |
+| Alpha-mask pick equivalence | gap | Current CPU picker does not evaluate material alpha-mask texture/cutoff, so exact triangles can exceed the visible masked silhouette. Specify/cache CPU alpha sampling before claiming parity. |
+| Transparent per-texel picking | partial | Triangle-surface behavior is now explicitly documented; no false promise of per-texel blended alpha. |
+| Optional WebGL capabilities | partial | Parallel shader compile, HDR color-buffer and native texture compression are selected outside draws. Anisotropy, timers, multi-draw and multiview remain measurement-gated and absent. |
+| Resource admission/accounting | conforms | Root governor, typed leases, capacity wake, quarantine debt, VT/texture/target/geometry tests cover physical domains. Audit subsystem projections for overlap whenever new diagnostics are added. |
+| Hot-path GC discipline | partial | Many retained typed workspaces and high-water capacities exist; targeted allocations remain in LOD identity, VT admission/demand, binding readiness and snapshot paths. Trace first and preserve clarity. |
+| Lazy/tree-shaken optional code | partial | XR has a separate entrypoint and several features/codecs are lazy. Bundle checks exist; continue attributing initial/reachable gzip before adding splits. |
+| Safari 17/A10 and Quest 2 physical behavior | partial | Browser/Quest harnesses and telemetry exist, but no static spec can prove sustained 60/90/120 Hz or all visual oracles. Continue controlled physical runs. |
+
+## Accepted architecture work order
+
+This review does not authorize implementing every candidate. If implementation
+resumes from these specs, the order is:
+
+1. design and prove one functional WebGL state-transition core/imperative owner;
+2. apply it without changing rendering semantics, then measure calls/frame and
+   CPU/GPU timing on Safari/A10-class and Quest 2;
+3. profile actual sampler-driven texture duplication and decide sampler objects;
+4. clarify the canonical prepared texture storage/upload contract without
+   forcing copies or removing useful native compression;
+5. continue correctness/perf/GC passes on existing source and tests;
+6. only later consider static `KHR_node_visibility`;
+7. later still, prove basic TRS animation;
+8. all other glTF/WebGL/meshlet features remain below those priorities.
+
+## Exit criteria for a future review
+
+A review round is complete when it identifies the exact invariant, points to
+code/tests or records the absence, revises contradictory specs, and classifies
+the result as conforming, a concrete gap, deferred, or rejected. “Looks clean”
+is not an exit criterion.

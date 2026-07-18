@@ -1,0 +1,180 @@
+# Scene-to-frame pipeline
+
+## Required stages
+
+All visible and pickable content follows these conceptual stages:
+
+```text
+public descriptors / controller revisions
+  -> validation and normalization
+  -> prepared semantic assets (CPU, no GL handles)
+  -> retained scene bindings and explicit deltas
+  -> view-dependent selection and frame plan
+  -> resource reconciliation on the GL lane
+  -> resolved submission packets
+  -> WebGL execution
+```
+
+Physical modules may combine adjacent stages when measured overhead warrants
+it, but their contracts and ownership MUST remain separable and testable.
+
+## Functional core, imperative shell
+
+Validation, transforms, bounds, material lowering, LOD choice, visibility,
+packet identity, resource requirements, picking math, and state-transition
+meaning SHOULD be deterministic functions of explicit inputs.
+
+The imperative shell owns browser APIs, clocks, observers, fetch/decode jobs,
+mutable caches, arenas, and WebGL calls. Shell objects SHOULD orchestrate pure
+decisions rather than duplicate them.
+
+Functional core does not mean immutable allocation on every frame. Pure code
+MAY write caller-owned scratch arrays or output structures when ownership is
+explicit and tests show equivalent behavior. Hot functions SHOULD offer stable
+storage or arenas instead of allocating transient object graphs.
+
+The preferred implementation is the simplest one whose ownership and
+performance meet the product target. A microbenchmark win does not justify
+duplicated semantics, obscure mutation, or a second lifecycle. Pure decisions
+SHOULD remain readable enough to compare directly with their specification and
+reference/property tests.
+
+## Preparation
+
+Asset preparation validates untrusted input and produces canonical CPU data.
+It MUST NOT create, retain, or delete WebGL handles. Codec-specific and
+format-specific structures MUST be lowered before frame selection unless their
+representation is explicitly required for deferred resource upload.
+
+Prepared data is keyed by content/preparation identity, not mounted node
+identity. It MAY outlive one scene claim within a bounded owner. Errors are
+stable preparation outcomes, not partially initialized entries.
+
+## Retained scene state
+
+Scene commit computes one coherent transaction. It acquires new claims before
+releasing obsolete claims where necessary to avoid visible holes for unchanged
+content. It records explicit revisions/deltas for mutable controller channels.
+
+The production path MUST be retained and incremental: camera motion does not
+reparse assets or rebuild scene topology; one transform patch does not scan all
+instances; one texture completion does not recompile unrelated assets.
+
+A slower pure full computation SHOULD exist where useful as a differential
+oracle for fuzzing. It MUST NOT become a silent production fallback.
+
+## Frame selection
+
+Frame selection takes the committed canonical state, ordered render views,
+resource readiness, capability/quality policy, and caller-owned scratch. It
+MUST NOT fetch, decode, subscribe, compile arbitrary source formats, call GL,
+or mutate application state.
+
+Selection determines:
+
+- conservative visibility and projected coverage;
+- LOD across all active views;
+- material/shader variants demanded by visible content;
+- opaque, alpha-mask, transparent, transmission, wireframe, and picking work;
+- resource declarations and legal fallbacks;
+- stable logical identity carried into pick records.
+
+Stereo selection MUST consider every view. A resource or LOD sufficient only
+for the left eye is not sufficient for the frame.
+
+## LOD behavior
+
+Authored LOD levels lower to one canonical ordered set. Selection uses maximum
+projected screen coverage across views and hysteresis around transitions.
+`MSFT_lod` and `MSFT_screencoverage` are ingestion declarations; no
+extension-specific executor path survives lowering.
+
+If the ideal level is not drawable, Royal SHOULD select the closest drawable
+level that preserves content. A positive authored terminal threshold MAY cull
+the whole set below that coverage. LOD changes MUST NOT alter logical picking
+identity.
+
+Royal does not currently generate mesh LODs in the browser.
+
+## Resource reconciliation
+
+The frame plan declares resource identity and requirements, not handles.
+Reconciliation is the only stage that creates, uploads, restores, suballocates,
+or deletes GPU resources. It executes serially on the root-owned GL lane and
+obeys root-wide admission budgets.
+
+Resource declarations act as reconstruction recipes for the current canonical
+state. Resolved handles are borrowed for a submission and MUST NOT leak into
+prepared assets, public snapshots, or later context generations.
+
+An admission denial produces a specified fallback, deferral, or captured
+failure. It MUST NOT leave half-published state.
+
+## Execution
+
+The executor consumes explicit resolved packets. It MUST NOT know React,
+perform asset IO, parse glTF/SVG, select LOD, infer logical identity, create
+resources on cache miss, or invent fallbacks.
+
+Pipeline state and numeric binding locations SHOULD compile once per stable
+variant. Submission SHOULD reuse arenas and perform no per-draw JavaScript
+closure creation, object spreading, string construction, or unbounded array
+growth.
+
+External GL use, including XR runtime work, crosses one explicit Royal state
+invalidation/restoration boundary so cached assumptions cannot leak between
+owners.
+
+## WebGL state boundary
+
+Frame planning emits complete pipeline and binding intent. Packets MUST NOT rely
+on undocumented state inherited from a previous draw or pass. Complete intent
+does not require repeating GL calls: one root-owned imperative state owner
+compares the next intent with its last applied state and performs only required
+transitions.
+
+The state owner covers program, vertex array, framebuffer, viewport/scissor,
+depth/stencil/cull/blend/color masks, active textures/samplers, and other mutable
+bindings used by Royal. Feature subsystems MUST NOT keep competing shadows of
+the same GL state. The owner MUST NOT call `getParameter` or otherwise query
+state during ordinary submission.
+
+The shadow is a call-suppression cache, not semantic state. It resets to unknown
+on context generation changes and after external/XR GL use. When unknown, the
+next complete intent establishes Royal's state explicitly. Owned resource
+handles are generation-safe, so equality with a stale-generation handle is
+impossible.
+
+State-transition meaning SHOULD have a pure, allocation-free decision layer or
+reference model that can be differentially tested. The imperative layer alone
+issues WebGL calls and updates the shadow only after each successful call.
+
+Within ordering constraints, frame selection MAY group compatible draws to
+reduce program, VAO, material, texture, blend, and target transitions. Opaque
+reordering MUST preserve depth correctness and stable picking identity;
+transparent/transmission ordering wins over state minimization.
+
+## No parallel semantic paths
+
+Ordinary nodes, glTF occurrences, authored `EXT_mesh_gpu_instancing`, and
+explicit bulk instances may have different preparation inputs, but equivalent
+geometry/material/instance records MUST converge before selection and drawing.
+
+Visible rendering and picking MUST share transforms, culling, sidedness,
+logical identity, instance indexing, and exact geometry normalization. Optional
+picking geometry replaces only the triangle source used for exact intersection;
+it does not create a second interaction lifecycle or GPU rendering path.
+
+The same collapse rule applies beyond textures:
+
+- glTF primitive encodings lower to one prepared vertex/index ABI;
+- authored, repeated, and explicit instances lower to one canonical instance
+  record/change protocol;
+- extension and Royal LOD declarations lower to one LOD set;
+- pointer, imperative, and future XR rays lower to one picking query;
+- ordinary and XR clocks submit through one frame-demand authority;
+- all draws lower to a small packet ABI independent of source format.
+
+Canonicalization SHOULD avoid a copy when validated source storage already
+matches the ABI. “One path” means one semantic and executor contract, not
+eagerly repacking every asset into an identical allocation.

@@ -12,6 +12,11 @@ versioned `0.0.1`. Develop against it inside this pnpm workspace, using
 `apps/examples-react` as the starter application. A normal registry install is
 not available yet.
 
+The intended renderer behavior and architecture are defined in the
+[Royal specifications](docs/specs/README.md). Their conformance ledger separates
+current implementation, known gaps, deferred work, and the proposed SVG glTF
+extension.
+
 From the repository root:
 
 ```bash
