@@ -110,12 +110,6 @@ export const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   punctuals: [],
 };
 
-export const surfaceLightValueKey = (value: number | undefined): string =>
-  value === undefined || !Number.isFinite(value) ? "" : Math.fround(value).toString();
-
-export const surfaceLightVectorKey = (values: readonly number[]): string =>
-  values.map((value) => surfaceLightValueKey(value)).join(",");
-
 export const surfaceLightSet = (
   lights: readonly SurfaceLight[],
   irradiance?: SurfaceIblIrradiance,

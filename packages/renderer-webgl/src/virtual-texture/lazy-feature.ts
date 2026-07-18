@@ -156,7 +156,6 @@ export class LazyVirtualTextureFeature implements VirtualTextureFeature {
 
   prepareFrame(authoredVirtualTextures: boolean): void {
     if (authoredVirtualTextures || this.#pendingAutoSources.size > 0) this.#request();
-    else this.#activate();
   }
 
   processGpuUploads(): void {

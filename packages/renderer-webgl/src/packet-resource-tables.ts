@@ -335,15 +335,6 @@ export const readPacketLocalModelInto = (
   return state.localModelDeterminants[index]!;
 };
 
-/** Returns the cached determinant of one immutable packet-local model. */
-export const packetLocalModelDeterminant = (
-  tables: PacketResourceTables,
-  id: number,
-): number => {
-  const state = tables as unknown as PacketResourceTablesState;
-  return state.localModelDeterminants[resourceIndex(id, state.localModelCount, "local-model")]!;
-};
-
 /** Stable identity of one immutable local-model object across plan rebuilds. */
 export const packetLocalModelSemanticId = (
   tables: PacketResourceTables,
