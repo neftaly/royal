@@ -7,7 +7,10 @@ import {
   GLTF_CORE_MATERIAL_TEXTURES,
   GLTF_MATERIAL_EXTENSION_TEXTURES,
 } from "./material-texture-definitions";
-import type { GltfTextureCoordinates } from "./texture-coordinates";
+import {
+  IDENTITY_GLTF_TEXTURE_COORDINATES,
+  type GltfTextureCoordinates,
+} from "./texture-coordinates";
 import type {
   LoadedGltfMaterial,
   LoadedGltfMaterialTextureSlot,
@@ -134,7 +137,7 @@ const surfaceTextures = (
     key: keyof SurfaceMaterialTextureCoordinates,
     slot: LoadedGltfMaterialTextureSlot | undefined,
   ): void => {
-    if (slot !== undefined) {
+    if (slot !== undefined && slot.coordinates !== IDENTITY_GLTF_TEXTURE_COORDINATES) {
       textureCoordinates[key] = slot.coordinates;
       hasTextureCoordinates = true;
     }

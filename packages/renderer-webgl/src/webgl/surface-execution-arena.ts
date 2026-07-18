@@ -81,6 +81,7 @@ import { WebGlTextureBindingShell } from "./texture-binding-shell";
 
 const TEXTURE_COLOR = [1, 1, 1, 1] as const;
 const EMPTY_SURFACE_TEXTURE_FEATURES: ReadonlySet<SurfaceShaderTextureFeature> = new Set();
+const DEFAULT_SURFACE_TEXTURE_COORDINATES = Symbol("default-surface-texture-coordinates");
 // Perceptual 50% sRGB gray represented in scene-linear space. Loading is a
 // neutral publication state, not an unsupported-texture diagnostic.
 const LOADING_SURFACE_COLOR = [0.21404114, 0.21404114, 0.21404114, 1] as const;
@@ -429,6 +430,10 @@ export class SurfaceExecutionArena {
     rootModel: Mat4;
   }>();
   readonly #programMaterials = new WeakMap<WebGLProgram, StableMaterialBinding>();
+  readonly #programTextureCoordinates = new WeakMap<
+    WebGLProgram,
+    SurfaceMaterialTextureCoordinates | typeof DEFAULT_SURFACE_TEXTURE_COORDINATES
+  >();
   readonly #reservedTextureUnits = new Set<number>();
   readonly #textureAdmissionInput: MutableTextureBindingPlanInput = {
     baseColor: BASE_COLOR_INPUT_NONE,
@@ -1225,7 +1230,11 @@ export class SurfaceExecutionArena {
           hasFiniteAttenuationDistance ? 1 : 0);
       }
     }
-    this.#bindTextureCoordinates(program, material, plan);
+    const textureCoordinates = material.textureCoordinates ?? DEFAULT_SURFACE_TEXTURE_COORDINATES;
+    if (this.#programTextureCoordinates.get(program) !== textureCoordinates) {
+      this.#bindTextureCoordinates(program, material, plan);
+      this.#programTextureCoordinates.set(program, textureCoordinates);
+    }
     if (material.kind === "standard") {
       uniform4f(this.#programs, program, "u_normalTextureSettings",
         material.normalScale ?? 1, factors.clearcoatNormalScale, 0, 0);

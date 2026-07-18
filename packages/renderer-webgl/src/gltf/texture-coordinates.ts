@@ -37,10 +37,18 @@ export const gltfTextureCoordinates = (textureInfo: GltfTextureInfo): GltfTextur
   const rotation = finiteOrDefault(transform?.rotation, 0, "rotation");
   const cosine = Math.cos(rotation);
   const sine = Math.sin(rotation);
+  const row0 = [cosine * scaleX, -sine * scaleY, offsetX, 0] as const;
+  const row1 = [sine * scaleX, cosine * scaleY, offsetY, 0] as const;
+
+  if (
+    selectedSet === 0
+    && row0[0] === 1 && row0[1] === 0 && row0[2] === 0
+    && row1[0] === 0 && row1[1] === 1 && row1[2] === 0
+  ) return IDENTITY_GLTF_TEXTURE_COORDINATES;
 
   return Object.freeze({
-    row0: Object.freeze([cosine * scaleX, -sine * scaleY, offsetX, 0] as const),
-    row1: Object.freeze([sine * scaleX, cosine * scaleY, offsetY, 0] as const),
+    row0: Object.freeze(row0),
+    row1: Object.freeze(row1),
     set: selectedSet,
   });
 };

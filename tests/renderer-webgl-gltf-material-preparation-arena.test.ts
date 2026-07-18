@@ -91,6 +91,16 @@ describe("glTF material preparation arena", () => {
     expect(refs).toHaveLength(6);
   });
 
+  it("omits the shared identity UV descriptor from prepared materials", () => {
+    const prepared = new GltfMaterialPreparationArena().prepare(
+      material(),
+      new Set(["image:base"]),
+      false,
+    );
+
+    expect(prepared.material.textureCoordinates).toBeUndefined();
+  });
+
   it("marks external glTF images as re-fetchable while keeping embedded images prepared-only", () => {
     const embedded = material();
     const external: LoadedGltfMaterial = {

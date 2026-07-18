@@ -6,6 +6,7 @@ import {
 import { gltfImageLoadKey, type GltfImageKind } from "../packages/renderer-webgl/src/gltf/image-keys";
 import type { GltfDocument, GltfImage, GltfTextureInfo } from "../packages/renderer-webgl/src/gltf/schema";
 import {
+  IDENTITY_GLTF_TEXTURE_COORDINATES,
   gltfTextureCoordinates,
   transformGltfTextureCoordinates,
 } from "../packages/renderer-webgl/src/gltf/texture-coordinates";
@@ -73,6 +74,14 @@ const expectedUnsupported = (
 };
 
 describe("glTF material texture coordinate preparation", () => {
+  it("canonicalizes implicit and explicitly authored identity transforms", () => {
+    expect(gltfTextureCoordinates({ index: 0 })).toBe(IDENTITY_GLTF_TEXTURE_COORDINATES);
+    expect(gltfTextureCoordinates({
+      extensions: { KHR_texture_transform: { offset: [0, 0], rotation: 0, scale: [1, 1] } },
+      index: 0,
+    })).toBe(IDENTITY_GLTF_TEXTURE_COORDINATES);
+  });
+
   it("matches the KHR_texture_transform affine definition across both retained UV sets", () => {
     forEachFuzzCase({ cases: 128, seed: 0x7e8c_00ad }, ({ label, random }) => {
       const offset = [random.number(-4, 4), random.number(-4, 4)] as const;
