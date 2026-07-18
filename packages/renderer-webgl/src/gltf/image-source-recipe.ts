@@ -26,6 +26,7 @@ export type GltfImageSourceRecipe = Readonly<{
   readonly source:
     | ({ readonly kind: "basisu-bytes"; readonly codec: Promise<GltfBasisuCodecModule>; readonly label: string } & BytesRecipe)
     | { readonly codec: Promise<GltfBasisuCodecModule>; readonly kind: "basisu-uri"; readonly uri: string }
+    | { readonly blob: Blob; readonly kind: "bitmap-blob" }
     | ({ readonly kind: "bitmap-bytes" } & BytesRecipe)
     | { readonly kind: "html-image"; readonly uri: string }
     | ({ readonly kind: "svg-bytes"; readonly label: string } & BytesRecipe)
@@ -183,16 +184,31 @@ export const gltfImageSourceRecipeBytes = (recipes: Iterable<GltfImageSourceReci
   return bytes;
 };
 
-const loadBitmap = (bytes: ArrayBuffer, mimeType: string | undefined, signal: AbortSignal): Promise<ImageBitmap> => {
+const loadBitmapBlob = (blob: Blob, signal: AbortSignal): Promise<ImageBitmap> => {
   const createBitmap = globalThis.createImageBitmap;
   if (typeof createBitmap !== "function") {
     return Promise.reject(new Error("ImageBitmap decoding is unavailable for glTF bufferView image"));
   }
-  return createBitmap(new Blob([bytes], { type: mimeType ?? "application/octet-stream" })).then((bitmap) => {
+  return createBitmap(blob).then((bitmap) => {
     if (!signal.aborted) return bitmap;
     bitmap.close();
     throw abortError();
   });
+};
+
+const loadBitmapBytes = (
+  bytes: ArrayBuffer,
+  mimeType: string | undefined,
+  signal: AbortSignal,
+): Promise<ImageBitmap> => loadBitmapBlob(
+  new Blob([bytes], { type: mimeType ?? "application/octet-stream" }),
+  signal,
+);
+
+const fetchBlob = async (uri: string, signal: AbortSignal): Promise<Blob> => {
+  const response = await fetch(uri, { signal });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.blob();
 };
 
 const fetchBytes = async (uri: string, signal: AbortSignal): Promise<Readonly<{
@@ -226,17 +242,16 @@ export const prepareGltfImageSourceRecipe = async (
       if (typeof globalThis.createImageBitmap !== "function") {
         return preparedGltfImageSourceRecipeWithoutTransport(recipe);
       }
-      const loaded = await fetchBytes(source.uri, signal);
+      const blob = await fetchBlob(source.uri, signal);
       return {
         recipe: {
           key: recipe.key,
           source: {
-            bytes: loaded.bytes,
-            kind: "bitmap-bytes",
-            ...(loaded.mimeType === undefined ? {} : { mimeType: loaded.mimeType }),
+            blob,
+            kind: "bitmap-blob",
           },
         },
-        transportBytes: loaded.bytes.byteLength,
+        transportBytes: blob.size,
       };
     }
     case "svg-uri": {
@@ -283,7 +298,8 @@ export const decodePreparedGltfImageSourceRecipe = async (
   const source = prepared.recipe.source;
   switch (source.kind) {
     case "html-image": return { image: await loadHtmlImage(source.uri, { signal }) };
-    case "bitmap-bytes": return { image: await loadBitmap(source.bytes, source.mimeType, signal) };
+    case "bitmap-blob": return { image: await loadBitmapBlob(source.blob, signal) };
+    case "bitmap-bytes": return { image: await loadBitmapBytes(source.bytes, source.mimeType, signal) };
     case "svg-bytes": {
       const { loadSvgTextureFromBytes } = await import("../texture/svg");
       const loaded = await loadSvgTextureFromBytes(source.bytes, source.label, signal);

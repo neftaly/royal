@@ -62,7 +62,7 @@ describe("glTF image source recipes", () => {
     expect(gltfImageSourceRecipeBytes(recipes)).toBe(3);
   });
 
-  it("transports an external ordinary image to an identified byte recipe before decode", async () => {
+  it("keeps an external ordinary image Blob-native between transport and decode", async () => {
     const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
     const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
     const fetchMock = vi.fn(async (_uri: string, init?: RequestInit) => {
@@ -70,7 +70,7 @@ describe("glTF image source recipes", () => {
       return new Response(bytes, { headers: { "content-type": "image/png; charset=binary" } });
     });
     const createBitmap = vi.fn(async (blob: Blob) => {
-      expect(blob.type).toBe("image/png");
+      expect(blob.type).toBe("image/png;charset=binary");
       expect(blob.size).toBe(4);
       return bitmap;
     });
@@ -85,9 +85,9 @@ describe("glTF image source recipes", () => {
 
     expect(prepared.transportBytes).toBe(4);
     expect(prepared.recipe.source).toMatchObject({
-      kind: "bitmap-bytes",
-      mimeType: "image/png",
+      kind: "bitmap-blob",
     });
+    expect(prepared.recipe.source).not.toHaveProperty("bytes");
     const decoded = await decodePreparedGltfImageSourceRecipe(prepared, controller.signal);
     expect(decoded.image).toBe(bitmap);
     expect(decoded).not.toHaveProperty("contentKey");
