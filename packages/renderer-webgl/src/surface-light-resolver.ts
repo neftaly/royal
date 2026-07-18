@@ -61,7 +61,7 @@ type GltfAssetLightWorkspace = {
 export class SurfaceLightResolver {
   #gltfAssetCache = new WeakMap<GltfSurfaceLightSource, WeakMap<Mat4, GltfAssetLightWorkspace>>();
   #gltfScopeIdCount = 0;
-  readonly #gltfScopeIds = new Map<string, number>();
+  #gltfScopeIds = new WeakMap<SurfaceLightSet, number>();
   readonly #options: SurfaceLightResolverOptions;
   #sceneCache: {
     readonly compiledLightSet: SurfaceLightSet | undefined;
@@ -148,21 +148,21 @@ export class SurfaceLightResolver {
     );
   }
 
-  gltfScopeId(stateKey: number, renderInstanceOrdinal: number, outerIndex: number): number {
-    const key = `${stateKey}:${renderInstanceOrdinal}:${outerIndex}`;
-    const existing = this.#gltfScopeIds.get(key);
+  /** Stable batching identity for one retained transformed light workspace. */
+  gltfScopeId(lights: SurfaceLightSet): number {
+    const existing = this.#gltfScopeIds.get(lights);
     if (existing !== undefined) return existing;
     this.#gltfScopeIdCount += 1;
     if (!Number.isSafeInteger(this.#gltfScopeIdCount)) {
       throw new Error("Royal glTF light-scope ID space is exhausted");
     }
-    this.#gltfScopeIds.set(key, this.#gltfScopeIdCount);
+    this.#gltfScopeIds.set(lights, this.#gltfScopeIdCount);
     return this.#gltfScopeIdCount;
   }
 
   clear(): void {
     this.#gltfAssetCache = new WeakMap();
-    this.#gltfScopeIds.clear();
+    this.#gltfScopeIds = new WeakMap();
     this.#gltfScopeIdCount = 0;
     this.#sceneCache = undefined;
   }

@@ -98,7 +98,6 @@ export class GltfPacketSubmissionOwner {
     packetEnd: 0,
   };
   readonly #vertexInputs: VertexInputArena;
-  #renderInstanceOrdinal = 0;
 
   constructor(options: GltfPacketSubmissionOwnerOptions) {
     this.#batches = new GltfFrameBatchArena(options.runtime, options.vertexInputs);
@@ -190,7 +189,6 @@ export class GltfPacketSubmissionOwner {
       this.#runtime.packetTopology.catalog,
       viewIndex,
     );
-    this.#renderInstanceOrdinal = 0;
     this.#geometryUploadDeferred = false;
     const packetCursor = this.#selection.selected.viewFirsts[viewIndex]!;
     this.#viewSelection.packetCursor = packetCursor;
@@ -220,8 +218,6 @@ export class GltfPacketSubmissionOwner {
       this.#geometryIdentityIds.fill(undefined);
       this.#geometryContextGeneration = contextGeneration;
     }
-    const renderInstanceOrdinal = this.#renderInstanceOrdinal;
-    this.#renderInstanceOrdinal += 1;
     const topology = this.#runtime.packetTopology;
     const catalog = topology.catalog;
     const selected = this.#selection.selected;
@@ -254,7 +250,7 @@ export class GltfPacketSubmissionOwner {
       : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
     const ordinaryLightScopeId = ordinaryAssetLights === undefined
       ? 0
-      : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
+      : this.#lightResolver.gltfScopeId(ordinaryAssetLights);
     let cursor = packetCursor;
 
     while (cursor < packetEnd) {
@@ -363,7 +359,7 @@ export class GltfPacketSubmissionOwner {
             ? 0
             : instanceViews === undefined
               ? ordinaryLightScopeId
-              : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, selectedOuterIndex);
+              : this.#lightResolver.gltfScopeId(assetLights);
           lightBindingId = assetLights === undefined
             ? NO_FRAME_PACKET_ID
             : retainGltfPacketSubmissionLightBinding(

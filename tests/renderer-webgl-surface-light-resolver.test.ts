@@ -169,10 +169,12 @@ describe("SurfaceLightResolver", () => {
       studioSpecular: vi.fn(),
     });
 
-    expect(resolver.gltfScopeId(4, 2, 0)).toBe(1);
-    expect(resolver.gltfScopeId(4, 2, 0)).toBe(1);
-    expect(resolver.gltfScopeId(4, 2, 1)).toBe(2);
+    const first = surfaceLightSet([directional]);
+    const second = surfaceLightSet([directional]);
+    expect(resolver.gltfScopeId(first)).toBe(1);
+    expect(resolver.gltfScopeId(first)).toBe(1);
+    expect(resolver.gltfScopeId(second)).toBe(2);
     resolver.clear();
-    expect(resolver.gltfScopeId(4, 2, 1)).toBe(1);
+    expect(resolver.gltfScopeId(second)).toBe(1);
   });
 });
