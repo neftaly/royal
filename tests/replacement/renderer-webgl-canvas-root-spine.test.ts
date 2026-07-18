@@ -288,13 +288,24 @@ describe("clear-only canvas root", () => {
     const bytes = staticTriangleGlb(document);
     const readGltf = vi.fn(async () => bytes);
     const { callbacks, canvas, root } = harness({ readGltf });
-    const node = gltf({ pickingId: "triangle", src: "/triangle.glb", version: "v1" });
+    const node = gltf({
+      pickingGeometry: planeGeometry([4, 1]),
+      pickingId: "triangle",
+      src: "/triangle.glb",
+      version: "v1",
+    });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.render(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
     }));
     expect(root.getGltfAssetSnapshot(node.asset)).toEqual({ state: "loading" });
+    expect(root.pick({ clientX: 260, clientY: 120 })?.target).toMatchObject({
+      kind: "gltf",
+      node,
+      pickingId: "triangle",
+    });
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {
       expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
@@ -308,6 +319,11 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
     expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({
+      kind: "gltf",
+      node,
+      pickingId: "triangle",
+    });
+    expect(root.pick({ clientX: 260, clientY: 120 })?.target).toMatchObject({
       kind: "gltf",
       node,
       pickingId: "triangle",

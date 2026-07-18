@@ -3,7 +3,7 @@ import { identityMat4, multiplyMat4Into } from "../math/mat4";
 import type { ResolvedCanvasSize } from "../frame/canvas-size";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type { OpaqueDrawStateIntent } from "../webgl/draw-state-transition";
-import type { CanonicalSurface, CanonicalSurfaceScene } from "./scene-lowering";
+import type { CanonicalDrawSurface, CanonicalSurfaceScene } from "./scene-lowering";
 
 type GpuGeometry = Readonly<{
   indexBuffer: WebGLBuffer;
@@ -16,7 +16,7 @@ type GpuGeometry = Readonly<{
 
 type GpuSurface = Readonly<{
   geometry: GpuGeometry;
-  surface: CanonicalSurface;
+  surface: CanonicalDrawSurface;
 }>;
 
 type MutableOpaqueDrawIntent = {
@@ -179,7 +179,7 @@ export class SurfaceGpuOwner {
     this.#gpuSurfaces = [];
   }
 
-  #createGeometry(surface: CanonicalSurface): GpuGeometry {
+  #createGeometry(surface: CanonicalDrawSurface): GpuGeometry {
     const gl = this.#gl;
     const vertexArray = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();

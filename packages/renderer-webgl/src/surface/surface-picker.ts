@@ -62,8 +62,8 @@ export class SurfacePicker {
   ): PickResult | undefined {
     const ray = this.#canvasRay(input, scene.camera, viewProjection, rect);
     if (ray === undefined) return undefined;
-    if (!pickCanonicalSurfaceInto(this.#hit, ray, scene.surfaces, this.#scratch)) return undefined;
-    const surface = scene.surfaces[this.#hit.surfaceIndex]!;
+    if (!pickCanonicalSurfaceInto(this.#hit, ray, scene.pickSurfaces, this.#scratch)) return undefined;
+    const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
     return {
       clientX: input.clientX,

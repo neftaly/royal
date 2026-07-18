@@ -1,6 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
-import type { CanonicalSurface } from "./scene-lowering";
+import type { CanonicalPickSurface } from "./scene-lowering";
 
 export type CanonicalPickRay = Readonly<{
   direction: Vec3;
@@ -53,7 +53,7 @@ const transformRayInto = (
 
 const rayIntersectsBounds = (
   ray: MutableLocalRay,
-  surface: CanonicalSurface,
+  surface: CanonicalPickSurface,
   minDistance: number,
   maxDistance: number,
 ): boolean => {
@@ -115,7 +115,7 @@ const triangleDistance = (
 };
 
 const exactSurfaceDistance = (
-  surface: CanonicalSurface,
+  surface: CanonicalPickSurface,
   ray: MutableLocalRay,
   minDistance: number,
   maxDistance: number,
@@ -144,7 +144,7 @@ const exactSurfaceDistance = (
 export const pickCanonicalSurfaceInto = (
   target: MutableCanonicalPickHit,
   ray: CanonicalPickRay,
-  surfaces: readonly CanonicalSurface[],
+  surfaces: readonly CanonicalPickSurface[],
   scratch: CanonicalPickingScratch,
 ): boolean => {
   let nearest = ray.maxDistance;

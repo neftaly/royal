@@ -1,5 +1,6 @@
 import {
   boxGeometry,
+  gltf,
   mesh,
   perspectiveCamera,
   planeGeometry,
@@ -40,8 +41,29 @@ describe("canonical direct surface lowering", () => {
     expect(surface.node).toBe(node);
     expect(surface.node.pickingId).toBe("hero");
     expect(surface.geometry.indices).toHaveLength(36);
-    expect(surface.pickingGeometry.indices).toHaveLength(6);
     expect(surface.model.slice(12, 15)).toEqual([1, 2, -3]);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
+    expect(prepared.pickSurfaces[0]!.node).toBe(surface.node);
+  });
+
+  it("prepares a glTF picking proxy without waiting for visible asset geometry", () => {
+    const node = gltf({
+      pickingGeometry: planeGeometry([4, 1]),
+      pickingId: "loading-asset",
+      src: "/model.glb",
+      transform: { position: [1, 2, -3] },
+    });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 5] }),
+      nodes: [node],
+    }));
+    expect(prepared.surfaces).toHaveLength(0);
+    expect(prepared.pickSurfaces).toHaveLength(1);
+    expect(prepared.pickSurfaces[0]).toMatchObject({
+      modelHandedness: 1,
+      node,
+    });
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
   });
 
   it("rejects unsupported material work before touching WebGL", () => {

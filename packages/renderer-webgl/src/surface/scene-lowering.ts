@@ -18,11 +18,15 @@ import {
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
 
-export type CanonicalSurface = Readonly<{
+export type CanonicalDrawSurface = Readonly<{
   color: LinearRgba;
   geometry: CanonicalTriangleGeometry;
-  inverseModel: Mat4 | undefined;
   model: Mat4;
+  node: MeshNode | GltfNode;
+}>;
+
+export type CanonicalPickSurface = Readonly<{
+  inverseModel: Mat4 | undefined;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
   pickingGeometry: CanonicalTriangleGeometry;
@@ -30,7 +34,8 @@ export type CanonicalSurface = Readonly<{
 
 export type CanonicalSurfaceScene = Readonly<{
   camera: Camera;
-  surfaces: readonly CanonicalSurface[];
+  pickSurfaces: readonly CanonicalPickSurface[];
+  surfaces: readonly CanonicalDrawSurface[];
 }>;
 
 const modelHandedness = (model: Mat4): 1 | -1 => {
@@ -66,29 +71,47 @@ export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
   preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
 ): CanonicalSurfaceScene => {
-  const surfaces: CanonicalSurface[] = [];
+  const pickSurfaces: CanonicalPickSurface[] = [];
+  const surfaces: CanonicalDrawSurface[] = [];
   for (const node of scene.nodes) {
     if (node.kind === "gltf") {
-      if (node.pickingGeometry !== undefined) {
-        throw new Error("Royal static glTF slice does not yet support pickingGeometry");
-      }
       if (node.materialVariant !== undefined) {
         throw new Error("Royal static glTF slice does not yet support materialVariant");
       }
+      const rootModel = transformMat4(node.transform);
+      const proxyGeometry = node.pickingGeometry === undefined
+        ? undefined
+        : prepareCanonicalGeometry(node.pickingGeometry);
+      if (proxyGeometry !== undefined) {
+        pickSurfaces.push({
+          inverseModel: inverseMat4(rootModel),
+          modelHandedness: modelHandedness(rootModel),
+          node,
+          pickingGeometry: proxyGeometry,
+        });
+      }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
-      const rootModel = transformMat4(node.transform);
       for (const primitive of prepared.primitives) {
         const model = multiplyMat4Into(identityMat4(), rootModel, primitive.localModel);
-        surfaces.push({
+        const surface: CanonicalDrawSurface = {
           color: primitive.color,
           geometry: primitive.geometry,
-          inverseModel: inverseMat4(model),
           model,
-          modelHandedness: modelHandedness(model),
           node,
-          pickingGeometry: primitive.geometry,
-        });
+        };
+        if (proxyGeometry === undefined) {
+          const pickableSurface = {
+            ...surface,
+            inverseModel: inverseMat4(model),
+            modelHandedness: modelHandedness(model),
+            pickingGeometry: primitive.geometry,
+          };
+          surfaces.push(pickableSurface);
+          pickSurfaces.push(pickableSurface);
+        } else {
+          surfaces.push(surface);
+        }
       }
       continue;
     }
@@ -97,7 +120,7 @@ export const prepareCanonicalSurfaceScene = (
     }
     const geometry = prepareCanonicalGeometry(node.geometry);
     const model = transformMat4(node.transform);
-    surfaces.push({
+    const surface = {
       color: solidUnlitColor(node),
       geometry,
       inverseModel: inverseMat4(model),
@@ -107,10 +130,13 @@ export const prepareCanonicalSurfaceScene = (
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry
         : prepareCanonicalGeometry(node.pickingGeometry),
-    });
+    };
+    surfaces.push(surface);
+    pickSurfaces.push(surface);
   }
   return {
     camera: staticCamera(scene),
+    pickSurfaces,
     surfaces,
   };
 };

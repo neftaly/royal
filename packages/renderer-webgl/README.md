@@ -61,7 +61,9 @@ reported as scheduled-frame failures.
 The current vertical slice renders opaque solid unlit planes and boxes through
 one canonical indexed-triangle path. Exact picking consumes those same retained
 transforms and triangles; optional `pickingGeometry` replaces only CPU exact
-intersection and never allocates a GPU buffer. Static `.glb` assets containing
+intersection and never allocates a GPU buffer. A glTF picking proxy is available
+while its asset is still loading and remains authoritative after visual geometry
+arrives. Static `.glb` assets containing
 triangle geometry and `KHR_materials_unlit` solid base-color factors demand-load
 into that same path; preparation code loads concurrently with the asset request.
 Textures, standard materials, external `.gltf` resources, sparse/quantized
