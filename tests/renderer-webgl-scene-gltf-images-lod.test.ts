@@ -198,13 +198,14 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
-    const { gl } = fakeGl();
+    const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
       resourceBudgets: { uploadBytes: 150 },
     });
     const graph = renderScene([gltf({ src: triangleGltfSrc, version: "material-demand-before-geometry" })]);
 
     root.render(graph);
+    const frameBeforeReady = root.frame;
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) => {
       const document = triangleDocument();
       const primitive = document.meshes[0]!.primitives[0]!;
@@ -258,6 +259,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       "/fixtures/second.png",
       "/fixtures/third.png",
     ]);
+    expect(drawCalls(calls), "the admitted geometry prefix should render immediately").not.toHaveLength(0);
+    expect(root.frame, "the progressive geometry frame should be published").toBeGreaterThan(frameBeforeReady);
     expect(viewport.animationFrames.length, "geometry upload should remain deferred after one frame")
       .toBeGreaterThan(0);
   });

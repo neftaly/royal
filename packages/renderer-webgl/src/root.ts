@@ -1008,6 +1008,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     let renderDeferred = false;
+    let geometryUploadDeferred = false;
     this.#virtualTextures.prepareFrame(plan.manifest.virtualTextures.length > 0);
     this.#virtualTextures.beginFrame();
     this.#textureResidencyIntent.beginFrame();
@@ -1077,6 +1078,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           plan.revision,
           viewIndex,
         );
+        let viewGeometryUploadDeferred = false;
         for (let nodeIndex = 0; nodeIndex < plan.nodes.length; nodeIndex += 1) {
           const node = plan.nodes[nodeIndex]!;
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
@@ -1104,6 +1106,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
               this.#gl,
               this.#context.generation,
             );
+            if (this.#gltfPacketSubmissions.geometryUploadDeferred) {
+              geometryUploadDeferred = true;
+              viewGeometryUploadDeferred = true;
+              break;
+            }
             continue;
           }
           this.#flushGltfPacketSubmissions(
@@ -1125,7 +1132,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           viewportSize, sourceX, sourceY,
         );
         this.#surfaceExecution.finishPass();
-        if (packetCursor !== packetEnd) {
+        if (!viewGeometryUploadDeferred && packetCursor !== packetEnd) {
           throw new Error("Royal retained glTF packet selection contains draws outside the frame plan");
         }
         if (hdrTarget !== undefined) {
@@ -1201,6 +1208,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (this.#virtualTextures.hasActionableUploads()) this.invalidate();
     } catch (value) {
       renderFailure = retainFirstFailure(renderFailure, value);
+    }
+    if (geometryUploadDeferred) {
+      try {
+        this.invalidate();
+      } catch (value) {
+        renderFailure = retainFirstFailure(renderFailure, value);
+      }
     }
 
     if (renderFailure !== undefined) throw renderFailure.value;

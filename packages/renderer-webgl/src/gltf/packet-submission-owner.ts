@@ -22,6 +22,7 @@ import {
 import type { WebGlGltfInstancingSnapshot } from "../root-types";
 import { SceneBindingRegistry } from "../scene-binding-registry";
 import {
+  VertexInputGpuUploadCapacityError,
   vertexInputGeometry,
   type VertexInputArena,
 } from "../vertex-input/arena";
@@ -81,6 +82,7 @@ export class GltfPacketSubmissionOwner {
   #geometryContextGeneration = -1;
   readonly #geometryIdentityIds: Array<number | undefined> = [];
   #geometryPlanRevision = -1;
+  #geometryUploadDeferred = false;
   readonly #instanceTransforms: GltfInstanceTransformRegistry;
   readonly #lightResolver: SurfaceLightResolver;
   readonly #materials: GltfMaterialPreparationArena;
@@ -117,6 +119,10 @@ export class GltfPacketSubmissionOwner {
     return this.#batches;
   }
 
+  get geometryUploadDeferred(): boolean {
+    return this.#geometryUploadDeferred;
+  }
+
   get segment(): number {
     return this.#batches.workspace.segment;
   }
@@ -136,6 +142,7 @@ export class GltfPacketSubmissionOwner {
       this.#runtime.packetTopology.catalog,
     );
     this.#batches.beginFrame();
+    this.#geometryUploadDeferred = false;
     this.#materialDemandEpoch += 1;
     if (this.#materialDemandEpoch > 0xffff_ffff) {
       this.#materialDemandEpochs.fill(0);
@@ -184,6 +191,7 @@ export class GltfPacketSubmissionOwner {
       viewIndex,
     );
     this.#renderInstanceOrdinal = 0;
+    this.#geometryUploadDeferred = false;
     const packetCursor = this.#selection.selected.viewFirsts[viewIndex]!;
     this.#viewSelection.packetCursor = packetCursor;
     this.#viewSelection.packetEnd = packetCursor + this.#selection.selected.viewCounts[viewIndex]!;
@@ -294,12 +302,18 @@ export class GltfPacketSubmissionOwner {
       }
       let geometryIdentityId = this.#geometryIdentityIds[geometryId];
       if (geometryIdentityId === undefined) {
-        geometryIdentityId = vertexInputGeometry(
-          this.#vertexInputs,
-          gl,
-          contextGeneration,
-          geometryId,
-        ).staticIdentityId;
+        try {
+          geometryIdentityId = vertexInputGeometry(
+            this.#vertexInputs,
+            gl,
+            contextGeneration,
+            geometryId,
+          ).staticIdentityId;
+        } catch (error) {
+          if (!(error instanceof VertexInputGpuUploadCapacityError)) throw error;
+          this.#geometryUploadDeferred = true;
+          return cursor;
+        }
         this.#geometryIdentityIds[geometryId] = geometryIdentityId;
       }
       const packetSidedness = catalog.sidedness[packetIndex]!;
