@@ -17,11 +17,11 @@ export type VirtualTextureCoverageGeometry = {
 export type VirtualTextureCoverageQuery = {
   readonly modelSource: VirtualTextureDrawDemandModelSource;
   readonly projection: Mat4;
-  readonly textureCoordinates?: GltfTextureCoordinates;
+  readonly textureCoordinates?: GltfTextureCoordinates | undefined;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
-  readonly wrapS?: TextureSamplerWrap;
-  readonly wrapT?: TextureSamplerWrap;
+  readonly wrapS?: TextureSamplerWrap | undefined;
+  readonly wrapT?: TextureSamplerWrap | undefined;
 };
 
 type ExactCoverageEvaluator = (

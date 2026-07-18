@@ -117,7 +117,7 @@ export type BaseColorTextureResidency =
   | { readonly kind: "ordinary"; readonly texture: TextureAssetUploadRef }
   | {
       readonly kind: "prepared-virtual";
-      readonly ordinaryFallback?: TextureAssetUploadRef;
+      readonly ordinaryFallback?: TextureAssetUploadRef | undefined;
       readonly state: VirtualTextureRuntimeState;
     };
 
@@ -129,13 +129,13 @@ export type VirtualTextureDrawDemandContext = {
   readonly modelSource: VirtualTextureDrawDemandModelSource;
   readonly projection: Mat4;
   readonly provider: VirtualTextureCoverageProvider;
-  readonly textureCoordinates?: GltfTextureCoordinates;
+  readonly textureCoordinates?: GltfTextureCoordinates | undefined;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
   /** Sampler addressing used by both demand projection and the VT shader. */
-  readonly wrapS?: TextureSamplerWrap;
+  readonly wrapS?: TextureSamplerWrap | undefined;
   /** Sampler addressing used by both demand projection and the VT shader. */
-  readonly wrapT?: TextureSamplerWrap;
+  readonly wrapT?: TextureSamplerWrap | undefined;
 };
 
 export type VirtualTextureScreenFootprint = {

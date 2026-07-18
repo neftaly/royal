@@ -58,7 +58,7 @@ export type SurfacePointLight = {
   readonly color: LinearRgba;
   readonly kind: "point";
   readonly position: Vec3;
-  readonly range?: number;
+  readonly range?: number | undefined;
 };
 
 export type SurfaceSpotLight = {
@@ -68,26 +68,26 @@ export type SurfaceSpotLight = {
   readonly kind: "spot";
   readonly outerConeAngle: number;
   readonly position: Vec3;
-  readonly range?: number;
+  readonly range?: number | undefined;
 };
 
 export type SurfaceLight = SurfaceDirectionalLight | SurfacePointLight | SurfaceSpotLight;
 
 export type SurfaceLightSet = {
   readonly directionals: readonly SurfaceDirectionalLight[];
-  readonly irradiance?: SurfaceIblIrradiance;
+  readonly irradiance?: SurfaceIblIrradiance | undefined;
   readonly lights: readonly SurfaceLight[];
   readonly punctuals: readonly (SurfacePointLight | SurfaceSpotLight)[];
-  readonly specular?: SurfaceIblSpecular;
+  readonly specular?: SurfaceIblSpecular | undefined;
 };
 
 /** Caller-owned storage for allocation-free light-set composition. */
 export type SurfaceLightSetWorkspace = {
   directionals: SurfaceDirectionalLight[];
-  irradiance?: SurfaceIblIrradiance;
+  irradiance: SurfaceIblIrradiance | undefined;
   lights: SurfaceLight[];
   punctuals: Array<SurfacePointLight | SurfaceSpotLight>;
-  specular?: SurfaceIblSpecular;
+  specular: SurfaceIblSpecular | undefined;
 };
 
 export type SurfaceLightTransformWorkspace = {
@@ -147,8 +147,10 @@ export const combineSurfaceLightSets = (
 
 export const createSurfaceLightSetWorkspace = (): SurfaceLightSetWorkspace => ({
   directionals: [],
+  irradiance: undefined,
   lights: [],
   punctuals: [],
+  specular: undefined,
 });
 
 export const createSurfaceLightTransformWorkspace = (): SurfaceLightTransformWorkspace => ({
@@ -196,10 +198,8 @@ export const writeCombinedSurfaceLightSet = (
   const sceneHasEnvironment = sceneLights?.irradiance !== undefined || sceneLights?.specular !== undefined;
   const irradiance = sceneHasEnvironment ? sceneLights?.irradiance : assetLights?.irradiance;
   const specular = sceneHasEnvironment ? sceneLights?.specular : assetLights?.specular;
-  if (irradiance === undefined) delete output.irradiance;
-  else output.irradiance = irradiance;
-  if (specular === undefined) delete output.specular;
-  else output.specular = specular;
+  output.irradiance = irradiance;
+  output.specular = specular;
   return output;
 };
 
@@ -212,7 +212,7 @@ type MutablePointLight = {
   color: LinearRgba;
   kind: "point";
   position: MutableVec3;
-  range?: number;
+  range: number | undefined;
 };
 type MutableSpotLight = {
   color: LinearRgba;
@@ -221,7 +221,7 @@ type MutableSpotLight = {
   kind: "spot";
   outerConeAngle: number;
   position: MutableVec3;
-  range?: number;
+  range: number | undefined;
 };
 type MutableSurfaceLight = MutableDirectionalLight | MutablePointLight | MutableSpotLight;
 
@@ -230,7 +230,7 @@ const createSurfaceLightTransformSlot = (light: SurfaceLight): MutableSurfaceLig
     case "directional":
       return { color: light.color, direction: [0, 0, -1], kind: "directional" };
     case "point":
-      return { color: light.color, kind: "point", position: [0, 0, 0] };
+      return { color: light.color, kind: "point", position: [0, 0, 0], range: light.range };
     case "spot":
       return {
         color: light.color,
@@ -239,6 +239,7 @@ const createSurfaceLightTransformSlot = (light: SurfaceLight): MutableSurfaceLig
         kind: "spot",
         outerConeAngle: light.outerConeAngle,
         position: [0, 0, 0],
+        range: light.range,
       };
   }
 };
@@ -259,8 +260,7 @@ const writeSurfaceLightTransformSlot = (
     case "point": {
       const point = output as MutablePointLight;
       transformPointInto(point.position, model, light.position);
-      if (light.range === undefined) delete point.range;
-      else point.range = light.range;
+      point.range = light.range;
       return;
     }
     case "spot": {
@@ -269,8 +269,7 @@ const writeSurfaceLightTransformSlot = (
       transformPointInto(spot.position, model, light.position);
       spot.innerConeAngle = light.innerConeAngle;
       spot.outerConeAngle = light.outerConeAngle;
-      if (light.range === undefined) delete spot.range;
-      else spot.range = light.range;
+      spot.range = light.range;
     }
   }
 };
@@ -299,10 +298,8 @@ export const writeTransformedSurfaceLightSet = (
     else output.punctuals.push(slot);
   }
   workspace.lightSlots.length = lights.length;
-  if (irradiance === undefined) delete output.irradiance;
-  else output.irradiance = irradiance;
-  if (specular === undefined) delete output.specular;
-  else output.specular = specular;
+  output.irradiance = irradiance;
+  output.specular = specular;
   return output;
 };
 

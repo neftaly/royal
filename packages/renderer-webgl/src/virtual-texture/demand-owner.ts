@@ -62,7 +62,20 @@ type VirtualTextureDemandOwnerOptions = {
 };
 
 type MutableVirtualTextureDrawDemandContext = {
-  -readonly [Key in keyof VirtualTextureDrawDemandContext]: VirtualTextureDrawDemandContext[Key];
+  -readonly [Key in Exclude<
+    keyof VirtualTextureDrawDemandContext,
+    "textureCoordinates" | "wrapS" | "wrapT"
+  >]: VirtualTextureDrawDemandContext[Key];
+} & {
+  textureCoordinates: VirtualTextureDrawDemandContext["textureCoordinates"] | undefined;
+  wrapS: VirtualTextureDrawDemandContext["wrapS"] | undefined;
+  wrapT: VirtualTextureDrawDemandContext["wrapT"] | undefined;
+};
+
+type MutablePreparedBaseColorResidency = {
+  kind: "prepared-virtual";
+  ordinaryFallback: TextureAssetUploadRef | undefined;
+  state: VirtualTextureRuntimeState;
 };
 
 /** Pure monotonic policy: automatic VT may activate once, but never source-flap afterward. */
@@ -85,11 +98,7 @@ export class VirtualTextureDemandOwner {
   readonly #options: VirtualTextureDemandOwnerOptions;
   #ordinaryResidency: { kind: "ordinary"; texture: TextureAssetUploadRef } | undefined;
   readonly #planning = createVirtualTextureDemandPlanningWorkspace();
-  #preparedResidency: {
-    kind: "prepared-virtual";
-    ordinaryFallback?: TextureAssetUploadRef;
-    state: VirtualTextureRuntimeState;
-  } | undefined;
+  #preparedResidency: MutablePreparedBaseColorResidency | undefined;
   readonly #publicationStates: VirtualTextureRuntimeState[] = [];
   readonly #workingSet = createVirtualTextureFrameWorkingSetWorkspace();
 
@@ -123,21 +132,27 @@ export class VirtualTextureDemandOwner {
     if (provider === undefined) return undefined;
     let context = this.#drawContext;
     if (context === undefined) {
-      context = { modelSource, projection, provider, view, viewportSize };
+      context = {
+        modelSource,
+        projection,
+        provider,
+        textureCoordinates: baseColorCoordinates,
+        view,
+        viewportSize,
+        wrapS: texture.sampler?.wrapS,
+        wrapT: texture.sampler?.wrapT,
+      };
       this.#drawContext = context;
     } else {
       context.modelSource = modelSource;
       context.projection = projection;
       context.provider = provider;
+      context.textureCoordinates = baseColorCoordinates;
       context.view = view;
       context.viewportSize = viewportSize;
+      context.wrapS = texture.sampler?.wrapS;
+      context.wrapT = texture.sampler?.wrapT;
     }
-    if (baseColorCoordinates === undefined) delete context.textureCoordinates;
-    else context.textureCoordinates = baseColorCoordinates;
-    if (texture.sampler?.wrapS === undefined) delete context.wrapS;
-    else context.wrapS = texture.sampler.wrapS;
-    if (texture.sampler?.wrapT === undefined) delete context.wrapT;
-    else context.wrapT = texture.sampler.wrapT;
     return context;
   }
 
@@ -307,11 +322,12 @@ export class VirtualTextureDemandOwner {
   ): BaseColorTextureResidency {
     let residency = this.#preparedResidency;
     if (residency === undefined) {
-      residency = { kind: "prepared-virtual", state };
+      residency = { kind: "prepared-virtual", ordinaryFallback, state };
       this.#preparedResidency = residency;
-    } else residency.state = state;
-    if (ordinaryFallback === undefined) delete residency.ordinaryFallback;
-    else residency.ordinaryFallback = ordinaryFallback;
+    } else {
+      residency.ordinaryFallback = ordinaryFallback;
+      residency.state = state;
+    }
     return residency;
   }
 

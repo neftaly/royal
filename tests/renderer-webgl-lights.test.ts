@@ -86,7 +86,13 @@ describe("WebGL surface light composition", () => {
     expect(output.irradiance).toBe(sceneEnvironment);
 
     writeCombinedSurfaceLightSet(output, undefined, undefined);
-    expect(output).toEqual({ directionals: [], lights: [], punctuals: [] });
+    expect(output).toEqual({
+      directionals: [],
+      irradiance: undefined,
+      lights: [],
+      punctuals: [],
+      specular: undefined,
+    });
   });
 
   it("reuses transformed light slots while updating their values", () => {
@@ -106,5 +112,14 @@ describe("WebGL surface light composition", () => {
     expect(second).toBe(first);
     expect(second.lights[0]).toBe(slot);
     expect(second.lights[0]).toMatchObject({ position: [6, 2, 3] });
+
+    writeTransformedSurfaceLightSet(workspace, model, [{ ...source, range: 8 }]);
+    const withoutRange = writeTransformedSurfaceLightSet(workspace, model, [source]);
+    const point = withoutRange.lights[0];
+    expect(point).toBe(slot);
+    expect(point?.kind).toBe("point");
+    if (point?.kind !== "point") throw new Error("expected a point-light slot");
+    expect(point.range).toBeUndefined();
+    expect(Object.hasOwn(point, "range")).toBe(true);
   });
 });
