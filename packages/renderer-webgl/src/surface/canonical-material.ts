@@ -56,7 +56,6 @@ export type CanonicalStandardMaterial = Readonly<{
   normalTexture?: CanonicalTextureBinding;
   occlusionAsset?: TextureSourceRef;
   occlusionStrength: number;
-  occlusionTexture?: CanonicalTextureBinding;
   requiresTextureCoordinates: boolean;
   roughnessFactor: number;
 }>;
@@ -124,14 +123,12 @@ export const resolveCanonicalMaterialTexture = (
   };
   const metallicRoughnessTexture = resolve(material.metallicRoughnessAsset);
   const normalTexture = resolve(material.normalAsset);
-  const occlusionTexture = resolve(material.occlusionAsset);
   const emissiveTexture = resolve(material.emissiveAsset);
   return {
     ...common,
     ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
     ...(normalTexture === undefined ? {} : { normalTexture }),
-    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
   };
 };
 
@@ -194,7 +191,6 @@ export const canonicalMaterialTextureKeys = (
   if (material.kind === "standard") {
     add(material.metallicRoughnessAsset);
     add(material.normalAsset);
-    add(material.occlusionAsset);
     add(material.emissiveAsset);
   }
   return keys.length === 0 ? EMPTY_TEXTURE_KEYS : keys;

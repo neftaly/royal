@@ -55,7 +55,7 @@ type MutableOpaqueDrawIntent = {
   viewport: { height: number; width: number; x: number; y: number };
 };
 
-const MATERIAL_TEXTURE_UNITS = 5;
+const MATERIAL_TEXTURE_UNITS = 4;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 
 const materialTextureFeatures = (
@@ -72,7 +72,7 @@ const materialTextureFeatures = (
 };
 
 const textureUnitMask = (features: number): number =>
-  (features & 0b111) | ((features & 0b1000) << 1);
+  features & 0b1111;
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
   const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
@@ -343,9 +343,6 @@ export class SurfaceGpuOwner {
           ? material.normalTexture
           : undefined;
         textureInputs[offset + 3] = material.kind === "standard"
-          ? material.occlusionTexture
-          : undefined;
-        textureInputs[offset + 4] = material.kind === "standard"
           ? material.emissiveTexture
           : undefined;
       }
@@ -359,7 +356,6 @@ export class SurfaceGpuOwner {
           textureBindings[offset + 1]!,
           textureBindings[offset + 2]!,
           textureBindings[offset + 3]!,
-          textureBindings[offset + 4]!,
         ];
         nextSurfaces[index] = {
           bindings,
@@ -419,9 +415,6 @@ export class SurfaceGpuOwner {
           : undefined),
         this.#textureGpu.retain(material.kind === "standard"
           ? material.normalTexture
-          : undefined),
-        this.#textureGpu.retain(material.kind === "standard"
-          ? material.occlusionTexture
           : undefined),
         this.#textureGpu.retain(material.kind === "standard"
           ? material.emissiveTexture

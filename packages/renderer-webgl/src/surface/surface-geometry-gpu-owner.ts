@@ -98,10 +98,17 @@ export class SurfaceGeometryGpuOwner {
       && surface.material.normalAsset !== undefined
       ? surface.geometry.tangents
       : undefined;
-    const textureCoordinates = surface.material.requiresTextureCoordinates
+    const material = surface.material;
+    const usesRuntimeTexture = material.baseColorAsset !== undefined
+      || (material.kind === "standard" && (
+        material.metallicRoughnessAsset !== undefined
+        || material.normalAsset !== undefined
+        || material.emissiveAsset !== undefined
+      ));
+    const textureCoordinates = usesRuntimeTexture
       ? surface.geometry.textureCoordinates0
       : undefined;
-    if (surface.material.requiresTextureCoordinates && textureCoordinates === undefined) {
+    if (usesRuntimeTexture && textureCoordinates === undefined) {
       throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
     }
     const vertexArray = gl.createVertexArray();

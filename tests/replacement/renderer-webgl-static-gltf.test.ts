@@ -290,8 +290,8 @@ describe("static glTF preparation core", () => {
       ? asset.src
       : asset.label])).toEqual([
       ["srgb", "/models/base.png"],
-      ["linear", "/models/shared-data.png"],
       ["srgb", "/models/emissive.png"],
+      ["linear", "/models/shared-data.png"],
     ]);
     expect(prepared.primitives[0]!.material).toMatchObject({
       emissiveFactor: [0.25, 0.5, 1],
@@ -305,6 +305,27 @@ describe("static glTF preparation core", () => {
     if (material.kind === "standard") {
       expect(material.normalAsset?.contentKey).toBe(material.metallicRoughnessAsset?.contentKey);
     }
+  });
+
+  it("retains authored occlusion without scheduling an unused runtime texture", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "occlusion.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.images = [{ uri: "ao.png" }];
+    document.textures = [{ source: 0 }];
+    document.materials = [{ occlusionTexture: { index: 0, strength: 0.4 } }];
+    delete document.extensionsRequired;
+    delete document.extensionsUsed;
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "occlusion-v1",
+      "occlusion.glb",
+      "/models/occlusion.glb",
+    );
+    expect(prepared.textureAssets).toEqual([]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      occlusionAsset: { kind: "asset", src: "/models/ao.png" },
+      occlusionStrength: 0.4,
+    });
   });
 
   it("lowers EXT_mesh_gpu_instancing accessors into one compact draw batch", async () => {

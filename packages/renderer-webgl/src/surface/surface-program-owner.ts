@@ -476,7 +476,7 @@ export class SurfaceProgramOwner {
     if (program.kind === "standard") {
       if (program.metallicRoughness !== null) this.#gl.uniform1i(program.metallicRoughness, 1);
       if (program.normalTexture !== null) this.#gl.uniform1i(program.normalTexture, 2);
-      if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 4);
+      if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 3);
     }
     this.#initializedSamplers.add(program.program);
   }

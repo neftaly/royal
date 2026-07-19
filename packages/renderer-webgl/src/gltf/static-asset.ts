@@ -442,22 +442,25 @@ const prepareStaticDocument = (
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
   const batchedPrimitives = batchRepeatedStaticPrimitives(primitives);
   const claimedTextures = new Map<string, TextureSourceRef>();
+  const claimTexture = (asset: TextureSourceRef | undefined): void => {
+    if (asset === undefined) return;
+    claimedTextures.set(`${asset.contentKey as string}:${asset.colorSpace ?? "srgb"}`, asset);
+  };
   for (const primitive of batchedPrimitives) {
-    const material = primitive.material;
-    const assets = material.kind === "unlit"
-      ? [material.baseColorAsset]
-      : [
-        material.baseColorAsset,
-        material.metallicRoughnessAsset,
-        material.normalAsset,
-        material.occlusionAsset,
-        material.emissiveAsset,
-      ];
-    for (const asset of assets) {
-      if (asset !== undefined) {
-        claimedTextures.set(`${asset.contentKey as string}:${asset.colorSpace ?? "srgb"}`, asset);
-      }
+    claimTexture(primitive.material.baseColorAsset);
+  }
+  for (const primitive of batchedPrimitives) {
+    if (primitive.material.kind === "standard") {
+      claimTexture(primitive.material.emissiveAsset);
     }
+  }
+  for (const primitive of batchedPrimitives) {
+    if (primitive.material.kind === "standard") {
+      claimTexture(primitive.material.metallicRoughnessAsset);
+    }
+  }
+  for (const primitive of batchedPrimitives) {
+    if (primitive.material.kind === "standard") claimTexture(primitive.material.normalAsset);
   }
   return {
     bounds: staticGltfBounds(batchedPrimitives),
