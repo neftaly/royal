@@ -59,6 +59,40 @@ Lighting includes directional, point, spot, explicit scene environment, and
 asset-scoped fallback environment. Environment precedence is semantic and
 independent of asynchronous completion order.
 
+### Prefiltered environment profile
+
+`prefilteredEnvironment({ src, version })` names one offline Royal environment
+artifact. Royal does not decode an HDR image or convolve an environment at
+runtime. The artifact is a little-endian KTX 1 cubemap with packed
+`R11F_G11F_B10F` faces, a complete mip pyramid, and one
+`royal.environment.v1` metadata entry containing provenance plus nine RGB
+spherical-harmonic irradiance coefficients. Faces are square powers of two no
+larger than 256 pixels. Unknown, truncated, oversized, or non-canonical
+artifacts fail before GPU allocation.
+
+The repository's `scripts/repack-royal-environment.ts` converts the pinned
+Filament `cmgen` output described by its `--help` text into this browser-safe
+profile. Source generation and repacking are offline concerns; neither tool nor
+its source HDR is shipped to an application.
+
+The exact pair `(src, typeof version, version)` is the asset identity. Changing
+rotation or radiance scale reuses the prepared artifact and changes only scene
+uniforms. While a new identity is fetched and validated, after its load fails,
+or when its persistent GPU claim is denied, PBR draws use the deterministic
+studio environment. Royal never samples a partial cubemap or stale prior
+identity. Successful publication changes diffuse SH and specular cubemap
+lighting together on one invalidated frame. Context restoration reuploads the
+retained validated bytes without refetching.
+
+Diffuse irradiance is reconstructed from the nine coefficients. Reflected
+radiance is sampled from the offline roughness mip pyramid and combined with an
+analytic split-sum BRDF approximation; no BRDF lookup texture is retained.
+Environment rotation applies to both directions, and `radianceScaleNits`
+scales both contributions. The cubemap, sampler, and coefficients have one root
+owner and one persistent-budget claim. The parser remains a lazy chunk and no
+environment texture, sampler, fetch, or shader variant exists for scenes that
+do not select this source.
+
 ## Pass activation
 
 The renderer privately compiles only passes needed by the visible frame. With

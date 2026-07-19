@@ -58,11 +58,11 @@ const parseSh = (value: Uint8Array): readonly (readonly [number, number, number]
     }
     return number;
   });
-  return Object.freeze(Array.from({ length: 9 }, (_unused, index) => Object.freeze([
+  return Array.from({ length: 9 }, (_unused, index) => [
     numbers[index * 3]!,
     numbers[index * 3 + 1]!,
     numbers[index * 3 + 2]!,
-  ] as const)));
+  ] as const);
 };
 
 type NativePayload = {
@@ -151,7 +151,7 @@ const validateNativeCmgenKtx1 = (source: ArrayBuffer): NativePayload => {
     offset += imageSize * FACES;
   }
   if (offset !== length) fail("Native cmgen KTX1 has trailing data");
-  return Object.freeze({ payloadOffset, sh: parsedSh });
+  return { payloadOffset, sh: parsedSh };
 };
 
 const metadataPair = (provenance: string, sh: NativePayload["sh"]): Uint8Array => {

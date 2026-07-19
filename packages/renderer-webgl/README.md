@@ -66,6 +66,13 @@ drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
 they are not reported as scheduled-frame failures.
 
+`getPrefilteredEnvironmentSnapshot(environment)` and
+`subscribePrefilteredEnvironment(environment, listener)` expose the focused
+`idle` / `loading` / `ready` / `error` lifecycle for one exact offline
+environment source/version. Ready describes validated retained bytes; GPU
+admission remains part of the root resource snapshot, and denial uses the
+studio fallback instead of a partial cubemap.
+
 The current vertical slice renders opaque solid unlit and standard planes and
 boxes through one canonical indexed-triangle path. Standard materials support
 authored directional lights, metallic/roughness factors, exposure, and the

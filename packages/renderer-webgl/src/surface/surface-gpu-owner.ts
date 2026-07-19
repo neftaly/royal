@@ -35,6 +35,7 @@ import {
   SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_OCCLUSION_TEXTURE,
+  SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
   SURFACE_FEATURE_SPECULAR_MATERIAL,
@@ -83,6 +84,11 @@ import {
   planSurfacePasses,
 } from "./surface-pass-plan";
 import type { SurfaceCompositeOwner } from "./surface-composite-owner";
+import {
+  PrefilteredEnvironmentGpuOwner,
+  type PrefilteredEnvironmentGpuBinding,
+} from "../environment/gpu-owner";
+import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -132,7 +138,7 @@ const MATERIAL_TEXTURE_UNITS = 9;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const DEFAULT_ATTENUATION_COLOR = new Float32Array([1, 1, 1]);
-const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
+const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 
 const textureBindingsEqual = (
@@ -143,6 +149,7 @@ const textureBindingsEqual = (
   for (let index = 0; index < left.length; index += 1) {
     if (
       left[index]!.sampler !== right[index]!.sampler
+      || left[index]!.target !== right[index]!.target
       || left[index]!.texture !== right[index]!.texture
     ) return false;
   }
@@ -172,6 +179,7 @@ const composeSurfaceTextureBindings = (
   offset: number,
   virtualTexture: VirtualTextureGpuBinding | undefined,
   sceneColor: GpuTextureBinding | undefined,
+  environment: PrefilteredEnvironmentGpuBinding | undefined,
 ): GpuTextureBinding[] => {
   const bindings = [
     ordinary[offset]!,
@@ -185,6 +193,7 @@ const composeSurfaceTextureBindings = (
     ordinary[offset + 7]!,
     ordinary[offset + 8]!,
     sceneColor ?? EMPTY_TEXTURE_BINDING,
+    environment?.texture ?? EMPTY_TEXTURE_BINDING,
   ];
   if (virtualTexture !== undefined) {
     bindings[0] = virtualTexture.atlas;
@@ -211,7 +220,7 @@ export const applyTextureCoordinates = (
 const materialTextureFeatures = (
   surface: CanonicalDrawSurface,
   geometry: GpuGeometry,
-  hasStudioEnvironment: boolean,
+  environmentFeatures: number,
   hasPunctualLights: boolean,
   hasVirtualBaseColor: boolean,
   ordinaryTextureMask: number,
@@ -230,8 +239,8 @@ const materialTextureFeatures = (
     && geometry.tangentBuffer !== null
   ) features |= SURFACE_FEATURE_TANGENT;
   if (ordinaryTextureMask & 8) features |= SURFACE_FEATURE_EMISSIVE_TEXTURE;
-  if (hasStudioEnvironment) {
-    features |= SURFACE_FEATURE_STUDIO_ENVIRONMENT;
+  if (environmentFeatures !== 0) {
+    features |= environmentFeatures;
     if (ordinaryTextureMask & 16) {
       features |= SURFACE_FEATURE_OCCLUSION_TEXTURE;
     }
@@ -250,6 +259,17 @@ const materialTextureFeatures = (
   return features;
 };
 
+const sceneEnvironmentFeatures = (
+  scene: CanonicalSurfaceScene | null,
+  prefiltered: PrefilteredEnvironmentGpuBinding | undefined,
+): number => {
+  const environment = scene?.environment;
+  if (environment === undefined) return 0;
+  return environment.source === "royal-prefiltered-v1" && prefiltered !== undefined
+    ? SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
+    : SURFACE_FEATURE_STUDIO_ENVIRONMENT;
+};
+
 const textureUnitMask = (features: number): number => (
   features & 0b1111
 ) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0)
@@ -258,6 +278,7 @@ const textureUnitMask = (features: number): number => (
   | (features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? 1 << 8 : 0)
   | (features & SURFACE_FEATURE_THICKNESS_TEXTURE ? 1 << 9 : 0)
   | (features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? 1 << 10 : 0)
+  | (features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? 1 << 11 : 0)
   | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b1000_0001 : 0);
 
 const residentOrdinaryTextureMask = (
@@ -381,6 +402,7 @@ export class SurfaceGpuOwner {
   #drawIntent: MutableSurfaceDrawIntent | null = null;
   #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
+  readonly #environmentGpu: PrefilteredEnvironmentGpuOwner;
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   readonly #onChanged: () => void;
@@ -429,6 +451,7 @@ export class SurfaceGpuOwner {
     onFailure: (error: unknown) => void = () => undefined,
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
+    this.#environmentGpu = new PrefilteredEnvironmentGpuOwner(gl, budget);
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#onFailure = onFailure;
@@ -439,6 +462,7 @@ export class SurfaceGpuOwner {
   }
 
   dispose(): void {
+    this.#environmentGpu.dispose();
     this.#geometryGpu.dispose();
     this.#textureGpu.dispose();
     this.#programs.dispose();
@@ -467,6 +491,7 @@ export class SurfaceGpuOwner {
   }
 
   invalidate(): void {
+    this.#environmentGpu.invalidate();
     this.#geometryGpu.invalidate();
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
@@ -534,6 +559,13 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
     this.#texturePublicationKeys.clear();
     this.#virtualTexture?.setScene(scene);
+  }
+
+  setPrefilteredEnvironment(prepared: PreparedRoyalEnvironment | undefined): boolean {
+    if (!this.#environmentGpu.set(prepared)) return false;
+    this.#dirty = true;
+    this.#fullReconcileRequired = true;
+    return true;
   }
 
   setVirtualTextureRuntime(runtime: VirtualTextureRuntime | null): void {
@@ -876,7 +908,17 @@ export class SurfaceGpuOwner {
             }
             gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
             this.#environmentSettings[0] = environment.radianceScaleNits;
+            const prefiltered = program.environmentCoefficients === null
+              ? undefined
+              : this.#environmentGpu.binding;
+            this.#environmentSettings[1] = (prefiltered?.mipCount ?? 1) - 1;
             gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
+            if (program.environmentCoefficients !== null) {
+              if (prefiltered === undefined) {
+                throw new Error("Royal prefiltered-environment program is missing GPU state");
+              }
+              gl.uniform4fv(program.environmentCoefficients, prefiltered.coefficients);
+            }
           }
           this.#presentation[0] = scene.exposure;
           this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
@@ -1180,7 +1222,7 @@ export class SurfaceGpuOwner {
     const features = materialTextureFeatures(
       geometrySurface.surface,
       geometrySurface.geometry,
-      scene?.environment !== undefined,
+      sceneEnvironmentFeatures(scene, this.#environmentGpu.binding),
       (scene?.punctualLights.length ?? 0) > 0,
       virtualTexture !== undefined,
       residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
@@ -1196,6 +1238,7 @@ export class SurfaceGpuOwner {
           && canonicalMaterialHasTransmission(material)
           ? this.#compositeGpu?.sceneColorBinding()
           : undefined,
+        this.#environmentGpu.binding,
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
@@ -1339,7 +1382,7 @@ export class SurfaceGpuOwner {
         const features = materialTextureFeatures(
           surface,
           resource.geometry,
-          scene.environment !== undefined,
+          sceneEnvironmentFeatures(scene, this.#environmentGpu.binding),
           scene.punctualLights.length > 0,
           resource.virtualTexture !== undefined,
           residentOrdinaryTextureMask(ordinaryBindings, 0),
@@ -1362,6 +1405,7 @@ export class SurfaceGpuOwner {
             && canonicalMaterialHasTransmission(material)
             ? this.#compositeGpu?.sceneColorBinding()
             : undefined,
+          this.#environmentGpu.binding,
         );
         resource.program = program;
         resource.surface = surface;

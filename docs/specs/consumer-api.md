@@ -153,6 +153,7 @@ polling. Product decisions use focused status:
 
 - glTF: `idle`, `loading`, `streaming`, `ready`, `degraded`, `error`;
 - ordinary texture: `idle`, `loading`, `ready`, `error`;
+- prefiltered environment: `idle`, `loading`, `ready`, `error`;
 - authored VT additionally exposes `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
@@ -160,6 +161,12 @@ polling. Product decisions use focused status:
 match the asset and texture specifications. Root-wide diagnostics are cold,
 bounded operational observation and MUST NOT be the only way to drive normal
 loading, variants, fitting, retries, or lifecycle UI.
+
+`usePrefilteredEnvironmentStatus(environment)` observes the exact `src` and
+typed `version` identity. `ready` means the artifact bytes have been fetched
+and validated and reports its face size, mip count, and provenance. GPU budget
+admission remains renderer diagnostics rather than a second asset lifecycle;
+denial keeps the documented studio fallback visible.
 
 Server rendering and pre-mount observation return stable unavailable/idle
 snapshots rather than touching DOM/WebGL or throwing due solely to absence of a

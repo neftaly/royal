@@ -550,14 +550,21 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.environment?.rotation).toHaveLength(16);
   });
 
-  it("fails a prefiltered environment before publishing known-wrong lighting", () => {
-    expect(() => prepareCanonicalSurfaceScene(scene({
+  it("retains prefiltered environment identity without transport or GL work", () => {
+    const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({}),
-      environment: prefilteredEnvironment({ src: "/studio.ktx" }),
+      environment: prefilteredEnvironment({ src: "/studio.ktx", version: "v2" }),
       nodes: [mesh({
         geometry: planeGeometry(1),
         material: standardMaterial({ color: [1, 1, 1, 1] }),
       })],
-    }))).toThrow("does not yet support prefiltered environments");
+    }));
+
+    expect(prepared.environment).toMatchObject({
+      source: "royal-prefiltered-v1",
+      src: "/studio.ktx",
+      version: "v2",
+    });
+    expect(prepared.environment?.rotation).toHaveLength(16);
   });
 });

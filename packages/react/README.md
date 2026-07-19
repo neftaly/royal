@@ -76,6 +76,11 @@ mount or when no visible triangle is hit.
 waking for unrelated frames. Its `streaming`, `ready`, and `degraded` states all
 mean geometry is drawable; `status.textures` reports total, loading, ready, and
 failed images as progressive materials arrive.
+`usePrefilteredEnvironmentStatus(environment)` observes an exact offline
+environment `src` and typed `version`. It reports `idle`, `loading`, `ready`, or
+`error`; ready state includes the cubemap face size, mip count, and recorded
+provenance. The scene remains drawable with Royal's studio environment while
+the artifact loads or cannot be admitted to the GPU budget.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
 `useOrbitCamera({ initial })` packages that resource with a stable controller;
@@ -85,6 +90,28 @@ observation; rendering itself does not subscribe React to camera motion.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
+
+Image-based lighting is explicit scene data and keeps its parser and transport
+lazy:
+
+```tsx
+import { usePrefilteredEnvironmentStatus } from "@royal/react";
+import { prefilteredEnvironment, scene } from "@royal/react/scene";
+
+const environment = prefilteredEnvironment({
+  src: "/lighting/studio.royal.ktx",
+  version: "sha256-…",
+  radianceScaleNits: 1,
+});
+
+function EnvironmentStatus() {
+  const status = usePrefilteredEnvironmentStatus(environment);
+  return <output>{status.state}</output>;
+}
+
+const renderScene = scene({ camera, environment, nodes });
+// Render <EnvironmentStatus /> as a child of the Canvas using renderScene.
+```
 
 WebXR is isolated in `@royal/react/xr`, so ordinary React applications do not
 load or probe XR code. Place the hook under `Canvas` and call `enter()` only

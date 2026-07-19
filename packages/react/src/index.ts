@@ -29,6 +29,8 @@ export type {
   TextureAssetStatus,
   TextureAssetStatusInput,
 } from "./observation/texture-asset";
+export { usePrefilteredEnvironmentStatus } from "./observation/prefiltered-environment";
+export type { PrefilteredEnvironmentStatus } from "./observation/prefiltered-environment";
 export { useVirtualTextureStatus } from "./observation/virtual-texture-asset";
 export type {
   VirtualTextureStatus,

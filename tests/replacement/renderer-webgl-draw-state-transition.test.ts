@@ -32,7 +32,7 @@ const intent = (): SurfaceDrawStateIntent => ({
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
-  textureBindings: [{ sampler: null, texture: null }],
+  textureBindings: [{ sampler: null, target: "2d", texture: null }],
   textureUnits: 1,
   vertexArray: handle<WebGLVertexArrayObject>(),
   viewport: { height: 360, width: 640, x: 0, y: 0 },
@@ -113,7 +113,7 @@ describe("surface draw state transition core", () => {
       ...first,
       textureBindings: [
         first.textureBindings[0]!,
-        { sampler: handle<WebGLSampler>(), texture: handle<WebGLTexture>() },
+        { sampler: handle<WebGLSampler>(), target: "2d", texture: handle<WebGLTexture>() },
       ],
       textureUnits: 3,
     }, transition);
@@ -125,17 +125,18 @@ describe("surface draw state transition core", () => {
 
   it("retains but does not inspect bindings unused by the next shader", () => {
     const previous = state();
-    const textured = {
+    const textured: SurfaceDrawStateIntent = {
       ...intent(),
       textureBindings: [{
         sampler: handle<WebGLSampler>(),
+        target: "2d",
         texture: handle<WebGLTexture>(),
       }],
     };
     commitAppliedSurfaceDrawState(previous, textured);
-    const untextured = {
+    const untextured: SurfaceDrawStateIntent = {
       ...textured,
-      textureBindings: [{ sampler: null, texture: null }],
+      textureBindings: [{ sampler: null, target: "2d", texture: null }],
       textureUnits: 0,
     };
     const transition = createSurfaceDrawStateTransition();

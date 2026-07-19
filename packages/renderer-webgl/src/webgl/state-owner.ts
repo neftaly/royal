@@ -146,7 +146,10 @@ export class WebGlStateOwner {
         if ((changedTextureUnits & 1) === 0) continue;
         const binding = intent.textureBindings[unit];
         gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, binding?.texture ?? null);
+        gl.bindTexture(
+          binding?.target === "cube" ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D,
+          binding?.texture ?? null,
+        );
         gl.bindSampler(unit, binding?.sampler ?? null);
       }
       if (transition.vertexArray) gl.bindVertexArray(intent.vertexArray);

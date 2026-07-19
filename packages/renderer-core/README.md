@@ -39,6 +39,13 @@ descriptors: glTF and ordinary image references expose `src`; authored virtual
 textures expose `manifestUri` because that source is a JSON manifest. Pick
 targets likewise preserve the authored `pickingId` name.
 
+`prefilteredEnvironment({ src, version, rotation, radianceScaleNits })` selects
+one offline Royal KTX 1 environment artifact. Raw HDR decode and convolution
+are deliberately not runtime scene operations. `src` plus the type and value of
+`version` identifies bytes; rotation and radiance scale may change without
+changing that content identity. See the repository rendering specification and
+`scripts/repack-royal-environment.ts --help` for the pinned artifact workflow.
+
 ## Entrypoints
 
 - `@royal/renderer-core` — cameras, scenes, nodes, materials, textures, lights,

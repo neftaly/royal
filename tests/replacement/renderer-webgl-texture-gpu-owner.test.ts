@@ -104,7 +104,7 @@ describe("ordinary texture GPU owner", () => {
     ]);
 
     expect(bindings[0]!.texture).not.toBeNull();
-    expect(bindings[1]).toEqual({ sampler: null, texture: null });
+    expect(bindings[1]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(gl.generateMipmap).not.toHaveBeenCalled();
     expect(budget.snapshot()).toEqual({ budgetBytes: 300, deniedClaims: 1, retainedBytes: 256 });
   });
@@ -149,7 +149,7 @@ describe("ordinary texture GPU owner", () => {
     const budget = new PersistentGpuBudgetOwner(300);
     const owner = new TextureGpuOwner(gl, budget);
     const bindings = owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
-    expect(bindings[0]).toEqual({ sampler: null, texture: null });
+    expect(bindings[0]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(gl.createTexture).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(0);
   });

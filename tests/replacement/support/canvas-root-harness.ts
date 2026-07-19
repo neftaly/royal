@@ -12,6 +12,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly compressedTexImage2D: ReturnType<typeof vi.fn>;
+  readonly createTexture: ReturnType<typeof vi.fn<() => WebGLTexture | null>>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly bufferSubData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
@@ -49,6 +50,7 @@ export const fakeGl = (): FakeGl => ({
   LINEAR: 0x2601,
   LINEAR_MIPMAP_LINEAR: 0x2703,
   LINEAR_MIPMAP_NEAREST: 0x2701,
+  R11F_G11F_B10F: 0x8c3a,
   LINK_STATUS: 0x8b82,
   MAX_RENDERBUFFER_SIZE: 0x84e8,
   MAX_VIEWPORT_DIMS: 0x0d3a,
@@ -60,6 +62,7 @@ export const fakeGl = (): FakeGl => ({
   ONE: 1,
   ONE_MINUS_SRC_ALPHA: 0x0303,
   REPEAT: 0x2901,
+  RGB: 0x1907,
   RGBA: 0x1908,
   RGBA8: 0x8058,
   SCISSOR_TEST: 0x0c11,
@@ -70,15 +73,20 @@ export const fakeGl = (): FakeGl => ({
   SRC_ALPHA: 0x0302,
   TEXTURE0: 0x84c0,
   TEXTURE_2D: 0x0de1,
+  TEXTURE_CUBE_MAP: 0x8513,
+  TEXTURE_CUBE_MAP_POSITIVE_X: 0x8515,
   TEXTURE_MAG_FILTER: 0x2800,
   TEXTURE_MIN_FILTER: 0x2801,
   TEXTURE_WRAP_S: 0x2802,
   TEXTURE_WRAP_T: 0x2803,
+  TEXTURE_WRAP_R: 0x8072,
   TRIANGLES: 0x0004,
   UNSIGNED_BYTE: 0x1401,
   UNSIGNED_INT: 0x1405,
+  UNSIGNED_INT_10F_11F_11F_REV: 0x8c3b,
   UNSIGNED_SHORT: 0x1403,
   UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
+  UNPACK_ALIGNMENT: 0x0cf5,
   UNPACK_FLIP_Y_WEBGL: 0x9240,
   UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
   VERTEX_SHADER: 0x8b31,
@@ -137,6 +145,8 @@ export const fakeGl = (): FakeGl => ({
   shaderSource: vi.fn(),
   stencilMask: vi.fn(),
   texImage2D: vi.fn(),
+  texStorage2D: vi.fn(),
+  texSubImage2D: vi.fn(),
   uniform4fv: vi.fn(),
   uniform1f: vi.fn(),
   uniform1i: vi.fn(),

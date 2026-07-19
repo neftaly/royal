@@ -32,7 +32,7 @@ export type OrdinaryTextureGpuSnapshot = Readonly<{
   residentTextures: number;
 }>;
 
-const EMPTY_BINDING: GpuTextureBinding = { sampler: null, texture: null };
+const EMPTY_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
 
 const samplerFilter = (gl: WebGL2RenderingContext, filter: string): number => {
   switch (filter) {
@@ -139,7 +139,7 @@ export class TextureGpuOwner {
         claimedSamplers.add(binding.samplerKey);
         let resolved = texture.bindings.get(sampler.sampler);
         if (resolved === undefined) {
-          resolved = { sampler: sampler.sampler, texture: texture.texture };
+          resolved = { sampler: sampler.sampler, target: "2d", texture: texture.texture };
           texture.bindings.set(sampler.sampler, resolved);
           insertedBindings.push([texture, sampler.sampler]);
         }
@@ -196,7 +196,7 @@ export class TextureGpuOwner {
       sampler ??= this.#createSampler(binding);
       let resolved = texture.bindings.get(sampler.sampler);
       if (resolved === undefined) {
-        resolved = { sampler: sampler.sampler, texture: texture.texture };
+        resolved = { sampler: sampler.sampler, target: "2d", texture: texture.texture };
         texture.bindings.set(sampler.sampler, resolved);
       }
       if (createdTexture) {

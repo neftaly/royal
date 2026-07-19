@@ -96,6 +96,9 @@ const smokeExpectations = {
   'standard-lighting': {
     minColorBuckets: 12,
     minPaintedRatio: 0.01,
+    ...(new URLSearchParams(routeQuery).get('environment') === 'prefiltered'
+      ? { prefilteredEnvironmentReady: true }
+      : {}),
   },
   'gltf-helmet': {
     minColorBuckets: 32,
@@ -240,6 +243,7 @@ const smokeExpression = `
         gltfReady: smoke?.gltfReady === true,
         minImagesLoaded: smoke?.minImagesLoaded ?? 0,
         path: routePath,
+        prefilteredEnvironmentReady: smoke?.prefilteredEnvironmentReady === true,
         resourceSubstrings: selectedCasePath === undefined
           ? smoke?.resourceSubstrings ?? []
           : [selectedCasePath],
@@ -258,6 +262,9 @@ const smokeExpression = `
           text: readout?.textContent?.trim() ?? '',
         };
       })() : undefined,
+      prefilteredEnvironmentState: document
+        .querySelector('[data-prefiltered-environment-state]')
+        ?.getAttribute('data-prefiltered-environment-state'),
       renderer: ${rendererSnapshotExpression},
       resources: performance.getEntriesByType('resource')
         .slice(-20)
@@ -304,7 +311,9 @@ const smokeExpression = `
           asset.imagesLoaded >= state.route.minImagesLoaded
         )
       );
-    return canvasReady && resourceReady && gltfDiagnosticsReady;
+    const prefilteredEnvironmentReady = state.route.prefilteredEnvironmentReady !== true
+      || state.prefilteredEnvironmentState === 'ready';
+    return canvasReady && resourceReady && gltfDiagnosticsReady && prefilteredEnvironmentReady;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -811,6 +820,11 @@ const assertRoute = (expected, state) => {
       failures.push(`glTF load diagnostics did not reach ${expected.minImagesLoaded} loaded images`);
     }
   }
+
+  if (
+    expected.prefilteredEnvironmentReady === true
+    && state.prefilteredEnvironmentState !== 'ready'
+  ) failures.push('prefiltered environment did not become ready');
 
   for (const resourceSubstring of expected.resourceSubstrings ?? []) {
     if (!state.resourceNames?.some((name) => name.includes(resourceSubstring))) {

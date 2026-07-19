@@ -225,9 +225,9 @@ const createGpuVirtualTexture = (
       atlasTexture,
       budgetIdentity,
       binding: {
-        atlas: { sampler: atlasSampler, texture: atlasTexture },
+        atlas: { sampler: atlasSampler, target: "2d", texture: atlasTexture },
         mipOffsets,
-        pageTable: { sampler: pageTableSampler, texture: pageTableTexture },
+        pageTable: { sampler: pageTableSampler, target: "2d", texture: pageTableTexture },
         settings0: new Float32Array([
           manifest.width,
           manifest.height,

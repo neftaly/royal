@@ -1,6 +1,7 @@
 import {
   Canvas,
   OrbitControls,
+  usePrefilteredEnvironmentStatus,
   useOrbitCamera,
 } from '@royal/react';
 import {
@@ -15,12 +16,20 @@ import {
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { browserProofPrefilteredEnvironment } from '../prefiltered-environment-fixture';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 
+const EnvironmentStatus = (): ReactNode => {
+  const status = usePrefilteredEnvironmentStatus(browserProofPrefilteredEnvironment);
+  return <output data-prefiltered-environment-state={status.state}>Environment: {status.state}</output>;
+};
+
 export const StandardLighting = (): ReactNode => {
-  const requestedLightCount = Number(new URLSearchParams(globalThis.location?.search ?? '').get('lights') ?? 8);
+  const params = new URLSearchParams(globalThis.location?.search ?? '');
+  const requestedLightCount = Number(params.get('lights') ?? 8);
+  const prefiltered = params.get('environment') === 'prefiltered';
   const lightCount = Number.isFinite(requestedLightCount)
     ? Math.max(0, Math.min(8, Math.floor(requestedLightCount)))
     : 8;
@@ -42,7 +51,7 @@ export const StandardLighting = (): ReactNode => {
   });
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
-    environment: showcaseEnvironment,
+    environment: prefiltered ? browserProofPrefilteredEnvironment : showcaseEnvironment,
     ...showcasePass,
     nodes: [
       directionalLight(showcaseKeyLight),
@@ -74,7 +83,7 @@ export const StandardLighting = (): ReactNode => {
         transform: { position: [1.55, 0.05, 0], rotation: [0.12, -0.82, -0.08] },
       }),
     ],
-  }), [orbit.cameraResource, pointLights]);
+  }), [orbit.cameraResource, pointLights, prefiltered]);
 
   return (
     <Canvas
@@ -84,6 +93,7 @@ export const StandardLighting = (): ReactNode => {
       scene={renderScene}
     >
       <BenchmarkRendererSnapshot />
+      {prefiltered ? <EnvironmentStatus /> : null}
       <OrbitControls orbit={orbit} />
     </Canvas>
   );

@@ -40,9 +40,13 @@ in vec2 surfaceSpecularColorTextureCoordinate;
 uniform sampler2D specularColorTexture;
 #endif
 __TRANSMISSION_DECLARATIONS__
-#ifdef STUDIO_ENVIRONMENT
+#if defined(STUDIO_ENVIRONMENT) || defined(PREFILTERED_ENVIRONMENT)
 uniform mat4 environmentRotation;
 uniform vec4 environmentSettings;
+#endif
+#ifdef PREFILTERED_ENVIRONMENT
+uniform vec4 environmentCoefficients[9];
+uniform samplerCube environmentSpecularTexture;
 #endif
 uniform vec4 baseColor;
 uniform vec4 cameraWorldPosition;
@@ -246,7 +250,7 @@ void main() {
     ) * punctualLightColors[index].rgb * attenuation;
   }
 #endif
-#ifdef STUDIO_ENVIRONMENT
+#if defined(STUDIO_ENVIRONMENT) || defined(PREFILTERED_ENVIRONMENT)
   float occlusion = 1.0;
 #ifdef OCCLUSION_TEXTURED
   occlusion = mix(
@@ -257,6 +261,45 @@ void main() {
 #endif
   vec3 environmentNormal = mat3(environmentRotation) * normal;
   vec3 environmentReflection = mat3(environmentRotation) * reflect(-viewDirection, normal);
+#ifdef PREFILTERED_ENVIRONMENT
+  vec3 diffuseRadiance = environmentCoefficients[0].rgb * 0.282095;
+  diffuseRadiance += environmentCoefficients[1].rgb * (0.488603 * environmentNormal.y);
+  diffuseRadiance += environmentCoefficients[2].rgb * (0.488603 * environmentNormal.z);
+  diffuseRadiance += environmentCoefficients[3].rgb * (0.488603 * environmentNormal.x);
+  diffuseRadiance += environmentCoefficients[4].rgb * (
+    1.092548 * environmentNormal.x * environmentNormal.y
+  );
+  diffuseRadiance += environmentCoefficients[5].rgb * (
+    1.092548 * environmentNormal.y * environmentNormal.z
+  );
+  diffuseRadiance += environmentCoefficients[6].rgb * (
+    0.315392 * (3.0 * environmentNormal.z * environmentNormal.z - 1.0)
+  );
+  diffuseRadiance += environmentCoefficients[7].rgb * (
+    1.092548 * environmentNormal.x * environmentNormal.z
+  );
+  diffuseRadiance += environmentCoefficients[8].rgb * (
+    0.546274 * (
+      environmentNormal.x * environmentNormal.x
+      - environmentNormal.y * environmentNormal.y
+    )
+  );
+  diffuseRadiance = max(diffuseRadiance, vec3(0.0));
+  vec3 specularRadiance = textureLod(
+    environmentSpecularTexture,
+    normalize(environmentReflection),
+    roughness * environmentSettings.y
+  ).rgb;
+  vec4 brdf0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+  vec4 brdf1 = vec4(1.0, 0.0425, 1.04, -0.04);
+  vec4 brdfFactors = roughness * brdf0 + brdf1;
+  float brdfA004 = min(
+    brdfFactors.x * brdfFactors.x,
+    exp2(-9.28 * normalView)
+  ) * brdfFactors.x + brdfFactors.y;
+  vec2 environmentBrdf = vec2(-1.04, 1.04) * brdfA004 + brdfFactors.zw;
+  vec3 specularResponse = f0 * environmentBrdf.x + f90 * environmentBrdf.y;
+#else
   float diffuseHeight = environmentNormal.y * 0.5 + 0.5;
   float reflectionHeight = environmentReflection.y * 0.5 + 0.5;
   vec3 diffuseRadiance = mix(
@@ -271,9 +314,11 @@ void main() {
   );
   vec3 environmentFresnel = mix(f0, f90, fresnelPower(normalView));
   float specularFocus = mix(1.0, 0.18, roughness);
+  vec3 specularResponse = environmentFresnel * specularFocus;
+#endif
   vec3 environment = (
     diffuseRadiance * diffuseColor * occlusion / PI
-    + specularRadiance * environmentFresnel * specularFocus
+    + specularRadiance * specularResponse * occlusion
   ) * environmentSettings.x;
   lit += environment;
 #endif

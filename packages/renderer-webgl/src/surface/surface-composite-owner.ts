@@ -182,7 +182,7 @@ export class SurfaceCompositeOwner {
   #resources: CompositeResources | null = null;
   #presentationSampler: WebGLSampler | null = null;
   #sceneSampler: WebGLSampler | null = null;
-  #sceneColorBinding: GpuTextureBinding = { sampler: null, texture: null };
+  #sceneColorBinding: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
   #vertexArray: WebGLVertexArrayObject | null = null;
 
   constructor(gl: WebGL2RenderingContext, budget: PersistentGpuBudgetOwner) {
@@ -230,7 +230,7 @@ export class SurfaceCompositeOwner {
     this.#presentationLocation = null;
     this.#presentationSampler = null;
     this.#sceneSampler = null;
-    this.#sceneColorBinding = { sampler: null, texture: null };
+    this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
     this.#deniedSize = "";
     this.#vertexArray = null;
   }
@@ -339,7 +339,11 @@ export class SurfaceCompositeOwner {
       framebuffer,
       frontFace: this.#gl.CCW,
       program,
-      textureBindings: [{ sampler: this.#presentationSampler, texture: resources.color }],
+      textureBindings: [{
+        sampler: this.#presentationSampler,
+        target: "2d",
+        texture: resources.color,
+      }],
       textureUnits: 1,
       vertexArray,
       viewport,
@@ -358,7 +362,7 @@ export class SurfaceCompositeOwner {
     this.#presentationLocation = null;
     this.#presentationSampler = null;
     this.#sceneSampler = null;
-    this.#sceneColorBinding = { sampler: null, texture: null };
+    this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
     this.#deniedSize = "";
     this.#vertexArray = null;
     this.#budget.release(this.#claim);
@@ -419,7 +423,11 @@ export class SurfaceCompositeOwner {
       width,
     };
     if (this.#sceneSampler !== null) {
-      this.#sceneColorBinding = { sampler: this.#sceneSampler, texture: sceneColor };
+      this.#sceneColorBinding = {
+        sampler: this.#sceneSampler,
+        target: "2d",
+        texture: sceneColor,
+      };
     }
     this.#bindingRevision += 1;
     return true;
@@ -477,7 +485,11 @@ export class SurfaceCompositeOwner {
     this.#presentationSampler = presentationSampler;
     this.#sceneSampler = sceneSampler;
     if (this.#resources !== null) {
-      this.#sceneColorBinding = { sampler: sceneSampler, texture: this.#resources.sceneColor };
+      this.#sceneColorBinding = {
+        sampler: sceneSampler,
+        target: "2d",
+        texture: this.#resources.sceneColor,
+      };
     }
     this.#vertexArray = vertexArray;
   }

@@ -88,6 +88,14 @@ Every root-bound callback carries or closes over a generation token. A stale
 generation MAY finish independently owned cache work, but MUST NOT invalidate,
 publish into, allocate for, or retain the superseded root.
 
+One root owns at most one active explicit prefiltered-environment identity.
+Replacing it aborts the old root claim, and a stale fetch or parse completion
+cannot publish. Parsed bytes are retained as the reconstruction recipe while
+that identity remains active. Asset readiness and focused subscriptions are
+independent of GPU admission; renderer invalidation publishes the ready GPU
+representation, or its deterministic studio fallback, through the same surface
+path.
+
 ## Context loss and restoration
 
 On `webglcontextlost`, Royal MUST prevent browser default teardown behavior as

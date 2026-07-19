@@ -1,4 +1,4 @@
-import type { RenderRoot } from "@royal/renderer-core";
+import { prefilteredEnvironment, type RenderRoot } from "@royal/renderer-core";
 import {
   rendererRootOptionsSemanticKey,
   type RoyalRendererRoot,
@@ -22,6 +22,7 @@ import {
   useVirtualTextureStatus,
   useOrbitCamera,
   useOrbitCameraView,
+  usePrefilteredEnvironmentStatus,
   useRendererLifecycle,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
@@ -62,6 +63,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();
     expectTypeOf(useVirtualTextureStatus).toBeFunction();
+    expectTypeOf(usePrefilteredEnvironmentStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitControls).toBeFunction();
     expectTypeOf(GltfOrbitCameraFit).toBeFunction();
@@ -95,6 +97,21 @@ describe("replacement React public API", () => {
       "output",
       null,
       useVirtualTextureStatus("/map.vt.json").state,
+    );
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle</output>");
+  });
+
+  it("server-renders an offline environment as idle before root mount", () => {
+    const environment = prefilteredEnvironment({ src: "/studio.ktx" });
+    const Status = () => createElement(
+      "output",
+      null,
+      usePrefilteredEnvironmentStatus(environment).state,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,

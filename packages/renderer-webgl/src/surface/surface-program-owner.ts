@@ -42,6 +42,7 @@ export const SURFACE_FEATURE_LINEAR_OUTPUT = 4096;
 export const SURFACE_FEATURE_TRANSMISSION_MATERIAL = 8192;
 export const SURFACE_FEATURE_TRANSMISSION_TEXTURE = 16384;
 export const SURFACE_FEATURE_THICKNESS_TEXTURE = 32768;
+export const SURFACE_FEATURE_PREFILTERED_ENVIRONMENT = 65536;
 export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
   | SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
   | SURFACE_FEATURE_NORMAL_TEXTURE
@@ -79,8 +80,10 @@ export type StandardProgram = Readonly<{
   emissive: WebGLUniformLocation | null;
   emissiveCoordinates: TextureCoordinatesProgram | null;
   emissiveFactor: WebGLUniformLocation;
+  environmentCoefficients: WebGLUniformLocation | null;
   environmentRotation: WebGLUniformLocation | null;
   environmentSettings: WebGLUniformLocation | null;
+  environmentSpecular: WebGLUniformLocation | null;
   kind: "standard";
   materialFactors: WebGLUniformLocation;
   metallicRoughness: WebGLUniformLocation | null;
@@ -214,7 +217,7 @@ const shaderVariant = (
     ? transmissionSource.vertexBody : "",
 ).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -309,11 +312,21 @@ const createStandardProgram = (
       ? textureCoordinatesProgram(gl, program, "emissive")
       : null,
     emissiveFactor: uniform(gl, program, "emissiveFactor"),
-    environmentRotation: features & SURFACE_FEATURE_STUDIO_ENVIRONMENT
+    environmentCoefficients: features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
+      ? uniform(gl, program, "environmentCoefficients[0]")
+      : null,
+    environmentRotation: features & (
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
+    )
       ? uniform(gl, program, "environmentRotation")
       : null,
-    environmentSettings: features & SURFACE_FEATURE_STUDIO_ENVIRONMENT
+    environmentSettings: features & (
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
+    )
       ? uniform(gl, program, "environmentSettings")
+      : null,
+    environmentSpecular: features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
+      ? uniform(gl, program, "environmentSpecularTexture")
       : null,
     kind: "standard",
     materialFactors: uniform(gl, program, "materialFactors"),
@@ -467,6 +480,7 @@ export class SurfaceProgramOwner {
       if (program.transmission !== null) this.#gl.uniform1i(program.transmission, 8);
       if (program.thickness !== null) this.#gl.uniform1i(program.thickness, 9);
       if (program.sceneColor !== null) this.#gl.uniform1i(program.sceneColor, 10);
+      if (program.environmentSpecular !== null) this.#gl.uniform1i(program.environmentSpecular, 11);
     }
     if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 7);
     this.#initializedSamplers.add(program.program);

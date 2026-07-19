@@ -2,6 +2,7 @@ import type { AppliedClearState } from './clear-state-transition';
 
 export type TextureUnitBinding = Readonly<{
   sampler: WebGLSampler | null;
+  target: '2d' | 'cube';
   texture: WebGLTexture | null;
 }>;
 

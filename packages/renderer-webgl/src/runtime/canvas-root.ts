@@ -6,6 +6,7 @@ import {
   type GltfNode,
   type PickInput,
   type PickResult,
+  type PrefilteredEnvironmentLight,
   type RenderRoot,
   type TextureAssetRef,
   type VirtualTextureAssetRef,
@@ -72,6 +73,11 @@ import {
   type PersistentGpuBudgetSnapshot,
 } from "../resource/persistent-gpu-budget";
 import type { OrdinaryTextureGpuSnapshot } from "../texture/gpu-owner";
+import {
+  PrefilteredEnvironmentAssetOwner,
+  type PrefilteredEnvironmentAssetSnapshot,
+} from "../environment/asset-owner";
+import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -101,6 +107,8 @@ export type CanvasRootPlatform = Readonly<{
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readGltfResource?(uri: string, signal: AbortSignal): Promise<Uint8Array>;
+  preparePrefilteredEnvironment?(source: ArrayBuffer): Promise<PreparedRoyalEnvironment>;
+  readPrefilteredEnvironment?(src: string, signal: AbortSignal): Promise<ArrayBuffer>;
 }>;
 
 const defaultPlatform = (): CanvasRootPlatform => ({
@@ -221,6 +229,7 @@ export class CanvasRoot {
   readonly #cameraSource: CameraSourceOwner;
   readonly #clock: FrameClockOwner;
   readonly #context: ContextLifecycleOwner;
+  readonly #environmentAssets: PrefilteredEnvironmentAssetOwner;
   #clearColor: LinearRgba = [0, 0, 0, 0];
   #disposed = false;
   #frame = 0;
@@ -321,6 +330,22 @@ export class CanvasRoot {
       () => this.#invalidatePresentation(),
       (error) => this.#captureScheduledFailure(error),
     );
+    this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
+      onAssetChanged: () => {
+        try {
+          this.#refreshPrefilteredEnvironment();
+        } catch (error) {
+          this.#captureScheduledFailure(error);
+        }
+      },
+      onListenerError: (error) => platform.onListenerError(error),
+      ...(platform.preparePrefilteredEnvironment === undefined
+        ? {}
+        : { prepare: platform.preparePrefilteredEnvironment }),
+      ...(platform.readPrefilteredEnvironment === undefined
+        ? {}
+        : { read: platform.readPrefilteredEnvironment }),
+    });
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
@@ -413,6 +438,7 @@ export class CanvasRoot {
     this.#progressiveTexturePresentation.dispose();
     this.#clock.dispose();
     this.#cameraSource.dispose();
+    this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
     this.#textureAssets.dispose();
     this.#surfaceGpu.dispose();
@@ -458,6 +484,11 @@ export class CanvasRoot {
   /** Focused readiness for one exact source/version identity. */
   getGltfAssetSnapshot = (asset: GltfAssetRef): GltfAssetSnapshot =>
     this.#gltfAssets.getSnapshot(asset);
+
+  /** Focused readiness for one exact offline environment source/version identity. */
+  getPrefilteredEnvironmentSnapshot = (
+    environment: PrefilteredEnvironmentLight,
+  ): PrefilteredEnvironmentAssetSnapshot => this.#environmentAssets.getSnapshot(environment);
 
   /** Focused readiness for one exact decoded texture identity. */
   getTextureAssetSnapshot = (asset: TextureAssetRef): TextureAssetSnapshot =>
@@ -523,6 +554,7 @@ export class CanvasRoot {
     this.#progressiveTexturePresentation.reset();
     this.#textureResourcesPending = false;
     this.#surfaceGpu.setScene(prepared);
+    this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(prepared.gltfNodes);
@@ -592,6 +624,12 @@ export class CanvasRoot {
   /** Subscribes only to one exact glTF source/version identity. */
   subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) =>
     this.#gltfAssets.subscribe(asset, listener);
+
+  /** Subscribes only to one exact offline environment source/version identity. */
+  subscribePrefilteredEnvironment = (
+    environment: PrefilteredEnvironmentLight,
+    listener: () => void,
+  ): (() => void) => this.#environmentAssets.subscribe(environment, listener);
 
   /** Subscribes only to one exact decoded texture identity. */
   subscribeTextureAsset = (asset: TextureAssetRef, listener: () => void): (() => void) =>
@@ -735,6 +773,7 @@ export class CanvasRoot {
     this.#progressiveTexturePresentation.reset();
     this.#textureResourcesPending = false;
     this.#surfaceGpu.setScene(prepared);
+    this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
@@ -758,6 +797,30 @@ export class CanvasRoot {
         this.#clock.invalidate();
       }
     }
+  }
+
+  #reconcilePrefilteredEnvironment(scene: CanonicalSurfaceScene): void {
+    const environment = scene.environment?.source === "royal-prefiltered-v1"
+      ? scene.environment
+      : undefined;
+    this.#environmentAssets.reconcile(environment);
+    let textureStateChanged = false;
+    try {
+      textureStateChanged = this.#surfaceGpu.setPrefilteredEnvironment(
+        environment === undefined ? undefined : this.#environmentAssets.prepared(environment),
+      );
+    } catch (error) {
+      textureStateChanged = true;
+      throw error;
+    } finally {
+      if (textureStateChanged) this.#state.invalidateTextureBindings();
+    }
+  }
+
+  #refreshPrefilteredEnvironment(): void {
+    if (this.#disposed || this.#surfaceScene === null) return;
+    this.#reconcilePrefilteredEnvironment(this.#surfaceScene);
+    this.#invalidatePresentation();
   }
 
   #refreshGltfTextureProgress(): void {
@@ -883,6 +946,7 @@ export class CanvasRoot {
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#state.invalidate();
       this.#surfaceGpu.invalidate();
+      if (this.#surfaceScene !== null) this.#reconcilePrefilteredEnvironment(this.#surfaceScene);
       this.#textureAssets.invalidateResidency();
       if (this.#sizeInput !== null) {
         const previousSize = this.#size;

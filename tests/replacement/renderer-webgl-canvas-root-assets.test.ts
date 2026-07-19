@@ -8,12 +8,16 @@ import {
   mesh,
   perspectiveCamera,
   planeGeometry,
+  prefilteredEnvironment,
   scene,
+  standardMaterial,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
 import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
+import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
+import { environmentKtx1Fixture } from "./support/environment-ktx1";
 import {
   staticInstancedTriangleGlb,
   staticTriangleDocument,
@@ -22,6 +26,70 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("uses studio fallback until one offline environment becomes GPU-ready", async () => {
+    const environment = prefilteredEnvironment({ src: "/environment.ktx", version: 2 });
+    const source = environmentKtx1Fixture(2).source;
+    const readPrefilteredEnvironment = vi.fn(async () => source);
+    const { callbacks, canvas, root } = harness({
+      preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
+      readPrefilteredEnvironment,
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      environment,
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: standardMaterial({ color: [0.8, 0.6, 0.2, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
+      String(shader).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
+
+    await vi.waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment)).toEqual({
+      mipCount: 2,
+      provenance: "fixture-2",
+      size: 2,
+      state: "ready",
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(12);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
+      String(shader).includes("#define PREFILTERED_ENVIRONMENT"))).toBe(true);
+    expect(vi.mocked(canvas.gl.bindTexture).mock.calls.some(([target]) =>
+      target === canvas.gl.TEXTURE_CUBE_MAP)).toBe(true);
+    expect(root.getSnapshot().resources.persistentGpu.retainedBytes).toBeGreaterThanOrEqual(120);
+
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    canvas.dispatchEvent(new Event("webglcontextrestored"));
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(24);
+    expect(readPrefilteredEnvironment).toHaveBeenCalledOnce();
+    expect(root.getPrefilteredEnvironmentSnapshot(environment).state).toBe("ready");
+  });
+
+  it("captures environment GPU allocation failure without corrupting asset readiness", async () => {
+    const environment = prefilteredEnvironment({ src: "/environment.ktx" });
+    const { canvas, root, scheduledFailures } = harness({
+      preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
+      readPrefilteredEnvironment: async () => environmentKtx1Fixture(2).source,
+    });
+    canvas.gl.createTexture.mockReturnValueOnce(null);
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      environment,
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: standardMaterial({ color: [0.5, 0.5, 0.5, 1] }),
+      })],
+    }));
+
+    await vi.waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment).state)
+      .toBe("ready"));
+    expect(scheduledFailures).toHaveLength(1);
+    expect(root.getSnapshot().lastFrameFailure).toMatch(/prefiltered environment/u);
+  });
+
   it("keeps texture publication incremental while a large scene is still admitting", async () => {
     let resolveDecode: ((source: {
       height: number;

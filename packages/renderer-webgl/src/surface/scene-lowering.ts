@@ -108,7 +108,7 @@ export type CanonicalSurfaceScene = Readonly<{
   alphaMaskTextureAssets: readonly TextureSourceRef[];
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
-  environment?: CanonicalStudioEnvironment;
+  environment?: CanonicalEnvironment;
   exposure: number;
   gltfNodes: readonly (GltfNode | GltfInstancesNode)[];
   lodGroups: readonly CanonicalLodGroup[];
@@ -219,10 +219,17 @@ export type CanonicalDirectionalLight = Readonly<{
   direction: Direction3;
 }>;
 
-export type CanonicalStudioEnvironment = Readonly<{
+export type CanonicalEnvironment = Readonly<{
   radianceScaleNits: number;
   rotation: Mat4;
-}>;
+} & (
+  | { source: "studio" }
+  | {
+    source: "royal-prefiltered-v1";
+    src: string;
+    version?: number | string;
+  }
+)>;
 
 export type CanonicalPunctualLight = Readonly<{
   color: LinearRgba;
@@ -271,15 +278,12 @@ const normalizedDirection = (direction: Direction3): Direction3 => {
   ];
 };
 
-const prepareStudioEnvironment = (
+const prepareEnvironment = (
   scene: RenderRoot,
   required: boolean,
-): CanonicalStudioEnvironment | undefined => {
+): CanonicalEnvironment | undefined => {
   const environment = scene.environment;
   if (!required || environment === undefined) return undefined;
-  if (environment.source !== "studio") {
-    throw new Error("Royal canonical surface slice does not yet support prefiltered environments");
-  }
   return {
     radianceScaleNits: environment.radianceScaleNits,
     rotation: transformMat4({
@@ -287,6 +291,13 @@ const prepareStudioEnvironment = (
       rotation: environment.rotation,
       scale: [1, 1, 1],
     }),
+    ...(environment.source === "studio"
+      ? { source: "studio" as const }
+      : {
+        source: "royal-prefiltered-v1" as const,
+        src: environment.src,
+        ...(environment.version === undefined ? {} : { version: environment.version }),
+      }),
   };
 };
 
@@ -310,7 +321,7 @@ export const prepareCanonicalSurfaceScene = (
       break;
     }
   }
-  const environment = prepareStudioEnvironment(scene, requiresLighting);
+  const environment = prepareEnvironment(scene, requiresLighting);
   const directionalLights: CanonicalDirectionalLight[] = [];
   const gltfNodes: Array<GltfNode | GltfInstancesNode> = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
