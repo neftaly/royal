@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +34,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 128 * 1024,
+  '@royal/renderer-webgl': 176 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -80,6 +88,21 @@ try {
       .find((target) => !contents.includes(target));
     if (missingTarget !== undefined) {
       throw new Error(`${manifest.name} packed export target is missing: ${missingTarget}`);
+    }
+    if (manifest.name === '@royal/renderer-webgl') {
+      const worker = contents.find((entry) =>
+        /^package\/dist\/assets\/static-preparation-worker-.*\.js$/u.test(entry));
+      if (worker === undefined) {
+        throw new Error('@royal/renderer-webgl packed worker entry is missing');
+      }
+      const browserPreparationName = readdirSync(path.join(repoRoot, directory, 'dist'))
+        .find((file) => file.startsWith('browser-static-preparation-') && file.endsWith('.js'));
+      const browserPreparation = browserPreparationName === undefined
+        ? ''
+        : readFileSync(path.join(repoRoot, directory, 'dist', browserPreparationName), 'utf8');
+      if (!browserPreparation.includes('new URL("assets/static-preparation-worker-')) {
+        throw new Error('@royal/renderer-webgl worker URL is not package-relative');
+      }
     }
     const packedBytes = statSync(tarball).size;
     const sizeBudget = packageSizeBudgets[manifest.name];

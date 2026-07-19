@@ -22,6 +22,7 @@ import {
   readGltfResourceWithFetch,
   readGltfWithFetch,
   type GltfAssetSnapshot,
+  type GltfAssetOwnerPlatform,
 } from "../gltf/asset-owner";
 import {
   identityMat4,
@@ -96,6 +97,22 @@ const lazyBrowserTextureDecoder = (): NonNullable<CanvasRootPlatform["decodeText
     decoder ??= import("../texture/browser-decode")
       .then((module) => module.createBrowserTextureDecoder());
     return (await decoder)(asset, signal);
+  };
+};
+
+const lazyBrowserGltfPreparer = (): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
+  let prepare: Promise<NonNullable<GltfAssetOwnerPlatform["prepare"]>> | undefined;
+  return async (bytes, contentKey, label, sourceUri, signal, readResource) => {
+    prepare ??= import("../gltf/browser-static-preparation")
+      .then((module) => module.prepareStaticGltfInBrowser);
+    return (await prepare)(
+      bytes,
+      contentKey,
+      label,
+      sourceUri,
+      signal,
+      readResource,
+    );
   };
 };
 
@@ -198,9 +215,12 @@ export class CanvasRoot {
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
     this.#surfaceGpu = new SurfaceGpuOwner(this.#gl);
+    const usesDefaultGltfIo = platform.readGltf === undefined
+      && platform.readGltfResource === undefined;
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
+      ...(usesDefaultGltfIo ? { prepare: lazyBrowserGltfPreparer() } : {}),
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
     });

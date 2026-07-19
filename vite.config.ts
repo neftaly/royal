@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import glsl from 'vite-plugin-glsl';
+import type { Plugin } from 'vite';
 
 type PackageConfig = {
   readonly external?: readonly string[];
@@ -79,6 +80,31 @@ const failOnRollupWarning = (warning: string | { readonly message?: string }): n
   throw new Error('Rollup warning treated as error: ' + message);
 };
 
+const omitPublishedWorkerEntryMap = (): Plugin => {
+  let outputDirectory: string | undefined;
+  return {
+    name: 'royal-omit-published-worker-entry-map',
+    writeBundle: (options) => {
+      outputDirectory = options.dir;
+    },
+    closeBundle: () => {
+      if (outputDirectory === undefined) return;
+      const assets = path.join(outputDirectory, 'assets');
+      let files: readonly string[];
+      try {
+        files = readdirSync(assets);
+      } catch {
+        return;
+      }
+      for (const fileName of files) {
+        if (/^static-preparation-worker-.*\.js\.map$/u.test(fileName)) {
+          rmSync(path.join(assets, fileName), { force: true });
+        }
+      }
+    }
+  };
+};
+
 const sharedBuildOptions = { target: 'safari17', sourcemap: true, rollupOptions: { onwarn: failOnRollupWarning } };
 
 const packageDependencyNames = (packageManifest: PackageManifest): readonly string[] => [
@@ -104,7 +130,44 @@ const packageExternalPredicate = (
 };
 
 export default ({ command, mode }: { readonly command: string; readonly mode: string }) => {
-  const sharedPlugins = [glsl({ include: ['**/*.frag', '**/*.vert'], minify: mode === 'production' })];
+  const sharedPlugins = [
+    glsl({ include: ['**/*.frag', '**/*.vert'], minify: mode === 'production' }),
+    omitPublishedWorkerEntryMap()
+  ];
+  const worker = {
+    format: 'iife' as const,
+    plugins: () => {
+      let outputDirectory: string | undefined;
+      const workerChunks: string[] = [];
+      const plugin: Plugin = {
+        name: 'royal-omit-worker-source-maps',
+        generateBundle: (_options, bundle) => {
+          for (const output of Object.values(bundle)) {
+            if (output.type === 'chunk') workerChunks.push(output.fileName);
+          }
+          for (const fileName of Object.keys(bundle)) {
+            if (fileName.endsWith('.map')) delete bundle[fileName];
+          }
+        },
+        writeBundle: (options) => {
+          if (options.dir === undefined) return;
+          outputDirectory = options.dir;
+          for (const fileName of workerChunks) {
+            rmSync(path.join(options.dir, fileName + '.map'), { force: true });
+          }
+        },
+        closeBundle: () => {
+          if (outputDirectory === undefined) return;
+          for (const fileName of readdirSync(outputDirectory)) {
+            if (/^static-preparation-worker-.*\.js\.map$/u.test(fileName)) {
+              rmSync(path.join(outputDirectory, fileName), { force: true });
+            }
+          }
+        }
+      };
+      return [plugin];
+    }
+  };
 
   if (isAppPackage) {
     return {
@@ -113,7 +176,8 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
       publicDir: false,
       plugins: [...(reactAppPackageNames.has(manifest.name ?? '') ? [react()] : []), ...sharedPlugins],
       resolve: { alias: sourceAliases },
-      build: sharedBuildOptions
+      build: sharedBuildOptions,
+      worker
     };
   }
 
@@ -123,8 +187,10 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
   }
 
   return {
+    base: './',
     clearScreen: false,
     plugins: sharedPlugins,
+    worker,
     build: {
       ...sharedBuildOptions,
       lib: packageConfig.lib,

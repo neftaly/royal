@@ -14,6 +14,14 @@ export type GltfAssetSnapshot =
 export type GltfAssetOwnerPlatform = Readonly<{
   onAssetChanged(): void;
   onListenerError(error: unknown): void;
+  prepare?(
+    bytes: Uint8Array,
+    contentKey: string,
+    label: string,
+    sourceUri: string,
+    signal: AbortSignal,
+    readResource: (uri: string) => Promise<Uint8Array>,
+  ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readResource(uri: string, signal: AbortSignal): Promise<Uint8Array>;
 }>;
@@ -175,18 +183,30 @@ export class GltfAssetOwner {
     };
     this.#entries.set(key, entry);
     this.#publish(key);
-    void Promise.all([
-      (async () => this.#platform.read(asset, entry.controller.signal))(),
-      import("./static-asset"),
-    ]).then(async ([bytes, preparation]) => {
+    const preparation = this.#platform.prepare === undefined
+      ? import("./static-asset")
+      : undefined;
+    void this.#platform.read(asset, entry.controller.signal).then(async (bytes) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
-      const prepared = await preparation.prepareStaticGltfSource(
-        bytes,
-        key,
-        diagnosticLabel(asset),
-        asset.src,
-        (uri) => this.#platform.readResource(uri, entry.controller.signal),
-      );
+      const readResource = (uri: string) =>
+        this.#platform.readResource(uri, entry.controller.signal);
+      const prepared = this.#platform.prepare === undefined
+        ? await preparation!.then((module) =>
+          module.prepareStaticGltfSource(
+            bytes,
+            key,
+            diagnosticLabel(asset),
+            asset.src,
+            readResource,
+          ))
+        : await this.#platform.prepare(
+          bytes,
+          key,
+          diagnosticLabel(asset),
+          asset.src,
+          entry.controller.signal,
+          readResource,
+        );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.prepared = prepared;
       entry.snapshot = {

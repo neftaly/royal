@@ -150,6 +150,10 @@ const buildFixture = async (name) => {
     lazyGzipBytes: jsFiles
       .filter((file) => !initialJsNames.has(file))
       .reduce((sum, file) => sum + gzipByFile[file], 0),
+    totalGzipBytes: Object.values(gzipByFile).reduce((sum, bytes) => sum + bytes, 0),
+    workerGzipBytes: jsFiles
+      .filter((file) => file.includes('-worker-'))
+      .reduce((sum, file) => sum + gzipByFile[file], 0),
     initialRenderedBytesByModule,
     renderedModulesByFile,
   };
@@ -166,7 +170,14 @@ try {
   console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
   console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
   console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
+  console.log(`Royal worker assets:  ${formatBytes(royal.workerGzipBytes)} gzip`);
+  console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
   if (showDetails) {
+    console.log('Royal JavaScript files by gzip bytes:');
+    for (const [file, bytes] of Object.entries(royal.gzipByFile)
+      .sort((left, right) => right[1] - left[1])) {
+      console.log(`${String(bytes).padStart(7)}  ${file}`);
+    }
     const royalModules = Array.from(royal.initialRenderedBytesByModule)
       .filter(([id]) => id.startsWith(path.join(repoRoot, 'packages')))
       .sort((left, right) => right[1] - left[1]);
@@ -202,6 +213,16 @@ try {
   if (royal.lazyGzipBytes > budget.royalLazyGzipBytes) {
     failures.push(
       `Royal lazy gzip ${royal.lazyGzipBytes} exceeds ${budget.royalLazyGzipBytes}`,
+    );
+  }
+  if (royal.workerGzipBytes > budget.royalWorkerGzipBytes) {
+    failures.push(
+      `Royal worker gzip ${royal.workerGzipBytes} exceeds ${budget.royalWorkerGzipBytes}`,
+    );
+  }
+  if (royal.totalGzipBytes > budget.royalTotalGzipBytes) {
+    failures.push(
+      `Royal deployed JS gzip ${royal.totalGzipBytes} exceeds ${budget.royalTotalGzipBytes}`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));
