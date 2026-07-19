@@ -17,7 +17,7 @@ export type EmbeddedTextureAssetRef = Readonly<{
   contentKey: string;
   kind: "embedded-asset";
   label: string;
-  mimeType: "image/avif" | "image/jpeg" | "image/png";
+  mimeType: "image/avif" | "image/jpeg" | "image/png" | "image/webp";
   sampler?: TextureAssetRef["sampler"];
 }>;
 

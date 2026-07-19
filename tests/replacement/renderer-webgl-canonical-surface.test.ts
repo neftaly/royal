@@ -6,8 +6,11 @@ import {
   mesh,
   perspectiveCamera,
   planeGeometry,
+  pointLight,
+  prefilteredEnvironment,
   scene,
   standardMaterial,
+  spotLight,
   studioEnvironment,
   unlitMaterial,
 } from "@royal/renderer-core";
@@ -18,6 +21,8 @@ import {
   refreshCanonicalSurfaceTexture,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
+import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
+import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
 
 describe("canonical direct surface lowering", () => {
   it("lowers planes and boxes to the same indexed triangle ABI", () => {
@@ -166,7 +171,7 @@ describe("canonical direct surface lowering", () => {
       direction: [0, -1, 0],
     }]);
     expect(prepared.exposure).toBeCloseTo(1 / 4.8);
-    expect(prepared.surfaces[0]!.material).toEqual({
+    expect(prepared.surfaces[0]!.material).toMatchObject({
       baseColor: [1, 0.5, 0.25, 1],
       emissiveFactor: [0, 0, 0],
       kind: "standard",
@@ -194,14 +199,94 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.surfaces[0]!.material.kind).toBe("unlit");
   });
 
-  it("fails unsupported environment work when a lit surface demands it", () => {
-    expect(() => prepareCanonicalSurfaceScene(scene({
+  it("normalizes point and spot lights to one bounded punctual-light ABI", () => {
+    const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({}),
-      environment: studioEnvironment(),
+      nodes: [
+        pointLight({
+          color: [0.5, 1, 0.25, 1],
+          intensityCandela: 12,
+          position: [1, 2, 3],
+          range: 8,
+        }),
+        spotLight({
+          direction: [0, -2, 0],
+          innerConeAngle: 0.2,
+          intensityCandela: 5,
+          outerConeAngle: 0.5,
+          position: [-1, 4, 2],
+        }),
+        mesh({
+          geometry: planeGeometry(1),
+          material: standardMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    }));
+    expect(prepared.punctualLights).toEqual([
+      {
+        color: [6, 12, 3, 1],
+        direction: [0, 0, -1],
+        innerConeCosine: 1,
+        kind: "point",
+        outerConeCosine: -1,
+        position: [1, 2, 3],
+        range: 8,
+      },
+      {
+        color: [5, 5, 5, 1],
+        direction: [0, -1, 0],
+        innerConeCosine: Math.cos(0.2),
+        kind: "spot",
+        outerConeCosine: Math.cos(0.5),
+        position: [-1, 4, 2],
+        range: 0,
+      },
+    ]);
+  });
+
+  it("composes authored glTF punctual lights through the same scene ABI", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensions = {
+      KHR_lights_punctual: { lights: [{ intensity: 3, type: "point" }] },
+    };
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "lit-asset");
+    const node = gltf({ src: "/lit.glb", transform: { position: [10, 0, 0] } });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [node],
+    }), (candidate) => candidate === node ? asset : undefined);
+    expect(prepared.punctualLights).toMatchObject([{
+      color: [3, 3, 3, 1],
+      kind: "point",
+      position: [11, 2, 0],
+    }]);
+  });
+
+  it("normalizes the built-in studio environment only when a lit surface demands it", () => {
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      environment: studioEnvironment({ radianceScaleNits: 25, rotation: [0, 0.5, 0] }),
       nodes: [mesh({
         geometry: planeGeometry(1),
         material: standardMaterial({ color: [1, 1, 1, 1] }),
       })],
-    }))).toThrow("does not yet support scene environments");
+    }));
+    expect(prepared.environment?.radianceScaleNits).toBe(25);
+    expect(prepared.environment?.rotation).toHaveLength(16);
+  });
+
+  it("fails a prefiltered environment before publishing known-wrong lighting", () => {
+    expect(() => prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      environment: prefilteredEnvironment({ src: "/studio.ktx" }),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1] }),
+      })],
+    }))).toThrow("does not yet support prefiltered environments");
   });
 });

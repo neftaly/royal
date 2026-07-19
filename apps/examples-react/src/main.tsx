@@ -14,8 +14,10 @@ import {
   directionalLight,
   mesh,
   planeGeometry,
+  pointLight,
   scene,
   standardMaterial,
+  studioEnvironment,
   unlitMaterial,
 } from "@royal/react/scene";
 import { GltfBistroWeb } from "./examples/cases/GltfBistroWeb";
@@ -33,6 +35,12 @@ const directNodes = [
       color: [1, 0.9, 0.75, 1],
       direction: [0.4, -0.7, -0.55],
       illuminanceLux: 5,
+    }),
+    pointLight({
+      color: [0.35, 0.55, 1, 1],
+      intensityCandela: 3,
+      position: [1.5, 1.8, 2.2],
+      range: 7,
     }),
     mesh({
       geometry: boxGeometry([1.5, 1.5, 1.5]),
@@ -71,6 +79,7 @@ const App = (): ReactNode => {
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     clearColor: [0.035, 0.07, 0.14, 1],
+    environment: studioEnvironment({ radianceScaleNits: 1 }),
     nodes: directNodes,
   }), [orbit.cameraResource]);
   const [lastPick, setLastPick] = useState("click a surface");

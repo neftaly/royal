@@ -62,7 +62,7 @@ describe("static glTF preparation core", () => {
     expect(prepared.primitives).toHaveLength(1);
     const primitive = prepared.primitives[0]!;
     expect(prepared.bounds).toEqual({ max: [2, 3, 0], min: [0, 1, 0] });
-    expect(primitive.material).toEqual({
+    expect(primitive.material).toMatchObject({
       baseColor: [0.2, 0.4, 0.8, 1],
       kind: "unlit",
       requiresTextureCoordinates: false,
@@ -98,7 +98,7 @@ describe("static glTF preparation core", () => {
       },
     }];
     expect(prepareStaticGlb(staticTriangleGlb(standard), "standard").primitives[0]!.material)
-      .toEqual({
+      .toMatchObject({
         baseColor: [0.1, 0.2, 0.3, 0.4],
         emissiveFactor: [0, 0, 0],
         kind: "standard",
@@ -113,7 +113,7 @@ describe("static glTF preparation core", () => {
     const meshes = standard.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
     delete meshes[0]!.primitives[0]!.material;
     expect(prepareStaticGlb(staticTriangleGlb(standard), "implicit").primitives[0]!.material)
-      .toEqual({
+      .toMatchObject({
         baseColor: [1, 1, 1, 1],
         emissiveFactor: [0, 0, 0],
         kind: "standard",
@@ -148,6 +148,36 @@ describe("static glTF preparation core", () => {
     expect(prepared.bounds).toEqual({ max: [6, 7, 0], min: [0, 1, 0] });
   });
 
+  it("lowers reachable KHR_lights_punctual nodes without a separate runtime path", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensions = {
+      KHR_lights_punctual: {
+        lights: [{
+          color: [0.5, 0.75, 1],
+          intensity: 12,
+          range: 8,
+          spot: { innerConeAngle: 0.2, outerConeAngle: 0.5 },
+          type: "spot",
+        }],
+      },
+    };
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "punctual-v1");
+    expect(prepared.lights).toEqual([{
+      color: [0.5, 0.75, 1],
+      innerConeAngle: 0.2,
+      intensity: 12,
+      kind: "spot",
+      localModel: expect.arrayContaining([1, 2, 0, 1]),
+      outerConeAngle: 0.5,
+      range: 8,
+    }]);
+    expect(prepared.lights[0]!.localModel.slice(12, 15)).toEqual([1, 2, 0]);
+  });
+
   it("preserves alpha-mask and double-sided raster intent", () => {
     const document = staticTriangleDocument();
     const materials = document.materials as Array<Record<string, unknown>>;
@@ -159,7 +189,7 @@ describe("static glTF preparation core", () => {
       pbrMetallicRoughness: { baseColorFactor: [1, 0.5, 0.25, 0.4] },
     };
     expect(prepareStaticGlb(staticTriangleGlb(document), "masked").primitives[0]!.material)
-      .toEqual({
+      .toMatchObject({
         alphaCutoff: 0.25,
         baseColor: [1, 0.5, 0.25, 0.4],
         doubleSided: true,
@@ -192,6 +222,43 @@ describe("static glTF preparation core", () => {
       baseColorAsset: prepared.textureAssets[0],
       requiresTextureCoordinates: true,
     });
+  });
+
+  it("lowers KHR_texture_transform and TEXCOORD_1 without a second texture path", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "transformed.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_texture_transform"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_texture_transform"];
+    const materials = document.materials as Array<{
+      pbrMetallicRoughness: { baseColorTexture: Record<string, unknown> };
+    }>;
+    materials[0]!.pbrMetallicRoughness.baseColorTexture = {
+      extensions: {
+        KHR_texture_transform: {
+          offset: [0.25, 0.5],
+          scale: [2, 3],
+          texCoord: 1,
+        },
+      },
+      index: 0,
+    };
+    const meshes = document.meshes as Array<{
+      primitives: Array<{ attributes: Record<string, unknown> }>;
+    }>;
+    meshes[0]!.primitives[0]!.attributes.TEXCOORD_1 = 2;
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "transformed-v1",
+      "transformed.glb",
+    );
+    expect(prepared.primitives[0]!.geometry.textureCoordinates1).toEqual(
+      prepared.primitives[0]!.geometry.textureCoordinates0,
+    );
+    expect(prepared.primitives[0]!.material.baseColorTextureCoordinates).toEqual({
+      row0: [2, 0, 0.25, 1],
+      row1: [0, 3, 0.5, 0],
+    });
+    expect(prepared.textureAssets).toHaveLength(1);
   });
 
   it("does not prepare or reject textures unreachable from the selected scene", () => {
@@ -256,6 +323,25 @@ describe("static glTF preparation core", () => {
     });
   });
 
+  it("selects EXT_texture_webp through the same ordinary texture lifecycle", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "webp.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_webp"];
+    document.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_webp"];
+    document.images = [{ uri: "albedo.webp" }];
+    document.textures = [{ extensions: { EXT_texture_webp: { source: 0 } } }];
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "webp-v1",
+      "webp.glb",
+      "/models/webp.glb",
+    );
+    expect(prepared.textureAssets).toMatchObject([{
+      kind: "asset",
+      src: "/models/albedo.webp",
+    }]);
+  });
+
   it("converges core material texture channels on color-space-aware source recipes", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "material.glb");
     const document = parsed.document as Record<string, unknown>;
@@ -307,7 +393,7 @@ describe("static glTF preparation core", () => {
     }
   });
 
-  it("retains authored occlusion without scheduling an unused runtime texture", () => {
+  it("schedules authored occlusion through the ordinary texture lifecycle", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "occlusion.glb");
     const document = parsed.document as Record<string, unknown>;
     document.images = [{ uri: "ao.png" }];
@@ -321,7 +407,11 @@ describe("static glTF preparation core", () => {
       "occlusion.glb",
       "/models/occlusion.glb",
     );
-    expect(prepared.textureAssets).toEqual([]);
+    expect(prepared.textureAssets).toMatchObject([{
+      colorSpace: "linear",
+      kind: "asset",
+      src: "/models/ao.png",
+    }]);
     expect(prepared.primitives[0]!.material).toMatchObject({
       occlusionAsset: { kind: "asset", src: "/models/ao.png" },
       occlusionStrength: 0.4,

@@ -10,7 +10,9 @@ import {
   identityMat4,
   inverseMat4,
   multiplyMat4Into,
+  transformDirection,
   transformMat4,
+  transformPoint,
   type Mat4,
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
@@ -61,9 +63,11 @@ export type CanonicalPickSurface = Readonly<{
 export type CanonicalSurfaceScene = Readonly<{
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
+  environment?: CanonicalStudioEnvironment;
   exposure: number;
   gltfNodes: readonly GltfNode[];
   pickSurfaces: readonly CanonicalPickSurface[];
+  punctualLights: readonly CanonicalPunctualLight[];
   surfaces: readonly CanonicalDrawSurface[];
   textureAssets: readonly TextureSourceRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
@@ -74,7 +78,23 @@ export type CanonicalDirectionalLight = Readonly<{
   direction: Direction3;
 }>;
 
+export type CanonicalStudioEnvironment = Readonly<{
+  radianceScaleNits: number;
+  rotation: Mat4;
+}>;
+
+export type CanonicalPunctualLight = Readonly<{
+  color: LinearRgba;
+  direction: Direction3;
+  innerConeCosine: number;
+  kind: "point" | "spot";
+  outerConeCosine: number;
+  position: readonly [number, number, number];
+  range: number;
+}>;
+
 export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
+export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
 
 const modelHandedness = (model: Mat4): 1 | -1 => {
   const determinant = model[0] * (model[5] * model[10] - model[6] * model[9])
@@ -110,6 +130,25 @@ const normalizedDirection = (direction: Direction3): Direction3 => {
   ];
 };
 
+const prepareStudioEnvironment = (
+  scene: RenderRoot,
+  required: boolean,
+): CanonicalStudioEnvironment | undefined => {
+  const environment = scene.environment;
+  if (!required || environment === undefined) return undefined;
+  if (environment.source !== "studio") {
+    throw new Error("Royal canonical surface slice does not yet support prefiltered environments");
+  }
+  return {
+    radianceScaleNits: environment.radianceScaleNits,
+    rotation: transformMat4({
+      position: [0, 0, 0],
+      rotation: environment.rotation,
+      scale: [1, 1, 1],
+    }),
+  };
+};
+
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
@@ -124,12 +163,11 @@ export const prepareCanonicalSurfaceScene = (
       break;
     }
   }
-  if (requiresLighting && scene.environment !== undefined) {
-    throw new Error("Royal canonical surface slice does not yet support scene environments");
-  }
+  const environment = prepareStudioEnvironment(scene, requiresLighting);
   const directionalLights: CanonicalDirectionalLight[] = [];
   const gltfNodes: GltfNode[] = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
+  const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
   const textureAssets: TextureSourceRef[] = [];
   for (const node of scene.nodes) {
@@ -153,6 +191,39 @@ export const prepareCanonicalSurfaceScene = (
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
       textureAssets.push(...prepared.textureAssets);
+      for (const light of prepared.lights) {
+        const lightModel = multiplyMat4Into(identityMat4(), rootModel, light.localModel);
+        const color: LinearRgba = [
+          light.color[0] * light.intensity,
+          light.color[1] * light.intensity,
+          light.color[2] * light.intensity,
+          1,
+        ];
+        const direction = transformDirection(lightModel, [0, 0, -1]);
+        if (light.kind === "directional") {
+          if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
+            throw new Error(
+              `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+            );
+          }
+          directionalLights.push({ color, direction });
+        } else {
+          if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
+            throw new Error(
+              `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
+            );
+          }
+          punctualLights.push({
+            color,
+            direction,
+            innerConeCosine: Math.cos(light.innerConeAngle),
+            kind: light.kind,
+            outerConeCosine: Math.cos(light.outerConeAngle),
+            position: transformPoint(lightModel, [0, 0, 0]),
+            range: light.range,
+          });
+        }
+      }
       for (const primitive of prepared.primitives) {
       const instanceBatch = primitive.instanceBatch;
       const model = instanceBatch === undefined
@@ -240,7 +311,28 @@ export const prepareCanonicalSurfaceScene = (
         });
         continue;
       }
-      if (!requiresLighting && (node.kind === "point-light" || node.kind === "spot-light")) {
+      if (node.kind === "point-light" || node.kind === "spot-light") {
+        if (!requiresLighting) continue;
+        if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
+          throw new Error(
+            `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
+          );
+        }
+        const spot = node.kind === "spot-light";
+        punctualLights.push({
+          color: [
+            node.color[0] * node.intensityCandela,
+            node.color[1] * node.intensityCandela,
+            node.color[2] * node.intensityCandela,
+            1,
+          ],
+          direction: spot ? normalizedDirection(node.direction) : [0, 0, -1],
+          innerConeCosine: spot ? Math.cos(node.innerConeAngle) : 1,
+          kind: spot ? "spot" : "point",
+          outerConeCosine: spot ? Math.cos(node.outerConeAngle) : -1,
+          position: node.position,
+          range: node.range ?? 0,
+        });
         continue;
       }
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
@@ -274,9 +366,11 @@ export const prepareCanonicalSurfaceScene = (
   return {
     camera,
     directionalLights,
+    ...(environment === undefined ? {} : { environment }),
     exposure: sceneExposure(scene),
     gltfNodes,
     pickSurfaces,
+    punctualLights,
     surfaces,
     textureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",

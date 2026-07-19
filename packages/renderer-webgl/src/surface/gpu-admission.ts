@@ -1,4 +1,5 @@
 import type { CanonicalDrawSurface } from "./scene-lowering";
+import { canonicalMaterialUsesTextureCoordinateSet } from "./canonical-material";
 
 export const surfaceUsesRuntimeTextureCoordinates = (
   surface: CanonicalDrawSurface,
@@ -8,9 +9,15 @@ export const surfaceUsesRuntimeTextureCoordinates = (
     || (material.kind === "standard" && (
       material.metallicRoughnessAsset !== undefined
       || material.normalAsset !== undefined
+      || material.occlusionAsset !== undefined
       || material.emissiveAsset !== undefined
     ));
 };
+
+export const surfaceUsesTextureCoordinateSet = (
+  surface: CanonicalDrawSurface,
+  set: 0 | 1,
+): boolean => canonicalMaterialUsesTextureCoordinateSet(surface.material, set);
 
 export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): string => {
   const geometryBaseKey = surface.material.kind === "standard"
@@ -19,10 +26,14 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
     : `${surface.geometry.key}:position`;
   const tangentKey = surface.material.kind === "standard"
     && surface.material.normalAsset !== undefined
+    && surface.material.normalTextureCoordinates === undefined
     && surface.geometry.tangents !== undefined
     ? "tangent"
     : "no-tangent";
-  return `${geometryBaseKey}:${surfaceUsesRuntimeTextureCoordinates(surface) ? "uv0" : "no-uv"}:${tangentKey}`;
+  const uvKey = surfaceUsesTextureCoordinateSet(surface, 1)
+    ? "uv01"
+    : surfaceUsesTextureCoordinateSet(surface, 0) ? "uv0" : "no-uv";
+  return `${geometryBaseKey}:${uvKey}:${tangentKey}`;
 };
 
 const surfaceAdmissionKey = (surface: CanonicalDrawSurface): string => JSON.stringify([

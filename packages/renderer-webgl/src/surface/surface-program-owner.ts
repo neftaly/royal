@@ -1,4 +1,26 @@
-import { MAX_CANONICAL_DIRECTIONAL_LIGHTS } from "./scene-lowering";
+import {
+  MAX_CANONICAL_DIRECTIONAL_LIGHTS,
+  MAX_CANONICAL_PUNCTUAL_LIGHTS,
+} from "./scene-lowering";
+import unlitVertexShader from "../webgl/shaders/unlit.vert";
+import unlitFragmentShader from "../webgl/shaders/unlit.frag";
+import standardVertexShader from "../webgl/shaders/surface.vert";
+import standardFragmentShader from "../webgl/shaders/surface.frag";
+
+export type TextureCoordinatesProgram = Readonly<{
+  row0: WebGLUniformLocation;
+  row1: WebGLUniformLocation;
+}>;
+
+export const SURFACE_FEATURE_BASE_COLOR_TEXTURE = 1;
+export const SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE = 2;
+export const SURFACE_FEATURE_NORMAL_TEXTURE = 4;
+export const SURFACE_FEATURE_EMISSIVE_TEXTURE = 8;
+export const SURFACE_FEATURE_TANGENT = 16;
+export const SURFACE_FEATURE_OCCLUSION_TEXTURE = 32;
+export const SURFACE_FEATURE_STUDIO_ENVIRONMENT = 64;
+export const SURFACE_FEATURE_PUNCTUAL_LIGHTS = 128;
+export const SURFACE_TEXTURE_FEATURES = 0b11_1111;
 
 export type UnlitProgram = Readonly<{
   alphaCutoff: WebGLUniformLocation | null;
@@ -6,6 +28,7 @@ export type UnlitProgram = Readonly<{
   kind: "unlit";
   program: WebGLProgram;
   texture: WebGLUniformLocation | null;
+  textureCoordinates: TextureCoordinatesProgram | null;
   viewProjectionModel: WebGLUniformLocation;
 }>;
 
@@ -17,16 +40,30 @@ export type StandardProgram = Readonly<{
   directionalLightCount: WebGLUniformLocation;
   directionalLightDirections: WebGLUniformLocation;
   emissive: WebGLUniformLocation | null;
+  emissiveCoordinates: TextureCoordinatesProgram | null;
   emissiveFactor: WebGLUniformLocation;
+  environmentRotation: WebGLUniformLocation | null;
+  environmentSettings: WebGLUniformLocation | null;
   kind: "standard";
   materialFactors: WebGLUniformLocation;
   metallicRoughness: WebGLUniformLocation | null;
+  metallicRoughnessCoordinates: TextureCoordinatesProgram | null;
   model: WebGLUniformLocation;
   normalTransform: WebGLUniformLocation;
   normalTexture: WebGLUniformLocation | null;
+  normalTextureCoordinates: TextureCoordinatesProgram | null;
+  occlusion: WebGLUniformLocation | null;
+  occlusionCoordinates: TextureCoordinatesProgram | null;
+  occlusionStrength: WebGLUniformLocation | null;
   program: WebGLProgram;
   presentation: WebGLUniformLocation;
   texture: WebGLUniformLocation | null;
+  textureCoordinates: TextureCoordinatesProgram | null;
+  punctualLightColors: WebGLUniformLocation | null;
+  punctualLightCount: WebGLUniformLocation | null;
+  punctualLightDirections: WebGLUniformLocation | null;
+  punctualLightPositions: WebGLUniformLocation | null;
+  punctualLightSpotCones: WebGLUniformLocation | null;
   viewProjection: WebGLUniformLocation;
 }>;
 
@@ -38,266 +75,12 @@ export const surfaceProgramVariantKey = (
   doubleSided: boolean,
 ): string => `${kind}:${features}:${instanced ? 1 : 0}:${alphaMasked ? 1 : 0}:${kind === "standard" && doubleSided ? 1 : 0}`;
 
-const UNLIT_VERTEX_SHADER = `#version 300 es
-layout(location = 0) in vec3 position;
-#ifdef INSTANCED
-layout(location = 3) in mat4 instanceModel;
-#endif
-#ifdef TEXTURED
-layout(location = 2) in vec2 textureCoordinate0;
-out vec2 surfaceTextureCoordinate0;
-#endif
-uniform mat4 viewProjectionModel;
-void main() {
-#ifdef TEXTURED
-  surfaceTextureCoordinate0 = textureCoordinate0;
-#endif
-  vec4 localPosition = vec4(position, 1.0);
-#ifdef INSTANCED
-  localPosition = instanceModel * localPosition;
-#endif
-  gl_Position = viewProjectionModel * localPosition;
-}
-`;
-
-const UNLIT_FRAGMENT_SHADER = `#version 300 es
-precision highp float;
-uniform vec4 linearColor;
-#ifdef ALPHA_MASK
-uniform float alphaCutoff;
-#endif
-#ifdef TEXTURED
-in vec2 surfaceTextureCoordinate0;
-uniform sampler2D baseColorTexture;
-#endif
-out vec4 outputColor;
-vec3 linearToSrgb(vec3 value) {
-  bvec3 low = lessThanEqual(value, vec3(0.0031308));
-  vec3 lower = value * 12.92;
-  vec3 upper = 1.055 * pow(max(value, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
-  return mix(upper, lower, low);
-}
-void main() {
-  vec4 color = linearColor;
-#ifdef TEXTURED
-  color *= texture(baseColorTexture, surfaceTextureCoordinate0);
-#endif
-#ifdef ALPHA_MASK
-  if (color.a < alphaCutoff) discard;
-#endif
-  outputColor = vec4(linearToSrgb(color.rgb), 1.0);
-}
-`;
-
-const STANDARD_VERTEX_SHADER = `#version 300 es
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-#ifdef TANGENT
-layout(location = 10) in vec4 tangent;
-out vec4 worldTangent;
-#endif
-#ifdef INSTANCED
-layout(location = 3) in mat4 instanceModel;
-layout(location = 7) in vec3 instanceNormal0;
-layout(location = 8) in vec3 instanceNormal1;
-layout(location = 9) in vec4 instanceNormal2;
-#endif
-#ifdef TEXTURED
-layout(location = 2) in vec2 textureCoordinate0;
-out vec2 surfaceTextureCoordinate0;
-#endif
-uniform mat4 viewProjection;
-uniform mat4 model;
-uniform mat4 normalTransform;
-out vec3 worldNormal;
-out vec3 worldPosition;
-void main() {
-#ifdef TEXTURED
-  surfaceTextureCoordinate0 = textureCoordinate0;
-#endif
-  vec4 localPosition = vec4(position, 1.0);
-#ifdef INSTANCED
-  localPosition = instanceModel * localPosition;
-#endif
-  vec4 world = model * localPosition;
-  worldPosition = world.xyz;
-#ifdef INSTANCED
-  mat3 instanceNormal = mat3(instanceNormal0, instanceNormal1, instanceNormal2.xyz);
-  worldNormal = mat3(normalTransform) * instanceNormal * normal;
-#else
-  worldNormal = mat3(normalTransform) * normal;
-#endif
-#ifdef TANGENT
-  vec3 localTangent = tangent.xyz;
-  float tangentHandedness = tangent.w;
-#ifdef INSTANCED
-  localTangent = mat3(instanceModel) * localTangent;
-  tangentHandedness *= instanceNormal2.w;
-#endif
-  worldTangent = vec4(
-    normalize(mat3(model) * localTangent),
-    tangentHandedness * normalTransform[3][3]
-  );
-#endif
-  gl_Position = viewProjection * world;
-}
-`;
-
-const STANDARD_FRAGMENT_SHADER = `#version 300 es
-precision highp float;
-#define MAX_DIRECTIONAL_LIGHTS ${MAX_CANONICAL_DIRECTIONAL_LIGHTS}
-in vec3 worldNormal;
-in vec3 worldPosition;
-#ifdef TEXTURED
-in vec2 surfaceTextureCoordinate0;
-#endif
-#ifdef BASE_COLOR_TEXTURED
-uniform sampler2D baseColorTexture;
-#endif
-#ifdef METALLIC_ROUGHNESS_TEXTURED
-uniform sampler2D metallicRoughnessTexture;
-#endif
-#ifdef NORMAL_TEXTURED
-uniform sampler2D normalTexture;
-#ifdef TANGENT
-in vec4 worldTangent;
-#endif
-#endif
-#ifdef EMISSIVE_TEXTURED
-uniform sampler2D emissiveTexture;
-#endif
-uniform vec4 baseColor;
-uniform vec4 cameraWorldPosition;
-uniform vec4 directionalLightColors[MAX_DIRECTIONAL_LIGHTS];
-uniform int directionalLightCount;
-uniform vec4 directionalLightDirections[MAX_DIRECTIONAL_LIGHTS];
-uniform vec4 emissiveFactor;
-uniform vec4 materialFactors;
-uniform vec4 presentation;
-out vec4 outputColor;
-const float PI = 3.141592653589793;
-float fresnelPower(float cosine) {
-  float value = clamp(1.0 - cosine, 0.0, 1.0);
-  float squared = value * value;
-  return squared * squared * value;
-}
-float ggxDistribution(float normalHalf, float alphaSquared) {
-  float denominator = normalHalf * normalHalf * (alphaSquared - 1.0) + 1.0;
-  return alphaSquared / max(PI * denominator * denominator, 0.0001);
-}
-float smithVisibility(float normalLight, float normalView, float alphaSquared) {
-  float lambdaView = normalLight * sqrt(max(
-    normalView * normalView * (1.0 - alphaSquared) + alphaSquared,
-    0.0
-  ));
-  float lambdaLight = normalView * sqrt(max(
-    normalLight * normalLight * (1.0 - alphaSquared) + alphaSquared,
-    0.0
-  ));
-  return 0.5 / max(lambdaView + lambdaLight, 0.0001);
-}
-vec3 pbrNeutral(vec3 color) {
-  const float startCompression = 0.76;
-  const float desaturation = 0.15;
-  float minimum = min(color.r, min(color.g, color.b));
-  float offset = minimum < 0.08 ? minimum - 6.25 * minimum * minimum : 0.04;
-  color -= offset;
-  float peak = max(color.r, max(color.g, color.b));
-  if (peak < startCompression) return max(color, vec3(0.0));
-  float distance = 1.0 - startCompression;
-  float compressed = 1.0 - distance * distance / (peak + distance - startCompression);
-  color *= compressed / peak;
-  float blend = 1.0 - 1.0 / (desaturation * (peak - compressed) + 1.0);
-  return mix(color, vec3(compressed), blend);
-}
-vec3 linearToSrgb(vec3 value) {
-  value = clamp(value, vec3(0.0), vec3(1.0));
-  bvec3 low = lessThanEqual(value, vec3(0.0031308));
-  vec3 lower = value * 12.92;
-  vec3 upper = 1.055 * pow(value, vec3(1.0 / 2.4)) - 0.055;
-  return mix(upper, lower, low);
-}
-void main() {
-  vec4 surfaceBaseColor = baseColor;
-#ifdef BASE_COLOR_TEXTURED
-  surfaceBaseColor *= texture(baseColorTexture, surfaceTextureCoordinate0);
-#endif
-#ifdef ALPHA_MASK
-  if (surfaceBaseColor.a < materialFactors.z) discard;
-#endif
-  vec3 normal = worldNormal;
-  if (dot(normal, normal) <= 0.00000001) {
-    normal = cross(dFdx(worldPosition), dFdy(worldPosition));
-  }
-  normal = normalize(normal);
-#ifdef NORMAL_TEXTURED
-  vec3 mappedNormal = texture(normalTexture, surfaceTextureCoordinate0).xyz * 2.0 - 1.0;
-  mappedNormal.xy *= materialFactors.w;
-#ifdef TANGENT
-  vec3 tangent = normalize(worldTangent.xyz - normal * dot(normal, worldTangent.xyz));
-  vec3 bitangent = cross(normal, tangent) * worldTangent.w;
-#else
-  vec3 positionDx = dFdx(worldPosition);
-  vec3 positionDy = dFdy(worldPosition);
-  vec2 uvDx = dFdx(surfaceTextureCoordinate0);
-  vec2 uvDy = dFdy(surfaceTextureCoordinate0);
-  vec3 tangent = normalize(positionDx * uvDy.y - positionDy * uvDx.y);
-  vec3 bitangent = normalize(-positionDx * uvDy.x + positionDy * uvDx.x);
-#endif
-  normal = normalize(mat3(tangent, bitangent, normal) * mappedNormal);
-#endif
-#ifdef DOUBLE_SIDED
-  if (!gl_FrontFacing) normal = -normal;
-#endif
-  vec3 viewVector = cameraWorldPosition.xyz - worldPosition;
-  vec3 viewDirection = dot(viewVector, viewVector) <= 0.00000001
-    ? normal
-    : normalize(viewVector);
-  float metallic = materialFactors.x;
-  float roughness = materialFactors.y;
-#ifdef METALLIC_ROUGHNESS_TEXTURED
-  vec4 metallicRoughnessSample = texture(
-    metallicRoughnessTexture,
-    surfaceTextureCoordinate0
-  );
-  metallic *= metallicRoughnessSample.b;
-  roughness *= metallicRoughnessSample.g;
-#endif
-  roughness = clamp(roughness, 0.04, 1.0);
-  float alpha = max(roughness * roughness, 0.001);
-  float alphaSquared = alpha * alpha;
-  vec3 dielectric = vec3(0.04);
-  vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
-  vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
-  float normalView = max(dot(normal, viewDirection), 0.0);
-  vec3 lit = vec3(0.0);
-  for (int index = 0; index < MAX_DIRECTIONAL_LIGHTS; index += 1) {
-    if (index >= directionalLightCount) break;
-    vec3 lightDirection = -directionalLightDirections[index].xyz;
-    float normalLight = max(dot(normal, lightDirection), 0.0);
-    if (normalLight <= 0.0) continue;
-    vec3 halfwayInput = lightDirection + viewDirection;
-    vec3 halfway = dot(halfwayInput, halfwayInput) <= 0.00000001
-      ? normal
-      : normalize(halfwayInput);
-    float normalHalf = max(dot(normal, halfway), 0.0);
-    float viewHalf = max(dot(viewDirection, halfway), 0.0);
-    vec3 fresnel = mix(f0, vec3(1.0), fresnelPower(viewHalf));
-    vec3 diffuse = diffuseColor * (1.0 - max(max(fresnel.r, fresnel.g), fresnel.b)) / PI;
-    vec3 specular = fresnel
-      * ggxDistribution(normalHalf, alphaSquared)
-      * smithVisibility(normalLight, normalView, alphaSquared);
-    lit += (diffuse + specular) * directionalLightColors[index].rgb * normalLight;
-  }
-  vec3 emissive = emissiveFactor.rgb;
-#ifdef EMISSIVE_TEXTURED
-  emissive *= texture(emissiveTexture, surfaceTextureCoordinate0).rgb;
-#endif
-  vec3 exposed = (lit + emissive) * max(presentation.x, 0.0);
-  vec3 mapped = presentation.y > 0.5 ? pbrNeutral(exposed) : clamp(exposed, 0.0, 1.0);
-  outputColor = vec4(linearToSrgb(mapped), 1.0);
-}
-`;
+const UNLIT_VERTEX_SHADER = unlitVertexShader;
+const UNLIT_FRAGMENT_SHADER = unlitFragmentShader;
+const STANDARD_VERTEX_SHADER = standardVertexShader;
+const STANDARD_FRAGMENT_SHADER = standardFragmentShader
+  .replace("__MAX_DIRECTIONAL_LIGHTS__", String(MAX_CANONICAL_DIRECTIONAL_LIGHTS))
+  .replace("__MAX_PUNCTUAL_LIGHTS__", String(MAX_CANONICAL_PUNCTUAL_LIGHTS));
 
 const compileShader = (
   gl: WebGL2RenderingContext,
@@ -356,7 +139,7 @@ const shaderVariant = (
   doubleSided: boolean,
 ): string => source.replace(
   "\n",
-  `\n${features === 0 ? "" : "#define TEXTURED\n"}${features & 1 ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & 2 ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & 4 ? "#define NORMAL_TEXTURED\n" : ""}${features & 8 ? "#define EMISSIVE_TEXTURED\n" : ""}${features & 16 ? "#define TANGENT\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -371,6 +154,15 @@ const uniform = (
   }
   return location;
 };
+
+const textureCoordinatesProgram = (
+  gl: WebGL2RenderingContext,
+  program: WebGLProgram,
+  prefix: string,
+): TextureCoordinatesProgram => ({
+  row0: uniform(gl, program, `${prefix}TextureCoordinates0`),
+  row1: uniform(gl, program, `${prefix}TextureCoordinates1`),
+});
 
 const createUnlitProgram = (
   gl: WebGL2RenderingContext,
@@ -390,6 +182,9 @@ const createUnlitProgram = (
     kind: "unlit",
     program,
     texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
+    textureCoordinates: features & 1
+      ? textureCoordinatesProgram(gl, program, "baseColor")
+      : null,
     viewProjectionModel: uniform(gl, program, "viewProjectionModel"),
   };
 };
@@ -413,19 +208,65 @@ const createStandardProgram = (
     directionalLightColors: uniform(gl, program, "directionalLightColors"),
     directionalLightCount: uniform(gl, program, "directionalLightCount"),
     directionalLightDirections: uniform(gl, program, "directionalLightDirections"),
-    emissive: features & 8 ? uniform(gl, program, "emissiveTexture") : null,
+    emissive: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
+      ? uniform(gl, program, "emissiveTexture")
+      : null,
+    emissiveCoordinates: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "emissive")
+      : null,
     emissiveFactor: uniform(gl, program, "emissiveFactor"),
+    environmentRotation: features & SURFACE_FEATURE_STUDIO_ENVIRONMENT
+      ? uniform(gl, program, "environmentRotation")
+      : null,
+    environmentSettings: features & SURFACE_FEATURE_STUDIO_ENVIRONMENT
+      ? uniform(gl, program, "environmentSettings")
+      : null,
     kind: "standard",
     materialFactors: uniform(gl, program, "materialFactors"),
-    metallicRoughness: features & 2
+    metallicRoughness: features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
       ? uniform(gl, program, "metallicRoughnessTexture")
+      : null,
+    metallicRoughnessCoordinates: features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "metallicRoughness")
       : null,
     model: uniform(gl, program, "model"),
     normalTransform: uniform(gl, program, "normalTransform"),
-    normalTexture: features & 4 ? uniform(gl, program, "normalTexture") : null,
+    normalTexture: features & SURFACE_FEATURE_NORMAL_TEXTURE
+      ? uniform(gl, program, "normalTexture")
+      : null,
+    normalTextureCoordinates: features & SURFACE_FEATURE_NORMAL_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "normal")
+      : null,
+    occlusion: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
+      ? uniform(gl, program, "occlusionTexture")
+      : null,
+    occlusionCoordinates: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "occlusion")
+      : null,
+    occlusionStrength: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
+      ? uniform(gl, program, "occlusionStrength")
+      : null,
     presentation: uniform(gl, program, "presentation"),
     program,
+    punctualLightColors: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      ? uniform(gl, program, "punctualLightColors")
+      : null,
+    punctualLightCount: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      ? uniform(gl, program, "punctualLightCount")
+      : null,
+    punctualLightDirections: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      ? uniform(gl, program, "punctualLightDirections")
+      : null,
+    punctualLightPositions: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      ? uniform(gl, program, "punctualLightPositions")
+      : null,
+    punctualLightSpotCones: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      ? uniform(gl, program, "punctualLightSpotCones")
+      : null,
     texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
+    textureCoordinates: features & 1
+      ? textureCoordinatesProgram(gl, program, "baseColor")
+      : null,
     viewProjection: uniform(gl, program, "viewProjection"),
   };
 };
@@ -477,6 +318,7 @@ export class SurfaceProgramOwner {
       if (program.metallicRoughness !== null) this.#gl.uniform1i(program.metallicRoughness, 1);
       if (program.normalTexture !== null) this.#gl.uniform1i(program.normalTexture, 2);
       if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 3);
+      if (program.occlusion !== null) this.#gl.uniform1i(program.occlusion, 4);
     }
     this.#initializedSamplers.add(program.program);
   }

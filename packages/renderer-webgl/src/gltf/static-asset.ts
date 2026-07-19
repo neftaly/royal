@@ -18,6 +18,7 @@ import { staticGltfBounds } from "./static-bounds";
 import {
   array,
   fail,
+  finiteTuple,
   index,
   nodeLocalMatrix,
   nonNegativeInteger,
@@ -39,6 +40,7 @@ import {
   prepareMaterial,
   resolveAssetUri,
 } from "./static-material";
+import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
 
 export type PreparedStaticGltfPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -49,8 +51,19 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 
 export type PreparedStaticGltf = Readonly<{
   bounds: GltfAssetBounds;
+  lights: readonly PreparedStaticGltfLight[];
   primitives: readonly PreparedStaticGltfPrimitive[];
   textureAssets: readonly TextureSourceRef[];
+}>;
+
+export type PreparedStaticGltfLight = Readonly<{
+  color: readonly [number, number, number];
+  innerConeAngle: number;
+  intensity: number;
+  kind: "directional" | "point" | "spot";
+  localModel: Mat4;
+  outerConeAngle: number;
+  range: number;
 }>;
 
 type StaticDracoDecoder = (
@@ -62,6 +75,19 @@ type PreparedMeshPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
 }>;
+
+const finiteNumber = (
+  value: unknown,
+  fallback: number,
+  label: string,
+  path: string,
+): number => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fail(label, path, "must be finite");
+  }
+  return value;
+};
 
 /** Converges repeated ordinary node occurrences on the authored instance ABI. */
 export const batchRepeatedStaticPrimitives = (
@@ -143,7 +169,10 @@ const prepareStaticDocument = (
       extension !== "KHR_materials_unlit"
       && extension !== "KHR_materials_emissive_strength"
       && extension !== "EXT_texture_avif"
+      && extension !== "EXT_texture_webp"
       && extension !== "EXT_mesh_gpu_instancing"
+      && extension !== "KHR_texture_transform"
+      && extension !== "KHR_lights_punctual"
       && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
       && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
     ) {
@@ -173,6 +202,21 @@ const prepareStaticDocument = (
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
   const materials = optionalArray(document.materials, label, "materials");
+  const documentExtensions = document.extensions === undefined
+    ? {}
+    : object(document.extensions, label, "extensions");
+  const punctualExtension = documentExtensions.KHR_lights_punctual === undefined
+    ? undefined
+    : object(
+      documentExtensions.KHR_lights_punctual,
+      label,
+      "extensions.KHR_lights_punctual",
+    );
+  const punctualLightDefinitions = optionalArray(
+    punctualExtension?.lights,
+    label,
+    "extensions.KHR_lights_punctual.lights",
+  );
   const textureAsset = createTextureAssetReader(
     document,
     binary,
@@ -279,6 +323,30 @@ const prepareStaticDocument = (
       if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
+      const material = preparePrimitiveMaterial(primitive.material, path);
+      const usesTextureCoordinates1 = canonicalMaterialUsesTextureCoordinateSet(material, 1);
+      const decodedTextureCoordinates1 = usesTextureCoordinates1
+        ? decoded?.attributes.get("TEXCOORD_1")
+        : undefined;
+      const textureCoordinates1 = !usesTextureCoordinates1 || attributes.TEXCOORD_1 === undefined
+        ? undefined
+        : decodedTextureCoordinates1 === undefined
+          ? readFloatVectors(
+            context,
+            index(attributes.TEXCOORD_1, accessors, label, `${path}.attributes.TEXCOORD_1`),
+            "VEC2",
+            2,
+            "TEXCOORD_1",
+          )
+          : validateDecodedVectors(
+            decodedTextureCoordinates1,
+            2,
+            label,
+            `${path}.attributes.TEXCOORD_1`,
+          );
+      if (textureCoordinates1 !== undefined && textureCoordinates1.length / 2 !== vertexCount) {
+        fail(label, `${path}.attributes.TEXCOORD_1`, "count must match POSITION");
+      }
       const decodedTangents = decoded?.attributes.get("TANGENT");
       const tangents = attributes.TANGENT === undefined
         ? undefined
@@ -311,9 +379,11 @@ const prepareStaticDocument = (
           fail(label, `${path}.indices[${item}]`, "decoded vertex index is out of range");
         }
       }
-      const material = preparePrimitiveMaterial(primitive.material, path);
-      if (material.requiresTextureCoordinates && textureCoordinates0 === undefined) {
-        fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the base color texture");
+      if (canonicalMaterialUsesTextureCoordinateSet(material, 0) && textureCoordinates0 === undefined) {
+        fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the material");
+      }
+      if (canonicalMaterialUsesTextureCoordinateSet(material, 1) && textureCoordinates1 === undefined) {
+        fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
       }
       return {
         geometry: {
@@ -324,6 +394,7 @@ const prepareStaticDocument = (
           positions,
           ...(tangents === undefined ? {} : { tangents }),
           ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
+          ...(textureCoordinates1 === undefined ? {} : { textureCoordinates1 }),
         },
         material,
       };
@@ -402,6 +473,7 @@ const prepareStaticDocument = (
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
   const claimed = new Set<number>();
+  const lights: PreparedStaticGltfLight[] = [];
   const primitives: PreparedStaticGltfPrimitive[] = [];
   const visit = (nodeIndex: number, parentModel: Mat4): void => {
     if (claimed.has(nodeIndex)) fail(label, `nodes[${nodeIndex}]`, "is cyclic or has multiple parents");
@@ -412,6 +484,68 @@ const prepareStaticDocument = (
     const localModel = nodeLocalMatrix(node, label, path);
     const worldModel = multiplyMat4Into(identityMat4(), parentModel, localModel);
     const instanceBatches = prepareNodeInstances(node, worldModel, path);
+    if (node.extensions !== undefined) {
+      const extensions = object(node.extensions, label, `${path}.extensions`);
+      if (extensions.KHR_lights_punctual !== undefined) {
+        const extensionPath = `${path}.extensions.KHR_lights_punctual`;
+        const extension = object(extensions.KHR_lights_punctual, label, extensionPath);
+        const lightIndex = index(
+          extension.light,
+          punctualLightDefinitions,
+          label,
+          `${extensionPath}.light`,
+        );
+        const lightPath = `extensions.KHR_lights_punctual.lights[${lightIndex}]`;
+        const light = object(punctualLightDefinitions[lightIndex], label, lightPath);
+        const kind = light.type === "directional"
+          || light.type === "point"
+          || light.type === "spot"
+          ? light.type
+          : fail(label, `${lightPath}.type`, "must be directional, point, or spot");
+        const color = finiteTuple(light.color, 3, [1, 1, 1], label, `${lightPath}.color`);
+        for (let channel = 0; channel < 3; channel += 1) {
+          if (color[channel]! < 0) fail(label, `${lightPath}.color[${channel}]`, "must not be negative");
+        }
+        const intensity = finiteNumber(light.intensity, 1, label, `${lightPath}.intensity`);
+        if (intensity < 0) fail(label, `${lightPath}.intensity`, "must not be negative");
+        const range = finiteNumber(light.range, 0, label, `${lightPath}.range`);
+        if (light.range !== undefined && range <= 0) {
+          fail(label, `${lightPath}.range`, "must be positive");
+        }
+        const spot = kind === "spot"
+          ? object(light.spot ?? {}, label, `${lightPath}.spot`)
+          : undefined;
+        const innerConeAngle = finiteNumber(
+          spot?.innerConeAngle,
+          0,
+          label,
+          `${lightPath}.spot.innerConeAngle`,
+        );
+        const outerConeAngle = finiteNumber(
+          spot?.outerConeAngle,
+          Math.PI / 4,
+          label,
+          `${lightPath}.spot.outerConeAngle`,
+        );
+        if (innerConeAngle < 0) {
+          fail(label, `${lightPath}.spot.innerConeAngle`, "must not be negative");
+        }
+        if (
+          outerConeAngle <= 0
+          || outerConeAngle > Math.PI / 2
+          || innerConeAngle >= outerConeAngle
+        ) fail(label, `${lightPath}.spot.outerConeAngle`, "must exceed innerConeAngle and be at most PI/2");
+        lights.push({
+          color: [color[0]!, color[1]!, color[2]!],
+          innerConeAngle,
+          intensity,
+          kind,
+          localModel: worldModel,
+          outerConeAngle,
+          range,
+        });
+      }
+    }
     if (node.mesh !== undefined) {
       const meshIndex = index(node.mesh, meshes, label, `${path}.mesh`);
       for (const primitive of prepareMesh(meshIndex)) {
@@ -462,8 +596,12 @@ const prepareStaticDocument = (
   for (const primitive of batchedPrimitives) {
     if (primitive.material.kind === "standard") claimTexture(primitive.material.normalAsset);
   }
+  for (const primitive of batchedPrimitives) {
+    if (primitive.material.kind === "standard") claimTexture(primitive.material.occlusionAsset);
+  }
   return {
     bounds: staticGltfBounds(batchedPrimitives),
+    lights,
     primitives: batchedPrimitives,
     textureAssets: [...claimedTextures.values()],
   };

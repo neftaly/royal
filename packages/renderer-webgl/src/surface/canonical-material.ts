@@ -12,6 +12,7 @@ import {
   type DecodedTextureSource,
   type TextureSourceRef,
 } from "../texture/asset-owner";
+import type { CanonicalTextureCoordinates } from "../gltf/texture-coordinates";
 
 export type CanonicalTextureSampler = Readonly<{
   magFilter: "linear" | "nearest";
@@ -33,6 +34,7 @@ export type CanonicalUnlitMaterial = Readonly<{
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
+  baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   doubleSided?: true;
   kind: "unlit";
   requiresTextureCoordinates: boolean;
@@ -43,24 +45,55 @@ export type CanonicalStandardMaterial = Readonly<{
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
   baseColorTexture?: CanonicalTextureBinding;
+  baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   doubleSided?: true;
   emissiveAsset?: TextureSourceRef;
   emissiveFactor: readonly [number, number, number];
   emissiveTexture?: CanonicalTextureBinding;
+  emissiveTextureCoordinates?: CanonicalTextureCoordinates;
   kind: "standard";
   metallicFactor: number;
   metallicRoughnessAsset?: TextureSourceRef;
   metallicRoughnessTexture?: CanonicalTextureBinding;
+  metallicRoughnessTextureCoordinates?: CanonicalTextureCoordinates;
   normalAsset?: TextureSourceRef;
   normalScale: number;
   normalTexture?: CanonicalTextureBinding;
+  normalTextureCoordinates?: CanonicalTextureCoordinates;
   occlusionAsset?: TextureSourceRef;
   occlusionStrength: number;
+  occlusionTexture?: CanonicalTextureBinding;
+  occlusionTextureCoordinates?: CanonicalTextureCoordinates;
   requiresTextureCoordinates: boolean;
   roughnessFactor: number;
 }>;
 
 export type CanonicalSurfaceMaterial = CanonicalStandardMaterial | CanonicalUnlitMaterial;
+
+/** Reports whether one authored material use requires a particular UV stream. */
+export const canonicalMaterialUsesTextureCoordinateSet = (
+  material: CanonicalSurfaceMaterial,
+  set: 0 | 1,
+): boolean => {
+  if (
+    material.baseColorAsset !== undefined
+    && (material.baseColorTextureCoordinates?.row0[3] ?? 0) === set
+  ) return true;
+  if (material.kind === "unlit") return false;
+  return (
+    material.metallicRoughnessAsset !== undefined
+      && (material.metallicRoughnessTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    material.normalAsset !== undefined
+      && (material.normalTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    material.occlusionAsset !== undefined
+      && (material.occlusionTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    material.emissiveAsset !== undefined
+      && (material.emissiveTextureCoordinates?.row0[3] ?? 0) === set
+  );
+};
 
 const NEUTRAL_PERCEPTUAL_GREY: LinearRgba = [0.214_041, 0.214_041, 0.214_041, 1];
 
@@ -124,11 +157,13 @@ export const resolveCanonicalMaterialTexture = (
   const metallicRoughnessTexture = resolve(material.metallicRoughnessAsset);
   const normalTexture = resolve(material.normalAsset);
   const emissiveTexture = resolve(material.emissiveAsset);
+  const occlusionTexture = resolve(material.occlusionAsset);
   return {
     ...common,
     ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
     ...(normalTexture === undefined ? {} : { normalTexture }),
+    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
   };
 };
 
@@ -192,6 +227,7 @@ export const canonicalMaterialTextureKeys = (
     add(material.metallicRoughnessAsset);
     add(material.normalAsset);
     add(material.emissiveAsset);
+    add(material.occlusionAsset);
   }
   return keys.length === 0 ? EMPTY_TEXTURE_KEYS : keys;
 };

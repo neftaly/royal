@@ -5,7 +5,7 @@ import {
 import type { CanonicalDrawSurface } from "./scene-lowering";
 import {
   surfaceGeometryResourceKey,
-  surfaceUsesRuntimeTextureCoordinates,
+  surfaceUsesTextureCoordinateSet,
 } from "./gpu-admission";
 import {
   planGeometryBatch,
@@ -16,6 +16,7 @@ type GpuGeometryArena = Readonly<{
   normalBuffer: WebGLBuffer | null;
   tangentBuffer: WebGLBuffer | null;
   textureCoordinateBuffer: WebGLBuffer | null;
+  textureCoordinate1Buffer: WebGLBuffer | null;
   vertexArray: WebGLVertexArrayObject;
   vertexBuffer: WebGLBuffer;
 }>;
@@ -30,6 +31,7 @@ export type GpuGeometry = Readonly<{
   normalBuffer: WebGLBuffer | null;
   tangentBuffer: WebGLBuffer | null;
   textureCoordinateBuffer: WebGLBuffer | null;
+  textureCoordinate1Buffer: WebGLBuffer | null;
   vertexArray: WebGLVertexArrayObject;
   vertexBuffer: WebGLBuffer;
 }>;
@@ -71,9 +73,11 @@ const geometryLayout = (surface: CanonicalDrawSurface): number => {
   if (
     surface.material.kind === "standard"
     && surface.material.normalAsset !== undefined
+    && surface.material.normalTextureCoordinates === undefined
     && surface.geometry.tangents !== undefined
   ) layout |= 2;
-  if (surfaceUsesRuntimeTextureCoordinates(surface)) layout |= 4;
+  if (surfaceUsesTextureCoordinateSet(surface, 0)) layout |= 4;
+  if (surfaceUsesTextureCoordinateSet(surface, 1)) layout |= 8;
   return layout;
 };
 
@@ -112,6 +116,9 @@ export class SurfaceGeometryGpuOwner {
     if (arena.textureCoordinateBuffer !== null) {
       this.#gl.deleteBuffer(arena.textureCoordinateBuffer);
     }
+    if (arena.textureCoordinate1Buffer !== null) {
+      this.#gl.deleteBuffer(arena.textureCoordinate1Buffer);
+    }
     this.#gl.deleteBuffer(arena.vertexBuffer);
     this.#gl.deleteVertexArray(arena.vertexArray);
   }
@@ -138,6 +145,7 @@ export class SurfaceGeometryGpuOwner {
     const hasNormals = (layout & 1) !== 0;
     const hasTangents = (layout & 2) !== 0;
     const hasTextureCoordinates = (layout & 4) !== 0;
+    const hasTextureCoordinates1 = (layout & 8) !== 0;
     const batch = planGeometryBatch(entries.map(({ surface }) => ({
       indices: surface.geometry.indices,
       vertexCount: surface.geometry.positions.length / 3,
@@ -148,6 +156,7 @@ export class SurfaceGeometryGpuOwner {
     const normalBuffer = hasNormals ? gl.createBuffer() : null;
     const tangentBuffer = hasTangents ? gl.createBuffer() : null;
     const textureCoordinateBuffer = hasTextureCoordinates ? gl.createBuffer() : null;
+    const textureCoordinate1Buffer = hasTextureCoordinates1 ? gl.createBuffer() : null;
     if (
       vertexArray === null
       || vertexBuffer === null
@@ -155,6 +164,7 @@ export class SurfaceGeometryGpuOwner {
       || (hasNormals && normalBuffer === null)
       || (hasTangents && tangentBuffer === null)
       || (hasTextureCoordinates && textureCoordinateBuffer === null)
+      || (hasTextureCoordinates1 && textureCoordinate1Buffer === null)
     ) {
       if (vertexArray !== null) gl.deleteVertexArray(vertexArray);
       if (vertexBuffer !== null) gl.deleteBuffer(vertexBuffer);
@@ -162,6 +172,7 @@ export class SurfaceGeometryGpuOwner {
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
       if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
+      if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
       throw new Error("Royal could not allocate surface geometry");
     }
     try {
@@ -186,6 +197,14 @@ export class SurfaceGeometryGpuOwner {
         gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 2 * 4, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+      }
+      if (textureCoordinate1Buffer === null) {
+        gl.disableVertexAttribArray(11);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinate1Buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 2 * 4, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(11);
+        gl.vertexAttribPointer(11, 2, gl.FLOAT, false, 0, 0);
       }
       if (tangentBuffer === null) {
         gl.disableVertexAttribArray(10);
@@ -221,6 +240,17 @@ export class SurfaceGeometryGpuOwner {
             geometry.textureCoordinates0,
           );
         }
+        if (textureCoordinate1Buffer !== null) {
+          if (geometry.textureCoordinates1 === undefined) {
+            throw new Error("Royal textured surface requires TEXCOORD_1 geometry");
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinate1Buffer);
+          gl.bufferSubData(
+            gl.ARRAY_BUFFER,
+            vertexOffset * 2 * 4,
+            geometry.textureCoordinates1,
+          );
+        }
         if (tangentBuffer !== null) {
           if (geometry.tangents === undefined) {
             throw new Error("Royal geometry batch is missing TANGENT data");
@@ -234,6 +264,7 @@ export class SurfaceGeometryGpuOwner {
         normalBuffer,
         tangentBuffer,
         textureCoordinateBuffer,
+        textureCoordinate1Buffer,
         vertexArray,
         vertexBuffer,
       };
@@ -249,6 +280,7 @@ export class SurfaceGeometryGpuOwner {
           normalBuffer,
           tangentBuffer,
           textureCoordinateBuffer,
+          textureCoordinate1Buffer,
           vertexArray,
           vertexBuffer,
         })),
@@ -258,6 +290,7 @@ export class SurfaceGeometryGpuOwner {
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
       if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
+      if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
       gl.deleteBuffer(vertexBuffer);
       gl.deleteVertexArray(vertexArray);
       throw error;
@@ -335,6 +368,13 @@ export class SurfaceGeometryGpuOwner {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.textureCoordinateBuffer);
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+      }
+      if (geometry.textureCoordinate1Buffer === null) {
+        gl.disableVertexAttribArray(11);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.textureCoordinate1Buffer);
+        gl.enableVertexAttribArray(11);
+        gl.vertexAttribPointer(11, 2, gl.FLOAT, false, 0, 0);
       }
       if (geometry.tangentBuffer === null) {
         gl.disableVertexAttribArray(10);

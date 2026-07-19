@@ -7,8 +7,10 @@ import {
   gltf,
   perspectiveCamera,
   planeGeometry,
+  pointLight,
   scene,
   standardMaterial,
+  studioEnvironment,
   unlitMaterial,
   type RenderRoot,
 } from "@royal/renderer-core";
@@ -245,11 +247,17 @@ describe("clear-only canvas root", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.render(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
+      environment: studioEnvironment({ radianceScaleNits: 20, rotation: [0, 0.25, 0] }),
       exposureEv100: 2,
       nodes: [
         directionalLight({
           direction: [0, 0, -1],
           illuminanceLux: 8,
+        }),
+        pointLight({
+          intensityCandela: 4,
+          position: [0, 1, 2],
+          range: 8,
         }),
         mesh({
           geometry: planeGeometry([2, 1]),
@@ -278,6 +286,15 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.frontFace).toHaveBeenLastCalledWith(canvas.gl.CW);
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
       String(source).includes("ggxDistribution"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define PUNCTUAL_LIGHTS"))).toBe(true);
+    expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledWith(
+      expect.anything(),
+      false,
+      expect.anything(),
+    );
   });
 
   it("groups opaque draw work by shader variant without changing surface count", () => {

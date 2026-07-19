@@ -1,59 +1,111 @@
 #version 300 es
-
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec4 a_tangent;
-layout(location = 7) in vec2 a_uv0;
-layout(location = 8) in vec2 a_uv1;
-layout(location = 9) in vec4 a_color;
-
-uniform mat4 u_projection;
-uniform mat4 u_view;
-uniform mat4 u_model;
-uniform mat4 u_modelNormalTransform;
-
-out vec3 v_normal;
-out vec4 v_tangent;
-out vec3 v_worldPosition;
-out vec2 v_uv0;
-out vec2 v_uv1;
-out vec4 v_color;
-
-vec3 orthogonalizeSurfaceTangent(vec3 tangent, vec3 normal) {
-  float normalLengthSquared = dot(normal, normal);
-  return normalLengthSquared > 0.00000001
-    ? tangent - normal * (dot(normal, tangent) / normalLengthSquared)
-    : tangent;
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+#ifdef TANGENT
+layout(location = 10) in vec4 tangent;
+out vec4 worldTangent;
+#endif
+#ifdef INSTANCED
+layout(location = 3) in mat4 instanceModel;
+layout(location = 7) in vec3 instanceNormal0;
+layout(location = 8) in vec3 instanceNormal1;
+layout(location = 9) in vec4 instanceNormal2;
+#endif
+#ifdef TEXTURED
+layout(location = 2) in vec2 textureCoordinate0;
+layout(location = 11) in vec2 textureCoordinate1;
+vec2 transformedTextureCoordinate(vec4 row0, vec4 row1) {
+  vec2 uv = mix(textureCoordinate0, textureCoordinate1, row0.w);
+  vec3 source = vec3(uv, 1.0);
+  return vec2(dot(row0.xyz, source), dot(row1.xyz, source));
 }
-
-vec3 normalizeSurfaceDirection(vec3 direction) {
-  float lengthSquared = dot(direction, direction);
-  return lengthSquared > 0.0 ? direction * inversesqrt(lengthSquared) : vec3(0.0);
-}
-
+#endif
+#ifdef BASE_COLOR_TEXTURED
+uniform vec4 baseColorTextureCoordinates0;
+uniform vec4 baseColorTextureCoordinates1;
+out vec2 surfaceBaseColorTextureCoordinate;
+#endif
+#ifdef METALLIC_ROUGHNESS_TEXTURED
+uniform vec4 metallicRoughnessTextureCoordinates0;
+uniform vec4 metallicRoughnessTextureCoordinates1;
+out vec2 surfaceMetallicRoughnessTextureCoordinate;
+#endif
+#ifdef NORMAL_TEXTURED
+uniform vec4 normalTextureCoordinates0;
+uniform vec4 normalTextureCoordinates1;
+out vec2 surfaceNormalTextureCoordinate;
+#endif
+#ifdef EMISSIVE_TEXTURED
+uniform vec4 emissiveTextureCoordinates0;
+uniform vec4 emissiveTextureCoordinates1;
+out vec2 surfaceEmissiveTextureCoordinate;
+#endif
+#ifdef OCCLUSION_TEXTURED
+uniform vec4 occlusionTextureCoordinates0;
+uniform vec4 occlusionTextureCoordinates1;
+out vec2 surfaceOcclusionTextureCoordinate;
+#endif
+uniform mat4 viewProjection;
+uniform mat4 model;
+uniform mat4 normalTransform;
+out vec3 worldNormal;
+out vec3 worldPosition;
 void main() {
-  vec3 localPosition = a_position;
-  vec3 localNormal = a_normal;
-  vec3 localTangent = a_tangent.xyz;
-  float localTangentHandedness = a_tangent.w;
-  vec4 worldPosition = u_model * vec4(localPosition, 1.0);
-  mat3 modelBasis = mat3(u_model);
-  float modelHandedness = u_modelNormalTransform[3][3];
-
-  vec3 worldNormal = normalizeSurfaceDirection(mat3(u_modelNormalTransform) * localNormal);
-  vec3 worldTangent = normalizeSurfaceDirection(
-    orthogonalizeSurfaceTangent(modelBasis * localTangent, worldNormal)
+#ifdef TEXTURED
+#ifdef BASE_COLOR_TEXTURED
+  surfaceBaseColorTextureCoordinate = transformedTextureCoordinate(
+    baseColorTextureCoordinates0,
+    baseColorTextureCoordinates1
   );
-
-  v_normal = worldNormal;
-  v_tangent = vec4(
-    worldTangent,
-    localTangentHandedness * modelHandedness
+#endif
+#ifdef METALLIC_ROUGHNESS_TEXTURED
+  surfaceMetallicRoughnessTextureCoordinate = transformedTextureCoordinate(
+    metallicRoughnessTextureCoordinates0,
+    metallicRoughnessTextureCoordinates1
   );
-  v_worldPosition = worldPosition.xyz;
-  v_uv0 = a_uv0;
-  v_uv1 = a_uv1;
-  v_color = a_color;
-
-  gl_Position = u_projection * u_view * worldPosition;
+#endif
+#ifdef NORMAL_TEXTURED
+  surfaceNormalTextureCoordinate = transformedTextureCoordinate(
+    normalTextureCoordinates0,
+    normalTextureCoordinates1
+  );
+#endif
+#ifdef EMISSIVE_TEXTURED
+  surfaceEmissiveTextureCoordinate = transformedTextureCoordinate(
+    emissiveTextureCoordinates0,
+    emissiveTextureCoordinates1
+  );
+#endif
+#ifdef OCCLUSION_TEXTURED
+  surfaceOcclusionTextureCoordinate = transformedTextureCoordinate(
+    occlusionTextureCoordinates0,
+    occlusionTextureCoordinates1
+  );
+#endif
+#endif
+  vec4 localPosition = vec4(position, 1.0);
+#ifdef INSTANCED
+  localPosition = instanceModel * localPosition;
+#endif
+  vec4 world = model * localPosition;
+  worldPosition = world.xyz;
+#ifdef INSTANCED
+  mat3 instanceNormal = mat3(instanceNormal0, instanceNormal1, instanceNormal2.xyz);
+  worldNormal = mat3(normalTransform) * instanceNormal * normal;
+#else
+  worldNormal = mat3(normalTransform) * normal;
+#endif
+#ifdef TANGENT
+  vec3 localTangent = tangent.xyz;
+  float tangentHandedness = tangent.w;
+#ifdef INSTANCED
+  localTangent = mat3(instanceModel) * localTangent;
+  tangentHandedness *= instanceNormal2.w;
+#endif
+  worldTangent = vec4(
+    normalize(mat3(model) * localTangent),
+    tangentHandedness * normalTransform[3][3]
+  );
+#endif
+  gl_Position = viewProjection * world;
 }

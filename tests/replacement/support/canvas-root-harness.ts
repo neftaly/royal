@@ -18,6 +18,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
   readonly uniform1i: ReturnType<typeof vi.fn>;
+  readonly uniform1f: ReturnType<typeof vi.fn>;
   readonly uniformMatrix4fv: ReturnType<typeof vi.fn>;
   readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
@@ -127,6 +128,7 @@ const fakeGl = (): FakeGl => ({
   stencilMask: vi.fn(),
   texImage2D: vi.fn(),
   uniform4fv: vi.fn(),
+  uniform1f: vi.fn(),
   uniform1i: vi.fn(),
   uniformMatrix4fv: vi.fn(),
   useProgram: vi.fn(),

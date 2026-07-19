@@ -11,6 +11,7 @@ import type { OpaqueDrawStateIntent } from "../webgl/draw-state-transition";
 import { TextureGpuOwner, type GpuTextureBinding } from "../texture/gpu-owner";
 import {
   MAX_CANONICAL_DIRECTIONAL_LIGHTS,
+  MAX_CANONICAL_PUNCTUAL_LIGHTS,
   type CanonicalDrawSurface,
   type CanonicalSurfaceScene,
 } from "./scene-lowering";
@@ -19,10 +20,23 @@ import type {
   CanonicalTextureBinding,
 } from "./canonical-material";
 import {
+  SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_EMISSIVE_TEXTURE,
+  SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
+  SURFACE_FEATURE_NORMAL_TEXTURE,
+  SURFACE_FEATURE_OCCLUSION_TEXTURE,
+  SURFACE_FEATURE_PUNCTUAL_LIGHTS,
+  SURFACE_FEATURE_STUDIO_ENVIRONMENT,
+  SURFACE_FEATURE_TANGENT,
   SurfaceProgramOwner,
   type StandardProgram,
+  type TextureCoordinatesProgram,
   type UnlitProgram,
 } from "./surface-program-owner";
+import {
+  IDENTITY_TEXTURE_COORDINATES,
+  type CanonicalTextureCoordinates,
+} from "../gltf/texture-coordinates";
 import {
   SurfaceGeometryGpuOwner,
   type GpuGeometry,
@@ -55,24 +69,52 @@ type MutableOpaqueDrawIntent = {
   viewport: { height: number; width: number; x: number; y: number };
 };
 
-const MATERIAL_TEXTURE_UNITS = 4;
+const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
+
+const applyTextureCoordinates = (
+  gl: WebGL2RenderingContext,
+  program: TextureCoordinatesProgram | null,
+  coordinates: CanonicalTextureCoordinates | undefined,
+): void => {
+  if (program === null) return;
+  const resolved = coordinates ?? IDENTITY_TEXTURE_COORDINATES;
+  gl.uniform4fv(program.row0, resolved.row0);
+  gl.uniform4fv(program.row1, resolved.row1);
+};
 
 const materialTextureFeatures = (
   surface: CanonicalDrawSurface,
   geometry: GpuGeometry,
+  hasStudioEnvironment: boolean,
+  hasPunctualLights: boolean,
 ): number => {
-  let features = surface.material.baseColorTexture === undefined ? 0 : 1;
+  let features = surface.material.baseColorTexture === undefined
+    ? 0
+    : SURFACE_FEATURE_BASE_COLOR_TEXTURE;
   if (surface.material.kind !== "standard") return features;
-  if (surface.material.metallicRoughnessTexture !== undefined) features |= 2;
-  if (surface.material.normalTexture !== undefined) features |= 4;
-  if ((features & 4) !== 0 && geometry.tangentBuffer !== null) features |= 16;
-  if (surface.material.emissiveTexture !== undefined) features |= 8;
+  if (surface.material.metallicRoughnessTexture !== undefined) {
+    features |= SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE;
+  }
+  if (surface.material.normalTexture !== undefined) features |= SURFACE_FEATURE_NORMAL_TEXTURE;
+  if (
+    (features & SURFACE_FEATURE_NORMAL_TEXTURE) !== 0
+    && geometry.tangentBuffer !== null
+  ) features |= SURFACE_FEATURE_TANGENT;
+  if (surface.material.emissiveTexture !== undefined) features |= SURFACE_FEATURE_EMISSIVE_TEXTURE;
+  if (hasStudioEnvironment) {
+    features |= SURFACE_FEATURE_STUDIO_ENVIRONMENT;
+    if (surface.material.occlusionTexture !== undefined) {
+      features |= SURFACE_FEATURE_OCCLUSION_TEXTURE;
+    }
+  }
+  if (hasPunctualLights) features |= SURFACE_FEATURE_PUNCTUAL_LIGHTS;
   return features;
 };
 
-const textureUnitMask = (features: number): number =>
-  features & 0b1111;
+const textureUnitMask = (features: number): number => (
+  features & 0b1111
+) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0);
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
   const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
@@ -120,7 +162,12 @@ export class SurfaceGpuOwner {
   #gpuSurfaces: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #emissiveFactor = new Float32Array(4);
+  readonly #environmentSettings = new Float32Array(4);
   readonly #presentation = new Float32Array(4);
+  readonly #punctualLightColors = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
+  readonly #punctualLightDirections = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
+  readonly #punctualLightPositions = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
+  readonly #punctualLightSpotCones = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
   readonly #programs: SurfaceProgramOwner;
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
@@ -245,6 +292,11 @@ export class SurfaceGpuOwner {
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
         if (materialChanged) {
           gl.uniform4fv(program.color, surface.material.baseColor);
+          applyTextureCoordinates(
+            gl,
+            program.textureCoordinates,
+            surface.material.baseColorTextureCoordinates,
+          );
           if (program.alphaCutoff !== null) {
             gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
           }
@@ -260,6 +312,28 @@ export class SurfaceGpuOwner {
           gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
           gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
           gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
+          if (
+            program.punctualLightCount !== null
+            && program.punctualLightColors !== null
+            && program.punctualLightDirections !== null
+            && program.punctualLightPositions !== null
+            && program.punctualLightSpotCones !== null
+          ) {
+            gl.uniform1i(program.punctualLightCount, scene.punctualLights.length);
+            gl.uniform4fv(program.punctualLightColors, this.#punctualLightColors);
+            gl.uniform4fv(program.punctualLightDirections, this.#punctualLightDirections);
+            gl.uniform4fv(program.punctualLightPositions, this.#punctualLightPositions);
+            gl.uniform4fv(program.punctualLightSpotCones, this.#punctualLightSpotCones);
+          }
+          if (program.environmentRotation !== null && program.environmentSettings !== null) {
+            const environment = scene.environment;
+            if (environment === undefined) {
+              throw new Error("Royal studio-environment program is missing canonical state");
+            }
+            gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
+            this.#environmentSettings[0] = environment.radianceScaleNits;
+            gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
+          }
           this.#presentation[0] = scene.exposure;
           this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
           gl.uniform4fv(program.presentation, this.#presentation);
@@ -269,6 +343,34 @@ export class SurfaceGpuOwner {
         gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
         if (materialChanged) {
           gl.uniform4fv(program.baseColor, material.baseColor);
+          applyTextureCoordinates(
+            gl,
+            program.textureCoordinates,
+            material.baseColorTextureCoordinates,
+          );
+          applyTextureCoordinates(
+            gl,
+            program.metallicRoughnessCoordinates,
+            material.metallicRoughnessTextureCoordinates,
+          );
+          applyTextureCoordinates(
+            gl,
+            program.normalTextureCoordinates,
+            material.normalTextureCoordinates,
+          );
+          applyTextureCoordinates(
+            gl,
+            program.emissiveCoordinates,
+            material.emissiveTextureCoordinates,
+          );
+          applyTextureCoordinates(
+            gl,
+            program.occlusionCoordinates,
+            material.occlusionTextureCoordinates,
+          );
+          if (program.occlusionStrength !== null) {
+            gl.uniform1f(program.occlusionStrength, material.occlusionStrength);
+          }
           this.#emissiveFactor[0] = material.emissiveFactor[0];
           this.#emissiveFactor[1] = material.emissiveFactor[1];
           this.#emissiveFactor[2] = material.emissiveFactor[2];
@@ -325,6 +427,8 @@ export class SurfaceGpuOwner {
         const features = materialTextureFeatures(
           geometrySurface.surface,
           geometrySurface.geometry,
+          scene?.environment !== undefined,
+          (scene?.punctualLights.length ?? 0) > 0,
         );
         textureUnitMasks[index] = textureUnitMask(features);
         programs[index] = this.#programs.get(
@@ -345,6 +449,9 @@ export class SurfaceGpuOwner {
         textureInputs[offset + 3] = material.kind === "standard"
           ? material.emissiveTexture
           : undefined;
+        textureInputs[offset + 4] = material.kind === "standard"
+          ? material.occlusionTexture
+          : undefined;
       }
       const textureBindings = this.#textureGpu.reconcile(textureInputs);
       const nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
@@ -356,6 +463,7 @@ export class SurfaceGpuOwner {
           textureBindings[offset + 1]!,
           textureBindings[offset + 2]!,
           textureBindings[offset + 3]!,
+          textureBindings[offset + 4]!,
         ];
         nextSurfaces[index] = {
           bindings,
@@ -384,6 +492,21 @@ export class SurfaceGpuOwner {
         const offset = index * 4;
         this.#directionalLightColors.set(light.color, offset);
         this.#directionalLightDirections.set(light.direction, offset);
+      }
+      this.#punctualLightColors.fill(0);
+      this.#punctualLightDirections.fill(0);
+      this.#punctualLightPositions.fill(0);
+      this.#punctualLightSpotCones.fill(0);
+      for (let index = 0; index < scene.punctualLights.length; index += 1) {
+        const light = scene.punctualLights[index]!;
+        const offset = index * 4;
+        this.#punctualLightColors.set(light.color, offset);
+        this.#punctualLightDirections.set(light.direction, offset);
+        this.#punctualLightDirections[offset + 3] = light.kind === "spot" ? 1 : 0;
+        this.#punctualLightPositions.set(light.position, offset);
+        this.#punctualLightPositions[offset + 3] = light.range;
+        this.#punctualLightSpotCones[offset] = light.innerConeCosine;
+        this.#punctualLightSpotCones[offset + 1] = light.outerConeCosine;
       }
     } else {
       this.#directionalLightCount = 0;
@@ -419,8 +542,16 @@ export class SurfaceGpuOwner {
         this.#textureGpu.retain(material.kind === "standard"
           ? material.emissiveTexture
           : undefined),
+        this.#textureGpu.retain(material.kind === "standard"
+          ? material.occlusionTexture
+          : undefined),
       ];
-      const features = materialTextureFeatures(surface, previous.geometry);
+      const features = materialTextureFeatures(
+        surface,
+        previous.geometry,
+        scene.environment !== undefined,
+        scene.punctualLights.length > 0,
+      );
       nextSurfaces[index] = {
         ...previous,
         bindings,

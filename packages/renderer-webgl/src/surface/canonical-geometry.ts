@@ -11,6 +11,7 @@ export type CanonicalTriangleGeometry = Readonly<{
   positions: Float32Array;
   tangents?: Float32Array;
   textureCoordinates0?: Float32Array;
+  textureCoordinates1?: Float32Array;
 }>;
 
 const planeGeometry = (

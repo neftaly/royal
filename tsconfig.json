@@ -48,6 +48,7 @@
     "apps/examples-react/src/vite-env.d.ts",
     "packages/renderer-core/src",
     "packages/renderer-webgl/src/index.ts",
+    "packages/renderer-webgl/src/glsl.d.ts",
     "packages/renderer-webgl/src/context/context-lifecycle.ts",
     "packages/renderer-webgl/src/context/context-lifecycle-owner.ts",
     "packages/renderer-webgl/src/frame/canvas-size.ts",

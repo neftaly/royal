@@ -8,6 +8,7 @@ describe("glTF asset lifecycle owner", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
       primitives: [],
       textureAssets: [],
     } as const;

@@ -14,6 +14,16 @@ import {
   optionalArray,
   type JsonObject,
 } from "./gltf-values";
+import {
+  IDENTITY_TEXTURE_COORDINATES,
+  prepareTextureCoordinates,
+  type CanonicalTextureCoordinates,
+} from "./texture-coordinates";
+
+type MaterialTextureUse = Readonly<{
+  asset: TextureSourceRef;
+  coordinates: CanonicalTextureCoordinates;
+}>;
 
 const factor01 = (
   value: unknown,
@@ -122,10 +132,20 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.EXT_texture_avif`,
       );
-    const sourceValue = avifExtension?.source ?? texture.source;
-    const sourcePath = avifExtension === undefined
+    const webpExtension = textureExtensions.EXT_texture_webp === undefined
+      ? undefined
+      : object(
+        textureExtensions.EXT_texture_webp,
+        label,
+        `${texturePath}.extensions.EXT_texture_webp`,
+      );
+    const selectedExtension = avifExtension === undefined
+      ? webpExtension === undefined ? undefined : "EXT_texture_webp"
+      : "EXT_texture_avif";
+    const sourceValue = avifExtension?.source ?? webpExtension?.source ?? texture.source;
+    const sourcePath = selectedExtension === undefined
       ? `${texturePath}.source`
-      : `${texturePath}.extensions.EXT_texture_avif.source`;
+      : `${texturePath}.extensions.${selectedExtension}.source`;
     const imageIndex = index(sourceValue, images, label, sourcePath);
     const imagePath = `images[${imageIndex}]`;
     const image = object(images[imageIndex], label, imagePath);
@@ -162,10 +182,11 @@ export const createTextureAssetReader = (
         image.mimeType !== "image/avif"
         && image.mimeType !== "image/jpeg"
         && image.mimeType !== "image/png"
+        && image.mimeType !== "image/webp"
       ) {
-        fail(label, `${imagePath}.mimeType`, "must be image/avif, image/jpeg, or image/png");
+        fail(label, `${imagePath}.mimeType`, "must be image/avif, image/jpeg, image/png, or image/webp");
       }
-      const mimeType = image.mimeType as "image/avif" | "image/jpeg" | "image/png";
+      const mimeType = image.mimeType as EmbeddedTextureAssetRef["mimeType"];
       const viewIndex = index(image.bufferView, bufferViews, label, `${imagePath}.bufferView`);
       const viewPath = `bufferViews[${viewIndex}]`;
       const view = object(bufferViews[viewIndex], label, viewPath);
@@ -252,19 +273,15 @@ export const prepareMaterial = (
     value: unknown,
     textureInfoPath: string,
     colorSpace: "linear" | "srgb",
-  ): TextureSourceRef | undefined => {
+  ): MaterialTextureUse | undefined => {
     if (value === undefined) return undefined;
     const textureInfo = object(value, label, textureInfoPath);
-    if (textureInfo.texCoord !== undefined && textureInfo.texCoord !== 0) {
-      fail(label, `${textureInfoPath}.texCoord`, "must select TEXCOORD_0");
-    }
-    return textureAsset(
-      textureInfo.index,
-      `${textureInfoPath}.index`,
-      colorSpace,
-    );
+    return {
+      asset: textureAsset(textureInfo.index, `${textureInfoPath}.index`, colorSpace),
+      coordinates: prepareTextureCoordinates(textureInfo, label, textureInfoPath),
+    };
   };
-  const baseColorAsset = materialTexture(
+  const baseColorTexture = materialTexture(
     pbr.baseColorTexture,
     `${materialPath}.pbrMetallicRoughness.baseColorTexture`,
     "srgb",
@@ -289,26 +306,29 @@ export const prepareMaterial = (
   if (unlit) return {
     ...presentation,
     baseColor,
-    ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
+    ...(baseColorTexture === undefined ? {} : { baseColorAsset: baseColorTexture.asset }),
+    ...(baseColorTexture === undefined || baseColorTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { baseColorTextureCoordinates: baseColorTexture.coordinates }),
     kind: "unlit",
-    requiresTextureCoordinates: baseColorAsset !== undefined,
+    requiresTextureCoordinates: baseColorTexture !== undefined,
   };
-  const metallicRoughnessAsset = materialTexture(
+  const metallicRoughnessTexture = materialTexture(
     pbr.metallicRoughnessTexture,
     `${materialPath}.pbrMetallicRoughness.metallicRoughnessTexture`,
     "linear",
   );
-  const normalAsset = materialTexture(
+  const normalTextureUse = materialTexture(
     material.normalTexture,
     `${materialPath}.normalTexture`,
     "linear",
   );
-  const occlusionAsset = materialTexture(
+  const occlusionTextureUse = materialTexture(
     material.occlusionTexture,
     `${materialPath}.occlusionTexture`,
     "linear",
   );
-  const emissiveAsset = materialTexture(
+  const emissiveTexture = materialTexture(
     material.emissiveTexture,
     `${materialPath}.emissiveTexture`,
     "srgb",
@@ -354,29 +374,46 @@ export const prepareMaterial = (
   return {
     ...presentation,
     baseColor,
-    ...(baseColorAsset === undefined ? {} : { baseColorAsset }),
+    ...(baseColorTexture === undefined ? {} : { baseColorAsset: baseColorTexture.asset }),
+    ...(baseColorTexture === undefined || baseColorTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { baseColorTextureCoordinates: baseColorTexture.coordinates }),
     emissiveFactor: [
       emissive[0]! * emissiveStrength,
       emissive[1]! * emissiveStrength,
       emissive[2]! * emissiveStrength,
     ],
-    ...(emissiveAsset === undefined ? {} : { emissiveAsset }),
+    ...(emissiveTexture === undefined ? {} : { emissiveAsset: emissiveTexture.asset }),
+    ...(emissiveTexture === undefined || emissiveTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { emissiveTextureCoordinates: emissiveTexture.coordinates }),
     kind: "standard",
     metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
-    ...(metallicRoughnessAsset === undefined ? {} : { metallicRoughnessAsset }),
-    ...(normalAsset === undefined ? {} : { normalAsset }),
+    ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessAsset: metallicRoughnessTexture.asset }),
+    ...(metallicRoughnessTexture === undefined
+      || metallicRoughnessTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { metallicRoughnessTextureCoordinates: metallicRoughnessTexture.coordinates }),
+    ...(normalTextureUse === undefined ? {} : { normalAsset: normalTextureUse.asset }),
     normalScale: normalTexture === undefined
       ? 1
       : finiteFactor(normalTexture.scale, 1, label, `${materialPath}.normalTexture.scale`),
-    ...(occlusionAsset === undefined ? {} : { occlusionAsset }),
+    ...(normalTextureUse === undefined || normalTextureUse.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { normalTextureCoordinates: normalTextureUse.coordinates }),
+    ...(occlusionTextureUse === undefined ? {} : { occlusionAsset: occlusionTextureUse.asset }),
     occlusionStrength: occlusionTexture === undefined
       ? 1
       : factor01(occlusionTexture.strength, 1, label, `${materialPath}.occlusionTexture.strength`),
-    requiresTextureCoordinates: baseColorAsset !== undefined
-      || metallicRoughnessAsset !== undefined
-      || normalAsset !== undefined
-      || occlusionAsset !== undefined
-      || emissiveAsset !== undefined,
+    ...(occlusionTextureUse === undefined
+      || occlusionTextureUse.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { occlusionTextureCoordinates: occlusionTextureUse.coordinates }),
+    requiresTextureCoordinates: baseColorTexture !== undefined
+      || metallicRoughnessTexture !== undefined
+      || normalTextureUse !== undefined
+      || occlusionTextureUse !== undefined
+      || emissiveTexture !== undefined,
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
   };
 };
