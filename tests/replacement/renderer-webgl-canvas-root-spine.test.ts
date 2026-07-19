@@ -480,6 +480,32 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(2);
   });
 
+  it("uploads shared authored material uniforms once per program", async () => {
+    const document = staticTriangleDocument();
+    delete document.extensionsRequired;
+    delete document.extensionsUsed;
+    document.materials = [{
+      pbrMetallicRoughness: { baseColorFactor: [0.2, 0.4, 0.8, 1] },
+    }];
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0] });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const node = gltf("/shared-material.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    vi.mocked(canvas.gl.uniform4fv).mockClear();
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(7);
+  });
+
   it("uses one canonical transform and identity for visible and exact picking work", () => {
     const { callbacks, canvas, root } = harness();
     const node = mesh({

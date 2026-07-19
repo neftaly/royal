@@ -125,6 +125,15 @@ describe("static glTF preparation core", () => {
       });
   });
 
+  it("retains one canonical material identity for primitives sharing an authored material", () => {
+    const document = staticTriangleDocument();
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0] });
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "shared-material");
+    expect(prepared.primitives).toHaveLength(2);
+    expect(prepared.primitives[1]!.material).toBe(prepared.primitives[0]!.material);
+  });
+
   it("preserves alpha-mask and double-sided raster intent", () => {
     const document = staticTriangleDocument();
     const materials = document.materials as Array<Record<string, unknown>>;

@@ -14,7 +14,10 @@ import {
   type CanonicalDrawSurface,
   type CanonicalSurfaceScene,
 } from "./scene-lowering";
-import type { CanonicalTextureBinding } from "./canonical-material";
+import type {
+  CanonicalSurfaceMaterial,
+  CanonicalTextureBinding,
+} from "./canonical-material";
 import {
   SurfaceProgramOwner,
   type StandardProgram,
@@ -71,20 +74,31 @@ const textureUnitMask = (features: number): number =>
   (features & 0b111) | ((features & 0b1000) << 1);
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
-  const groups = new Map<WebGLProgram, GpuSurface[]>();
+  const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
+  let materialGroupCount = 0;
   for (const resource of surfaces) {
-    const key = resource.program.program;
-    const group = groups.get(key);
-    if (group === undefined) groups.set(key, [resource]);
-    else group.push(resource);
+    const program = resource.program.program;
+    let materialGroups = groups.get(program);
+    if (materialGroups === undefined) {
+      materialGroups = new Map<CanonicalSurfaceMaterial, GpuSurface[]>();
+      groups.set(program, materialGroups);
+    }
+    const material = resource.surface.materialSource;
+    const group = materialGroups.get(material);
+    if (group === undefined) {
+      materialGroups.set(material, [resource]);
+      materialGroupCount += 1;
+    } else group.push(resource);
   }
-  if (groups.size < 2) return surfaces;
+  if (materialGroupCount < 2) return surfaces;
   const grouped = Array<GpuSurface>(surfaces.length);
   let index = 0;
-  for (const group of groups.values()) {
-    for (const resource of group) {
-      grouped[index] = resource;
-      index += 1;
+  for (const materialGroups of groups.values()) {
+    for (const group of materialGroups.values()) {
+      for (const resource of group) {
+        grouped[index] = resource;
+        index += 1;
+      }
     }
   }
   return grouped;
@@ -183,6 +197,9 @@ export class SurfaceGpuOwner {
     drawIntent.viewport.width = size.backingWidth;
     cameraWorldPositionFromViewInto(this.#cameraPosition, view);
     this.#cameraPosition[3] = 1;
+    let initializedProgram: WebGLProgram | null = null;
+    let materialProgram: WebGLProgram | null = null;
+    let materialSource: CanonicalSurfaceMaterial | null = null;
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     for (const resource of this.#gpuSurfaces) {
@@ -199,13 +216,20 @@ export class SurfaceGpuOwner {
       }
       drawIntent.vertexArray = resource.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
-      this.#programs.initializeSamplers(program);
+      if (initializedProgram !== program.program) {
+        this.#programs.initializeSamplers(program);
+        initializedProgram = program.program;
+      }
+      const materialChanged = materialProgram !== program.program
+        || materialSource !== surface.materialSource;
       if (program.kind === "unlit") {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
-        gl.uniform4fv(program.color, surface.material.baseColor);
-        if (program.alphaCutoff !== null) {
-          gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
+        if (materialChanged) {
+          gl.uniform4fv(program.color, surface.material.baseColor);
+          if (program.alphaCutoff !== null) {
+            gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
+          }
         }
       } else {
         const material = surface.material;
@@ -225,18 +249,22 @@ export class SurfaceGpuOwner {
         }
         gl.uniformMatrix4fv(program.model, false, surface.model);
         gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
-        gl.uniform4fv(program.baseColor, material.baseColor);
-        this.#emissiveFactor[0] = material.emissiveFactor[0];
-        this.#emissiveFactor[1] = material.emissiveFactor[1];
-        this.#emissiveFactor[2] = material.emissiveFactor[2];
-        this.#emissiveFactor[3] = 0;
-        gl.uniform4fv(program.emissiveFactor, this.#emissiveFactor);
-        this.#materialFactors[0] = material.metallicFactor;
-        this.#materialFactors[1] = material.roughnessFactor;
-        this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
-        this.#materialFactors[3] = material.normalScale;
-        gl.uniform4fv(program.materialFactors, this.#materialFactors);
+        if (materialChanged) {
+          gl.uniform4fv(program.baseColor, material.baseColor);
+          this.#emissiveFactor[0] = material.emissiveFactor[0];
+          this.#emissiveFactor[1] = material.emissiveFactor[1];
+          this.#emissiveFactor[2] = material.emissiveFactor[2];
+          this.#emissiveFactor[3] = 0;
+          gl.uniform4fv(program.emissiveFactor, this.#emissiveFactor);
+          this.#materialFactors[0] = material.metallicFactor;
+          this.#materialFactors[1] = material.roughnessFactor;
+          this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
+          this.#materialFactors[3] = material.normalScale;
+          gl.uniform4fv(program.materialFactors, this.#materialFactors);
+        }
       }
+      materialProgram = program.program;
+      materialSource = surface.materialSource;
       if (resource.instanceCount > 0) {
         gl.drawElementsInstanced(
           gl.TRIANGLES,

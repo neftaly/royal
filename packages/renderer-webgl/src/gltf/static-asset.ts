@@ -138,6 +138,22 @@ const prepareStaticDocument = (
     bufferViews,
     label,
   };
+  let defaultMaterial: CanonicalSurfaceMaterial | undefined;
+  const preparedMaterials = new Map<number, CanonicalSurfaceMaterial>();
+  const preparePrimitiveMaterial = (
+    materialIndex: unknown,
+    path: string,
+  ): CanonicalSurfaceMaterial => {
+    if (materialIndex === undefined && defaultMaterial !== undefined) return defaultMaterial;
+    if (typeof materialIndex === "number") {
+      const retained = preparedMaterials.get(materialIndex);
+      if (retained !== undefined) return retained;
+    }
+    const prepared = prepareMaterial(materials, textureAsset, materialIndex, label, path);
+    if (materialIndex === undefined) defaultMaterial = prepared;
+    else if (typeof materialIndex === "number") preparedMaterials.set(materialIndex, prepared);
+    return prepared;
+  };
   const preparedMeshes: Array<readonly PreparedMeshPrimitive[] | undefined> = [];
   const prepareMesh = (meshIndex: number): readonly PreparedMeshPrimitive[] => {
     const retained = preparedMeshes[meshIndex];
@@ -242,13 +258,7 @@ const prepareStaticDocument = (
           fail(label, `${path}.indices[${item}]`, "decoded vertex index is out of range");
         }
       }
-      const material = prepareMaterial(
-        materials,
-        textureAsset,
-        primitive.material,
-        label,
-        path,
-      );
+      const material = preparePrimitiveMaterial(primitive.material, path);
       if (material.requiresTextureCoordinates && textureCoordinates0 === undefined) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the base color texture");
       }
