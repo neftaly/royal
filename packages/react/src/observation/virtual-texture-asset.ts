@@ -1,7 +1,7 @@
 import { virtualTexture, type VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { VirtualTextureAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useOptionalCanvasRoot } from "../runtime/canvas";
+import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
   selectObservedRoot,
   type RendererObservationOptions,

@@ -19,6 +19,7 @@
     "src/xr/session-state.ts",
     "src/xr/use-xr-session.ts",
     "src/scene.ts",
+    "src/runtime/canvas-context.ts",
     "src/runtime/canvas.ts",
     "src/interaction/canvas-pointer-events.ts",
     "src/interaction/canvas-pointer-interaction.ts",

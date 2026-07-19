@@ -135,6 +135,11 @@ created it. During immutable-option replacement or development hot refresh,
 context, callbacks, rendering, and external refs MUST expose `null` rather than
 an older disposed root until the new generation is live.
 
+Canvas providers and observation hooks share one dependency-light context
+identity boundary. Refreshing renderer implementation modules MUST NOT create a
+second context generation that makes still-mounted Canvas children appear to be
+outside their provider.
+
 Hooks that observe external renderer state MUST use stable subscription
 semantics and detached TypeScript-readonly snapshots. Runtime freezing is not
 part of the contract. Observer callbacks that are documented as immediate MUST

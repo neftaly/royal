@@ -6,10 +6,8 @@ import {
   type RoyalRendererRoot,
 } from "@royal/renderer-webgl";
 import {
-  createContext,
   createElement,
   useCallback,
-  useContext,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -18,6 +16,11 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import {
+  CanvasElementContext,
+  CanvasRootContext,
+  useCanvasRoot,
+} from "./canvas-context";
 import { createCanvasPointerInteractionState } from "../interaction/canvas-pointer-interaction";
 import {
   attachCanvasPointerEventHandlers,
@@ -31,9 +34,6 @@ import {
   createRoyalScenePointerEventRegistry,
   type ScenePointerEvents,
 } from "../interaction/scene-interactions";
-
-const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
-const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
 
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children" | "height" | "width"> {
@@ -150,23 +150,7 @@ export const observeCanvasSize = (
   };
 };
 
-/** Returns the surrounding canvas, or `null` before its ref is attached. */
-export const useCanvasElement = (): HTMLCanvasElement | null => {
-  const canvas = useContext(CanvasElementContext);
-  if (canvas === undefined) throw new Error("useCanvasElement must be used inside <Canvas>");
-  return canvas;
-};
-
-/** @internal Context probe for focused hooks that also accept an explicit root. */
-export const useOptionalCanvasRoot = (): RoyalRendererRoot | null | undefined =>
-  useContext(CanvasRootContext);
-
-/** Returns the surrounding renderer root, or `null` during its mount lifecycle. */
-export const useCanvasRoot = (): RoyalRendererRoot | null => {
-  const root = useOptionalCanvasRoot();
-  if (root === undefined) throw new Error("useCanvasRoot must be used inside <Canvas>");
-  return root;
-};
+export { useCanvasElement, useCanvasRoot } from "./canvas-context";
 
 /** Requests one coalesced frame from the surrounding Canvas. */
 export const useInvalidate = (): (() => void) => {

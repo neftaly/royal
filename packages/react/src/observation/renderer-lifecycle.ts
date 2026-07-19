@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useOptionalCanvasRoot } from "../runtime/canvas";
+import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { useLifecycleSnapshot } from "./root-snapshot";
 import {
   selectObservedRoot,

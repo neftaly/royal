@@ -4,7 +4,7 @@ import {
 } from "@royal/renderer-core";
 import type { PrefilteredEnvironmentAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useOptionalCanvasRoot } from "../runtime/canvas";
+import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
   selectObservedRoot,
   type RendererObservationOptions,

@@ -1,7 +1,7 @@
 import type { GltfAssetRef } from "@royal/renderer-core";
 import type { GltfAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useOptionalCanvasRoot } from "../runtime/canvas";
+import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
   selectObservedRoot,
   type RendererObservationOptions,

@@ -1,6 +1,6 @@
 import type { RoyalRendererRoot } from "@royal/renderer-webgl";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { useOptionalCanvasRoot } from "../runtime/canvas";
+import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
   createXrSessionController,
   type XrSessionControllerOptions,
