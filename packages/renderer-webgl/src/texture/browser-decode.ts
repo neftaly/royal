@@ -4,6 +4,7 @@ import type {
   TextureSourceRef,
 } from "./asset-owner";
 import { decodeBrowserImageElement } from "./browser-image-element";
+import { readEncodedImageDimensions } from "./encoded-image-dimensions";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 
 export type BrowserTextureDecoder = (
@@ -21,6 +22,12 @@ type PendingWork = {
 };
 
 const aborted = (): DOMException => new DOMException("Texture decode was aborted", "AbortError");
+const IMAGE_HEADER_PREFIX_BYTES = 128 * 1024;
+
+const mayContainDimensionHint = (blob: Blob): boolean => {
+  const type = blob.type.split(";", 1)[0]!.trim().toLowerCase();
+  return type.length === 0 || type === "image/jpeg" || type === "image/png";
+};
 
 /** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */
 class BrowserWorkQueue {
@@ -163,23 +170,76 @@ const decodeTextureBlob = async (
   if (typeof globalThis.createImageBitmap !== "function") {
     throw new Error(`${diagnosticLabel(asset)} requires browser image decoding support`);
   }
+  const bitmapOptions = {
+    colorSpaceConversion: "none",
+    imageOrientation: "none",
+    premultiplyAlpha: "none",
+  } as const;
+  let sourceDimensions: Readonly<{ height: number; width: number }> | undefined;
+  let directFit: Readonly<{ height: number; width: number }> | undefined;
+  if (
+    maxStorageBytes !== undefined
+    && maxStorageBytes >= 4
+    && mayContainDimensionHint(blob)
+  ) {
+    const prefix = new Uint8Array(
+      await blob.slice(0, IMAGE_HEADER_PREFIX_BYTES).arrayBuffer(),
+    );
+    if (signal.aborted) throw aborted();
+    const dimensions = readEncodedImageDimensions(prefix);
+    if (dimensions !== undefined) {
+      try {
+        const fitted = fitOrdinaryTextureStorage(
+          dimensions.width,
+          dimensions.height,
+          maxStorageBytes,
+        );
+        sourceDimensions = dimensions;
+        if (
+          fitted.width !== dimensions.width
+          || fitted.height !== dimensions.height
+        ) directFit = fitted;
+      } catch {
+        // A malformed size hint cannot replace browser format validation.
+      }
+    }
+  }
   let bitmap: ImageBitmap;
   try {
-    bitmap = await globalThis.createImageBitmap(blob, {
-      colorSpaceConversion: "none",
-      imageOrientation: "none",
-      premultiplyAlpha: "none",
-    });
+    bitmap = await globalThis.createImageBitmap(blob, directFit === undefined
+      ? bitmapOptions
+      : {
+          ...bitmapOptions,
+          resizeHeight: directFit.height,
+          resizeQuality: "high",
+          resizeWidth: directFit.width,
+        });
   } catch (error) {
     if (signal.aborted) throw aborted();
-    try {
-      const decoded = await decodeBrowserImageElement(blob, signal);
-      return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
-    } catch (fallbackError) {
-      throw new AggregateError(
-        [error, fallbackError],
-        `${diagnosticLabel(asset)} could not be decoded by browser bitmap or image-element paths`,
-      );
+    if (directFit !== undefined) {
+      try {
+        bitmap = await globalThis.createImageBitmap(blob, bitmapOptions);
+      } catch (fallbackError) {
+        try {
+          const decoded = await decodeBrowserImageElement(blob, signal);
+          return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+        } catch (imageElementError) {
+          throw new AggregateError(
+            [error, fallbackError, imageElementError],
+            `${diagnosticLabel(asset)} could not be decoded by browser bitmap or image-element paths`,
+          );
+        }
+      }
+    } else {
+      try {
+        const decoded = await decodeBrowserImageElement(blob, signal);
+        return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+      } catch (fallbackError) {
+        throw new AggregateError(
+          [error, fallbackError],
+          `${diagnosticLabel(asset)} could not be decoded by browser bitmap or image-element paths`,
+        );
+      }
     }
   }
   if (signal.aborted) {
@@ -190,8 +250,8 @@ const decodeTextureBlob = async (
     bitmap.close();
     throw new Error(`${diagnosticLabel(asset)} decoded to an empty image`);
   }
-  const sourceHeight = bitmap.height;
-  const sourceWidth = bitmap.width;
+  const sourceHeight = sourceDimensions?.height ?? bitmap.height;
+  const sourceWidth = sourceDimensions?.width ?? bitmap.width;
   if (maxStorageBytes !== undefined && maxStorageBytes >= 4) {
     const fitted = fitOrdinaryTextureStorage(bitmap.width, bitmap.height, maxStorageBytes);
     if (fitted.width !== bitmap.width || fitted.height !== bitmap.height) {

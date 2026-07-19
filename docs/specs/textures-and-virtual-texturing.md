@@ -67,6 +67,14 @@ belong in explicit diagnostics, not ordinary presentation.
 Decoded sources MAY be retained for context restoration only within CPU budget.
 Eviction MUST leave a reconstruction recipe or legal refetch path.
 
+When the persistent budget requires a smaller ordinary PNG/JPEG, Royal reads a
+bounded encoded-header prefix through a pure, non-authoritative dimension
+parser and asks the browser to decode directly to the selected fitted size.
+Malformed, truncated, unsupported, or unusually deep headers fall back to the
+browser-authoritative decode-then-fit path. The hint cannot expand an image,
+change aspect ratio, accept a format, or bypass browser validation; it avoids a
+second full decoded bitmap only when the same budget decision is known early.
+
 Ordinary images used by pickable `MASK` materials additionally retain one
 8-bit alpha plane at the already fitted upload dimensions. This demand is
 keyed by decoded content, shared across color interpretations and samplers, and

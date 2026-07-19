@@ -3,6 +3,7 @@ import {
   createBrowserTextureDecoder,
   decodeTextureWithBrowser,
 } from "../../packages/renderer-webgl/src/texture/browser-decode";
+import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 
 afterEach(() => {
@@ -137,6 +138,89 @@ describe("browser texture decode shell", () => {
       sourceHeight: 2048,
       sourceWidth: 2048,
       width: 8,
+    });
+  });
+
+  it("decodes PNG directly to its fitted budget dimensions from a bounded header hint", async () => {
+    const bytes = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10,
+      0, 0, 0, 13,
+      73, 72, 68, 82,
+      0, 0, 8, 0,
+      0, 0, 4, 0,
+    ]);
+    const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
+    const bitmap = {
+      close: vi.fn(),
+      height: fitted.height,
+      width: fitted.width,
+    } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async (
+      _blob: Blob,
+      _options?: ImageBitmapOptions,
+    ) => bitmap);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+
+    const result = await decodeTextureWithBrowser({
+      bytes,
+      contentKey: "large-png",
+      kind: "embedded-asset",
+      label: "large PNG",
+      mimeType: "image/png",
+    }, new AbortController().signal, 340);
+
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(createImageBitmap.mock.calls[0]![1]).toMatchObject({
+      resizeHeight: fitted.height,
+      resizeQuality: "high",
+      resizeWidth: fitted.width,
+    });
+    expect(result).toMatchObject({
+      height: fitted.height,
+      sourceHeight: 1024,
+      sourceWidth: 2048,
+      width: fitted.width,
+    });
+  });
+
+  it("falls back to decode-then-fit when direct Blob resizing is unavailable", async () => {
+    const bytes = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10,
+      0, 0, 0, 13,
+      73, 72, 68, 82,
+      0, 0, 8, 0,
+      0, 0, 4, 0,
+    ]);
+    const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
+    const original = { close: vi.fn(), height: 1024, width: 2048 } as unknown as ImageBitmap;
+    const resized = {
+      close: vi.fn(),
+      height: fitted.height,
+      width: fitted.width,
+    } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn()
+      .mockRejectedValueOnce(new Error("Blob resizing unavailable"))
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(resized);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+
+    const result = await decodeTextureWithBrowser({
+      bytes,
+      contentKey: "large-png-fallback",
+      kind: "embedded-asset",
+      label: "large PNG fallback",
+      mimeType: "image/png",
+    }, new AbortController().signal, 340);
+
+    expect(createImageBitmap).toHaveBeenCalledTimes(3);
+    expect(createImageBitmap.mock.calls[1]![1]).not.toHaveProperty("resizeWidth");
+    expect(createImageBitmap.mock.calls[2]![0]).toBe(original);
+    expect(original.close).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      height: fitted.height,
+      sourceHeight: 1024,
+      sourceWidth: 2048,
+      width: fitted.width,
     });
   });
 
