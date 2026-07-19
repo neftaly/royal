@@ -65,6 +65,7 @@ describe("canvas root asset publication", () => {
         primitiveCount: 1,
         state: "ready",
         timings: {
+          externalResourceReadDurationMs: 0,
           preparationDurationMs: expect.any(Number),
           sourceReadDurationMs: expect.any(Number),
         },

@@ -2,6 +2,7 @@ import type { PreparedStaticGltf } from "./static-asset";
 
 type PreparationResultMessage =
   | Readonly<{ error: string; kind: "error" }>
+  | Readonly<{ kind: "read-resource"; uri: string }>
   | Readonly<{ kind: "ready"; prepared: PreparedStaticGltf }>;
 
 const WORKER_GLTF_BYTE_THRESHOLD = 256 * 1024;
@@ -17,6 +18,11 @@ const abortFailure = (): DOMException => new DOMException(
   "Royal glTF preparation was aborted",
   "AbortError",
 );
+
+const formatFailure = (error: unknown): string => {
+  const value = error instanceof Error ? error.message : String(error);
+  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
+};
 
 const defaultWorker = (): Worker => new Worker(
   new URL("./static-preparation-worker.ts", import.meta.url),
@@ -78,7 +84,29 @@ export const prepareStaticGltfInBrowser = async (
     )));
     const onMessage = (event: MessageEvent<PreparationResultMessage>): void => {
       const message = event.data;
-      if (message.kind === "error") {
+      if (message.kind === "read-resource") {
+        void readResource(message.uri).then((bytes) => {
+          if (settled) return;
+          try {
+            worker.postMessage(
+              { bytes, kind: "read-resource-ready" },
+              [bytes.buffer],
+            );
+          } catch (error) {
+            finish(() => reject(error));
+          }
+        }).catch((error: unknown) => {
+          if (settled) return;
+          try {
+            worker.postMessage({
+              error: formatFailure(error),
+              kind: "read-resource-error",
+            });
+          } catch (postError) {
+            finish(() => reject(postError));
+          }
+        });
+      } else if (message.kind === "error") {
         finish(() => reject(new Error(message.error)));
       } else {
         finish(() => resolve(message.prepared));
@@ -90,7 +118,7 @@ export const prepareStaticGltfInBrowser = async (
     worker.addEventListener("messageerror", onMessageError);
     try {
       worker.postMessage(
-        { bytes, contentKey, label, sourceUri },
+        { bytes, contentKey, kind: "prepare", label, sourceUri },
         [bytes.buffer],
       );
     } catch (error) {

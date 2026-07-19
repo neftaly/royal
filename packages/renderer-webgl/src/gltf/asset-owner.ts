@@ -21,7 +21,9 @@ export type GltfTextureProgress = Readonly<{
 export type GltfAssetTimings = Readonly<{
   /** Time spent reading the root `.gltf` or `.glb` source. */
   sourceReadDurationMs: number;
-  /** Time spent resolving resources and preparing canonical render data. */
+  /** Time spent reading resources referenced by the root source. */
+  externalResourceReadDurationMs: number;
+  /** Time spent preparing canonical render data, excluding resource reads. */
   preparationDurationMs: number;
   /** Elapsed time from claim until every requested image succeeded or failed. */
   imagesCompleteAfterMs?: number;
@@ -278,8 +280,15 @@ export class GltfAssetOwner {
     void this.#platform.read(asset, entry.controller.signal).then(async (bytes) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const readCompletedAt = performance.now();
-      const readResource = (uri: string) =>
-        this.#platform.readResource(uri, entry.controller.signal);
+      let externalResourceReadDurationMs = 0;
+      const readResource = async (uri: string): Promise<Uint8Array> => {
+        const startedAt = performance.now();
+        try {
+          return await this.#platform.readResource(uri, entry.controller.signal);
+        } finally {
+          externalResourceReadDurationMs += performance.now() - startedAt;
+        }
+      };
       const prepared = this.#platform.prepare === undefined
         ? await preparation!.then((module) =>
           module.prepareStaticGltfSource(
@@ -311,7 +320,11 @@ export class GltfAssetOwner {
         primitiveCount: prepared.primitives.length,
         state: usableState(textures),
         timings: {
-          preparationDurationMs: preparedAt - readCompletedAt,
+          externalResourceReadDurationMs,
+          preparationDurationMs: Math.max(
+            0,
+            preparedAt - readCompletedAt - externalResourceReadDurationMs,
+          ),
           sourceReadDurationMs: readCompletedAt - entry.startedAt,
         },
         textures,

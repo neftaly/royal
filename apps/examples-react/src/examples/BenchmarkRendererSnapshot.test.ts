@@ -47,6 +47,7 @@ describe('current benchmark glTF adapter', () => {
       primitiveCount: 381,
       state: 'streaming',
       timings: {
+        externalResourceReadDurationMs: 70,
         preparationDurationMs: 250,
         sourceReadDurationMs: 40,
       },
@@ -56,7 +57,8 @@ describe('current benchmark glTF adapter', () => {
       imagesLoaded: 80,
       imageRequests: 110,
       phaseMs: {
-        firstUsable: 290,
+        externalResourceRead: 70,
+        firstUsable: 360,
         preparation: 250,
         sourceRead: 40,
       },
@@ -72,6 +74,7 @@ describe('current benchmark glTF adapter', () => {
       primitiveCount: 381,
       state: 'degraded',
       timings: {
+        externalResourceReadDurationMs: 70,
         imagesCompleteAfterMs: 1_200,
         preparationDurationMs: 250,
         sourceReadDurationMs: 40,

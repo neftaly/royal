@@ -42,6 +42,11 @@ Document fetch, buffer fetch/decode, scene preparation, and image preparation
 are distinct phases. Their jobs share a root-wide scheduler and budgets.
 Preparation MUST be generation-safe and deduplicate equal work.
 
+Referenced buffer reads MUST use the same injected, cancellable resource-I/O
+port whether preparation is local or worker-executed. Executor choice cannot
+silently replace consumer authentication, caching, or URI policy with a direct
+worker fetch.
+
 A prepared scene publishes atomically: traversable nodes, primitive records,
 bounds, lights, variant names, and image demands either form one coherent
 revision or do not replace the previous revision. Individual image outcomes may

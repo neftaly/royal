@@ -35,7 +35,7 @@ describe("browser static glTF preparation", () => {
       () => worker as unknown as Worker,
     );
     expect(worker.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ contentKey: "asset:v1" }),
+      expect.objectContaining({ contentKey: "asset:v1", kind: "prepare" }),
       [bytes.buffer],
     );
     const prepared = {
@@ -48,6 +48,41 @@ describe("browser static glTF preparation", () => {
     }));
     await expect(result).resolves.toBe(prepared);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps worker resource reads in the injected asset lifecycle", async () => {
+    const worker = new FakeWorker();
+    const source = new TextEncoder().encode("{}");
+    const external = new Uint8Array([4, 5, 6]);
+    const readResource = vi.fn(async () => external);
+    const result = prepareStaticGltfInBrowser(
+      source,
+      "asset:external",
+      "external asset",
+      "/asset.gltf",
+      new AbortController().signal,
+      readResource,
+      () => worker as unknown as Worker,
+    );
+
+    worker.dispatchEvent(new MessageEvent("message", {
+      data: { kind: "read-resource", uri: "/asset.bin" },
+    }));
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledWith("/asset.bin"));
+    expect(worker.postMessage).toHaveBeenLastCalledWith(
+      { bytes: external, kind: "read-resource-ready" },
+      [external.buffer],
+    );
+
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      primitives: [],
+      textureAssets: [],
+    } as const;
+    worker.dispatchEvent(new MessageEvent("message", {
+      data: { kind: "ready", prepared },
+    }));
+    await expect(result).resolves.toBe(prepared);
   });
 
   it("terminates in-flight preparation when its asset claim is aborted", async () => {

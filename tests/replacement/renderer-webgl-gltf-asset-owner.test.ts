@@ -62,6 +62,11 @@ describe("glTF asset lifecycle owner", () => {
       "/models/triangle.bin",
       expect.any(AbortSignal),
     );
+    const ready = owner.getSnapshot(node.asset);
+    expect(ready.state).toBe("ready");
+    if (ready.state === "ready") {
+      expect(ready.timings.externalResourceReadDurationMs).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("deduplicates exact identities and publishes loading then ready once", async () => {
@@ -87,6 +92,7 @@ describe("glTF asset lifecycle owner", () => {
         primitiveCount: 1,
         state: "ready",
         timings: {
+          externalResourceReadDurationMs: 0,
           preparationDurationMs: expect.any(Number),
           sourceReadDurationMs: expect.any(Number),
         },
@@ -101,6 +107,7 @@ describe("glTF asset lifecycle owner", () => {
     expect(ready.state).toBe("ready");
     if (ready.state === "ready") {
       expect(ready.timings.sourceReadDurationMs).toBeGreaterThanOrEqual(0);
+      expect(ready.timings.externalResourceReadDurationMs).toBe(0);
       expect(ready.timings.preparationDurationMs).toBeGreaterThanOrEqual(0);
     }
   });
@@ -158,6 +165,7 @@ describe("glTF asset lifecycle owner", () => {
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       state: "degraded",
       timings: {
+        externalResourceReadDurationMs: expect.any(Number),
         imagesCompleteAfterMs: expect.any(Number),
         preparationDurationMs: expect.any(Number),
         sourceReadDurationMs: expect.any(Number),
@@ -171,7 +179,9 @@ describe("glTF asset lifecycle owner", () => {
       : undefined;
     if (degraded.state === "degraded") {
       expect(completionMs).toBeGreaterThanOrEqual(
-        degraded.timings.sourceReadDurationMs + degraded.timings.preparationDurationMs,
+        degraded.timings.sourceReadDurationMs
+          + degraded.timings.externalResourceReadDurationMs
+          + degraded.timings.preparationDurationMs,
       );
     }
     owner.refreshTextureProgress(() => ({ height: 16, state: "ready", width: 16 }));

@@ -27,11 +27,13 @@ export const benchmarkGltfDiagnostics = (
   const phaseMs = usable
     ? {
         firstUsable: status.timings.sourceReadDurationMs
+          + status.timings.externalResourceReadDurationMs
           + status.timings.preparationDurationMs,
         ...(status.timings.imagesCompleteAfterMs === undefined
           ? {}
           : { imagesComplete: status.timings.imagesCompleteAfterMs }),
         preparation: status.timings.preparationDurationMs,
+        externalResourceRead: status.timings.externalResourceReadDurationMs,
         sourceRead: status.timings.sourceReadDurationMs,
       }
     : {};

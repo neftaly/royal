@@ -157,6 +157,11 @@ needs it. Worker startup is lazy, jobs obey the same cancellation/generation
 rules, and transferred buffers have explicit ownership. Small jobs SHOULD stay
 local when worker startup and copying would dominate.
 
+Workers execute CPU preparation only. Referenced-resource reads cross the
+root's injected resource-I/O port, even when a worker requests them, so custom
+authentication, caching, cancellation, and diagnostics cannot be bypassed by
+the chosen executor.
+
 Parsing/preparation SHOULD yield or chunk only where it measurably improves
 input responsiveness. Lifecycle complexity is not justified solely to make a
 synthetic progress counter move.
@@ -176,11 +181,12 @@ Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
 Focused glTF status exposes monotonic timings for root-source reading,
-canonical preparation, derived first usable data, and terminal image
-completion. Read and preparation are disjoint durations whose sum is the first
-usable milestone; image completion is elapsed from the exact source/version
-claim. The values are diagnostics, not scheduling inputs, and observing them
-does not poll or wake the frame loop.
+referenced-resource reading, canonical preparation, derived first usable data,
+and terminal image completion. Root read, referenced-resource read, and
+preparation are disjoint durations whose sum is the first usable milestone;
+image completion is elapsed from the exact source/version claim. The values are
+diagnostics, not scheduling inputs, and observing them does not poll or wake the
+frame loop.
 
 An ordinary image decode retains its scheduling reservation until every claimed
 GPU representation consumes it, rejects it, or the claim is cancelled. Bounding

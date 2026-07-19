@@ -3,14 +3,21 @@ import { prepareStaticGltfSource, type PreparedStaticGltf } from "./static-asset
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
   contentKey: string;
+  kind: "prepare";
   label: string;
   sourceUri: string;
 }>;
 
+type ResourceResult =
+  | Readonly<{ bytes: Uint8Array; kind: "read-resource-ready" }>
+  | Readonly<{ error: string; kind: "read-resource-error" }>;
+
+type WorkerMessage = PreparationRequest | ResourceResult;
+
 type WorkerScope = Readonly<{
   addEventListener(
     type: "message",
-    listener: (event: MessageEvent<PreparationRequest>) => void,
+    listener: (event: MessageEvent<WorkerMessage>) => void,
   ): void;
   postMessage(message: unknown, transfer?: Transferable[]): void;
 }>;
@@ -21,6 +28,24 @@ const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
   return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
 };
+
+type ResourceRead = Readonly<{
+  reject(error: Error): void;
+  resolve(bytes: Uint8Array): void;
+}>;
+
+let resourceRead: ResourceRead | undefined;
+let preparing = false;
+
+const readResource = (uri: string): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    if (resourceRead !== undefined) {
+      reject(new Error("Royal glTF preparation supports one external buffer read"));
+      return;
+    }
+    resourceRead = { reject, resolve };
+    workerScope.postMessage({ kind: "read-resource", uri });
+  });
 
 const transferBuffers = (prepared: PreparedStaticGltf): ArrayBuffer[] => {
   const buffers = new Set<ArrayBuffer>();
@@ -48,18 +73,34 @@ const transferBuffers = (prepared: PreparedStaticGltf): ArrayBuffer[] => {
 
 workerScope.addEventListener("message", (event) => {
   const request = event.data;
+  if (request.kind === "read-resource-ready") {
+    const read = resourceRead;
+    if (read === undefined) return;
+    resourceRead = undefined;
+    read.resolve(request.bytes);
+    return;
+  }
+  if (request.kind === "read-resource-error") {
+    const read = resourceRead;
+    if (read === undefined) return;
+    resourceRead = undefined;
+    read.reject(new Error(request.error));
+    return;
+  }
+  if (preparing) {
+    workerScope.postMessage({
+      error: "Royal glTF preparation worker is already active",
+      kind: "error",
+    });
+    return;
+  }
+  preparing = true;
   void prepareStaticGltfSource(
     request.bytes,
     request.contentKey,
     request.label,
     request.sourceUri,
-    async (uri) => {
-      const response = await fetch(uri);
-      if (!response.ok) {
-        throw new Error(`glTF resource ${JSON.stringify(uri)} failed with HTTP ${response.status}`);
-      }
-      return new Uint8Array(await response.arrayBuffer());
-    },
+    readResource,
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },

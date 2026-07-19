@@ -302,12 +302,10 @@ export class CanvasRoot {
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
     this.#surfaceGpu = new SurfaceGpuOwner(this.#gl, this.#persistentGpuBudget);
-    const usesDefaultGltfIo = platform.readGltf === undefined
-      && platform.readGltfResource === undefined;
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
-      ...(usesDefaultGltfIo ? { prepare: lazyBrowserGltfPreparer() } : {}),
+      prepare: lazyBrowserGltfPreparer(),
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
     });
