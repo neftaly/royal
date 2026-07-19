@@ -326,6 +326,35 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(2);
   });
 
+  it("draws opaque surfaces before retained transparent work with straight-alpha state", () => {
+    const { callbacks, canvas, root } = harness();
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({ geometry, material: unlitMaterial({ color: [1, 0, 0, 0.5] }) }),
+        mesh({ geometry, material: unlitMaterial({ color: [0, 0, 1, 1] }) }),
+      ],
+    }));
+    callbacks.shift()!();
+
+    const materialColors = vi.mocked(canvas.gl.uniform4fv).mock.calls
+      .map(([, value]) => Array.from(value))
+      .filter((value) => value[0] === 1 || value[2] === 1);
+    expect(materialColors).toEqual([
+      [0, 0, 1, 1],
+      [1, 0, 0, 0.5],
+    ]);
+    expect(canvas.gl.blendFuncSeparate).toHaveBeenCalledWith(
+      canvas.gl.SRC_ALPHA,
+      canvas.gl.ONE_MINUS_SRC_ALPHA,
+      canvas.gl.ONE,
+      canvas.gl.ONE_MINUS_SRC_ALPHA,
+    );
+    expect(canvas.gl.depthMask).toHaveBeenLastCalledWith(false);
+  });
+
   it("keeps off-frustum surfaces out of the draw shell", () => {
     const { callbacks, canvas, root } = harness();
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });

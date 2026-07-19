@@ -6,22 +6,23 @@ import {
   planClearStateTransition,
 } from "./clear-state-transition";
 import {
-  commitAppliedOpaqueDrawState,
-  createOpaqueDrawStateTransition,
-  planOpaqueDrawStateTransition,
-  type AppliedOpaqueDrawState,
-  type OpaqueDrawStateIntent,
+  commitAppliedSurfaceDrawState,
+  createSurfaceDrawStateTransition,
+  planSurfaceDrawStateTransition,
+  type AppliedSurfaceDrawState,
+  type SurfaceDrawStateIntent,
 } from "./draw-state-transition";
 
-/** Sole root-local writer for WebGL pipeline state used by clear and opaque draws. */
+/** Sole root-local writer for WebGL pipeline state used by clears and surface draws. */
 export class WebGlStateOwner {
   readonly #clearTransition = createClearStateTransition();
-  readonly #drawTransition = createOpaqueDrawStateTransition();
+  readonly #drawTransition = createSurfaceDrawStateTransition();
   readonly #gl: WebGL2RenderingContext;
-  readonly #state: AppliedOpaqueDrawState = {
+  readonly #state: AppliedSurfaceDrawState = {
     ...createUnknownClearState(),
+    alphaBlend: null,
     cullBackFaces: null,
-    fixedOpaquePipelineKnown: false,
+    fixedPipelineKnown: false,
     frontFace: null,
     program: null,
     textureBindings: [],
@@ -35,7 +36,8 @@ export class WebGlStateOwner {
 
   invalidate(): void {
     this.#state.known = false;
-    this.#state.fixedOpaquePipelineKnown = false;
+    this.#state.fixedPipelineKnown = false;
+    this.#state.alphaBlend = null;
     this.#state.cullBackFaces = null;
     this.#state.frontFace = null;
     this.#state.program = null;
@@ -86,17 +88,25 @@ export class WebGlStateOwner {
     }
   }
 
-  applyOpaqueDraw(intent: OpaqueDrawStateIntent): void {
+  applySurfaceDraw(intent: SurfaceDrawStateIntent): void {
     const gl = this.#gl;
     const transition = this.#drawTransition;
-    planOpaqueDrawStateTransition(this.#state, intent, transition);
+    planSurfaceDrawStateTransition(this.#state, intent, transition);
     try {
       if (transition.framebuffer) gl.bindFramebuffer(gl.FRAMEBUFFER, intent.framebuffer);
       if (transition.viewport) {
         gl.viewport(intent.viewport.x, intent.viewport.y, intent.viewport.width, intent.viewport.height);
       }
       if (transition.fixedPipeline) {
-        gl.disable(gl.BLEND);
+        if (intent.alphaBlend) {
+          gl.enable(gl.BLEND);
+          gl.blendFuncSeparate(
+            gl.SRC_ALPHA,
+            gl.ONE_MINUS_SRC_ALPHA,
+            gl.ONE,
+            gl.ONE_MINUS_SRC_ALPHA,
+          );
+        } else gl.disable(gl.BLEND);
         gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.STENCIL_TEST);
         gl.enable(gl.DEPTH_TEST);
@@ -113,7 +123,7 @@ export class WebGlStateOwner {
       if (transition.frontFace) gl.frontFace(intent.frontFace);
       if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
-        gl.depthMask(true);
+        gl.depthMask(!intent.alphaBlend);
         gl.stencilMask(0xff_ff_ff_ff);
       }
       if (transition.program) gl.useProgram(intent.program);
@@ -126,7 +136,7 @@ export class WebGlStateOwner {
         gl.bindSampler(unit, binding?.sampler ?? null);
       }
       if (transition.vertexArray) gl.bindVertexArray(intent.vertexArray);
-      commitAppliedOpaqueDrawState(this.#state, intent);
+      commitAppliedSurfaceDrawState(this.#state, intent);
     } catch (error) {
       this.invalidate();
       throw error;

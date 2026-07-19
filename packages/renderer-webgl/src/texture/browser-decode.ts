@@ -1,4 +1,5 @@
 import type { DecodedTextureSource, TextureSourceRef } from "./asset-owner";
+import { decodeBrowserImageElement } from "./browser-image-element";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
@@ -83,11 +84,24 @@ const decodeTextureBlob = async (
   if (typeof globalThis.createImageBitmap !== "function") {
     throw new Error(`${diagnosticLabel(asset)} requires browser image decoding support`);
   }
-  const bitmap = await globalThis.createImageBitmap(blob, {
-    colorSpaceConversion: "none",
-    imageOrientation: "none",
-    premultiplyAlpha: "none",
-  });
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await globalThis.createImageBitmap(blob, {
+      colorSpaceConversion: "none",
+      imageOrientation: "none",
+      premultiplyAlpha: "none",
+    });
+  } catch (error) {
+    if (signal.aborted) throw aborted();
+    try {
+      return await decodeBrowserImageElement(blob, signal);
+    } catch (fallbackError) {
+      throw new AggregateError(
+        [error, fallbackError],
+        `${diagnosticLabel(asset)} could not be decoded by browser bitmap or image-element paths`,
+      );
+    }
+  }
   if (signal.aborted) {
     bitmap.close();
     throw aborted();

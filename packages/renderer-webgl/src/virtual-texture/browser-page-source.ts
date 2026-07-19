@@ -1,6 +1,7 @@
 import type { VirtualTextureManifest, VirtualTexturePageId } from "./manifest";
 import { virtualTexturePageUri } from "./manifest";
 import { parseKtx2Etc2Page } from "./ktx2-etc2";
+import { decodeBrowserImageElement } from "../texture/browser-image-element";
 
 export type DecodedVirtualTexturePage = Readonly<{
   close(): void;
@@ -16,27 +17,15 @@ export type DecodedVirtualTexturePage = Readonly<{
 const decodeWithImageElement = async (
   blob: Blob,
   storedPageSize: number,
+  signal: AbortSignal,
 ): Promise<DecodedVirtualTexturePage> => {
-  if (typeof document === "undefined") throw new Error("Royal VT SVG decode requires a document");
-  const objectUri = URL.createObjectURL(blob);
-  const image = new Image();
+  const decoded = await decodeBrowserImageElement(blob, signal);
   try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Royal VT browser image decode failed"));
-      image.src = objectUri;
-    });
-    if (image.naturalWidth === storedPageSize && image.naturalHeight === storedPageSize) {
-      let live = true;
+    if (decoded.width === storedPageSize && decoded.height === storedPageSize) {
       return {
-        close: () => {
-          if (!live) return;
-          live = false;
-          image.src = "";
-          URL.revokeObjectURL(objectUri);
-        },
+        close: decoded.close,
         kind: "image",
-        source: image,
+        source: decoded.source,
       };
     }
     const canvas = document.createElement("canvas");
@@ -45,9 +34,8 @@ const decodeWithImageElement = async (
     const context = canvas.getContext("2d", { alpha: true });
     if (context === null) throw new Error("Royal VT could not allocate a raster page canvas");
     context.clearRect(0, 0, storedPageSize, storedPageSize);
-    context.drawImage(image, 0, 0, storedPageSize, storedPageSize);
-    image.src = "";
-    URL.revokeObjectURL(objectUri);
+    context.drawImage(decoded.source, 0, 0, storedPageSize, storedPageSize);
+    decoded.close();
     return {
       close: () => {
         canvas.width = 1;
@@ -57,8 +45,7 @@ const decodeWithImageElement = async (
       source: canvas,
     };
   } catch (error) {
-    image.src = "";
-    URL.revokeObjectURL(objectUri);
+    decoded.close();
     throw error;
   }
 };
@@ -66,6 +53,7 @@ const decodeWithImageElement = async (
 const decodeImagePage = async (
   blob: Blob,
   storedPageSize: number,
+  signal: AbortSignal,
 ): Promise<DecodedVirtualTexturePage> => {
   const options: ImageBitmapOptions = {
     colorSpaceConversion: "none",
@@ -76,7 +64,7 @@ const decodeImagePage = async (
   try {
     source = await createImageBitmap(blob, options);
   } catch {
-    return decodeWithImageElement(blob, storedPageSize);
+    return decodeWithImageElement(blob, storedPageSize, signal);
   }
   if (source.width !== storedPageSize || source.height !== storedPageSize) {
     source.close();
@@ -124,5 +112,5 @@ export const readVirtualTexturePage = async (
       kind: "etc2-rgba",
     };
   }
-  return decodeImagePage(await response.blob(), storedPageSize);
+  return decodeImagePage(await response.blob(), storedPageSize, signal);
 };

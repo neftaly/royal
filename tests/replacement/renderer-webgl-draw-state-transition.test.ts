@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  commitAppliedOpaqueDrawState,
-  createOpaqueDrawStateTransition,
-  planOpaqueDrawStateTransition,
-  type AppliedOpaqueDrawState,
-  type OpaqueDrawStateIntent,
+  commitAppliedSurfaceDrawState,
+  createSurfaceDrawStateTransition,
+  planSurfaceDrawStateTransition,
+  type AppliedSurfaceDrawState,
+  type SurfaceDrawStateIntent,
 } from "../../packages/renderer-webgl/src/webgl/draw-state-transition";
 import { createUnknownClearState } from "../../packages/renderer-webgl/src/webgl/clear-state-transition";
 
 const handle = <Value>(): Value => ({}) as Value;
 
-const state = (): AppliedOpaqueDrawState => ({
+const state = (): AppliedSurfaceDrawState => ({
   ...createUnknownClearState(),
+  alphaBlend: null,
   cullBackFaces: null,
-  fixedOpaquePipelineKnown: false,
+  fixedPipelineKnown: false,
   frontFace: null,
   program: null,
   textureBindings: [],
@@ -21,7 +22,8 @@ const state = (): AppliedOpaqueDrawState => ({
   vertexArray: null,
 });
 
-const intent = (): OpaqueDrawStateIntent => ({
+const intent = (): SurfaceDrawStateIntent => ({
+  alphaBlend: false,
   cullBackFaces: true,
   framebuffer: null,
   frontFace: 0x0901,
@@ -32,12 +34,12 @@ const intent = (): OpaqueDrawStateIntent => ({
   viewport: { height: 360, width: 640, x: 0, y: 0 },
 });
 
-describe("opaque draw state transition core", () => {
+describe("surface draw state transition core", () => {
   it("establishes every required state once, then suppresses an identical draw", () => {
     const previous = state();
     const next = intent();
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, next, transition);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, next, transition);
     expect(transition).toEqual({
       cullMode: true,
       fixedPipeline: true,
@@ -49,18 +51,18 @@ describe("opaque draw state transition core", () => {
       viewport: true,
       writeMasks: true,
     });
-    commitAppliedOpaqueDrawState(previous, next);
-    planOpaqueDrawStateTransition(previous, next, transition);
+    commitAppliedSurfaceDrawState(previous, next);
+    planSurfaceDrawStateTransition(previous, next, transition);
     expect(Object.values(transition).every((value) => !value)).toBe(true);
   });
 
   it("isolates a VAO change from unrelated WebGL state", () => {
     const previous = state();
     const first = intent();
-    commitAppliedOpaqueDrawState(previous, first);
+    commitAppliedSurfaceDrawState(previous, first);
     const next = { ...first, vertexArray: handle<WebGLVertexArrayObject>() };
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, next, transition);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, next, transition);
     expect(transition).toEqual({
       cullMode: false,
       fixedPipeline: false,
@@ -77,9 +79,9 @@ describe("opaque draw state transition core", () => {
   it("isolates mirrored-front-face changes from the rest of the pipeline", () => {
     const previous = state();
     const first = intent();
-    commitAppliedOpaqueDrawState(previous, first);
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, { ...first, frontFace: 0x0900 }, transition);
+    commitAppliedSurfaceDrawState(previous, first);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, { ...first, frontFace: 0x0900 }, transition);
     expect(transition.frontFace).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "frontFace")
@@ -89,9 +91,9 @@ describe("opaque draw state transition core", () => {
   it("isolates double-sided culling changes from the rest of the pipeline", () => {
     const previous = state();
     const first = intent();
-    commitAppliedOpaqueDrawState(previous, first);
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, { ...first, cullBackFaces: false }, transition);
+    commitAppliedSurfaceDrawState(previous, first);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, { ...first, cullBackFaces: false }, transition);
     expect(transition.cullMode).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "cullMode")
@@ -101,9 +103,9 @@ describe("opaque draw state transition core", () => {
   it("isolates texture and sampler binding changes from fixed pipeline state", () => {
     const previous = state();
     const first = intent();
-    commitAppliedOpaqueDrawState(previous, first);
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, {
+    commitAppliedSurfaceDrawState(previous, first);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, {
       ...first,
       textureBindings: [
         first.textureBindings[0]!,
@@ -126,16 +128,29 @@ describe("opaque draw state transition core", () => {
         texture: handle<WebGLTexture>(),
       }],
     };
-    commitAppliedOpaqueDrawState(previous, textured);
+    commitAppliedSurfaceDrawState(previous, textured);
     const untextured = {
       ...textured,
       textureBindings: [{ sampler: null, texture: null }],
       textureUnits: 0,
     };
-    const transition = createOpaqueDrawStateTransition();
-    planOpaqueDrawStateTransition(previous, untextured, transition);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, untextured, transition);
     expect(transition.textureUnits).toBe(0);
-    commitAppliedOpaqueDrawState(previous, untextured);
+    commitAppliedSurfaceDrawState(previous, untextured);
     expect(previous.textureBindings[0]).toBe(textured.textureBindings[0]);
+  });
+
+  it("changes only blend/depth pipeline state when crossing the transparent boundary", () => {
+    const previous = state();
+    const opaque = intent();
+    commitAppliedSurfaceDrawState(previous, opaque);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, { ...opaque, alphaBlend: true }, transition);
+    expect(transition.fixedPipeline).toBe(true);
+    expect(transition.writeMasks).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "fixedPipeline" && key !== "writeMasks")
+      .every(([, value]) => !value)).toBe(true);
   });
 });

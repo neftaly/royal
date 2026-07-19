@@ -31,6 +31,7 @@ export type CanonicalTextureBinding = Readonly<{
 }>;
 
 export type CanonicalUnlitMaterial = Readonly<{
+  alphaBlend?: true;
   alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
@@ -43,6 +44,7 @@ export type CanonicalUnlitMaterial = Readonly<{
 }>;
 
 export type CanonicalStandardMaterial = Readonly<{
+  alphaBlend?: true;
   alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
@@ -178,13 +180,11 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
     throw new Error("Royal canonical surface slice does not yet support wireframe materials");
   }
   const source = material.baseColor;
-  if (source.kind === "solid" && source.color[3] !== 1) {
-    throw new Error("Royal canonical surface slice does not yet support non-opaque materials");
-  }
   const baseColor = source.kind === "solid"
     ? source.color
     : [1, 1, 1, 1] as const;
   const common = {
+    ...(source.kind === "solid" && source.color[3] < 1 ? { alphaBlend: true as const } : {}),
     baseColor,
     ...(source.kind === "asset" ? { baseColorAsset: source } : {}),
     ...(source.kind === "virtual-asset" ? { baseColorVirtualAsset: source } : {}),

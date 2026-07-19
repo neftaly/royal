@@ -7,6 +7,7 @@ import {
 } from "../../../packages/renderer-webgl/src/runtime/canvas-root";
 
 export type FakeGl = WebGL2RenderingContext & {
+  readonly blendFuncSeparate: ReturnType<typeof vi.fn>;
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
@@ -52,6 +53,8 @@ const fakeGl = (): FakeGl => ({
   NEAREST_MIPMAP_LINEAR: 0x2702,
   NEAREST_MIPMAP_NEAREST: 0x2700,
   NONE: 0,
+  ONE: 1,
+  ONE_MINUS_SRC_ALPHA: 0x0303,
   REPEAT: 0x2901,
   RGBA: 0x1908,
   RGBA8: 0x8058,
@@ -60,6 +63,7 @@ const fakeGl = (): FakeGl => ({
   STENCIL_TEST: 0x0b90,
   STENCIL_BUFFER_BIT: 0x0400,
   SRGB8_ALPHA8: 0x8c43,
+  SRC_ALPHA: 0x0302,
   TEXTURE0: 0x84c0,
   TEXTURE_2D: 0x0de1,
   TEXTURE_MAG_FILTER: 0x2800,
@@ -81,6 +85,7 @@ const fakeGl = (): FakeGl => ({
   bindFramebuffer: vi.fn(),
   bindBuffer: vi.fn(),
   bindVertexArray: vi.fn(),
+  blendFuncSeparate: vi.fn(),
   bufferData: vi.fn(),
   bufferSubData: vi.fn(),
   clear: vi.fn(),

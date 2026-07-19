@@ -53,7 +53,7 @@ describe('examples contract', () => {
           phaseMs: {},
           primitiveCount: 1,
           src: '/scene.gltf',
-          status: 'sceneReady',
+          status: 'ready',
           variantNames: [],
           ...asset,
         }],

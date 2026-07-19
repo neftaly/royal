@@ -1,7 +1,6 @@
 import {
   Canvas,
   OrbitControls,
-  useFrame,
   useInvalidate,
   useOrbitCamera,
 } from '@royal/react';
@@ -16,6 +15,7 @@ import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { productEnvironment, productFillLight, productKeyLight, productPass } from '../presentation';
+import { useAnimationFrame } from '../use-animation-frame';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
 const cubeSources = [
@@ -141,7 +141,7 @@ const InstancedCubeAnimation = ({
   readonly animation: InstancingConfig['animation'];
   readonly groups: readonly CubeInstanceGroup[];
 }): null => {
-  useFrame(({ elapsedSeconds }) => {
+  useAnimationFrame((elapsedSeconds) => {
     const pulse = elapsedSeconds * 1.65;
 
     for (const group of groups) {
@@ -174,7 +174,7 @@ const InstancedCubeAnimation = ({
 
 const ForcedRedraw = (): null => {
   const invalidate = useInvalidate();
-  useFrame(invalidate);
+  useAnimationFrame(invalidate);
   return null;
 };
 

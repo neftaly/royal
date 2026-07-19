@@ -1,13 +1,14 @@
-import type { AppliedClearState } from "./clear-state-transition";
+import type { AppliedClearState } from './clear-state-transition';
 
 export type TextureUnitBinding = Readonly<{
   sampler: WebGLSampler | null;
   texture: WebGLTexture | null;
 }>;
 
-export type OpaqueDrawStateIntent = Readonly<{
-  framebuffer: WebGLFramebuffer | null;
+export type SurfaceDrawStateIntent = Readonly<{
+  alphaBlend: boolean;
   cullBackFaces: boolean;
+  framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
   textureBindings: readonly TextureUnitBinding[];
@@ -16,9 +17,9 @@ export type OpaqueDrawStateIntent = Readonly<{
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
 
-export type OpaqueDrawStateTransition = {
-  fixedPipeline: boolean;
+export type SurfaceDrawStateTransition = {
   cullMode: boolean;
+  fixedPipeline: boolean;
   framebuffer: boolean;
   frontFace: boolean;
   program: boolean;
@@ -28,9 +29,10 @@ export type OpaqueDrawStateTransition = {
   writeMasks: boolean;
 };
 
-export type AppliedOpaqueDrawState = AppliedClearState & {
-  fixedOpaquePipelineKnown: boolean;
+export type AppliedSurfaceDrawState = AppliedClearState & {
+  alphaBlend: boolean | null;
   cullBackFaces: boolean | null;
+  fixedPipelineKnown: boolean;
   frontFace: number | null;
   program: WebGLProgram | null;
   textureBindings: (TextureUnitBinding | undefined)[];
@@ -38,7 +40,7 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
   vertexArray: WebGLVertexArrayObject | null;
 };
 
-export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => ({
+export const createSurfaceDrawStateTransition = (): SurfaceDrawStateTransition => ({
   cullMode: false,
   fixedPipeline: false,
   framebuffer: false,
@@ -50,11 +52,11 @@ export const createOpaqueDrawStateTransition = (): OpaqueDrawStateTransition => 
   writeMasks: false,
 });
 
-/** Plans the complete opaque draw state diff into caller-owned storage. */
-export const planOpaqueDrawStateTransition = (
-  previous: AppliedOpaqueDrawState,
-  next: OpaqueDrawStateIntent,
-  output: OpaqueDrawStateTransition,
+/** Plans one complete surface draw-state diff into caller-owned storage. */
+export const planSurfaceDrawStateTransition = (
+  previous: AppliedSurfaceDrawState,
+  next: SurfaceDrawStateIntent,
+  output: SurfaceDrawStateTransition,
 ): void => {
   const unknown = !previous.known;
   output.framebuffer = unknown || previous.framebuffer !== next.framebuffer;
@@ -63,12 +65,17 @@ export const planOpaqueDrawStateTransition = (
     || previous.viewportY !== next.viewport.y
     || previous.viewportWidth !== next.viewport.width
     || previous.viewportHeight !== next.viewport.height;
-  output.fixedPipeline = unknown || !previous.fixedOpaquePipelineKnown || previous.scissorEnabled;
+  output.fixedPipeline = unknown
+    || !previous.fixedPipelineKnown
+    || previous.scissorEnabled
+    || previous.alphaBlend !== next.alphaBlend;
   output.cullMode = unknown
-    || !previous.fixedOpaquePipelineKnown
+    || !previous.fixedPipelineKnown
     || previous.cullBackFaces !== next.cullBackFaces;
   output.frontFace = unknown || previous.frontFace !== next.frontFace;
-  output.writeMasks = unknown || !previous.writeMasksKnown;
+  output.writeMasks = unknown
+    || !previous.writeMasksKnown
+    || previous.alphaBlend !== next.alphaBlend;
   output.program = unknown || previous.program !== next.program;
   output.textureUnits = 0;
   let remainingUnits = next.textureUnits;
@@ -83,12 +90,13 @@ export const planOpaqueDrawStateTransition = (
   output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
 };
 
-export const commitAppliedOpaqueDrawState = (
-  state: AppliedOpaqueDrawState,
-  intent: OpaqueDrawStateIntent,
+export const commitAppliedSurfaceDrawState = (
+  state: AppliedSurfaceDrawState,
+  intent: SurfaceDrawStateIntent,
 ): void => {
-  state.fixedOpaquePipelineKnown = true;
+  state.alphaBlend = intent.alphaBlend;
   state.cullBackFaces = intent.cullBackFaces;
+  state.fixedPipelineKnown = true;
   state.framebuffer = intent.framebuffer;
   state.frontFace = intent.frontFace;
   state.known = true;
@@ -99,8 +107,8 @@ export const commitAppliedOpaqueDrawState = (
     state.textureBindings[unit] = intent.textureBindings[unit];
   }
   state.scissorEnabled = false;
-  state.vertexArray = intent.vertexArray;
   state.textureBindingsKnown = true;
+  state.vertexArray = intent.vertexArray;
   state.viewportHeight = intent.viewport.height;
   state.viewportWidth = intent.viewport.width;
   state.viewportX = intent.viewport.x;

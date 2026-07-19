@@ -465,11 +465,13 @@ const installBenchmarkHooks = async (session) => {
     typeof sample.paintedRatio === 'number' &&
     sample.paintedRatio >= config.firstUsableMinPaintedRatio &&
     sample.colorBuckets >= config.firstUsableMinColorBuckets;
-  const rendererGltfSceneReady = (renderer) => {
+  const usableGltfStatus = (status) =>
+    status === 'streaming' || status === 'degraded' || status === 'ready';
+  const rendererGltfUsable = (renderer) => {
     const assets = renderer?.gltfLoadDiagnostics?.assets;
     return Array.isArray(assets)
       && assets.length > 0
-      && assets.every((asset) => asset.status === 'sceneReady');
+      && assets.every((asset) => usableGltfStatus(asset.status));
   };
   const rendererGltfAssetsSettled = (renderer, requireSuccess) => {
     const diagnostics = renderer?.gltfLoadDiagnostics;
@@ -479,13 +481,13 @@ const installBenchmarkHooks = async (session) => {
     if (requireSuccess && (diagnostics.errorAssets ?? 0) !== 0) return false;
     return assets.every((asset) =>
       asset.status !== 'loading' &&
-      (!requireSuccess || asset.status === 'sceneReady') &&
+      (!requireSuccess || asset.status === 'ready') &&
       (asset.imagesLoaded ?? 0) + (asset.imageFailures ?? 0) >= (asset.imageRequests ?? 0) &&
       (!requireSuccess || (asset.imageFailures ?? 0) === 0));
   };
   const updateFirstUsable = () => {
     const renderer = readRendererSnapshot();
-    if (!rendererGltfSceneReady(renderer)) return false;
+    if (!rendererGltfUsable(renderer)) return false;
     const textureReady = (renderer?.textureResidency?.resources ?? 0) > 0;
     const needsUsableSample = firstUsableAt === null;
     const needsTexturedSample = firstTexturedFrameAt === null
@@ -948,8 +950,12 @@ const roundedGltfLoadDiagnostics = (snapshot) => {
       ?? assets.filter((asset) => asset.status === 'error').length,
     loadingAssets: snapshot.loadingAssets
       ?? assets.filter((asset) => asset.status === 'loading').length,
-    sceneReadyAssets: snapshot.sceneReadyAssets
-      ?? assets.filter((asset) => asset.status === 'sceneReady').length,
+    usableAssets: snapshot.usableAssets
+      ?? assets.filter((asset) => (
+        asset.status === 'streaming'
+        || asset.status === 'degraded'
+        || asset.status === 'ready'
+      )).length,
   };
 };
 
@@ -1014,9 +1020,8 @@ const gltfLoadDiagnosticsSummary = (diagnostics) => {
     assets: assets.length,
     errorAssets: diagnostics?.errorAssets ?? 0,
     loadingAssets: diagnostics?.loadingAssets ?? 0,
-    sceneReadyAssets: diagnostics?.sceneReadyAssets ?? 0,
+    usableAssets: diagnostics?.usableAssets ?? 0,
     slowestImagesComplete: topAssetsByPhase(assets, 'imagesComplete'),
-    slowestSceneReady: topAssetsByPhase(assets, 'toSceneReady'),
     topImageRequestAssets: topAssetsByCount(assets, 'imageRequests'),
     totals,
   };
@@ -1150,7 +1155,6 @@ const buildReport = ({
 const printSummary = (report) => {
   const metrics = report.metrics;
   const summary = metrics.gltfLoadSummary;
-  const slowestScene = summary?.slowestSceneReady?.[0];
   const slowestImages = summary?.slowestImagesComplete?.[0];
   const shortKey = (key) => {
     if (typeof key !== 'string') return 'n/a';
@@ -1166,11 +1170,10 @@ const printSummary = (report) => {
       ` firstUsable=${metrics.firstUsableDrawMs}ms` +
       ` fullyLoaded=${metrics.fullyLoadedMs}ms` +
       ` gltfAssets=${summary?.assets ?? 0}` +
-      ` sceneReadyAssets=${summary?.sceneReadyAssets ?? 0}` +
+      ` usableAssets=${summary?.usableAssets ?? 0}` +
       ` imageRequests=${summary?.totals?.imageRequests ?? 0}` +
       ` imagesLoaded=${summary?.totals?.imagesLoaded ?? 0}` +
       ` imageFailures=${summary?.totals?.imageFailures ?? 0}` +
-      ` slowScene=${topPhaseText(slowestScene)}` +
       ` slowImages=${topPhaseText(slowestImages)}` +
       ` vtManifests=${metrics.vt.manifestResourceCount}` +
       ` vtPages=${metrics.vt.pageResourceCount}` +
@@ -1212,7 +1215,13 @@ const main = async () => {
     if (managePreview) await waitForHttp(baseUrl, 15_000);
     session = await connectPage();
     session.on('Runtime.exceptionThrown', (event) => {
-      exceptions.push(event.exceptionDetails?.text ?? 'Runtime exception');
+      const details = event.exceptionDetails;
+      exceptions.push(
+        details?.exception?.description
+        ?? details?.exception?.value
+        ?? details?.text
+        ?? 'Runtime exception',
+      );
     });
     session.on('Runtime.consoleAPICalled', (event) => {
       if (event.type !== 'warning' && event.type !== 'error') return;

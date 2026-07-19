@@ -6,7 +6,13 @@ import {
   useRendererLifecycle,
   type OrbitCameraViewOptions,
 } from '@royal/react';
-import { directionalLight, gltf, scene, type Transform } from '@royal/react/scene';
+import {
+  directionalLight,
+  gltf,
+  scene,
+  type GltfAssetRef,
+  type Transform,
+} from '@royal/react/scene';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
@@ -37,10 +43,6 @@ type SceneShowcaseEntry = {
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/scenes/';
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 const upstreamRoot = 'https://github.com/KhronosGroup/glTF-Sample-Assets/tree/2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf/Models/';
-const sceneShowcaseRendererOptions = {
-  ...exampleCanvasRendererOptions,
-  automaticVirtualTextures: false,
-} as const;
 
 const sceneEntries = [
   {
@@ -124,15 +126,18 @@ const writeSceneId = (id: SceneId): void => {
   globalThis.history.pushState(null, '', url);
 };
 
-const SceneLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
-  const asset = useGltfAssetStatus(src);
+const SceneLoadStatus = ({ asset }: { readonly asset: GltfAssetRef }): ReactNode => {
+  const status = useGltfAssetStatus(asset);
   const lifecycle = useRendererLifecycle();
-  const assetLabel = asset.state === 'error' ? `error: ${asset.error}` : asset.state;
+  const assetLabel = status.state === 'error' ? `error: ${status.error}` : status.state;
   const rendererLabel = lifecycle.state === 'failed' ? `failed: ${lifecycle.error}` : lifecycle.state;
   return (
-    <output aria-live="polite" className="gltf-scenes-load-status">
-      Renderer: {rendererLabel}; asset: {assetLabel} · drag to orbit · wheel/pinch to zoom
-    </output>
+    <>
+      <BenchmarkRendererSnapshot asset={asset} status={status} />
+      <output aria-live="polite" className="gltf-scenes-load-status">
+        Renderer: {rendererLabel}; asset: {assetLabel} · drag to orbit · wheel/pinch to zoom
+      </output>
+    </>
   );
 };
 
@@ -156,6 +161,10 @@ export const GltfScenes = (): ReactNode => {
     writeSceneId(nextId);
     setSceneId(nextId);
   }, []);
+  const model = useMemo(() => gltf({
+    src: entry.src,
+    ...(entry.transform === undefined ? {} : { transform: entry.transform }),
+  }), [entry.src, entry.transform]);
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     environment: materialEnvironment,
@@ -163,12 +172,9 @@ export const GltfScenes = (): ReactNode => {
     nodes: [
       directionalLight(materialKeyLight),
       directionalLight(materialFillLight),
-      gltf({
-        src: entry.src,
-        ...(entry.transform === undefined ? {} : { transform: entry.transform }),
-      }),
+      model,
     ],
-  }), [entry.src, entry.transform, orbit.cameraResource]);
+  }), [model, orbit.cameraResource]);
 
   return (
     <div className="gltf-scenes" data-scene-id={entry.id}>
@@ -200,12 +206,11 @@ export const GltfScenes = (): ReactNode => {
       <div className="gltf-scenes-canvas">
         <Canvas
           aria-label={`glTF scene showcase: ${entry.title}`}
-          rendererOptions={sceneShowcaseRendererOptions}
+          rendererOptions={exampleCanvasRendererOptions}
           scene={renderScene}
           style={interactiveCanvasStyle}
         >
-          <BenchmarkRendererSnapshot />
-          <SceneLoadStatus src={entry.src} />
+          <SceneLoadStatus asset={model.asset} />
           <OrbitControls
             enablePan
             maxDistance={entry.maxDistance}

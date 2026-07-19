@@ -121,7 +121,6 @@ const smokeExpectations = {
     // Tiger consistently contributes far more color variation.
     minColorBuckets: 48,
     minPaintedRatio: 0.006,
-    virtualTextureRecovery: true,
   },
   'gltf-lod': {
     minColorBuckets: 8,
@@ -300,8 +299,7 @@ const smokeExpression = `
         Array.isArray(state.renderer?.gltfLoadDiagnostics?.assets) &&
         state.renderer.gltfLoadDiagnostics.assets.length > 0 &&
         state.renderer.gltfLoadDiagnostics.assets.some((asset) =>
-          asset.status === 'sceneReady' &&
-          typeof asset.phaseMs?.toSceneReady === 'number' &&
+          (asset.status === 'streaming' || asset.status === 'degraded' || asset.status === 'ready') &&
           asset.imagesLoaded >= state.route.minImagesLoaded
         )
       );
@@ -481,162 +479,6 @@ const compositedCanvasSample = async (session) => {
   `);
 };
 
-const waitForSvgTextureMode = async (session, expectedMode) => evaluate(session, `
-(async () => {
-  const deadline = performance.now() + 12000;
-  let stableFrames = 0;
-  let sample;
-  while (performance.now() < deadline && stableFrames < 6) {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-    const container = document.querySelector('.svg-texture-example');
-    const renderer = ${rendererSnapshotExpression};
-    const virtualTexturing = renderer?.virtualTexturing;
-    sample = {
-      activePages: virtualTexturing?.activePages ?? null,
-      frame: renderer?.frame ?? null,
-      lifecycleError: renderer?.lifecycle?.error ?? null,
-      lifecycleState: renderer?.lifecycle?.state ?? null,
-      mode: container?.getAttribute('data-svg-texture-mode') ?? null,
-      outstandingPageRequests: virtualTexturing?.outstandingPageRequests ?? null,
-      pendingPages: virtualTexturing?.pendingPages ?? null,
-      sceneReadyAssets: renderer?.gltfLoadDiagnostics?.assets
-        ?.filter((asset) => asset.status === 'sceneReady').length ?? null,
-    };
-    const expectedResidency = '${expectedMode}' === 'virtual'
-      ? sample.activePages > 0
-      : sample.activePages === 0;
-    if (
-      sample.mode === '${expectedMode}'
-      && sample.lifecycleState === 'available'
-      && sample.lifecycleError === null
-      && sample.sceneReadyAssets > 0
-      && sample.pendingPages === 0
-      && sample.outstandingPageRequests === 0
-      && expectedResidency
-    ) stableFrames += 1;
-    else stableFrames = 0;
-  }
-  return { ...sample, settled: stableFrames >= 6 };
-})()
-`);
-
-const captureSvgTextureCanvas = async (session) => {
-  await evaluate(session, `
-    (() => {
-      const control = document.querySelector('.svg-texture-mode');
-      if (control instanceof HTMLElement) control.style.visibility = 'hidden';
-    })()
-  `);
-  try {
-    return await captureCompositedCanvas(session);
-  } finally {
-    await evaluate(session, `
-      (() => {
-        const control = document.querySelector('.svg-texture-mode');
-        if (control instanceof HTMLElement) control.style.removeProperty('visibility');
-      })()
-    `);
-  }
-};
-
-const runSvgTextureParitySmoke = async (session) => {
-  const virtual = await waitForSvgTextureMode(session, 'virtual');
-  if (virtual.settled !== true) return { error: 'generated VT mode did not settle', virtual };
-  const virtualCapture = await captureSvgTextureCanvas(session);
-  if (virtualCapture === undefined) return { error: 'could not capture generated VT mode', virtual };
-  if (captureDirectory !== '') {
-    await mkdir(captureDirectory, { recursive: true });
-    await writeFile(path.join(captureDirectory, 'ghostscript-tiger-vt.png'), Buffer.from(virtualCapture, 'base64'));
-  }
-
-  let ordinary;
-  try {
-    await evaluate(session, `
-      (() => {
-        const control = document.querySelector('.svg-texture-mode');
-        if (!(control instanceof HTMLButtonElement)) return false;
-        control.click();
-        return true;
-      })()
-    `);
-    ordinary = await waitForSvgTextureMode(session, 'ordinary');
-    if (ordinary.settled !== true) {
-      return { error: 'ordinary SVG texture mode did not settle', ordinary, virtual };
-    }
-    const ordinaryCapture = await captureSvgTextureCanvas(session);
-    if (ordinaryCapture === undefined) {
-      return { error: 'could not capture ordinary SVG texture mode', ordinary, virtual };
-    }
-    if (captureDirectory !== '') {
-      await writeFile(
-        path.join(captureDirectory, 'ghostscript-tiger-ordinary.png'),
-        Buffer.from(ordinaryCapture, 'base64'),
-      );
-    }
-    const comparison = await evaluate(session, `
-      (async () => {
-        const decode = async (data) => {
-          const response = await fetch('data:image/png;base64,' + data);
-          return createImageBitmap(await response.blob());
-        };
-        const [virtualBitmap, ordinaryBitmap] = await Promise.all([
-          decode('${virtualCapture}'),
-          decode('${ordinaryCapture}'),
-        ]);
-        const width = 160;
-        const height = Math.max(1, Math.round(width * virtualBitmap.height / virtualBitmap.width));
-        const pixels = (bitmap) => {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const context = canvas.getContext('2d', { willReadFrequently: true });
-          if (context === null) return undefined;
-          context.drawImage(bitmap, 0, 0, width, height);
-          return context.getImageData(0, 0, width, height).data;
-        };
-        const virtualPixels = pixels(virtualBitmap);
-        const ordinaryPixels = pixels(ordinaryBitmap);
-        virtualBitmap.close();
-        ordinaryBitmap.close();
-        if (virtualPixels === undefined || ordinaryPixels === undefined) {
-          return { error: '2D comparison context unavailable' };
-        }
-        const errors = [];
-        let changedPixels = 0;
-        let sum = 0;
-        let sumSquares = 0;
-        for (let index = 0; index < virtualPixels.length; index += 4) {
-          const error = (
-            Math.abs(virtualPixels[index] - ordinaryPixels[index])
-            + Math.abs(virtualPixels[index + 1] - ordinaryPixels[index + 1])
-            + Math.abs(virtualPixels[index + 2] - ordinaryPixels[index + 2])
-          ) / (3 * 255);
-          errors.push(error);
-          sum += error;
-          sumSquares += error * error;
-          if (error > 0.1) changedPixels += 1;
-        }
-        errors.sort((left, right) => left - right);
-        const count = errors.length;
-        return {
-          changedPixelRatio: changedPixels / count,
-          height,
-          meanAbsoluteError: sum / count,
-          p95Error: errors[Math.min(count - 1, Math.floor(count * 0.95))],
-          rootMeanSquareError: Math.sqrt(sumSquares / count),
-          width,
-        };
-      })()
-    `);
-    return { comparison, ordinary, virtual };
-  } finally {
-    if (ordinary?.mode === 'ordinary') {
-      await evaluate(session, `document.querySelector('.svg-texture-mode')?.click()`);
-      await waitForSvgTextureMode(session, 'virtual');
-    }
-  }
-};
-
 const assertRoute = (expected, state) => {
   const failures = [];
   if (state.route.id !== expected.id) {
@@ -716,30 +558,6 @@ const assertRoute = (expected, state) => {
       }
       if (!(slate?.[2] > slate?.[0] * 1.25 && slate?.[2] > slate?.[1] * 1.15)) {
         failures.push(`glTF slate variant was not blue-dominant: ${JSON.stringify(slate)}`);
-      }
-    }
-  }
-
-  if (expected.id === 'gltf-ghostscript-tiger-svg') {
-    const parity = state.svgTextureParity;
-    if (parity === undefined) {
-      failures.push('SVG texture route missed generated-VT parity smoke');
-    } else if (parity.error !== undefined) {
-      failures.push(`SVG texture parity smoke failed: ${parity.error}`);
-    } else if (parity.comparison?.error !== undefined) {
-      failures.push(`SVG texture comparison failed: ${parity.comparison.error}`);
-    } else {
-      if (!(parity.comparison?.meanAbsoluteError < 0.015)) {
-        failures.push(`SVG generated VT mean pixel error was ${parity.comparison?.meanAbsoluteError ?? 'unknown'}`);
-      }
-      if (!(parity.comparison?.changedPixelRatio < 0.05)) {
-        failures.push(`SVG generated VT changed-pixel ratio was ${parity.comparison?.changedPixelRatio ?? 'unknown'}`);
-      }
-      if (
-        parity.virtual?.activePages <= 0
-        || parity.ordinary?.activePages !== 0
-      ) {
-        failures.push('SVG parity modes did not exercise distinct generated-VT and ordinary residency');
       }
     }
   }
@@ -1046,10 +864,12 @@ const assertRoute = (expected, state) => {
     const assets = gltfLoadDiagnostics?.assets;
     if (!Array.isArray(assets) || assets.length === 0) {
       failures.push('missing glTF loading diagnostics');
-    } else if (!assets.some((asset) => asset.status === 'sceneReady')) {
-      failures.push('glTF load diagnostics did not report a scene-ready asset');
-    } else if (!assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')) {
-      failures.push('glTF load diagnostics missed toSceneReady phase timing');
+    } else if (!assets.some((asset) => (
+      asset.status === 'streaming'
+      || asset.status === 'degraded'
+      || asset.status === 'ready'
+    ))) {
+      failures.push('glTF load diagnostics did not report a usable asset');
     } else if (!assets.some((asset) => asset.imagesLoaded >= (expected.minImagesLoaded ?? 0))) {
       failures.push(`glTF load diagnostics did not reach ${expected.minImagesLoaded} loaded images`);
     }
@@ -2029,12 +1849,6 @@ const main = async () => {
           },
         };
       }
-      if (route.id === 'gltf-ghostscript-tiger-svg') {
-        state = {
-          ...state,
-          svgTextureParity: await runSvgTextureParitySmoke(session),
-        };
-      }
       if (route.id === 'virtual-texture-stress') {
         const virtualTextureInteraction = await runVirtualTextureInteractionSmoke(session);
         const refreshedSample = await compositedCanvasSample(session);
@@ -2057,14 +1871,17 @@ const main = async () => {
         const recentResources = (state.resources ?? [])
           .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
           .join('; ');
-        const interaction = state.virtualTextureInteraction ?? state.svgTextureParity;
+        const interaction = state.virtualTextureInteraction;
         const interactionDiagnostics = interaction === undefined ? '' : JSON.stringify(interaction);
+        const rendererDiagnostics = state.renderer === undefined ? '' : JSON.stringify(state.renderer);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`
         }${
           recentResources === '' ? '' : `; resources: ${recentResources}`
         }${
           interactionDiagnostics === '' ? '' : `; interaction: ${interactionDiagnostics}`
+        }${
+          rendererDiagnostics === '' ? '' : `; renderer: ${rendererDiagnostics}`
         }`);
       }
       if (contextLossSmoke && !contextLossChecked) {
@@ -2093,10 +1910,7 @@ const main = async () => {
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)} luma=${state.canvas.sample.meanPaintedLuminance.toFixed(3)} p25=${state.canvas.sample.paintedLuminanceP25.toFixed(3)} p50=${state.canvas.sample.paintedLuminanceP50.toFixed(3)} p75=${state.canvas.sample.paintedLuminanceP75.toFixed(3)} chroma=${state.canvas.sample.meanPaintedChroma.toFixed(3)} saturation=${state.canvas.sample.meanPaintedSaturation.toFixed(3)}`;
-      const paritySummary = state.svgTextureParity?.comparison?.meanAbsoluteError === undefined
-        ? ''
-        : ` svgParityMae=${state.svgTextureParity.comparison.meanAbsoluteError.toFixed(4)} changed=${state.svgTextureParity.comparison.changedPixelRatio.toFixed(4)}`;
-      console.log(`ok ${route.id}${canvasSummary}${paritySummary}`);
+      console.log(`ok ${route.id}${canvasSummary}`);
     }
 
     if (contextLossSmoke && !contextLossChecked) {

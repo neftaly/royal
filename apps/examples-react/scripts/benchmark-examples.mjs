@@ -768,15 +768,12 @@ const installBenchmarkHooks = async (session) => {
   };
   const labelProgram = (program) => {
     const sources = glProgramShaders.get(program)?.map((shader) => glShaderSources.get(shader) ?? '').join('\\n') ?? '';
-    const kind = sources.includes('u_hdrColor')
-      ? 'postprocess'
-      : sources.includes('u_cameraWorldPosition')
-        ? 'surface'
-        : sources.includes('u_toneMappingSettings') ? 'unlit' : 'wireframe';
-    const instanced = sources.includes('a_instanceModel') ? '-instanced' : '';
-    const samplers = [...sources.matchAll(/uniform(?: highp)? u?sampler(?:2D|Cube) (u_[A-Za-z0-9]+);/g)]
-      .map((match) => match[1].slice(2).replace(/Texture$/u, ''))
-      .map((name) => kind === 'surface' && name === 'texture' ? 'baseColor' : name);
+    const kind = sources.includes('uniform vec4 cameraWorldPosition')
+      ? 'surface'
+      : sources.includes('uniform vec4 linearColor') ? 'unlit' : 'unknown';
+    const instanced = sources.includes('in mat4 instanceModel') ? '-instanced' : '';
+    const samplers = [...sources.matchAll(/uniform(?: highp)? sampler(?:2D|Cube) ([A-Za-z0-9]+);/g)]
+      .map((match) => match[1].replace(/Texture$/u, ''));
     const features = [...new Set(samplers)].sort();
     glProgramLabels.set(program, kind + instanced + (features.length === 0 ? '' : ':' + features.join(',')));
   };

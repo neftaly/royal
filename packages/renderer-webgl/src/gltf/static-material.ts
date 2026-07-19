@@ -257,8 +257,9 @@ export const prepareMaterial = (
     material.alphaMode !== undefined
     && material.alphaMode !== "OPAQUE"
     && material.alphaMode !== "MASK"
+    && material.alphaMode !== "BLEND"
   ) {
-    fail(label, `${materialPath}.alphaMode`, "must be OPAQUE or MASK");
+    fail(label, `${materialPath}.alphaMode`, "must be OPAQUE, MASK, or BLEND");
   }
   if (material.doubleSided !== undefined && typeof material.doubleSided !== "boolean") {
     fail(label, `${materialPath}.doubleSided`, "must be boolean");
@@ -300,6 +301,7 @@ export const prepareMaterial = (
   }
   const baseColor = [color[0]!, color[1]!, color[2]!, color[3]!] as const;
   const presentation = {
+    ...(material.alphaMode === "BLEND" ? { alphaBlend: true as const } : {}),
     ...(alphaCutoff === undefined ? {} : { alphaCutoff }),
     ...(material.doubleSided === true ? { doubleSided: true as const } : {}),
   };

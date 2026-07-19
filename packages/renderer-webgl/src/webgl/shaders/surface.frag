@@ -255,5 +255,5 @@ void main() {
 #endif
   vec3 exposed = (lit + emissive) * max(presentation.x, 0.0);
   vec3 mapped = presentation.y > 0.5 ? pbrNeutral(exposed) : clamp(exposed, 0.0, 1.0);
-  outputColor = vec4(linearToSrgb(mapped), 1.0);
+  outputColor = vec4(linearToSrgb(mapped), surfaceBaseColor.a);
 }

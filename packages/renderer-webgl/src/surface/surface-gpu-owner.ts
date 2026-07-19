@@ -7,7 +7,7 @@ import {
 } from "../math/mat4";
 import type { FrameViewport } from "../frame/clear-frame";
 import type { WebGlStateOwner } from "../webgl/state-owner";
-import type { OpaqueDrawStateIntent } from "../webgl/draw-state-transition";
+import type { SurfaceDrawStateIntent } from "../webgl/draw-state-transition";
 import { TextureGpuOwner, type GpuTextureBinding } from "../texture/gpu-owner";
 import {
   MAX_CANONICAL_DIRECTIONAL_LIGHTS,
@@ -75,7 +75,8 @@ type GpuSurface = {
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
 
-type MutableOpaqueDrawIntent = {
+type MutableSurfaceDrawIntent = {
+  alphaBlend: boolean;
   cullBackFaces: boolean;
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
@@ -162,10 +163,20 @@ const textureUnitMask = (features: number): number => (
 ) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0)
   | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b10_0001 : 0);
 
-const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
+type GroupedSurfaces = Readonly<{
+  blended: GpuSurface[];
+  opaque: readonly GpuSurface[];
+}>;
+
+const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]): GroupedSurfaces => {
   const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
+  const blended: GpuSurface[] = [];
   let materialGroupCount = 0;
   for (const resource of surfaces) {
+    if (resource.surface.material.alphaBlend === true) {
+      blended.push(resource);
+      continue;
+    }
     const program = resource.program.program;
     let materialGroups = groups.get(program);
     if (materialGroups === undefined) {
@@ -179,8 +190,20 @@ const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSu
       materialGroupCount += 1;
     } else group.push(resource);
   }
-  if (materialGroupCount < 2) return surfaces;
-  const grouped = Array<GpuSurface>(surfaces.length);
+  const opaqueCount = surfaces.length - blended.length;
+  if (materialGroupCount < 2) {
+    if (blended.length === 0) return { blended, opaque: surfaces };
+    const opaque = Array<GpuSurface>(opaqueCount);
+    let opaqueIndex = 0;
+    for (const resource of surfaces) {
+      if (resource.surface.material.alphaBlend !== true) {
+        opaque[opaqueIndex] = resource;
+        opaqueIndex += 1;
+      }
+    }
+    return { blended, opaque };
+  }
+  const grouped = Array<GpuSurface>(opaqueCount);
   let index = 0;
   for (const materialGroups of groups.values()) {
     for (const group of materialGroups.values()) {
@@ -190,7 +213,7 @@ const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSu
       }
     }
   }
-  return grouped;
+  return { blended, opaque: grouped };
 };
 
 const surfaceMatchesLodSelections = (
@@ -213,11 +236,13 @@ export class SurfaceGpuOwner {
   readonly #directionalLightDirections = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
   #directionalLightCount = 0;
   #dirty = false;
-  #drawIntent: MutableOpaqueDrawIntent | null = null;
+  #drawIntent: MutableSurfaceDrawIntent | null = null;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
-  #gpuSurfaces: readonly GpuSurface[] = [];
+  #opaqueSurfaces: readonly GpuSurface[] = [];
+  #blendedSurfaces: GpuSurface[] = [];
+  #blendedDepths = new Float64Array(0);
   #gpuSurfacesBySceneIndex: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #lodGroups = new Set<string>();
@@ -261,7 +286,9 @@ export class SurfaceGpuOwner {
 
   invalidate(): void {
     this.#geometryGpu.invalidate();
-    this.#gpuSurfaces = [];
+    this.#opaqueSurfaces = [];
+    this.#blendedSurfaces = [];
+    this.#blendedDepths = new Float64Array(0);
     this.#gpuSurfacesBySceneIndex = [];
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
@@ -337,7 +364,10 @@ export class SurfaceGpuOwner {
       }
     }
     const scene = this.#scene;
-    if (scene === null || this.#gpuSurfaces.length === 0) return this.#dirty;
+    if (
+      scene === null
+      || this.#opaqueSurfaces.length + this.#blendedSurfaces.length === 0
+    ) return this.#dirty;
     this.#selectLods(views, scene);
     for (const view of views) this.#drawView(view, framebuffer, state, scene);
     return this.#dirty || virtualTexturePending;
@@ -351,9 +381,10 @@ export class SurfaceGpuOwner {
   ): void {
     let drawIntent = this.#drawIntent;
     if (drawIntent === null) {
-      const firstSurface = this.#gpuSurfaces[0]!;
+      const firstSurface = this.#opaqueSurfaces[0] ?? this.#blendedSurfaces[0]!;
       const first = firstSurface.program;
       drawIntent = {
+        alphaBlend: firstSurface.surface.material.alphaBlend === true,
         cullBackFaces: firstSurface.surface.material.doubleSided !== true,
         framebuffer,
         frontFace: this.#gl.CCW,
@@ -385,19 +416,25 @@ export class SurfaceGpuOwner {
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
-    for (let index = 0; index < this.#gpuSurfaces.length; index += 1) {
-      const resource = this.#gpuSurfaces[index]!;
+    this.#sortBlendedSurfaces(view);
+    const opaqueCount = this.#opaqueSurfaces.length;
+    const surfaceCount = opaqueCount + this.#blendedSurfaces.length;
+    for (let index = 0; index < surfaceCount; index += 1) {
+      const resource = index < opaqueCount
+        ? this.#opaqueSurfaces[index]!
+        : this.#blendedSurfaces[index - opaqueCount]!;
       const surface = resource.surface;
       if (!surfaceMatchesLodSelections(surface, this.#lodSelections)) continue;
       if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
+      drawIntent.alphaBlend = surface.material.alphaBlend === true;
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
       drawIntent.textureBindings = resource.bindings;
       drawIntent.textureUnits = resource.textureUnits;
       drawIntent.vertexArray = resource.vertexArray;
-      state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
+      state.applySurfaceDraw(drawIntent as SurfaceDrawStateIntent);
       if (initializedProgram !== program.program) {
         this.#programs.initializeSamplers(program);
         initializedProgram = program.program;
@@ -548,6 +585,35 @@ export class SurfaceGpuOwner {
     }
   }
 
+  #sortBlendedSurfaces(view: Mat4): void {
+    const surfaces = this.#blendedSurfaces;
+    if (surfaces.length < 2) return;
+    if (this.#blendedDepths.length < surfaces.length) {
+      this.#blendedDepths = new Float64Array(surfaces.length);
+    }
+    const depths = this.#blendedDepths;
+    for (let index = 0; index < surfaces.length; index += 1) {
+      const bounds = surfaces[index]!.surface.worldBounds;
+      const x = (bounds.min[0] + bounds.max[0]) * 0.5;
+      const y = (bounds.min[1] + bounds.max[1]) * 0.5;
+      const z = (bounds.min[2] + bounds.max[2]) * 0.5;
+      const depth = view[2] * x + view[6] * y + view[10] * z + view[14];
+      depths[index] = Number.isFinite(depth) ? depth : 0;
+    }
+    for (let index = 1; index < surfaces.length; index += 1) {
+      const surface = surfaces[index]!;
+      const depth = depths[index]!;
+      let insertion = index;
+      while (insertion > 0 && depths[insertion - 1]! > depth) {
+        surfaces[insertion] = surfaces[insertion - 1]!;
+        depths[insertion] = depths[insertion - 1]!;
+        insertion -= 1;
+      }
+      surfaces[insertion] = surface;
+      depths[insertion] = depth;
+    }
+  }
+
   #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
     this.#lodGroups.clear();
     for (const group of scene.lodGroups) {
@@ -674,7 +740,9 @@ export class SurfaceGpuOwner {
       geometryPlan.commit();
       this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuSurfacesBySceneIndex = nextSurfaces;
-      this.#gpuSurfaces = groupSurfacesByProgram(nextSurfaces);
+      const grouped = groupSurfacesForDrawing(nextSurfaces);
+      this.#opaqueSurfaces = grouped.opaque;
+      this.#blendedSurfaces = grouped.blended;
     } catch (error) {
       geometryPlan.rollback();
       throw error;
@@ -763,7 +831,11 @@ export class SurfaceGpuOwner {
         resource.textureUnits = textureUnitMask(features);
       }
     }
-    if (regroup) this.#gpuSurfaces = groupSurfacesByProgram(surfaces);
+    if (regroup) {
+      const grouped = groupSurfacesForDrawing(surfaces);
+      this.#opaqueSurfaces = grouped.opaque;
+      this.#blendedSurfaces = grouped.blended;
+    }
     this.#texturePublicationKeys.clear();
     this.#dirty = false;
     this.#drawIntent = null;

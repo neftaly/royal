@@ -290,6 +290,22 @@ describe("static glTF preparation core", () => {
       });
   });
 
+  it("lowers alpha blending into the shared surface presentation contract", () => {
+    const document = staticTriangleDocument();
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials[0] = {
+      alphaMode: "BLEND",
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [1, 0.5, 0.25, 0.4] },
+    };
+    expect(prepareStaticGlb(staticTriangleGlb(document), "blended").primitives[0]!.material)
+      .toMatchObject({
+        alphaBlend: true,
+        baseColor: [1, 0.5, 0.25, 0.4],
+        kind: "unlit",
+      });
+  });
+
   it("lowers external base color images to the shared ordinary texture contract", () => {
     const prepared = prepareStaticGlb(
       staticTexturedTriangleGlb(),

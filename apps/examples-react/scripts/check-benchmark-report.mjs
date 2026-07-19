@@ -735,7 +735,7 @@ const checkGltfLoadReport = (report) => {
 
   if (requireObject(metrics.gltfLoadSummary, 'report.metrics.gltfLoadSummary')) {
     requirePositiveNumber(metrics.gltfLoadSummary.assets, 'report.metrics.gltfLoadSummary.assets');
-    requirePositiveNumber(metrics.gltfLoadSummary.sceneReadyAssets, 'report.metrics.gltfLoadSummary.sceneReadyAssets');
+    requirePositiveNumber(metrics.gltfLoadSummary.usableAssets, 'report.metrics.gltfLoadSummary.usableAssets');
     requireZero(metrics.gltfLoadSummary.errorAssets, 'report.metrics.gltfLoadSummary.errorAssets');
     requireZero(metrics.gltfLoadSummary.loadingAssets, 'report.metrics.gltfLoadSummary.loadingAssets');
     if (requireObject(metrics.gltfLoadSummary.totals, 'report.metrics.gltfLoadSummary.totals')) {

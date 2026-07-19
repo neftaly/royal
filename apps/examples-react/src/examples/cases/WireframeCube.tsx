@@ -10,7 +10,6 @@ import {
 import {
   Canvas,
   OrbitControls,
-  useFrame,
   useOrbitCamera,
 } from '@royal/react';
 import {
@@ -20,6 +19,7 @@ import {
 } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { useAnimationFrame } from '../use-animation-frame';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
@@ -31,7 +31,7 @@ const SpinController = ({
 }: {
   readonly meshRef: { current: RenderObjectHandle | null };
 }): null => {
-  useFrame(({ elapsedSeconds }) => {
+  useAnimationFrame((elapsedSeconds) => {
     const handle = meshRef.current;
     if (handle === null) return;
 
