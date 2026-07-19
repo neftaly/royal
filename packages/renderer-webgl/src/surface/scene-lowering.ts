@@ -20,7 +20,6 @@ import {
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import { prepareGltfInstanceBatches } from "../gltf/instance-transforms";
 import {
-  appendCanonicalMaterialTextureAssets,
   canonicalMaterialTextureKeys,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
@@ -31,8 +30,11 @@ import {
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
 import type { CanonicalCamera } from "./camera-source-owner";
-import type { DecodedTextureSource } from "../texture/asset-owner";
-import type { TextureSourceRef } from "../texture/asset-owner";
+import {
+  textureStorageKey,
+  type DecodedTextureSource,
+  type TextureSourceRef,
+} from "../texture/asset-owner";
 import {
   emptyWorldBounds,
   includeTransformedBounds,
@@ -94,6 +96,32 @@ export type CanonicalSurfaceScene = Readonly<{
   virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
+
+/** Collects display-defining color images before material-detail images. */
+export const collectCanonicalSurfaceTextureAssets = (
+  surfaces: readonly Pick<CanonicalDrawSurface, "materialSource">[],
+): readonly TextureSourceRef[] => {
+  const assets: TextureSourceRef[] = [];
+  const claimed = new Set<string>();
+  const add = (asset: TextureSourceRef | undefined): void => {
+    if (asset === undefined) return;
+    const key = textureStorageKey(asset);
+    if (claimed.has(key)) return;
+    claimed.add(key);
+    assets.push(asset);
+  };
+  for (const { materialSource } of surfaces) {
+    add(materialSource.baseColorAsset);
+  }
+  for (const { materialSource } of surfaces) {
+    if (materialSource.kind === "unlit") continue;
+    add(materialSource.emissiveAsset);
+    add(materialSource.metallicRoughnessAsset);
+    add(materialSource.normalAsset);
+    add(materialSource.occlusionAsset);
+  }
+  return assets;
+};
 
 const indexSurfaceTextures = (
   surfaces: readonly CanonicalDrawSurface[],
@@ -244,7 +272,6 @@ export const prepareCanonicalSurfaceScene = (
   const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
   const virtualTextureAssets: VirtualTextureAssetRef[] = [];
-  const textureAssets: TextureSourceRef[] = [];
   const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
   let materialLodGroupIndex = 0;
   for (const node of scene.nodes) {
@@ -424,7 +451,6 @@ export const prepareCanonicalSurfaceScene = (
           : `${primitive.geometry.key}:mount:${materialLodGroupIndex++}:material-lod`;
         for (let materialLevel = 0; materialLevel < materialLevelCount; materialLevel += 1) {
           const levelMaterial = materialLod?.levels[materialLevel] ?? materialSource;
-          appendCanonicalMaterialTextureAssets(textureAssets, levelMaterial);
           let lods = geometryLods;
           if (materialLod !== undefined && materialGroup !== undefined) {
             const materialMembership: LodMembership = {
@@ -513,7 +539,6 @@ export const prepareCanonicalSurfaceScene = (
     }
     const materialSource = prepareCanonicalMaterialSource(node.material);
     const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
-    if (node.material.baseColor.kind === "asset") textureAssets.push(node.material.baseColor);
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
@@ -550,7 +575,7 @@ export const prepareCanonicalSurfaceScene = (
     pickSurfaces,
     punctualLights,
     surfaces,
-    textureAssets,
+    textureAssets: collectCanonicalSurfaceTextureAssets(surfaces),
     textureSurfaceIndices: indexSurfaceTextures(surfaces),
     virtualTextureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",

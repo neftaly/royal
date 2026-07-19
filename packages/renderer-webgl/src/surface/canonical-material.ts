@@ -216,19 +216,6 @@ export const prepareCanonicalMaterial = (
 
 const EMPTY_TEXTURE_KEYS: readonly string[] = [];
 
-/** Appends the cold texture recipes required by one selected canonical material. */
-export const appendCanonicalMaterialTextureAssets = (
-  target: TextureSourceRef[],
-  material: CanonicalSurfaceMaterial,
-): void => {
-  if (material.baseColorAsset !== undefined) target.push(material.baseColorAsset);
-  if (material.kind === "unlit") return;
-  if (material.emissiveAsset !== undefined) target.push(material.emissiveAsset);
-  if (material.metallicRoughnessAsset !== undefined) target.push(material.metallicRoughnessAsset);
-  if (material.normalAsset !== undefined) target.push(material.normalAsset);
-  if (material.occlusionAsset !== undefined) target.push(material.occlusionAsset);
-};
-
 /** Stable decoded-content claims used to target asynchronous texture publication. */
 export const canonicalMaterialTextureKeys = (
   material: CanonicalSurfaceMaterial,

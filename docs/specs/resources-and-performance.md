@@ -189,6 +189,12 @@ unbounded queue of completed RGBA images waiting behind progressive GPU
 admission. The initial implementation permits eight such retained decode
 reservations per root and preserves deterministic source order.
 
+Canonical scene lowering deduplicates ordinary image claims by GPU storage
+identity. It orders every selected surface's base-color claim before emissive,
+metallic-roughness, normal, and occlusion claims, preserving stable authored
+order within each tier. This reduces neutral-grey first display without a
+camera-specific scheduler; panel and XR consume the same claim order.
+
 Encoding can materially improve load time: GLB reduces request overhead;
 Meshopt/Draco reduce geometry bytes and parsing; offline ETC2 KTX2 reduces texture
 bytes, upload footprint, and GPU memory without a runtime transcoder; authored

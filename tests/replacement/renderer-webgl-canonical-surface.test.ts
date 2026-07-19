@@ -18,14 +18,71 @@ import {
 import { describe, expect, it } from "vitest";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import {
+  collectCanonicalSurfaceTextureAssets,
   prepareCanonicalSurfaceScene,
   refreshCanonicalSurfaceTexture,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
 
 describe("canonical direct surface lowering", () => {
+  it("queues every base color before secondary material images", () => {
+    const firstBase = imageTexture("/first-base.png");
+    const firstEmissive = imageTexture("/first-emissive.png");
+    const firstMetallicRoughness = imageTexture("/first-metallic-roughness.png");
+    const firstNormal = imageTexture("/first-normal.png");
+    const firstOcclusion = imageTexture("/first-occlusion.png");
+    const secondBase = imageTexture("/second-base.png");
+    const secondEmissive = imageTexture("/second-emissive.png");
+    const firstBaseSamplerAlias = imageTexture({
+      sampler: { minFilter: "nearest" },
+      src: "/first-base.png",
+    });
+    const firstBaseLinear = imageTexture({
+      colorSpace: "linear",
+      src: "/first-base.png",
+    });
+    const material = (
+      baseColorAsset: typeof firstBase,
+      emissiveAsset: typeof firstEmissive,
+      details = false,
+    ): CanonicalSurfaceMaterial => ({
+      baseColor: [1, 1, 1, 1],
+      baseColorAsset,
+      emissiveAsset,
+      emissiveFactor: [1, 1, 1],
+      kind: "standard",
+      metallicFactor: 0,
+      ...(details ? {
+        metallicRoughnessAsset: firstMetallicRoughness,
+        normalAsset: firstNormal,
+        occlusionAsset: firstOcclusion,
+      } : {}),
+      normalScale: 1,
+      occlusionStrength: 1,
+      requiresTextureCoordinates: true,
+      roughnessFactor: 1,
+    });
+
+    expect(collectCanonicalSurfaceTextureAssets([
+      { materialSource: material(firstBase, firstEmissive, true) },
+      { materialSource: material(secondBase, secondEmissive) },
+      { materialSource: material(firstBaseSamplerAlias, firstEmissive) },
+      { materialSource: material(firstBaseLinear, firstEmissive) },
+    ])).toEqual([
+      firstBase,
+      secondBase,
+      firstBaseLinear,
+      firstEmissive,
+      firstMetallicRoughness,
+      firstNormal,
+      firstOcclusion,
+      secondEmissive,
+    ]);
+  });
+
   it("lowers planes and boxes to the same indexed triangle ABI", () => {
     const plane = prepareCanonicalGeometry(planeGeometry([2, 4]));
     const box = prepareCanonicalGeometry(boxGeometry([2, 4, 6]));
