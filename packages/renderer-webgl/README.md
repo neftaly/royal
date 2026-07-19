@@ -58,8 +58,13 @@ unrelated frames.
 
 `getGltfAssetSnapshot(asset)` and `subscribeGltfAsset(asset, listener)` expose
 focused `idle` / `loading` / `ready` / `error` state for one exact source and
-version. Loading and content errors stay on that asset lifecycle; they are not
-reported as scheduled-frame failures.
+version. `streaming`, `ready`, and `degraded` all mean geometry is usable and
+include `primitiveCount`, `bounds`, and
+`textures: { total, loading, ready, failed }`. `streaming` has outstanding
+images, `ready` has completed without image failures, and `degraded` remains
+drawable after one or more image failures. Texture progress never stalls
+geometry publication. Loading and content errors stay on that asset lifecycle;
+they are not reported as scheduled-frame failures.
 
 The current vertical slice renders opaque solid unlit and standard planes and
 boxes through one canonical indexed-triangle path. Standard materials support

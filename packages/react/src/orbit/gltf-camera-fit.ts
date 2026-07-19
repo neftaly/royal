@@ -44,7 +44,11 @@ export const GltfOrbitCameraFit = ({
 }: GltfOrbitCameraFitProps): ReactNode => {
   const status = useGltfAssetStatus(node.asset);
   const size = useCanvasSize();
-  const bounds = status.state === "ready" ? status.bounds : node.asset.bounds;
+  const bounds = status.state === "ready"
+    || status.state === "streaming"
+    || status.state === "degraded"
+    ? status.bounds
+    : node.asset.bounds;
   const fitKey = bounds === undefined || size === undefined ? undefined : JSON.stringify([
     node.asset.src, node.asset.version, bounds.min, bounds.max, node.transform,
     size.aspectRatio, fovY, minDistance, padding, pitch, yaw,

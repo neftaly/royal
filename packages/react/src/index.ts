@@ -62,6 +62,7 @@ export { createRendererRoot } from "@royal/renderer-webgl";
 export type {
   PickInput,
   PickResult,
+  GltfTextureProgress,
   RendererRootOptions,
   RendererRootSnapshot,
   RoyalRendererRoot,

@@ -461,6 +461,9 @@ export class CanvasRoot {
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
     this.#textureAssets.reconcile(prepared.textureAssets);
+    this.#gltfAssets.refreshTextureProgress(
+      (asset) => this.#textureAssets.getSourceSnapshot(asset),
+    );
     this.#clock.invalidate();
   }
 
@@ -662,20 +665,29 @@ export class CanvasRoot {
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets);
+    this.#gltfAssets.refreshTextureProgress(
+      (asset) => this.#textureAssets.getSourceSnapshot(asset),
+    );
     this.#clock.invalidate();
   }
 
   #refreshPreparedTexture(key: string): void {
-    if (this.#disposed || this.#surfaceScene === null) return;
-    const prepared = refreshCanonicalSurfaceTexture(
-      this.#surfaceScene,
-      key,
-      (asset) => this.#textureAssets.decoded(asset),
+    if (this.#disposed) return;
+    if (this.#surfaceScene !== null) {
+      const prepared = refreshCanonicalSurfaceTexture(
+        this.#surfaceScene,
+        key,
+        (asset) => this.#textureAssets.decoded(asset),
+      );
+      if (prepared !== this.#surfaceScene) {
+        this.#surfaceScene = prepared;
+        this.#surfaceGpu.publishTextureScene(prepared, key);
+        this.#clock.invalidate();
+      }
+    }
+    this.#gltfAssets.refreshTextureProgress(
+      (asset) => this.#textureAssets.getSourceSnapshot(asset),
     );
-    if (prepared === this.#surfaceScene) return;
-    this.#surfaceScene = prepared;
-    this.#surfaceGpu.publishTextureScene(prepared, key);
-    this.#clock.invalidate();
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {

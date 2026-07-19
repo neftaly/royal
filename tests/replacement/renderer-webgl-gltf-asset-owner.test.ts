@@ -1,4 +1,4 @@
-import { gltf } from "@royal/renderer-core";
+import { gltf, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
@@ -75,6 +75,7 @@ describe("glTF asset lifecycle owner", () => {
         bounds: { max: [2, 3, 0], min: [0, 1, 0] },
         primitiveCount: 1,
         state: "ready",
+        textures: { failed: 0, loading: 0, ready: 0, total: 0 },
       });
     });
     expect(read).toHaveBeenCalledTimes(1);
@@ -112,6 +113,36 @@ describe("glTF asset lifecycle owner", () => {
     await Promise.resolve();
     expect(owner.getSnapshot(node.asset)).toEqual({ state: "idle" });
     expect(changes).not.toHaveBeenCalled();
+  });
+
+  it("separates usable geometry from streaming and degraded texture progress", async () => {
+    const texture = imageTexture("/albedo.avif");
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      primitives: [],
+      textureAssets: [texture],
+    } as const;
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare: vi.fn(async () => prepared),
+      read: vi.fn(async () => new Uint8Array([1])),
+      readResource: vi.fn(),
+    });
+    const node = gltf("/textured.gltf");
+    owner.reconcile([node]);
+    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("streaming"));
+    owner.refreshTextureProgress(() => ({ error: "decode failed", state: "error" }));
+    expect(owner.getSnapshot(node.asset)).toMatchObject({
+      state: "degraded",
+      textures: { failed: 1, loading: 0, ready: 0, total: 1 },
+    });
+    owner.refreshTextureProgress(() => ({ height: 16, state: "ready", width: 16 }));
+    expect(owner.getSnapshot(node.asset)).toMatchObject({
+      state: "ready",
+      textures: { failed: 0, loading: 0, ready: 1, total: 1 },
+    });
   });
 
   it("retains bounded content failures without retrying on reconciliation", async () => {

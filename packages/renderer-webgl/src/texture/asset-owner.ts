@@ -131,6 +131,10 @@ export class TextureAssetOwner {
     return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
   }
 
+  getSourceSnapshot(asset: TextureSourceRef): TextureAssetSnapshot {
+    return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
+  }
+
   reconcile(assets: readonly TextureSourceRef[]): void {
     if (this.#disposed) return;
     const claimed = new Set<string>();
@@ -219,6 +223,7 @@ export class TextureAssetOwner {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.decoded = undefined;
       entry.snapshot = { error: formatFailure(error), state: "error" };
+      this.#platform.onAssetChanged(key);
       this.#publish(key);
     });
   }

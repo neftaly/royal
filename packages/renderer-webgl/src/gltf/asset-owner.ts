@@ -5,6 +5,17 @@ import type {
   GltfNode,
 } from "@royal/renderer-core";
 import type { PreparedStaticGltf } from "./static-asset";
+import type {
+  TextureAssetSnapshot,
+  TextureSourceRef,
+} from "../texture/asset-owner";
+
+export type GltfTextureProgress = Readonly<{
+  failed: number;
+  loading: number;
+  ready: number;
+  total: number;
+}>;
 
 export type GltfAssetSnapshot =
   | Readonly<{ state: "idle" }>
@@ -12,7 +23,8 @@ export type GltfAssetSnapshot =
   | Readonly<{
     bounds: GltfAssetBounds;
     primitiveCount: number;
-    state: "ready";
+    state: "degraded" | "ready" | "streaming";
+    textures: GltfTextureProgress;
   }>
   | Readonly<{ error: string; state: "error" }>;
 
@@ -42,6 +54,39 @@ type AssetEntry = {
 };
 
 const IDLE: GltfAssetSnapshot = { state: "idle" };
+
+const textureProgress = (
+  assets: readonly TextureSourceRef[],
+  snapshot: (asset: TextureSourceRef) => TextureAssetSnapshot,
+): GltfTextureProgress => {
+  let failed = 0;
+  let ready = 0;
+  for (const asset of assets) {
+    const state = snapshot(asset).state;
+    if (state === "ready") ready += 1;
+    else if (state === "error") failed += 1;
+  }
+  return {
+    failed,
+    loading: assets.length - ready - failed,
+    ready,
+    total: assets.length,
+  };
+};
+
+const sameTextureProgress = (
+  left: GltfTextureProgress,
+  right: GltfTextureProgress,
+): boolean => left.failed === right.failed
+  && left.loading === right.loading
+  && left.ready === right.ready
+  && left.total === right.total;
+
+const usableState = (
+  progress: GltfTextureProgress,
+): "degraded" | "ready" | "streaming" => progress.loading > 0
+  ? "streaming"
+  : progress.failed > 0 ? "degraded" : "ready";
 
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
@@ -123,6 +168,29 @@ export class GltfAssetOwner {
 
   prepared(asset: GltfAssetRef): PreparedStaticGltf | undefined {
     return this.#entries.get(gltfAssetKey(asset))?.prepared;
+  }
+
+  /** Recomputes focused image progress without changing geometry readiness. */
+  refreshTextureProgress(
+    snapshot: (asset: TextureSourceRef) => TextureAssetSnapshot,
+  ): void {
+    if (this.#disposed) return;
+    for (const entry of this.#entries.values()) {
+      if (
+        entry.prepared === undefined
+        || entry.snapshot.state === "idle"
+        || entry.snapshot.state === "loading"
+        || entry.snapshot.state === "error"
+      ) continue;
+      const textures = textureProgress(entry.prepared.textureAssets, snapshot);
+      const state = usableState(textures);
+      if (
+        sameTextureProgress(entry.snapshot.textures, textures)
+        && entry.snapshot.state === state
+      ) continue;
+      entry.snapshot = { ...entry.snapshot, state, textures };
+      this.#publish(entry.key);
+    }
   }
 
   reconcile(nodes: readonly GltfAssetNode[]): void {
@@ -216,10 +284,17 @@ export class GltfAssetOwner {
         );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.prepared = prepared;
+      const textures = {
+        failed: 0,
+        loading: prepared.textureAssets.length,
+        ready: 0,
+        total: prepared.textureAssets.length,
+      };
       entry.snapshot = {
         bounds: prepared.bounds,
         primitiveCount: prepared.primitives.length,
-        state: "ready",
+        state: usableState(textures),
+        textures,
       };
       this.#platform.onAssetChanged();
       this.#publish(key);

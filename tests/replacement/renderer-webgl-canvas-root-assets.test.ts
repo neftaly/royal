@@ -64,6 +64,7 @@ describe("canvas root asset publication", () => {
         bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
         primitiveCount: 1,
         state: "ready",
+        textures: { failed: 0, loading: 0, ready: 0, total: 0 },
       });
     });
     expect(readGltf).toHaveBeenCalledTimes(1);
@@ -231,7 +232,11 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
 
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+    expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+      state: "streaming",
+      textures: { failed: 0, loading: 1, ready: 0, total: 1 },
+    });
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "asset", src: "/models/albedo.png" }),
       expect.any(AbortSignal),
@@ -242,6 +247,10 @@ describe("canvas root asset publication", () => {
 
     resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 64 });
     await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+      state: "ready",
+      textures: { failed: 0, loading: 0, ready: 1, total: 1 },
+    });
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
