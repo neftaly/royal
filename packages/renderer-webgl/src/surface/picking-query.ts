@@ -146,11 +146,16 @@ export const pickCanonicalSurfaceInto = (
   ray: CanonicalPickRay,
   surfaces: readonly CanonicalPickSurface[],
   scratch: CanonicalPickingScratch,
+  selectedLodLevels?: ReadonlyMap<string, number>,
 ): boolean => {
   let nearest = ray.maxDistance;
   let surfaceIndex = -1;
   for (let index = 0; index < surfaces.length; index += 1) {
     const surface = surfaces[index]!;
+    if (
+      surface.lod !== undefined
+      && (selectedLodLevels?.get(surface.lod.group) ?? 0) !== surface.lod.level
+    ) continue;
     if (surface.inverseModel === undefined) continue;
     transformRayInto(scratch.localRay, ray, surface.inverseModel);
     if (!rayIntersectsBounds(scratch.localRay, surface, ray.minDistance, nearest)) continue;

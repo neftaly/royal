@@ -41,12 +41,21 @@ import {
   resolveAssetUri,
 } from "./static-material";
 import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
+import { normalizeLodThresholds } from "../surface/lod-selection";
+
+export type PreparedStaticLodMembership = Readonly<{
+  group: string;
+  level: number;
+  thresholds: readonly number[];
+}>;
 
 export type PreparedStaticGltfPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   instanceBatch?: StaticInstanceBatch & Readonly<{ key: string }>;
   localModel: Mat4;
+  lod?: PreparedStaticLodMembership;
   material: CanonicalSurfaceMaterial;
+  materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
 }>;
 
 export type PreparedStaticGltf = Readonly<{
@@ -74,6 +83,7 @@ type StaticDracoDecoder = (
 type PreparedMeshPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
+  materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
 }>;
 
 const finiteNumber = (
@@ -96,7 +106,7 @@ export const batchRepeatedStaticPrimitives = (
   const repeated = new Map<string, PreparedStaticGltfPrimitive[]>();
   let hasRepeatedGeometry = false;
   for (const primitive of primitives) {
-    if (primitive.instanceBatch !== undefined) continue;
+    if (primitive.instanceBatch !== undefined || primitive.lod !== undefined) continue;
     const key = primitive.geometry.key;
     const group = repeated.get(key);
     if (group === undefined) repeated.set(key, [primitive]);
@@ -109,7 +119,7 @@ export const batchRepeatedStaticPrimitives = (
   const emitted = new Set<string>();
   const result: PreparedStaticGltfPrimitive[] = [];
   for (const primitive of primitives) {
-    if (primitive.instanceBatch !== undefined) {
+    if (primitive.instanceBatch !== undefined || primitive.lod !== undefined) {
       result.push(primitive);
       continue;
     }
@@ -135,6 +145,9 @@ export const batchRepeatedStaticPrimitives = (
         },
         localModel: identityMat4(),
         material: primitive.material,
+        ...(primitive.materialVariants === undefined
+          ? {}
+          : { materialVariants: primitive.materialVariants }),
       });
     }
   }
@@ -173,6 +186,8 @@ const prepareStaticDocument = (
       && extension !== "EXT_mesh_gpu_instancing"
       && extension !== "KHR_texture_transform"
       && extension !== "KHR_lights_punctual"
+      && extension !== "KHR_materials_variants"
+      && extension !== "MSFT_lod"
       && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
       && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
     ) {
@@ -217,6 +232,29 @@ const prepareStaticDocument = (
     label,
     "extensions.KHR_lights_punctual.lights",
   );
+  const variantsExtension = documentExtensions.KHR_materials_variants === undefined
+    ? undefined
+    : object(
+      documentExtensions.KHR_materials_variants,
+      label,
+      "extensions.KHR_materials_variants",
+    );
+  const variantDefinitions = optionalArray(
+    variantsExtension?.variants,
+    label,
+    "extensions.KHR_materials_variants.variants",
+  );
+  const variantNames = variantDefinitions.map((definition, variantIndex) => {
+    const path = `extensions.KHR_materials_variants.variants[${variantIndex}]`;
+    const variant = object(definition, label, path);
+    if (typeof variant.name !== "string" || variant.name.length === 0) {
+      return fail(label, `${path}.name`, "must be a non-empty string");
+    }
+    return variant.name;
+  });
+  if (new Set(variantNames).size !== variantNames.length) {
+    fail(label, "extensions.KHR_materials_variants.variants", "names must be unique");
+  }
   const textureAsset = createTextureAssetReader(
     document,
     binary,
@@ -250,6 +288,18 @@ const prepareStaticDocument = (
     if (materialIndex === undefined) defaultMaterial = prepared;
     else if (typeof materialIndex === "number") preparedMaterials.set(materialIndex, prepared);
     return prepared;
+  };
+  const materialSetUsesTextureCoordinates = (
+    material: CanonicalSurfaceMaterial,
+    variants: ReadonlyMap<string, CanonicalSurfaceMaterial> | undefined,
+    set: 0 | 1,
+  ): boolean => {
+    if (canonicalMaterialUsesTextureCoordinateSet(material, set)) return true;
+    if (variants === undefined) return false;
+    for (const variant of variants.values()) {
+      if (canonicalMaterialUsesTextureCoordinateSet(variant, set)) return true;
+    }
+    return false;
   };
   const preparedMeshes: Array<readonly PreparedMeshPrimitive[] | undefined> = [];
   const prepareMesh = (meshIndex: number): readonly PreparedMeshPrimitive[] => {
@@ -324,7 +374,52 @@ const prepareStaticDocument = (
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
       const material = preparePrimitiveMaterial(primitive.material, path);
-      const usesTextureCoordinates1 = canonicalMaterialUsesTextureCoordinateSet(material, 1);
+      let materialVariants: Map<string, CanonicalSurfaceMaterial> | undefined;
+      if (extensions.KHR_materials_variants !== undefined) {
+        const extensionPath = `${path}.extensions.KHR_materials_variants`;
+        const extension = object(
+          extensions.KHR_materials_variants,
+          label,
+          extensionPath,
+        );
+        const mappings = array(extension.mappings, label, `${extensionPath}.mappings`);
+        materialVariants = new Map();
+        for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex += 1) {
+          const mappingPath = `${extensionPath}.mappings[${mappingIndex}]`;
+          const mapping = object(mappings[mappingIndex], label, mappingPath);
+          const mappedMaterial = preparePrimitiveMaterial(
+            index(mapping.material, materials, label, `${mappingPath}.material`),
+            mappingPath,
+          );
+          const mappedVariants = array(mapping.variants, label, `${mappingPath}.variants`);
+          if (mappedVariants.length === 0) {
+            fail(label, `${mappingPath}.variants`, "must not be empty");
+          }
+          for (let variantIndex = 0; variantIndex < mappedVariants.length; variantIndex += 1) {
+            const name = variantNames[index(
+              mappedVariants[variantIndex],
+              variantNames,
+              label,
+              `${mappingPath}.variants[${variantIndex}]`,
+            )]!;
+            if (materialVariants.has(name)) {
+              fail(label, `${mappingPath}.variants[${variantIndex}]`, `duplicates variant ${JSON.stringify(name)}`);
+            }
+            materialVariants.set(name, mappedMaterial);
+          }
+        }
+        if (materialVariants.size === 0) materialVariants = undefined;
+      }
+      const usesTextureCoordinates0 = materialSetUsesTextureCoordinates(
+        material,
+        materialVariants,
+        0,
+      );
+      const usesTextureCoordinates1 = materialSetUsesTextureCoordinates(
+        material,
+        materialVariants,
+        1,
+      );
       const decodedTextureCoordinates1 = usesTextureCoordinates1
         ? decoded?.attributes.get("TEXCOORD_1")
         : undefined;
@@ -379,10 +474,10 @@ const prepareStaticDocument = (
           fail(label, `${path}.indices[${item}]`, "decoded vertex index is out of range");
         }
       }
-      if (canonicalMaterialUsesTextureCoordinateSet(material, 0) && textureCoordinates0 === undefined) {
+      if (usesTextureCoordinates0 && textureCoordinates0 === undefined) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the material");
       }
-      if (canonicalMaterialUsesTextureCoordinateSet(material, 1) && textureCoordinates1 === undefined) {
+      if (usesTextureCoordinates1 && textureCoordinates1 === undefined) {
         fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
       }
       return {
@@ -397,6 +492,7 @@ const prepareStaticDocument = (
           ...(textureCoordinates1 === undefined ? {} : { textureCoordinates1 }),
         },
         material,
+        ...(materialVariants === undefined ? {} : { materialVariants }),
       };
     });
     preparedMeshes[meshIndex] = prepared;
@@ -473,13 +569,77 @@ const prepareStaticDocument = (
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
   const claimed = new Set<number>();
-  const lights: PreparedStaticGltfLight[] = [];
-  const primitives: PreparedStaticGltfPrimitive[] = [];
-  const visit = (nodeIndex: number, parentModel: Mat4): void => {
-    if (claimed.has(nodeIndex)) fail(label, `nodes[${nodeIndex}]`, "is cyclic or has multiple parents");
-    claimed.add(nodeIndex);
+  const nodeLodIds = (node: JsonObject, path: string): readonly number[] => {
+    if (node.extensions === undefined) return [];
+    const extensions = object(node.extensions, label, `${path}.extensions`);
+    if (extensions.MSFT_lod === undefined) return [];
+    const extensionPath = `${path}.extensions.MSFT_lod`;
+    const extension = object(extensions.MSFT_lod, label, extensionPath);
+    const ids = array(extension.ids, label, `${extensionPath}.ids`);
+    if (ids.length === 0) fail(label, `${extensionPath}.ids`, "must not be empty");
+    return ids.map((id, lodIndex) => index(
+      id,
+      nodes,
+      label,
+      `${extensionPath}.ids[${lodIndex}]`,
+    ));
+  };
+  const referencedLodNodes = new Set<number>();
+  for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
     const path = `nodes[${nodeIndex}]`;
     const node = object(nodes[nodeIndex], label, path);
+    for (const lodNode of nodeLodIds(node, path)) referencedLodNodes.add(lodNode);
+  }
+  const graphState = new Uint8Array(nodes.length);
+  const validateNodeGraph = (nodeIndex: number): void => {
+    if (graphState[nodeIndex] === 1) {
+      fail(label, `nodes[${nodeIndex}]`, "is part of a child/MSFT_lod cycle");
+    }
+    if (graphState[nodeIndex] === 2) return;
+    graphState[nodeIndex] = 1;
+    const path = `nodes[${nodeIndex}]`;
+    const node = object(nodes[nodeIndex], label, path);
+    const children = optionalArray(node.children, label, `${path}.children`);
+    for (let child = 0; child < children.length; child += 1) {
+      validateNodeGraph(index(children[child], nodes, label, `${path}.children[${child}]`));
+    }
+    for (const lodNode of nodeLodIds(node, path)) validateNodeGraph(lodNode);
+    graphState[nodeIndex] = 2;
+  };
+  for (let root = 0; root < roots.length; root += 1) {
+    validateNodeGraph(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`));
+  }
+  const lights: PreparedStaticGltfLight[] = [];
+  const primitives: PreparedStaticGltfPrimitive[] = [];
+  const visit = (
+    nodeIndex: number,
+    parentModel: Mat4,
+    lod?: PreparedStaticLodMembership,
+    applyOwnLod = true,
+  ): void => {
+    const path = `nodes[${nodeIndex}]`;
+    const node = object(nodes[nodeIndex], label, path);
+    if (applyOwnLod) {
+      const lodIds = nodeLodIds(node, path);
+      if (lodIds.length > 0) {
+        const levelCount = lodIds.length + 1;
+        const extras = node.extras === undefined
+          ? undefined
+          : object(node.extras, label, `${path}.extras`);
+        const hints = extras?.MSFT_screencoverage === undefined
+          ? undefined
+          : array(extras.MSFT_screencoverage, label, `${path}.extras.MSFT_screencoverage`);
+        const thresholds = normalizeLodThresholds(hints, levelCount);
+        const group = `${contentKey}:node:${nodeIndex}:lod`;
+        visit(nodeIndex, parentModel, { group, level: 0, thresholds }, false);
+        for (let level = 1; level < levelCount; level += 1) {
+          visit(lodIds[level - 1]!, parentModel, { group, level, thresholds }, false);
+        }
+        return;
+      }
+    }
+    if (claimed.has(nodeIndex)) fail(label, `nodes[${nodeIndex}]`, "is cyclic or has multiple parents");
+    claimed.add(nodeIndex);
     if (node.skin !== undefined) fail(label, `${path}.skin`, "is not supported yet");
     const localModel = nodeLocalMatrix(node, label, path);
     const worldModel = multiplyMat4Into(identityMat4(), parentModel, localModel);
@@ -550,7 +710,11 @@ const prepareStaticDocument = (
       const meshIndex = index(node.mesh, meshes, label, `${path}.mesh`);
       for (const primitive of prepareMesh(meshIndex)) {
         if (instanceBatches === undefined) {
-          primitives.push({ ...primitive, localModel: worldModel });
+          primitives.push({
+            ...primitive,
+            localModel: worldModel,
+            ...(lod === undefined ? {} : { lod }),
+          });
           continue;
         }
         for (let batch = 0; batch < instanceBatches.length; batch += 1) {
@@ -561,17 +725,23 @@ const prepareStaticDocument = (
               key: `${contentKey}:node:${nodeIndex}:instances:${batch}`,
             },
             localModel: worldModel,
+            ...(lod === undefined ? {} : { lod }),
           });
         }
       }
     }
     const children = optionalArray(node.children, label, `${path}.children`);
     for (let child = 0; child < children.length; child += 1) {
-      visit(index(children[child], nodes, label, `${path}.children[${child}]`), worldModel);
+      visit(
+        index(children[child], nodes, label, `${path}.children[${child}]`),
+        worldModel,
+        lod,
+      );
     }
   };
   for (let root = 0; root < roots.length; root += 1) {
-    visit(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`), identityMat4());
+    const rootIndex = index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`);
+    if (!referencedLodNodes.has(rootIndex)) visit(rootIndex, identityMat4());
   }
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
   const batchedPrimitives = batchRepeatedStaticPrimitives(primitives);
@@ -582,22 +752,37 @@ const prepareStaticDocument = (
   };
   for (const primitive of batchedPrimitives) {
     claimTexture(primitive.material.baseColorAsset);
+    for (const material of primitive.materialVariants?.values() ?? []) {
+      claimTexture(material.baseColorAsset);
+    }
   }
   for (const primitive of batchedPrimitives) {
     if (primitive.material.kind === "standard") {
       claimTexture(primitive.material.emissiveAsset);
+    }
+    for (const material of primitive.materialVariants?.values() ?? []) {
+      if (material.kind === "standard") claimTexture(material.emissiveAsset);
     }
   }
   for (const primitive of batchedPrimitives) {
     if (primitive.material.kind === "standard") {
       claimTexture(primitive.material.metallicRoughnessAsset);
     }
+    for (const material of primitive.materialVariants?.values() ?? []) {
+      if (material.kind === "standard") claimTexture(material.metallicRoughnessAsset);
+    }
   }
   for (const primitive of batchedPrimitives) {
     if (primitive.material.kind === "standard") claimTexture(primitive.material.normalAsset);
+    for (const material of primitive.materialVariants?.values() ?? []) {
+      if (material.kind === "standard") claimTexture(material.normalAsset);
+    }
   }
   for (const primitive of batchedPrimitives) {
     if (primitive.material.kind === "standard") claimTexture(primitive.material.occlusionAsset);
+    for (const material of primitive.materialVariants?.values() ?? []) {
+      if (material.kind === "standard") claimTexture(material.occlusionAsset);
+    }
   }
   return {
     bounds: staticGltfBounds(batchedPrimitives),

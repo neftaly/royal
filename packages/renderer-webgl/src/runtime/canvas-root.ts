@@ -333,6 +333,7 @@ export class CanvasRoot {
       scene,
       this.#viewProjection,
       this.#canvas.getBoundingClientRect(),
+      this.#surfaceGpu.lodSelections(),
     );
   }
 

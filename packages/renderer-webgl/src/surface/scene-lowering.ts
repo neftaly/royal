@@ -17,6 +17,7 @@ import {
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
+  appendCanonicalMaterialTextureAssets,
   canonicalMaterialTextureKeys,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
@@ -32,9 +33,11 @@ import type { TextureSourceRef } from "../texture/asset-owner";
 import {
   emptyWorldBounds,
   includeTransformedBounds,
+  includeWorldBounds,
   transformedWorldBounds,
   type WorldBounds,
 } from "./surface-visibility";
+import type { LodMembership } from "./lod-selection";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -43,6 +46,7 @@ export type CanonicalDrawSurface = Readonly<{
     key: string;
     localModels: Float32Array;
   }>;
+  lod?: LodMembership;
   material: CanonicalSurfaceMaterial;
   materialSource: CanonicalSurfaceMaterial;
   model: Mat4;
@@ -55,6 +59,7 @@ export type CanonicalDrawSurface = Readonly<{
 
 export type CanonicalPickSurface = Readonly<{
   inverseModel: Mat4 | undefined;
+  lod?: LodMembership;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
   pickingGeometry: CanonicalTriangleGeometry;
@@ -170,12 +175,10 @@ export const prepareCanonicalSurfaceScene = (
   const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
   const textureAssets: TextureSourceRef[] = [];
+  const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
   for (const node of scene.nodes) {
     if (node.kind === "gltf") {
       gltfNodes.push(node);
-      if (node.materialVariant !== undefined) {
-        throw new Error("Royal static glTF slice does not yet support materialVariant");
-      }
       const rootModel = transformMat4(node.transform);
       const proxyGeometry = node.pickingGeometry === undefined
         ? undefined
@@ -190,7 +193,6 @@ export const prepareCanonicalSurfaceScene = (
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
-      textureAssets.push(...prepared.textureAssets);
       for (const light of prepared.lights) {
         const lightModel = multiplyMat4Into(identityMat4(), rootModel, light.localModel);
         const color: LinearRgba = [
@@ -225,13 +227,37 @@ export const prepareCanonicalSurfaceScene = (
         }
       }
       for (const primitive of prepared.primitives) {
-      const instanceBatch = primitive.instanceBatch;
-      const model = instanceBatch === undefined
-        ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
-        : rootModel;
-      const worldBounds = instanceBatch === undefined
-        ? transformedWorldBounds(primitive.geometry.bounds, model)
-        : emptyWorldBounds();
+        const instanceBatch = primitive.instanceBatch;
+        const materialSource = node.materialVariant === undefined
+          ? primitive.material
+          : primitive.materialVariants?.get(node.materialVariant) ?? primitive.material;
+        appendCanonicalMaterialTextureAssets(textureAssets, materialSource);
+        const model = instanceBatch === undefined
+          ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
+          : rootModel;
+        const worldBounds = instanceBatch === undefined
+          ? transformedWorldBounds(primitive.geometry.bounds, model)
+          : emptyWorldBounds();
+        if (instanceBatch !== undefined) {
+          const localModels = instanceBatch.localModels;
+          for (let offset = 0; offset < localModels.length; offset += 16) {
+            includeTransformedBounds(
+              worldBounds,
+              primitive.geometry.bounds,
+              multiplyMat4Into(identityMat4(), rootModel, mat4At(localModels, offset)),
+            );
+          }
+        }
+        let lod: LodMembership | undefined;
+        if (primitive.lod !== undefined) {
+          let selectionBounds = lodBounds.get(primitive.lod.group);
+          if (selectionBounds === undefined) {
+            selectionBounds = emptyWorldBounds();
+            lodBounds.set(primitive.lod.group, selectionBounds);
+          }
+          includeWorldBounds(selectionBounds, worldBounds);
+          lod = { ...primitive.lod, selectionBounds };
+        }
         const surface: CanonicalDrawSurface = {
           geometry: primitive.geometry,
           ...(instanceBatch === undefined ? {} : {
@@ -241,15 +267,16 @@ export const prepareCanonicalSurfaceScene = (
               localModels: instanceBatch.localModels,
             },
           }),
-          material: resolveCanonicalMaterialTexture(primitive.material, decodedTexture),
-          materialSource: primitive.material,
+          material: resolveCanonicalMaterialTexture(materialSource, decodedTexture),
+          materialSource,
+          ...(lod === undefined ? {} : { lod }),
           model,
           modelHandedness: instanceBatch === undefined
             ? modelHandedness(model)
             : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1,
           node,
           normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
-          textureKeys: canonicalMaterialTextureKeys(primitive.material),
+          textureKeys: canonicalMaterialTextureKeys(materialSource),
           worldBounds,
         };
         if (proxyGeometry === undefined) {
@@ -258,6 +285,7 @@ export const prepareCanonicalSurfaceScene = (
               inverseModel: inverseMat4(model),
               modelHandedness: surface.modelHandedness,
               node,
+              ...(lod === undefined ? {} : { lod }),
               pickingGeometry: primitive.geometry,
             });
           } else {
@@ -265,28 +293,17 @@ export const prepareCanonicalSurfaceScene = (
             for (let offset = 0; offset < localModels.length; offset += 16) {
               const localModel = mat4At(localModels, offset);
               const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
-              includeTransformedBounds(worldBounds, primitive.geometry.bounds, instanceModel);
               pickSurfaces.push({
                 inverseModel: inverseMat4(instanceModel),
                 modelHandedness: surface.modelHandedness,
                 node,
+                ...(lod === undefined ? {} : { lod }),
                 pickingGeometry: primitive.geometry,
               });
             }
           }
           surfaces.push(surface);
         } else {
-          if (instanceBatch !== undefined) {
-            const localModels = instanceBatch.localModels;
-            for (let offset = 0; offset < localModels.length; offset += 16) {
-              const localModel = mat4At(localModels, offset);
-              includeTransformedBounds(
-                worldBounds,
-                primitive.geometry.bounds,
-                multiplyMat4Into(identityMat4(), rootModel, localModel),
-              );
-            }
-          }
           surfaces.push(surface);
         }
       }

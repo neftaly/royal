@@ -46,6 +46,12 @@ import {
   retainedSurfaceAdmissionCount,
 } from "./gpu-admission";
 import { frustumPlanesInto, worldBoundsVisible } from "./surface-visibility";
+import {
+  closestDrawableLodLevel,
+  createProjectedBoundsWorkspace,
+  hystereticLodLevel,
+  projectedBoundsScreenCoverage,
+} from "./lod-selection";
 
 type GpuSurface = Readonly<{
   bindings: readonly GpuTextureBinding[];
@@ -161,6 +167,10 @@ export class SurfaceGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   #gpuSurfaces: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
+  readonly #lodGroups = new Set<string>();
+  #lodDrawableLevels = new Uint8Array(1);
+  readonly #lodProjection = createProjectedBoundsWorkspace();
+  readonly #lodSelections = new Map<string, number>();
   readonly #emissiveFactor = new Float32Array(4);
   readonly #environmentSettings = new Float32Array(4);
   readonly #presentation = new Float32Array(4);
@@ -189,6 +199,8 @@ export class SurfaceGpuOwner {
     this.#admittedSurfaceCount = 0;
     this.#scene = null;
     this.#texturePublicationKeys.clear();
+    this.#lodGroups.clear();
+    this.#lodSelections.clear();
   }
 
   invalidate(): void {
@@ -200,6 +212,11 @@ export class SurfaceGpuOwner {
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
     this.#texturePublicationKeys.clear();
+  }
+
+  /** Current canonical LOD choices shared by visual submission and exact picking. */
+  lodSelections(): ReadonlyMap<string, number> {
+    return this.#lodSelections;
   }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
@@ -269,9 +286,44 @@ export class SurfaceGpuOwner {
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
+    this.#lodGroups.clear();
+    for (const resource of this.#gpuSurfaces) {
+      const lod = resource.surface.lod;
+      if (lod === undefined || this.#lodGroups.has(lod.group)) continue;
+      this.#lodGroups.add(lod.group);
+      const coverage = projectedBoundsScreenCoverage(
+        lod.selectionBounds,
+        viewProjection,
+        this.#lodProjection,
+      );
+      if (this.#lodDrawableLevels.length < lod.thresholds.length) {
+        this.#lodDrawableLevels = new Uint8Array(lod.thresholds.length);
+      } else this.#lodDrawableLevels.fill(0, 0, lod.thresholds.length);
+      for (const candidate of this.#gpuSurfaces) {
+        if (candidate.surface.lod?.group === lod.group) {
+          this.#lodDrawableLevels[candidate.surface.lod.level] = 1;
+        }
+      }
+      const previous = this.#lodSelections.get(lod.group);
+      const target = hystereticLodLevel(
+        coverage,
+        lod.thresholds,
+        previous,
+      );
+      this.#lodSelections.set(lod.group, closestDrawableLodLevel(
+        target,
+        previous,
+        this.#lodDrawableLevels,
+        lod.thresholds.length,
+      ));
+    }
     for (let index = 0; index < this.#gpuSurfaces.length; index += 1) {
       const resource = this.#gpuSurfaces[index]!;
       const surface = resource.surface;
+      if (
+        surface.lod !== undefined
+        && this.#lodSelections.get(surface.lod.group) !== surface.lod.level
+      ) continue;
       if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;

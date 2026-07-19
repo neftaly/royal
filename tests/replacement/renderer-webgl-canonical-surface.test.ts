@@ -144,6 +144,57 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
   });
 
+  it("selects an exact glTF material variant and falls back to the base material", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_variants"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_materials_variants"];
+    document.extensions = {
+      KHR_materials_variants: { variants: [{ name: "Ruby" }] },
+    };
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials.push({
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [0.9, 0.01, 0.03, 1] },
+    });
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives[0]!.extensions = {
+      KHR_materials_variants: { mappings: [{ material: 1, variants: [0] }] },
+    };
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "variant-asset");
+    const ruby = gltf({ materialVariant: "Ruby", src: "/variant.glb" });
+    const unknown = gltf({ materialVariant: "Unknown", src: "/variant.glb" });
+    const render = (node: typeof ruby) => prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [node] }),
+      () => asset,
+    );
+
+    expect(render(ruby).surfaces[0]!.material.baseColor).toEqual([0.9, 0.01, 0.03, 1]);
+    expect(render(unknown).surfaces[0]!.material.baseColor).toEqual([0.2, 0.4, 0.8, 1]);
+  });
+
+  it("shares one world-space LOD selection bound across authored levels", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { MSFT_lod: { ids: [2] } };
+    nodes[1]!.extras = { MSFT_screencoverage: [0.5, 0] };
+    nodes.push({ mesh: 0, translation: [0, 2, -2] });
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "lod-asset");
+    const node = gltf({ src: "/lod.glb", transform: { position: [10, 0, 0] } });
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [node] }),
+      () => asset,
+    );
+
+    expect(prepared.surfaces.map((surface) => surface.lod?.level)).toEqual([0, 1]);
+    expect(prepared.surfaces[0]!.lod?.selectionBounds)
+      .toBe(prepared.surfaces[1]!.lod?.selectionBounds);
+    expect(prepared.surfaces[0]!.lod?.selectionBounds).toEqual({
+      max: [12, 3, 0],
+      min: [10, 1, -2],
+    });
+  });
+
   it("normalizes standard material and directional-light state before touching WebGL", () => {
     const renderScene = scene({
       camera: perspectiveCamera({}),

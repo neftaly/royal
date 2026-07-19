@@ -16,6 +16,19 @@ export const emptyWorldBounds = (): MutableWorldBounds => ({
   min: [Infinity, Infinity, Infinity],
 });
 
+/** Expands one lowering-owned AABB by another already-world-space AABB. */
+export const includeWorldBounds = (
+  output: MutableWorldBounds,
+  bounds: WorldBounds,
+): void => {
+  output.min[0] = Math.min(output.min[0], bounds.min[0]);
+  output.min[1] = Math.min(output.min[1], bounds.min[1]);
+  output.min[2] = Math.min(output.min[2], bounds.min[2]);
+  output.max[0] = Math.max(output.max[0], bounds.max[0]);
+  output.max[1] = Math.max(output.max[1], bounds.max[1]);
+  output.max[2] = Math.max(output.max[2], bounds.max[2]);
+};
+
 /** Expands a world AABB by one affine-transformed local AABB without corner allocations. */
 export const includeTransformedBounds = (
   output: MutableWorldBounds,

@@ -59,10 +59,17 @@ export class SurfacePicker {
     scene: CanonicalSurfaceScene,
     viewProjection: Mat4,
     rect: CanvasClientRect,
+    selectedLodLevels?: ReadonlyMap<string, number>,
   ): PickResult | undefined {
     const ray = this.#canvasRay(input, scene.camera, viewProjection, rect);
     if (ray === undefined) return undefined;
-    if (!pickCanonicalSurfaceInto(this.#hit, ray, scene.pickSurfaces, this.#scratch)) return undefined;
+    if (!pickCanonicalSurfaceInto(
+      this.#hit,
+      ray,
+      scene.pickSurfaces,
+      this.#scratch,
+      selectedLodLevels,
+    )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
     return {

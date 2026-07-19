@@ -105,6 +105,28 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
   });
 
+  it("submits exactly one retained node LOD level", async () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { MSFT_lod: { ids: [2] } };
+    nodes[1]!.extras = { MSFT_screencoverage: [0.99, 0] };
+    nodes.push({ mesh: 0, translation: [0, 2, -1] });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const node = gltf({ src: "/lod.glb", version: "v1" });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [1, 2, 5] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+  });
+
   it("streams external glTF color images through the ordinary texture path", async () => {
     let resolveDecode: ((source: {
       height: number;

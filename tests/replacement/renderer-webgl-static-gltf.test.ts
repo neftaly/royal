@@ -134,6 +134,40 @@ describe("static glTF preparation core", () => {
     expect(prepared.primitives[1]!.material).toBe(prepared.primitives[0]!.material);
   });
 
+  it("lowers KHR_materials_variants names to canonical material choices", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_variants"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_materials_variants"];
+    document.extensions = {
+      KHR_materials_variants: {
+        variants: [{ name: "Ruby" }, { name: "Emerald" }],
+      },
+    };
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials.push({
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [0.8, 0.02, 0.04, 1] },
+    });
+    const meshes = document.meshes as Array<{
+      primitives: Array<Record<string, unknown>>;
+    }>;
+    meshes[0]!.primitives[0]!.extensions = {
+      KHR_materials_variants: {
+        mappings: [{ material: 1, variants: [0, 1] }],
+      },
+    };
+
+    const primitive = prepareStaticGlb(
+      staticTriangleGlb(document),
+      "variants-v1",
+    ).primitives[0]!;
+    expect(primitive.material.baseColor).toEqual([0.2, 0.4, 0.8, 1]);
+    expect(primitive.materialVariants?.get("Ruby")?.baseColor)
+      .toEqual([0.8, 0.02, 0.04, 1]);
+    expect(primitive.materialVariants?.get("Emerald"))
+      .toBe(primitive.materialVariants?.get("Ruby"));
+  });
+
   it("batches repeated mesh nodes while preserving their composed transforms", () => {
     const document = staticTriangleDocument();
     const nodes = document.nodes as Array<Record<string, unknown>>;
@@ -146,6 +180,34 @@ describe("static glTF preparation core", () => {
     const models = prepared.primitives[0]!.instanceBatch!.localModels;
     expect([models[12], models[13], models[28], models[29]]).toEqual([1, 2, 5, 6]);
     expect(prepared.bounds).toEqual({ max: [6, 7, 0], min: [0, 1, 0] });
+  });
+
+  it("lowers node MSFT_lod members to one canonical ordered set", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    document.extensionsUsed = ["KHR_materials_unlit", "MSFT_lod"];
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { MSFT_lod: { ids: [2] } };
+    nodes[1]!.extras = { MSFT_screencoverage: [0.6, 0.02] };
+    nodes.push({ mesh: 0, translation: [0, 2, -1] });
+
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "lod-v1");
+    expect(prepared.primitives).toHaveLength(2);
+    expect(prepared.primitives.map((primitive) => primitive.lod)).toEqual([
+      { group: "lod-v1:node:1:lod", level: 0, thresholds: [0.6, 0.02] },
+      { group: "lod-v1:node:1:lod", level: 1, thresholds: [0.6, 0.02] },
+    ]);
+    expect(prepared.primitives[0]!.localModel.slice(12, 15)).toEqual([1, 2, 0]);
+    expect(prepared.primitives[1]!.localModel.slice(12, 15)).toEqual([1, 2, -1]);
+  });
+
+  it("rejects child and MSFT_lod cycles before publishing partial geometry", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { MSFT_lod: { ids: [0] } };
+    expect(() => prepareStaticGlb(staticTriangleGlb(document), "lod-cycle"))
+      .toThrow("child/MSFT_lod cycle");
   });
 
   it("lowers reachable KHR_lights_punctual nodes without a separate runtime path", () => {
