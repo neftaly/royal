@@ -6,6 +6,7 @@ import unlitVertexShader from "../webgl/shaders/unlit.vert";
 import unlitFragmentShader from "../webgl/shaders/unlit.frag";
 import standardVertexShader from "../webgl/shaders/surface.vert";
 import standardFragmentShader from "../webgl/shaders/surface.frag";
+import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 
 export type TextureCoordinatesProgram = Readonly<{
   row0: WebGLUniformLocation;
@@ -135,6 +136,7 @@ const UNLIT_VERTEX_SHADER = unlitVertexShader;
 const UNLIT_FRAGMENT_SHADER = unlitFragmentShader;
 const STANDARD_VERTEX_SHADER = standardVertexShader;
 const STANDARD_FRAGMENT_SHADER = standardFragmentShader
+  .replace("__PRESENTATION_FUNCTIONS__", PRESENTATION_GLSL)
   .replace("__MAX_DIRECTIONAL_LIGHTS__", String(MAX_CANONICAL_DIRECTIONAL_LIGHTS))
   .replace("__MAX_PUNCTUAL_LIGHTS__", String(MAX_CANONICAL_PUNCTUAL_LIGHTS));
 

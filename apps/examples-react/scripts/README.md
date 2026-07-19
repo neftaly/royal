@@ -269,6 +269,10 @@ Add `--cold-cache=true` to disable WebKit resource caching for the inspected
 target. Use it for load-path evidence; omit it for steady-state frame samples.
 Failure reports retain the last responsive renderer/resource progress sample,
 so a later inspector stall does not erase where the load reached.
+Add `--camera-drag=true` to make every measured frame follow one synthetic
+one-pixel orbit step through the ordinary React pointer path. The resulting p95
+is input-to-presenting-RAF latency, and renderer/GL deltas prove that the sample
+drew rather than measuring an idle display clock.
 
 Kitchen sink:
 

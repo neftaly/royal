@@ -40,7 +40,15 @@ type BrowserBenchmarkSnapshot = BrowserBenchmarkCounters & {
 type BrowserBenchmarkApi = {
   readonly reset: () => void;
   readonly snapshot: () => BrowserBenchmarkSnapshot;
+  readonly timingSnapshot: () => BrowserBenchmarkTimingSnapshot;
 };
+
+type BrowserBenchmarkTimingSnapshot = Readonly<{
+  callbackCalls: number;
+  callbackMaxMs: number;
+  callbackTotalMs: number;
+  supported: boolean;
+}>;
 
 type BrowserBenchmarkGlobal = typeof globalThis & {
   __royalBrowserBenchmarkError?: string;
@@ -50,6 +58,7 @@ type BrowserBenchmarkGlobal = typeof globalThis & {
 
 type BrowserBenchmarkOptions = {
   readonly autorun: boolean;
+  readonly cameraDrag: boolean;
   readonly frames: number;
   readonly timeoutMs: number;
   readonly warmupFrames: number;
@@ -64,6 +73,7 @@ type BrowserBenchmarkReport = {
   readonly device: Record<string, unknown>;
   readonly example: Pick<Example, 'id' | 'path' | 'sourceFile' | 'title'>;
   readonly frameStats: ReturnType<typeof frameStats>;
+  readonly frameTiming: BrowserBenchmarkTimingSnapshot;
   readonly generatedAt: string;
   readonly gl: {
     readonly frames: BrowserBenchmarkSnapshot;
@@ -167,6 +177,7 @@ const benchmarkOptions = (): BrowserBenchmarkOptions => {
   const params = new URL(globalThis.location.href).searchParams;
   return {
     autorun: params.get('autorun') === '1' || params.get('bench') === 'auto',
+    cameraDrag: params.get('cameraDrag') === '1',
     frames: numberParam(params, 'frames', 120, 1),
     timeoutMs: numberParam(params, 'timeoutMs', 30_000, 100),
     warmupFrames: numberParam(params, 'warmup', 20, 0),
@@ -288,13 +299,48 @@ export const installBrowserBenchmarkHooks = (): void => {
   if (bridge.__royalBrowserBench !== undefined) return;
 
   const counters = createCounters();
+  let callbackCalls = 0;
+  let callbackMaxMs = 0;
+  let callbackTotalMs = 0;
+  let timingSupported = false;
   patchPrototype(globalThis.WebGLRenderingContext?.prototype, counters);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype, counters);
+  const originalRequestFrame = globalThis.requestAnimationFrame;
+  if (
+    typeof originalRequestFrame === 'function'
+    && (originalRequestFrame as { __royalBrowserBenchPatched?: boolean })
+      .__royalBrowserBenchPatched !== true
+  ) {
+    const wrappedRequestFrame = (callback: FrameRequestCallback): number =>
+      originalRequestFrame.call(globalThis, (time) => {
+        const startedAt = performance.now();
+        try {
+          callback(time);
+        } finally {
+          const duration = performance.now() - startedAt;
+          callbackCalls += 1;
+          callbackTotalMs += duration;
+          callbackMaxMs = Math.max(callbackMaxMs, duration);
+        }
+      });
+    Object.defineProperty(wrappedRequestFrame, '__royalBrowserBenchPatched', { value: true });
+    globalThis.requestAnimationFrame = wrappedRequestFrame;
+    timingSupported = true;
+  }
   bridge.__royalBrowserBench = {
     reset: () => {
       for (const key of counterKeys) counters[key] = 0;
+      callbackCalls = 0;
+      callbackMaxMs = 0;
+      callbackTotalMs = 0;
     },
     snapshot: () => browserBenchSnapshot(counters),
+    timingSnapshot: () => ({
+      callbackCalls,
+      callbackMaxMs,
+      callbackTotalMs,
+      supported: timingSupported,
+    }),
   };
 };
 
@@ -416,6 +462,48 @@ const sampleFrames = async (
   return frameStats(deltas, frames, timeoutMs);
 };
 
+const sampleCameraDragFrames = async (
+  canvas: HTMLCanvasElement,
+  frames: number,
+  timeoutMs: number,
+): Promise<ReturnType<typeof frameStats>> => {
+  const rect = canvas.getBoundingClientRect();
+  const pointerId = 1;
+  const startX = rect.left + rect.width / 2;
+  const clientY = rect.top + rect.height / 2;
+  const dragSpan = Math.max(1, Math.floor(Math.min(60, rect.width / 4)));
+  const clientXAt = (index: number): number => {
+    const cycle = index % (dragSpan * 2);
+    return startX + (cycle <= dragSpan ? cycle : dragSpan * 2 - cycle);
+  };
+  const dispatch = (type: string, clientX: number, buttons: number): void => {
+    canvas.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      button: type === 'pointermove' ? -1 : 0,
+      buttons,
+      clientX,
+      clientY,
+      pointerId,
+      pointerType: 'mouse',
+    }));
+  };
+  dispatch('pointerdown', startX, 1);
+  const deadline = performance.now() + timeoutMs;
+  const deltas: number[] = [];
+  try {
+    for (let index = 0; index < frames; index += 1) {
+      const startedAt = performance.now();
+      dispatch('pointermove', clientXAt(index + 1), 1);
+      const frameAt = await nextRaf(deadline);
+      if (frameAt === null) break;
+      deltas.push(frameAt - startedAt);
+    }
+  } finally {
+    dispatch('pointerup', clientXAt(deltas.length), 0);
+  }
+  return frameStats(deltas, frames, timeoutMs);
+};
+
 const performanceSummary = (): BrowserBenchmarkReport['performance'] => {
   const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
@@ -488,10 +576,14 @@ const runBrowserBenchmark = async (
   const warmupComplete = await waitFrames(options.warmupFrames, options.timeoutMs);
   bench.reset();
   const beforeFrames = rendererSnapshot();
-  const stats = warmupComplete
-    ? await sampleFrames(options.frames, options.timeoutMs)
+  const canvas = document.querySelector('canvas');
+  const stats = warmupComplete && canvas !== null
+    ? options.cameraDrag
+      ? await sampleCameraDragFrames(canvas, options.frames, options.timeoutMs)
+      : await sampleFrames(options.frames, options.timeoutMs)
     : frameStats([], options.frames, options.timeoutMs);
   const framesGl = bench.snapshot();
+  const frameTiming = bench.timingSnapshot();
   const afterFrames = rendererSnapshot();
   const device = deviceSummary();
   const warnings = benchmarkWarnings({
@@ -512,6 +604,7 @@ const runBrowserBenchmark = async (
       title: example.title,
     },
     frameStats: stats,
+    frameTiming,
     generatedAt: new Date().toISOString(),
     gl: {
       frames: framesGl,
@@ -519,6 +612,7 @@ const runBrowserBenchmark = async (
     },
     options: {
       autorun: options.autorun,
+      cameraDrag: options.cameraDrag,
       frames: options.frames,
       timeoutMs: options.timeoutMs,
       warmupFrames: options.warmupFrames,

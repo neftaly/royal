@@ -45,6 +45,23 @@ The default tone map is PBR Neutral; linear clamp is an explicit diagnostic or
 display-referred choice. Exposure is EV100, where a higher value produces a
 darker image.
 
+For an all-standard PBR scene using PBR Neutral, Royal MAY retain one
+view-sized renderable half-float color/depth target and move the shared
+tone-map/output transform to a full-screen terminal draw. This is the preferred
+path when `EXT_color_buffer_float` is available: the transform runs once per
+presented pixel instead of once per covered material fragment. The direct
+material-shader transform remains the semantic fallback for a denied target,
+an incomplete framebuffer, missing float-color support, or a material family
+whose output contract is not yet scene-linear. Both paths consume the same
+shared transform source and MUST agree for opaque standard surfaces.
+
+`EXT_float_blend` is required for that half-float path only when an admitted
+draw actually enables alpha blending. Its absence MUST NOT disable terminal
+presentation for an opaque/alpha-mask scene. Capability selection and material
+eligibility are retained lifecycle decisions, not browser-name tests or
+per-draw extension queries. The terminal target is charged to the root
+persistent GPU budget and is released when the path deactivates.
+
 ## Geometry and materials
 
 Royal's simple public materials are standard PBR, unlit, and wireframe. glTF
@@ -116,11 +133,13 @@ The implemented path is private and demand-loaded. For each active view, Royal
 renders opaque/masked work into one scene-linear color/depth target, snapshots
 that color for transmission, draws transmission followed by blended work, and
 performs tone mapping/output encoding once while presenting to the destination
-framebuffer. A renderable half-float target is used only when both float-color
-and float-blend support are present; otherwise the same semantics use a clamped
-RGBA8 linear target. Budget denial or target incompleteness keeps the core PBR
-material as a stable opaque fallback rather than exposing partial or stale
-screen color.
+framebuffer. A renderable half-float target requires float-color support and,
+only when a participating draw blends, float-blend support. Otherwise the same
+transmission semantics use a clamped RGBA8 linear target. The opaque snapshot
+texture and its mip chain are absent when the target serves terminal
+presentation without transmission. Budget denial or target incompleteness
+keeps the core PBR material as a stable opaque fallback rather than exposing
+partial or stale screen color.
 
 Rough transmission samples the opaque snapshot mip chain. Royal allocates and
 regenerates that chain only when an active transmission material has meaningful

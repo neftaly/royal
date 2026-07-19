@@ -29,6 +29,10 @@ const coldCache = optionValue(
   'cold-cache',
   process.env.IPAD_BENCH_COLD_CACHE ?? 'false',
 ) === 'true';
+const cameraDrag = optionValue(
+  'camera-drag',
+  process.env.IPAD_BENCH_CAMERA_DRAG ?? 'false',
+) === 'true';
 const waitForPhysicalOrientation = optionValue(
   'wait-for-orientation',
   process.env.IPAD_BENCH_WAIT_FOR_ORIENTATION ?? 'false',
@@ -270,6 +274,7 @@ const benchmarkUrl = () => {
   currentRunToken = String(Date.now());
   const url = new URL(`http://${host}:${appPort}${route.startsWith('/') ? route : `/${route}`}`);
   url.searchParams.set('bench', 'auto');
+  if (cameraDrag) url.searchParams.set('cameraDrag', '1');
   url.searchParams.set('frames', String(frames));
   url.searchParams.set('warmup', String(warmup));
   url.searchParams.set('timeoutMs', String(timeoutMs));
@@ -328,6 +333,29 @@ const evaluate = async (client, targetId, expression, waitMs = timeoutMs) => {
   return response.result?.result?.value;
 };
 
+const waitForNavigationCommit = async (client, targetId) => {
+  const deadline = Date.now() + Math.min(timeoutMs, 15_000);
+  let lastUrl;
+  let lastTransportError;
+  while (Date.now() < deadline) {
+    try {
+      lastUrl = await evaluate(client, targetId, 'location.href', 5_000);
+      lastTransportError = undefined;
+      if (
+        typeof lastUrl === 'string'
+        && new URL(lastUrl).searchParams.get('run') === currentRunToken
+      ) return;
+    } catch (error) {
+      lastTransportError = error;
+    }
+    await sleep(250);
+  }
+  const transport = lastTransportError instanceof Error
+    ? `; transport=${lastTransportError.message}`
+    : '';
+  throw new Error(`iPad navigation did not commit; lastUrl=${String(lastUrl)}${transport}`);
+};
+
 const waitForReport = async (client, targetId) => {
   const deadline = Date.now() + timeoutMs + frames * 1000;
   let lastTransportError;
@@ -347,7 +375,8 @@ const waitForReport = async (client, targetId) => {
           'elapsedMs: performance.now(),',
           'readyState: document.readyState,',
           'renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,',
-          'resourceCount: performance.getEntriesByType("resource").length',
+          'resourceCount: performance.getEntriesByType("resource").length,',
+          'url: location.href',
           '} };',
           '})())',
         ].join(' '),
@@ -504,6 +533,20 @@ const incompleteRendererEvidence = (report) => {
   if (report.renderer?.after === null || typeof report.renderer?.after !== 'object') {
     failures.push('final renderer snapshot is missing');
   }
+  if (cameraDrag) {
+    if (report.options?.cameraDrag !== true) {
+      failures.push('camera-drag sampling was not activated by the page');
+    }
+    const rendererFrames = report.renderer?.delta?.frame;
+    const sampledFrames = report.frameStats?.sampleCount;
+    if (
+      !Number.isFinite(rendererFrames)
+      || !Number.isFinite(sampledFrames)
+      || rendererFrames < sampledFrames
+    ) {
+      failures.push('camera-drag samples did not each produce a Royal renderer frame');
+    }
+  }
   return failures;
 };
 
@@ -559,6 +602,7 @@ const run = async () => {
     );
     browserDiagnostics.reset();
     await targetCommand(client, targetId, 'Page.navigate', { url });
+    await waitForNavigationCommit(client, targetId);
     report = await waitForReport(client, targetId);
     const evidenceFailures = incompleteRendererEvidence(report);
     if (evidenceFailures.length > 0) {
@@ -595,13 +639,14 @@ const run = async () => {
     const outputPath = path.join(outputDir, filename);
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: diagnosticSnapshot,
+      cameraDrag,
       coldCache,
       physicalOrientation,
       receivedAt: new Date().toISOString(),
       report,
     }, null, 2)}\n`);
     console.log(`Wrote ${outputPath}`);
-    console.log(`p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
+    console.log(`mode=${cameraDrag ? 'camera-drag' : 'idle'} p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
   } catch (error) {
     let page;
     try {
@@ -633,6 +678,7 @@ const run = async () => {
     }
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: browserDiagnostics.snapshot(),
+      cameraDrag,
       coldCache,
       error: error instanceof Error ? error.stack ?? error.message : String(error),
       generatedAt,

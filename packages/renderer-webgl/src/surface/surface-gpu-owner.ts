@@ -84,6 +84,10 @@ import {
   canonicalTransmissionNeedsMipmaps,
   planSurfacePasses,
 } from "./surface-pass-plan";
+import {
+  terminalPresentationRequested,
+  type LinearCompositeCapabilities,
+} from "./terminal-presentation-plan";
 import type { SurfaceCompositeOwner } from "./surface-composite-owner";
 import {
   PrefilteredEnvironmentGpuOwner,
@@ -439,6 +443,9 @@ export class SurfaceGpuOwner {
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
   readonly #texturePublicationKeys = new Set<string>();
+  #terminalPresentationEligible = false;
+  #terminalPresentationHasAlphaBlend = false;
+  readonly #linearCompositeCapabilities: LinearCompositeCapabilities;
   readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #transmissionFactors = new Float32Array(4);
   #transmissionCandidates: readonly CanonicalDrawSurface[] = [];
@@ -459,6 +466,10 @@ export class SurfaceGpuOwner {
     this.#onChanged = onChanged;
     this.#onFailure = onFailure;
     this.#multiDraw = this.#readMultiDraw();
+    this.#linearCompositeCapabilities = {
+      hasFloatBlendTarget: this.#readExtension("EXT_float_blend"),
+      hasFloatColorTarget: this.#readExtension("EXT_color_buffer_float"),
+    };
     this.#programs = new SurfaceProgramOwner(gl);
     this.#resourceBudget = budget;
     this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget);
@@ -497,6 +508,8 @@ export class SurfaceGpuOwner {
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
     this.#transmissionCandidates = [];
+    this.#terminalPresentationEligible = false;
+    this.#terminalPresentationHasAlphaBlend = false;
   }
 
   invalidate(): void {
@@ -528,6 +541,11 @@ export class SurfaceGpuOwner {
     return typeof this.#gl.getExtension === "function"
       ? this.#gl.getExtension("WEBGL_multi_draw") as WebGlMultiDraw | null
       : null;
+  }
+
+  #readExtension(name: string): boolean {
+    return typeof this.#gl.getExtension === "function"
+      && this.#gl.getExtension(name) !== null;
   }
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */
@@ -565,6 +583,11 @@ export class SurfaceGpuOwner {
     );
     this.#scene = scene;
     this.#compositeGpu?.resetAdmission();
+    this.#terminalPresentationEligible = scene !== null
+      && scene.surfaces.every((surface) => surface.material.kind === "standard");
+    this.#terminalPresentationHasAlphaBlend = scene?.surfaces.some(
+      (surface) => surface.material.alphaBlend === true,
+    ) ?? false;
     this.#transmissionCandidates = scene === null
       ? []
       : scene.surfaces.filter((surface) => canonicalMaterialHasTransmission(surface.material));
@@ -598,6 +621,12 @@ export class SurfaceGpuOwner {
       return;
     }
     this.#scene = scene;
+    this.#terminalPresentationEligible = scene.surfaces.every(
+      (surface) => surface.material.kind === "standard",
+    );
+    this.#terminalPresentationHasAlphaBlend = scene.surfaces.some(
+      (surface) => surface.material.alphaBlend === true,
+    );
     this.#texturePublicationKeys.add(textureKey);
     this.#dirty = true;
   }
@@ -638,11 +667,19 @@ export class SurfaceGpuOwner {
       }
       if (transmissionRequested && roughSceneColorRequired) break;
     }
+    const terminalPresentation = scene !== null && terminalPresentationRequested(
+      scene.toneMapping,
+      this.#terminalPresentationEligible,
+      this.#terminalPresentationHasAlphaBlend,
+      this.#linearCompositeCapabilities,
+    );
+    const compositeRequested = transmissionRequested || terminalPresentation;
     let compositeActive = false;
-    if (transmissionRequested) {
+    if (compositeRequested) {
       const composite = this.#compositeGpu;
       if (composite === null) this.#requestCompositeOwner();
       else {
+        composite.setSceneColorRequired(transmissionRequested);
         composite.setMipmapsRequired(roughSceneColorRequired);
         let width = 1;
         let height = 1;
@@ -650,7 +687,13 @@ export class SurfaceGpuOwner {
           width = Math.max(width, view.viewport.width);
           height = Math.max(height, view.viewport.height);
         }
-        compositeActive = composite.ensure(width, height, state);
+        compositeActive = composite.ensure(
+          width,
+          height,
+          state,
+          terminalPresentation,
+          this.#terminalPresentationHasAlphaBlend,
+        );
         if (this.#compositeBindingRevision !== composite.bindingRevision) {
           this.#compositeBindingRevision = composite.bindingRevision;
           this.#dirty = true;
@@ -662,10 +705,7 @@ export class SurfaceGpuOwner {
         this.#compositeLoadGeneration += 1;
         this.#compositeLoadRequested = false;
       }
-      if (
-        this.#transmissionCandidates.length === 0
-        && this.#compositeGpu?.retainedTarget === true
-      ) {
+      if (this.#compositeGpu?.retainedTarget === true) {
         this.#compositeGpu?.deactivate();
         state.invalidate();
       }
@@ -721,7 +761,7 @@ export class SurfaceGpuOwner {
           scene,
           "opaque",
         );
-        composite.snapshot(state);
+        if (transmissionRequested) composite.snapshot(state);
         this.#drawView(
           this.#compositeView,
           composite.framebuffer(),
@@ -752,9 +792,24 @@ export class SurfaceGpuOwner {
     }) => {
       if (generation !== this.#compositeLoadGeneration) return;
       this.#compositeLoadRequested = false;
-      if (this.#scene === null || this.#transmissionCandidates.length === 0) return;
+      if (
+        this.#scene === null
+        || (
+          this.#transmissionCandidates.length === 0
+          && !terminalPresentationRequested(
+            this.#scene.toneMapping,
+            this.#terminalPresentationEligible,
+            this.#terminalPresentationHasAlphaBlend,
+            this.#linearCompositeCapabilities,
+          )
+        )
+      ) return;
       this.#programs.setTransmissionShaderSource(transmissionShaderSource);
-      this.#compositeGpu = new SurfaceCompositeOwner(this.#gl, this.#resourceBudget);
+      this.#compositeGpu = new SurfaceCompositeOwner(
+        this.#gl,
+        this.#resourceBudget,
+        this.#linearCompositeCapabilities,
+      );
       this.#dirty = true;
       this.#fullReconcileRequired = true;
       this.#onChanged();

@@ -6,6 +6,10 @@ import {
   canonicalTransmissionNeedsMipmaps,
   planSurfacePasses,
 } from "../../packages/renderer-webgl/src/surface/surface-pass-plan";
+import {
+  linearCompositeColorBytesPerPixel,
+  terminalPresentationRequested,
+} from "../../packages/renderer-webgl/src/surface/terminal-presentation-plan";
 import { compositeTargetByteLength } from "../../packages/renderer-webgl/src/surface/surface-composite-owner";
 
 const standard = (
@@ -25,7 +29,8 @@ const standard = (
 describe("fixed surface pass planning", () => {
   it("accounts for target color, depth-stencil, and the complete source mip chain", () => {
     expect(compositeTargetByteLength(2, 2, 4)).toBe(52);
-    expect(compositeTargetByteLength(2, 2, 4, false)).toBe(48);
+    expect(compositeTargetByteLength(2, 2, 4, { mipmappedSceneColor: false })).toBe(48);
+    expect(compositeTargetByteLength(2, 2, 4, { sceneColor: false })).toBe(32);
     expect(compositeTargetByteLength(1, 1, 8)).toBe(20);
   });
 
@@ -83,5 +88,39 @@ describe("fixed surface pass planning", () => {
       thicknessFactor: 0.01,
       transmissionFactor: 1,
     }))).toBe(false);
+  });
+});
+
+describe("terminal presentation planning", () => {
+  const supported = {
+    hasFloatBlendTarget: false,
+    hasFloatColorTarget: true,
+  };
+
+  it("does not require float blending for an opaque HDR scene", () => {
+    expect(terminalPresentationRequested("pbr-neutral", true, false, supported)).toBe(true);
+    expect(linearCompositeColorBytesPerPixel(supported, false)).toBe(8);
+  });
+
+  it("requires float blending only when an alpha-blended draw exists", () => {
+    expect(terminalPresentationRequested("pbr-neutral", true, true, supported)).toBe(false);
+    expect(linearCompositeColorBytesPerPixel(supported, true)).toBe(4);
+    const blended = {
+      hasFloatBlendTarget: true,
+      hasFloatColorTarget: true,
+    };
+    expect(terminalPresentationRequested("pbr-neutral", true, true, blended)).toBe(true);
+    expect(linearCompositeColorBytesPerPixel(blended, true)).toBe(8);
+  });
+
+  it("preserves direct presentation for unsupported or mixed material output", () => {
+    expect(terminalPresentationRequested(
+      "pbr-neutral",
+      true,
+      false,
+      { ...supported, hasFloatColorTarget: false },
+    )).toBe(false);
+    expect(terminalPresentationRequested("pbr-neutral", false, false, supported)).toBe(false);
+    expect(terminalPresentationRequested("linear-clamp", true, false, supported)).toBe(false);
   });
 });

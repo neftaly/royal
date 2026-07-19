@@ -5,7 +5,12 @@ import type { GpuTextureBinding } from "../texture/gpu-owner";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import presentationFragmentShader from "../webgl/shaders/presentation.frag";
 import presentationVertexShader from "../webgl/shaders/presentation.vert";
+import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 import type { SurfaceTransmissionShaderSource } from "./surface-program-owner";
+import {
+  linearCompositeColorBytesPerPixel,
+  type LinearCompositeCapabilities,
+} from "./terminal-presentation-plan";
 
 export const transmissionShaderSource: SurfaceTransmissionShaderSource = {
   fragmentDeclarations: `
@@ -94,10 +99,11 @@ out vec2 surfaceThicknessTextureCoordinate;
 
 type CompositeResources = Readonly<{
   color: WebGLTexture;
+  colorBytesPerPixel: 4 | 8;
   depthStencil: WebGLRenderbuffer;
   framebuffer: WebGLFramebuffer;
   height: number;
-  sceneColor: WebGLTexture;
+  sceneColor: WebGLTexture | null;
   sceneColorLevels: number;
   width: number;
 }>;
@@ -119,9 +125,15 @@ export const compositeTargetByteLength = (
   width: number,
   height: number,
   colorBytesPerPixel: 4 | 8,
-  mipmapped = true,
+  options: Readonly<{
+    mipmappedSceneColor?: boolean;
+    sceneColor?: boolean;
+  }> = {},
 ): number => width * height * (colorBytesPerPixel + 4)
-  + (mipmapped ? mipPixelCount(width, height) : width * height) * colorBytesPerPixel;
+  + (options.sceneColor === false
+    ? 0
+    : (options.mipmappedSceneColor === false ? width * height : mipPixelCount(width, height))
+      * colorBytesPerPixel);
 
 const compileShader = (
   gl: WebGL2RenderingContext,
@@ -140,11 +152,16 @@ const compileShader = (
   return shader;
 };
 
+const PRESENTATION_FRAGMENT_SHADER = presentationFragmentShader.replace(
+  "__PRESENTATION_FUNCTIONS__",
+  PRESENTATION_GLSL,
+);
+
 const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
   const vertex = compileShader(gl, gl.VERTEX_SHADER, presentationVertexShader);
   let fragment: WebGLShader;
   try {
-    fragment = compileShader(gl, gl.FRAGMENT_SHADER, presentationFragmentShader);
+    fragment = compileShader(gl, gl.FRAGMENT_SHADER, PRESENTATION_FRAGMENT_SHADER);
   } catch (error) {
     gl.deleteShader(vertex);
     throw error;
@@ -173,6 +190,7 @@ export class SurfaceCompositeOwner {
   #bindingRevision = 0;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
+  readonly #capabilities: LinearCompositeCapabilities;
   readonly #gl: WebGL2RenderingContext;
   #deniedSize = "";
   #mipmapsRequired = false;
@@ -180,13 +198,19 @@ export class SurfaceCompositeOwner {
   #presentationLocation: WebGLUniformLocation | null = null;
   readonly #presentationValues = new Float32Array(4);
   #resources: CompositeResources | null = null;
+  #sceneColorRequired = true;
   #presentationSampler: WebGLSampler | null = null;
   #sceneSampler: WebGLSampler | null = null;
   #sceneColorBinding: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
   #vertexArray: WebGLVertexArrayObject | null = null;
 
-  constructor(gl: WebGL2RenderingContext, budget: PersistentGpuBudgetOwner) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    budget: PersistentGpuBudgetOwner,
+    capabilities: LinearCompositeCapabilities,
+  ) {
     this.#budget = budget;
+    this.#capabilities = capabilities;
     this.#gl = gl;
   }
 
@@ -219,6 +243,10 @@ export class SurfaceCompositeOwner {
     this.#bindingRevision += 1;
   }
 
+  setSceneColorRequired(required: boolean): void {
+    this.#sceneColorRequired = required;
+  }
+
   deactivate(): void {
     this.#deleteResources();
     const gl = this.#gl;
@@ -239,23 +267,39 @@ export class SurfaceCompositeOwner {
     this.deactivate();
   }
 
-  ensure(width: number, height: number, state: WebGlStateOwner): boolean {
+  ensure(
+    width: number,
+    height: number,
+    state: WebGlStateOwner,
+    requireHdr = false,
+    requireFloatBlend = false,
+  ): boolean {
     if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1) {
       throw new RangeError("Royal composite target dimensions must be positive safe integers");
     }
-    const desiredLevels = this.#mipmapsRequired ? mipLevels(width, height) : 1;
+    const desiredLevels = this.#sceneColorRequired
+      ? this.#mipmapsRequired ? mipLevels(width, height) : 1
+      : 0;
+    const preferredColorBytesPerPixel = linearCompositeColorBytesPerPixel(
+      this.#capabilities,
+      requireFloatBlend,
+    );
+    const retainedFormatIsValid = this.#resources?.colorBytesPerPixel === 4
+      ? !requireHdr
+      : preferredColorBytesPerPixel === 8;
     if (
       this.#resources?.width === width
       && this.#resources.height === height
       && this.#resources.sceneColorLevels === desiredLevels
+      && retainedFormatIsValid
     ) return true;
-    const sizeKey = `${width}x${height}:${desiredLevels}`;
+    const sizeKey = `${width}x${height}:${desiredLevels}:${requireHdr ? 1 : 0}:${requireFloatBlend ? 1 : 0}`;
     if (this.#deniedSize === sizeKey) return false;
     try {
       this.#deleteResources();
-      const hdr = this.#gl.getExtension("EXT_color_buffer_float") !== null
-        && this.#gl.getExtension("EXT_float_blend") !== null;
-      if (!(hdr && this.#allocate(width, height, 8)) && !this.#allocate(width, height, 4)) {
+      const allocatedPreferred = preferredColorBytesPerPixel === 8
+        && this.#allocate(width, height, 8);
+      if (!allocatedPreferred && (requireHdr || !this.#allocate(width, height, 4))) {
         this.#deniedSize = sizeKey;
         return false;
       }
@@ -276,7 +320,9 @@ export class SurfaceCompositeOwner {
   }
 
   sceneColorBinding(): GpuTextureBinding {
-    if (this.#resources === null) throw new Error("Royal composite target is not available");
+    if (this.#resources?.sceneColor === null || this.#resources === null) {
+      throw new Error("Royal composite scene-color target is not available");
+    }
     return this.#sceneColorBinding;
   }
 
@@ -297,7 +343,9 @@ export class SurfaceCompositeOwner {
 
   snapshot(state: WebGlStateOwner): void {
     const resources = this.#resources;
-    if (resources === null) throw new Error("Royal composite target is not available");
+    if (resources === null || resources.sceneColor === null) {
+      throw new Error("Royal composite scene-color target is not available");
+    }
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE10);
     gl.bindTexture(gl.TEXTURE_2D, resources.sceneColor);
@@ -374,14 +422,22 @@ export class SurfaceCompositeOwner {
       width,
       height,
       colorBytesPerPixel,
-      this.#mipmapsRequired,
+      {
+        mipmappedSceneColor: this.#mipmapsRequired,
+        sceneColor: this.#sceneColorRequired,
+      },
     );
     if (!this.#budget.tryClaim(this.#claim, bytes)) return false;
     const color = gl.createTexture();
-    const sceneColor = gl.createTexture();
+    const sceneColor = this.#sceneColorRequired ? gl.createTexture() : null;
     const depthStencil = gl.createRenderbuffer();
     const framebuffer = gl.createFramebuffer();
-    if (color === null || sceneColor === null || depthStencil === null || framebuffer === null) {
+    if (
+      color === null
+      || (this.#sceneColorRequired && sceneColor === null)
+      || depthStencil === null
+      || framebuffer === null
+    ) {
       if (framebuffer !== null) gl.deleteFramebuffer(framebuffer);
       if (depthStencil !== null) gl.deleteRenderbuffer(depthStencil);
       if (sceneColor !== null) gl.deleteTexture(sceneColor);
@@ -390,11 +446,13 @@ export class SurfaceCompositeOwner {
       throw new Error("Royal could not allocate composite target resources");
     }
     const internalFormat = colorBytesPerPixel === 8 ? gl.RGBA16F : gl.RGBA8;
-    const levels = this.#mipmapsRequired ? mipLevels(width, height) : 1;
+    const levels = sceneColor === null ? 0 : this.#mipmapsRequired ? mipLevels(width, height) : 1;
     gl.bindTexture(gl.TEXTURE_2D, color);
     gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height);
-    gl.bindTexture(gl.TEXTURE_2D, sceneColor);
-    gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
+    if (sceneColor !== null) {
+      gl.bindTexture(gl.TEXTURE_2D, sceneColor);
+      gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
+    }
     gl.bindRenderbuffer(gl.RENDERBUFFER, depthStencil);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, width, height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -415,6 +473,7 @@ export class SurfaceCompositeOwner {
     }
     this.#resources = {
       color,
+      colorBytesPerPixel,
       depthStencil,
       framebuffer,
       height,
@@ -422,7 +481,7 @@ export class SurfaceCompositeOwner {
       sceneColorLevels: levels,
       width,
     };
-    if (this.#sceneSampler !== null) {
+    if (this.#sceneSampler !== null && sceneColor !== null) {
       this.#sceneColorBinding = {
         sampler: this.#sceneSampler,
         target: "2d",
@@ -439,7 +498,7 @@ export class SurfaceCompositeOwner {
     const gl = this.#gl;
     gl.deleteFramebuffer(resources.framebuffer);
     gl.deleteRenderbuffer(resources.depthStencil);
-    gl.deleteTexture(resources.sceneColor);
+    if (resources.sceneColor !== null) gl.deleteTexture(resources.sceneColor);
     gl.deleteTexture(resources.color);
     this.#resources = null;
     this.#budget.release(this.#claim);
@@ -484,7 +543,7 @@ export class SurfaceCompositeOwner {
     this.#program = program;
     this.#presentationSampler = presentationSampler;
     this.#sceneSampler = sceneSampler;
-    if (this.#resources !== null) {
+    if (this.#resources?.sceneColor !== null && this.#resources !== null) {
       this.#sceneColorBinding = {
         sampler: sceneSampler,
         target: "2d",

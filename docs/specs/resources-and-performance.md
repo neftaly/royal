@@ -135,6 +135,13 @@ selection, resource admission, exact interaction queries, and compact packet
 construction. The GPU owns vertex transforms, rasterization, material shading,
 depth, texture sampling, clustered-light lookup, and presentation passes.
 
+A retained terminal-presentation target is justified only when it removes
+repeated fragment work measured on the device floor. Royal accounts its color
+and depth bytes before allocation, omits the separate scene-color snapshot when
+transmission is inactive, and falls back to direct presentation on admission
+denial. It MUST NOT silently lower canvas resolution or skip authored work to
+improve a frame-rate report.
+
 Work may move to the GPU when it removes a measured CPU bottleneck without
 introducing blocking readback, excessive bandwidth, duplicate state, or an
 incompatible fallback architecture. Work may move to the CPU when a GPU pass or
