@@ -1,11 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   IDENTITY_TEXTURE_COORDINATES,
   prepareTextureCoordinates,
   transformTextureCoordinates,
 } from "../../packages/renderer-webgl/src/gltf/texture-coordinates";
+import { applyTextureCoordinates } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 
 describe("glTF texture coordinate preparation", () => {
+  it("uploads only semantic row changes within one program", () => {
+    const uniform4fv = vi.fn();
+    const gl = { uniform4fv } as unknown as WebGL2RenderingContext;
+    const program = {
+      row0: {} as WebGLUniformLocation,
+      row1: {} as WebGLUniformLocation,
+    };
+    let previous = applyTextureCoordinates(gl, program, undefined, undefined);
+    expect(previous).toBe(IDENTITY_TEXTURE_COORDINATES);
+    expect(uniform4fv).toHaveBeenCalledTimes(2);
+    previous = applyTextureCoordinates(gl, program, undefined, previous);
+    expect(uniform4fv).toHaveBeenCalledTimes(2);
+    const transformed = prepareTextureCoordinates({
+      extensions: { KHR_texture_transform: { offset: [0.25, 0.5] } },
+    }, "asset", "texture");
+    previous = applyTextureCoordinates(gl, program, transformed, previous);
+    expect(uniform4fv).toHaveBeenCalledTimes(4);
+    applyTextureCoordinates(gl, program, undefined, previous);
+    expect(uniform4fv).toHaveBeenCalledTimes(6);
+  });
+
   it("retains one shared identity and selects the second authored UV stream", () => {
     expect(prepareTextureCoordinates({}, "asset", "texture")).toBe(
       IDENTITY_TEXTURE_COORDINATES,

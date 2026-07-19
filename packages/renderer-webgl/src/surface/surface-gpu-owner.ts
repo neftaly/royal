@@ -92,15 +92,19 @@ const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
 
-const applyTextureCoordinates = (
+/** @internal Applies one semantic coordinate change into caller-retained state. */
+export const applyTextureCoordinates = (
   gl: WebGL2RenderingContext,
   program: TextureCoordinatesProgram | null,
   coordinates: CanonicalTextureCoordinates | undefined,
-): void => {
-  if (program === null) return;
+  previous: CanonicalTextureCoordinates | undefined,
+): CanonicalTextureCoordinates | undefined => {
+  if (program === null) return previous;
   const resolved = coordinates ?? IDENTITY_TEXTURE_COORDINATES;
+  if (resolved === previous) return previous;
   gl.uniform4fv(program.row0, resolved.row0);
   gl.uniform4fv(program.row1, resolved.row1);
+  return resolved;
 };
 
 const materialTextureFeatures = (
@@ -359,8 +363,13 @@ export class SurfaceGpuOwner {
     cameraWorldPositionFromViewInto(this.#cameraPosition, view);
     this.#cameraPosition[3] = 1;
     let initializedProgram: WebGLProgram | null = null;
+    let baseColorCoordinates: CanonicalTextureCoordinates | undefined;
+    let emissiveCoordinates: CanonicalTextureCoordinates | undefined;
     let materialProgram: WebGLProgram | null = null;
     let materialSource: CanonicalSurfaceMaterial | null = null;
+    let metallicRoughnessCoordinates: CanonicalTextureCoordinates | undefined;
+    let normalCoordinates: CanonicalTextureCoordinates | undefined;
+    let occlusionCoordinates: CanonicalTextureCoordinates | undefined;
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
@@ -381,8 +390,16 @@ export class SurfaceGpuOwner {
         this.#programs.initializeSamplers(program);
         initializedProgram = program.program;
       }
-      const materialChanged = materialProgram !== program.program
+      const programChanged = materialProgram !== program.program;
+      const materialChanged = programChanged
         || materialSource !== surface.materialSource;
+      if (programChanged) {
+        baseColorCoordinates = undefined;
+        emissiveCoordinates = undefined;
+        metallicRoughnessCoordinates = undefined;
+        normalCoordinates = undefined;
+        occlusionCoordinates = undefined;
+      }
       if (program.kind === "unlit") {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
@@ -394,10 +411,11 @@ export class SurfaceGpuOwner {
               ? NEUTRAL_PERCEPTUAL_GREY
               : surface.material.baseColor,
           );
-          applyTextureCoordinates(
+          baseColorCoordinates = applyTextureCoordinates(
             gl,
             program.textureCoordinates,
             surface.material.baseColorTextureCoordinates,
+            baseColorCoordinates,
           );
           if (program.alphaCutoff !== null) {
             gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
@@ -451,30 +469,35 @@ export class SurfaceGpuOwner {
               ? NEUTRAL_PERCEPTUAL_GREY
               : material.baseColor,
           );
-          applyTextureCoordinates(
+          baseColorCoordinates = applyTextureCoordinates(
             gl,
             program.textureCoordinates,
             material.baseColorTextureCoordinates,
+            baseColorCoordinates,
           );
-          applyTextureCoordinates(
+          metallicRoughnessCoordinates = applyTextureCoordinates(
             gl,
             program.metallicRoughnessCoordinates,
             material.metallicRoughnessTextureCoordinates,
+            metallicRoughnessCoordinates,
           );
-          applyTextureCoordinates(
+          normalCoordinates = applyTextureCoordinates(
             gl,
             program.normalTextureCoordinates,
             material.normalTextureCoordinates,
+            normalCoordinates,
           );
-          applyTextureCoordinates(
+          emissiveCoordinates = applyTextureCoordinates(
             gl,
             program.emissiveCoordinates,
             material.emissiveTextureCoordinates,
+            emissiveCoordinates,
           );
-          applyTextureCoordinates(
+          occlusionCoordinates = applyTextureCoordinates(
             gl,
             program.occlusionCoordinates,
             material.occlusionTextureCoordinates,
+            occlusionCoordinates,
           );
           if (program.occlusionStrength !== null) {
             gl.uniform1f(program.occlusionStrength, material.occlusionStrength);

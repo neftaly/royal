@@ -290,6 +290,8 @@ describe("clear-only canvas root", () => {
       String(source).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
       String(source).includes("#define PUNCTUAL_LIGHTS"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("normalize(mat3(environmentRotation)"))).toBe(false);
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledWith(
       expect.anything(),
       false,

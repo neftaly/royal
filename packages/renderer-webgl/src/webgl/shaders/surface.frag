@@ -227,10 +227,8 @@ void main() {
     occlusionStrength
   );
 #endif
-  vec3 environmentNormal = normalize(mat3(environmentRotation) * normal);
-  vec3 environmentReflection = normalize(
-    mat3(environmentRotation) * reflect(-viewDirection, normal)
-  );
+  vec3 environmentNormal = mat3(environmentRotation) * normal;
+  vec3 environmentReflection = mat3(environmentRotation) * reflect(-viewDirection, normal);
   float diffuseHeight = environmentNormal.y * 0.5 + 0.5;
   float reflectionHeight = environmentReflection.y * 0.5 + 0.5;
   vec3 diffuseRadiance = mix(
