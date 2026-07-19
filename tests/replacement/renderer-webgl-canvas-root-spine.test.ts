@@ -294,6 +294,29 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
   });
 
+  it("admits large surface sets across follow-up frames without duplicating geometry", () => {
+    const { callbacks, canvas, root } = harness();
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: Array.from({ length: 20 }, (_, index) => mesh({
+        geometry,
+        material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+        transform: { position: [index * 0.01, 0, 0] },
+      })),
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(16);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(1);
+
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(36);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(0);
+  });
+
   it("keeps textured geometry stable while neutral content progresses to one shared upload", async () => {
     let resolveDecode: ((source: {
       height: number;

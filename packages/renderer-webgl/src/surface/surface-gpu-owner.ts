@@ -25,6 +25,10 @@ import {
   SurfaceGeometryGpuOwner,
   type GpuGeometry,
 } from "./surface-geometry-gpu-owner";
+import {
+  nextSurfaceAdmissionCount,
+  retainedSurfaceAdmissionCount,
+} from "./gpu-admission";
 
 type GpuSurface = Readonly<{
   bindings: readonly GpuTextureBinding[];
@@ -46,6 +50,7 @@ type MutableOpaqueDrawIntent = {
 };
 
 const MATERIAL_TEXTURE_UNITS = 5;
+const SURFACE_UPLOADS_PER_FRAME = 16;
 
 const materialTextureFeatures = (surface: GpuSurface): number => {
   let features = surface.bindings[0]!.texture === null ? 0 : 1;
@@ -59,6 +64,7 @@ const materialTextureFeatures = (surface: GpuSurface): number => {
 
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
+  #admittedSurfaceCount = 0;
   readonly #cameraPosition = new Float32Array(4);
   readonly #directionalLightColors = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
   readonly #directionalLightDirections = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
@@ -88,6 +94,7 @@ export class SurfaceGpuOwner {
     this.#textureGpu.dispose();
     this.#programs.dispose();
     this.#drawIntent = null;
+    this.#admittedSurfaceCount = 0;
     this.#scene = null;
   }
 
@@ -97,11 +104,17 @@ export class SurfaceGpuOwner {
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#drawIntent = null;
+    this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
   }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
+    this.#admittedSurfaceCount = retainedSurfaceAdmissionCount(
+      this.#scene?.surfaces ?? [],
+      scene?.surfaces ?? [],
+      this.#admittedSurfaceCount,
+    );
     this.#scene = scene;
     this.#dirty = true;
   }
@@ -111,7 +124,7 @@ export class SurfaceGpuOwner {
     view: Mat4,
     size: ResolvedCanvasSize,
     state: WebGlStateOwner,
-  ): void {
+  ): boolean {
     if (this.#dirty) {
       try {
         this.#reconcile();
@@ -121,7 +134,7 @@ export class SurfaceGpuOwner {
       }
     }
     const scene = this.#scene;
-    if (scene === null || this.#gpuSurfaces.length === 0) return;
+    if (scene === null || this.#gpuSurfaces.length === 0) return this.#dirty;
     let drawIntent = this.#drawIntent;
     if (drawIntent === null) {
       const firstSurface = this.#gpuSurfaces[0]!;
@@ -229,6 +242,7 @@ export class SurfaceGpuOwner {
         );
       }
     }
+    return this.#dirty;
   }
 
   #programFor(
@@ -245,7 +259,12 @@ export class SurfaceGpuOwner {
     this.#dirty = false;
     const scene = this.#scene;
     const surfaces = scene?.surfaces ?? [];
-    const geometryPlan = this.#geometryGpu.prepare(surfaces);
+    const admittedSurfaceCount = nextSurfaceAdmissionCount(
+      this.#admittedSurfaceCount,
+      surfaces.length,
+      SURFACE_UPLOADS_PER_FRAME,
+    );
+    const geometryPlan = this.#geometryGpu.prepare(surfaces, admittedSurfaceCount);
     try {
       const textureInputs = Array<CanonicalTextureBinding | undefined>(
         geometryPlan.surfaces.length * MATERIAL_TEXTURE_UNITS,
@@ -287,6 +306,7 @@ export class SurfaceGpuOwner {
         };
       }
       geometryPlan.commit();
+      this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuSurfaces = nextSurfaces;
     } catch (error) {
       geometryPlan.rollback();
@@ -305,6 +325,7 @@ export class SurfaceGpuOwner {
     } else {
       this.#directionalLightCount = 0;
     }
+    this.#dirty = this.#admittedSurfaceCount < surfaces.length;
     this.#drawIntent = null;
   }
 }

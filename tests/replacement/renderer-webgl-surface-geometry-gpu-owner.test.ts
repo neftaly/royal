@@ -9,6 +9,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import {
+  nextSurfaceAdmissionCount,
+  retainedSurfaceAdmissionCount,
+} from "../../packages/renderer-webgl/src/surface/gpu-admission";
 
 const fakeGl = (): WebGL2RenderingContext => ({
   ARRAY_BUFFER: 0x8892,
@@ -42,6 +46,16 @@ const surface = (geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof 
   })).surfaces;
 
 describe("surface geometry GPU owner", () => {
+  it("advances bounded prefixes and retains only reusable resource identities", () => {
+    const first = surface(planeGeometry(1));
+    const sameGeometry = surface(planeGeometry(1));
+    const changedGeometry = surface(boxGeometry(1));
+    expect(nextSurfaceAdmissionCount(0, 381, 16)).toBe(16);
+    expect(nextSurfaceAdmissionCount(376, 381, 16)).toBe(381);
+    expect(retainedSurfaceAdmissionCount(first, sameGeometry, 1)).toBe(1);
+    expect(retainedSurfaceAdmissionCount(first, changedGeometry, 1)).toBe(0);
+  });
+
   it("retains committed handles and rolls back only newly prepared handles", () => {
     const gl = fakeGl();
     const owner = new SurfaceGeometryGpuOwner(gl);

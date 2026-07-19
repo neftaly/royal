@@ -3,6 +3,7 @@ import {
   identityMat4,
 } from "../math/mat4";
 import type { CanonicalDrawSurface } from "./scene-lowering";
+import { surfaceGeometryResourceKey } from "./gpu-admission";
 
 export type GpuGeometry = Readonly<{
   indexBuffer: WebGLBuffer;
@@ -288,7 +289,10 @@ export class SurfaceGeometryGpuOwner {
     }
   }
 
-  prepare(surfaces: readonly CanonicalDrawSurface[]): SurfaceGeometryPlan {
+  prepare(
+    surfaces: readonly CanonicalDrawSurface[],
+    admittedCount = surfaces.length,
+  ): SurfaceGeometryPlan {
     const previousByKey = new Map(
       this.#geometryResources.map((resource) => [resource.key, resource] as const),
     );
@@ -309,17 +313,9 @@ export class SurfaceGeometryGpuOwner {
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     try {
-      for (const surface of surfaces) {
-        const geometryBaseKey = surface.material.kind === "standard"
-          && surface.geometry.normals !== undefined
-          ? `${surface.geometry.key}:normal`
-          : `${surface.geometry.key}:position`;
-        const tangentKey = surface.material.kind === "standard"
-          && surface.material.normalAsset !== undefined
-          && surface.geometry.tangents !== undefined
-          ? "tangent"
-          : "no-tangent";
-        const key = `${geometryBaseKey}:${surface.material.requiresTextureCoordinates ? "uv0" : "no-uv"}:${tangentKey}`;
+      for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
+        const surface = surfaces[surfaceIndex]!;
+        const key = surfaceGeometryResourceKey(surface);
         let geometry = nextByKey.get(key) ?? previousByKey.get(key);
         if (geometry === undefined) {
           geometry = this.#createGeometry(surface, key);

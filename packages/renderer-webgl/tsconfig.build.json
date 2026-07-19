@@ -35,6 +35,7 @@
     "src/surface/camera-source-owner.ts",
     "src/surface/canonical-geometry.ts",
     "src/surface/canonical-material.ts",
+    "src/surface/gpu-admission.ts",
     "src/surface/picking-query.ts",
     "src/surface/scene-lowering.ts",
     "src/surface/surface-gpu-owner.ts",
