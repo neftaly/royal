@@ -1,4 +1,4 @@
-import { Canvas } from "@royal/react";
+import { Canvas, useGltfAssetStatus } from "@royal/react";
 import {
   boxGeometry,
   directionalLight,
@@ -12,6 +12,12 @@ import {
 } from "@royal/react/scene";
 import { useXrSession } from "@royal/react/xr";
 import { type ReactNode } from "react";
+import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
+
+const xrBox = gltf({
+  src: `${import.meta.env.BASE_URL}fixtures/khronos/Box/glTF-Binary/Box.glb`,
+  transform: { position: [0, 1.15, -4.2], scale: [0.8, 0.8, 0.8] },
+});
 
 const renderScene = scene({
   camera: perspectiveCamera({
@@ -39,10 +45,7 @@ const renderScene = scene({
       material: standardMaterial({ color: [0.82, 0.16, 0.08, 1], roughness: 0.5 }),
       transform: { position: [1.1, 0.62, -2.8], rotation: [-0.1, -0.35, 0.08] },
     }),
-    gltf({
-      src: `${import.meta.env.BASE_URL}fixtures/khronos/Box/glTF-Binary/Box.glb`,
-      transform: { position: [0, 1.15, -4.2], scale: [0.8, 0.8, 0.8] },
-    }),
+    xrBox,
   ],
   toneMapping: "pbr-neutral",
 });
@@ -74,6 +77,11 @@ const XrControls = (): ReactNode => {
   );
 };
 
+const XrBenchmark = (): ReactNode => {
+  const status = useGltfAssetStatus(xrBox.asset);
+  return <BenchmarkRendererSnapshot asset={xrBox.asset} status={status} />;
+};
+
 /** Direct and glTF surfaces rendered through the same canvas/XR canonical path. */
 export const WebXrVr = (): ReactNode => (
   <main>
@@ -84,6 +92,7 @@ export const WebXrVr = (): ReactNode => (
     </header>
     <section className="viewport" aria-label="WebXR renderer example">
       <Canvas aria-label="Royal WebXR scene" className="webxr-vr-canvas" scene={renderScene}>
+        <XrBenchmark />
         <XrControls />
       </Canvas>
     </section>

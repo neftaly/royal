@@ -21,6 +21,7 @@ import {
   unlitMaterial,
 } from "@royal/react/scene";
 import "./style.css";
+import { BenchmarkRendererSnapshot } from "./examples/BenchmarkRendererSnapshot";
 
 const blue = standardMaterial({
   color: [0.04, 0.32, 0.9, 1],
@@ -102,6 +103,7 @@ const App = (): ReactNode => {
           scenePointerEvents={scenePointerEvents}
         >
           <OrbitControls minDistance={2} orbit={orbit} />
+          <BenchmarkRendererSnapshot />
           <output className="pick-status">picked · {lastPick}</output>
           <RendererStatus />
         </Canvas>

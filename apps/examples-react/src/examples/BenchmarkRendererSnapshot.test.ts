@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { gltf } from '@royal/react/scene';
+import { benchmarkGltfDiagnostics } from './BenchmarkRendererSnapshot';
 import { copyVirtualTexturingCounters } from './BenchmarkRendererSnapshotCounters';
 
 describe('copyVirtualTexturingCounters', () => {
@@ -32,6 +34,39 @@ describe('copyVirtualTexturingCounters', () => {
       activePagesMip0: 1,
       cachedPagesMip0: 2,
       cachedPagesMip1: 3,
+    });
+  });
+});
+
+describe('current benchmark glTF adapter', () => {
+  const asset = gltf({ src: '/bistro.gltf', version: 'web-v2' }).asset;
+
+  it('keeps progressive image counts explicit while geometry is usable', () => {
+    expect(benchmarkGltfDiagnostics(asset, {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      primitiveCount: 381,
+      state: 'streaming',
+      textures: { failed: 0, loading: 30, ready: 80, total: 110 },
+    })).toMatchObject({
+      imageFailures: 0,
+      imagesLoaded: 80,
+      imageRequests: 110,
+      primitiveCount: 381,
+      status: 'streaming',
+      version: 'web-v2',
+    });
+  });
+
+  it('reports terminal degradation without hiding drawable geometry', () => {
+    expect(benchmarkGltfDiagnostics(asset, {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      primitiveCount: 381,
+      state: 'degraded',
+      textures: { failed: 2, loading: 0, ready: 108, total: 110 },
+    })).toMatchObject({
+      imageFailures: 2,
+      imagesLoaded: 108,
+      status: 'degraded',
     });
   });
 });

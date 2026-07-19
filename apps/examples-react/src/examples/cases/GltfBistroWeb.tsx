@@ -8,6 +8,7 @@ import {
 } from "@royal/react";
 import { directionalLight, gltf, scene } from "@royal/react/scene";
 import { useMemo, type ReactNode } from "react";
+import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
 
 const bistro = gltf({
   bounds: {
@@ -45,7 +46,12 @@ const BistroStatus = (): ReactNode => {
       : ` · ${status.textures.failed} failed`;
     value = `${status.state} · ${status.primitiveCount} primitives · ${status.textures.ready}/${status.textures.total} textures${failed}`;
   } else if (status.state === "error") value = `error · ${status.error}`;
-  return <output className="status" data-gltf-state={status.state}>{value}</output>;
+  return (
+    <>
+      <BenchmarkRendererSnapshot asset={bistro.asset} status={status} />
+      <output className="status" data-gltf-state={status.state}>{value}</output>
+    </>
+  );
 };
 
 export const GltfBistroWeb = (): ReactNode => {

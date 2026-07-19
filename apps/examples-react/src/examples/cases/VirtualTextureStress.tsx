@@ -14,6 +14,7 @@ import {
   virtualTexture,
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
 const mapTexture = virtualTexture({
@@ -106,6 +107,7 @@ export const VirtualTextureStress = (): ReactNode => {
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >
+          <BenchmarkRendererSnapshot />
           <VirtualTextureStatusLabel />
           <OrbitControls
             enablePan

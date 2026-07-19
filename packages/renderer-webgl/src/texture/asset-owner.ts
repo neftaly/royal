@@ -106,6 +106,7 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 export class TextureAssetOwner {
   #disposed = false;
   readonly #entries = new Map<string, AssetEntry>();
+  readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new Map<string, Set<() => void>>();
   readonly #platform: TextureAssetOwnerPlatform;
 
@@ -125,22 +126,22 @@ export class TextureAssetOwner {
   }
 
   decoded(asset: TextureSourceRef): DecodedTextureSource | undefined {
-    return this.#entries.get(decodedTextureKey(asset))?.decoded;
+    return this.#entries.get(this.#key(asset))?.decoded;
   }
 
   getSnapshot(asset: TextureAssetRef): TextureAssetSnapshot {
-    return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
+    return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
   }
 
   getSourceSnapshot(asset: TextureSourceRef): TextureAssetSnapshot {
-    return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
+    return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
   }
 
   reconcile(assets: readonly TextureSourceRef[]): void {
     if (this.#disposed) return;
     const claimed = new Set<string>();
     for (const asset of assets) {
-      const key = decodedTextureKey(asset);
+      const key = this.#key(asset);
       claimed.add(key);
       if (!this.#entries.has(key)) this.#start(asset, key);
     }
@@ -157,7 +158,7 @@ export class TextureAssetOwner {
     if (typeof listener !== "function") {
       throw new TypeError("Royal texture asset subscriber must be a function");
     }
-    const key = decodedTextureKey(asset);
+    const key = this.#key(asset);
     if (this.#disposed) return () => undefined;
     let listeners = this.#listeners.get(key);
     if (listeners === undefined) {
@@ -190,6 +191,15 @@ export class TextureAssetOwner {
         }
       }
     }
+  }
+
+  #key(asset: TextureSourceRef): string {
+    let key = this.#keys.get(asset);
+    if (key === undefined) {
+      key = decodedTextureKey(asset);
+      this.#keys.set(asset, key);
+    }
+    return key;
   }
 
   #start(asset: TextureSourceRef, key: string): void {

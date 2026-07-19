@@ -1,134 +1,79 @@
+import type { GltfAssetRef } from '@royal/react/scene';
 import {
   useCanvasRoot,
-  type RoyalRendererDiagnosticsSnapshot,
+  type GltfAssetStatus,
 } from '@royal/react';
-import { useLayoutEffect, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import {
-  copyNumberCounters,
-  copyVirtualTexturingCounters,
-  isRecord,
-} from './BenchmarkRendererSnapshotCounters';
-import {
-  exampleContract,
   installRendererBenchmarkBridge,
-  type GltfInstancingCounters,
   type GltfLoadDiagnosticsAsset,
-  type GltfLoadDiagnosticsSnapshot,
   type RendererBenchmarkSnapshot,
-  type RendererLifecycleSnapshot,
 } from '../example-contract';
 
-const gltfInstancingCounterKeys = exampleContract.benchmark.gltfInstancingCounterFields;
+export type BenchmarkRendererSnapshotProps = Readonly<{
+  asset?: GltfAssetRef;
+  status?: GltfAssetStatus;
+}>;
 
-const copyGltfInstancingCounters = (value: unknown): GltfInstancingCounters | null => {
-  if (!isRecord(value)) return null;
-
-  const counters: Record<string, number> = {};
-  for (const key of gltfInstancingCounterKeys) {
-    const counter = value[key];
-    if (typeof counter !== 'number' || !Number.isFinite(counter)) return null;
-    counters[key] = counter;
-  }
-
-  return counters;
-};
-
-const copyRendererLifecycleSnapshot = (value: unknown): RendererLifecycleSnapshot | null => {
-  if (!isRecord(value)) return null;
-  const state = value.state;
-  if (
-    typeof value.generation !== 'number' ||
-    !Number.isFinite(value.generation) ||
-    typeof value.interruptions !== 'number' ||
-    !Number.isFinite(value.interruptions) ||
-    typeof value.recoveries !== 'number' ||
-    !Number.isFinite(value.recoveries) ||
-    (state !== 'available' && state !== 'disposed' && state !== 'failed' && state !== 'unavailable')
-  ) return null;
-
+/** @internal Pure adapter shared with the benchmark contract test. */
+export const benchmarkGltfDiagnostics = (
+  asset: GltfAssetRef | undefined,
+  status: GltfAssetStatus | undefined,
+): GltfLoadDiagnosticsAsset | undefined => {
+  if (asset === undefined || status === undefined || status.state === 'idle') return undefined;
+  const usable = status.state === 'streaming'
+    || status.state === 'ready'
+    || status.state === 'degraded';
   return {
-    ...(typeof value.error === 'string' ? { error: value.error } : {}),
-    generation: value.generation,
-    interruptions: value.interruptions,
-    recoveries: value.recoveries,
-    state,
+    ...(status.state === 'error' ? { error: status.error } : {}),
+    imageCandidates: usable ? status.textures.total : 0,
+    imageFailures: usable ? status.textures.failed : 0,
+    imagesLoaded: usable ? status.textures.ready : 0,
+    imageRequests: usable ? status.textures.total : 0,
+    lightCount: 0,
+    nodeCount: 0,
+    phaseMs: {},
+    primitiveCount: usable ? status.primitiveCount : 0,
+    src: asset.src,
+    status: status.state,
+    variantNames: [],
+    ...(asset.version === undefined ? {} : { version: asset.version }),
   };
 };
 
-const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset | null => {
-  if (!isRecord(value)) return null;
-  const phaseMs = copyNumberCounters(value.phaseMs);
-  if (
-    typeof value.imageCandidates !== 'number' ||
-    typeof value.imageFailures !== 'number' ||
-    typeof value.imagesLoaded !== 'number' ||
-    typeof value.imageRequests !== 'number' ||
-    typeof value.lightCount !== 'number' ||
-    typeof value.nodeCount !== 'number' ||
-    phaseMs === null ||
-    typeof value.primitiveCount !== 'number' ||
-    typeof value.src !== 'string' ||
-    typeof value.status !== 'string' ||
-    !Array.isArray(value.variantNames) ||
-    value.variantNames.some((name) => typeof name !== 'string')
-  ) {
-    return null;
-  }
-
-  return {
-    ...(typeof value.error === 'string' ? { error: value.error } : {}),
-    imageCandidates: value.imageCandidates,
-    imageFailures: value.imageFailures,
-    imagesLoaded: value.imagesLoaded,
-    imageRequests: value.imageRequests,
-    lightCount: value.lightCount,
-    nodeCount: value.nodeCount,
-    phaseMs,
-    primitiveCount: value.primitiveCount,
-    status: value.status,
-    src: value.src,
-    variantNames: [...value.variantNames] as string[],
-    ...(typeof value.version === 'number' || typeof value.version === 'string'
-      ? { version: value.version }
-      : {}),
-  };
-};
-
-const copyGltfLoadDiagnosticsSnapshot = (value: unknown): GltfLoadDiagnosticsSnapshot | null => {
-  if (!isRecord(value) || !Array.isArray(value.assets)) return null;
-  const assets: GltfLoadDiagnosticsAsset[] = [];
-  for (const asset of value.assets) {
-    const copied = copyGltfLoadDiagnosticsAsset(asset);
-    if (copied === null) return null;
-    assets.push(copied);
-  }
-
-  return { assets };
-};
-
-export const BenchmarkRendererSnapshot = (): ReactNode => {
+/** Installs the benchmark-only bridge using public product observation APIs. */
+export const BenchmarkRendererSnapshot = ({
+  asset,
+  status,
+}: BenchmarkRendererSnapshotProps = {}): ReactNode => {
   const root = useCanvasRoot();
+  const observation = useRef({ asset, status });
+  observation.current.asset = asset;
+  observation.current.status = status;
 
   useLayoutEffect(() => {
     if (root === null) return undefined;
-
-    const snapshot = (): RendererBenchmarkSnapshot | null => {
-      const rootSnapshot = root.snapshot();
-      const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
-      if (!Number.isFinite(rootSnapshot.frame)) {
-        return null;
-      }
-
+    const snapshot = (): RendererBenchmarkSnapshot => {
+      const current = root.getSnapshot();
+      const observed = observation.current;
+      const gltf = benchmarkGltfDiagnostics(observed.asset, observed.status);
       return {
-        frame: rootSnapshot.frame,
-        gltfInstancing: copyGltfInstancingCounters(diagnostics.gltfInstancing),
-        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoads),
-        lifecycle: copyRendererLifecycleSnapshot(rootSnapshot.lifecycle),
-        planning: copyNumberCounters(diagnostics.planning),
-        resourcePressure: diagnostics.resourcePressure,
-        resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),
-        textureResidency: diagnostics.textureResidency,
-        virtualTexturing: copyVirtualTexturingCounters(diagnostics.virtualTexturing),
+        frame: current.frame,
+        gltfInstancing: null,
+        gltfLoadDiagnostics: { assets: gltf === undefined ? [] : [gltf] },
+        lifecycle: {
+          generation: current.context.generation,
+          interruptions: current.context.interruptions,
+          recoveries: current.context.recoveries,
+          state: current.context.phase === 'active'
+            ? 'available'
+            : current.context.phase === 'disposed' ? 'disposed' : 'unavailable',
+        },
+        planning: null,
+        resourcePressure: null,
+        resourceLifetime: null,
+        textureResidency: null,
+        virtualTexturing: null,
       };
     };
     const renderNow = (): void => {

@@ -24,7 +24,7 @@
     "check:package-imports": "node scripts/package-import-smoke.mjs",
     "dev": "pnpm --filter @royal/examples-react dev",
     "lint": "pnpm -r --if-present lint",
-    "test": "vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx",
+    "test": "vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {

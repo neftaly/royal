@@ -148,9 +148,9 @@ if (!new Set(['chromium', 'cdp']).has(browserMode)) {
   throw new Error(`EXAMPLES_BENCH_BROWSER must be "chromium" or "cdp", received ${JSON.stringify(browserMode)}`);
 }
 
-if (!new Set(['hardware-headed', 'hardware-headless']).has(gpuMode)) {
+if (!new Set(['hardware-headed', 'hardware-headless', 'software-headless']).has(gpuMode)) {
   throw new Error(
-    `EXAMPLES_BENCH_GPU must be "hardware-headed" or "hardware-headless", received ${JSON.stringify(gpuMode)}`,
+    `EXAMPLES_BENCH_GPU must be "hardware-headed", "hardware-headless", or "software-headless", received ${JSON.stringify(gpuMode)}`,
   );
 }
 
@@ -436,12 +436,15 @@ const readWebGlGpu = async (session) => evaluate(session, `
 })()
 `);
 
-const assertRequestedGpu = (gpu) => {
+const assertRequestedGpu = (gpu, requireHardware) => {
   if (gpu === null) throw new Error('Examples benchmark could not create a WebGL2 context');
-  if (gpu.renderer === null) {
+  if (requireHardware && gpu.renderer === null) {
     throw new Error('Hardware GPU benchmark requires WEBGL_debug_renderer_info');
   }
-  if (/SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu.renderer)) {
+  if (
+    requireHardware
+    && /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu.renderer)
+  ) {
     throw new Error(`Hardware GPU benchmark resolved to software rendering: ${gpu.renderer}`);
   }
 };
@@ -2781,7 +2784,9 @@ const main = async () => {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     ...(gpuMode === 'hardware-headed' ? [] : ['--headless=new']),
-    ...(gpuMode === 'hardware-headed'
+    ...(gpuMode === 'software-headless'
+      ? []
+      : gpuMode === 'hardware-headed'
         ? [
           '--ozone-platform=x11',
           '--use-gl=angle',
@@ -2839,7 +2844,7 @@ const main = async () => {
     await installBenchmarkHooks(session);
     const gpu = await readWebGlGpu(session);
     const browserEnvironment = await readBrowserEnvironment(session);
-    assertRequestedGpu(gpu);
+    assertRequestedGpu(gpu, gpuMode !== 'software-headless');
     console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
     // Real XR transfers debugger ownership after navigation so activation and
     // measurement share a fresh Quest Browser attachment. Start tracing on

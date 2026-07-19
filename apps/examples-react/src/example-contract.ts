@@ -1,5 +1,4 @@
 import contractJson from '../example-contract.json';
-import type { RoyalRendererDiagnosticsSnapshot } from '@royal/react';
 
 export type ExampleContractEntry = {
   readonly id: string;
@@ -46,9 +45,9 @@ export type RendererBenchmarkSnapshot = {
   readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
   readonly lifecycle: RendererLifecycleSnapshot | null;
   readonly planning: Record<string, number> | null;
-  readonly resourcePressure: RoyalRendererDiagnosticsSnapshot['resourcePressure'] | null;
+  readonly resourcePressure: Record<string, number> | null;
   readonly resourceLifetime: Record<string, number> | null;
-  readonly textureResidency: RoyalRendererDiagnosticsSnapshot['textureResidency'] | null;
+  readonly textureResidency: Record<string, number> | null;
   readonly virtualTexturing: Record<string, number> | null;
 };
 
