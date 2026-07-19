@@ -6,6 +6,10 @@ import {
 } from "../surface/canonical-material";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
+import {
+  ETC2_RGBA8_WEBGL_FORMAT,
+  ETC2_SRGB8_ALPHA8_WEBGL_FORMAT,
+} from "../texture/etc2-storage";
 import { readVirtualTexturePage, type DecodedVirtualTexturePage } from "./browser-page-source";
 import {
   collectVirtualTextureSurfaceDemand,
@@ -43,8 +47,6 @@ const MAX_DECODE_JOBS = 4;
 const MAX_UPLOADS_PER_FRAME = 4;
 const MAX_DEMAND_PAGES = 512;
 const MAX_SHADER_MIPS = 16;
-const COMPRESSED_RGBA8_ETC2_EAC = 0x9278;
-const COMPRESSED_SRGB8_ALPHA8_ETC2_EAC = 0x9279;
 const IDLE_VIRTUAL_TEXTURE_SNAPSHOT: VirtualTextureAssetSnapshot = {
   failedPages: 0,
   pendingPages: 0,
@@ -176,8 +178,8 @@ const createGpuVirtualTexture = (
       1,
       compressed
         ? (asset.colorSpace ?? manifest.colorSpace) === "srgb"
-          ? COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
-          : COMPRESSED_RGBA8_ETC2_EAC
+          ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
+          : ETC2_RGBA8_WEBGL_FORMAT
         : (asset.colorSpace ?? manifest.colorSpace) === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
       atlasColumns * storedPageSize,
       atlasRows * storedPageSize,
@@ -671,8 +673,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           storedPageSize,
           storedPageSize,
           expectedColorSpace === "srgb"
-            ? COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
-            : COMPRESSED_RGBA8_ETC2_EAC,
+            ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
+            : ETC2_RGBA8_WEBGL_FORMAT,
           ready.decoded.blocks,
         );
       } else {

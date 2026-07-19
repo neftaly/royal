@@ -101,8 +101,9 @@ The current replacement implementation accepts these required declarations:
 This is an implementation ledger, not the desired eventual static profile.
 Notably, glTF `KHR_texture_basisu`, `EXT_meshopt_compression`,
 image-based-light extensions, and the remaining PBR
-family are not yet accepted as required. Direct Royal KTX2/Basis ingestion does
-not imply support for the glTF texture extension.
+family are not yet accepted as required. Direct Royal offline ETC2 KTX2
+ingestion is not Basis ingestion and does not imply support for the glTF texture
+extension.
 
 Unknown `extensionsUsed` declarations do not fail core content. An unknown
 `extensionsRequired` declaration MUST fail before knowingly incomplete content

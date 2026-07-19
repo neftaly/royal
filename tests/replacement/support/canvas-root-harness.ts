@@ -11,6 +11,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
+  readonly compressedTexImage2D: ReturnType<typeof vi.fn>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly bufferSubData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
@@ -28,6 +29,8 @@ export type FakeGl = WebGL2RenderingContext & {
 export const fakeGl = (): FakeGl => ({
   COLOR_BUFFER_BIT: 0x4000,
   CLAMP_TO_EDGE: 0x812f,
+  COMPRESSED_RGBA8_ETC2_EAC: 0x9278,
+  COMPRESSED_SRGB8_ALPHA8_ETC2_EAC: 0x9279,
   ARRAY_BUFFER: 0x8892,
   BACK: 0x0405,
   BLEND: 0x0be2,
@@ -94,6 +97,7 @@ export const fakeGl = (): FakeGl => ({
   clearStencil: vi.fn(),
   colorMask: vi.fn(),
   compileShader: vi.fn(),
+  compressedTexImage2D: vi.fn(),
   createBuffer: vi.fn(() => ({})),
   createProgram: vi.fn(() => ({})),
   createSampler: vi.fn(() => ({})),

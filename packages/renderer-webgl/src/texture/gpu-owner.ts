@@ -3,6 +3,12 @@ import type { CanonicalTextureBinding } from "../surface/canonical-material";
 const EMPTY_STORAGE_KEYS: readonly string[] = [];
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import {
+  completeKtx2MipLevelCount,
+  ETC2_RGBA8_WEBGL_FORMAT,
+  ETC2_SRGB8_ALPHA8_WEBGL_FORMAT,
+  ktx2Etc2StorageBytes,
+} from "./etc2-storage";
 import { ordinaryTextureStorageBytes } from "./storage";
 
 export { ordinaryTextureStorageBytes } from "./storage";
@@ -11,6 +17,7 @@ type GpuTexture = {
   readonly bindings: WeakMap<WebGLSampler, GpuTextureBinding>;
   readonly budgetIdentity: object;
   byteLength: number;
+  readonly compressed: boolean;
   readonly fitted: boolean;
   readonly height: number;
   mipmapped: boolean;
@@ -248,12 +255,20 @@ export class TextureGpuOwner {
 
   #createTexture(binding: CanonicalTextureBinding): GpuTexture | undefined {
     const gl = this.#gl;
-    const mipmapped = usesMipmaps(binding.sampler.minFilter);
-    const byteLength = ordinaryTextureStorageBytes(
-      binding.decoded.width,
-      binding.decoded.height,
-      mipmapped,
-    );
+    const decoded = binding.decoded;
+    const compressed = decoded.kind === "ktx2-etc2";
+    const mipmapsRequired = usesMipmaps(binding.sampler.minFilter);
+    const mipmapped = compressed
+      ? decoded.levels.length === completeKtx2MipLevelCount(decoded.width, decoded.height)
+      : mipmapsRequired;
+    if (compressed && mipmapsRequired && !mipmapped) {
+      throw new TypeError(
+        "Royal ETC2 KTX2 textures require a complete offline mip pyramid for mipmapped sampling",
+      );
+    }
+    const byteLength = compressed
+      ? ktx2Etc2StorageBytes(decoded)
+      : ordinaryTextureStorageBytes(decoded.width, decoded.height, mipmapped);
     const budgetIdentity = {};
     if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
       this.#deniedStorageKeys.add(binding.storageKey);
@@ -268,25 +283,47 @@ export class TextureGpuOwner {
     try {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      this.#applyUnpackState();
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        binding.decoded.source,
-      );
-      if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
+      if (compressed) {
+        if (decoded.colorSpace !== binding.colorSpace) {
+          throw new TypeError("Royal ETC2 KTX2 storage color space does not match its binding");
+        }
+        const format = binding.colorSpace === "srgb"
+          ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
+          : ETC2_RGBA8_WEBGL_FORMAT;
+        for (let levelIndex = 0; levelIndex < decoded.levels.length; levelIndex += 1) {
+          const level = decoded.levels[levelIndex]!;
+          gl.compressedTexImage2D(
+            gl.TEXTURE_2D,
+            levelIndex,
+            format,
+            level.width,
+            level.height,
+            0,
+            level.blocks,
+          );
+        }
+      } else {
+        this.#applyUnpackState();
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          decoded.source,
+        );
+        if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
+      }
       return {
         bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),
         budgetIdentity,
         byteLength,
-        fitted: binding.decoded.sourceWidth !== undefined,
-        height: binding.decoded.height,
+        compressed,
+        fitted: decoded.sourceWidth !== undefined,
+        height: decoded.height,
         mipmapped,
         texture,
-        width: binding.decoded.width,
+        width: decoded.width,
       };
     } catch (error) {
       gl.deleteTexture(texture);
@@ -306,6 +343,11 @@ export class TextureGpuOwner {
 
   #ensureMipmaps(resource: GpuTexture, storageKey: string): boolean {
     if (resource.mipmapped) return true;
+    if (resource.compressed) {
+      throw new TypeError(
+        "Royal ETC2 KTX2 textures require a complete offline mip pyramid for mipmapped sampling",
+      );
+    }
     const byteLength = ordinaryTextureStorageBytes(resource.width, resource.height, true);
     if (!this.#budget.tryClaim(resource.budgetIdentity, byteLength)) {
       this.#deniedStorageKeys.add(storageKey);

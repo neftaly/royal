@@ -3,6 +3,7 @@ import {
   createBrowserTextureDecoder,
   decodeTextureWithBrowser,
 } from "../../packages/renderer-webgl/src/texture/browser-decode";
+import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -40,6 +41,72 @@ describe("browser texture decode shell", () => {
       src: "/missing.png",
     }, new AbortController().signal)).rejects.toThrow("HTTP 404");
     expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it("keeps direct KTX2 ETC2 levels compressed and extracts alpha only on demand", async () => {
+    const bytes = createKtx2Etc2Fixture(152);
+    const createImageBitmap = vi.fn();
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer, {
+      headers: { "content-type": "image/ktx2" },
+    })));
+
+    const decoded = await decodeTextureWithBrowser({
+      kind: "asset",
+      sampler: { minFilter: "linear" },
+      src: "/texture.ktx2?v=1",
+    }, new AbortController().signal, 16, true);
+
+    expect(decoded).toMatchObject({
+      alpha: { height: 4, width: 4 },
+      colorSpace: "srgb",
+      height: 4,
+      kind: "ktx2-etc2",
+      width: 4,
+    });
+    if (decoded.kind !== "ktx2-etc2") throw new Error("expected compressed texture");
+    expect(decoded.levels).toHaveLength(1);
+    expect(decoded.levels[0]!.blocks.byteLength).toBe(16);
+    expect(decoded.alpha?.values).toHaveLength(16);
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    decoded.close?.();
+    decoded.close?.();
+    expect(decoded.levels[0]!.blocks.byteLength).toBe(0);
+    expect(decoded.alpha?.values).toHaveLength(16);
+  });
+
+  it("rejects KTX2 color-space and exact compressed-storage budget mismatches", async () => {
+    const bytes = createKtx2Etc2Fixture(152);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer)));
+    await expect(decodeTextureWithBrowser({
+      colorSpace: "linear",
+      kind: "asset",
+      src: "/texture.ktx2",
+    }, new AbortController().signal)).rejects.toThrow("declares srgb ETC2 storage");
+    await expect(decodeTextureWithBrowser({
+      kind: "asset",
+      src: "/texture.ktx2",
+    }, new AbortController().signal, 15)).rejects.toThrow("needs at least 16 bytes");
+  });
+
+  it("fits compressed storage by rebasing an authored mip suffix without resampling", async () => {
+    const bytes = createKtx2Etc2Fixture(152, 8, 8, 4);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer)));
+    const decoded = await decodeTextureWithBrowser({
+      kind: "asset",
+      src: "/texture.ktx2",
+    }, new AbortController().signal, 48);
+
+    expect(decoded).toMatchObject({
+      height: 4,
+      kind: "ktx2-etc2",
+      sourceHeight: 8,
+      sourceWidth: 8,
+      width: 4,
+    });
+    if (decoded.kind !== "ktx2-etc2") throw new Error("expected compressed texture");
+    expect(decoded.levels.map((level) => level.width)).toEqual([4, 2, 1]);
+    expect(decoded.levels.reduce((sum, level) => sum + level.blocks.byteLength, 0)).toBe(48);
   });
 
   it("resizes decoded pixels to the largest budgeted mip representation", async () => {

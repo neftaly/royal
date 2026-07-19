@@ -5,11 +5,14 @@ import {
   ordinaryTextureStorageBytes,
   TextureGpuOwner,
 } from "../../packages/renderer-webgl/src/texture/gpu-owner";
+import { ETC2_SRGB8_ALPHA8_WEBGL_FORMAT } from "../../packages/renderer-webgl/src/texture/etc2-storage";
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 const fakeGl = (): WebGL2RenderingContext => ({
   CLAMP_TO_EDGE: 0x812f,
+  COMPRESSED_RGBA8_ETC2_EAC: 0x9278,
+  COMPRESSED_SRGB8_ALPHA8_ETC2_EAC: 0x9279,
   LINEAR: 0x2601,
   LINEAR_MIPMAP_LINEAR: 0x2703,
   LINEAR_MIPMAP_NEAREST: 0x2701,
@@ -34,6 +37,7 @@ const fakeGl = (): WebGL2RenderingContext => ({
   UNSIGNED_BYTE: 0x1401,
   activeTexture: vi.fn(),
   bindTexture: vi.fn(),
+  compressedTexImage2D: vi.fn(),
   createSampler: vi.fn(() => ({})),
   createTexture: vi.fn(() => ({})),
   deleteSampler: vi.fn(),
@@ -59,6 +63,31 @@ const binding = (
   },
   samplerKey,
   storageKey,
+});
+
+const compressedBinding = (
+  levelCount: number,
+  minFilter: CanonicalTextureBinding["sampler"]["minFilter"],
+): CanonicalTextureBinding => ({
+  colorSpace: "srgb",
+  decoded: {
+    colorSpace: "srgb",
+    height: 8,
+    kind: "ktx2-etc2",
+    levels: Array.from({ length: levelCount }, (_, level) => {
+      const width = Math.max(1, 8 >> level);
+      const height = Math.max(1, 8 >> level);
+      return {
+        blocks: new Uint8Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 16),
+        height,
+        width,
+      };
+    }),
+    width: 8,
+  },
+  sampler: { magFilter: "linear", minFilter, wrapS: "repeat", wrapT: "repeat" },
+  samplerKey: `compressed:${minFilter}`,
+  storageKey: "compressed-image:srgb",
 });
 
 describe("ordinary texture GPU owner", () => {
@@ -146,6 +175,39 @@ describe("ordinary texture GPU owner", () => {
     owner.reconcile([]);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteSampler).toHaveBeenCalledTimes(2);
+  });
+
+  it("uploads a complete ETC2 pyramid directly with its exact compressed budget", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(112);
+    const owner = new TextureGpuOwner(gl, budget);
+    const result = owner.reconcile([compressedBinding(4, "linear-mipmap-linear")]);
+
+    expect(result[0]!.texture).not.toBeNull();
+    expect(gl.compressedTexImage2D).toHaveBeenCalledTimes(4);
+    expect(gl.compressedTexImage2D).toHaveBeenNthCalledWith(
+      1,
+      gl.TEXTURE_2D,
+      0,
+      ETC2_SRGB8_ALPHA8_WEBGL_FORMAT,
+      8,
+      8,
+      0,
+      expect.any(Uint8Array),
+    );
+    expect(gl.texImage2D).not.toHaveBeenCalled();
+    expect(gl.generateMipmap).not.toHaveBeenCalled();
+    expect(gl.pixelStorei).not.toHaveBeenCalled();
+    expect(budget.snapshot()).toEqual({ budgetBytes: 112, deniedClaims: 0, retainedBytes: 112 });
+  });
+
+  it("accepts a base-only ETC2 texture for non-mip sampling but rejects invented mipmaps", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    expect(owner.reconcile([compressedBinding(1, "linear")])[0]!.texture).not.toBeNull();
+    expect(() => owner.reconcile([compressedBinding(1, "linear-mipmap-linear")]))
+      .toThrow("complete offline mip pyramid");
+    expect(gl.generateMipmap).not.toHaveBeenCalled();
   });
 
   it("deletes newly allocated storage when sampler preparation fails", () => {

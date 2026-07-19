@@ -1,4 +1,8 @@
-import type { DecodedTextureSource, TextureSourceRef } from "./asset-owner";
+import type {
+  DecodedImageTextureSource,
+  DecodedTextureSource,
+  TextureSourceRef,
+} from "./asset-owner";
 import { decodeBrowserImageElement } from "./browser-image-element";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 
@@ -65,18 +69,88 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
   return `texture ${JSON.stringify(source)}`;
 };
 
+type TextureBlob = Readonly<{ blob: Blob; ktx2: boolean }>;
+
+const isKtx2MimeType = (mimeType: string): boolean =>
+  mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/ktx2";
+
+const isKtx2Uri = (uri: string): boolean => /\.ktx2(?:[?#]|$)/i.test(uri);
+
 const readTextureBlob = async (
   asset: TextureSourceRef,
   signal: AbortSignal,
-): Promise<Blob> => asset.kind === "embedded-asset"
-    ? new Blob([asset.bytes.slice().buffer as ArrayBuffer], { type: asset.mimeType })
+): Promise<TextureBlob> => asset.kind === "embedded-asset"
+    ? {
+      blob: new Blob([asset.bytes.slice().buffer as ArrayBuffer], { type: asset.mimeType }),
+      ktx2: false,
+    }
     : await (async () => {
       const response = await fetch(asset.src, { signal });
       if (!response.ok) {
         throw new Error(`${diagnosticLabel(asset)} fetch failed with HTTP ${response.status}`);
       }
-      return response.blob();
+      const blob = await response.blob();
+      return {
+        blob,
+        ktx2: isKtx2Uri(asset.src) || isKtx2MimeType(blob.type),
+      };
     })();
+
+const decodeKtx2Texture = async (
+  asset: TextureSourceRef,
+  blob: Blob,
+  signal: AbortSignal,
+  maxStorageBytes?: number,
+  retainAlpha = false,
+): Promise<DecodedTextureSource> => {
+  if (signal.aborted) throw aborted();
+  const {
+    decodeKtx2Etc2Alpha,
+    fitKtx2Etc2Storage,
+    parseKtx2Etc2,
+  } = await import("./ktx2-etc2");
+  if (signal.aborted) throw aborted();
+  const sourceTexture = parseKtx2Etc2(new Uint8Array(await blob.arrayBuffer()));
+  if (signal.aborted) throw aborted();
+  const colorSpace = asset.colorSpace ?? "srgb";
+  if (sourceTexture.colorSpace !== colorSpace) {
+    throw new TypeError(
+      `${diagnosticLabel(asset)} declares ${sourceTexture.colorSpace} ETC2 storage but the asset requests ${colorSpace}`,
+    );
+  }
+  const texture = maxStorageBytes === undefined
+    ? sourceTexture
+    : fitKtx2Etc2Storage(sourceTexture, maxStorageBytes);
+  const alpha = retainAlpha ? {
+    height: texture.height,
+    values: decodeKtx2Etc2Alpha(texture),
+    width: texture.width,
+  } : undefined;
+  const emptyBlocks = new Uint8Array(0);
+  const levels = texture.levels.map((level) => ({
+    blocks: level.blocks,
+    height: level.height,
+    width: level.width,
+  }));
+  let released = false;
+  return {
+    close: () => {
+      if (released) return;
+      released = true;
+      for (const level of levels) level.blocks = emptyBlocks;
+    },
+    colorSpace,
+    height: texture.height,
+    kind: "ktx2-etc2",
+    levels,
+    ...(texture === sourceTexture ? {} : {
+      sourceHeight: sourceTexture.height,
+      sourceWidth: sourceTexture.width,
+    }),
+    ...(alpha === undefined ? {} : { alpha }),
+    width: texture.width,
+  };
+};
 
 const decodeTextureBlob = async (
   asset: TextureSourceRef,
@@ -141,7 +215,7 @@ const decodeTextureBlob = async (
     bitmap.close();
     throw aborted();
   }
-  const decoded: DecodedTextureSource = {
+  const decoded: DecodedImageTextureSource = {
     close: () => bitmap.close(),
     height: bitmap.height,
     source: bitmap,
@@ -154,9 +228,9 @@ const decodeTextureBlob = async (
 };
 
 const retainTextureAlpha = (
-  decoded: DecodedTextureSource,
+  decoded: DecodedImageTextureSource,
   signal: AbortSignal,
-): DecodedTextureSource => {
+): DecodedImageTextureSource => {
   let canvas: HTMLCanvasElement | undefined;
   try {
     if (signal.aborted) throw aborted();
@@ -204,10 +278,12 @@ export const createBrowserTextureDecoder = (
   const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
   return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
-    const blob = await readTextureBlob(asset, signal);
+    const { blob, ktx2 } = await readTextureBlob(asset, signal);
     return decodes.run(
       signal,
-      () => decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha),
+      () => ktx2
+        ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha)
+        : decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha),
     );
   });
 };

@@ -38,11 +38,11 @@ canonical storage classes are deliberately few:
 - HDR/environment: the explicit HDR representation required by that pipeline.
 
 Opaque color MAY use a smaller RGB representation when alpha absence is proven
-before upload. A complete authored mip chain may remain GPU-compressed; an
-incomplete or incompatible chain falls back once during preparation rather than
-branching during drawing. Browser-decoded AVIF/WebP is not automatically GPU
-compressed and enters an uncompressed plan unless an offline container supplies
-blocks.
+before upload. A complete authored mip chain may remain GPU-compressed. A direct
+compressed source that is incomplete for its sampler or otherwise incompatible
+fails during preparation rather than inventing a transcode or branching during
+drawing. Browser-decoded AVIF/WebP is not automatically GPU compressed and
+enters an uncompressed plan unless an offline container supplies blocks.
 
 Optional ASTC or another native target MAY be added only if device measurements
 show enough memory/bandwidth benefit to justify another representation revision,
@@ -71,10 +71,33 @@ Ordinary images used by pickable `MASK` materials additionally retain one
 8-bit alpha plane at the already fitted upload dimensions. This demand is
 keyed by decoded content, shared across color interpretations and samplers, and
 is absent for ordinary opaque/blended textures and authoritative picking
-proxies. The transient canvas RGBA readback exists only during demanded decode;
-the image source is still released after GPU upload. Removing the final mask
-claim releases the alpha plane. Decode failure keeps the visible/pick fallback
-opaque rather than inventing a cutout.
+proxies. Browser images use a transient canvas RGBA readback only during
+demanded decode. Offline ETC2 RGBA decodes only its EAC alpha blocks into that
+same one-byte plane; RGB remains compressed and no GPU readback occurs. The
+upload source is released after GPU upload. Removing the final mask claim
+releases the alpha plane. Decode failure keeps the visible/pick fallback opaque
+rather than inventing a cutout.
+
+### Direct offline ETC2 KTX2 subset
+
+An ordinary `textureAsset` or `imageTexture` URI ending in `.ktx2`, or served as
+`image/ktx2`, enters the same root-owned texture lifecycle as a browser image.
+Royal accepts only two-dimensional, non-array, single-face, unsupercompressed
+ETC2 RGBA KTX2 with Vulkan format 151 (linear) or 152 (sRGB). The declared format
+MUST match the asset color-space request. Level storage is bounds-, size-,
+alignment-, and overlap-validated before publication, and upload borrows the
+level byte views without a second block copy. Orientation is absent/default
+`rd` or explicitly `rd`, swizzle is absent/identity `rgba`, and premultiplied
+alpha descriptors are rejected so this path cannot violate Royal's canonical
+upper-left, straight-alpha contract.
+
+A mipmapped sampler requires a complete authored pyramid. Under a per-texture
+storage ceiling, Royal MAY drop the largest authored levels and rebase a
+complete remaining suffix; it never resamples compressed texels or calls
+`generateMipmap` for this path. Exact compressed bytes, not an RGBA estimate,
+participate in the persistent GPU budget. `KHR_texture_basisu` is a separate
+glTF delivery contract and remains unsupported because Royal ships no Basis
+runtime transcoder.
 
 ## Representation choice
 

@@ -154,8 +154,9 @@ CPU traces show that canonical retained selection is a material bottleneck.
 
 Workers are appropriate for demanded, heavy, independent decode or preparation
 whose transfer/serialization cost is lower than main-thread blocking. Royal
-currently requires worker support for Basis transcoding and may isolate other
-codecs similarly.
+does not currently transcode Basis at runtime. Any future codec heavy enough to
+need a worker must first justify its code, startup, transfer, cancellation, and
+target-browser costs; worker availability is not itself a format promise.
 
 Royal MUST NOT create a worker at module import or root creation when no job
 needs it. Worker startup is lazy, jobs obey the same cancellation/generation

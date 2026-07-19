@@ -185,6 +185,37 @@ describe("clear-only canvas root", () => {
       String(shader).includes("#define TEXTURED"))).toBe(true);
   });
 
+  it("publishes offline ETC2 mip levels through the same texture lifecycle", async () => {
+    const decodeTexture = vi.fn(async () => ({
+      colorSpace: "srgb" as const,
+      height: 8,
+      kind: "ktx2-etc2" as const,
+      levels: [8, 4, 2, 1].map((size) => ({
+        blocks: new Uint8Array(Math.ceil(size / 4) ** 2 * 16),
+        height: size,
+        width: size,
+      })),
+      width: 8,
+    }));
+    const { callbacks, canvas, root } = harness({ decodeTexture });
+    const texture = imageTexture("/checker.ktx2");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    callbacks.shift()!();
+    expect(canvas.gl.compressedTexImage2D).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+    expect(canvas.gl.generateMipmap).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+  });
+
   it("commits intermediate texture resources without presenting the whole scene", async () => {
     let now = 0;
     let nextDelay = 1;

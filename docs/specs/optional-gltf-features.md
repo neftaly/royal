@@ -186,10 +186,13 @@ required float64 accessor would be false compatibility, so such assets fail.
 
 ## Texture format extensions
 
-`KHR_texture_basisu` remains the preferred portable compressed-delivery path.
-`EXT_texture_webp` remains a browser-decoded compatibility option with core
-fallback. The current Khronos registry has no registered AVIF texture extension;
-Royal MUST NOT invent one under `KHR` or `EXT` naming.
+`KHR_texture_basisu` is the ecosystem's portable compressed-delivery path, but
+Royal intentionally does not claim it while doing so would require a shipped
+runtime transcoder. Direct offline ETC2 KTX2 is a narrower Royal source path and
+does not make a Basis container or glTF extension valid. `EXT_texture_webp`
+remains a browser-decoded compatibility option with core fallback. The current
+Khronos registry has no registered AVIF texture extension; Royal MUST NOT invent
+one under `KHR` or `EXT` naming.
 
 Direct Royal ordinary image sources may use any browser-decoded format that
 passes the normal image capability and failure boundary. That does not make the

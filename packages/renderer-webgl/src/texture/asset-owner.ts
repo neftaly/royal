@@ -1,18 +1,36 @@
 import type {
   TextureAssetRef,
+  TextureColorSpace,
   TextureContentKey,
   TextureVersion,
 } from "@royal/renderer-core";
+import type { Ktx2Etc2Level } from "./etc2-storage";
 
-export type DecodedTextureSource = Readonly<{
+export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
   height: number;
+  kind?: never;
   source: TexImageSource;
   sourceHeight?: number;
   sourceWidth?: number;
   width: number;
 }>;
+
+export type DecodedKtx2Etc2TextureSource = Readonly<{
+  alpha?: DecodedTextureAlpha;
+  close?: () => void;
+  colorSpace: TextureColorSpace;
+  height: number;
+  kind: "ktx2-etc2";
+  levels: readonly Ktx2Etc2Level[];
+  sourceHeight?: number;
+  sourceWidth?: number;
+  width: number;
+}>;
+
+/** Canonical CPU upload source: a browser image or already-GPU-native ETC2 levels. */
+export type DecodedTextureSource = DecodedImageTextureSource | DecodedKtx2Etc2TextureSource;
 
 /** Compact CPU representation retained only while an alpha-mask pick claim exists. */
 export type DecodedTextureAlpha = Readonly<{
