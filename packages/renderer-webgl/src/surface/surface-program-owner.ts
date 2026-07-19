@@ -30,6 +30,14 @@ export type StandardProgram = Readonly<{
   viewProjection: WebGLUniformLocation;
 }>;
 
+export const surfaceProgramVariantKey = (
+  kind: "standard" | "unlit",
+  features: number,
+  instanced: boolean,
+  alphaMasked: boolean,
+  doubleSided: boolean,
+): string => `${kind}:${features}:${instanced ? 1 : 0}:${alphaMasked ? 1 : 0}:${kind === "standard" && doubleSided ? 1 : 0}`;
+
 const UNLIT_VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec3 position;
 #ifdef INSTANCED
@@ -445,7 +453,13 @@ export class SurfaceProgramOwner {
     doubleSided: boolean,
   ): StandardProgram | UnlitProgram {
     const twoSided = kind === "standard" && doubleSided;
-    const key = `${kind}:${features}:${instanced ? 1 : 0}:${alphaMasked ? 1 : 0}:${twoSided ? 1 : 0}`;
+    const key = surfaceProgramVariantKey(
+      kind,
+      features,
+      instanced,
+      alphaMasked,
+      doubleSided,
+    );
     const retained = this.#programs.get(key);
     if (retained !== undefined) return retained;
     const created = kind === "unlit"

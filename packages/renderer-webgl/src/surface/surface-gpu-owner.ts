@@ -18,6 +18,7 @@ import {
 import type { CanonicalTextureBinding } from "./canonical-material";
 import {
   SurfaceProgramOwner,
+  surfaceProgramVariantKey,
   type StandardProgram,
   type UnlitProgram,
 } from "./surface-program-owner";
@@ -60,6 +61,33 @@ const materialTextureFeatures = (surface: GpuSurface): number => {
   if ((features & 4) !== 0 && surface.geometry.tangentBuffer !== null) features |= 16;
   if (surface.bindings[4]!.texture !== null) features |= 8;
   return features;
+};
+
+const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
+  const groups = new Map<string, GpuSurface[]>();
+  for (const resource of surfaces) {
+    const material = resource.surface.material;
+    const key = surfaceProgramVariantKey(
+      material.kind,
+      materialTextureFeatures(resource),
+      resource.instanceCount > 0,
+      material.alphaCutoff !== undefined,
+      material.doubleSided === true,
+    );
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [resource]);
+    else group.push(resource);
+  }
+  if (groups.size < 2) return surfaces;
+  const grouped = Array<GpuSurface>(surfaces.length);
+  let index = 0;
+  for (const group of groups.values()) {
+    for (const resource of group) {
+      grouped[index] = resource;
+      index += 1;
+    }
+  }
+  return grouped;
 };
 
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
@@ -307,7 +335,7 @@ export class SurfaceGpuOwner {
       }
       geometryPlan.commit();
       this.#admittedSurfaceCount = admittedSurfaceCount;
-      this.#gpuSurfaces = nextSurfaces;
+      this.#gpuSurfaces = groupSurfacesByProgram(nextSurfaces);
     } catch (error) {
       geometryPlan.rollback();
       throw error;

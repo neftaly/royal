@@ -425,6 +425,33 @@ describe("clear-only canvas root", () => {
       String(source).includes("ggxDistribution"))).toBe(true);
   });
 
+  it("groups opaque draw work by shader variant without changing surface count", () => {
+    const { callbacks, canvas, root } = harness();
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({
+          geometry,
+          material: unlitMaterial({ color: [1, 0, 0, 1] }),
+        }),
+        directionalLight({ direction: [0, 0, -1], illuminanceLux: 8 }),
+        mesh({
+          geometry,
+          material: standardMaterial({ color: [0, 1, 0, 1] }),
+        }),
+        mesh({
+          geometry,
+          material: unlitMaterial({ color: [0, 0, 1, 1] }),
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.useProgram).toHaveBeenCalledTimes(2);
+  });
+
   it("uses one canonical transform and identity for visible and exact picking work", () => {
     const { callbacks, canvas, root } = harness();
     const node = mesh({
