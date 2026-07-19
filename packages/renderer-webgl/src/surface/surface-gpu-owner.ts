@@ -81,6 +81,18 @@ type GpuSurface = {
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
 
+type WebGlMultiDraw = Readonly<{
+  multiDrawElementsWEBGL: (
+    mode: number,
+    counts: Int32Array,
+    countsOffset: number,
+    type: number,
+    offsets: Int32Array,
+    offsetsOffset: number,
+    drawCount: number,
+  ) => void;
+}>;
+
 type MutableSurfaceDrawIntent = {
   alphaBlend: boolean;
   cullBackFaces: boolean;
@@ -97,6 +109,36 @@ const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
+
+const textureBindingsEqual = (
+  left: readonly GpuTextureBinding[],
+  right: readonly GpuTextureBinding[],
+): boolean => {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (
+      left[index]!.sampler !== right[index]!.sampler
+      || left[index]!.texture !== right[index]!.texture
+    ) return false;
+  }
+  return true;
+};
+
+const sharesMultiDrawState = (left: GpuSurface, right: GpuSurface): boolean => (
+  left.instanceCount === 0
+  && right.instanceCount === 0
+  && left.program.program === right.program.program
+  && left.surface.materialSource === right.surface.materialSource
+  && left.surface.material.alphaBlend !== true
+  && right.surface.material.alphaBlend !== true
+  && left.surface.material.doubleSided === right.surface.material.doubleSided
+  && left.surface.modelHandedness === right.surface.modelHandedness
+  && mat4ValuesEqual(left.surface.model, right.surface.model)
+  && left.textureUnits === right.textureUnits
+  && left.vertexArray === right.vertexArray
+  && left.geometry.indexType === right.geometry.indexType
+  && textureBindingsEqual(left.bindings, right.bindings)
+);
 
 const composeSurfaceTextureBindings = (
   ordinary: readonly GpuTextureBinding[],
@@ -261,6 +303,9 @@ export class SurfaceGpuOwner {
   #blendedDepths = new Float64Array(0);
   #gpuSurfacesBySceneIndex: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
+  #multiDraw: WebGlMultiDraw | null;
+  #multiDrawCounts = new Int32Array(0);
+  #multiDrawOffsets = new Int32Array(0);
   readonly #lodGroups = new Set<string>();
   #lodDrawableLevels = new Uint8Array(1);
   readonly #lodProjection = createProjectedBoundsWorkspace();
@@ -284,6 +329,7 @@ export class SurfaceGpuOwner {
   constructor(gl: WebGL2RenderingContext, budget = new PersistentGpuBudgetOwner()) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
+    this.#multiDraw = this.#readMultiDraw();
     this.#programs = new SurfaceProgramOwner(gl);
     this.#textureGpu = new TextureGpuOwner(gl, budget);
   }
@@ -310,10 +356,17 @@ export class SurfaceGpuOwner {
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#virtualTexture?.invalidate();
+    this.#multiDraw = this.#readMultiDraw();
     this.#drawIntent = null;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
     this.#texturePublicationKeys.clear();
+  }
+
+  #readMultiDraw(): WebGlMultiDraw | null {
+    return typeof this.#gl.getExtension === "function"
+      ? this.#gl.getExtension("WEBGL_multi_draw") as WebGlMultiDraw | null
+      : null;
   }
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */
@@ -604,7 +657,51 @@ export class SurfaceGpuOwner {
       materialSource = surface.materialSource;
       transformModel = surface.model;
       transformProgram = program.program;
-      if (resource.instanceCount > 0) {
+      if (
+        this.#multiDraw !== null
+        && index < opaqueCount
+        && resource.instanceCount === 0
+        && resource.geometry.indexOffset <= 0x7fff_ffff
+      ) {
+        this.#multiDrawCounts[0] = resource.geometry.indexCount;
+        this.#multiDrawOffsets[0] = resource.geometry.indexOffset;
+        let drawCount = 1;
+        let nextIndex = index + 1;
+        for (; nextIndex < opaqueCount; nextIndex += 1) {
+          const next = this.#opaqueSurfaces[nextIndex]!;
+          if (
+            next.geometry.indexOffset > 0x7fff_ffff
+            || !sharesMultiDrawState(resource, next)
+          ) break;
+          if (
+            surfaceMatchesLodSelections(next.surface, this.#lodSelections)
+            && worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes)
+          ) {
+            this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
+            this.#multiDrawOffsets[drawCount] = next.geometry.indexOffset;
+            drawCount += 1;
+          }
+        }
+        if (drawCount > 1) {
+          this.#multiDraw.multiDrawElementsWEBGL(
+            gl.TRIANGLES,
+            this.#multiDrawCounts,
+            0,
+            resource.geometry.indexType,
+            this.#multiDrawOffsets,
+            0,
+            drawCount,
+          );
+          index = nextIndex - 1;
+        } else {
+          gl.drawElements(
+            gl.TRIANGLES,
+            resource.geometry.indexCount,
+            resource.geometry.indexType,
+            resource.geometry.indexOffset,
+          );
+        }
+      } else if (resource.instanceCount > 0) {
         gl.drawElementsInstanced(
           gl.TRIANGLES,
           resource.geometry.indexCount,
@@ -758,6 +855,10 @@ export class SurfaceGpuOwner {
       }
       const textureBindings = this.#textureGpu.reconcile(textureInputs);
       const nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
+      if (this.#multiDrawCounts.length < geometryPlan.surfaces.length) {
+        this.#multiDrawCounts = new Int32Array(geometryPlan.surfaces.length);
+        this.#multiDrawOffsets = new Int32Array(geometryPlan.surfaces.length);
+      }
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
         const geometrySurface = geometryPlan.surfaces[index]!;
         const offset = index * MATERIAL_TEXTURE_UNITS;

@@ -25,7 +25,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly viewport: ReturnType<typeof vi.fn>;
 };
 
-const fakeGl = (): FakeGl => ({
+export const fakeGl = (): FakeGl => ({
   COLOR_BUFFER_BIT: 0x4000,
   CLAMP_TO_EDGE: 0x812f,
   ARRAY_BUFFER: 0x8892,
@@ -174,9 +174,12 @@ export class FakeCanvas extends EventTarget {
 
 export const canvasRootHarness = (
   platformOverrides: Partial<CanvasRootPlatform> = {},
+  glOverrides: Partial<FakeGl> = {},
 ) => {
   const callbacks: Array<() => void> = [];
-  const canvas = new FakeCanvas();
+  const gl = fakeGl();
+  Object.assign(gl, glOverrides);
+  const canvas = new FakeCanvas(gl);
   const listenerErrors: unknown[] = [];
   const scheduledFailures: unknown[] = [];
   const platform: CanvasRootPlatform = {

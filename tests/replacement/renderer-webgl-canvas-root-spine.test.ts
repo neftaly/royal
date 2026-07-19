@@ -398,6 +398,34 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
   });
 
+  it("coalesces adjacent opaque arena ranges when WEBGL_multi_draw is available", async () => {
+    const multiDrawElementsWEBGL = vi.fn();
+    const document = staticTriangleDocument();
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0] });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf }, {
+      getExtension: vi.fn((name: string) => name === "WEBGL_multi_draw"
+        ? { multiDrawElementsWEBGL }
+        : null) as WebGL2RenderingContext["getExtension"],
+    });
+    const node = gltf("/multi-draw.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+    expect(multiDrawElementsWEBGL).toHaveBeenCalledOnce();
+    const call = multiDrawElementsWEBGL.mock.calls[0]!;
+    expect([...call[1].slice(0, call[6])]).toEqual([3, 3]);
+    expect([...call[4].slice(0, call[6])]).toEqual([0, 3]);
+  });
+
   it("uses one canonical transform and identity for visible and exact picking work", () => {
     const { callbacks, canvas, root } = harness();
     const node = mesh({

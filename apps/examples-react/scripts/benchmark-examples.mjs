@@ -462,8 +462,9 @@ const gzipSize = (filePath) => new Promise((resolve, reject) => {
 
 const glCounterTotals = (gl) => ({
   ...gl,
-  drawCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
+  drawCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0) + (gl.multiDrawElements ?? 0),
   instancedDrawCalls: (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
+  submissionCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0) + (gl.multiDrawCalls ?? 0),
   stateChanges:
     (gl.bindBuffer ?? 0) +
     (gl.bindTexture ?? 0) +
@@ -696,6 +697,8 @@ const installBenchmarkHooks = async (session) => {
     copyTexSubImage2DPixels: 0,
     generateMipmap: 0,
     linkProgram: 0,
+    multiDrawCalls: 0,
+    multiDrawElements: 0,
     drawArrays: 0,
     drawArraysInstanced: 0,
     drawElements: 0,
@@ -1026,7 +1029,8 @@ const installBenchmarkHooks = async (session) => {
   const drawCount = () => counters.drawArrays
     + counters.drawArraysInstanced
     + counters.drawElements
-    + counters.drawElementsInstanced;
+    + counters.drawElementsInstanced
+    + counters.multiDrawCalls;
   const originalWindowRequestAnimationFrame = globalThis.requestAnimationFrame;
   if (
     typeof originalWindowRequestAnimationFrame === 'function'
@@ -1132,6 +1136,38 @@ const installBenchmarkHooks = async (session) => {
     return () => endGpuTimer(timer, false);
   };
   const patchPrototype = (prototype) => {
+    const originalGetExtension = prototype?.getExtension;
+    if (
+      typeof originalGetExtension === 'function'
+      && originalGetExtension.__royalBenchPatched !== true
+    ) {
+      const wrappedGetExtension = function (name) {
+        const extension = originalGetExtension.call(this, name);
+        if (
+          name === 'WEBGL_multi_draw'
+          && typeof extension?.multiDrawElementsWEBGL === 'function'
+          && extension.multiDrawElementsWEBGL.__royalBenchPatched !== true
+        ) {
+          const gl = this;
+          const originalMultiDrawElements = extension.multiDrawElementsWEBGL;
+          const wrappedMultiDrawElements = function (...args) {
+            counters.multiDrawCalls += 1;
+            counters.multiDrawElements += Math.max(0, Number(args[6]) || 0);
+            recordDraw(gl);
+            return originalMultiDrawElements.apply(this, args);
+          };
+          Object.defineProperty(
+            wrappedMultiDrawElements,
+            '__royalBenchPatched',
+            { value: true },
+          );
+          extension.multiDrawElementsWEBGL = wrappedMultiDrawElements;
+        }
+        return extension;
+      };
+      Object.defineProperty(wrappedGetExtension, '__royalBenchPatched', { value: true });
+      prototype.getExtension = wrappedGetExtension;
+    }
     patch(prototype, 'shaderSource', (args) => {
       if (config.gpuDrawProfileEnabled && args[0] !== null) glShaderSources.set(args[0], String(args[1] ?? ''));
     });
@@ -2426,6 +2462,7 @@ const routeSummary = (route) => {
     ? route.glFrameCount
     : route.frameStats.sampleCount > 0 ? route.frameStats.sampleCount : frameSampleCount;
   const drawCallsPerFrame = route.gl.drawCalls / sampledFrameCount;
+  const submissionCallsPerFrame = route.gl.submissionCalls / sampledFrameCount;
   const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / sampledFrameCount;
   const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / sampledFrameCount;
   const stateChangesPerFrame = route.gl.stateChanges / sampledFrameCount;
@@ -2448,6 +2485,10 @@ const routeSummary = (route) => {
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.drawCalls / cameraDragSampleCount;
+  const cameraDragSubmissionCallsPerFrame =
+    cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+      ? undefined
+      : route.cameraDrag.gl.submissionCalls / cameraDragSampleCount;
   const cameraDragInstancedDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.instancedDrawCalls / cameraDragSampleCount;
@@ -2504,6 +2545,7 @@ const routeSummary = (route) => {
     readyMs: round(route.wallNavigationAndReadyMs),
     jitterP95MinusP50Ms: round(route.frameStats.jitterP95MinusP50Ms),
     drawCallsPerFrame: round(drawCallsPerFrame),
+    submissionCallsPerFrame: round(submissionCallsPerFrame),
     instancedDrawCallsPerFrame: round(instancedDrawCallsPerFrame),
     stateChangesPerFrame: round(stateChangesPerFrame),
     useProgramPerFrame: round(useProgramPerFrame),
@@ -2589,7 +2631,8 @@ const routeSummary = (route) => {
     bufferSubDataBytesPerFrame: round(bufferSubDataBytesPerFrame),
     ...(hasCameraDragStats
       ? {
-        cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
+    cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
+    cameraDragSubmissionCallsPerFrame: round(cameraDragSubmissionCallsPerFrame),
         ...(typeof cameraDragStateChangesPerFrame === 'number' && cameraDragStateChangesPerFrame !== 0
           ? { cameraDragStateChangesPerFrame: round(cameraDragStateChangesPerFrame) }
           : {}),
@@ -2879,6 +2922,7 @@ const main = async () => {
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
       const measuredGlFrameCount = result.glFrameCount > 0 ? result.glFrameCount : frameSampleCount;
       const drawCallsPerFrame = result.gl.drawCalls / measuredGlFrameCount;
+      const submissionCallsPerFrame = result.gl.submissionCalls / measuredGlFrameCount;
       const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / measuredGlFrameCount;
       const stateChangesPerFrame = result.gl.stateChanges / measuredGlFrameCount;
       const uniformCallsPerFrame = result.gl.uniformCalls / measuredGlFrameCount;
@@ -2893,6 +2937,10 @@ const main = async () => {
       const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || result.cameraDrag === undefined
         ? undefined
         : result.cameraDrag.gl.drawCalls / cameraDragSampleCount;
+      const cameraDragSubmissionCallsPerFrame =
+        cameraDragSampleCount <= 0 || result.cameraDrag === undefined
+          ? undefined
+          : result.cameraDrag.gl.submissionCalls / cameraDragSampleCount;
       const cameraDragFailure = cameraDragFrameStats?.failed === true
         ? cameraDragFrameStats.reason
         : cameraDragFrameStats?.timedOut === true
@@ -2957,6 +3005,7 @@ const main = async () => {
               ? [`dragMiss=${cameraDragFrameStats.samplesMissing}`]
               : []),
             `dragDraw/frame=${cameraDragDrawCallsPerFrame.toFixed(1)}`,
+            `dragSubmit/frame=${cameraDragSubmissionCallsPerFrame.toFixed(1)}`,
           ]
           : []),
         ...(cameraDragFailure === undefined ? [] : [`drag=${cameraDragFailure}`]),
@@ -2971,6 +3020,7 @@ const main = async () => {
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
+        `submit/frame=${submissionCallsPerFrame.toFixed(1)}`,
         `state/frame=${stateChangesPerFrame.toFixed(1)}`,
         `uniform/frame=${uniformCallsPerFrame.toFixed(1)}`,
         ...(instancedDrawCallsPerFrame === 0 ? [] : [`inst/frame=${instancedDrawCallsPerFrame.toFixed(1)}`]),
