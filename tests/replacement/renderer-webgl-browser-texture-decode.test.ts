@@ -73,6 +73,47 @@ describe("browser texture decode shell", () => {
     });
   });
 
+  it("extracts only the fitted alpha plane when exact mask picking demands it", async () => {
+    const bitmap = { close: vi.fn(), height: 1, width: 2 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const getImageData = vi.fn(() => ({
+      data: new Uint8ClampedArray([10, 20, 30, 40, 50, 60, 70, 200]),
+    }));
+    const context = { drawImage: vi.fn(), getImageData };
+    const canvas = {
+      getContext: vi.fn(() => context),
+      height: 0,
+      width: 0,
+    };
+    vi.stubGlobal("document", { createElement: vi.fn(() => canvas) });
+
+    const result = await decodeTextureWithBrowser({
+      bytes: new Uint8Array([1]),
+      contentKey: "mask",
+      kind: "embedded-asset",
+      label: "mask",
+      mimeType: "image/png",
+    }, new AbortController().signal, undefined, true);
+
+    expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 2, 1);
+    expect(result.alpha).toEqual({ height: 1, values: new Uint8Array([40, 200]), width: 2 });
+    expect(canvas).toMatchObject({ height: 0, width: 0 });
+  });
+
+  it("closes decoded browser storage when demanded alpha extraction fails", async () => {
+    const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+
+    await expect(decodeTextureWithBrowser({
+      bytes: new Uint8Array([1]),
+      contentKey: "unreadable-mask",
+      kind: "embedded-asset",
+      label: "unreadable mask",
+      mimeType: "image/png",
+    }, new AbortController().signal, undefined, true)).rejects.toThrow("canvas pixel access");
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
   it("bounds complete jobs and browser bitmap decode as one pipeline", async () => {
     const releases: Array<(bitmap: ImageBitmap) => void> = [];
     const createImageBitmap = vi.fn(() => new Promise<ImageBitmap>((resolve) => {

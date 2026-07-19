@@ -83,6 +83,7 @@ export const staticTexturedTriangleGlb = (
   embeddedImage?: Uint8Array,
   imageUri = "albedo.png",
   format: "avif" | "core" = "core",
+  configureDocument?: (document: Record<string, unknown>) => void,
 ): Uint8Array => {
   const document = staticTriangleDocument();
   document.accessors = [
@@ -126,6 +127,7 @@ export const staticTexturedTriangleGlb = (
     indices: 1,
     material: 0,
   }] }];
+  configureDocument?.(document);
   const binary = new Uint8Array(byteLength);
   new Float32Array(binary.buffer, 0, 9).set([
     -1, -1, 0,

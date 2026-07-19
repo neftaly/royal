@@ -57,6 +57,11 @@ storage share before upload. This bounds ordinary glTF sets without an
 asset-specific branch. Authored close-range detail that must remain independent
 of scene-wide residency belongs in KTX2/VT representations.
 
+CPU alpha retained for exact `MASK` picking is bounded to one byte per fitted
+pixel, at most one quarter of the corresponding admitted RGBA base-level bytes,
+and exists only while a canonical mask-pick claim is live. It MUST NOT retain a
+second RGBA copy or keep the browser image source alive after upload.
+
 It MUST NOT busy-loop each frame, partially publish, exceed the ceiling
 silently, or make settled work permanently unwakeable. Reserved correctness
 floors and lending policy remain internal unless applications need to control

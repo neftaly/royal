@@ -5,11 +5,19 @@ import type {
 } from "@royal/renderer-core";
 
 export type DecodedTextureSource = Readonly<{
+  alpha?: DecodedTextureAlpha;
   close?: () => void;
   height: number;
   source: TexImageSource;
   sourceHeight?: number;
   sourceWidth?: number;
+  width: number;
+}>;
+
+/** Compact CPU representation retained only while an alpha-mask pick claim exists. */
+export type DecodedTextureAlpha = Readonly<{
+  height: number;
+  values: Uint8Array;
   width: number;
 }>;
 
@@ -37,6 +45,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
     asset: TextureSourceRef,
     signal: AbortSignal,
     maxStorageBytes?: number,
+    retainAlpha?: boolean,
   ): Promise<DecodedTextureSource>;
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
@@ -44,6 +53,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
 }>;
 
 type AssetEntry = {
+  alpha: DecodedTextureAlpha | undefined;
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
   controller: AbortController | undefined;
@@ -51,8 +61,10 @@ type AssetEntry = {
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedReleased: boolean;
+  decodeRetainsAlpha: boolean;
   queued: boolean;
   readonly residentStorageKeys: Set<string>;
+  retainAlpha: boolean;
   snapshot: TextureAssetSnapshot;
 };
 
@@ -160,6 +172,11 @@ export class TextureAssetOwner {
       : undefined;
   }
 
+  alpha(asset: TextureSourceRef): DecodedTextureAlpha | undefined {
+    const entry = this.#entries.get(this.#key(asset));
+    return entry?.retainAlpha === true ? entry.alpha : undefined;
+  }
+
   getSnapshot(asset: TextureAssetRef): TextureAssetSnapshot {
     return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
   }
@@ -168,9 +185,14 @@ export class TextureAssetOwner {
     return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
   }
 
-  reconcile(assets: readonly TextureSourceRef[]): void {
+  reconcile(
+    assets: readonly TextureSourceRef[],
+    alphaMaskAssets: readonly TextureSourceRef[] = [],
+  ): void {
     if (this.#disposed) return;
     this.#storageEntries.clear();
+    const retainedAlphaKeys = new Set<string>();
+    for (const asset of alphaMaskAssets) retainedAlphaKeys.add(this.#key(asset));
     const claimed = new Map<string, { asset: TextureSourceRef; storageKeys: Set<string> }>();
     for (const asset of assets) {
       const key = this.#key(asset);
@@ -190,7 +212,7 @@ export class TextureAssetOwner {
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key);
       if (entry === undefined) {
-        this.#start(claim.asset, key, claim.storageKeys);
+        this.#start(claim.asset, key, claim.storageKeys, retainedAlphaKeys.has(key));
         continue;
       }
       entry.asset = claim.asset;
@@ -198,6 +220,20 @@ export class TextureAssetOwner {
       for (const storageKey of claim.storageKeys) entry.claimedStorageKeys.add(storageKey);
       for (const storageKey of entry.residentStorageKeys) {
         if (!claim.storageKeys.has(storageKey)) entry.residentStorageKeys.delete(storageKey);
+      }
+      const retainAlpha = retainedAlphaKeys.has(key);
+      if (entry.retainAlpha !== retainAlpha) {
+        entry.retainAlpha = retainAlpha;
+        if (!retainAlpha) {
+          entry.alpha = undefined;
+        } else if (entry.alpha === undefined && entry.snapshot.state !== "error") {
+          if (entry.controller !== undefined && !entry.decodeRetainsAlpha) {
+            entry.controller.abort();
+            entry.controller = undefined;
+            this.#releaseDecodeReservation(entry);
+          }
+          this.#queueDecode(entry);
+        }
       }
       if (
         entry.decodedReleased
@@ -213,6 +249,7 @@ export class TextureAssetOwner {
       if (claimed.has(key)) continue;
       this.#entries.delete(key);
       entry.controller?.abort();
+      entry.alpha = undefined;
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
       entry.queued = false;
@@ -242,6 +279,11 @@ export class TextureAssetOwner {
       entry.decoded.close?.();
       entry.decodedReleased = true;
       this.#releaseDecodeReservation(entry);
+      if (
+        entry.retainAlpha
+        && entry.alpha === undefined
+        && !entry.decodeRetainsAlpha
+      ) this.#queueDecode(entry);
     }
   }
 
@@ -254,6 +296,7 @@ export class TextureAssetOwner {
       if (entry !== undefined) rejected.add(entry);
     }
     for (const entry of rejected) {
+      entry.alpha = undefined;
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
       this.#releaseDecodeReservation(entry);
@@ -271,6 +314,7 @@ export class TextureAssetOwner {
   invalidateResidency(): void {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
+      entry.alpha = undefined;
       entry.residentStorageKeys.clear();
       entry.controller?.abort();
       entry.controller = undefined;
@@ -334,17 +378,25 @@ export class TextureAssetOwner {
     return key;
   }
 
-  #start(asset: TextureSourceRef, key: string, storageKeys: Set<string>): void {
+  #start(
+    asset: TextureSourceRef,
+    key: string,
+    storageKeys: Set<string>,
+    retainAlpha: boolean,
+  ): void {
     const entry: AssetEntry = {
+      alpha: undefined,
       asset,
       claimedStorageKeys: new Set(storageKeys),
       controller: undefined,
       decodeReservation: false,
       decoded: undefined,
       decodedReleased: false,
+      decodeRetainsAlpha: false,
       key,
       queued: false,
       residentStorageKeys: new Set(),
+      retainAlpha,
       snapshot: { state: "loading" },
     };
     this.#entries.set(key, entry);
@@ -387,7 +439,12 @@ export class TextureAssetOwner {
     entry.controller = controller;
     const asset = entry.asset;
     const key = entry.key;
-    void this.#platform.decode(asset, controller.signal, this.#maxStorageBytes).then((decoded) => {
+    const retainAlpha = entry.retainAlpha;
+    entry.decodeRetainsAlpha = retainAlpha;
+    const decoding = retainAlpha
+      ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
+      : this.#platform.decode(asset, controller.signal, this.#maxStorageBytes);
+    void decoding.then((decoded) => {
       if (
         this.#disposed
         || this.#entries.get(key) !== entry
@@ -406,14 +463,38 @@ export class TextureAssetOwner {
         decoded.close?.();
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid dimensions`);
       }
+      const alpha = decoded.alpha;
+      if (alpha !== undefined && (
+        alpha.width !== decoded.width
+        || alpha.height !== decoded.height
+        || alpha.values.length !== decoded.width * decoded.height
+      )) {
+        decoded.close?.();
+        throw new Error(`${diagnosticLabel(asset)} decoder returned invalid retained alpha`);
+      }
+      let decodedSource: DecodedTextureSource = decoded;
+      if (alpha !== undefined) {
+        const { alpha: _discardedAlpha, ...sourceWithoutAlpha } = decoded;
+        decodedSource = sourceWithoutAlpha;
+      }
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.controller = undefined;
-      entry.decoded = decoded;
+      entry.alpha = entry.retainAlpha ? alpha : undefined;
+      entry.decoded = decodedSource;
       entry.decodedReleased = false;
       entry.snapshot = { height: decoded.height, state: "ready", width: decoded.width };
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
+      if (
+        [...entry.claimedStorageKeys].every(
+          (storageKey) => entry.residentStorageKeys.has(storageKey),
+        )
+      ) {
+        decodedSource.close?.();
+        entry.decodedReleased = true;
+        this.#releaseDecodeReservation(entry);
+      }
     }).catch((error: unknown) => {
       if (
         this.#disposed

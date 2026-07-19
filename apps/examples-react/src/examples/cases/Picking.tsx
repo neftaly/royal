@@ -2,6 +2,7 @@ import {
   Canvas,
   OrbitControls,
   type ScenePointerEvents,
+  useGltfAssetStatus,
   useOrbitCamera,
 } from '@royal/react';
 import {
@@ -30,6 +31,20 @@ import {
 const backplateGeometry = planeGeometry([4.4, 2.65]);
 const backplateMaterial = unlitMaterial({ color: linearRgbaFromSrgb([0.08, 0.1, 0.12, 1]) });
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const helmetNode = gltf({
+  pickingId: 'helmet',
+  src: helmetSrc,
+  transform: {
+    position: [0, -0.08, 0],
+    rotation: [0, 0.34, 0],
+    scale: [1.08, 1.08, 1.08],
+  },
+});
+
+const PickingBenchmarkSnapshot = (): ReactNode => {
+  const status = useGltfAssetStatus(helmetNode.asset);
+  return <BenchmarkRendererSnapshot asset={helmetNode.asset} status={status} />;
+};
 
 const createPickingScene = (
   camera: ReturnType<typeof useOrbitCamera>['cameraResource'],
@@ -48,15 +63,7 @@ const createPickingScene = (
         rotation: [0, 0, 0],
       },
     }),
-    gltf({
-      pickingId: 'helmet',
-      src: helmetSrc,
-      transform: {
-        position: [0, -0.08, 0],
-        rotation: [0, 0.34, 0],
-        scale: [1.08, 1.08, 1.08],
-      },
-    }),
+    helmetNode,
   ],
 });
 
@@ -96,7 +103,7 @@ export const Picking = (): ReactNode => {
         style={{ cursor: hovered ? 'pointer' : 'grab', touchAction: 'none' }}
         scene={renderScene}
       >
-        <BenchmarkRendererSnapshot />
+        <PickingBenchmarkSnapshot />
         <OrbitControls orbit={orbit} />
       </Canvas>
       <output

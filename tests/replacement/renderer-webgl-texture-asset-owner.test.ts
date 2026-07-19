@@ -74,6 +74,74 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
   });
 
+  it("retains one compact alpha plane only while an alpha-mask pick claim exists", async () => {
+    const close = vi.fn();
+    const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => ({
+      ...decoded(close),
+      alpha,
+    }));
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/cutout.png");
+
+    owner.reconcile([asset], [asset]);
+    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    expect(decode.mock.calls[0]![3]).toBe(true);
+    owner.releaseUploaded([textureStorageKey(asset)]);
+    expect(close).toHaveBeenCalledOnce();
+    expect(owner.alpha(asset)).toBe(alpha);
+
+    owner.reconcile([asset]);
+    expect(owner.alpha(asset)).toBeUndefined();
+    expect(decode).toHaveBeenCalledOnce();
+  });
+
+  it("upgrades an already resident texture when alpha-mask demand appears", async () => {
+    const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+      .mockResolvedValueOnce(decoded())
+      .mockResolvedValueOnce({ ...decoded(), alpha });
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/late-cutout.png");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    owner.releaseUploaded([textureStorageKey(asset)]);
+
+    owner.reconcile([asset], [asset]);
+
+    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(decode.mock.calls[1]![3]).toBe(true);
+  });
+
+  it("does not busy-loop when an injected decoder cannot retain alpha", async () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/adapter-without-alpha.png");
+    owner.reconcile([asset], [asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    owner.releaseUploaded([textureStorageKey(asset)]);
+    await Promise.resolve();
+
+    expect(owner.alpha(asset)).toBeUndefined();
+    expect(decode).toHaveBeenCalledOnce();
+  });
+
   it("holds a bounded decode reservation until each source is consumed", async () => {
     const decode = vi.fn(async () => decoded());
     const owner = new TextureAssetOwner({

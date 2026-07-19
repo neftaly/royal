@@ -23,6 +23,7 @@ import {
   canonicalMaterialHasTransmission,
   canonicalMaterialHasVolume,
   canonicalMaterialTextureKeys,
+  canonicalTextureSampler,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
   type CanonicalSurfaceMaterial,
@@ -33,6 +34,7 @@ import {
 } from "./canonical-geometry";
 import type { CanonicalCamera } from "./camera-source-owner";
 import {
+  decodedTextureKey,
   textureStorageKey,
   type DecodedTextureSource,
   type TextureSourceRef,
@@ -67,13 +69,26 @@ export type CanonicalDrawSurface = Readonly<{
 }>;
 
 export type CanonicalPickSurface = Readonly<{
+  alphaMaskSampler?: ReturnType<typeof canonicalTextureSampler>;
   instanceIndex?: number;
   inverseModel: Mat4 | undefined;
   lods?: readonly LodMembership[];
+  materialSource?: CanonicalSurfaceMaterial;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode | GltfInstancesNode;
   pickingGeometry: CanonicalTriangleGeometry;
 }>;
+
+const canonicalPickMaterial = (
+  material: CanonicalSurfaceMaterial,
+): Pick<CanonicalPickSurface, "alphaMaskSampler" | "materialSource"> => material.alphaCutoff === undefined
+  ? {}
+  : {
+    ...(material.baseColorAsset === undefined
+      ? {}
+      : { alphaMaskSampler: canonicalTextureSampler(material.baseColorAsset) }),
+    materialSource: material,
+  };
 
 export type CanonicalLodGroup = Readonly<{
   group: string;
@@ -84,6 +99,7 @@ export type CanonicalLodGroup = Readonly<{
 }>;
 
 export type CanonicalSurfaceScene = Readonly<{
+  alphaMaskTextureAssets: readonly TextureSourceRef[];
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
   environment?: CanonicalStudioEnvironment;
@@ -98,6 +114,23 @@ export type CanonicalSurfaceScene = Readonly<{
   virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
+
+const collectCanonicalAlphaMaskTextureAssets = (
+  surfaces: readonly CanonicalPickSurface[],
+): readonly TextureSourceRef[] => {
+  const assets: TextureSourceRef[] = [];
+  const claimed = new Set<string>();
+  for (const surface of surfaces) {
+    const material = surface.materialSource;
+    const asset = material?.alphaCutoff === undefined ? undefined : material.baseColorAsset;
+    if (asset === undefined) continue;
+    const key = decodedTextureKey(asset);
+    if (claimed.has(key)) continue;
+    claimed.add(key);
+    assets.push(asset);
+  }
+  return assets;
+};
 
 /** Collects display-defining color images before material-detail images. */
 export const collectCanonicalSurfaceTextureAssets = (
@@ -424,33 +457,6 @@ export const prepareCanonicalSurfaceScene = (
         const handedness = instanceBatch === undefined
           ? modelHandedness(model)
           : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1;
-        if (proxyGeometry === undefined) {
-          if (instanceBatch === undefined) {
-            pickSurfaces.push({
-              inverseModel: inverseMat4(model),
-              modelHandedness: handedness,
-              node,
-              ...(geometryLods === undefined ? {} : { lods: geometryLods }),
-              pickingGeometry: primitive.geometry,
-            });
-          } else {
-            const localModels = instanceBatch.localModels;
-            for (let offset = 0; offset < localModels.length; offset += 16) {
-              const localModel = mat4At(localModels, offset);
-              const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
-              pickSurfaces.push({
-                inverseModel: inverseMat4(instanceModel),
-                ...(sourceIndices === undefined
-                  ? {}
-                  : { instanceIndex: sourceIndices[offset / 16]! }),
-                modelHandedness: handedness,
-                node,
-                ...(geometryLods === undefined ? {} : { lods: geometryLods }),
-                pickingGeometry: primitive.geometry,
-              });
-            }
-          }
-        }
         const materialLevelCount = materialLod?.levels.length ?? 1;
         const materialGroup = materialLod === undefined
           ? undefined
@@ -492,6 +498,38 @@ export const prepareCanonicalSurfaceScene = (
             textureKeys: canonicalMaterialTextureKeys(levelMaterial),
             worldBounds,
           });
+          if (proxyGeometry === undefined) {
+            if (instanceBatch === undefined) {
+              pickSurfaces.push({
+                ...canonicalPickMaterial(levelMaterial),
+                inverseModel: inverseMat4(model),
+                modelHandedness: handedness,
+                node,
+                ...(lods === undefined ? {} : { lods }),
+                pickingGeometry: primitive.geometry,
+              });
+            } else {
+              const localModels = instanceBatch.localModels;
+              for (let offset = 0; offset < localModels.length; offset += 16) {
+                const instanceModel = multiplyMat4Into(
+                  identityMat4(),
+                  rootModel,
+                  mat4At(localModels, offset),
+                );
+                pickSurfaces.push({
+                  ...canonicalPickMaterial(levelMaterial),
+                  inverseModel: inverseMat4(instanceModel),
+                  ...(sourceIndices === undefined
+                    ? {}
+                    : { instanceIndex: sourceIndices[offset / 16]! }),
+                  modelHandedness: handedness,
+                  node,
+                  ...(lods === undefined ? {} : { lods }),
+                  pickingGeometry: primitive.geometry,
+                });
+              }
+            }
+          }
         }
         }
       }
@@ -569,9 +607,18 @@ export const prepareCanonicalSurfaceScene = (
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
     surfaces.push(surface);
-    pickSurfaces.push(surface);
+    pickSurfaces.push(node.pickingGeometry === undefined ? {
+      ...surface,
+      ...canonicalPickMaterial(materialSource),
+    } : {
+      inverseModel: surface.inverseModel,
+      modelHandedness: surface.modelHandedness,
+      node,
+      pickingGeometry: surface.pickingGeometry,
+    });
   }
   return {
+    alphaMaskTextureAssets: collectCanonicalAlphaMaskTextureAssets(pickSurfaces),
     camera,
     directionalLights,
     ...(environment === undefined ? {} : { environment }),

@@ -6,6 +6,7 @@ export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
   signal: AbortSignal,
   maxStorageBytes?: number,
+  retainAlpha?: boolean,
 ) => Promise<DecodedTextureSource>;
 
 type PendingWork = {
@@ -82,6 +83,7 @@ const decodeTextureBlob = async (
   blob: Blob,
   signal: AbortSignal,
   maxStorageBytes?: number,
+  retainAlpha = false,
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   if (typeof globalThis.createImageBitmap !== "function") {
@@ -97,7 +99,8 @@ const decodeTextureBlob = async (
   } catch (error) {
     if (signal.aborted) throw aborted();
     try {
-      return await decodeBrowserImageElement(blob, signal);
+      const decoded = await decodeBrowserImageElement(blob, signal);
+      return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
     } catch (fallbackError) {
       throw new AggregateError(
         [error, fallbackError],
@@ -138,7 +141,7 @@ const decodeTextureBlob = async (
     bitmap.close();
     throw aborted();
   }
-  return {
+  const decoded: DecodedTextureSource = {
     close: () => bitmap.close(),
     height: bitmap.height,
     source: bitmap,
@@ -147,6 +150,44 @@ const decodeTextureBlob = async (
       : { sourceHeight, sourceWidth }),
     width: bitmap.width,
   };
+  return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+};
+
+const retainTextureAlpha = (
+  decoded: DecodedTextureSource,
+  signal: AbortSignal,
+): DecodedTextureSource => {
+  let canvas: HTMLCanvasElement | undefined;
+  try {
+    if (signal.aborted) throw aborted();
+    canvas = globalThis.document?.createElement("canvas");
+    if (canvas === undefined) {
+      throw new Error("Royal alpha-mask picking requires canvas pixel access");
+    }
+    canvas.width = decoded.width;
+    canvas.height = decoded.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (context === null) throw new Error("Royal alpha-mask picking could not create a 2D canvas");
+    context.drawImage(decoded.source as CanvasImageSource, 0, 0, decoded.width, decoded.height);
+    const rgba = context.getImageData(0, 0, decoded.width, decoded.height).data;
+    const values = new Uint8Array(decoded.width * decoded.height);
+    for (let source = 3, target = 0; target < values.length; source += 4, target += 1) {
+      values[target] = rgba[source]!;
+    }
+    if (signal.aborted) throw aborted();
+    return {
+      ...decoded,
+      alpha: { height: decoded.height, values, width: decoded.width },
+    };
+  } catch (error) {
+    decoded.close?.();
+    throw error;
+  } finally {
+    if (canvas !== undefined) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
 };
 
 /**
@@ -162,11 +203,11 @@ export const createBrowserTextureDecoder = (
   }
   const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
-  return (asset, signal, maxStorageBytes) => jobs.run(signal, async () => {
+  return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
     const blob = await readTextureBlob(asset, signal);
     return decodes.run(
       signal,
-      () => decodeTextureBlob(asset, blob, signal, maxStorageBytes),
+      () => decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha),
     );
   });
 };

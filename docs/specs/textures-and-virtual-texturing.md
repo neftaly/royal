@@ -67,6 +67,15 @@ belong in explicit diagnostics, not ordinary presentation.
 Decoded sources MAY be retained for context restoration only within CPU budget.
 Eviction MUST leave a reconstruction recipe or legal refetch path.
 
+Ordinary images used by pickable `MASK` materials additionally retain one
+8-bit alpha plane at the already fitted upload dimensions. This demand is
+keyed by decoded content, shared across color interpretations and samplers, and
+is absent for ordinary opaque/blended textures and authoritative picking
+proxies. The transient canvas RGBA readback exists only during demanded decode;
+the image source is still released after GPU upload. Removing the final mask
+claim releases the alpha plane. Decode failure keeps the visible/pick fallback
+opaque rather than inventing a cutout.
+
 ## Representation choice
 
 Authored `virtualTexture(...)` always requests the authored VT path. Automatic

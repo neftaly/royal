@@ -26,7 +26,11 @@ import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src
 import { dielectricF0FromIndexOfRefraction } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
-import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
+import {
+  staticTexturedTriangleGlb,
+  staticTriangleDocument,
+  staticTriangleGlb,
+} from "./support/static-glb";
 
 describe("canonical direct surface lowering", () => {
   it("computes authored dielectric F0 in the functional material core", () => {
@@ -128,6 +132,49 @@ describe("canonical direct surface lowering", () => {
     );
     expect(ready.surfaces[0]!.geometry.key).toBe(pending.surfaces[0]!.geometry.key);
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(source);
+  });
+
+  it("carries one glTF MASK material and decoded-alpha demand into exact picking", () => {
+    const asset = prepareStaticGlb(staticTexturedTriangleGlb(
+      undefined,
+      "cutout.png",
+      "core",
+      (document) => {
+        const materials = document.materials as Array<Record<string, unknown>>;
+        materials[0]!.alphaMode = "MASK";
+        materials[0]!.alphaCutoff = 0.5;
+        document.nodes = [{ mesh: 0 }];
+        document.scenes = [{ nodes: [0] }];
+      },
+    ), "cutout");
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [gltf("/cutout.glb")] }),
+      () => asset,
+    );
+
+    expect(prepared.pickSurfaces).toHaveLength(1);
+    expect(prepared.pickSurfaces[0]).toMatchObject({
+      alphaMaskSampler: { magFilter: "linear" },
+      materialSource: {
+        alphaCutoff: 0.5,
+        baseColorAsset: { kind: "asset", src: "/cutout.png" },
+      },
+    });
+    expect(prepared.alphaMaskTextureAssets).toEqual([
+      expect.objectContaining({ kind: "asset", src: "/cutout.png" }),
+    ]);
+
+    const proxyNode = gltf({
+      pickingGeometry: planeGeometry(2),
+      src: "/cutout.glb",
+    });
+    const proxied = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [proxyNode] }),
+      () => asset,
+    );
+    expect(proxied.pickSurfaces).toHaveLength(1);
+    expect(proxied.pickSurfaces[0]).not.toHaveProperty("materialSource");
+    expect(proxied.alphaMaskTextureAssets).toEqual([]);
   });
 
   it("retains authored virtual textures as an optional canonical binding", () => {
@@ -326,7 +373,8 @@ describe("canonical direct surface lowering", () => {
       surfaceIndices: [0, 1],
       thresholds: [0.5, 0],
     }]);
-    expect(prepared.pickSurfaces).toHaveLength(1);
+    expect(prepared.pickSurfaces).toHaveLength(2);
+    expect(prepared.pickSurfaces.map((surface) => surface.lods?.[0]?.level)).toEqual([0, 1]);
   });
 
   it("normalizes standard material and directional-light state before touching WebGL", () => {

@@ -3,6 +3,8 @@ import {
   type PickResult,
 } from "@royal/renderer-core";
 import { identityMat4, inverseMat4Into, type Mat4 } from "../math/mat4";
+import type { DecodedTextureAlpha, TextureSourceRef } from "../texture/asset-owner";
+import { canonicalAlphaMaskAcceptsTrianglePoint } from "./alpha-mask-sampling";
 import {
   createCanonicalPickingScratch,
   pickCanonicalSurfaceInto,
@@ -42,6 +44,30 @@ const unprojectInto = (
 
 /** Owns bounded scratch; all scene intersection remains in the pure canonical query. */
 export class SurfacePicker {
+  readonly #acceptHit = (
+    surface: CanonicalSurfaceScene["pickSurfaces"][number],
+    aIndex: number,
+    bIndex: number,
+    cIndex: number,
+    barycentricB: number,
+    barycentricC: number,
+  ): boolean => {
+    const material = surface.materialSource;
+    if (material === undefined) return true;
+    const asset = material.baseColorAsset;
+    return canonicalAlphaMaskAcceptsTrianglePoint(
+      material,
+      surface.pickingGeometry,
+      asset === undefined ? undefined : this.#alphaTexture(asset),
+      surface.alphaMaskSampler,
+      aIndex,
+      bIndex,
+      cIndex,
+      barycentricB,
+      barycentricC,
+    );
+  };
+  readonly #alphaTexture: (asset: TextureSourceRef) => DecodedTextureAlpha | undefined;
   readonly #hit = { distance: 0, surfaceIndex: -1 };
   readonly #inverseViewProjection = identityMat4();
   readonly #near: [number, number, number] = [0, 0, 0];
@@ -53,6 +79,10 @@ export class SurfacePicker {
     origin: [0, 0, 0],
   };
   readonly #scratch = createCanonicalPickingScratch();
+
+  constructor(alphaTexture: (asset: TextureSourceRef) => DecodedTextureAlpha | undefined) {
+    this.#alphaTexture = alphaTexture;
+  }
 
   pick(
     input: PickInput,
@@ -69,6 +99,7 @@ export class SurfacePicker {
       scene.pickSurfaces,
       this.#scratch,
       selectedLodLevels,
+      this.#acceptHit,
     )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;

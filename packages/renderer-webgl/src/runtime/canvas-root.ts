@@ -50,6 +50,7 @@ import { SurfaceGpuOwner, type SurfaceFrameView } from "../surface/surface-gpu-o
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   TextureAssetOwner,
+  type DecodedTextureAlpha,
   type DecodedTextureSource,
   type TextureAssetSnapshot,
   type TextureSourceRef,
@@ -92,6 +93,7 @@ export type CanvasRootPlatform = Readonly<{
     asset: TextureSourceRef,
     signal: AbortSignal,
     maxStorageBytes?: number,
+    retainAlpha?: boolean,
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readGltfResource?(uri: string, signal: AbortSignal): Promise<Uint8Array>;
@@ -123,10 +125,10 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 
 const lazyBrowserTextureDecoder = (): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
-  return async (asset, signal, maxStorageBytes) => {
+  return async (asset, signal, maxStorageBytes, retainAlpha) => {
     decoder ??= import("../texture/browser-decode")
       .then((module) => module.createBrowserTextureDecoder());
-    return (await decoder)(asset, signal, maxStorageBytes);
+    return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
 };
 
@@ -218,6 +220,8 @@ export class CanvasRoot {
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
+  readonly #getDecodedAlpha = (asset: TextureSourceRef): DecodedTextureAlpha | undefined =>
+    this.#textureAssets.alpha(asset);
   readonly #getDecodedTexture = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
     this.#textureAssets.decoded(asset);
   readonly #getGltfAsset = (node: GltfNode | GltfInstancesNode): PreparedStaticGltf | undefined =>
@@ -240,7 +244,7 @@ export class CanvasRoot {
   #snapshotRevision = -1;
   readonly #state: WebGlStateOwner;
   readonly #surfaceGpu: SurfaceGpuOwner;
-  readonly #surfacePicker = new SurfacePicker();
+  readonly #surfacePicker = new SurfacePicker(this.#getDecodedAlpha);
   readonly #textureAssets: TextureAssetOwner;
   readonly #unsubscribeContext: () => void;
   readonly #projection = identityMat4();
@@ -498,7 +502,7 @@ export class CanvasRoot {
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
-    this.#textureAssets.reconcile(prepared.textureAssets);
+    this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
     this.#clock.invalidate();
   }
@@ -700,7 +704,7 @@ export class CanvasRoot {
     this.#surfaceGpu.setScene(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
-    this.#textureAssets.reconcile(prepared.textureAssets);
+    this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
     this.#clock.invalidate();
   }

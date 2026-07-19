@@ -172,8 +172,10 @@ Attack: bounding boxes as exact hits, compacted instance indices, separate proxy
 lifecycle, alpha-mask disagreement, or LOD changing identity.
 
 Resolution: canonical transforms/geometry/instances and optional exact proxy
-share one query. Current alpha-mask picking is a known gap; transparent per-texel
-alpha is an explicit limitation.
+share one query. Alpha-mask factor, UV transform, wrap/filter and cutoff now use
+retained demanded alpha in that query; minified GPU mip equivalence still needs
+an explicit ray-footprint contract. Transparent per-texel alpha is an explicit
+limitation.
 
 ### 17. Multi-view and XR pass
 
@@ -264,7 +266,7 @@ ownership, and clarity—not assignment tokens.
 | Neutral texture fallbacks | partial | Stable neutral/error texture contracts exist; ongoing visual oracles must ensure every material slot and VT transition avoids white/debug flashes. |
 | VT demand/publication lifecycle | conforms | Pure demand/model/orchestration, transactional GPU arena, scheduling/admission/property tests and close-view stress cases provide broad evidence. Physical Safari/Quest quality remains ongoing. |
 | Exact picking geometry path | conforms | Mesh/glTF/instance proxies enter the same CPU geometry/query and do not allocate GPU resources. |
-| Alpha-mask pick equivalence | gap | Current CPU picker does not evaluate material alpha-mask texture/cutoff, so exact triangles can exceed the visible masked silhouette. Specify/cache CPU alpha sampling before claiming parity. |
+| Alpha-mask pick equivalence | partial | CPU picking evaluates factor, selected/transformed UVs, wrap, base-level nearest/bilinear alpha and cutoff through bounded demand retained only for mask claims. Missing pixels mirror the opaque neutral fallback and proxies remain authoritative. Minified mip selection remains deliberately approximate until rays carry a footprint. |
 | Transparent per-texel picking | partial | Triangle-surface behavior is now explicitly documented; no false promise of per-texel blended alpha. |
 | Optional WebGL capabilities | partial | Parallel shader compile, HDR color-buffer and native texture compression are selected outside draws. Anisotropy, timers, multi-draw and multiview remain measurement-gated and absent. |
 | Resource admission/accounting | conforms | Root governor, typed leases, capacity wake, quarantine debt, VT/texture/target/geometry tests cover physical domains. Audit subsystem projections for overlap whenever new diagnostics are added. |

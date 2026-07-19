@@ -297,6 +297,56 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
   });
 
+  it("uses retained alpha in the same exact query after a MASK texture becomes ready", async () => {
+    let resolveDecode: ((source: {
+      alpha: { height: number; values: Uint8Array; width: number };
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      alpha: { height: number; values: Uint8Array; width: number };
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      undefined,
+      "cutout.png",
+      "core",
+      (document) => {
+        const materials = document.materials as Array<Record<string, unknown>>;
+        materials[0]!.alphaMode = "MASK";
+        materials[0]!.alphaCutoff = 0.5;
+        document.nodes = [{ mesh: 0 }];
+        document.scenes = [{ nodes: [0] }];
+      },
+    ));
+    const { callbacks, root } = harness({ decodeTexture, readGltf });
+    const node = gltf("/models/cutout.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+
+    expect(decodeTexture).toHaveBeenCalledWith(
+      expect.objectContaining({ src: "/models/cutout.png" }),
+      expect.any(AbortSignal),
+      402_653_184,
+      true,
+    );
+    expect(root.pick({ clientX: 150, clientY: 100 })?.target).toMatchObject({ node });
+
+    resolveDecode?.({
+      alpha: { height: 1, values: new Uint8Array([0]), width: 1 },
+      height: 1,
+      source: {} as ImageBitmap,
+      width: 1,
+    });
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    expect(root.pick({ clientX: 150, clientY: 100 })).toBeUndefined();
+  });
+
   it("reports failed glTF images without stalling geometry or republishing GPU state", async () => {
     const decodeTexture = vi.fn(async () => { throw new Error("AVIF decode failed"); });
     const { callbacks, canvas, root } = harness({

@@ -30,7 +30,9 @@ Optional `pickingGeometry` is an exact triangle proxy in the node's local
 space. It replaces only the exact-intersection geometry. It MUST work before a
 glTF asset prepares, MUST use the node/instance transform and identity from the
 normal path, MUST NOT allocate a GPU resource, and MUST NOT create a parallel
-event or lifecycle path.
+event or lifecycle path. A proxy is authoritative geometry and does not
+implicitly inherit a visual material's UV mask: no equivalence exists between
+unrelated proxy and render UV topology.
 
 When no proxy exists, pickable rendered triangle geometry defines the visual
 outline. Royal MUST NOT use an asset bounding box as an exact hit merely because
@@ -43,6 +45,15 @@ Alpha-mask fragments below cutoff are not hits. Opaque geometry is hit regardles
 of color alpha. Transparent/blended geometry currently uses its triangle
 surface rather than per-texel alpha; this is a documented limitation and must
 not vary by input device.
+
+Exact mask picking interpolates the selected authored UV set barycentrically,
+applies `KHR_texture_transform`, sampler wrap, base-color alpha factor, and
+cutoff in the canonical CPU query. Missing or failed pixels follow the visible
+opaque neutral fallback, so a progressively arriving mask may refine a hit.
+Because a ray has no pixel derivatives, the current query samples retained base
+alpha with the magnification filter rather than guessing a GPU minification
+mip. Close/intermediate silhouettes are exact; minified mip silhouettes are a
+documented approximation until the query accepts an explicit ray footprint.
 
 LOD changes preserve the parent logical target. Instance indices refer to the
 authored/caller instance channel, never a compacted visible index.

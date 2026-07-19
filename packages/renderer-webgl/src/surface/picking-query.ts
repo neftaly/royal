@@ -21,13 +21,30 @@ type MutableLocalRay = {
 
 export type CanonicalPickingScratch = Readonly<{
   localRay: MutableLocalRay;
+  triangleHit: MutableTriangleHit;
 }>;
+
+type MutableTriangleHit = {
+  distance: number;
+  u: number;
+  v: number;
+};
+
+export type CanonicalPickHitAcceptance = (
+  surface: CanonicalPickSurface,
+  aIndex: number,
+  bIndex: number,
+  cIndex: number,
+  barycentricB: number,
+  barycentricC: number,
+) => boolean;
 
 export const createCanonicalPickingScratch = (): CanonicalPickingScratch => ({
   localRay: {
     direction: [0, 0, -1],
     origin: [0, 0, 0],
   },
+  triangleHit: { distance: 0, u: 0, v: 0 },
 });
 
 const transformRayInto = (
@@ -78,13 +95,14 @@ const rayIntersectsBounds = (
 };
 
 const triangleDistance = (
+  target: MutableTriangleHit,
   positions: Float32Array,
   aIndex: number,
   bIndex: number,
   cIndex: number,
   ray: MutableLocalRay,
   handedness: 1 | -1,
-): number | undefined => {
+): boolean => {
   const a = aIndex * 3;
   const b = bIndex * 3;
   const c = cIndex * 3;
@@ -98,20 +116,23 @@ const triangleDistance = (
   const pY = ray.direction[2] * edge2X - ray.direction[0] * edge2Z;
   const pZ = ray.direction[0] * edge2Y - ray.direction[1] * edge2X;
   const determinant = (edge1X * pX + edge1Y * pY + edge1Z * pZ) * handedness;
-  if (!(determinant > 0) || !Number.isFinite(determinant)) return undefined;
+  if (!(determinant > 0) || !Number.isFinite(determinant)) return false;
   const inverseDeterminant = handedness / determinant;
   const relativeX = ray.origin[0] - positions[a]!;
   const relativeY = ray.origin[1] - positions[a + 1]!;
   const relativeZ = ray.origin[2] - positions[a + 2]!;
   const u = (relativeX * pX + relativeY * pY + relativeZ * pZ) * inverseDeterminant;
-  if (u < 0 || u > 1) return undefined;
+  if (u < 0 || u > 1) return false;
   const qX = relativeY * edge1Z - relativeZ * edge1Y;
   const qY = relativeZ * edge1X - relativeX * edge1Z;
   const qZ = relativeX * edge1Y - relativeY * edge1X;
   const v = (ray.direction[0] * qX + ray.direction[1] * qY + ray.direction[2] * qZ)
     * inverseDeterminant;
-  if (v < 0 || u + v > 1) return undefined;
-  return (edge2X * qX + edge2Y * qY + edge2Z * qZ) * inverseDeterminant;
+  if (v < 0 || u + v > 1) return false;
+  target.distance = (edge2X * qX + edge2Y * qY + edge2Z * qZ) * inverseDeterminant;
+  target.u = u;
+  target.v = v;
+  return true;
 };
 
 const exactSurfaceDistance = (
@@ -119,20 +140,38 @@ const exactSurfaceDistance = (
   ray: MutableLocalRay,
   minDistance: number,
   maxDistance: number,
+  triangleHit: MutableTriangleHit,
+  acceptsHit?: CanonicalPickHitAcceptance,
 ): number | undefined => {
   const { indices, positions } = surface.pickingGeometry;
   let nearest = maxDistance;
   let hit = false;
   for (let index = 0; index + 2 < indices.length; index += 3) {
-    const distance = triangleDistance(
+    const aIndex = indices[index]!;
+    const bIndex = indices[index + 1]!;
+    const cIndex = indices[index + 2]!;
+    if (!triangleDistance(
+      triangleHit,
       positions,
-      indices[index]!,
-      indices[index + 1]!,
-      indices[index + 2]!,
+      aIndex,
+      bIndex,
+      cIndex,
       ray,
       surface.modelHandedness,
-    );
-    if (distance !== undefined && distance >= minDistance && distance <= nearest) {
+    )) continue;
+    const distance = triangleHit.distance;
+    if (
+      distance >= minDistance
+      && distance <= nearest
+      && (acceptsHit === undefined || acceptsHit(
+        surface,
+        aIndex,
+        bIndex,
+        cIndex,
+        triangleHit.u,
+        triangleHit.v,
+      ))
+    ) {
       nearest = distance;
       hit = true;
     }
@@ -147,6 +186,7 @@ export const pickCanonicalSurfaceInto = (
   surfaces: readonly CanonicalPickSurface[],
   scratch: CanonicalPickingScratch,
   selectedLodLevels?: ReadonlyMap<string, number>,
+  acceptsHit?: CanonicalPickHitAcceptance,
 ): boolean => {
   let nearest = ray.maxDistance;
   let surfaceIndex = -1;
@@ -165,7 +205,14 @@ export const pickCanonicalSurfaceInto = (
     if (surface.inverseModel === undefined) continue;
     transformRayInto(scratch.localRay, ray, surface.inverseModel);
     if (!rayIntersectsBounds(scratch.localRay, surface, ray.minDistance, nearest)) continue;
-    const distance = exactSurfaceDistance(surface, scratch.localRay, ray.minDistance, nearest);
+    const distance = exactSurfaceDistance(
+      surface,
+      scratch.localRay,
+      ray.minDistance,
+      nearest,
+      scratch.triangleHit,
+      acceptsHit,
+    );
     if (distance !== undefined && (surfaceIndex < 0 || distance < nearest)) {
       nearest = distance;
       surfaceIndex = index;
