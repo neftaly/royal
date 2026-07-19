@@ -26,6 +26,7 @@ shaped glTF extension.
 | `KHR_materials_unlit` | material | canonical unlit material |
 | `KHR_materials_variants` | document and mesh primitive | named canonical material choices preserving node/pick identity |
 | `KHR_materials_volume` | material, with active transmission | thickness/attenuation inputs on the transmission composite path |
+| `KHR_mesh_quantization` | document declaration; current profile is Draco-decoded canonical attributes | normalized integer attributes lower to canonical float streams |
 | `KHR_texture_transform` | texture-info fields consumed by the supported material slots | selected UV set and two canonical affine rows |
 | `MSFT_lod` | node and material | ordered geometry/material memberships and normalized coverage thresholds |
 
@@ -47,6 +48,9 @@ transform math is generic.
   volume fails because its rendering semantics depend on transmission.
 - Texture transforms accept offset, rotation, scale, and UV-set override and
   disappear into canonical rows.
+- Mesh quantization currently accepts the normalized integer attribute forms
+  decoded by the Draco adapter. Uncompressed quantized attributes still fail
+  at their semantic reader instead of being interpreted as floats.
 - Variants accept named root definitions and primitive mappings.
 - `MSFT_lod` accepts node/material ID chains and the
   `MSFT_screencoverage` extras convention. It does not claim progressive
@@ -60,7 +64,7 @@ device proof.
 ## Explicit non-claims
 
 Royal currently rejects required `KHR_texture_basisu`,
-`EXT_meshopt_compression`, `KHR_mesh_quantization`, image-based-light
+`EXT_meshopt_compression`, image-based-light
 extensions, the remaining PBR extension family, and all draft or imaginary
 texture extensions. Browser AVIF remains valid as a direct ordinary Royal
 texture source; `EXT_texture_avif` is not a registered glTF extension and is

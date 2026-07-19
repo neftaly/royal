@@ -32,6 +32,7 @@ const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> 
   KHR_materials_unlit: materialOnly,
   KHR_materials_variants: (path) => path === "" || primitive.test(path),
   KHR_materials_volume: materialOnly,
+  KHR_mesh_quantization: () => false,
   KHR_texture_transform: (path) => textureInfo.test(path),
   MSFT_lod: (path) => material.test(path) || node.test(path),
 };

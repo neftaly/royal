@@ -93,12 +93,14 @@ The current replacement implementation accepts these required declarations:
   `KHR_materials_specular`, `KHR_materials_transmission`,
   `KHR_materials_unlit`, `KHR_materials_variants`, and
   `KHR_materials_volume`;
+- `KHR_mesh_quantization` for normalized integer attributes decoded through
+  the Draco adapter;
 - `KHR_texture_transform`;
 - `MSFT_lod` plus its `MSFT_screencoverage` convention.
 
 This is an implementation ledger, not the desired eventual static profile.
 Notably, glTF `KHR_texture_basisu`, `EXT_meshopt_compression`,
-`KHR_mesh_quantization`, image-based-light extensions, and the remaining PBR
+image-based-light extensions, and the remaining PBR
 family are not yet accepted as required. Direct Royal KTX2/Basis ingestion does
 not imply support for the glTF texture extension.
 

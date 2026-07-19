@@ -16,7 +16,7 @@ const bistro = gltf({
     max: [20, 11, 8.25],
   },
   src: `${import.meta.env.BASE_URL}BistroWeb/Bistro.gltf`,
-  version: "web-draco-avif-v4",
+  version: "web-draco-avif-v5",
 });
 
 const bistroNodes = [
@@ -78,7 +78,7 @@ export const GltfBistroWeb = (): ReactNode => {
         <p className="eyebrow">Royal glTF workload</p>
         <h1>Bistro web tier.</h1>
         <p>
-          The unmodified ~100 MB Draco + AVIF asset exercises external glTF IO,
+          The ~100 MB Draco + AVIF asset exercises external glTF IO,
           instancing, authored tangents, and canonical material textures.
           {" "}<a href={import.meta.env.BASE_URL}>Back to the direct-surface example</a>.
         </p>

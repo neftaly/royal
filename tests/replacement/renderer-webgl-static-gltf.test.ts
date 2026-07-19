@@ -84,8 +84,26 @@ describe("static glTF preparation core", () => {
       .toThrow("extensionsRequired[0]: is unsupported");
     extensionDocument.extensionsRequired = ["KHR_mesh_quantization"];
     extensionDocument.extensionsUsed = ["KHR_mesh_quantization"];
-    expect(() => prepareStaticGlb(staticTriangleGlb(extensionDocument), "quantized"))
-      .toThrow("extensionsRequired[0]: is unsupported");
+    expect(prepareStaticGlb(staticTriangleGlb(extensionDocument), "quantized").primitives)
+      .toHaveLength(1);
+    const uncompressedQuantized = staticTriangleDocument();
+    uncompressedQuantized.extensionsRequired = ["KHR_mesh_quantization"];
+    uncompressedQuantized.extensionsUsed = ["KHR_mesh_quantization"];
+    (uncompressedQuantized.accessors as unknown[]).push({
+      bufferView: 0,
+      componentType: 5122,
+      count: 3,
+      normalized: true,
+      type: "VEC3",
+    });
+    const uncompressedMesh = (uncompressedQuantized.meshes as Array<{
+      primitives: Array<{ attributes: Record<string, number> }>;
+    }>)[0]!;
+    uncompressedMesh.primitives[0]!.attributes.NORMAL = 2;
+    expect(() => prepareStaticGlb(
+      staticTriangleGlb(uncompressedQuantized),
+      "uncompressed-quantized",
+    )).toThrow("accessors[2].normalized: is invalid for this accessor");
     const misplaced = staticTriangleDocument();
     misplaced.extensionsRequired = ["KHR_materials_ior"];
     misplaced.extensionsUsed = ["KHR_materials_ior"];
