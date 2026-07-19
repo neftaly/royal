@@ -77,6 +77,7 @@ import type {
   VirtualTextureRuntime,
 } from "../virtual-texture/runtime-contract";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import { planContiguousRunEnds } from "./contiguous-run-plan";
 import {
   canonicalSurfaceIsDoubleSided,
@@ -438,6 +439,7 @@ export class SurfaceGpuOwner {
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
   readonly #texturePublicationKeys = new Set<string>();
+  readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #transmissionFactors = new Float32Array(4);
   #transmissionCandidates: readonly CanonicalDrawSurface[] = [];
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
@@ -449,6 +451,7 @@ export class SurfaceGpuOwner {
     budget = new PersistentGpuBudgetOwner(),
     onChanged: () => void = () => undefined,
     onFailure: (error: unknown) => void = () => undefined,
+    uploadBudget = new FrameUploadBudgetOwner(),
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#environmentGpu = new PrefilteredEnvironmentGpuOwner(gl, budget);
@@ -458,7 +461,13 @@ export class SurfaceGpuOwner {
     this.#multiDraw = this.#readMultiDraw();
     this.#programs = new SurfaceProgramOwner(gl);
     this.#resourceBudget = budget;
-    this.#textureGpu = new TextureGpuOwner(gl, budget);
+    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget);
+    this.#uploadBudget = uploadBudget;
+  }
+
+  beginFrame(): void {
+    this.#uploadBudget.beginFrame();
+    this.#textureGpu.beginFrame();
   }
 
   dispose(): void {
@@ -541,6 +550,10 @@ export class SurfaceGpuOwner {
 
   ordinaryTextureSnapshot(): OrdinaryTextureGpuSnapshot {
     return this.#textureGpu.snapshot();
+  }
+
+  texturePublicationsPending(): boolean {
+    return this.#texturePublicationKeys.size > 0;
   }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
@@ -1362,7 +1375,9 @@ export class SurfaceGpuOwner {
     }
     this.#fullReconcileRequired = false;
     this.#texturePublicationKeys.clear();
-    this.#dirty = this.#admittedSurfaceCount < surfaces.length;
+    if (scene !== null) this.#collectDeferredTexturePublications(scene);
+    this.#dirty = this.#admittedSurfaceCount < surfaces.length
+      || this.#texturePublicationKeys.size > 0;
     this.#drawIntent = null;
   }
 
@@ -1372,13 +1387,18 @@ export class SurfaceGpuOwner {
     let regroup = false;
     for (const key of this.#texturePublicationKeys) {
       const indices = scene.textureSurfaceIndices.get(key);
-      if (indices === undefined) continue;
+      if (indices === undefined) {
+        this.#texturePublicationKeys.delete(key);
+        continue;
+      }
+      let deferred = false;
       for (const index of indices) {
         if (index >= surfaces.length) continue;
         const resource = surfaces[index]!;
         const surface = scene.surfaces[index]!;
         const material = surface.material;
         const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
+        deferred ||= this.#materialUploadDeferred(material);
         const features = materialTextureFeatures(
           surface,
           resource.geometry,
@@ -1411,6 +1431,7 @@ export class SurfaceGpuOwner {
         resource.surface = surface;
         resource.textureUnits = textureUnitMask(features);
       }
+      if (!deferred) this.#texturePublicationKeys.delete(key);
     }
     if (regroup) {
       const grouped = groupSurfacesForDrawing(surfaces);
@@ -1420,10 +1441,32 @@ export class SurfaceGpuOwner {
       this.#transmissionSurfaces = grouped.transmission;
     }
     this.#planOpaqueMultiDrawRuns();
-    this.#texturePublicationKeys.clear();
     this.#gpuScene = scene;
-    this.#dirty = this.#admittedSurfaceCount < scene.surfaces.length;
+    this.#dirty = this.#admittedSurfaceCount < scene.surfaces.length
+      || this.#texturePublicationKeys.size > 0;
     this.#drawIntent = null;
+  }
+
+  #materialUploadDeferred(material: CanonicalSurfaceMaterial): boolean {
+    for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+      const binding = materialTextureBindingAt(material, unit);
+      if (binding !== undefined && this.#textureGpu.isUploadDeferred(binding.storageKey)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #collectDeferredTexturePublications(scene: CanonicalSurfaceScene): void {
+    for (const [key, indices] of scene.textureSurfaceIndices) {
+      for (const index of indices) {
+        const surface = scene.surfaces[index];
+        if (surface !== undefined && this.#materialUploadDeferred(surface.material)) {
+          this.#texturePublicationKeys.add(key);
+          break;
+        }
+      }
+    }
   }
 
   #applyVirtualTexture(

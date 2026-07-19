@@ -1,5 +1,6 @@
 import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-budget";
 import { DEFAULT_ASYNC_PREPARATION_JOB_LIMIT } from "../resource/async-preparation-owner";
+import { DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME } from "../resource/frame-upload-budget";
 
 export type CanvasRootOptions = Readonly<{
   /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `true` */
@@ -10,6 +11,8 @@ export type CanvasRootOptions = Readonly<{
   persistentGpuByteBudget?: number;
   /** Root-wide concurrent asynchronous asset-preparation ceiling. @defaultValue `8` */
   maxConcurrentPreparationJobs?: number;
+  /** Ordinary-texture upload traffic admitted per rendered frame. @defaultValue 16 MiB */
+  ordinaryTextureUploadByteBudgetPerFrame?: number;
 }>;
 
 /** Validates immutable root options and returns their stable semantic identity. */
@@ -23,6 +26,7 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
       && key !== "antialias"
       && key !== "persistentGpuByteBudget"
       && key !== "maxConcurrentPreparationJobs"
+      && key !== "ordinaryTextureUploadByteBudgetPerFrame"
     ) {
       throw new TypeError(`Royal renderer options contain unsupported field ${String(key)}`);
     }
@@ -45,5 +49,15 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
       "Royal renderer option maxConcurrentPreparationJobs must be a positive safe integer",
     );
   }
-  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}`;
+  const ordinaryTextureUploadByteBudgetPerFrame = options.ordinaryTextureUploadByteBudgetPerFrame
+    ?? DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME;
+  if (
+    !Number.isSafeInteger(ordinaryTextureUploadByteBudgetPerFrame)
+    || ordinaryTextureUploadByteBudgetPerFrame < 1
+  ) {
+    throw new RangeError(
+      "Royal renderer option ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
+    );
+  }
+  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
 };

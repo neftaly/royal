@@ -110,6 +110,12 @@ export const BenchmarkRendererSnapshot = ({
         planning: null,
         resourcePressure: {
           activePreparationJobs: current.resources.asyncPreparation.activeJobs,
+          admittedOrdinaryTextureUploadBytes:
+            current.resources.ordinaryTextureUploads.admittedBytes,
+          deferredOrdinaryTextureUploads:
+            current.resources.ordinaryTextureUploads.deferredUploads,
+          ordinaryTextureUploadBudgetBytes:
+            current.resources.ordinaryTextureUploads.budgetBytes,
           preparationJobLimit: current.resources.asyncPreparation.jobLimit,
           queuedPreparationJobs: current.resources.asyncPreparation.queuedJobs,
           persistentGpuBudgetBytes: current.resources.persistentGpu.budgetBytes,

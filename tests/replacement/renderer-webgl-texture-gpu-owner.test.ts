@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
 import {
   ordinaryTextureStorageBytes,
   TextureGpuOwner,
@@ -152,6 +153,30 @@ describe("ordinary texture GPU owner", () => {
     expect(bindings[0]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(gl.createTexture).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
+  it("defers distinct upload storage until a later frame without reporting failure", () => {
+    const gl = fakeGl();
+    const uploadBudget = new FrameUploadBudgetOwner(256);
+    const owner = new TextureGpuOwner(gl, new PersistentGpuBudgetOwner(), uploadBudget);
+    const first = binding("first", "nearest", "first-image:srgb");
+    const second = binding("second", "nearest", "second-image:srgb");
+
+    const initial = owner.reconcile([first, second]);
+    expect(initial[0]!.texture).not.toBeNull();
+    expect(initial[1]).toEqual({ sampler: null, target: "2d", texture: null });
+    expect(owner.isUploadDeferred(second.storageKey)).toBe(true);
+    expect(owner.takeDeniedStorageKeys()).toEqual([]);
+    expect(uploadBudget.snapshot()).toEqual({
+      admittedBytes: 256,
+      budgetBytes: 256,
+      deferredUploads: 1,
+    });
+
+    uploadBudget.beginFrame();
+    owner.beginFrame();
+    expect(owner.retain(second).texture).not.toBeNull();
+    expect(gl.texImage2D).toHaveBeenCalledTimes(2);
   });
 
   it("shares storage, separates samplers, and adds mipmaps once when later demanded", () => {

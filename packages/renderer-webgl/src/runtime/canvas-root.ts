@@ -83,6 +83,10 @@ import {
   DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
+import {
+  FrameUploadBudgetOwner,
+  type FrameUploadBudgetSnapshot,
+} from "../resource/frame-upload-budget";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -92,6 +96,7 @@ export type CanvasRootSnapshot = Readonly<{
   lastFrameFailure?: string;
   resources: Readonly<{
     asyncPreparation: AsyncPreparationSnapshot;
+    ordinaryTextureUploads: FrameUploadBudgetSnapshot;
     ordinaryTextures: OrdinaryTextureGpuSnapshot;
     persistentGpu: PersistentGpuBudgetSnapshot;
   }>;
@@ -243,6 +248,7 @@ export class CanvasRoot {
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
+  readonly #frameUploadBudget: FrameUploadBudgetOwner;
   readonly #getDecodedAlpha = (asset: TextureSourceRef): DecodedTextureAlpha | undefined =>
     this.#textureAssets.alpha(asset);
   readonly #getDecodedTexture = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
@@ -335,6 +341,9 @@ export class CanvasRoot {
         if (!this.#disposed) this.#publish();
       },
     );
+    this.#frameUploadBudget = new FrameUploadBudgetOwner(
+      options.ordinaryTextureUploadByteBudgetPerFrame,
+    );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
     this.#surfaceGpu = new SurfaceGpuOwner(
@@ -342,6 +351,7 @@ export class CanvasRoot {
       this.#persistentGpuBudget,
       () => this.#invalidatePresentation(),
       (error) => this.#captureScheduledFailure(error),
+      this.#frameUploadBudget,
     );
     this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
       onAssetChanged: () => {
@@ -418,6 +428,7 @@ export class CanvasRoot {
   [rendererSubmitExternalFrame](frame: ExternalSurfaceFrame): boolean {
     this.#assertLive("submit an external frame");
     if (this.#context.getSnapshot().phase !== "active" || frame.views.length === 0) return false;
+    this.#surfaceGpu.beginFrame();
     const intent = this.#externalClearIntent;
     intent.clearColor = this.#clearColor;
     intent.framebuffer = frame.framebuffer;
@@ -438,7 +449,7 @@ export class CanvasRoot {
     } finally {
       this.#releaseUploadedTextures();
     }
-    this.#textureResourcesPending = false;
+    this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
     this.#presentationRequired = false;
     this.#frame += 1;
     this.#lastFrameFailure = undefined;
@@ -483,6 +494,7 @@ export class CanvasRoot {
           : { lastFrameFailure: this.#lastFrameFailure }),
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
+          ordinaryTextureUploads: this.#frameUploadBudget.snapshot(),
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
         },
@@ -917,15 +929,17 @@ export class CanvasRoot {
   #renderFrame(): void {
     const intent = this.#frameIntent;
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+    this.#surfaceGpu.beginFrame();
     if (this.#textureResourcesPending) {
       try {
         if (!this.#surfaceGpu.flushTexturePublications(this.#state)) {
           this.#presentationRequired = true;
         }
       } finally {
-        this.#textureResourcesPending = false;
+        this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
         this.#releaseUploadedTextures();
       }
+      if (this.#textureResourcesPending) this.#clock.invalidate();
     }
     if (!this.#presentationRequired) {
       this.#publish();

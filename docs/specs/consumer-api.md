@@ -169,6 +169,12 @@ does not request workers. Broad renderer diagnostics expose
 `resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs }` for
 operational inspection. Focused asset status remains the product lifecycle.
 
+`rendererOptions.ordinaryTextureUploadByteBudgetPerFrame` is an immutable positive byte
+ceiling with default 16 MiB. Broad diagnostics expose
+`resources.ordinaryTextureUploads: { admittedBytes, budgetBytes, deferredUploads }` for
+the latest submitted frame. Deferral is renderer scheduling, not an asset
+failure or a separate consumer lifecycle.
+
 `usePrefilteredEnvironmentStatus(environment)` observes the exact `src` and
 typed `version` identity. `ready` means the artifact bytes have been fetched
 and validated and reports its face size, mip count, and provenance. GPU budget

@@ -175,6 +175,49 @@ describe("canvas root asset publication", () => {
     }
   });
 
+  it("defers texture upload traffic across frames without failing ready assets", async () => {
+    const first = imageTexture("/first.png");
+    const second = imageTexture("/second.png");
+    const { callbacks, canvas, root } = harness({
+      decodeTexture: async () => ({
+        height: 2,
+        source: {} as ImageBitmap,
+        width: 2,
+      }),
+    }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
+        mesh({
+          geometry: planeGeometry(1),
+          material: unlitMaterial({ texture: second }),
+          transform: { position: [1, 0, 0] },
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
+
+    callbacks.shift()!();
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
+      admittedBytes: 16,
+      budgetBytes: 16,
+      deferredUploads: 1,
+    });
+    expect(root.getTextureAssetSnapshot(second).state).toBe("ready");
+    callbacks.shift()!();
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(2);
+    expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
+      admittedBytes: 16,
+      budgetBytes: 16,
+      deferredUploads: 0,
+    });
+  });
+
   it("publishes one asynchronously prepared GLB into the same draw and pick path", async () => {
     const document = staticTriangleDocument();
     delete document.extensionsRequired;

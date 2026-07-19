@@ -68,6 +68,9 @@ The latter is a root-wide FIFO ceiling shared by glTF, ordinary texture, VT,
 and prefiltered-environment preparation; it is not a worker count. A semantic
 option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount lifecycle.
+`ordinaryTextureUploadByteBudgetPerFrame` defaults to 16 MiB and paces new ordinary-texture
+transfer across real canvas/XR frames without changing focused asset readiness.
+One individually larger texture is admitted alone rather than starving.
 
 Focused hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents

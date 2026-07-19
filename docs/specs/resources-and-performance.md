@@ -40,6 +40,15 @@ request. A queued claim can be aborted without starting; active claims retain
 their slot until their promise settles. Root diagnostics expose the immutable
 limit and current active/queued counts without polling or waking rendering.
 
+The upload-traffic ceiling is reset exactly once per submitted canvas or XR
+frame. New ordinary-texture base-level bytes consume it before GL allocation or
+transfer; storage that does not fit remains ready at the asset layer, retains
+its legal neutral/current representation, and retries deterministically on a
+later demanded frame. One individually oversized upload is admitted into an
+otherwise empty frame so a valid texture cannot starve forever. The diagnostic
+snapshot reports admitted—not necessarily driver-completed—bytes and unique
+deferrals for the most recently submitted frame.
+
 One physical allocation MUST have one accounting owner. Diagnostics may project
 the same allocation in a subsystem view but MUST identify overlap rather than
 sum it as independent memory. Persistent, transient, upload-traffic, and decoded

@@ -112,6 +112,11 @@ const installBenchmarkHooks = async (session) => {
     jobLimit: 0,
     queuedJobs: 0,
   };
+  const ordinaryTextureUploadHighWater = {
+    admittedBytes: 0,
+    budgetBytes: 0,
+    deferredUploads: 0,
+  };
   let loadHitchSampling = true;
   let longTaskCount = 0;
   let longTaskMaxMs = 0;
@@ -166,6 +171,16 @@ const installBenchmarkHooks = async (session) => {
     preparationPressureHighWater.queuedJobs = Math.max(
       preparationPressureHighWater.queuedJobs,
       pressure?.queuedPreparationJobs ?? 0,
+    );
+    ordinaryTextureUploadHighWater.admittedBytes = Math.max(
+      ordinaryTextureUploadHighWater.admittedBytes,
+      pressure?.admittedOrdinaryTextureUploadBytes ?? 0,
+    );
+    ordinaryTextureUploadHighWater.budgetBytes = pressure?.ordinaryTextureUploadBudgetBytes
+      ?? ordinaryTextureUploadHighWater.budgetBytes;
+    ordinaryTextureUploadHighWater.deferredUploads = Math.max(
+      ordinaryTextureUploadHighWater.deferredUploads,
+      pressure?.deferredOrdinaryTextureUploads ?? 0,
     );
     loadFrameRequest = requestAnimationFrame(sampleLoadFrame);
   };
@@ -742,6 +757,7 @@ const installBenchmarkHooks = async (session) => {
       supported: longTaskObserver !== null,
       totalMs: longTaskTotalMs,
     },
+    ordinaryTextureUploadHighWater: { ...ordinaryTextureUploadHighWater },
     preparationPressureHighWater: { ...preparationPressureHighWater },
   });
   const gpuTimingSnapshot = () => {
@@ -952,6 +968,11 @@ const roundedLoadHitches = (snapshot) => {
       maxMs: round(longTasks.maxMs ?? 0),
       supported: longTasks.supported === true,
       totalMs: round(longTasks.totalMs ?? 0),
+    },
+    ordinaryTextureUploadHighWater: {
+      admittedBytes: snapshot.ordinaryTextureUploadHighWater?.admittedBytes ?? 0,
+      budgetBytes: snapshot.ordinaryTextureUploadHighWater?.budgetBytes ?? 0,
+      deferredUploads: snapshot.ordinaryTextureUploadHighWater?.deferredUploads ?? 0,
     },
     preparationPressureHighWater: {
       activeJobs: snapshot.preparationPressureHighWater?.activeJobs ?? 0,
@@ -1228,6 +1249,9 @@ const printSummary = (report) => {
       ` prepHighWater=${metrics.loadHitches?.preparationPressureHighWater?.activeJobs ?? 'n/a'}` +
       `/${metrics.loadHitches?.preparationPressureHighWater?.queuedJobs ?? 'n/a'}` +
       `/${metrics.loadHitches?.preparationPressureHighWater?.jobLimit ?? 'n/a'}` +
+      ` uploadHighWater=${metrics.loadHitches?.ordinaryTextureUploadHighWater?.admittedBytes ?? 'n/a'}` +
+      `/${metrics.loadHitches?.ordinaryTextureUploadHighWater?.deferredUploads ?? 'n/a'}` +
+      `/${metrics.loadHitches?.ordinaryTextureUploadHighWater?.budgetBytes ?? 'n/a'}` +
       ` vtFrameP95=${metrics.vtFrameSample?.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms` +
       ` retainedHeap=${metrics.heap.retainedGrowthBytes ?? 'n/a'}B`,
   );

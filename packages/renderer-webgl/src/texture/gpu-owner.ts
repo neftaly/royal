@@ -3,6 +3,7 @@ import type { CanonicalTextureBinding } from "../surface/canonical-material";
 const EMPTY_STORAGE_KEYS: readonly string[] = [];
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import {
   completeKtx2MipLevelCount,
   ETC2_RGBA8_WEBGL_FORMAT,
@@ -61,18 +62,22 @@ const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 export class TextureGpuOwner {
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #deniedStorageKeys = new Set<string>();
+  readonly #deferredStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
   readonly #uploadedStorageKeys = new Set<string>();
+  readonly #uploadBudget: FrameUploadBudgetOwner;
   #unpackStateKnown = false;
 
   constructor(
     gl: WebGL2RenderingContext,
     budget = new PersistentGpuBudgetOwner(),
+    uploadBudget = new FrameUploadBudgetOwner(),
   ) {
     this.#gl = gl;
     this.#budget = budget;
+    this.#uploadBudget = uploadBudget;
   }
 
   dispose(): void {
@@ -84,6 +89,7 @@ export class TextureGpuOwner {
     this.#samplers.clear();
     this.#textures.clear();
     this.#deniedStorageKeys.clear();
+    this.#deferredStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
   }
 
@@ -93,8 +99,13 @@ export class TextureGpuOwner {
     for (const resource of this.#textures.values()) this.#budget.release(resource.budgetIdentity);
     this.#textures.clear();
     this.#deniedStorageKeys.clear();
+    this.#deferredStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
     this.#unpackStateKnown = false;
+  }
+
+  beginFrame(): void {
+    this.#deferredStorageKeys.clear();
   }
 
   reconcile(
@@ -237,6 +248,10 @@ export class TextureGpuOwner {
     return { fittedTextures, residentTextures: this.#textures.size };
   }
 
+  isUploadDeferred(storageKey: string): boolean {
+    return this.#deferredStorageKeys.has(storageKey);
+  }
+
   #createSampler(binding: CanonicalTextureBinding): GpuSampler {
     const gl = this.#gl;
     const sampler = gl.createSampler();
@@ -254,6 +269,7 @@ export class TextureGpuOwner {
   }
 
   #createTexture(binding: CanonicalTextureBinding): GpuTexture | undefined {
+    if (this.#deferredStorageKeys.has(binding.storageKey)) return undefined;
     const gl = this.#gl;
     const decoded = binding.decoded;
     const compressed = decoded.kind === "ktx2-etc2";
@@ -274,6 +290,19 @@ export class TextureGpuOwner {
       this.#deniedStorageKeys.add(binding.storageKey);
       return undefined;
     }
+    const uploadBytes = compressed
+      ? decoded.levels.reduce((total, level) => total + level.blocks.byteLength, 0)
+      : decoded.width * decoded.height * 4;
+    if (!Number.isSafeInteger(uploadBytes)) {
+      this.#budget.release(budgetIdentity);
+      throw new RangeError("Royal ordinary texture upload exceeds safe integer range");
+    }
+    if (!this.#uploadBudget.tryAdmit(uploadBytes)) {
+      this.#budget.release(budgetIdentity);
+      this.#deferredStorageKeys.add(binding.storageKey);
+      return undefined;
+    }
+    this.#deferredStorageKeys.delete(binding.storageKey);
     this.#deniedStorageKeys.delete(binding.storageKey);
     const texture = gl.createTexture();
     if (texture === null) {

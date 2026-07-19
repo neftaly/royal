@@ -95,6 +95,11 @@ claim before it starts, and releases an active slot before settling the
 consumer-facing promise. Disposal rejects queued work and prevents later active
 completion from publishing root diagnostics.
 
+Every submitted canvas or XR transaction begins one upload-admission frame.
+Deferred texture publication keeps its decoded-source claim and schedules a
+later frame; it does not regress focused readiness, masquerade as persistent
+GPU denial, busy-loop outside submitted frames, or fork canvas/XR behavior.
+
 One root owns at most one active explicit prefiltered-environment identity.
 Replacing it aborts the old root claim, and a stale fetch or parse completion
 cannot publish. Parsed bytes are retained as the reconstruction recipe while
