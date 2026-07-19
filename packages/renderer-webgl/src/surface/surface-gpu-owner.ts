@@ -35,6 +35,7 @@ type GpuSurface = Readonly<{
   instanceCount: number;
   program: StandardProgram | UnlitProgram;
   surface: CanonicalDrawSurface;
+  textureUnits: number;
   vertexArray: WebGLVertexArrayObject;
 }>;
 
@@ -44,6 +45,7 @@ type MutableOpaqueDrawIntent = {
   frontFace: number;
   program: WebGLProgram;
   samplers: (WebGLSampler | null)[];
+  textureUnits: number;
   textures: (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: { height: number; width: number; x: number; y: number };
@@ -64,6 +66,9 @@ const materialTextureFeatures = (
   if (surface.material.emissiveTexture !== undefined) features |= 8;
   return features;
 };
+
+const textureUnitMask = (features: number): number =>
+  (features & 0b111) | ((features & 0b1000) << 1);
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
   const groups = new Map<WebGLProgram, GpuSurface[]>();
@@ -167,6 +172,7 @@ export class SurfaceGpuOwner {
         frontFace: this.#gl.CCW,
         program: first.program,
         samplers: [null, null, null, null, null],
+        textureUnits: firstSurface.textureUnits,
         textures: [null, null, null, null, null],
         vertexArray: firstSurface.vertexArray,
         viewport: { height: 0, width: 0, x: 0, y: 0 },
@@ -185,6 +191,7 @@ export class SurfaceGpuOwner {
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
+      drawIntent.textureUnits = resource.textureUnits;
       for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
         const binding = resource.bindings[unit]!;
         drawIntent.samplers[unit] = binding.sampler;
@@ -262,15 +269,21 @@ export class SurfaceGpuOwner {
     const geometryPlan = this.#geometryGpu.prepare(surfaces, admittedSurfaceCount);
     try {
       const programs = Array<StandardProgram | UnlitProgram>(geometryPlan.surfaces.length);
+      const textureUnitMasks = Array<number>(geometryPlan.surfaces.length);
       const textureInputs = Array<CanonicalTextureBinding | undefined>(
         geometryPlan.surfaces.length * MATERIAL_TEXTURE_UNITS,
       );
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
         const geometrySurface = geometryPlan.surfaces[index]!;
         const material = geometrySurface.surface.material;
+        const features = materialTextureFeatures(
+          geometrySurface.surface,
+          geometrySurface.geometry,
+        );
+        textureUnitMasks[index] = textureUnitMask(features);
         programs[index] = this.#programs.get(
           material.kind,
-          materialTextureFeatures(geometrySurface.surface, geometrySurface.geometry),
+          features,
           geometrySurface.instanceCount > 0,
           material.alphaCutoff !== undefined,
           material.doubleSided === true,
@@ -308,6 +321,7 @@ export class SurfaceGpuOwner {
           instanceCount: geometrySurface.instanceCount,
           program: programs[index]!,
           surface: geometrySurface.surface,
+          textureUnits: textureUnitMasks[index]!,
           vertexArray: geometrySurface.vertexArray,
         };
       }

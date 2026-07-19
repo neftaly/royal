@@ -6,6 +6,7 @@ export type OpaqueDrawStateIntent = Readonly<{
   frontFace: number;
   program: WebGLProgram;
   samplers: readonly (WebGLSampler | null)[];
+  textureUnits: number;
   textures: readonly (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
@@ -67,8 +68,9 @@ export const planOpaqueDrawStateTransition = (
   output.writeMasks = unknown || !previous.writeMasksKnown;
   output.program = unknown || previous.program !== next.program;
   output.textureUnits = 0;
-  const unitCount = Math.max(next.textures.length, next.samplers.length);
-  for (let unit = 0; unit < unitCount; unit += 1) {
+  let remainingUnits = next.textureUnits;
+  for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
+    if ((remainingUnits & 1) === 0) continue;
     if (
       unknown
       || !previous.textureBindingsKnown
@@ -89,16 +91,14 @@ export const commitAppliedOpaqueDrawState = (
   state.frontFace = intent.frontFace;
   state.known = true;
   state.program = intent.program;
-  state.samplers.length = intent.samplers.length;
-  for (let unit = 0; unit < intent.samplers.length; unit += 1) {
+  let remainingUnits = intent.textureUnits;
+  for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
+    if ((remainingUnits & 1) === 0) continue;
     state.samplers[unit] = intent.samplers[unit] ?? null;
+    state.textures[unit] = intent.textures[unit] ?? null;
   }
   state.scissorEnabled = false;
   state.vertexArray = intent.vertexArray;
-  state.textures.length = intent.textures.length;
-  for (let unit = 0; unit < intent.textures.length; unit += 1) {
-    state.textures[unit] = intent.textures[unit] ?? null;
-  }
   state.textureBindingsKnown = true;
   state.viewportHeight = intent.viewport.height;
   state.viewportWidth = intent.viewport.width;

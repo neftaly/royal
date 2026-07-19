@@ -119,8 +119,9 @@ export class WebGlStateOwner {
         gl.stencilMask(0xff_ff_ff_ff);
       }
       if (transition.program) gl.useProgram(intent.program);
-      for (let unit = 0; unit < intent.textures.length; unit += 1) {
-        if ((transition.textureUnits & (1 << unit)) === 0) continue;
+      let changedTextureUnits = transition.textureUnits;
+      for (let unit = 0; changedTextureUnits !== 0; unit += 1, changedTextureUnits >>>= 1) {
+        if ((changedTextureUnits & 1) === 0) continue;
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, intent.textures[unit] ?? null);
         gl.bindSampler(unit, intent.samplers[unit] ?? null);

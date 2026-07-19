@@ -28,6 +28,7 @@ const intent = (): OpaqueDrawStateIntent => ({
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
   samplers: [null],
+  textureUnits: 1,
   textures: [null],
   vertexArray: handle<WebGLVertexArrayObject>(),
   viewport: { height: 360, width: 640, x: 0, y: 0 },
@@ -107,11 +108,34 @@ describe("opaque draw state transition core", () => {
     planOpaqueDrawStateTransition(previous, {
       ...first,
       samplers: [null, handle<WebGLSampler>()],
+      textureUnits: 3,
       textures: [null, handle<WebGLTexture>()],
     }, transition);
     expect(transition.textureUnits).toBe(2);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "textureUnits")
       .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("retains but does not inspect bindings unused by the next shader", () => {
+    const previous = state();
+    const textured = {
+      ...intent(),
+      samplers: [handle<WebGLSampler>()],
+      textures: [handle<WebGLTexture>()],
+    };
+    commitAppliedOpaqueDrawState(previous, textured);
+    const untextured = {
+      ...textured,
+      samplers: [null],
+      textureUnits: 0,
+      textures: [null],
+    };
+    const transition = createOpaqueDrawStateTransition();
+    planOpaqueDrawStateTransition(previous, untextured, transition);
+    expect(transition.textureUnits).toBe(0);
+    commitAppliedOpaqueDrawState(previous, untextured);
+    expect(previous.textures[0]).toBe(textured.textures[0]);
+    expect(previous.samplers[0]).toBe(textured.samplers[0]);
   });
 });
