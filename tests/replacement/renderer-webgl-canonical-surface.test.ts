@@ -102,10 +102,17 @@ describe("canonical direct surface lowering", () => {
           geometry: planeGeometry(2),
           material: unlitMaterial({ texture: secondTexture }),
         }),
+        mesh({
+          geometry: planeGeometry(3),
+          material: unlitMaterial({ texture: firstTexture }),
+        }),
       ],
     }));
     const firstSurface = pending.surfaces[0]!;
     const secondSurface = pending.surfaces[1]!;
+    const thirdSurface = pending.surfaces[2]!;
+    expect(pending.textureSurfaceIndices.get(decodedTextureKey(firstTexture))).toEqual([0, 2]);
+    expect(pending.textureSurfaceIndices.get(decodedTextureKey(secondTexture))).toEqual([1]);
     const decoded = { height: 8, source: {} as ImageBitmap, width: 16 };
     const ready = refreshCanonicalSurfaceTexture(
       pending,
@@ -124,6 +131,8 @@ describe("canonical direct surface lowering", () => {
     expect(ready.surfaces[0]!.normalTransform).toBe(firstSurface.normalTransform);
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(decoded);
     expect(ready.surfaces[1]).toBe(secondSurface);
+    expect(ready.surfaces[2]).not.toBe(thirdSurface);
+    expect(ready.surfaces[2]!.material.baseColorTexture?.decoded).toBe(decoded);
   });
 
   it("keeps one node transform and identity while replacing only exact pick triangles", () => {

@@ -64,17 +64,16 @@ export type SurfaceFrameView = Readonly<{
   viewport: FrameViewport;
 }>;
 
-type GpuSurface = Readonly<{
+type GpuSurface = {
   bindings: readonly GpuTextureBinding[];
-  geometry: GpuGeometry;
-  instanceCount: number;
+  readonly geometry: GpuGeometry;
+  readonly instanceCount: number;
   program: StandardProgram | UnlitProgram;
-  sceneIndex: number;
   surface: CanonicalDrawSurface;
   textureUnits: number;
-  vertexArray: WebGLVertexArrayObject;
-  virtualTexture?: VirtualTextureGpuBinding;
-}>;
+  readonly vertexArray: WebGLVertexArrayObject;
+  readonly virtualTexture?: VirtualTextureGpuBinding;
+};
 
 type MutableOpaqueDrawIntent = {
   cullBackFaces: boolean;
@@ -91,6 +90,26 @@ const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
+
+const composeSurfaceTextureBindings = (
+  ordinary: readonly GpuTextureBinding[],
+  offset: number,
+  virtualTexture: VirtualTextureGpuBinding | undefined,
+): GpuTextureBinding[] => {
+  const bindings = [
+    ordinary[offset]!,
+    ordinary[offset + 1]!,
+    ordinary[offset + 2]!,
+    ordinary[offset + 3]!,
+    ordinary[offset + 4]!,
+    EMPTY_TEXTURE_BINDING,
+  ];
+  if (virtualTexture !== undefined) {
+    bindings[0] = virtualTexture.atlas;
+    bindings[5] = virtualTexture.pageTable;
+  }
+  return bindings;
+};
 
 /** @internal Applies one semantic coordinate change into caller-retained state. */
 export const applyTextureCoordinates = (
@@ -208,6 +227,7 @@ export class SurfaceGpuOwner {
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   #gpuSurfaces: readonly GpuSurface[] = [];
+  #gpuSurfacesBySceneIndex: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #lodGroups = new Set<string>();
   #lodDrawableLevels = new Uint8Array(1);
@@ -251,6 +271,7 @@ export class SurfaceGpuOwner {
   invalidate(): void {
     this.#geometryGpu.invalidate();
     this.#gpuSurfaces = [];
+    this.#gpuSurfacesBySceneIndex = [];
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#virtualTexture?.invalidate();
@@ -651,27 +672,14 @@ export class SurfaceGpuOwner {
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
         const geometrySurface = geometryPlan.surfaces[index]!;
         const offset = index * MATERIAL_TEXTURE_UNITS;
-        const bindings = [
-          textureBindings[offset]!,
-          textureBindings[offset + 1]!,
-          textureBindings[offset + 2]!,
-          textureBindings[offset + 3]!,
-          textureBindings[offset + 4]!,
-          EMPTY_TEXTURE_BINDING,
-        ];
         const virtualTexture = geometrySurface.surface.material.baseColorVirtualAsset === undefined
           ? undefined
           : this.#virtualTexture?.binding(geometrySurface.surface.material.baseColorVirtualAsset);
-        if (virtualTexture !== undefined) {
-          bindings[0] = virtualTexture.atlas;
-          bindings[5] = virtualTexture.pageTable;
-        }
         nextSurfaces[index] = {
-          bindings,
+          bindings: composeSurfaceTextureBindings(textureBindings, offset, virtualTexture),
           geometry: geometrySurface.geometry,
           instanceCount: geometrySurface.instanceCount,
           program: programs[index]!,
-          sceneIndex: index,
           surface: geometrySurface.surface,
           textureUnits: textureUnitMasks[index]!,
           vertexArray: geometrySurface.vertexArray,
@@ -680,6 +688,7 @@ export class SurfaceGpuOwner {
       }
       geometryPlan.commit();
       this.#admittedSurfaceCount = admittedSurfaceCount;
+      this.#gpuSurfacesBySceneIndex = nextSurfaces;
       this.#gpuSurfaces = groupSurfacesByProgram(nextSurfaces);
     } catch (error) {
       geometryPlan.rollback();
@@ -718,58 +727,58 @@ export class SurfaceGpuOwner {
   }
 
   #reconcileTexturePublications(): void {
-    const scene = this.#scene;
-    if (scene === null) return;
-    const nextSurfaces = this.#gpuSurfaces.slice();
-    for (let index = 0; index < nextSurfaces.length; index += 1) {
-      const previous = nextSurfaces[index]!;
-      const surface = scene.surfaces[previous.sceneIndex]!;
-      let affected = false;
-      for (const key of surface.textureKeys) {
-        if (this.#texturePublicationKeys.has(key)) {
-          affected = true;
-          break;
-        }
-      }
-      if (!affected) continue;
-      const material = surface.material;
-      const bindings = [
-        this.#textureGpu.retain(material.baseColorTexture),
-        this.#textureGpu.retain(material.kind === "standard"
-          ? material.metallicRoughnessTexture
-          : undefined),
-        this.#textureGpu.retain(material.kind === "standard"
-          ? material.normalTexture
-          : undefined),
-        this.#textureGpu.retain(material.kind === "standard"
-          ? material.emissiveTexture
-          : undefined),
-        this.#textureGpu.retain(material.kind === "standard"
-          ? material.occlusionTexture
-          : undefined),
-      ];
-      const features = materialTextureFeatures(
-        surface,
-        previous.geometry,
-        scene.environment !== undefined,
-        scene.punctualLights.length > 0,
-        previous.virtualTexture !== undefined,
-      );
-      nextSurfaces[index] = {
-        ...previous,
-        bindings,
-        program: this.#programs.get(
+    const scene = this.#scene!;
+    const surfaces = this.#gpuSurfacesBySceneIndex;
+    let regroup = false;
+    for (const key of this.#texturePublicationKeys) {
+      const indices = scene.textureSurfaceIndices.get(key);
+      if (indices === undefined) continue;
+      for (const index of indices) {
+        if (index >= surfaces.length) continue;
+        const resource = surfaces[index]!;
+        const surface = scene.surfaces[index]!;
+        const material = surface.material;
+        const ordinaryBindings = [
+          this.#textureGpu.retain(material.baseColorTexture),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.metallicRoughnessTexture
+            : undefined),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.normalTexture
+            : undefined),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.emissiveTexture
+            : undefined),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.occlusionTexture
+            : undefined),
+        ];
+        const features = materialTextureFeatures(
+          surface,
+          resource.geometry,
+          scene.environment !== undefined,
+          scene.punctualLights.length > 0,
+          resource.virtualTexture !== undefined,
+        );
+        const program = this.#programs.get(
           material.kind,
           features,
-          previous.instanceCount > 0,
+          resource.instanceCount > 0,
           material.alphaCutoff !== undefined,
           material.doubleSided === true,
-        ),
-        surface,
-        textureUnits: textureUnitMask(features),
-      };
+        );
+        regroup ||= program.program !== resource.program.program;
+        resource.bindings = composeSurfaceTextureBindings(
+          ordinaryBindings,
+          0,
+          resource.virtualTexture,
+        );
+        resource.program = program;
+        resource.surface = surface;
+        resource.textureUnits = textureUnitMask(features);
+      }
     }
-    this.#gpuSurfaces = groupSurfacesByProgram(nextSurfaces);
+    if (regroup) this.#gpuSurfaces = groupSurfacesByProgram(surfaces);
     this.#texturePublicationKeys.clear();
     this.#dirty = false;
     this.#drawIntent = null;
