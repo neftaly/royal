@@ -525,6 +525,69 @@ describe("static glTF preparation core", () => {
     }
   });
 
+  it("lowers complete KHR_materials_specular semantics through ordinary texture recipes", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "specular.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_specular", "KHR_texture_transform"];
+    document.extensionsUsed = ["KHR_materials_specular", "KHR_texture_transform"];
+    document.images = [{ uri: "shared.png" }, { uri: "shared.png" }];
+    document.textures = [{ source: 0 }, { source: 1 }];
+    document.materials = [{
+      extensions: {
+        KHR_materials_specular: {
+          specularColorFactor: [0.5, 1, 2],
+          specularColorTexture: {
+            extensions: { KHR_texture_transform: { offset: [0.25, 0.5] } },
+            index: 1,
+          },
+          specularFactor: 0.25,
+          specularTexture: { index: 0 },
+        },
+      },
+      pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 0.4 },
+    }];
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "specular-v1",
+      "specular.glb",
+      "/models/specular.glb",
+    );
+    expect(prepared.textureAssets.map((asset) => [asset.colorSpace, asset.kind === "asset"
+      ? asset.src
+      : asset.label])).toEqual([
+      ["srgb", "/models/shared.png"],
+      ["linear", "/models/shared.png"],
+    ]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      kind: "standard",
+      requiresTextureCoordinates: true,
+      specularColorFactor: [0.5, 1, 2],
+      specularColorTextureCoordinates: {
+        row0: [1, 0, 0.25, 0],
+        row1: [0, 1, 0.5, 0],
+      },
+      specularFactor: 0.25,
+    });
+  });
+
+  it("rejects invalid KHR_materials_specular factors and unlit combinations", () => {
+    const negativeColor = staticTriangleDocument();
+    negativeColor.extensionsRequired = ["KHR_materials_specular"];
+    negativeColor.materials = [{
+      extensions: { KHR_materials_specular: { specularColorFactor: [1, -1, 1] } },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(negativeColor), "negative-specular"))
+      .toThrow("specularColorFactor[1]: must not be negative");
+
+    const invalidCombination = staticTriangleDocument();
+    invalidCombination.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_specular"];
+    invalidCombination.materials = [{
+      extensions: { KHR_materials_specular: {}, KHR_materials_unlit: {} },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalidCombination), "unlit-specular"))
+      .toThrow("must not combine KHR_materials_specular with KHR_materials_unlit");
+  });
+
   it("schedules authored occlusion through the ordinary texture lifecycle", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "occlusion.glb");
     const document = parsed.document as Record<string, unknown>;

@@ -263,6 +263,16 @@ export const prepareMaterial = (
   if (unlit && iorExtension !== undefined) {
     fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_ior with KHR_materials_unlit");
   }
+  const specularExtension = extensions.KHR_materials_specular === undefined
+    ? undefined
+    : object(
+      extensions.KHR_materials_specular,
+      label,
+      `${materialPath}.extensions.KHR_materials_specular`,
+    );
+  if (unlit && specularExtension !== undefined) {
+    fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_specular with KHR_materials_unlit");
+  }
   const indexOfRefraction = finiteFactor(
     iorExtension?.ior,
     1.5,
@@ -358,6 +368,32 @@ export const prepareMaterial = (
     `${materialPath}.emissiveTexture`,
     "srgb",
   );
+  const specularTexture = materialTexture(
+    specularExtension?.specularTexture,
+    `${materialPath}.extensions.KHR_materials_specular.specularTexture`,
+    "linear",
+  );
+  const specularColorTexture = materialTexture(
+    specularExtension?.specularColorTexture,
+    `${materialPath}.extensions.KHR_materials_specular.specularColorTexture`,
+    "srgb",
+  );
+  const specularColor = finiteTuple(
+    specularExtension?.specularColorFactor,
+    3,
+    [1, 1, 1],
+    label,
+    `${materialPath}.extensions.KHR_materials_specular.specularColorFactor`,
+  );
+  for (let channel = 0; channel < 3; channel += 1) {
+    if (specularColor[channel]! < 0) {
+      fail(
+        label,
+        `${materialPath}.extensions.KHR_materials_specular.specularColorFactor[${channel}]`,
+        "must not be negative",
+      );
+    }
+  }
   const emissive = finiteTuple(
     material.emissiveFactor,
     3,
@@ -439,7 +475,26 @@ export const prepareMaterial = (
       || metallicRoughnessTexture !== undefined
       || normalTextureUse !== undefined
       || occlusionTextureUse !== undefined
-      || emissiveTexture !== undefined,
+      || emissiveTexture !== undefined
+      || specularTexture !== undefined
+      || specularColorTexture !== undefined,
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
+    ...(specularExtension === undefined ? {} : {
+      specularColorFactor: [specularColor[0]!, specularColor[1]!, specularColor[2]!] as const,
+      specularFactor: factor01(
+        specularExtension.specularFactor,
+        1,
+        label,
+        `${materialPath}.extensions.KHR_materials_specular.specularFactor`,
+      ),
+    }),
+    ...(specularTexture === undefined ? {} : { specularTextureAsset: specularTexture.asset }),
+    ...(specularTexture === undefined || specularTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { specularTextureCoordinates: specularTexture.coordinates }),
+    ...(specularColorTexture === undefined ? {} : { specularColorAsset: specularColorTexture.asset }),
+    ...(specularColorTexture === undefined || specularColorTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { specularColorTextureCoordinates: specularColorTexture.coordinates }),
   };
 };

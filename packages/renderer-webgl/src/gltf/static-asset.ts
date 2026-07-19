@@ -200,6 +200,7 @@ const prepareStaticDocument = (
       extension !== "KHR_materials_unlit"
       && extension !== "KHR_materials_emissive_strength"
       && extension !== "KHR_materials_ior"
+      && extension !== "KHR_materials_specular"
       && extension !== "EXT_texture_avif"
       && extension !== "EXT_texture_webp"
       && extension !== "EXT_mesh_gpu_instancing"
@@ -899,6 +900,16 @@ const prepareStaticDocument = (
   for (const primitive of batchedPrimitives) {
     forEachPrimitiveMaterial(primitive, (material) => {
       if (material.kind === "standard") claimTexture(material.occlusionAsset);
+    });
+  }
+  for (const primitive of batchedPrimitives) {
+    forEachPrimitiveMaterial(primitive, (material) => {
+      if (material.kind === "standard") claimTexture(material.specularColorAsset);
+    });
+  }
+  for (const primitive of batchedPrimitives) {
+    forEachPrimitiveMaterial(primitive, (material) => {
+      if (material.kind === "standard") claimTexture(material.specularTextureAsset);
     });
   }
   return {

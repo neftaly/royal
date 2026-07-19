@@ -21,11 +21,16 @@ export const SURFACE_FEATURE_OCCLUSION_TEXTURE = 32;
 export const SURFACE_FEATURE_STUDIO_ENVIRONMENT = 64;
 export const SURFACE_FEATURE_PUNCTUAL_LIGHTS = 128;
 export const SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE = 256;
+export const SURFACE_FEATURE_SPECULAR_TEXTURE = 512;
+export const SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE = 1024;
+export const SURFACE_FEATURE_SPECULAR_MATERIAL = 2048;
 export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
   | SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
   | SURFACE_FEATURE_NORMAL_TEXTURE
   | SURFACE_FEATURE_EMISSIVE_TEXTURE
   | SURFACE_FEATURE_OCCLUSION_TEXTURE
+  | SURFACE_FEATURE_SPECULAR_TEXTURE
+  | SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
   | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
 
 export type UnlitProgram = Readonly<{
@@ -80,6 +85,11 @@ export type StandardProgram = Readonly<{
   punctualLightDirections: WebGLUniformLocation | null;
   punctualLightPositions: WebGLUniformLocation | null;
   punctualLightSpotCones: WebGLUniformLocation | null;
+  specular: WebGLUniformLocation | null;
+  specularColor: WebGLUniformLocation | null;
+  specularColorCoordinates: TextureCoordinatesProgram | null;
+  specularCoordinates: TextureCoordinatesProgram | null;
+  specularFactors: WebGLUniformLocation | null;
   viewProjection: WebGLUniformLocation;
 }>;
 
@@ -159,7 +169,7 @@ const shaderVariant = (
   features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
 ).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -297,6 +307,21 @@ const createStandardProgram = (
     punctualLightSpotCones: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
       ? uniform(gl, program, "punctualLightSpotCones")
       : null,
+    specular: features & SURFACE_FEATURE_SPECULAR_TEXTURE
+      ? uniform(gl, program, "specularTexture")
+      : null,
+    specularColor: features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
+      ? uniform(gl, program, "specularColorTexture")
+      : null,
+    specularColorCoordinates: features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "specularColor")
+      : null,
+    specularCoordinates: features & SURFACE_FEATURE_SPECULAR_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "specular")
+      : null,
+    specularFactors: features & SURFACE_FEATURE_SPECULAR_MATERIAL
+      ? uniform(gl, program, "specularFactors")
+      : null,
     texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? uniform(gl, program, "baseColorTexture")
       : null,
@@ -366,8 +391,10 @@ export class SurfaceProgramOwner {
       if (program.normalTexture !== null) this.#gl.uniform1i(program.normalTexture, 2);
       if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 3);
       if (program.occlusion !== null) this.#gl.uniform1i(program.occlusion, 4);
+      if (program.specular !== null) this.#gl.uniform1i(program.specular, 5);
+      if (program.specularColor !== null) this.#gl.uniform1i(program.specularColor, 6);
     }
-    if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 5);
+    if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 7);
     this.#initializedSamplers.add(program.program);
   }
 

@@ -398,6 +398,37 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
   });
 
+  it("activates authored glTF specular factors only on their material variant", async () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_specular"];
+    document.extensionsUsed = ["KHR_materials_specular"];
+    document.materials = [{
+      extensions: {
+        KHR_materials_specular: {
+          specularColorFactor: [0.5, 1, 2],
+          specularFactor: 0.25,
+        },
+      },
+      pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 0.4 },
+    }];
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const node = gltf("/specular.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define SPECULAR_MATERIAL"))).toBe(true);
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) =>
+      Array.from(value).join(",") === "0.5,1,2,0.25")).toBe(true);
+  });
+
   it("coalesces adjacent opaque arena ranges when WEBGL_multi_draw is available", async () => {
     const multiDrawElementsWEBGL = vi.fn();
     const document = staticTriangleDocument();

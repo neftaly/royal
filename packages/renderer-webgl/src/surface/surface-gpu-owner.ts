@@ -32,6 +32,9 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_OCCLUSION_TEXTURE,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
+  SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
+  SURFACE_FEATURE_SPECULAR_MATERIAL,
+  SURFACE_FEATURE_SPECULAR_TEXTURE,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
   SURFACE_FEATURE_TANGENT,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
@@ -107,7 +110,7 @@ type MutableSurfaceDrawIntent = {
   viewport: { height: number; width: number; x: number; y: number };
 };
 
-const MATERIAL_TEXTURE_UNITS = 5;
+const MATERIAL_TEXTURE_UNITS = 7;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
@@ -154,11 +157,13 @@ const composeSurfaceTextureBindings = (
     ordinary[offset + 2]!,
     ordinary[offset + 3]!,
     ordinary[offset + 4]!,
+    ordinary[offset + 5]!,
+    ordinary[offset + 6]!,
     EMPTY_TEXTURE_BINDING,
   ];
   if (virtualTexture !== undefined) {
     bindings[0] = virtualTexture.atlas;
-    bindings[5] = virtualTexture.pageTable;
+    bindings[7] = virtualTexture.pageTable;
   }
   return bindings;
 };
@@ -205,13 +210,20 @@ const materialTextureFeatures = (
     }
   }
   if (hasPunctualLights) features |= SURFACE_FEATURE_PUNCTUAL_LIGHTS;
+  if (surface.material.specularFactor !== undefined) {
+    features |= SURFACE_FEATURE_SPECULAR_MATERIAL;
+    if (ordinaryTextureMask & 32) features |= SURFACE_FEATURE_SPECULAR_TEXTURE;
+    if (ordinaryTextureMask & 64) features |= SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE;
+  }
   return features;
 };
 
 const textureUnitMask = (features: number): number => (
   features & 0b1111
 ) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0)
-  | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b10_0001 : 0);
+  | (features & SURFACE_FEATURE_SPECULAR_TEXTURE ? 0b10_0000 : 0)
+  | (features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? 0b100_0000 : 0)
+  | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b1000_0001 : 0);
 
 const residentOrdinaryTextureMask = (
   bindings: readonly GpuTextureBinding[],
@@ -318,6 +330,7 @@ export class SurfaceGpuOwner {
   readonly #environmentSettings = new Float32Array(4);
   readonly #fallbackBaseColor = new Float32Array(4);
   readonly #presentation = new Float32Array(4);
+  readonly #specularFactors = new Float32Array(4);
   readonly #punctualLightColors = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
   readonly #punctualLightDirections = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
   readonly #punctualLightPositions = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
@@ -500,6 +513,8 @@ export class SurfaceGpuOwner {
     let metallicRoughnessCoordinates: CanonicalTextureCoordinates | undefined;
     let normalCoordinates: CanonicalTextureCoordinates | undefined;
     let occlusionCoordinates: CanonicalTextureCoordinates | undefined;
+    let specularColorCoordinates: CanonicalTextureCoordinates | undefined;
+    let specularCoordinates: CanonicalTextureCoordinates | undefined;
     let standardGlobalsProgram: WebGLProgram | null = null;
     let transformModel: Mat4 | null = null;
     let transformProgram: WebGLProgram | null = null;
@@ -543,6 +558,8 @@ export class SurfaceGpuOwner {
         metallicRoughnessCoordinates = undefined;
         normalCoordinates = undefined;
         occlusionCoordinates = undefined;
+        specularColorCoordinates = undefined;
+        specularCoordinates = undefined;
       }
       if (program.kind === "unlit") {
         if (transformChanged) {
@@ -642,6 +659,18 @@ export class SurfaceGpuOwner {
             material.occlusionTextureCoordinates,
             occlusionCoordinates,
           );
+          specularCoordinates = applyTextureCoordinates(
+            gl,
+            program.specularCoordinates,
+            material.specularTextureCoordinates,
+            specularCoordinates,
+          );
+          specularColorCoordinates = applyTextureCoordinates(
+            gl,
+            program.specularColorCoordinates,
+            material.specularColorTextureCoordinates,
+            specularColorCoordinates,
+          );
           if (program.occlusionStrength !== null) {
             gl.uniform1f(program.occlusionStrength, material.occlusionStrength);
           }
@@ -657,6 +686,14 @@ export class SurfaceGpuOwner {
           this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
           this.#materialFactors[3] = material.normalScale;
           gl.uniform4fv(program.materialFactors, this.#materialFactors);
+          if (program.specularFactors !== null) {
+            const color = material.specularColorFactor;
+            this.#specularFactors[0] = color?.[0] ?? 1;
+            this.#specularFactors[1] = color?.[1] ?? 1;
+            this.#specularFactors[2] = color?.[2] ?? 1;
+            this.#specularFactors[3] = material.specularFactor ?? 1;
+            gl.uniform4fv(program.specularFactors, this.#specularFactors);
+          }
           this.#applyVirtualTexture(program, resource.virtualTexture);
         }
       }
@@ -861,6 +898,12 @@ export class SurfaceGpuOwner {
         textureInputs[offset + 4] = material.kind === "standard"
           ? material.occlusionTexture
           : undefined;
+        textureInputs[offset + 5] = material.kind === "standard"
+          ? material.specularTexture
+          : undefined;
+        textureInputs[offset + 6] = material.kind === "standard"
+          ? material.specularColorTexture
+          : undefined;
       }
       const textureBindings = this.#textureGpu.reconcile(textureInputs);
       const nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
@@ -970,6 +1013,12 @@ export class SurfaceGpuOwner {
             : undefined),
           this.#textureGpu.retain(material.kind === "standard"
             ? material.occlusionTexture
+            : undefined),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.specularTexture
+            : undefined),
+          this.#textureGpu.retain(material.kind === "standard"
+            ? material.specularColorTexture
             : undefined),
         ];
         const features = materialTextureFeatures(

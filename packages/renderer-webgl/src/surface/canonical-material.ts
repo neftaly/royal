@@ -74,6 +74,14 @@ export type CanonicalStandardMaterial = Readonly<{
   occlusionTextureCoordinates?: CanonicalTextureCoordinates;
   requiresTextureCoordinates: boolean;
   roughnessFactor: number;
+  specularColorAsset?: TextureSourceRef;
+  specularColorFactor?: readonly [number, number, number];
+  specularColorTexture?: CanonicalTextureBinding;
+  specularColorTextureCoordinates?: CanonicalTextureCoordinates;
+  specularFactor?: number;
+  specularTextureAsset?: TextureSourceRef;
+  specularTexture?: CanonicalTextureBinding;
+  specularTextureCoordinates?: CanonicalTextureCoordinates;
 }>;
 
 export type CanonicalSurfaceMaterial = CanonicalStandardMaterial | CanonicalUnlitMaterial;
@@ -107,6 +115,12 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
   ) || (
     material.emissiveAsset !== undefined
       && (material.emissiveTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    material.specularTextureAsset !== undefined
+      && (material.specularTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    material.specularColorAsset !== undefined
+      && (material.specularColorTextureCoordinates?.row0[3] ?? 0) === set
   );
 };
 
@@ -175,12 +189,16 @@ export const resolveCanonicalMaterialTexture = (
   const normalTexture = resolve(material.normalAsset);
   const emissiveTexture = resolve(material.emissiveAsset);
   const occlusionTexture = resolve(material.occlusionAsset);
+  const specularTexture = resolve(material.specularTextureAsset);
+  const specularColorTexture = resolve(material.specularColorAsset);
   return {
     ...common,
     ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
     ...(normalTexture === undefined ? {} : { normalTexture }),
     ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
+    ...(specularTexture === undefined ? {} : { specularTexture }),
+    ...(specularColorTexture === undefined ? {} : { specularColorTexture }),
   };
 };
 
@@ -241,6 +259,8 @@ export const canonicalMaterialTextureKeys = (
     add(material.normalAsset);
     add(material.emissiveAsset);
     add(material.occlusionAsset);
+    add(material.specularColorAsset);
+    add(material.specularTextureAsset);
   }
   return keys.length === 0 ? EMPTY_TEXTURE_KEYS : keys;
 };

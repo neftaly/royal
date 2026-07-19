@@ -31,6 +31,14 @@ in vec2 surfaceOcclusionTextureCoordinate;
 uniform sampler2D occlusionTexture;
 uniform float occlusionStrength;
 #endif
+#ifdef SPECULAR_TEXTURED
+in vec2 surfaceSpecularTextureCoordinate;
+uniform sampler2D specularTexture;
+#endif
+#ifdef SPECULAR_COLOR_TEXTURED
+in vec2 surfaceSpecularColorTextureCoordinate;
+uniform sampler2D specularColorTexture;
+#endif
 #ifdef STUDIO_ENVIRONMENT
 uniform mat4 environmentRotation;
 uniform vec4 environmentSettings;
@@ -43,6 +51,9 @@ uniform vec4 directionalLightDirections[MAX_DIRECTIONAL_LIGHTS];
 uniform vec4 emissiveFactor;
 uniform vec4 materialFactors;
 uniform vec4 presentation;
+#ifdef SPECULAR_MATERIAL
+uniform vec4 specularFactors;
+#endif
 #ifdef PUNCTUAL_LIGHTS
 uniform vec4 punctualLightColors[MAX_PUNCTUAL_LIGHTS];
 uniform int punctualLightCount;
@@ -77,6 +88,7 @@ vec3 brdfContribution(
   vec3 lightDirection,
   vec3 viewDirection,
   vec3 f0,
+  vec3 f90,
   vec3 diffuseColor,
   float normalView,
   float alphaSquared
@@ -89,7 +101,7 @@ vec3 brdfContribution(
     : normalize(halfwayInput);
   float normalHalf = max(dot(normal, halfway), 0.0);
   float viewHalf = max(dot(viewDirection, halfway), 0.0);
-  vec3 fresnel = mix(f0, vec3(1.0), fresnelPower(viewHalf));
+  vec3 fresnel = mix(f0, f90, fresnelPower(viewHalf));
   vec3 diffuse = diffuseColor * (1.0 - max(max(fresnel.r, fresnel.g), fresnel.b)) / PI;
   vec3 specular = fresnel
     * ggxDistribution(normalHalf, alphaSquared)
@@ -169,7 +181,20 @@ void main() {
   float alpha = max(roughness * roughness, 0.001);
   float alphaSquared = alpha * alpha;
   vec3 dielectric = vec3(emissiveFactor.w);
-  vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
+  float specularWeight = 1.0;
+#ifdef SPECULAR_MATERIAL
+  vec3 specularColor = specularFactors.rgb;
+  specularWeight = specularFactors.a;
+#ifdef SPECULAR_TEXTURED
+  specularWeight *= texture(specularTexture, surfaceSpecularTextureCoordinate).a;
+#endif
+#ifdef SPECULAR_COLOR_TEXTURED
+  specularColor *= texture(specularColorTexture, surfaceSpecularColorTextureCoordinate).rgb;
+#endif
+  dielectric = min(dielectric * specularColor, vec3(1.0));
+#endif
+  vec3 f0 = mix(dielectric * specularWeight, surfaceBaseColor.rgb, metallic);
+  vec3 f90 = vec3(mix(specularWeight, 1.0, metallic));
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
   float normalView = max(dot(normal, viewDirection), 0.0);
   vec3 lit = vec3(0.0);
@@ -181,6 +206,7 @@ void main() {
       lightDirection,
       viewDirection,
       f0,
+      f90,
       diffuseColor,
       normalView,
       alphaSquared
@@ -212,6 +238,7 @@ void main() {
       lightDirection,
       viewDirection,
       f0,
+      f90,
       diffuseColor,
       normalView,
       alphaSquared
@@ -241,7 +268,7 @@ void main() {
     vec3(0.8, 0.88, 1.0),
     reflectionHeight
   );
-  vec3 environmentFresnel = mix(f0, vec3(1.0), fresnelPower(normalView));
+  vec3 environmentFresnel = mix(f0, f90, fresnelPower(normalView));
   float specularFocus = mix(1.0, 0.18, roughness);
   vec3 environment = (
     diffuseRadiance * diffuseColor * occlusion / PI

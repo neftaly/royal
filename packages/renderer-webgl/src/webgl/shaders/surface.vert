@@ -45,6 +45,16 @@ uniform vec4 occlusionTextureCoordinates0;
 uniform vec4 occlusionTextureCoordinates1;
 out vec2 surfaceOcclusionTextureCoordinate;
 #endif
+#ifdef SPECULAR_TEXTURED
+uniform vec4 specularTextureCoordinates0;
+uniform vec4 specularTextureCoordinates1;
+out vec2 surfaceSpecularTextureCoordinate;
+#endif
+#ifdef SPECULAR_COLOR_TEXTURED
+uniform vec4 specularColorTextureCoordinates0;
+uniform vec4 specularColorTextureCoordinates1;
+out vec2 surfaceSpecularColorTextureCoordinate;
+#endif
 uniform mat4 viewProjection;
 uniform mat4 model;
 uniform mat4 normalTransform;
@@ -80,6 +90,18 @@ void main() {
   surfaceOcclusionTextureCoordinate = transformedTextureCoordinate(
     occlusionTextureCoordinates0,
     occlusionTextureCoordinates1
+  );
+#endif
+#ifdef SPECULAR_TEXTURED
+  surfaceSpecularTextureCoordinate = transformedTextureCoordinate(
+    specularTextureCoordinates0,
+    specularTextureCoordinates1
+  );
+#endif
+#ifdef SPECULAR_COLOR_TEXTURED
+  surfaceSpecularColorTextureCoordinate = transformedTextureCoordinate(
+    specularColorTextureCoordinates0,
+    specularColorTextureCoordinates1
   );
 #endif
 #endif

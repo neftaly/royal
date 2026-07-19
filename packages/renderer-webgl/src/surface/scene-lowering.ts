@@ -119,6 +119,8 @@ export const collectCanonicalSurfaceTextureAssets = (
     add(materialSource.metallicRoughnessAsset);
     add(materialSource.normalAsset);
     add(materialSource.occlusionAsset);
+    add(materialSource.specularColorAsset);
+    add(materialSource.specularTextureAsset);
   }
   return assets;
 };

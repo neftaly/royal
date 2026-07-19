@@ -6,7 +6,7 @@ import {
   useOrbitCamera,
   useRendererLifecycle,
 } from '@royal/react';
-import { directionalLight, gltf, scene } from '@royal/react/scene';
+import { directionalLight, gltf, scene, type GltfAssetRef } from '@royal/react/scene';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
@@ -23,16 +23,17 @@ import {
   showcasePass,
 } from '../presentation';
 
-const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
-  const status = useGltfAssetStatus(src);
+const GltfLabLoadStatus = ({ asset }: { readonly asset: GltfAssetRef }): ReactNode => {
+  const status = useGltfAssetStatus(asset);
   const lifecycle = useRendererLifecycle();
   const assetLabel = status.state === 'error' ? `error: ${status.error}` : status.state;
   const rendererLabel = lifecycle.state === 'failed' ? `failed: ${lifecycle.error}` : lifecycle.state;
-  return (
+  return <>
+    <BenchmarkRendererSnapshot asset={asset} status={status} />
     <output className="gltf-lab-load-status">
       Renderer: {rendererLabel}; asset: {assetLabel}
     </output>
-  );
+  </>;
 };
 
 const selectedCaseName = (): string =>
@@ -50,6 +51,14 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     far: 120,
   });
   const src = import.meta.env.BASE_URL + entry.path;
+  const model = useMemo(() => gltf({
+    src,
+    transform: {
+      position: [0, 0, 0],
+      rotation: [0, 0.2, 0],
+      scale: [entry.presentation.scale, entry.presentation.scale, entry.presentation.scale],
+    },
+  }), [entry.presentation.scale, src]);
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     environment: showcaseEnvironment,
@@ -57,16 +66,9 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     nodes: [
       directionalLight(showcaseKeyLight),
       directionalLight(showcaseFillLight),
-      gltf({
-        src,
-        transform: {
-          position: [0, 0, 0],
-          rotation: [0, 0.2, 0],
-          scale: [entry.presentation.scale, entry.presentation.scale, entry.presentation.scale],
-        },
-      }),
+      model,
     ],
-  }), [entry.presentation.scale, orbit.cameraResource, src]);
+  }), [model, orbit.cameraResource]);
 
   return (
     <Canvas
@@ -75,8 +77,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
       scene={renderScene}
       style={interactiveCanvasStyle}
     >
-      <BenchmarkRendererSnapshot />
-      <GltfLabLoadStatus src={src} />
+      <GltfLabLoadStatus asset={model.asset} />
       <OrbitControls orbit={orbit} maxDistance={60} minDistance={0.1} />
     </Canvas>
   );
