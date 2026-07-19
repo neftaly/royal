@@ -41,6 +41,7 @@ const fakeGl = (): WebGL2RenderingContext => ({
 const binding = (
   samplerKey: string,
   minFilter: CanonicalTextureBinding["sampler"]["minFilter"],
+  storageKey = "shared-image:srgb",
 ): CanonicalTextureBinding => ({
   colorSpace: "srgb",
   decoded: { height: 8, source: {} as ImageBitmap, width: 8 },
@@ -51,7 +52,7 @@ const binding = (
     wrapT: "repeat",
   },
   samplerKey,
-  storageKey: "shared-image:srgb",
+  storageKey,
 });
 
 describe("ordinary texture GPU owner", () => {
@@ -110,5 +111,19 @@ describe("ordinary texture GPU owner", () => {
     owner.reconcile([]);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteSampler).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies context-global unpack state once per context generation", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    owner.reconcile([
+      binding("first", "nearest", "first-image:srgb"),
+      binding("second", "nearest", "second-image:srgb"),
+    ]);
+    expect(gl.pixelStorei).toHaveBeenCalledTimes(3);
+
+    owner.invalidate();
+    owner.reconcile([binding("third", "nearest", "third-image:srgb")]);
+    expect(gl.pixelStorei).toHaveBeenCalledTimes(6);
   });
 });

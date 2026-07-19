@@ -40,6 +40,7 @@ export class TextureGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
+  #unpackStateKnown = false;
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
@@ -56,6 +57,7 @@ export class TextureGpuOwner {
   invalidate(): void {
     this.#samplers.clear();
     this.#textures.clear();
+    this.#unpackStateKnown = false;
   }
 
   reconcile(
@@ -166,9 +168,7 @@ export class TextureGpuOwner {
     try {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+      this.#applyUnpackState();
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
@@ -188,6 +188,15 @@ export class TextureGpuOwner {
       gl.deleteTexture(texture);
       throw error;
     }
+  }
+
+  #applyUnpackState(): void {
+    if (this.#unpackStateKnown) return;
+    const gl = this.#gl;
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    this.#unpackStateKnown = true;
   }
 
   #ensureMipmaps(resource: GpuTexture): void {
