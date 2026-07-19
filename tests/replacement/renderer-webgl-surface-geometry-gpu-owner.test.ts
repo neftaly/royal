@@ -51,10 +51,24 @@ describe("surface geometry GPU owner", () => {
     const first = surface(planeGeometry(1));
     const sameGeometry = surface(planeGeometry(1));
     const changedGeometry = surface(boxGeometry(1));
+    const withInstances = [{
+      ...first[0]!,
+      instances: {
+        count: 1,
+        key: "instances-a",
+        localModels: new Float32Array(16),
+      },
+    }];
+    const withDifferentInstances = [{
+      ...withInstances[0]!,
+      instances: { ...withInstances[0]!.instances, key: "instances-b" },
+    }];
     expect(nextSurfaceAdmissionCount(0, 381, 16)).toBe(16);
     expect(nextSurfaceAdmissionCount(376, 381, 16)).toBe(381);
     expect(retainedSurfaceAdmissionCount(first, sameGeometry, 1)).toBe(1);
     expect(retainedSurfaceAdmissionCount(first, changedGeometry, 1)).toBe(0);
+    expect(retainedSurfaceAdmissionCount(withInstances, withInstances, 1)).toBe(1);
+    expect(retainedSurfaceAdmissionCount(withInstances, withDifferentInstances, 1)).toBe(0);
   });
 
   it("retains committed handles and rolls back only newly prepared handles", () => {

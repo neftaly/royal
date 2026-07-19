@@ -1,7 +1,17 @@
 import { gltf, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
+import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
+
+const prepareStatic = (
+  bytes: Uint8Array,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  _signal: AbortSignal,
+  readResource: (uri: string) => Promise<Uint8Array>,
+) => prepareStaticGltfSource(bytes, contentKey, label, sourceUri, readResource);
 
 describe("glTF asset lifecycle owner", () => {
   it("routes preparation through one injected lifecycle without duplicating resource IO", async () => {
@@ -41,6 +51,7 @@ describe("glTF asset lifecycle owner", () => {
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
+      prepare: prepareStatic,
       read: vi.fn(async () => fixture.document),
       readResource,
     });

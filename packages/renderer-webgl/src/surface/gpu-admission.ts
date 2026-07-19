@@ -37,11 +37,6 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
   return `${geometryBaseKey}:${uvKey}:${tangentKey}`;
 };
 
-const surfaceAdmissionKey = (surface: CanonicalDrawSurface): string => JSON.stringify([
-  surfaceGeometryResourceKey(surface),
-  surface.instances?.key ?? null,
-]);
-
 /** Preserves only the admitted prefix whose GPU resource identities remain reusable. */
 export const retainedSurfaceAdmissionCount = (
   previous: readonly CanonicalDrawSurface[],
@@ -50,7 +45,12 @@ export const retainedSurfaceAdmissionCount = (
 ): number => {
   const retained = Math.min(admitted, previous.length, next.length);
   for (let index = 0; index < retained; index += 1) {
-    if (surfaceAdmissionKey(previous[index]!) !== surfaceAdmissionKey(next[index]!)) return index;
+    const previousSurface = previous[index]!;
+    const nextSurface = next[index]!;
+    if (
+      surfaceGeometryResourceKey(previousSurface) !== surfaceGeometryResourceKey(nextSurface)
+      || previousSurface.instances?.key !== nextSurface.instances?.key
+    ) return index;
   }
   return retained;
 };
