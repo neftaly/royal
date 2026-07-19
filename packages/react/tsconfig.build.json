@@ -7,12 +7,17 @@
     "outDir": "dist",
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
-      "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"]
+      "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"],
+      "@royal/renderer-webgl/xr": ["../renderer-webgl/dist/xr.d.ts"]
     },
     "rootDir": "src"
   },
   "files": [
     "src/index.ts",
+    "src/xr.ts",
+    "src/xr/session-controller.ts",
+    "src/xr/session-state.ts",
+    "src/xr/use-xr-session.ts",
     "src/scene.ts",
     "src/runtime/canvas.ts",
     "src/interaction/canvas-pointer-events.ts",

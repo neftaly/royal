@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build --config vite.config.ts --logLevel warn",
     "dev": "vite --config vite.config.ts",
-    "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src/main.tsx src/examples/cases/GltfBistroWeb.tsx",
+    "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src/main.tsx src/examples/cases/GltfBistroWeb.tsx src/examples/cases/WebXrVr.tsx",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1",
     "test": "pnpm exec vitest run --passWithNoTests --config vite.config.ts src/replacement-*.test.ts src/replacement-*.test.tsx"
   },

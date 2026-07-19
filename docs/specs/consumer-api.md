@@ -22,6 +22,24 @@ Backend architecture does not earn public vocabulary. A consumer should not
 need to know frame packets, passes, WebGL state, texture units, cache entries,
 worker jobs, or resource owners.
 
+The canonical React XR composition is a control under the same `Canvas`:
+
+```tsx
+const xr = useXrSession({
+  mode: "immersive-vr",
+  session: { optionalFeatures: ["local-floor"] },
+});
+
+<button onClick={() => void xr.enter()} disabled={xr.status !== "available"}>
+  Enter XR
+</button>
+```
+
+`useXrSession` is exported only by `@royal/react/xr`. Its serializable lifecycle
+snapshot uses one `status` authority; `enter`, `exit`, and
+`refreshAvailability` are explicit controls. `suspended` retains a browser-
+hidden live session, while `blocked` and `error` retain an actionable message.
+
 ## Entrypoints
 
 The intended entrypoints are:

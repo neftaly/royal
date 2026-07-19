@@ -36,7 +36,8 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     external: ['@royal/renderer-core', '@royal/renderer-core/render-object'],
     lib: {
       entry: {
-        index: 'src/index.ts'
+        index: 'src/index.ts',
+        xr: 'src/xr.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -52,7 +53,8 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        scene: 'src/scene.ts'
+        scene: 'src/scene.ts',
+        xr: 'src/xr.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -68,6 +70,8 @@ const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(m
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
+  { find: '@royal/renderer-webgl/xr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/xr.ts') },
+  { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },
   { find: '@royal/react/scene', replacement: path.join(repoRoot, 'packages/react/src/scene.ts') },

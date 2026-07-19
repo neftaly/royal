@@ -80,10 +80,30 @@ observation; rendering itself does not subscribe React to camera motion.
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
 
-The replacement is being implemented in vertical slices. The current slice
-renders opaque solid unlit and standard planes and boxes, including directional
-lighting, and proves canvas ownership, sizing, recovery, frame scheduling,
-exact shared-path picking, and React scene pointer bindings. Demand-loaded
-static unlit or core metallic-roughness GLB geometry is the first asset profile;
-textures, environments, complete glTF compatibility, and XR remain
-absent rather than being exposed as compatibility shims.
+WebXR is isolated in `@royal/react/xr`, so ordinary React applications do not
+load or probe XR code. Place the hook under `Canvas` and call `enter()` only
+from a user gesture:
+
+```tsx
+import { useXrSession } from "@royal/react/xr";
+
+function XrButton() {
+  const xr = useXrSession({
+    mode: "immersive-vr",
+    session: { optionalFeatures: ["local-floor"] },
+  });
+  const live = xr.status === "active" || xr.status === "suspended";
+  return (
+    <button
+      disabled={xr.status === "checking" || xr.status === "unavailable"}
+      onClick={() => void (live ? xr.exit() : xr.enter())}
+    >
+      {live ? "Exit XR" : "Enter XR"}
+    </button>
+  );
+}
+```
+
+The hook owns capability checking, one browser session, one session RAF chain,
+and cleanup. `suspended` is a live hidden session, not a failure. An `exit()`
+rejection restores that live state and retains its message in `error`.

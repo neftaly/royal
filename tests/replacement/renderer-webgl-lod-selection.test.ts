@@ -5,6 +5,7 @@ import {
   closestDrawableLodLevel,
   createProjectedBoundsWorkspace,
   hystereticLodLevel,
+  maximumProjectedBoundsScreenCoverage,
   normalizeLodThresholds,
   projectedBoundsScreenCoverage,
 } from "../../packages/renderer-webgl/src/surface/lod-selection";
@@ -34,6 +35,18 @@ describe("canonical LOD selection", () => {
     expect(projectedBoundsScreenCoverage(
       { max: [4, 4, 0], min: [-4, -4, 0] },
       identityMat4(),
+      workspace,
+    )).toBe(1);
+  });
+
+  it("selects conservative maximum demand across ordered views", () => {
+    const workspace = createProjectedBoundsWorkspace();
+    const near = identityMat4();
+    near[0] = 2;
+    near[5] = 2;
+    expect(maximumProjectedBoundsScreenCoverage(
+      { max: [0.5, 0.5, 0], min: [-0.5, -0.5, 0] },
+      [{ viewProjection: identityMat4() }, { viewProjection: near }],
       workspace,
     )).toBe(1);
   });

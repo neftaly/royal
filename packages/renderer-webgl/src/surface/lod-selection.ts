@@ -190,3 +190,23 @@ export const projectedBoundsScreenCoverage = (
     * Math.max(0, extents[3]! - extents[1]!);
   return Number.isFinite(coverage) ? Math.max(0, Math.min(1, coverage)) : 0;
 };
+
+/**
+ * Resolves one conservative multi-view demand. A stereo frame therefore never
+ * chooses a coarser level merely because the second eye was submitted last.
+ */
+export const maximumProjectedBoundsScreenCoverage = (
+  bounds: WorldBounds,
+  views: readonly Readonly<{ viewProjection: Mat4 }>[],
+  workspace: ProjectedBoundsWorkspace,
+): number => {
+  let maximum = 0;
+  for (const view of views) {
+    maximum = Math.max(
+      maximum,
+      projectedBoundsScreenCoverage(bounds, view.viewProjection, workspace),
+    );
+    if (maximum === 1) break;
+  }
+  return maximum;
+};

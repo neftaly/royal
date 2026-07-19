@@ -5,7 +5,7 @@ import {
   type Mat4,
   type MutableMat4,
 } from "../math/mat4";
-import type { ResolvedCanvasSize } from "../frame/canvas-size";
+import type { FrameViewport } from "../frame/clear-frame";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type { OpaqueDrawStateIntent } from "../webgl/draw-state-transition";
 import { TextureGpuOwner, type GpuTextureBinding } from "../texture/gpu-owner";
@@ -50,8 +50,14 @@ import {
   closestDrawableLodLevel,
   createProjectedBoundsWorkspace,
   hystereticLodLevel,
-  projectedBoundsScreenCoverage,
+  maximumProjectedBoundsScreenCoverage,
 } from "./lod-selection";
+
+export type SurfaceFrameView = Readonly<{
+  view: Mat4;
+  viewProjection: Mat4;
+  viewport: FrameViewport;
+}>;
 
 type GpuSurface = Readonly<{
   bindings: readonly GpuTextureBinding[];
@@ -263,10 +269,9 @@ export class SurfaceGpuOwner {
     this.#dirty = true;
   }
 
-  draw(
-    viewProjection: Mat4,
-    view: Mat4,
-    size: ResolvedCanvasSize,
+  drawViews(
+    views: readonly SurfaceFrameView[],
+    framebuffer: WebGLFramebuffer | null,
     state: WebGlStateOwner,
   ): boolean {
     if (this.#dirty) {
@@ -281,13 +286,24 @@ export class SurfaceGpuOwner {
     }
     const scene = this.#scene;
     if (scene === null || this.#gpuSurfaces.length === 0) return this.#dirty;
+    this.#selectLods(views);
+    for (const view of views) this.#drawView(view, framebuffer, state, scene);
+    return this.#dirty;
+  }
+
+  #drawView(
+    frameView: SurfaceFrameView,
+    framebuffer: WebGLFramebuffer | null,
+    state: WebGlStateOwner,
+    scene: CanonicalSurfaceScene,
+  ): void {
     let drawIntent = this.#drawIntent;
     if (drawIntent === null) {
       const firstSurface = this.#gpuSurfaces[0]!;
       const first = firstSurface.program;
       drawIntent = {
         cullBackFaces: firstSurface.surface.material.doubleSided !== true,
-        framebuffer: null,
+        framebuffer,
         frontFace: this.#gl.CCW,
         program: first.program,
         textureBindings: firstSurface.bindings,
@@ -297,8 +313,13 @@ export class SurfaceGpuOwner {
       };
       this.#drawIntent = drawIntent;
     }
-    drawIntent.viewport.height = size.backingHeight;
-    drawIntent.viewport.width = size.backingWidth;
+    drawIntent.framebuffer = framebuffer;
+    drawIntent.viewport.height = frameView.viewport.height;
+    drawIntent.viewport.width = frameView.viewport.width;
+    drawIntent.viewport.x = frameView.viewport.x;
+    drawIntent.viewport.y = frameView.viewport.y;
+    const view = frameView.view;
+    const viewProjection = frameView.viewProjection;
     cameraWorldPositionFromViewInto(this.#cameraPosition, view);
     this.#cameraPosition[3] = 1;
     let initializedProgram: WebGLProgram | null = null;
@@ -307,61 +328,6 @@ export class SurfaceGpuOwner {
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
-    this.#lodGroups.clear();
-    for (const resource of this.#gpuSurfaces) {
-      const lods = resource.surface.lods;
-      if (lods === undefined) continue;
-      for (const lod of lods) {
-        if (this.#lodGroups.has(lod.group)) continue;
-        this.#lodGroups.add(lod.group);
-        const coverage = projectedBoundsScreenCoverage(
-          lod.selectionBounds,
-          viewProjection,
-          this.#lodProjection,
-        );
-        if (this.#lodDrawableLevels.length < lod.thresholds.length) {
-          this.#lodDrawableLevels = new Uint8Array(lod.thresholds.length);
-        } else this.#lodDrawableLevels.fill(0, 0, lod.thresholds.length);
-        for (const candidate of this.#gpuSurfaces) {
-          const candidateLods = candidate.surface.lods;
-          if (candidateLods === undefined) continue;
-          for (const candidateLod of candidateLods) {
-            if (candidateLod.group === lod.group) {
-              this.#lodDrawableLevels[candidateLod.level] = 1;
-            }
-          }
-        }
-        const previous = this.#lodSelections.get(lod.group);
-        const target = hystereticLodLevel(
-          coverage,
-          lod.thresholds,
-          previous,
-        );
-        this.#lodSelections.set(lod.group, closestDrawableLodLevel(
-          target,
-          previous,
-          this.#lodDrawableLevels,
-          lod.thresholds.length,
-        ));
-      }
-    }
-    // Admission is prefix-bounded. Independent selectors may temporarily pick
-    // a node/material combination whose complete packet is not uploaded yet;
-    // retain one admitted combination for every affected set instead of a hole.
-    for (const group of this.#lodGroups) {
-      let matched = false;
-      let fallback: CanonicalDrawSurface | undefined;
-      for (const candidate of this.#gpuSurfaces) {
-        if (!surfaceHasLodGroup(candidate.surface, group)) continue;
-        fallback ??= candidate.surface;
-        if (surfaceMatchesLodSelections(candidate.surface, this.#lodSelections)) {
-          matched = true;
-          break;
-        }
-      }
-      if (matched || fallback?.lods === undefined) continue;
-      for (const lod of fallback.lods) this.#lodSelections.set(lod.group, lod.level);
-    }
     for (let index = 0; index < this.#gpuSurfaces.length; index += 1) {
       const resource = this.#gpuSurfaces[index]!;
       const surface = resource.surface;
@@ -496,7 +462,64 @@ export class SurfaceGpuOwner {
         );
       }
     }
-    return this.#dirty;
+  }
+
+  #selectLods(views: readonly SurfaceFrameView[]): void {
+    this.#lodGroups.clear();
+    for (const resource of this.#gpuSurfaces) {
+      const lods = resource.surface.lods;
+      if (lods === undefined) continue;
+      for (const lod of lods) {
+        if (this.#lodGroups.has(lod.group)) continue;
+        this.#lodGroups.add(lod.group);
+        const coverage = maximumProjectedBoundsScreenCoverage(
+          lod.selectionBounds,
+          views,
+          this.#lodProjection,
+        );
+        if (this.#lodDrawableLevels.length < lod.thresholds.length) {
+          this.#lodDrawableLevels = new Uint8Array(lod.thresholds.length);
+        } else this.#lodDrawableLevels.fill(0, 0, lod.thresholds.length);
+        for (const candidate of this.#gpuSurfaces) {
+          const candidateLods = candidate.surface.lods;
+          if (candidateLods === undefined) continue;
+          for (const candidateLod of candidateLods) {
+            if (candidateLod.group === lod.group) {
+              this.#lodDrawableLevels[candidateLod.level] = 1;
+            }
+          }
+        }
+        const previous = this.#lodSelections.get(lod.group);
+        const target = hystereticLodLevel(
+          coverage,
+          lod.thresholds,
+          previous,
+        );
+        this.#lodSelections.set(lod.group, closestDrawableLodLevel(
+          target,
+          previous,
+          this.#lodDrawableLevels,
+          lod.thresholds.length,
+        ));
+      }
+    }
+    // Admission is prefix-bounded. Independent selectors may temporarily pick
+    // a node/material combination whose complete packet is not uploaded yet;
+    // retain one admitted combination for every affected set instead of a hole.
+    for (const group of this.#lodGroups) {
+      let matched = false;
+      let fallback: CanonicalDrawSurface | undefined;
+      for (const candidate of this.#gpuSurfaces) {
+        if (!surfaceHasLodGroup(candidate.surface, group)) continue;
+        fallback ??= candidate.surface;
+        if (surfaceMatchesLodSelections(candidate.surface, this.#lodSelections)) {
+          matched = true;
+          break;
+        }
+      }
+      if (matched || fallback?.lods === undefined) continue;
+      for (const lod of fallback.lods) this.#lodSelections.set(lod.group, lod.level);
+    }
   }
 
   #reconcile(): void {

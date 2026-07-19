@@ -29,6 +29,11 @@
       "import": "./dist/scene.js",
       "default": "./dist/scene.js"
     },
+    "./xr": {
+      "types": "./dist/xr.d.ts",
+      "import": "./dist/xr.js",
+      "default": "./dist/xr.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

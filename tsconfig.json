@@ -26,8 +26,14 @@
       "@royal/renderer-webgl": [
         "./packages/renderer-webgl/src/index.ts"
       ],
+      "@royal/renderer-webgl/xr": [
+        "./packages/renderer-webgl/src/xr.ts"
+      ],
       "@royal/react": [
         "./packages/react/src/index.ts"
+      ],
+      "@royal/react/xr": [
+        "./packages/react/src/xr.ts"
       ],
       "@royal/react/scene": [
         "./packages/react/src/scene.ts"
@@ -45,14 +51,18 @@
   },
   "include": [
     "apps/examples-react/src/main.tsx",
+    "apps/examples-react/src/examples/cases/WebXrVr.tsx",
     "apps/examples-react/src/vite-env.d.ts",
     "packages/renderer-core/src",
     "packages/renderer-webgl/src/index.ts",
+    "packages/renderer-webgl/src/xr.ts",
+    "packages/renderer-webgl/src/xr",
     "packages/renderer-webgl/src/glsl.d.ts",
     "packages/renderer-webgl/src/context/context-lifecycle.ts",
     "packages/renderer-webgl/src/context/context-lifecycle-owner.ts",
     "packages/renderer-webgl/src/frame/canvas-size.ts",
     "packages/renderer-webgl/src/frame/clear-frame.ts",
+    "packages/renderer-webgl/src/frame/external-frame.ts",
     "packages/renderer-webgl/src/frame/frame-clock.ts",
     "packages/renderer-webgl/src/frame/frame-clock-owner.ts",
     "packages/renderer-webgl/src/gltf/accessor-reader.ts",
@@ -83,6 +93,8 @@
     "packages/renderer-webgl/src/webgl/draw-state-transition.ts",
     "packages/renderer-webgl/src/webgl/state-owner.ts",
     "packages/react/src/index.ts",
+    "packages/react/src/xr.ts",
+    "packages/react/src/xr",
     "packages/react/src/scene.ts",
     "packages/react/src/runtime",
     "packages/react/src/observation",

@@ -73,7 +73,11 @@ opaque solid metallic-roughness or `KHR_materials_unlit` factors demand-load
 into that same path. Their float `NORMAL` and `TEXCOORD_0` streams lower into
 optional canonical attributes for later material slices; preparation code loads
 concurrently with the asset request.
-Textures, scene environments, point/spot lights, external `.gltf` resources,
-sparse/quantized accessors, variants, deformation, and animation still fail
-explicitly rather than calling the legacy renderer. Optional capability and
-WebXR subpaths return only with their working feature slices.
+The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
+`createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It
+borrows the root's existing context, acquires exclusive external-clock
+authority, and submits all ordered views as one frame transaction. LOD demand
+uses maximum coverage across the views, upload admission remains root-wide, and
+Royal re-establishes its GL state after browser runtime work. The session host
+still owns `session.requestAnimationFrame`; React applications should use the
+higher-level `@royal/react/xr` lifecycle instead.

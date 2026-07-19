@@ -20,7 +20,6 @@ import {
   studioEnvironment,
   unlitMaterial,
 } from "@royal/react/scene";
-import { GltfBistroWeb } from "./examples/cases/GltfBistroWeb";
 import "./style.css";
 
 const blue = standardMaterial({
@@ -113,7 +112,10 @@ const App = (): ReactNode => {
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) throw new Error("Expected #root element");
-const Example = globalThis.location.pathname.endsWith("/gltf-bistro-web")
-  ? GltfBistroWeb
-  : App;
+let Example: () => ReactNode = App;
+if (globalThis.location.pathname.endsWith("/gltf-bistro-web")) {
+  Example = (await import("./examples/cases/GltfBistroWeb")).GltfBistroWeb;
+} else if (globalThis.location.pathname.endsWith("/webxr-vr")) {
+  Example = (await import("./examples/cases/WebXrVr")).WebXrVr;
+}
 createRoot(rootElement).render(<StrictMode><Example /></StrictMode>);

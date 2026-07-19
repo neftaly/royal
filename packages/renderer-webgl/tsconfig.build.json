@@ -13,10 +13,13 @@
   "files": [
     "src/glsl.d.ts",
     "src/index.ts",
+    "src/xr.ts",
+    "src/xr/session-renderer.ts",
     "src/context/context-lifecycle-owner.ts",
     "src/context/context-lifecycle.ts",
     "src/frame/canvas-size.ts",
     "src/frame/clear-frame.ts",
+    "src/frame/external-frame.ts",
     "src/frame/frame-clock-owner.ts",
     "src/frame/frame-clock.ts",
     "src/gltf/accessor-reader.ts",

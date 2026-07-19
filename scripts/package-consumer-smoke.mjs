@@ -34,7 +34,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 176 * 1024,
+  '@royal/renderer-webgl': 232 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -155,6 +155,7 @@ import {
   type RoyalRendererRoot,
 } from '@royal/react';
 import { scene } from '@royal/react/scene';
+import { useXrSession } from '@royal/react/xr';
 import type { ReactNode } from 'react';
 
 const orbit = createOrbitCameraController(
@@ -175,11 +176,17 @@ const Status = (): ReactNode => {
   return <output>{renderer}: {size?.width ?? 0} by {size?.height ?? 0}; model {model.state}</output>;
 };
 
+const XrControl = (): ReactNode => {
+  const xr = useXrSession({ mode: 'immersive-vr' });
+  return <button onClick={() => void xr.enter()}>{xr.status}</button>;
+};
+
 export const App = (): ReactNode => {
   return (
     <Canvas aria-label="Royal preview" data-testid="royal-canvas" scene={renderScene}>
       <OrbitControls orbit={orbit} />
       <Status />
+      <XrControl />
     </Canvas>
   );
 };
@@ -191,8 +198,10 @@ const entrypoints = [
   '@royal/renderer-core',
   '@royal/renderer-core/render-object',
   '@royal/renderer-webgl',
+  '@royal/renderer-webgl/xr',
   '@royal/react',
   '@royal/react/scene',
+  '@royal/react/xr',
 ];
 for (const entrypoint of entrypoints) await import(entrypoint);
 console.log('ok packed Royal entrypoints');

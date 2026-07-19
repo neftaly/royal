@@ -19,6 +19,11 @@ import {
 } from "../frame/canvas-size";
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
 import {
+  rendererOwnedWebGl2Context,
+  rendererSubmitExternalFrame,
+  type ExternalSurfaceFrame,
+} from "../frame/external-frame";
+import {
   GltfAssetOwner,
   readGltfResourceWithFetch,
   readGltfWithFetch,
@@ -36,7 +41,7 @@ import {
   prepareCanonicalSurfaceScene,
   refreshCanonicalSurfaceTexture,
 } from "../surface/scene-lowering";
-import { SurfaceGpuOwner } from "../surface/surface-gpu-owner";
+import { SurfaceGpuOwner, type SurfaceFrameView } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   TextureAssetOwner,
@@ -200,12 +205,40 @@ export class CanvasRoot {
   readonly #projection = identityMat4();
   readonly #view = identityMat4();
   readonly #viewProjection = identityMat4();
+  readonly #canvasViewport = { height: 1, width: 1, x: 0, y: 0 };
+  readonly #canvasViews: readonly SurfaceFrameView[] = [{
+    view: this.#view,
+    viewProjection: this.#viewProjection,
+    viewport: this.#canvasViewport,
+  }];
+  readonly #externalClearIntent: {
+    clearColor: LinearRgba;
+    clearDepth: number;
+    clearStencil: number;
+    framebuffer: WebGLFramebuffer | null;
+    scissor: null;
+    size: { height: number; width: number };
+    viewport: { height: number; width: number; x: number; y: number };
+  } = {
+    clearColor: this.#clearColor,
+    clearDepth: 1,
+    clearStencil: 0,
+    framebuffer: null,
+    scissor: null,
+    size: { height: 1, width: 1 },
+    viewport: { height: 1, width: 1, x: 0, y: 0 },
+  };
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: RenderRoot | null = null;
 
   /** Canvas whose context and backing dimensions are owned by this root. */
   get canvas(): HTMLCanvasElement {
     return this.#canvas;
+  }
+
+  /** @internal Dedicated optional renderers borrow, but never own, this context. */
+  get [rendererOwnedWebGl2Context](): WebGL2RenderingContext {
+    return this.#gl;
   }
 
   constructor(
@@ -261,6 +294,30 @@ export class CanvasRoot {
   acquireExternalClock(): ExternalFrameClock {
     this.#assertLive("acquire an external clock");
     return this.#clock.acquireExternalClock();
+  }
+
+  /** @internal Submits one already-validated multi-view transaction. */
+  [rendererSubmitExternalFrame](frame: ExternalSurfaceFrame): boolean {
+    this.#assertLive("submit an external frame");
+    if (this.#context.getSnapshot().phase !== "active" || frame.views.length === 0) return false;
+    const intent = this.#externalClearIntent;
+    intent.clearColor = this.#clearColor;
+    intent.framebuffer = frame.framebuffer;
+    intent.size.height = frame.size.height;
+    intent.size.width = frame.size.width;
+    intent.viewport.height = frame.size.height;
+    intent.viewport.width = frame.size.width;
+    this.#state.invalidate();
+    this.#state.clear(intent);
+    const pending = this.#surfaceGpu.drawViews(
+      frame.views,
+      frame.framebuffer,
+      this.#state,
+    );
+    this.#frame += 1;
+    this.#lastFrameFailure = undefined;
+    this.#publish();
+    return pending;
   }
 
   dispose(): void {
@@ -571,7 +628,9 @@ export class CanvasRoot {
       projectionMat4Into(this.#projection, surfaceScene.camera, size.backingWidth, size.backingHeight);
       viewMat4Into(this.#view, surfaceScene.camera);
       multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
-      if (this.#surfaceGpu.draw(this.#viewProjection, this.#view, size, this.#state)) {
+      this.#canvasViewport.height = size.backingHeight;
+      this.#canvasViewport.width = size.backingWidth;
+      if (this.#surfaceGpu.drawViews(this.#canvasViews, null, this.#state)) {
         this.#clock.invalidate();
       }
     }
