@@ -1,14 +1,19 @@
 import {
+  boxGeometry,
   createGltfInstanceTransforms,
   directionalLight,
   gltf,
   gltfInstances,
+  imageTexture,
+  mesh,
   perspectiveCamera,
   planeGeometry,
   scene,
+  unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
+import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import {
   staticInstancedTriangleGlb,
   staticTriangleDocument,
@@ -17,6 +22,49 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("keeps texture publication incremental while a large scene is still admitting", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const reconcile = vi.spyOn(TextureGpuOwner.prototype, "reconcile");
+    const retain = vi.spyOn(TextureGpuOwner.prototype, "retain");
+    const texture = imageTexture("/shared.png");
+    const material = unlitMaterial({ texture });
+    const nodes = Array.from({ length: 20 }, (_, index) => mesh({
+      geometry: boxGeometry(1),
+      material,
+      transform: { position: [index * 2, 0, 0] },
+    }));
+    const { callbacks, root } = harness({ decodeTexture });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.render(scene({
+        camera: perspectiveCamera({ position: [0, 0, 30] }),
+        nodes,
+      }));
+      callbacks.shift()!();
+      expect(reconcile).toHaveBeenCalledTimes(1);
+
+      resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 32 });
+      await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+      callbacks.shift()!();
+      expect(reconcile).toHaveBeenCalledTimes(1);
+      expect(retain).toHaveBeenCalledTimes(20 * 9);
+      expect(callbacks).toHaveLength(0);
+    } finally {
+      root.dispose();
+      reconcile.mockRestore();
+      retain.mockRestore();
+    }
+  });
+
   it("publishes one asynchronously prepared GLB into the same draw and pick path", async () => {
     const document = staticTriangleDocument();
     delete document.extensionsRequired;

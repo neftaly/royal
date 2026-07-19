@@ -57,6 +57,7 @@ import {
 import {
   SurfaceGeometryGpuOwner,
   type GpuGeometry,
+  type GpuGeometrySurface,
 } from "./surface-geometry-gpu-owner";
 import {
   nextSurfaceAdmissionCount,
@@ -268,6 +269,25 @@ const residentOrdinaryTextureMask = (
   return mask;
 };
 
+const materialTextureBindingAt = (
+  material: CanonicalSurfaceMaterial,
+  unit: number,
+): CanonicalTextureBinding | undefined => {
+  if (unit === 0) return material.baseColorTexture;
+  if (material.kind !== "standard") return undefined;
+  switch (unit) {
+    case 1: return material.metallicRoughnessTexture;
+    case 2: return material.normalTexture;
+    case 3: return material.emissiveTexture;
+    case 4: return material.occlusionTexture;
+    case 5: return material.specularTexture;
+    case 6: return material.specularColorTexture;
+    case 7: return material.transmissionTexture;
+    case 8: return material.thicknessTexture;
+    default: return undefined;
+  }
+};
+
 type GroupedSurfaces = Readonly<{
   blended: GpuSurface[];
   opaque: readonly GpuSurface[];
@@ -357,6 +377,7 @@ export class SurfaceGpuOwner {
   #directionalLightCount = 0;
   #dirty = false;
   #drawIntent: MutableSurfaceDrawIntent | null = null;
+  #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
@@ -367,11 +388,13 @@ export class SurfaceGpuOwner {
   #blendedSurfaces: GpuSurface[] = [];
   #blendedDepths = new Float64Array(0);
   #transmissionSurfaces: GpuSurface[] = [];
-  #gpuSurfacesBySceneIndex: readonly GpuSurface[] = [];
+  #gpuScene: CanonicalSurfaceScene | null = null;
+  #gpuSurfacesBySceneIndex: GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   #multiDraw: WebGlMultiDraw | null;
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
+  readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
   readonly #lodGroups = new Set<string>();
   #lodDrawableLevels = new Uint8Array(1);
   readonly #lodProjection = createProjectedBoundsWorkspace();
@@ -422,12 +445,14 @@ export class SurfaceGpuOwner {
     this.#compositeGpu = null;
     this.#virtualTexture?.dispose();
     this.#drawIntent = null;
+    this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
     this.#blendedDepths = new Float64Array(0);
     this.#gpuSurfacesBySceneIndex = [];
+    this.#gpuScene = null;
     this.#scene = null;
     this.#texturePublicationKeys.clear();
     this.#lodGroups.clear();
@@ -447,12 +472,14 @@ export class SurfaceGpuOwner {
     this.#blendedDepths = new Float64Array(0);
     this.#transmissionSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
+    this.#gpuScene = null;
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#compositeGpu?.invalidate();
     this.#virtualTexture?.invalidate();
     this.#multiDraw = this.#readMultiDraw();
     this.#drawIntent = null;
+    this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
     this.#requiresSceneColor = false;
@@ -502,6 +529,7 @@ export class SurfaceGpuOwner {
       ? []
       : scene.surfaces.filter((surface) => canonicalMaterialHasTransmission(surface.material));
     this.#dirty = true;
+    this.#fullReconcileRequired = true;
     this.#texturePublicationKeys.clear();
     this.#virtualTexture?.setScene(scene);
   }
@@ -514,6 +542,7 @@ export class SurfaceGpuOwner {
     this.#programs.setVirtualTextureDeclarations(runtime?.shaderSource.declarations ?? "");
     runtime?.setScene(this.#scene);
     this.#dirty = true;
+    this.#fullReconcileRequired = true;
   }
 
   publishTextureScene(scene: CanonicalSurfaceScene, textureKey: string): void {
@@ -522,14 +551,17 @@ export class SurfaceGpuOwner {
       return;
     }
     this.#scene = scene;
-    if (this.#dirty && this.#texturePublicationKeys.size === 0) return;
     this.#texturePublicationKeys.add(textureKey);
     this.#dirty = true;
   }
 
   /** Commits pending texture representations without requiring a scene presentation. */
   flushTexturePublications(state: WebGlStateOwner): boolean {
-    if (!this.#dirty || this.#texturePublicationKeys.size === 0) return false;
+    if (
+      !this.#dirty
+      || this.#fullReconcileRequired
+      || this.#texturePublicationKeys.size === 0
+    ) return false;
     try {
       this.#reconcileTexturePublications();
     } finally {
@@ -575,6 +607,7 @@ export class SurfaceGpuOwner {
         if (this.#compositeBindingRevision !== composite.bindingRevision) {
           this.#compositeBindingRevision = composite.bindingRevision;
           this.#dirty = true;
+          this.#fullReconcileRequired = true;
         }
       }
     } else {
@@ -593,6 +626,7 @@ export class SurfaceGpuOwner {
     if (this.#compositeActive !== compositeActive) {
       this.#compositeActive = compositeActive;
       this.#dirty = true;
+      this.#fullReconcileRequired = true;
     }
     let virtualTexturePending = false;
     if (this.#virtualTexture !== null) {
@@ -602,6 +636,7 @@ export class SurfaceGpuOwner {
       if (this.#virtualTextureBindingRevision !== this.#virtualTexture.bindingRevision) {
         this.#virtualTextureBindingRevision = this.#virtualTexture.bindingRevision;
         this.#dirty = true;
+        this.#fullReconcileRequired = true;
       }
     }
     if (this.#dirty) {
@@ -674,6 +709,7 @@ export class SurfaceGpuOwner {
       this.#programs.setTransmissionShaderSource(transmissionShaderSource);
       this.#compositeGpu = new SurfaceCompositeOwner(this.#gl, this.#resourceBudget);
       this.#dirty = true;
+      this.#fullReconcileRequired = true;
       this.#onChanged();
     }).catch((error: unknown) => {
       if (generation !== this.#compositeLoadGeneration) return;
@@ -1118,6 +1154,63 @@ export class SurfaceGpuOwner {
     }
   }
 
+  #retainOrdinaryTextureBindings(
+    material: CanonicalSurfaceMaterial,
+  ): readonly GpuTextureBinding[] {
+    for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+      this.#ordinaryBindingScratch[unit] = this.#textureGpu.retain(
+        materialTextureBindingAt(material, unit),
+      );
+    }
+    return this.#ordinaryBindingScratch;
+  }
+
+  #prepareGpuSurface(
+    geometrySurface: GpuGeometrySurface,
+    ordinaryBindings: readonly GpuTextureBinding[],
+    bindingOffset: number,
+    scene: CanonicalSurfaceScene | null,
+  ): GpuSurface {
+    const material = geometrySurface.surface.material;
+    const virtualTexture = material.baseColorVirtualAsset === undefined
+      ? undefined
+      : this.#virtualTexture?.binding(material.baseColorVirtualAsset);
+    const features = materialTextureFeatures(
+      geometrySurface.surface,
+      geometrySurface.geometry,
+      scene?.environment !== undefined,
+      (scene?.punctualLights.length ?? 0) > 0,
+      virtualTexture !== undefined,
+      residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
+      this.#compositeActive,
+    );
+    return {
+      bindings: composeSurfaceTextureBindings(
+        ordinaryBindings,
+        bindingOffset,
+        virtualTexture,
+        this.#compositeActive
+          && material.kind === "standard"
+          && canonicalMaterialHasTransmission(material)
+          ? this.#compositeGpu?.sceneColorBinding()
+          : undefined,
+      ),
+      geometry: geometrySurface.geometry,
+      instanceCount: geometrySurface.instanceCount,
+      program: this.#programs.get(
+        material.kind,
+        features,
+        geometrySurface.instanceCount > 0,
+        material.alphaCutoff !== undefined,
+        canonicalSurfaceIsDoubleSided(material),
+      ),
+      surface: geometrySurface.surface,
+      textureUnits: textureUnitMask(features),
+      vertexArray: geometrySurface.vertexArray,
+      ...(virtualTexture === undefined ? {} : { virtualTexture }),
+    };
+  }
+
   #reconcile(): void {
     this.#dirty = false;
     const scene = this.#scene;
@@ -1129,95 +1222,60 @@ export class SurfaceGpuOwner {
     );
     const geometryPlan = this.#geometryGpu.prepare(surfaces, admittedSurfaceCount);
     try {
-      const programs = Array<StandardProgram | UnlitProgram>(geometryPlan.surfaces.length);
-      const textureUnitMasks = Array<number>(geometryPlan.surfaces.length);
-      const textureInputs = Array<CanonicalTextureBinding | undefined>(
-        geometryPlan.surfaces.length * MATERIAL_TEXTURE_UNITS,
-      );
-      for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
-        const geometrySurface = geometryPlan.surfaces[index]!;
-        const material = geometrySurface.surface.material;
-        const offset = index * MATERIAL_TEXTURE_UNITS;
-        textureInputs[offset] = material.baseColorTexture;
-        textureInputs[offset + 1] = material.kind === "standard"
-          ? material.metallicRoughnessTexture
-          : undefined;
-        textureInputs[offset + 2] = material.kind === "standard"
-          ? material.normalTexture
-          : undefined;
-        textureInputs[offset + 3] = material.kind === "standard"
-          ? material.emissiveTexture
-          : undefined;
-        textureInputs[offset + 4] = material.kind === "standard"
-          ? material.occlusionTexture
-          : undefined;
-        textureInputs[offset + 5] = material.kind === "standard"
-          ? material.specularTexture
-          : undefined;
-        textureInputs[offset + 6] = material.kind === "standard"
-          ? material.specularColorTexture
-          : undefined;
-        textureInputs[offset + 7] = material.kind === "standard"
-          ? material.transmissionTexture
-          : undefined;
-        textureInputs[offset + 8] = material.kind === "standard"
-          ? material.thicknessTexture
-          : undefined;
+      const previousSurfaceCount = this.#gpuSurfacesBySceneIndex.length;
+      const appendOnly = scene !== null
+        && !this.#fullReconcileRequired
+        && this.#gpuScene === scene
+        && previousSurfaceCount === this.#admittedSurfaceCount
+        && admittedSurfaceCount > previousSurfaceCount;
+      let nextSurfaces: GpuSurface[];
+      if (appendOnly) {
+        const appended = Array<GpuSurface>(admittedSurfaceCount - previousSurfaceCount);
+        for (let index = previousSurfaceCount; index < admittedSurfaceCount; index += 1) {
+          const geometrySurface = geometryPlan.surfaces[index]!;
+          const ordinaryBindings = this.#retainOrdinaryTextureBindings(
+            geometrySurface.surface.material,
+          );
+          appended[index - previousSurfaceCount] = this.#prepareGpuSurface(
+            geometrySurface,
+            ordinaryBindings,
+            0,
+            scene,
+          );
+        }
+        geometryPlan.commit();
+        for (const resource of appended) this.#gpuSurfacesBySceneIndex.push(resource);
+        nextSurfaces = this.#gpuSurfacesBySceneIndex;
+      } else {
+        const textureInputs = Array<CanonicalTextureBinding | undefined>(
+          geometryPlan.surfaces.length * MATERIAL_TEXTURE_UNITS,
+        );
+        for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
+          const material = geometryPlan.surfaces[index]!.surface.material;
+          const offset = index * MATERIAL_TEXTURE_UNITS;
+          for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+            textureInputs[offset + unit] = materialTextureBindingAt(material, unit);
+          }
+        }
+        const textureBindings = this.#textureGpu.reconcile(textureInputs);
+        nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
+        for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
+          nextSurfaces[index] = this.#prepareGpuSurface(
+            geometryPlan.surfaces[index]!,
+            textureBindings,
+            index * MATERIAL_TEXTURE_UNITS,
+            scene,
+          );
+        }
+        geometryPlan.commit();
+        this.#gpuSurfacesBySceneIndex = nextSurfaces;
       }
-      const textureBindings = this.#textureGpu.reconcile(textureInputs);
-      const nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
-      const linearOutput = this.#compositeActive;
       if (this.#multiDrawCounts.length < geometryPlan.surfaces.length) {
         this.#multiDrawCounts = new Int32Array(geometryPlan.surfaces.length);
         this.#multiDrawOffsets = new Int32Array(geometryPlan.surfaces.length);
       }
-      for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
-        const geometrySurface = geometryPlan.surfaces[index]!;
-        const offset = index * MATERIAL_TEXTURE_UNITS;
-        const material = geometrySurface.surface.material;
-        const virtualTexture = material.baseColorVirtualAsset === undefined
-          ? undefined
-          : this.#virtualTexture?.binding(material.baseColorVirtualAsset);
-        const features = materialTextureFeatures(
-          geometrySurface.surface,
-          geometrySurface.geometry,
-          scene?.environment !== undefined,
-          (scene?.punctualLights.length ?? 0) > 0,
-          virtualTexture !== undefined,
-          residentOrdinaryTextureMask(textureBindings, offset),
-          linearOutput,
-        );
-        textureUnitMasks[index] = textureUnitMask(features);
-        programs[index] = this.#programs.get(
-          material.kind,
-          features,
-          geometrySurface.instanceCount > 0,
-          material.alphaCutoff !== undefined,
-          canonicalSurfaceIsDoubleSided(material),
-        );
-        nextSurfaces[index] = {
-          bindings: composeSurfaceTextureBindings(
-            textureBindings,
-            offset,
-            virtualTexture,
-            this.#compositeActive
-              && material.kind === "standard"
-              && canonicalMaterialHasTransmission(material)
-              ? this.#compositeGpu?.sceneColorBinding()
-              : undefined,
-          ),
-          geometry: geometrySurface.geometry,
-          instanceCount: geometrySurface.instanceCount,
-          program: programs[index]!,
-          surface: geometrySurface.surface,
-          textureUnits: textureUnitMasks[index]!,
-          vertexArray: geometrySurface.vertexArray,
-          ...(virtualTexture === undefined ? {} : { virtualTexture }),
-        };
-      }
-      geometryPlan.commit();
       this.#admittedSurfaceCount = admittedSurfaceCount;
-      this.#gpuSurfacesBySceneIndex = nextSurfaces;
+      this.#gpuScene = scene;
       const grouped = groupSurfacesForDrawing(nextSurfaces);
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.blended;
@@ -1256,6 +1314,8 @@ export class SurfaceGpuOwner {
     } else {
       this.#directionalLightCount = 0;
     }
+    this.#fullReconcileRequired = false;
+    this.#texturePublicationKeys.clear();
     this.#dirty = this.#admittedSurfaceCount < surfaces.length;
     this.#drawIntent = null;
   }
@@ -1272,33 +1332,7 @@ export class SurfaceGpuOwner {
         const resource = surfaces[index]!;
         const surface = scene.surfaces[index]!;
         const material = surface.material;
-        const ordinaryBindings = [
-          this.#textureGpu.retain(material.baseColorTexture),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.metallicRoughnessTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.normalTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.emissiveTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.occlusionTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.specularTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.specularColorTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.transmissionTexture
-            : undefined),
-          this.#textureGpu.retain(material.kind === "standard"
-            ? material.thicknessTexture
-            : undefined),
-        ];
+        const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
         const features = materialTextureFeatures(
           surface,
           resource.geometry,
@@ -1340,7 +1374,8 @@ export class SurfaceGpuOwner {
     }
     this.#planOpaqueMultiDrawRuns();
     this.#texturePublicationKeys.clear();
-    this.#dirty = false;
+    this.#gpuScene = scene;
+    this.#dirty = this.#admittedSurfaceCount < scene.surfaces.length;
     this.#drawIntent = null;
   }
 
