@@ -142,6 +142,7 @@ describe("canonical direct surface lowering", () => {
         const materials = document.materials as Array<Record<string, unknown>>;
         materials[0]!.alphaMode = "MASK";
         materials[0]!.alphaCutoff = 0.5;
+        materials[0]!.doubleSided = true;
         document.nodes = [{ mesh: 0 }];
         document.scenes = [{ nodes: [0] }];
       },
@@ -154,6 +155,7 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces).toHaveLength(1);
     expect(prepared.pickSurfaces[0]).toMatchObject({
       alphaMaskSampler: { magFilter: "linear" },
+      doubleSided: true,
       materialSource: {
         alphaCutoff: 0.5,
         baseColorAsset: { kind: "asset", src: "/cutout.png" },

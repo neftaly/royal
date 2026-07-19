@@ -117,4 +117,34 @@ describe("canonical alpha-mask picking", () => {
     expect(accepts).toHaveBeenCalledTimes(2);
     expect(accepts.mock.calls[0]!.slice(1)).toEqual([0, 1, 2, 0.25, 0.25]);
   });
+
+  it("accepts a back-facing triangle only when canonical raster intent is double-sided", () => {
+    const node = { kind: "mesh" } as CanonicalPickSurface["node"];
+    const surface: CanonicalPickSurface = {
+      inverseModel: identityMat4(),
+      modelHandedness: 1,
+      node,
+      pickingGeometry: geometry(),
+    };
+    const ray = {
+      direction: [0, 0, 1] as const,
+      maxDistance: 10,
+      minDistance: 0,
+      origin: [0.25, 0.25, -1] as const,
+    };
+    const hit = { distance: 0, surfaceIndex: -1 };
+    expect(pickCanonicalSurfaceInto(
+      hit,
+      ray,
+      [surface],
+      createCanonicalPickingScratch(),
+    )).toBe(false);
+    expect(pickCanonicalSurfaceInto(
+      hit,
+      ray,
+      [{ ...surface, doubleSided: true }],
+      createCanonicalPickingScratch(),
+    )).toBe(true);
+    expect(hit.distance).toBe(1);
+  });
 });

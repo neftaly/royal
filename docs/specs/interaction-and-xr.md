@@ -40,7 +40,8 @@ geometry is still loading. A conservative bounds test is only a broad phase.
 
 ## Hit semantics
 
-The nearest legal surface wins. Backface behavior matches visible sidedness.
+The nearest legal surface wins. Backface behavior matches visible sidedness,
+including legal hits on either face of actual `doubleSided` glTF primitives.
 Alpha-mask fragments below cutoff are not hits. Opaque geometry is hit regardless
 of color alpha. Transparent/blended geometry currently uses its triangle
 surface rather than per-texel alpha; this is a documented limitation and must

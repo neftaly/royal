@@ -102,6 +102,7 @@ const triangleDistance = (
   cIndex: number,
   ray: MutableLocalRay,
   handedness: 1 | -1,
+  doubleSided: boolean,
 ): boolean => {
   const a = aIndex * 3;
   const b = bIndex * 3;
@@ -116,7 +117,10 @@ const triangleDistance = (
   const pY = ray.direction[2] * edge2X - ray.direction[0] * edge2Z;
   const pZ = ray.direction[0] * edge2Y - ray.direction[1] * edge2X;
   const determinant = (edge1X * pX + edge1Y * pY + edge1Z * pZ) * handedness;
-  if (!(determinant > 0) || !Number.isFinite(determinant)) return false;
+  if (
+    !Number.isFinite(determinant)
+    || (doubleSided ? determinant === 0 : !(determinant > 0))
+  ) return false;
   const inverseDeterminant = handedness / determinant;
   const relativeX = ray.origin[0] - positions[a]!;
   const relativeY = ray.origin[1] - positions[a + 1]!;
@@ -158,6 +162,7 @@ const exactSurfaceDistance = (
       cIndex,
       ray,
       surface.modelHandedness,
+      surface.doubleSided === true,
     )) continue;
     const distance = triangleHit.distance;
     if (

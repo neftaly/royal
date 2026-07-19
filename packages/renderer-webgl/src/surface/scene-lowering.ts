@@ -70,6 +70,7 @@ export type CanonicalDrawSurface = Readonly<{
 
 export type CanonicalPickSurface = Readonly<{
   alphaMaskSampler?: ReturnType<typeof canonicalTextureSampler>;
+  doubleSided?: true;
   instanceIndex?: number;
   inverseModel: Mat4 | undefined;
   lods?: readonly LodMembership[];
@@ -81,14 +82,15 @@ export type CanonicalPickSurface = Readonly<{
 
 const canonicalPickMaterial = (
   material: CanonicalSurfaceMaterial,
-): Pick<CanonicalPickSurface, "alphaMaskSampler" | "materialSource"> => material.alphaCutoff === undefined
-  ? {}
-  : {
+): Pick<CanonicalPickSurface, "alphaMaskSampler" | "doubleSided" | "materialSource"> => ({
+  ...(material.doubleSided === true ? { doubleSided: true as const } : {}),
+  ...(material.alphaCutoff === undefined ? {} : {
     ...(material.baseColorAsset === undefined
       ? {}
       : { alphaMaskSampler: canonicalTextureSampler(material.baseColorAsset) }),
     materialSource: material,
-  };
+  }),
+});
 
 export type CanonicalLodGroup = Readonly<{
   group: string;
@@ -611,6 +613,7 @@ export const prepareCanonicalSurfaceScene = (
       ...surface,
       ...canonicalPickMaterial(materialSource),
     } : {
+      ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
       inverseModel: surface.inverseModel,
       modelHandedness: surface.modelHandedness,
       node,
