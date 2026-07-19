@@ -56,6 +56,10 @@ CSS owns layout. Royal measures that layout and owns the canvas backing size, so
 native `width` and `height` props are intentionally excluded. Native canvas
 props, ARIA attributes, event handlers, class/style, refs, and application
 `data-*` attributes pass through; `data-*` is not a Royal scene protocol.
+Canvas defaults to `display: block; width: 100%` so its renderer-owned backing
+dimensions cannot feed back into unconstrained intrinsic CSS sizing. An explicit
+React `style` may override either default; CSS should keep at least one axis
+independent of the canvas's intrinsic dimensions.
 
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
 both defaulting to `true`. A semantic option change replaces both the root and

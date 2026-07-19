@@ -530,7 +530,14 @@ const run = async () => {
     await evaluate(
       client,
       targetId,
-      'delete globalThis.__royalBrowserBenchmarkError; delete globalThis.__royalBrowserBenchmarkReport; "cleared";',
+      [
+        'delete globalThis.__royalBrowserBenchmarkError;',
+        'delete globalThis.__royalBrowserBenchmarkReport;',
+        // Prevent repeated physical-device runs from retaining prior WebGL
+        // documents in Safari's back-forward cache on memory-constrained iPads.
+        'globalThis.addEventListener("unload", () => undefined, { once: true });',
+        '"cleared";',
+      ].join(' '),
       5_000,
     );
     browserDiagnostics.reset();

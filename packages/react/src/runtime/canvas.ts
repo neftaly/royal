@@ -106,21 +106,27 @@ export const observeCanvasSize = (
   }
   let cssHeight = 0;
   let cssWidth = 0;
+  let frame: number | undefined;
+  const schedulePublication = (): void => {
+    if (frame !== undefined) return;
+    frame = globalThis.requestAnimationFrame(() => {
+      frame = undefined;
+      publishCanvasSize(root, cssWidth, cssHeight);
+    });
+  };
   const observer = new ResizeObserverConstructor((entries) => {
     const entry = entries[entries.length - 1];
     if (entry === undefined) return;
     cssHeight = entry.contentRect.height;
     cssWidth = entry.contentRect.width;
-    publishCanvasSize(root, cssWidth, cssHeight);
+    schedulePublication();
   });
-  const updateDevicePixelRatio = (): void => {
-    if (cssWidth > 0 && cssHeight > 0) publishCanvasSize(root, cssWidth, cssHeight);
-  };
   observer.observe(canvas);
-  globalThis.addEventListener?.("resize", updateDevicePixelRatio);
+  globalThis.addEventListener?.("resize", schedulePublication);
   return () => {
+    if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
     observer.disconnect();
-    globalThis.removeEventListener?.("resize", updateDevicePixelRatio);
+    globalThis.removeEventListener?.("resize", schedulePublication);
   };
 };
 
@@ -265,6 +271,7 @@ export const Canvas = ({
     ...canvasProps,
     key: optionsKey,
     ref: attachCanvas,
+    style: { display: "block", width: "100%", ...canvasProps.style },
   });
   return createElement(
     CanvasElementContext.Provider,

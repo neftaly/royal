@@ -41,7 +41,9 @@ describe("replacement React public API", () => {
       { "aria-label": "preview", scene: emptyScene },
       createElement(Status),
     ));
-    expect(html).toContain('<canvas aria-label="preview"></canvas>');
+    expect(html).toContain(
+      '<canvas aria-label="preview" style="display:block;width:100%"></canvas>',
+    );
     expect(html).toContain("<output>unavailable</output>");
   });
 
@@ -67,6 +69,14 @@ describe("replacement React public API", () => {
     expectTypeOf(useOrbitCameraView).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
+  });
+
+  it("provides a stable CSS sizing default while preserving explicit style overrides", () => {
+    const html = renderToStaticMarkup(createElement(Canvas, {
+      scene: emptyScene,
+      style: { display: "inline-block", width: "40%" },
+    }));
+    expect(html).toContain('style="display:inline-block;width:40%"');
   });
 
   it("server-renders exact glTF status as idle before root mount", () => {
@@ -132,6 +142,7 @@ describe("replacement React public API", () => {
   it("observes canvas size without forcing layout and reuses it for DPR changes", () => {
     let observe: ResizeObserverCallback | undefined;
     let resize: (() => void) | undefined;
+    let frame: FrameRequestCallback | undefined;
     const disconnect = vi.fn();
     const canvas = { getBoundingClientRect: vi.fn() } as unknown as HTMLCanvasElement;
     const setSize = vi.fn();
@@ -144,6 +155,11 @@ describe("replacement React public API", () => {
       disconnect = disconnect;
       observe = vi.fn();
     });
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.stubGlobal("addEventListener", vi.fn((type: string, listener: () => void) => {
       if (type === "resize") resize = listener;
     }));
@@ -156,17 +172,23 @@ describe("replacement React public API", () => {
       observe?.([
         { contentRect: { height: 180, width: 320 } } as ResizeObserverEntry,
       ], {} as ResizeObserver);
+      observe?.([
+        { contentRect: { height: 200, width: 360 } } as ResizeObserverEntry,
+      ], {} as ResizeObserver);
+      expect(setSize).not.toHaveBeenCalled();
+      frame?.(0);
       expect(setSize).toHaveBeenLastCalledWith({
-        cssHeight: 180,
-        cssWidth: 320,
+        cssHeight: 200,
+        cssWidth: 360,
         devicePixelRatio: 2,
       });
 
       vi.stubGlobal("devicePixelRatio", 3);
       resize?.();
+      frame?.(1);
       expect(setSize).toHaveBeenLastCalledWith({
-        cssHeight: 180,
-        cssWidth: 320,
+        cssHeight: 200,
+        cssWidth: 360,
         devicePixelRatio: 3,
       });
       expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
