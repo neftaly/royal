@@ -64,6 +64,10 @@ describe("canvas root asset publication", () => {
         bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
         primitiveCount: 1,
         state: "ready",
+        timings: {
+          preparationDurationMs: expect.any(Number),
+          sourceReadDurationMs: expect.any(Number),
+        },
         textures: { failed: 0, loading: 0, ready: 0, total: 0 },
       });
     });

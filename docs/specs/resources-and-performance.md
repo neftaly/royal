@@ -175,6 +175,13 @@ Parallelism is bounded globally so one asset cannot starve all other work.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
+Focused glTF status exposes monotonic timings for root-source reading,
+canonical preparation, derived first usable data, and terminal image
+completion. Read and preparation are disjoint durations whose sum is the first
+usable milestone; image completion is elapsed from the exact source/version
+claim. The values are diagnostics, not scheduling inputs, and observing them
+does not poll or wake the frame loop.
+
 An ordinary image decode retains its scheduling reservation until every claimed
 GPU representation consumes it, rejects it, or the claim is cancelled. Bounding
 only active decoder calls is insufficient: fast decoders can otherwise leave an

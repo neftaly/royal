@@ -86,6 +86,10 @@ describe("glTF asset lifecycle owner", () => {
         bounds: { max: [2, 3, 0], min: [0, 1, 0] },
         primitiveCount: 1,
         state: "ready",
+        timings: {
+          preparationDurationMs: expect.any(Number),
+          sourceReadDurationMs: expect.any(Number),
+        },
         textures: { failed: 0, loading: 0, ready: 0, total: 0 },
       });
     });
@@ -93,6 +97,12 @@ describe("glTF asset lifecycle owner", () => {
     expect(changes).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledTimes(2);
     expect(owner.prepared(first.asset)?.primitives).toHaveLength(1);
+    const ready = owner.getSnapshot(first.asset);
+    expect(ready.state).toBe("ready");
+    if (ready.state === "ready") {
+      expect(ready.timings.sourceReadDurationMs).toBeGreaterThanOrEqual(0);
+      expect(ready.timings.preparationDurationMs).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("aborts released work and returns observers to idle", async () => {
@@ -147,11 +157,27 @@ describe("glTF asset lifecycle owner", () => {
     owner.refreshTextureProgress(() => ({ error: "decode failed", state: "error" }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       state: "degraded",
+      timings: {
+        imagesCompleteAfterMs: expect.any(Number),
+        preparationDurationMs: expect.any(Number),
+        sourceReadDurationMs: expect.any(Number),
+      },
       textures: { failed: 1, loading: 0, ready: 0, total: 1 },
     });
+    const degraded = owner.getSnapshot(node.asset);
+    expect(degraded.state).toBe("degraded");
+    const completionMs = degraded.state === "degraded"
+      ? degraded.timings.imagesCompleteAfterMs
+      : undefined;
+    if (degraded.state === "degraded") {
+      expect(completionMs).toBeGreaterThanOrEqual(
+        degraded.timings.sourceReadDurationMs + degraded.timings.preparationDurationMs,
+      );
+    }
     owner.refreshTextureProgress(() => ({ height: 16, state: "ready", width: 16 }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       state: "ready",
+      timings: { imagesCompleteAfterMs: completionMs },
       textures: { failed: 0, loading: 0, ready: 1, total: 1 },
     });
   });

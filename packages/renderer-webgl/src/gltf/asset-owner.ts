@@ -17,6 +17,16 @@ export type GltfTextureProgress = Readonly<{
   total: number;
 }>;
 
+/** Monotonic load milestones for one exact source/version claim. */
+export type GltfAssetTimings = Readonly<{
+  /** Time spent reading the root `.gltf` or `.glb` source. */
+  sourceReadDurationMs: number;
+  /** Time spent resolving resources and preparing canonical render data. */
+  preparationDurationMs: number;
+  /** Elapsed time from claim until every requested image succeeded or failed. */
+  imagesCompleteAfterMs?: number;
+}>;
+
 export type GltfAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
@@ -24,6 +34,7 @@ export type GltfAssetSnapshot =
     bounds: GltfAssetBounds;
     primitiveCount: number;
     state: "degraded" | "ready" | "streaming";
+    timings: GltfAssetTimings;
     textures: GltfTextureProgress;
   }>
   | Readonly<{ error: string; state: "error" }>;
@@ -46,11 +57,11 @@ export type GltfAssetOwnerPlatform = Readonly<{
 }>;
 
 type AssetEntry = {
-  readonly asset: GltfAssetRef;
   readonly controller: AbortController;
   readonly key: string;
   prepared: PreparedStaticGltf | undefined;
   snapshot: GltfAssetSnapshot;
+  readonly startedAt: number;
 };
 
 const IDLE: GltfAssetSnapshot = { state: "idle" };
@@ -79,8 +90,7 @@ const sameTextureProgress = (
   right: GltfTextureProgress,
 ): boolean => left.failed === right.failed
   && left.loading === right.loading
-  && left.ready === right.ready
-  && left.total === right.total;
+  && left.ready === right.ready;
 
 const usableState = (
   progress: GltfTextureProgress,
@@ -176,19 +186,23 @@ export class GltfAssetOwner {
   ): void {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
-      if (
-        entry.prepared === undefined
-        || entry.snapshot.state === "idle"
-        || entry.snapshot.state === "loading"
-        || entry.snapshot.state === "error"
-      ) continue;
+      if (entry.prepared === undefined || !("textures" in entry.snapshot)) continue;
       const textures = textureProgress(entry.prepared.textureAssets, snapshot);
       const state = usableState(textures);
+      const complete = textures.loading === 0;
+      const timings = complete
+        && textures.total > 0
+        && entry.snapshot.timings.imagesCompleteAfterMs === undefined
+        ? {
+            ...entry.snapshot.timings,
+            imagesCompleteAfterMs: performance.now() - entry.startedAt,
+          }
+        : entry.snapshot.timings;
       if (
         sameTextureProgress(entry.snapshot.textures, textures)
-        && entry.snapshot.state === state
+        && timings === entry.snapshot.timings
       ) continue;
-      entry.snapshot = { ...entry.snapshot, state, textures };
+      entry.snapshot = { ...entry.snapshot, state, timings, textures };
       this.#publish(entry.key);
     }
   }
@@ -250,11 +264,11 @@ export class GltfAssetOwner {
 
   #start(asset: GltfAssetRef, key: string): void {
     const entry: AssetEntry = {
-      asset,
       controller: new AbortController(),
       key,
       prepared: undefined,
       snapshot: { state: "loading" },
+      startedAt: performance.now(),
     };
     this.#entries.set(key, entry);
     this.#publish(key);
@@ -263,6 +277,7 @@ export class GltfAssetOwner {
       : undefined;
     void this.#platform.read(asset, entry.controller.signal).then(async (bytes) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
+      const readCompletedAt = performance.now();
       const readResource = (uri: string) =>
         this.#platform.readResource(uri, entry.controller.signal);
       const prepared = this.#platform.prepare === undefined
@@ -283,6 +298,7 @@ export class GltfAssetOwner {
           readResource,
         );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
+      const preparedAt = performance.now();
       entry.prepared = prepared;
       const textures = {
         failed: 0,
@@ -294,13 +310,16 @@ export class GltfAssetOwner {
         bounds: prepared.bounds,
         primitiveCount: prepared.primitives.length,
         state: usableState(textures),
+        timings: {
+          preparationDurationMs: preparedAt - readCompletedAt,
+          sourceReadDurationMs: readCompletedAt - entry.startedAt,
+        },
         textures,
       };
       this.#platform.onAssetChanged();
       this.#publish(key);
     }).catch((error: unknown) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
-      entry.prepared = undefined;
       entry.snapshot = { error: formatFailure(error), state: "error" };
       this.#publish(key);
     });

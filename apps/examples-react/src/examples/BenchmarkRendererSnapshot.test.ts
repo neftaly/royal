@@ -46,11 +46,20 @@ describe('current benchmark glTF adapter', () => {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       primitiveCount: 381,
       state: 'streaming',
+      timings: {
+        preparationDurationMs: 250,
+        sourceReadDurationMs: 40,
+      },
       textures: { failed: 0, loading: 30, ready: 80, total: 110 },
     })).toMatchObject({
       imageFailures: 0,
       imagesLoaded: 80,
       imageRequests: 110,
+      phaseMs: {
+        firstUsable: 290,
+        preparation: 250,
+        sourceRead: 40,
+      },
       primitiveCount: 381,
       status: 'streaming',
       version: 'web-v2',
@@ -62,10 +71,16 @@ describe('current benchmark glTF adapter', () => {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       primitiveCount: 381,
       state: 'degraded',
+      timings: {
+        imagesCompleteAfterMs: 1_200,
+        preparationDurationMs: 250,
+        sourceReadDurationMs: 40,
+      },
       textures: { failed: 2, loading: 0, ready: 108, total: 110 },
     })).toMatchObject({
       imageFailures: 2,
       imagesLoaded: 108,
+      phaseMs: { imagesComplete: 1_200 },
       status: 'degraded',
     });
   });

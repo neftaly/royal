@@ -24,6 +24,17 @@ export const benchmarkGltfDiagnostics = (
   const usable = status.state === 'streaming'
     || status.state === 'ready'
     || status.state === 'degraded';
+  const phaseMs = usable
+    ? {
+        firstUsable: status.timings.sourceReadDurationMs
+          + status.timings.preparationDurationMs,
+        ...(status.timings.imagesCompleteAfterMs === undefined
+          ? {}
+          : { imagesComplete: status.timings.imagesCompleteAfterMs }),
+        preparation: status.timings.preparationDurationMs,
+        sourceRead: status.timings.sourceReadDurationMs,
+      }
+    : {};
   return {
     ...(status.state === 'error' ? { error: status.error } : {}),
     imageCandidates: usable ? status.textures.total : 0,
@@ -32,7 +43,7 @@ export const benchmarkGltfDiagnostics = (
     imageRequests: usable ? status.textures.total : 0,
     lightCount: 0,
     nodeCount: 0,
-    phaseMs: {},
+    phaseMs,
     primitiveCount: usable ? status.primitiveCount : 0,
     src: asset.src,
     status: status.state,
