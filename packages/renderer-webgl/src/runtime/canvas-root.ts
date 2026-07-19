@@ -527,7 +527,7 @@ export class CanvasRoot {
     );
     if (prepared === this.#surfaceScene) return;
     this.#surfaceScene = prepared;
-    this.#surfaceGpu.setScene(prepared);
+    this.#surfaceGpu.publishTextureScene(prepared, key);
     this.#clock.invalidate();
   }
 

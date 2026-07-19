@@ -38,6 +38,7 @@ type GpuSurface = Readonly<{
   geometry: GpuGeometry;
   instanceCount: number;
   program: StandardProgram | UnlitProgram;
+  sceneIndex: number;
   surface: CanonicalDrawSurface;
   textureUnits: number;
   vertexArray: WebGLVertexArrayObject;
@@ -124,6 +125,7 @@ export class SurfaceGpuOwner {
   readonly #programs: SurfaceProgramOwner;
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
+  readonly #texturePublicationKeys = new Set<string>();
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
 
   constructor(gl: WebGL2RenderingContext) {
@@ -140,6 +142,7 @@ export class SurfaceGpuOwner {
     this.#drawIntent = null;
     this.#admittedSurfaceCount = 0;
     this.#scene = null;
+    this.#texturePublicationKeys.clear();
   }
 
   invalidate(): void {
@@ -150,6 +153,7 @@ export class SurfaceGpuOwner {
     this.#drawIntent = null;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
+    this.#texturePublicationKeys.clear();
   }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
@@ -161,6 +165,18 @@ export class SurfaceGpuOwner {
     );
     this.#scene = scene;
     this.#dirty = true;
+    this.#texturePublicationKeys.clear();
+  }
+
+  publishTextureScene(scene: CanonicalSurfaceScene, textureKey: string): void {
+    if (this.#scene === null || this.#scene.surfaces.length !== scene.surfaces.length) {
+      this.setScene(scene);
+      return;
+    }
+    this.#scene = scene;
+    if (this.#dirty && this.#texturePublicationKeys.size === 0) return;
+    this.#texturePublicationKeys.add(textureKey);
+    this.#dirty = true;
   }
 
   draw(
@@ -170,10 +186,12 @@ export class SurfaceGpuOwner {
     state: WebGlStateOwner,
   ): boolean {
     if (this.#dirty) {
+      const texturePublication = this.#texturePublicationKeys.size > 0;
       try {
-        this.#reconcile();
+        if (texturePublication) this.#reconcileTexturePublications();
+        else this.#reconcile();
       } finally {
-        state.invalidateVertexArray();
+        if (!texturePublication) state.invalidateVertexArray();
         state.invalidateTextureBindings();
       }
     }
@@ -353,6 +371,7 @@ export class SurfaceGpuOwner {
           geometry: geometrySurface.geometry,
           instanceCount: geometrySurface.instanceCount,
           program: programs[index]!,
+          sceneIndex: index,
           surface: geometrySurface.surface,
           textureUnits: textureUnitMasks[index]!,
           vertexArray: geometrySurface.vertexArray,
@@ -379,6 +398,58 @@ export class SurfaceGpuOwner {
       this.#directionalLightCount = 0;
     }
     this.#dirty = this.#admittedSurfaceCount < surfaces.length;
+    this.#drawIntent = null;
+  }
+
+  #reconcileTexturePublications(): void {
+    const scene = this.#scene;
+    if (scene === null) return;
+    const nextSurfaces = this.#gpuSurfaces.slice();
+    for (let index = 0; index < nextSurfaces.length; index += 1) {
+      const previous = nextSurfaces[index]!;
+      const surface = scene.surfaces[previous.sceneIndex]!;
+      let affected = false;
+      for (const key of surface.textureKeys) {
+        if (this.#texturePublicationKeys.has(key)) {
+          affected = true;
+          break;
+        }
+      }
+      if (!affected) continue;
+      const material = surface.material;
+      const bindings = [
+        this.#textureGpu.retain(material.baseColorTexture),
+        this.#textureGpu.retain(material.kind === "standard"
+          ? material.metallicRoughnessTexture
+          : undefined),
+        this.#textureGpu.retain(material.kind === "standard"
+          ? material.normalTexture
+          : undefined),
+        this.#textureGpu.retain(material.kind === "standard"
+          ? material.occlusionTexture
+          : undefined),
+        this.#textureGpu.retain(material.kind === "standard"
+          ? material.emissiveTexture
+          : undefined),
+      ];
+      const features = materialTextureFeatures(surface, previous.geometry);
+      nextSurfaces[index] = {
+        ...previous,
+        bindings,
+        program: this.#programs.get(
+          material.kind,
+          features,
+          previous.instanceCount > 0,
+          material.alphaCutoff !== undefined,
+          material.doubleSided === true,
+        ),
+        surface,
+        textureUnits: textureUnitMask(features),
+      };
+    }
+    this.#gpuSurfaces = groupSurfacesByProgram(nextSurfaces);
+    this.#texturePublicationKeys.clear();
+    this.#dirty = false;
     this.#drawIntent = null;
   }
 }

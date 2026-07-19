@@ -119,6 +119,32 @@ export class TextureGpuOwner {
     return result;
   }
 
+  /** Retains one newly published binding without releasing unrelated scene claims. */
+  retain(binding: CanonicalTextureBinding | undefined): GpuTextureBinding {
+    if (binding === undefined) return EMPTY_BINDING;
+    let texture = this.#textures.get(binding.storageKey);
+    let sampler = this.#samplers.get(binding.samplerKey);
+    const createdTexture = texture === undefined;
+    const createdSampler = sampler === undefined;
+    try {
+      texture ??= this.#createTexture(binding);
+      if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
+      sampler ??= this.#createSampler(binding);
+      let resolved = texture.bindings.get(sampler.sampler);
+      if (resolved === undefined) {
+        resolved = { sampler: sampler.sampler, texture: texture.texture };
+        texture.bindings.set(sampler.sampler, resolved);
+      }
+      if (createdTexture) this.#textures.set(binding.storageKey, texture);
+      if (createdSampler) this.#samplers.set(binding.samplerKey, sampler);
+      return resolved;
+    } catch (error) {
+      if (createdSampler && sampler !== undefined) this.#gl.deleteSampler(sampler.sampler);
+      if (createdTexture && texture !== undefined) this.#gl.deleteTexture(texture.texture);
+      throw error;
+    }
+  }
+
   #createSampler(binding: CanonicalTextureBinding): GpuSampler {
     const gl = this.#gl;
     const sampler = gl.createSampler();

@@ -99,4 +99,16 @@ describe("ordinary texture GPU owner", () => {
     expect(gl.createTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteTexture).not.toHaveBeenCalled();
   });
+
+  it("retains an incremental publication until the next complete claim reconciliation", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    const retained = owner.retain(binding("nearest", "nearest"));
+    expect(owner.retain(binding("nearest", "nearest"))).toBe(retained);
+    expect(gl.createTexture).toHaveBeenCalledTimes(1);
+    expect(gl.createSampler).toHaveBeenCalledTimes(1);
+    owner.reconcile([]);
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    expect(gl.deleteSampler).toHaveBeenCalledTimes(1);
+  });
 });

@@ -342,6 +342,7 @@ describe("clear-only canvas root", () => {
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+    const vertexArrayBindings = vi.mocked(canvas.gl.bindVertexArray).mock.calls.length;
 
     const source = {} as ImageBitmap;
     resolveDecode?.({ height: 32, source, width: 64 });
@@ -353,6 +354,7 @@ describe("clear-only canvas root", () => {
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.bindVertexArray).toHaveBeenCalledTimes(vertexArrayBindings);
     expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
     expect(canvas.gl.texImage2D.mock.calls[0]!.at(-1)).toBe(source);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
