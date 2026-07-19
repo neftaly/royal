@@ -117,6 +117,7 @@ describe("canonical direct surface lowering", () => {
 
     expect(ready).not.toBe(pending);
     expect(ready.pickSurfaces).toBe(pending.pickSurfaces);
+    expect(ready.textureSurfaceIndices).toBe(pending.textureSurfaceIndices);
     expect(ready.surfaces[0]).not.toBe(firstSurface);
     expect(ready.surfaces[0]!.geometry).toBe(firstSurface.geometry);
     expect(ready.surfaces[0]!.model).toBe(firstSurface.model);

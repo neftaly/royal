@@ -34,6 +34,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
   decode(asset: TextureSourceRef, signal: AbortSignal): Promise<DecodedTextureSource>;
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
+  onSnapshotChanged(key: string): void;
 }>;
 
 type AssetEntry = {
@@ -218,12 +219,13 @@ export class TextureAssetOwner {
       entry.decoded = decoded;
       entry.snapshot = { height: decoded.height, state: "ready", width: decoded.width };
       this.#platform.onAssetChanged(key);
+      this.#platform.onSnapshotChanged(key);
       this.#publish(key);
     }).catch((error: unknown) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.decoded = undefined;
       entry.snapshot = { error: formatFailure(error), state: "error" };
-      this.#platform.onAssetChanged(key);
+      this.#platform.onSnapshotChanged(key);
       this.#publish(key);
     });
   }

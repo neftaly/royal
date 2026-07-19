@@ -289,4 +289,27 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
   });
+
+  it("reports failed glTF images without stalling geometry or republishing GPU state", async () => {
+    const decodeTexture = vi.fn(async () => { throw new Error("AVIF decode failed"); });
+    const { callbacks, canvas, root } = harness({
+      decodeTexture,
+      readGltf: vi.fn(async () => staticTexturedTriangleGlb()),
+    });
+    const node = gltf("/models/degraded.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [1, 2, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+      state: "degraded",
+      textures: { failed: 1, loading: 0, ready: 0, total: 1 },
+    }));
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+  });
 });

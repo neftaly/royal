@@ -21,6 +21,7 @@ describe("ordinary texture asset lifecycle owner", () => {
       decode,
       onAssetChanged: changed,
       onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
     });
     const first = textureAsset({
       colorSpace: "srgb",
@@ -61,6 +62,7 @@ describe("ordinary texture asset lifecycle owner", () => {
       }),
       onAssetChanged: changed,
       onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
     });
     const asset = imageTexture("/slow.png");
     owner.reconcile([asset]);
@@ -77,10 +79,12 @@ describe("ordinary texture asset lifecycle owner", () => {
   it("retains bounded terminal failures without retrying each reconciliation", async () => {
     const decode = vi.fn(async () => { throw new Error("x".repeat(800)); });
     const changed = vi.fn();
+    const snapshotChanged = vi.fn();
     const owner = new TextureAssetOwner({
       decode,
       onAssetChanged: changed,
       onListenerError: vi.fn(),
+      onSnapshotChanged: snapshotChanged,
     });
     const asset = imageTexture("/broken.png");
     owner.reconcile([asset]);
@@ -89,6 +93,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     if (snapshot.state === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);
     owner.reconcile([asset]);
     expect(decode).toHaveBeenCalledTimes(1);
-    expect(changed).toHaveBeenCalledWith(decodedTextureKey(asset));
+    expect(changed).not.toHaveBeenCalled();
+    expect(snapshotChanged).toHaveBeenCalledWith(decodedTextureKey(asset));
   });
 });

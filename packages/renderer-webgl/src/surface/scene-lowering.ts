@@ -81,9 +81,24 @@ export type CanonicalSurfaceScene = Readonly<{
   punctualLights: readonly CanonicalPunctualLight[];
   surfaces: readonly CanonicalDrawSurface[];
   textureAssets: readonly TextureSourceRef[];
+  textureSurfaceIndices: ReadonlyMap<string, readonly number[]>;
   virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
+
+const indexSurfaceTextures = (
+  surfaces: readonly CanonicalDrawSurface[],
+): ReadonlyMap<string, readonly number[]> => {
+  const indices = new Map<string, number[]>();
+  for (let surfaceIndex = 0; surfaceIndex < surfaces.length; surfaceIndex += 1) {
+    for (const key of surfaces[surfaceIndex]!.textureKeys) {
+      const claimed = indices.get(key);
+      if (claimed === undefined) indices.set(key, [surfaceIndex]);
+      else claimed.push(surfaceIndex);
+    }
+  }
+  return indices;
+};
 
 export type CanonicalDirectionalLight = Readonly<{
   color: LinearRgba;
@@ -494,6 +509,7 @@ export const prepareCanonicalSurfaceScene = (
     punctualLights,
     surfaces,
     textureAssets,
+    textureSurfaceIndices: indexSurfaceTextures(surfaces),
     virtualTextureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
   };
@@ -505,15 +521,15 @@ export const refreshCanonicalSurfaceTexture = (
   textureKey: string,
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
 ): CanonicalSurfaceScene => {
-  let surfaces: CanonicalDrawSurface[] | undefined;
-  for (let index = 0; index < scene.surfaces.length; index += 1) {
+  const affected = scene.textureSurfaceIndices.get(textureKey);
+  if (affected === undefined) return scene;
+  const surfaces = scene.surfaces.slice();
+  for (const index of affected) {
     const surface = scene.surfaces[index]!;
-    if (!surface.textureKeys.includes(textureKey)) continue;
-    surfaces ??= scene.surfaces.slice();
     surfaces[index] = {
       ...surface,
       material: resolveCanonicalMaterialTexture(surface.materialSource, decodedTexture),
     };
   }
-  return surfaces === undefined ? scene : { ...scene, surfaces };
+  return { ...scene, surfaces };
 };

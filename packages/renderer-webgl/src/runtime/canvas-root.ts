@@ -2,6 +2,8 @@ import {
   validatePickInput,
   type GltfInstanceTransforms,
   type GltfAssetRef,
+  type GltfInstancesNode,
+  type GltfNode,
   type PickInput,
   type PickResult,
   type RenderRoot,
@@ -31,6 +33,7 @@ import {
   type GltfAssetSnapshot,
   type GltfAssetOwnerPlatform,
 } from "../gltf/asset-owner";
+import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
   identityMat4,
   multiplyMat4Into,
@@ -204,6 +207,12 @@ export class CanvasRoot {
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
+  readonly #getDecodedTexture = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
+    this.#textureAssets.decoded(asset);
+  readonly #getGltfAsset = (node: GltfNode | GltfInstancesNode): PreparedStaticGltf | undefined =>
+    this.#gltfAssets.prepared(node.asset);
+  readonly #getTextureSnapshot = (asset: TextureSourceRef): TextureAssetSnapshot =>
+    this.#textureAssets.getSourceSnapshot(asset);
   #lastFrameFailure: string | undefined;
   readonly #listeners = new Set<() => void>();
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
@@ -291,6 +300,7 @@ export class CanvasRoot {
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
       onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
+      onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
     });
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
@@ -448,9 +458,9 @@ export class CanvasRoot {
     const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
       scene,
-      (node) => this.#gltfAssets.prepared(node.asset),
+      this.#getGltfAsset,
       camera.camera,
-      (asset) => this.#textureAssets.decoded(asset),
+      this.#getDecodedTexture,
     );
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
@@ -461,9 +471,7 @@ export class CanvasRoot {
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
     this.#textureAssets.reconcile(prepared.textureAssets);
-    this.#gltfAssets.refreshTextureProgress(
-      (asset) => this.#textureAssets.getSourceSnapshot(asset),
-    );
+    this.#refreshGltfTextureProgress();
     this.#clock.invalidate();
   }
 
@@ -656,18 +664,16 @@ export class CanvasRoot {
     const camera = this.#cameraSource.prepare(this.#surfaceSceneInput.camera);
     const prepared = prepareCanonicalSurfaceScene(
       this.#surfaceSceneInput,
-      (node) => this.#gltfAssets.prepared(node.asset),
+      this.#getGltfAsset,
       camera.camera,
-      (asset) => this.#textureAssets.decoded(asset),
+      this.#getDecodedTexture,
     );
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets);
-    this.#gltfAssets.refreshTextureProgress(
-      (asset) => this.#textureAssets.getSourceSnapshot(asset),
-    );
+    this.#refreshGltfTextureProgress();
     this.#clock.invalidate();
   }
 
@@ -677,7 +683,7 @@ export class CanvasRoot {
       const prepared = refreshCanonicalSurfaceTexture(
         this.#surfaceScene,
         key,
-        (asset) => this.#textureAssets.decoded(asset),
+        this.#getDecodedTexture,
       );
       if (prepared !== this.#surfaceScene) {
         this.#surfaceScene = prepared;
@@ -685,9 +691,10 @@ export class CanvasRoot {
         this.#clock.invalidate();
       }
     }
-    this.#gltfAssets.refreshTextureProgress(
-      (asset) => this.#textureAssets.getSourceSnapshot(asset),
-    );
+  }
+
+  #refreshGltfTextureProgress(): void {
+    this.#gltfAssets.refreshTextureProgress(this.#getTextureSnapshot);
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
