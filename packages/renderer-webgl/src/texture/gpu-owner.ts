@@ -1,4 +1,5 @@
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
+import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 
 type GpuTexture = {
   readonly bindings: WeakMap<WebGLSampler, GpuTextureBinding>;
@@ -7,10 +8,7 @@ type GpuTexture = {
 };
 type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
-export type GpuTextureBinding = Readonly<{
-  sampler: WebGLSampler | null;
-  texture: WebGLTexture | null;
-}>;
+export type GpuTextureBinding = TextureUnitBinding;
 
 const EMPTY_BINDING: GpuTextureBinding = { sampler: null, texture: null };
 

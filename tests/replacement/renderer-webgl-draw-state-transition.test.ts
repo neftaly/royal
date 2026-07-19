@@ -16,8 +16,7 @@ const state = (): AppliedOpaqueDrawState => ({
   fixedOpaquePipelineKnown: false,
   frontFace: null,
   program: null,
-  samplers: [],
-  textures: [],
+  textureBindings: [],
   textureBindingsKnown: false,
   vertexArray: null,
 });
@@ -27,9 +26,8 @@ const intent = (): OpaqueDrawStateIntent => ({
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
-  samplers: [null],
+  textureBindings: [{ sampler: null, texture: null }],
   textureUnits: 1,
-  textures: [null],
   vertexArray: handle<WebGLVertexArrayObject>(),
   viewport: { height: 360, width: 640, x: 0, y: 0 },
 });
@@ -107,9 +105,11 @@ describe("opaque draw state transition core", () => {
     const transition = createOpaqueDrawStateTransition();
     planOpaqueDrawStateTransition(previous, {
       ...first,
-      samplers: [null, handle<WebGLSampler>()],
+      textureBindings: [
+        first.textureBindings[0]!,
+        { sampler: handle<WebGLSampler>(), texture: handle<WebGLTexture>() },
+      ],
       textureUnits: 3,
-      textures: [null, handle<WebGLTexture>()],
     }, transition);
     expect(transition.textureUnits).toBe(2);
     expect(Object.entries(transition)
@@ -121,21 +121,21 @@ describe("opaque draw state transition core", () => {
     const previous = state();
     const textured = {
       ...intent(),
-      samplers: [handle<WebGLSampler>()],
-      textures: [handle<WebGLTexture>()],
+      textureBindings: [{
+        sampler: handle<WebGLSampler>(),
+        texture: handle<WebGLTexture>(),
+      }],
     };
     commitAppliedOpaqueDrawState(previous, textured);
     const untextured = {
       ...textured,
-      samplers: [null],
+      textureBindings: [{ sampler: null, texture: null }],
       textureUnits: 0,
-      textures: [null],
     };
     const transition = createOpaqueDrawStateTransition();
     planOpaqueDrawStateTransition(previous, untextured, transition);
     expect(transition.textureUnits).toBe(0);
     commitAppliedOpaqueDrawState(previous, untextured);
-    expect(previous.textures[0]).toBe(textured.textures[0]);
-    expect(previous.samplers[0]).toBe(textured.samplers[0]);
+    expect(previous.textureBindings[0]).toBe(textured.textureBindings[0]);
   });
 });

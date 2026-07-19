@@ -49,9 +49,8 @@ type MutableOpaqueDrawIntent = {
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
-  samplers: (WebGLSampler | null)[];
+  textureBindings: readonly GpuTextureBinding[];
   textureUnits: number;
-  textures: (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: { height: number; width: number; x: number; y: number };
 };
@@ -206,9 +205,8 @@ export class SurfaceGpuOwner {
         framebuffer: null,
         frontFace: this.#gl.CCW,
         program: first.program,
-        samplers: [null, null, null, null, null],
+        textureBindings: firstSurface.bindings,
         textureUnits: firstSurface.textureUnits,
-        textures: [null, null, null, null, null],
         vertexArray: firstSurface.vertexArray,
         viewport: { height: 0, width: 0, x: 0, y: 0 },
       };
@@ -231,12 +229,8 @@ export class SurfaceGpuOwner {
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
+      drawIntent.textureBindings = resource.bindings;
       drawIntent.textureUnits = resource.textureUnits;
-      for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
-        const binding = resource.bindings[unit]!;
-        drawIntent.samplers[unit] = binding.sampler;
-        drawIntent.textures[unit] = binding.texture;
-      }
       drawIntent.vertexArray = resource.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
       if (initializedProgram !== program.program) {

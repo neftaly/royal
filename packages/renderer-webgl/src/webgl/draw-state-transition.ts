@@ -1,13 +1,17 @@
 import type { AppliedClearState } from "./clear-state-transition";
 
+export type TextureUnitBinding = Readonly<{
+  sampler: WebGLSampler | null;
+  texture: WebGLTexture | null;
+}>;
+
 export type OpaqueDrawStateIntent = Readonly<{
   framebuffer: WebGLFramebuffer | null;
   cullBackFaces: boolean;
   frontFace: number;
   program: WebGLProgram;
-  samplers: readonly (WebGLSampler | null)[];
+  textureBindings: readonly TextureUnitBinding[];
   textureUnits: number;
-  textures: readonly (WebGLTexture | null)[];
   vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
@@ -29,8 +33,7 @@ export type AppliedOpaqueDrawState = AppliedClearState & {
   cullBackFaces: boolean | null;
   frontFace: number | null;
   program: WebGLProgram | null;
-  samplers: (WebGLSampler | null)[];
-  textures: (WebGLTexture | null)[];
+  textureBindings: (TextureUnitBinding | undefined)[];
   textureBindingsKnown: boolean;
   vertexArray: WebGLVertexArrayObject | null;
 };
@@ -74,8 +77,7 @@ export const planOpaqueDrawStateTransition = (
     if (
       unknown
       || !previous.textureBindingsKnown
-      || previous.textures[unit] !== next.textures[unit]
-      || previous.samplers[unit] !== next.samplers[unit]
+      || previous.textureBindings[unit] !== next.textureBindings[unit]
     ) output.textureUnits |= 1 << unit;
   }
   output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
@@ -94,8 +96,7 @@ export const commitAppliedOpaqueDrawState = (
   let remainingUnits = intent.textureUnits;
   for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
     if ((remainingUnits & 1) === 0) continue;
-    state.samplers[unit] = intent.samplers[unit] ?? null;
-    state.textures[unit] = intent.textures[unit] ?? null;
+    state.textureBindings[unit] = intent.textureBindings[unit];
   }
   state.scissorEnabled = false;
   state.vertexArray = intent.vertexArray;

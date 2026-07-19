@@ -24,8 +24,7 @@ export class WebGlStateOwner {
     fixedOpaquePipelineKnown: false,
     frontFace: null,
     program: null,
-    samplers: [],
-    textures: [],
+    textureBindings: [],
     textureBindingsKnown: false,
     vertexArray: null,
   };
@@ -40,8 +39,7 @@ export class WebGlStateOwner {
     this.#state.cullBackFaces = null;
     this.#state.frontFace = null;
     this.#state.program = null;
-    this.#state.samplers.length = 0;
-    this.#state.textures.length = 0;
+    this.#state.textureBindings.length = 0;
     this.#state.textureBindingsKnown = false;
     this.#state.vertexArray = null;
   }
@@ -122,9 +120,10 @@ export class WebGlStateOwner {
       let changedTextureUnits = transition.textureUnits;
       for (let unit = 0; changedTextureUnits !== 0; unit += 1, changedTextureUnits >>>= 1) {
         if ((changedTextureUnits & 1) === 0) continue;
+        const binding = intent.textureBindings[unit];
         gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, intent.textures[unit] ?? null);
-        gl.bindSampler(unit, intent.samplers[unit] ?? null);
+        gl.bindTexture(gl.TEXTURE_2D, binding?.texture ?? null);
+        gl.bindSampler(unit, binding?.sampler ?? null);
       }
       if (transition.vertexArray) gl.bindVertexArray(intent.vertexArray);
       commitAppliedOpaqueDrawState(this.#state, intent);
