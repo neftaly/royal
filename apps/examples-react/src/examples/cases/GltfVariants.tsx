@@ -5,11 +5,12 @@ import {
 } from '@royal/react';
 import { gltf, scene, studioEnvironment } from '@royal/react/scene';
 import { useMemo, useState, type ReactNode } from 'react';
-import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { BenchmarkGltfRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { colorAccuratePass, interactiveCanvasStyle } from '../presentation';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
+const variantAsset = gltf({ src: variantSrc }).asset;
 const variantNames = ['ruby', 'mint', 'slate'] as const;
 type VariantName = typeof variantNames[number];
 
@@ -57,7 +58,7 @@ export const GltfVariants = (): ReactNode => {
           scene={renderScene}
         >
           <OrbitControls orbit={orbit} maxDistance={8} minDistance={0.1} />
-          <BenchmarkRendererSnapshot />
+          <BenchmarkGltfRendererSnapshot asset={variantAsset} />
         </Canvas>
       </div>
     </div>

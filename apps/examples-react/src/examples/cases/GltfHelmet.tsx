@@ -6,7 +6,7 @@ import {
 } from '@royal/react';
 import { directionalLight, gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
-import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { BenchmarkGltfRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, materialEnvironment, materialFillLight, materialKeyLight, materialPass } from '../presentation';
 
@@ -42,7 +42,7 @@ export const GltfHelmet = (): ReactNode => {
       style={interactiveCanvasStyle}
       scene={renderScene}
     >
-      <BenchmarkRendererSnapshot />
+      <BenchmarkGltfRendererSnapshot asset={helmetNode.asset} />
       <GltfOrbitCameraFit node={helmetNode} orbit={orbit} padding={1.15} />
       <OrbitControls orbit={orbit} />
     </Canvas>

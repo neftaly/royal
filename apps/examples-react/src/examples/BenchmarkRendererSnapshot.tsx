@@ -1,6 +1,7 @@
 import type { GltfAssetRef } from '@royal/react/scene';
 import {
   useCanvasRoot,
+  useGltfAssetStatus,
   type GltfAssetStatus,
   type VirtualTextureStatus,
 } from '@royal/react';
@@ -16,6 +17,14 @@ export type BenchmarkRendererSnapshotProps = Readonly<{
   status?: GltfAssetStatus;
   virtualTextureStatus?: VirtualTextureStatus;
 }>;
+
+/** Observes one glTF asset for examples that do not otherwise render its status. */
+export const BenchmarkGltfRendererSnapshot = ({
+  asset,
+}: Readonly<{ asset: GltfAssetRef }>): ReactNode => {
+  const status = useGltfAssetStatus(asset);
+  return <BenchmarkRendererSnapshot asset={asset} status={status} />;
+};
 
 /** @internal Focused VT adapter; it does not poll the root frame snapshot. */
 export const benchmarkVirtualTextureDiagnostics = (

@@ -14,9 +14,9 @@ import { useXrSession } from "@royal/react/xr";
 import { type ReactNode } from "react";
 import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
 
-const xrBox = gltf({
-  src: `${import.meta.env.BASE_URL}fixtures/khronos/Box/glTF-Binary/Box.glb`,
-  transform: { position: [0, 1.15, -4.2], scale: [0.8, 0.8, 0.8] },
+const xrTiger = gltf({
+  src: `${import.meta.env.BASE_URL}fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf`,
+  transform: { position: [0, 1.6, -3.8], scale: [13, 13, 13] },
 });
 
 const renderScene = scene({
@@ -45,7 +45,7 @@ const renderScene = scene({
       material: standardMaterial({ color: [0.82, 0.16, 0.08, 1], roughness: 0.5 }),
       transform: { position: [1.1, 0.62, -2.8], rotation: [-0.1, -0.35, 0.08] },
     }),
-    xrBox,
+    xrTiger,
   ],
   toneMapping: "pbr-neutral",
 });
@@ -78,8 +78,8 @@ const XrControls = (): ReactNode => {
 };
 
 const XrBenchmark = (): ReactNode => {
-  const status = useGltfAssetStatus(xrBox.asset);
-  return <BenchmarkRendererSnapshot asset={xrBox.asset} status={status} />;
+  const status = useGltfAssetStatus(xrTiger.asset);
+  return <BenchmarkRendererSnapshot asset={xrTiger.asset} status={status} />;
 };
 
 /** Direct and glTF surfaces rendered through the same canvas/XR canonical path. */

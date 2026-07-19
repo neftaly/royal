@@ -5,11 +5,19 @@ import {
 } from '@royal/react';
 import { directionalLight, gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
-import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { BenchmarkGltfRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
+const lodNode = gltf({
+  src: lodSrc,
+  transform: {
+    position: [0, 0, 0],
+    rotation: [0.18, -0.28, 0],
+    scale: [1.3, 1.3, 1.3],
+  },
+});
 
 export const GltfLod = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -22,14 +30,7 @@ export const GltfLod = (): ReactNode => {
     nodes: [
       directionalLight(showcaseKeyLight),
       directionalLight(showcaseFillLight),
-      gltf({
-        src: lodSrc,
-        transform: {
-          position: [0, 0, 0],
-          rotation: [0.18, -0.28, 0],
-          scale: [1.3, 1.3, 1.3],
-        },
-      }),
+      lodNode,
     ],
   }), [orbit.cameraResource]);
 
@@ -46,7 +47,7 @@ export const GltfLod = (): ReactNode => {
         minDistance={0.1}
         zoomSpeed={0.00075}
       />
-      <BenchmarkRendererSnapshot />
+      <BenchmarkGltfRendererSnapshot asset={lodNode.asset} />
     </Canvas>
   );
 };

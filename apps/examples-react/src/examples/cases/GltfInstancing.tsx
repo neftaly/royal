@@ -9,10 +9,11 @@ import {
   directionalLight,
   gltfInstances,
   scene,
+  type GltfAssetRef,
   type GltfInstanceTransforms,
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
-import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { BenchmarkGltfRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { productEnvironment, productFillLight, productKeyLight, productPass } from '../presentation';
 import { useAnimationFrame } from '../use-animation-frame';
@@ -23,6 +24,7 @@ const cubeSources = [
   fixtureBase + 'instanced-cube-b.gltf',
   fixtureBase + 'instanced-cube-c.gltf',
 ] as const;
+const benchmarkAsset = { src: cubeSources[0] } satisfies GltfAssetRef;
 
 const spacing = 0.34;
 const defaultGridSize = 16;
@@ -209,7 +211,7 @@ export const GltfInstancing = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
       scene={renderScene}
     >
-      <BenchmarkRendererSnapshot />
+      <BenchmarkGltfRendererSnapshot asset={benchmarkAsset} />
       {instancingConfig.animate
         ? <InstancedCubeAnimation animation={instancingConfig.animation} groups={groups} />
         : null}
