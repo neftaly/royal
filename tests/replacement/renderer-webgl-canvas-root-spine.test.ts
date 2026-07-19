@@ -448,6 +448,13 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
     expect(canvas.gl.uniform1i).toHaveBeenCalledWith(expect.anything(), 1);
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return Math.abs(values[0]! - 1 / 4.8) < 0.000_001
+        && values[1] === 1
+        && values[2] === 0
+        && values[3] === 0;
+    })).toBe(true);
     expect(canvas.gl.frontFace).toHaveBeenLastCalledWith(canvas.gl.CW);
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
       String(source).includes("ggxDistribution"))).toBe(true);

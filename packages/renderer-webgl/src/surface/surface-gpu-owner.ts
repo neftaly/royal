@@ -118,6 +118,7 @@ export class SurfaceGpuOwner {
   #gpuSurfaces: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #emissiveFactor = new Float32Array(4);
+  readonly #presentation = new Float32Array(4);
   readonly #programs: SurfaceProgramOwner;
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
@@ -242,9 +243,9 @@ export class SurfaceGpuOwner {
           gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
           gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
           gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
-          this.#materialFactors[2] = scene.exposure;
-          this.#materialFactors[3] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
-          gl.uniform4fv(program.presentation, this.#materialFactors);
+          this.#presentation[0] = scene.exposure;
+          this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
+          gl.uniform4fv(program.presentation, this.#presentation);
           standardGlobalsProgram = program.program;
         }
         gl.uniformMatrix4fv(program.model, false, surface.model);
