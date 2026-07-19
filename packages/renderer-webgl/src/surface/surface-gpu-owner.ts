@@ -63,6 +63,7 @@ import type {
   VirtualTextureRuntime,
 } from "../virtual-texture/runtime-contract";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import { planContiguousRunEnds } from "./contiguous-run-plan";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -109,6 +110,7 @@ const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
+const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 
 const textureBindingsEqual = (
   left: readonly GpuTextureBinding[],
@@ -299,6 +301,7 @@ export class SurfaceGpuOwner {
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   #opaqueSurfaces: readonly GpuSurface[] = [];
+  #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
   #blendedDepths = new Float64Array(0);
   #gpuSurfacesBySceneIndex: readonly GpuSurface[] = [];
@@ -350,6 +353,7 @@ export class SurfaceGpuOwner {
   invalidate(): void {
     this.#geometryGpu.invalidate();
     this.#opaqueSurfaces = [];
+    this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
     this.#blendedDepths = new Float64Array(0);
     this.#gpuSurfacesBySceneIndex = [];
@@ -666,13 +670,11 @@ export class SurfaceGpuOwner {
         this.#multiDrawCounts[0] = resource.geometry.indexCount;
         this.#multiDrawOffsets[0] = resource.geometry.indexOffset;
         let drawCount = 1;
+        const runEnd = this.#opaqueMultiDrawRunEnds[index] ?? index + 1;
         let nextIndex = index + 1;
-        for (; nextIndex < opaqueCount; nextIndex += 1) {
+        for (; nextIndex < runEnd; nextIndex += 1) {
           const next = this.#opaqueSurfaces[nextIndex]!;
-          if (
-            next.geometry.indexOffset > 0x7fff_ffff
-            || !sharesMultiDrawState(resource, next)
-          ) break;
+          if (next.geometry.indexOffset > 0x7fff_ffff) break;
           if (
             surfaceMatchesLodSelections(next.surface, this.#lodSelections)
             && worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes)
@@ -899,6 +901,7 @@ export class SurfaceGpuOwner {
       const grouped = groupSurfacesForDrawing(nextSurfaces);
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.blended;
+      this.#planOpaqueMultiDrawRuns();
     } catch (error) {
       geometryPlan.rollback();
       throw error;
@@ -993,6 +996,7 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.blended;
     }
+    this.#planOpaqueMultiDrawRuns();
     this.#texturePublicationKeys.clear();
     this.#dirty = false;
     this.#drawIntent = null;
@@ -1013,5 +1017,11 @@ export class SurfaceGpuOwner {
     this.#gl.uniform4fv(program.virtualSettings1, binding.settings1);
     this.#gl.uniform4fv(program.virtualSettings2, binding.settings2);
     this.#gl.uniform1fv(program.virtualMipOffsets, binding.mipOffsets);
+  }
+
+  #planOpaqueMultiDrawRuns(): void {
+    this.#opaqueMultiDrawRunEnds = this.#multiDraw === null
+      ? EMPTY_RUN_ENDS
+      : planContiguousRunEnds(this.#opaqueSurfaces, sharesMultiDrawState);
   }
 }
