@@ -72,31 +72,55 @@ const assignRef = <Value>(
   return undefined;
 };
 
-const readCssSize = (canvas: HTMLCanvasElement, root: RoyalRendererRoot): void => {
-  const box = canvas.getBoundingClientRect();
+const readDevicePixelRatio = (): number => {
   const candidateDpr = globalThis.devicePixelRatio;
+  return Number.isFinite(candidateDpr) && candidateDpr > 0 ? candidateDpr : 1;
+};
+
+const publishCanvasSize = (
+  root: RoyalRendererRoot,
+  cssWidth: number,
+  cssHeight: number,
+): void => {
   root.setSize({
-    cssHeight: box.height,
-    cssWidth: box.width,
-    devicePixelRatio: Number.isFinite(candidateDpr) && candidateDpr > 0 ? candidateDpr : 1,
+    cssHeight,
+    cssWidth,
+    devicePixelRatio: readDevicePixelRatio(),
   });
 };
 
-const observeCanvasSize = (
+/** @internal Browser shell for CSS-size and DPR observation. */
+export const observeCanvasSize = (
   canvas: HTMLCanvasElement,
   root: RoyalRendererRoot,
 ): (() => void) => {
-  const update = (): void => readCssSize(canvas, root);
-  update();
   const ResizeObserverConstructor = globalThis.ResizeObserver;
-  const observer = typeof ResizeObserverConstructor === "function"
-    ? new ResizeObserverConstructor(update)
-    : undefined;
-  observer?.observe(canvas);
-  globalThis.addEventListener?.("resize", update);
+  if (typeof ResizeObserverConstructor !== "function") {
+    const update = (): void => {
+      const box = canvas.getBoundingClientRect();
+      publishCanvasSize(root, box.width, box.height);
+    };
+    update();
+    globalThis.addEventListener?.("resize", update);
+    return () => globalThis.removeEventListener?.("resize", update);
+  }
+  let cssHeight = 0;
+  let cssWidth = 0;
+  const observer = new ResizeObserverConstructor((entries) => {
+    const entry = entries[entries.length - 1];
+    if (entry === undefined) return;
+    cssHeight = entry.contentRect.height;
+    cssWidth = entry.contentRect.width;
+    publishCanvasSize(root, cssWidth, cssHeight);
+  });
+  const updateDevicePixelRatio = (): void => {
+    if (cssWidth > 0 && cssHeight > 0) publishCanvasSize(root, cssWidth, cssHeight);
+  };
+  observer.observe(canvas);
+  globalThis.addEventListener?.("resize", updateDevicePixelRatio);
   return () => {
-    observer?.disconnect();
-    globalThis.removeEventListener?.("resize", update);
+    observer.disconnect();
+    globalThis.removeEventListener?.("resize", updateDevicePixelRatio);
   };
 };
 

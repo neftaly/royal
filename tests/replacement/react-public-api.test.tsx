@@ -5,7 +5,7 @@ import {
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   Canvas,
   createOrbitCameraController,
@@ -23,6 +23,7 @@ import {
   useRendererLifecycle,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
+import { observeCanvasSize } from "../../packages/react/src/runtime/canvas";
 
 const emptyScene = {
   camera: {},
@@ -105,5 +106,53 @@ describe("replacement React public API", () => {
     expect(() => selectObservedRoot(undefined, undefined, "useThing")).toThrow(
       "useThing must be used inside <Canvas> or receive { root }",
     );
+  });
+
+  it("observes canvas size without forcing layout and reuses it for DPR changes", () => {
+    let observe: ResizeObserverCallback | undefined;
+    let resize: (() => void) | undefined;
+    const disconnect = vi.fn();
+    const canvas = { getBoundingClientRect: vi.fn() } as unknown as HTMLCanvasElement;
+    const setSize = vi.fn();
+    vi.stubGlobal("devicePixelRatio", 2);
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) {
+        observe = callback;
+      }
+
+      disconnect = disconnect;
+      observe = vi.fn();
+    });
+    vi.stubGlobal("addEventListener", vi.fn((type: string, listener: () => void) => {
+      if (type === "resize") resize = listener;
+    }));
+    vi.stubGlobal("removeEventListener", vi.fn());
+    try {
+      const release = observeCanvasSize(canvas, {
+        setSize,
+      } as unknown as RoyalRendererRoot);
+      expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
+      observe?.([
+        { contentRect: { height: 180, width: 320 } } as ResizeObserverEntry,
+      ], {} as ResizeObserver);
+      expect(setSize).toHaveBeenLastCalledWith({
+        cssHeight: 180,
+        cssWidth: 320,
+        devicePixelRatio: 2,
+      });
+
+      vi.stubGlobal("devicePixelRatio", 3);
+      resize?.();
+      expect(setSize).toHaveBeenLastCalledWith({
+        cssHeight: 180,
+        cssWidth: 320,
+        devicePixelRatio: 3,
+      });
+      expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
+      release();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
