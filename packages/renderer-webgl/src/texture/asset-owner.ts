@@ -8,6 +8,8 @@ export type DecodedTextureSource = Readonly<{
   close?: () => void;
   height: number;
   source: TexImageSource;
+  sourceHeight?: number;
+  sourceWidth?: number;
   width: number;
 }>;
 
@@ -31,7 +33,11 @@ export type TextureAssetSnapshot =
   | Readonly<{ error: string; state: "error" }>;
 
 export type TextureAssetOwnerPlatform = Readonly<{
-  decode(asset: TextureSourceRef, signal: AbortSignal): Promise<DecodedTextureSource>;
+  decode(
+    asset: TextureSourceRef,
+    signal: AbortSignal,
+    maxStorageBytes?: number,
+  ): Promise<DecodedTextureSource>;
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
@@ -120,11 +126,17 @@ export class TextureAssetOwner {
   readonly #entries = new Map<string, AssetEntry>();
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new Map<string, Set<() => void>>();
+  #maxStorageBytes: number | undefined;
   readonly #platform: TextureAssetOwnerPlatform;
+  readonly #storageBudgetBytes: number | undefined;
   readonly #storageEntries = new Map<string, AssetEntry>();
 
-  constructor(platform: TextureAssetOwnerPlatform) {
+  constructor(platform: TextureAssetOwnerPlatform, storageBudgetBytes?: number) {
+    if (storageBudgetBytes !== undefined && (
+      !Number.isSafeInteger(storageBudgetBytes) || storageBudgetBytes < 1
+    )) throw new RangeError("Royal texture storage budget must be a positive safe integer");
     this.#platform = platform;
+    this.#storageBudgetBytes = storageBudgetBytes;
   }
 
   dispose(): void {
@@ -167,6 +179,14 @@ export class TextureAssetOwner {
       if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
       else existing.storageKeys.add(storageKey);
     }
+    let storageCount = 0;
+    for (const claim of claimed.values()) storageCount += claim.storageKeys.size;
+    const fairStorageBytes = this.#storageBudgetBytes === undefined || storageCount === 0
+      ? undefined
+      : Math.floor(this.#storageBudgetBytes / storageCount);
+    this.#maxStorageBytes = fairStorageBytes !== undefined && fairStorageBytes >= 4
+      ? fairStorageBytes
+      : undefined;
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key);
       if (entry === undefined) {
@@ -367,7 +387,7 @@ export class TextureAssetOwner {
     entry.controller = controller;
     const asset = entry.asset;
     const key = entry.key;
-    void this.#platform.decode(asset, controller.signal).then((decoded) => {
+    void this.#platform.decode(asset, controller.signal, this.#maxStorageBytes).then((decoded) => {
       if (
         this.#disposed
         || this.#entries.get(key) !== entry

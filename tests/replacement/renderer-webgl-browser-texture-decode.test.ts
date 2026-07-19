@@ -42,6 +42,37 @@ describe("browser texture decode shell", () => {
     expect(createImageBitmap).not.toHaveBeenCalled();
   });
 
+  it("resizes decoded pixels to the largest budgeted mip representation", async () => {
+    const original = { close: vi.fn(), height: 2048, width: 2048 } as unknown as ImageBitmap;
+    const resized = { close: vi.fn(), height: 8, width: 8 } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn()
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(resized);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    const result = await decodeTextureWithBrowser({
+      bytes: new Uint8Array([1]),
+      contentKey: "large",
+      kind: "embedded-asset",
+      label: "large",
+      mimeType: "image/avif",
+    }, new AbortController().signal, 340);
+
+    expect(createImageBitmap).toHaveBeenCalledTimes(2);
+    expect(createImageBitmap.mock.calls[1]![1]).toMatchObject({
+      resizeHeight: 8,
+      resizeQuality: "high",
+      resizeWidth: 8,
+    });
+    expect(original.close).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      height: 8,
+      source: resized,
+      sourceHeight: 2048,
+      sourceWidth: 2048,
+      width: 8,
+    });
+  });
+
   it("bounds complete jobs and browser bitmap decode as one pipeline", async () => {
     const releases: Array<(bitmap: ImageBitmap) => void> = [];
     const createImageBitmap = vi.fn(() => new Promise<ImageBitmap>((resolve) => {

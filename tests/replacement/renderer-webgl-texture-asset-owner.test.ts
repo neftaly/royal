@@ -5,6 +5,7 @@ import {
   textureStorageKey,
   TextureAssetOwner,
   type DecodedTextureSource,
+  type TextureAssetOwnerPlatform,
 } from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 const decoded = (close = vi.fn()): DecodedTextureSource => ({
@@ -17,7 +18,7 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 describe("ordinary texture asset lifecycle owner", () => {
   it("shares decode by content and version, independently of sampling and color interpretation", async () => {
     const changed = vi.fn();
-    const decode = vi.fn(async () => decoded());
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
     const owner = new TextureAssetOwner({
       decode,
       onAssetChanged: changed,
@@ -98,6 +99,23 @@ describe("ordinary texture asset lifecycle owner", () => {
     owner.rejectGpuStorage([textureStorageKey(assets[1]!)]);
     await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
     expect(owner.getSnapshot(assets[9]!).state).toBe("ready");
+  });
+
+  it("shares the root texture storage allowance across active representations", async () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    }, 1024);
+    const assets = [imageTexture("/a.avif"), imageTexture("/b.avif")];
+
+    owner.reconcile(assets);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(2));
+
+    expect(decode.mock.calls[0]![2]).toBe(512);
+    expect(decode.mock.calls[1]![2]).toBe(512);
   });
 
   it("re-decodes released pixels when GPU residency is invalidated", async () => {

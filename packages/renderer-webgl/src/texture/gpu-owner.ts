@@ -1,11 +1,15 @@
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import { ordinaryTextureStorageBytes } from "./storage";
+
+export { ordinaryTextureStorageBytes } from "./storage";
 
 type GpuTexture = {
   readonly bindings: WeakMap<WebGLSampler, GpuTextureBinding>;
   readonly budgetIdentity: object;
   byteLength: number;
+  readonly fitted: boolean;
   readonly height: number;
   mipmapped: boolean;
   readonly texture: WebGLTexture;
@@ -14,7 +18,10 @@ type GpuTexture = {
 type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
 export type GpuTextureBinding = TextureUnitBinding;
-export type OrdinaryTextureGpuSnapshot = Readonly<{ residentTextures: number }>;
+export type OrdinaryTextureGpuSnapshot = Readonly<{
+  fittedTextures: number;
+  residentTextures: number;
+}>;
 
 const EMPTY_BINDING: GpuTextureBinding = { sampler: null, texture: null };
 
@@ -40,34 +47,6 @@ const samplerWrap = (gl: WebGL2RenderingContext, wrap: string): number => {
 };
 
 const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
-
-/** Exact RGBA8/sRGB8-alpha allocation size, including a generated mip chain. */
-export const ordinaryTextureStorageBytes = (
-  width: number,
-  height: number,
-  mipmapped: boolean,
-): number => {
-  if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1) {
-    throw new RangeError("Royal ordinary texture dimensions must be positive safe integers");
-  }
-  let levelWidth = width;
-  let levelHeight = height;
-  let texels = 0;
-  for (;;) {
-    texels += levelWidth * levelHeight;
-    if (!Number.isSafeInteger(texels)) {
-      throw new RangeError("Royal ordinary texture allocation exceeds safe integer range");
-    }
-    if (!mipmapped || (levelWidth === 1 && levelHeight === 1)) break;
-    levelWidth = Math.max(1, Math.floor(levelWidth / 2));
-    levelHeight = Math.max(1, Math.floor(levelHeight / 2));
-  }
-  const bytes = texels * 4;
-  if (!Number.isSafeInteger(bytes)) {
-    throw new RangeError("Royal ordinary texture allocation exceeds safe integer range");
-  }
-  return bytes;
-};
 
 /** Owns ordinary texture storage and sampler resources for one context generation. */
 export class TextureGpuOwner {
@@ -242,7 +221,11 @@ export class TextureGpuOwner {
   }
 
   snapshot(): OrdinaryTextureGpuSnapshot {
-    return { residentTextures: this.#textures.size };
+    let fittedTextures = 0;
+    for (const texture of this.#textures.values()) {
+      if (texture.fitted) fittedTextures += 1;
+    }
+    return { fittedTextures, residentTextures: this.#textures.size };
   }
 
   #createSampler(binding: CanonicalTextureBinding): GpuSampler {
@@ -297,6 +280,7 @@ export class TextureGpuOwner {
         bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),
         budgetIdentity,
         byteLength,
+        fitted: binding.decoded.sourceWidth !== undefined,
         height: binding.decoded.height,
         mipmapped,
         texture,

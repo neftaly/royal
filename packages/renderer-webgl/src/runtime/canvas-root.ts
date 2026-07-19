@@ -91,6 +91,7 @@ export type CanvasRootPlatform = Readonly<{
   decodeTexture?(
     asset: TextureSourceRef,
     signal: AbortSignal,
+    maxStorageBytes?: number,
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readGltfResource?(uri: string, signal: AbortSignal): Promise<Uint8Array>;
@@ -122,10 +123,10 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 
 const lazyBrowserTextureDecoder = (): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
-  return async (asset, signal) => {
+  return async (asset, signal, maxStorageBytes) => {
     decoder ??= import("../texture/browser-decode")
       .then((module) => module.createBrowserTextureDecoder());
-    return (await decoder)(asset, signal);
+    return (await decoder)(asset, signal, maxStorageBytes);
   };
 };
 
@@ -315,7 +316,7 @@ export class CanvasRoot {
       onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
-    });
+    }, Math.floor(this.#persistentGpuBudget.snapshot().budgetBytes * 0.75));
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
     this.#clock = new FrameClockOwner({

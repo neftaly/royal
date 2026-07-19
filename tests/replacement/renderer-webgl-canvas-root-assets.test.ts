@@ -240,6 +240,7 @@ describe("canvas root asset publication", () => {
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "asset", src: "/models/albedo.png" }),
       expect.any(AbortSignal),
+      402_653_184,
     );
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
@@ -280,6 +281,7 @@ describe("canvas root asset publication", () => {
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "embedded-asset", mimeType: "image/png" }),
       expect.any(AbortSignal),
+      402_653_184,
     );
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);

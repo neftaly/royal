@@ -1,9 +1,11 @@
 import type { DecodedTextureSource, TextureSourceRef } from "./asset-owner";
 import { decodeBrowserImageElement } from "./browser-image-element";
+import { fitOrdinaryTextureStorage } from "./storage-fit";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
   signal: AbortSignal,
+  maxStorageBytes?: number,
 ) => Promise<DecodedTextureSource>;
 
 type PendingWork = {
@@ -79,6 +81,7 @@ const decodeTextureBlob = async (
   asset: TextureSourceRef,
   blob: Blob,
   signal: AbortSignal,
+  maxStorageBytes?: number,
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   if (typeof globalThis.createImageBitmap !== "function") {
@@ -110,10 +113,38 @@ const decodeTextureBlob = async (
     bitmap.close();
     throw new Error(`${diagnosticLabel(asset)} decoded to an empty image`);
   }
+  const sourceHeight = bitmap.height;
+  const sourceWidth = bitmap.width;
+  if (maxStorageBytes !== undefined && maxStorageBytes >= 4) {
+    const fitted = fitOrdinaryTextureStorage(bitmap.width, bitmap.height, maxStorageBytes);
+    if (fitted.width !== bitmap.width || fitted.height !== bitmap.height) {
+      try {
+        const resized = await globalThis.createImageBitmap(bitmap, {
+          colorSpaceConversion: "none",
+          imageOrientation: "none",
+          premultiplyAlpha: "none",
+          resizeHeight: fitted.height,
+          resizeQuality: "high",
+          resizeWidth: fitted.width,
+        });
+        bitmap.close();
+        bitmap = resized;
+      } catch {
+        // The persistent GPU authority still rejects an oversized fallback.
+      }
+    }
+  }
+  if (signal.aborted) {
+    bitmap.close();
+    throw aborted();
+  }
   return {
     close: () => bitmap.close(),
     height: bitmap.height,
     source: bitmap,
+    ...(bitmap.width === sourceWidth && bitmap.height === sourceHeight
+      ? {}
+      : { sourceHeight, sourceWidth }),
     width: bitmap.width,
   };
 };
@@ -131,9 +162,12 @@ export const createBrowserTextureDecoder = (
   }
   const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
-  return (asset, signal) => jobs.run(signal, async () => {
+  return (asset, signal, maxStorageBytes) => jobs.run(signal, async () => {
     const blob = await readTextureBlob(asset, signal);
-    return decodes.run(signal, () => decodeTextureBlob(asset, blob, signal));
+    return decodes.run(
+      signal,
+      () => decodeTextureBlob(asset, blob, signal, maxStorageBytes),
+    );
   });
 };
 

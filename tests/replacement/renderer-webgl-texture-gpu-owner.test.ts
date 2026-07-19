@@ -5,6 +5,8 @@ import {
   ordinaryTextureStorageBytes,
   TextureGpuOwner,
 } from "../../packages/renderer-webgl/src/texture/gpu-owner";
+import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
+import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 const fakeGl = (): WebGL2RenderingContext => ({
   CLAMP_TO_EDGE: 0x812f,
@@ -76,6 +78,41 @@ describe("ordinary texture GPU owner", () => {
     expect(bindings[1]).toEqual({ sampler: null, texture: null });
     expect(gl.generateMipmap).not.toHaveBeenCalled();
     expect(budget.snapshot()).toEqual({ budgetBytes: 300, deniedClaims: 1, retainedBytes: 256 });
+  });
+
+  it("fits the largest aspect-preserving mip chain under a storage ceiling", () => {
+    expect(fitOrdinaryTextureStorage(8, 8, 340)).toEqual({ height: 8, width: 8 });
+    expect(fitOrdinaryTextureStorage(8, 8, 100)).toEqual({ height: 4, width: 4 });
+    expect(fitOrdinaryTextureStorage(8, 4, 100)).toEqual({ height: 3, width: 7 });
+    expect(() => fitOrdinaryTextureStorage(8, 8, 3)).toThrow("at least four bytes");
+  });
+
+  it("fuzzes storage fits for boundedness and maximality", () => {
+    forEachFuzzCase({ cases: 256, envName: "ROYAL_TEXTURE_STORAGE_FUZZ_CASES", seed: 0x7e87_1202 }, ({ random }) => {
+      const width = random.int(1, 4_097);
+      const height = random.int(1, 4_097);
+      const authoredBytes = ordinaryTextureStorageBytes(width, height, true);
+      const maxBytes = authoredBytes === 4 ? 4 : random.int(4, authoredBytes + 1);
+      const fitted = fitOrdinaryTextureStorage(width, height, maxBytes);
+
+      assertFuzz(fitted.width >= 1 && fitted.width <= width, "fitted width must stay within the source");
+      assertFuzz(fitted.height >= 1 && fitted.height <= height, "fitted height must stay within the source");
+      assertFuzz(
+        ordinaryTextureStorageBytes(fitted.width, fitted.height, true) <= maxBytes,
+        "fitted mip chain must respect its byte ceiling",
+      );
+
+      const longest = Math.max(width, height);
+      const nextLongest = Math.max(fitted.width, fitted.height) + 1;
+      if (nextLongest <= longest) {
+        const nextWidth = Math.max(1, Math.floor(width / longest * nextLongest));
+        const nextHeight = Math.max(1, Math.floor(height / longest * nextLongest));
+        assertFuzz(
+          ordinaryTextureStorageBytes(nextWidth, nextHeight, true) > maxBytes,
+          "fitted size must be the largest aspect-preserving candidate",
+        );
+      }
+    });
   });
 
   it("does not create GL storage when the initial persistent claim is denied", () => {

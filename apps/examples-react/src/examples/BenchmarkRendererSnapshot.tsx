@@ -77,6 +77,7 @@ export const BenchmarkRendererSnapshot = ({
         },
         resourceLifetime: null,
         textureResidency: {
+          fitted: current.resources.ordinaryTextures.fittedTextures,
           resources: current.resources.ordinaryTextures.residentTextures,
         },
         virtualTexturing: null,

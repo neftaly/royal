@@ -1,4 +1,4 @@
-export const DEFAULT_PERSISTENT_GPU_BYTE_BUDGET = 1344 * 1024 * 1024;
+export const DEFAULT_PERSISTENT_GPU_BYTE_BUDGET = 512 * 1024 * 1024;
 
 export type PersistentGpuBudgetSnapshot = Readonly<{
   budgetBytes: number;

@@ -22,7 +22,7 @@ geometry, re-upload static instances, or resubscribe resources.
 Each root admits work against five public ceilings:
 
 - retained decoded CPU bytes (default 512 MiB);
-- retained persistent GPU bytes (default 1344 MiB);
+- retained persistent GPU bytes (default 512 MiB);
 - concurrent transient/scratch peak bytes (default 192 MiB);
 - GPU upload traffic per rendered frame (default 16 MiB);
 - concurrent asynchronous preparation jobs (default 8).
@@ -49,6 +49,13 @@ Admission denial chooses one of:
 - evict unclaimed/reconstructible content then retry under bounded policy;
 - select a legal lower-cost representation or fallback;
 - settle as a captured resource failure.
+
+Ordinary browser-decoded images share 75% of the persistent ceiling. Royal keeps
+authored dimensions when their complete RGBA mip representations fit; otherwise
+it selects the largest aspect-preserving decoded size that fits each active
+storage share before upload. This bounds ordinary glTF sets without an
+asset-specific branch. Authored close-range detail that must remain independent
+of scene-wide residency belongs in KTX2/VT representations.
 
 It MUST NOT busy-loop each frame, partially publish, exceed the ceiling
 silently, or make settled work permanently unwakeable. Reserved correctness
