@@ -1,9 +1,9 @@
 import {
   Canvas,
-  useFrame,
   useGltfAssetStatus,
   useInvalidate,
   useRendererLifecycle,
+  useVirtualTextureStatus,
 } from '@royal/react';
 import {
   boxGeometry,
@@ -17,6 +17,7 @@ import {
 } from '@royal/react/scene';
 import { Component, useCallback, useRef, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../examples/BenchmarkRendererSnapshot';
+import { useAnimationFrame } from '../examples/use-animation-frame';
 
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const camera = perspectiveCamera({
@@ -36,27 +37,29 @@ const ordinaryScene = scene({
 const lifecycleScenePointerEvents = {
   'lifecycle-probe': { onPointerMove: (): void => undefined },
 } as const;
+const probeVirtualTexture = virtualTexture({ manifestUri: `${fixtureRoot}map.vt.json` });
 const virtualTextureScene = scene({
   camera,
   nodes: [mesh({
     geometry: planeGeometry([3, 3]),
     material: unlitMaterial({
-      texture: virtualTexture({ manifestUri: `${fixtureRoot}map.vt.json` }),
+      texture: probeVirtualTexture,
     }),
   })],
 });
 
 const ActiveFrameProbe = (): ReactNode => {
   const invalidate = useInvalidate();
-  useFrame(invalidate);
+  useAnimationFrame(() => invalidate());
   return null;
 };
 
+const RendererBenchmarkProbe = (): ReactNode => (
+  <BenchmarkRendererSnapshot virtualTextureStatus={useVirtualTextureStatus(probeVirtualTexture)} />
+);
+
 const FailingFrameProbe = (): ReactNode => {
-  useFrame(() => {
-    throw new Error('React lifecycle probe frame failure');
-  });
-  return null;
+  throw new Error('React lifecycle probe frame failure');
 };
 
 const RendererObserverProbe = (): ReactNode => {
@@ -157,7 +160,7 @@ export const ReactLifecycleProbe = (): ReactNode => {
             {...(mode === 'ordinary' ? { scenePointerEvents: lifecycleScenePointerEvents } : {})}
             style={{ height: 320, width: 480 }}
           >
-            <BenchmarkRendererSnapshot />
+            <RendererBenchmarkProbe />
             <RendererObserverProbe />
             {mode === 'animate' ? <ActiveFrameProbe /> : null}
             {failFrame ? <FailingFrameProbe /> : null}

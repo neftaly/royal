@@ -23,7 +23,7 @@ export const benchmarkVirtualTextureDiagnostics = (
 ): Record<string, number> | null => status === undefined ? null : {
   failedPages: status.failedPages,
   manifestFailures: status.state === 'error' || status.state === 'unsupported' ? 1 : 0,
-  manifestRequests: 1,
+  manifestRequests: status.state === 'idle' ? 0 : 1,
   manifestsReady: status.state === 'ready' ? 1 : 0,
   pendingPages: status.pendingPages,
   residentPages: status.residentPages,

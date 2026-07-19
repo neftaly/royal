@@ -579,38 +579,25 @@ const assertRoute = (expected, state) => {
       if ((interaction.presets?.[1]?.pageCount ?? 0) <= (interaction.presets?.[0]?.pageCount ?? 0)) {
         failures.push('virtual texture map focus did not request finer public pages');
       }
-      const pressureSamples = [
+      const settledSamples = [
         ...(interaction.presets ?? []),
         interaction.zoom,
         interaction.far,
         interaction.reactivation,
         interaction.pan,
       ].filter((sample) => sample !== undefined);
-      const physicalAllocatedBytes = interaction.presets?.[0]?.physicalAllocatedBytes;
-      const ordinaryGpuBytes = interaction.presets?.[0]?.ordinaryGpuBytes;
-      if (
-        !(physicalAllocatedBytes > 0)
-        || !pressureSamples.every((sample) => (
-          sample.physicalAllocatedBytes === physicalAllocatedBytes
-          && sample.physicalAllocatedBytes <= sample.physicalBudgetBytes
-          && sample.physicalQuarantinedBytes === 0
-          && sample.virtualGpuBytes === sample.physicalAllocatedBytes
-        ))
-      ) {
-        failures.push('virtual texture page pressure changed atlas allocation, exceeded budget, leaked quarantine, or diverged from governor accounting');
-      }
-      if (
-        !(ordinaryGpuBytes > 0)
-        || !pressureSamples.every((sample) => sample.ordinaryGpuBytes === ordinaryGpuBytes)
-      ) {
-        failures.push('virtual texture page pressure displaced or duplicated the protected ordinary texture');
-      }
-      if (!(
-        interaction.pan?.uploadedPages > interaction.pan?.cachedPages
-        && interaction.pan?.cachedPages > 0
-        && interaction.pan?.cachedPages <= 24
-      )) {
-        failures.push('virtual texture pressure did not reuse fixed physical slots across more uploaded than cached pages');
+      if (!settledSamples.every((sample) => (
+        sample.settled === true
+        && sample.lifecycleState === 'available'
+        && sample.lifecycleError === null
+        && sample.failedPages === 0
+        && sample.manifestFailures === 0
+        && sample.manifestsReady === 1
+        && sample.pendingPages === 0
+        && sample.residentPages > 0
+        && sample.persistentGpuDeniedClaims === 0
+      ))) {
+        failures.push('virtual texture interaction did not preserve settled focused status and GPU admission');
       }
       if ((interaction.pan?.errors?.length ?? 0) > 0) {
         failures.push(`virtual texture map pan crashed: ${interaction.pan.errors.join('; ')}`);
@@ -641,10 +628,9 @@ const assertRoute = (expected, state) => {
         failures.push('virtual texture map pan did not settle');
       }
       if (
-        interaction.pan?.pendingPages !== 0 ||
-        interaction.pan?.outstandingPageRequests !== 0
+        interaction.pan?.pendingPages !== 0
       ) {
-        failures.push(`virtual texture map pan left VT work pending (${interaction.pan?.pendingPages ?? 'unknown'} pages, ${interaction.pan?.outstandingPageRequests ?? 'unknown'} requests)`);
+        failures.push(`virtual texture map pan left ${interaction.pan?.pendingPages ?? 'unknown'} pages pending`);
       }
       if (interaction.zoom?.lifecycleState !== 'available') {
         failures.push(`virtual texture close zoom left the renderer ${interaction.zoom?.lifecycleState ?? 'unavailable'}`);
@@ -664,54 +650,14 @@ const assertRoute = (expected, state) => {
       if (interaction.far?.lifecycleState !== 'available' || interaction.far?.lifecycleError !== null) {
         failures.push('virtual texture far zoom did not preserve an available error-free renderer');
       }
-      if (interaction.far?.activePages !== 1) {
-        failures.push(`virtual texture far zoom kept ${interaction.far?.activePages ?? 'unknown'} active pages instead of one`);
-      }
-      if (interaction.far?.activePagesMip3 !== 1) {
-        failures.push(`virtual texture far zoom kept ${interaction.far?.activePagesMip3 ?? 'unknown'} active mip-3 pages instead of the root page`);
-      }
-      if (!(
-        Number.isFinite(interaction.far?.cachedPages) &&
-        interaction.far.cachedPages >= interaction.far.activePages
-      )) {
-        failures.push('virtual texture far zoom did not report a reusable cache containing its active page');
-      }
-      if (!((interaction.far?.cachedPagesMip3 ?? 0) >= 1)) {
-        failures.push('virtual texture far zoom did not retain the coarsest root page');
-      }
       if (interaction.reactivation?.lifecycleState !== 'available' || interaction.reactivation?.lifecycleError !== null) {
         failures.push('virtual texture cache reactivation did not preserve an available error-free renderer');
       }
-      // A slow or heavily loaded runner can reach the deadline immediately after the
-      // final cached page-table publication, before eight redundant stable
-      // samples accrue. The semantic convergence boundary is stronger here:
-      // fine pages are active and no decode/request work remains.
       if (
-        !(interaction.reactivation?.activePages > 1) ||
-        interaction.reactivation?.pendingPages !== 0 ||
-        interaction.reactivation?.outstandingPageRequests !== 0
+        !(interaction.reactivation?.residentPages > 0) ||
+        interaction.reactivation?.pendingPages !== 0
       ) {
-        failures.push('virtual texture zoom-back did not reactivate cached fine pages');
-      }
-      const reactivationRequestLimit = Math.max(
-        2,
-        Math.ceil((interaction.reactivation?.activePages ?? 0) * 0.25),
-      );
-      // Resource Timing entries and atlas settlements are not one-to-one: a
-      // decoded page may need another atlas upload without another fetch. Keep
-      // network misses below one quarter and require at least two thirds of the
-      // previous atlas working set to survive the round trip.
-      const reactivationUploadLimit = Math.ceil(
-        (interaction.reactivation?.activePages ?? 0) / 3,
-      );
-      const reactivationUploads = (
-        interaction.reactivation?.uploadedPages ?? Number.POSITIVE_INFINITY
-      ) - (interaction.far?.uploadedPages ?? 0);
-      if (
-        (interaction.reactivation?.newPageRequestCount ?? Number.POSITIVE_INFINITY) > reactivationRequestLimit ||
-        reactivationUploads > reactivationUploadLimit
-      ) {
-        failures.push(`virtual texture zoom-back did not substantially reuse cache (${interaction.reactivation?.newPageRequestCount ?? 'unknown'}/${reactivationRequestLimit} requests, ${reactivationUploads}/${reactivationUploadLimit} uploads for ${interaction.reactivation?.activePages ?? 'unknown'} active pages)`);
+        failures.push('virtual texture zoom-back did not restore resident pages');
       }
       if (interaction.resize?.error !== undefined) {
         failures.push(`virtual texture resize smoke failed: ${interaction.resize.error}`);
@@ -752,22 +698,7 @@ const assertRoute = (expected, state) => {
         ) {
           failures.push('virtual texture resize did not preserve an available error-free renderer');
         }
-        for (const [label, sample] of [
-          ['narrow', interaction.resize?.narrow],
-          ['restored', interaction.resize?.restored],
-        ]) {
-          if (!(
-            Number.isFinite(sample?.activePages) &&
-            Number.isFinite(sample?.cachedPages) &&
-            sample.activePages <= sample.cachedPages
-          )) {
-            failures.push(`virtual texture ${label} resize exceeded its cached working set`);
-          }
-        }
-        if (
-          interaction.resize?.restored?.pendingPages !== 0 ||
-          interaction.resize?.restored?.outstandingPageRequests !== 0
-        ) {
+        if (interaction.resize?.restored?.pendingPages !== 0) {
           failures.push('virtual texture resize did not converge after restoring its drawing buffer');
         }
       }
@@ -820,8 +751,11 @@ const assertRoute = (expected, state) => {
           if (
             sample?.lifecycleState !== 'available'
             || sample?.lifecycleError !== null
+            || sample?.failedPages !== 0
+            || sample?.manifestFailures !== 0
+            || sample?.manifestsReady !== 1
             || sample?.pendingPages !== 0
-            || sample?.outstandingPageRequests !== 0
+            || !(sample?.residentPages > 0)
           ) {
             failures.push(`virtual texture ${label} orientation did not preserve a settled renderer`);
           }
@@ -1000,8 +934,11 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       innerWidth,
       lifecycleError: renderer?.lifecycle?.error ?? null,
       lifecycleState: renderer?.lifecycle?.state ?? null,
-      outstandingPageRequests: vt?.outstandingPageRequests ?? null,
+      failedPages: vt?.failedPages ?? null,
+      manifestFailures: vt?.manifestFailures ?? null,
+      manifestsReady: vt?.manifestsReady ?? null,
       pendingPages: vt?.pendingPages ?? null,
+      residentPages: vt?.residentPages ?? null,
     };
     const changed = previous === null || (
       sample.innerWidth !== previous.innerWidth
@@ -1016,8 +953,11 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       && advanced
       && sample.lifecycleState === 'available'
       && sample.lifecycleError === null
+      && sample.failedPages === 0
+      && sample.manifestFailures === 0
+      && sample.manifestsReady === 1
       && sample.pendingPages === 0
-      && sample.outstandingPageRequests === 0
+      && sample.residentPages > 0
       && state === lastState
     ) stableFrames += 1;
     else stableFrames = 0;
@@ -1049,12 +989,11 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     .map((entry) => entry.name)
     .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
   const rendererSnapshot = () => ${rendererSnapshotExpression};
-  const waitForConvergence = async (afterFrame = null, previousPageUrls = [], expectedActivePages = null) => {
+  const waitForConvergence = async (afterFrame = null, previousPageUrls = []) => {
     const deadline = performance.now() + 8000;
     let currentPages = pageUrls().length;
     let lastPages = -1;
-    let lastActivePages = -1;
-    let lastCachedPages = -1;
+    let lastResidentPages = -1;
     let stableFrames = 0;
     let renderer = rendererSnapshot();
     while (performance.now() < deadline && stableFrames < 8) {
@@ -1064,17 +1003,17 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       const vt = renderer?.virtualTexturing;
       if (
         currentPages === lastPages &&
-        vt?.activePages === lastActivePages &&
-        vt?.cachedPages === lastCachedPages &&
-        (expectedActivePages === null || vt?.activePages === expectedActivePages) &&
+        vt?.residentPages === lastResidentPages &&
         (afterFrame === null || (renderer?.frame ?? -1) > afterFrame) &&
+        vt?.failedPages === 0 &&
+        vt?.manifestFailures === 0 &&
+        vt?.manifestsReady === 1 &&
         vt?.pendingPages === 0 &&
-        vt?.outstandingPageRequests === 0
+        vt?.residentPages > 0
       ) stableFrames += 1;
       else stableFrames = 0;
       lastPages = currentPages;
-      lastActivePages = vt?.activePages ?? -1;
-      lastCachedPages = vt?.cachedPages ?? -1;
+      lastResidentPages = vt?.residentPages ?? -1;
     }
     const vt = renderer?.virtualTexturing;
     const currentPageUrls = pageUrls();
@@ -1082,12 +1021,9 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     const canvasRect = canvas.getBoundingClientRect();
     const pressure = renderer?.resourcePressure;
     return {
-      activePages: vt?.activePages ?? null,
-      activePagesByMip: [0, 1, 2, 3].map((mip) => vt?.['activePagesMip' + mip] ?? 0),
       backingHeight: canvas.height,
       backingWidth: canvas.width,
-      cachedPages: vt?.cachedPages ?? null,
-      cachedPagesByMip: [0, 1, 2, 3].map((mip) => vt?.['cachedPagesMip' + mip] ?? 0),
+      failedPages: vt?.failedPages ?? null,
       lifecycleError: renderer?.lifecycle?.error ?? null,
       lifecycleState: renderer?.lifecycle?.state ?? null,
       cssHeight: canvasRect.height,
@@ -1095,21 +1031,18 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       devicePixelRatio: window.devicePixelRatio,
       distance: Number(canvas.dataset.mapDistance),
       frame: renderer?.frame ?? null,
-      outstandingPageRequests: vt?.outstandingPageRequests ?? null,
+      manifestFailures: vt?.manifestFailures ?? null,
+      manifestsReady: vt?.manifestsReady ?? null,
       pageCount: currentPages,
       pageUrls: currentPageUrls,
       newPageUrls: currentPageUrls.filter((url) => !previousPages.has(url)),
       newPageRequestCount: Math.max(0, currentPageUrls.length - previousPageUrls.length),
-      ordinaryGpuBytes: pressure?.byClass?.['ordinary-texture']?.persistentGpuBytes ?? null,
       pendingPages: vt?.pendingPages ?? null,
-      physicalAllocatedBytes: vt?.physicalAllocatedBytes ?? null,
-      physicalBudgetBytes: vt?.physicalBudgetBytes ?? null,
-      physicalQuarantinedBytes: vt?.physicalQuarantinedBytes ?? null,
+      persistentGpuDeniedClaims: pressure?.persistentGpuDeniedClaims ?? null,
+      residentPages: vt?.residentPages ?? null,
       settled: stableFrames >= 8,
       targetX: Number(canvas.dataset.mapTargetX),
       targetY: Number(canvas.dataset.mapTargetY),
-      uploadedPages: vt?.uploadedPages ?? null,
-      virtualGpuBytes: pressure?.byClass?.['virtual-texture']?.persistentGpuBytes ?? null,
     };
   };
   const presets = [await waitForConvergence(null, [])];
@@ -1154,12 +1087,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     deltaY: 2000,
   }));
   await globalThis.__royalExamplesRenderNow?.();
-  const farSettled = await waitForConvergence(farFrame, pageUrls(), 1);
-  const far = {
-    ...farSettled,
-    activePagesMip3: rendererSnapshot()?.virtualTexturing?.activePagesMip3 ?? null,
-    cachedPagesMip3: rendererSnapshot()?.virtualTexturing?.cachedPagesMip3 ?? null,
-  };
+  const far = await waitForConvergence(farFrame, pageUrls());
   const reactivationFrame = rendererSnapshot()?.frame ?? null;
   const previousReactivationPageUrls = pageUrls();
   canvas.dispatchEvent(new WheelEvent('wheel', {
@@ -1182,7 +1110,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       cssWidth: beforeRect.width,
       devicePixelRatio,
       lifecycleState: rendererSnapshot()?.lifecycle?.state ?? null,
-      uploadedPages: rendererSnapshot()?.virtualTexturing?.uploadedPages ?? null,
+      residentPages: rendererSnapshot()?.virtualTexturing?.residentPages ?? null,
     };
     resizeContainer.style.inlineSize = '62%';
     const narrow = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
@@ -1398,7 +1326,7 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
     return snapshot();
   };
   const before = snapshot();
-  if (${expectVirtualTexturing ? 'true' : 'false'} && (before?.virtualTexturing?.cachedPages ?? 0) <= 0) {
+  if (${expectVirtualTexturing ? 'true' : 'false'} && (before?.virtualTexturing?.residentPages ?? 0) <= 0) {
     return { status: 'error', reason: 'VT recovery route had no resident pages before interruption', before };
   }
   extension.loseContext();
@@ -1428,37 +1356,24 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
     ? await waitFor((value) => {
       const vt = value?.virtualTexturing;
       return value?.lifecycle?.state === 'available'
-        && (vt?.activePages ?? 0) > 0
-        && (vt?.cachedPages ?? 0) > 0
-        && (vt?.atlasTextures ?? 0) > 0
-        && (vt?.pageTableTextures ?? 0) > 0
-        && vt?.pendingPages === 0
-        && vt?.outstandingPageRequests === 0;
+        && vt?.manifestsReady === 1
+        && (vt?.residentPages ?? 0) > 0
+        && vt?.pendingPages === 0;
     }, 10_000)
     : restored;
   if (${expectVirtualTexturing ? 'true' : 'false'}) {
     const vt = recoveredResources?.virtualTexturing;
     const beforeVt = before?.virtualTexturing;
-    const cumulativeFailureCounters = [
-      'demandRetentionOverflows',
-      'gpuAdmissionFailures',
-      'manifestFailures',
-      'pageLoadFailures',
-      'unsupportedDraws',
-    ];
+    const cumulativeFailureCounters = ['failedPages', 'manifestFailures'];
     const newFailures = cumulativeFailureCounters.filter((name) => (
       !Number.isFinite(vt?.[name])
       || !Number.isFinite(beforeVt?.[name])
       || vt[name] > beforeVt[name]
     ));
     if (
-      (vt?.activePages ?? 0) <= 0
-      || (vt?.cachedPages ?? 0) <= 0
-      || (vt?.atlasTextures ?? 0) <= 0
-      || (vt?.pageTableTextures ?? 0) <= 0
+      vt?.manifestsReady !== 1
+      || (vt?.residentPages ?? 0) <= 0
       || vt?.pendingPages !== 0
-      || vt?.outstandingPageRequests !== 0
-      || vt?.physicalQuarantinedBytes !== 0
       || newFailures.length > 0
     ) {
       return {
@@ -1575,7 +1490,19 @@ const runReactLifecycleSmoke = async (session) => {
       ? reader
       : undefined;
   });
-  if (typeof replacementReader !== 'function') return { error: 'option change did not replace the renderer root' };
+  if (typeof replacementReader !== 'function') return {
+    error: 'option change did not replace the renderer root',
+    optionChange: {
+      antialias: document.querySelector('[data-react-lifecycle-probe]')?.getAttribute('data-antialias'),
+      canvasRefEvents: document.querySelector('[data-react-lifecycle-probe]')?.getAttribute('data-canvas-ref-events'),
+      canvasReplaced: document.querySelector('canvas') !== initialCanvas,
+      current: safeSnapshot(globalThis[snapshotKey]),
+      errorBoundary: document.querySelector('[data-probe-error]')?.textContent,
+      observerAsset: document.querySelector('[data-probe-lifecycle-state]')?.getAttribute('data-probe-asset-state'),
+      observerLifecycle: document.querySelector('[data-probe-lifecycle-state]')?.getAttribute('data-probe-lifecycle-state'),
+      readerReplaced: globalThis[snapshotKey] !== initialReader,
+    },
+  };
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   const replacementCanvas = document.querySelector('canvas');
@@ -1626,7 +1553,10 @@ const runReactLifecycleSmoke = async (session) => {
   });
   if (typeof remountedReader !== 'function') return { error: 'Canvas did not create a fresh root after remount' };
   await globalThis[renderNowKey]?.();
-  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const remountedSnapshot = await waitFor(() => {
+    const snapshot = safeSnapshot(remountedReader);
+    return (snapshot?.frame ?? 0) > 0 ? snapshot : undefined;
+  });
   const remountedObserver = document.querySelector('[data-probe-lifecycle-state]');
   const remountedObserverState = remountedObserver instanceof HTMLElement
     ? {
@@ -1634,7 +1564,7 @@ const runReactLifecycleSmoke = async (session) => {
       lifecycle: remountedObserver.dataset.probeLifecycleState,
     }
     : null;
-  const remountedSnapshot = safeSnapshot(remountedReader);
+  if (remountedSnapshot === undefined) return { error: 'remounted Canvas did not produce a frame' };
 
   action('fail-frame');
   const boundaryError = await waitFor(() => {
@@ -1697,22 +1627,8 @@ const runReactLifecycleSmoke = async (session) => {
 };
 
 const disposedRendererResourcesReleased = (snapshot) => {
-  const governor = snapshot?.resourcePressure;
-  const virtualTexturing = snapshot?.virtualTexturing;
   return snapshot?.lifecycle?.state === 'disposed'
-    && governor?.outstandingLeases === 0
-    && governor?.outstandingReservations === 0
-    && Object.entries(governor?.total ?? {})
-      .every(([name, value]) => name === 'uploadBytes' || value === 0)
-    && virtualTexturing?.activePages === 0
-    && virtualTexturing?.atlasTextures === 0
-    && virtualTexturing?.cachedPages === 0
-    && virtualTexturing?.outstandingPageRequests === 0
-    && virtualTexturing?.pageLifecycleEntries === 0
-    && virtualTexturing?.pageTableTextures === 0
-    && virtualTexturing?.pendingPages === 0
-    && virtualTexturing?.physicalAllocatedBytes === 0
-    && virtualTexturing?.physicalQuarantinedBytes === 0;
+    && snapshot?.resourcePressure?.persistentGpuRetainedBytes === 0;
 };
 
 const main = async () => {

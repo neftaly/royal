@@ -57,6 +57,11 @@ type CanvasRuntime = Readonly<{
   root: RoyalRendererRoot | null;
 }>;
 
+type CanvasAttachment = Readonly<{
+  canvas: HTMLCanvasElement;
+  optionsKey: string;
+}>;
+
 const EMPTY_RUNTIME: CanvasRuntime = { error: null, root: null };
 
 const assignRef = <Value>(
@@ -176,7 +181,8 @@ export const Canvas = ({
     () => createRoyalScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
     [scenePickingIndex, scenePointerEvents],
   );
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [attachment, setAttachment] = useState<CanvasAttachment | null>(null);
+  const canvas = attachment?.optionsKey === optionsKey ? attachment.canvas : null;
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pointerInteractionStateRef] = useState<CanvasPointerInteractionStateRef>(() => ({
@@ -191,18 +197,15 @@ export const Canvas = ({
 
   const attachCanvas = useCallback((element: HTMLCanvasElement | null) => {
     canvasRef.current = element;
-    setCanvas(element);
+    setAttachment(element === null ? null : { canvas: element, optionsKey });
     const releaseExternalRef = assignRef(ref, element);
     if (element === null) return releaseExternalRef;
     return () => {
-      if (canvasRef.current === element) {
-        canvasRef.current = null;
-        setCanvas(null);
-      }
+      if (canvasRef.current === element) canvasRef.current = null;
       if (releaseExternalRef === undefined) assignRef(ref, null);
       else releaseExternalRef();
     };
-  }, [ref]);
+  }, [optionsKey, ref]);
 
   useLayoutEffect(() => {
     if (canvas === null) return undefined;
