@@ -73,6 +73,33 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
   });
 
+  it("holds a bounded decode reservation until each source is consumed", async () => {
+    const decode = vi.fn(async () => decoded());
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const assets = Array.from(
+      { length: 10 },
+      (_value, index) => imageTexture(`/streamed-${index}.avif`),
+    );
+
+    owner.reconcile(assets);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    await Promise.resolve();
+    expect(decode).toHaveBeenCalledTimes(8);
+
+    owner.releaseUploaded([textureStorageKey(assets[0]!)]);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    expect(owner.getSnapshot(assets[8]!).state).toBe("ready");
+
+    owner.rejectGpuStorage([textureStorageKey(assets[1]!)]);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    expect(owner.getSnapshot(assets[9]!).state).toBe("ready");
+  });
+
   it("re-decodes released pixels when GPU residency is invalidated", async () => {
     const firstClose = vi.fn();
     const second = decoded();

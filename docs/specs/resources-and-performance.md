@@ -168,6 +168,13 @@ Parallelism is bounded globally so one asset cannot starve all other work.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
+An ordinary image decode retains its scheduling reservation until every claimed
+GPU representation consumes it, rejects it, or the claim is cancelled. Bounding
+only active decoder calls is insufficient: fast decoders can otherwise leave an
+unbounded queue of completed RGBA images waiting behind progressive GPU
+admission. The initial implementation permits eight such retained decode
+reservations per root and preserves deterministic source order.
+
 Encoding can materially improve load time: GLB reduces request overhead;
 Meshopt/Draco reduce geometry bytes and parsing; offline ETC2 KTX2 reduces texture
 bytes, upload footprint, and GPU memory without a runtime transcoder; authored

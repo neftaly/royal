@@ -41,14 +41,17 @@ type AssetEntry = {
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
   controller: AbortController | undefined;
+  decodeReservation: boolean;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedReleased: boolean;
+  queued: boolean;
   readonly residentStorageKeys: Set<string>;
   snapshot: TextureAssetSnapshot;
 };
 
 const IDLE: TextureAssetSnapshot = { state: "idle" };
+const DEFAULT_DECODED_TEXTURE_RESERVATIONS = 8;
 
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
@@ -111,7 +114,9 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 
 /** Owns exact decoded-content claims, asynchronous decode, and focused status publication. */
 export class TextureAssetOwner {
+  #activeDecodeReservations = 0;
   #disposed = false;
+  readonly #decodeQueue: AssetEntry[] = [];
   readonly #entries = new Map<string, AssetEntry>();
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -129,6 +134,7 @@ export class TextureAssetOwner {
       entry.controller?.abort();
       if (!entry.decodedReleased) entry.decoded?.close?.();
     }
+    this.#decodeQueue.length = 0;
     this.#entries.clear();
     this.#listeners.clear();
     this.#storageEntries.clear();
@@ -175,8 +181,9 @@ export class TextureAssetOwner {
       }
       if (
         entry.decodedReleased
+        && entry.snapshot.state !== "error"
         && [...claim.storageKeys].some((storageKey) => !entry.residentStorageKeys.has(storageKey))
-      ) this.#decode(entry, false);
+      ) this.#queueDecode(entry);
     }
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key)!;
@@ -184,9 +191,12 @@ export class TextureAssetOwner {
     }
     for (const [key, entry] of this.#entries) {
       if (claimed.has(key)) continue;
+      this.#entries.delete(key);
       entry.controller?.abort();
       if (!entry.decodedReleased) entry.decoded?.close?.();
-      this.#entries.delete(key);
+      entry.decodedReleased = true;
+      entry.queued = false;
+      this.#releaseDecodeReservation(entry);
       this.#publish(key);
     }
   }
@@ -211,6 +221,7 @@ export class TextureAssetOwner {
       ) continue;
       entry.decoded.close?.();
       entry.decodedReleased = true;
+      this.#releaseDecodeReservation(entry);
     }
   }
 
@@ -225,6 +236,7 @@ export class TextureAssetOwner {
     for (const entry of rejected) {
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
+      this.#releaseDecodeReservation(entry);
       entry.snapshot = {
         error: "Royal persistent GPU budget denied texture storage",
         state: "error",
@@ -240,10 +252,14 @@ export class TextureAssetOwner {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
       entry.residentStorageKeys.clear();
+      entry.controller?.abort();
+      entry.controller = undefined;
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
+      entry.queued = false;
+      this.#releaseDecodeReservation(entry);
       entry.snapshot = { state: "loading" };
-      this.#decode(entry, true);
+      this.#queueDecode(entry);
       this.#platform.onAssetChanged(entry.key);
       this.#platform.onSnapshotChanged(entry.key);
       this.#publish(entry.key);
@@ -303,19 +319,50 @@ export class TextureAssetOwner {
       asset,
       claimedStorageKeys: new Set(storageKeys),
       controller: undefined,
+      decodeReservation: false,
       decoded: undefined,
       decodedReleased: false,
       key,
+      queued: false,
       residentStorageKeys: new Set(),
       snapshot: { state: "loading" },
     };
     this.#entries.set(key, entry);
     this.#publish(key);
-    this.#decode(entry, true);
+    this.#queueDecode(entry);
   }
 
-  #decode(entry: AssetEntry, terminalFailure: boolean): void {
-    if (entry.controller !== undefined) return;
+  #queueDecode(entry: AssetEntry): void {
+    if (entry.controller !== undefined || entry.decodeReservation) return;
+    if (entry.queued) return;
+    entry.queued = true;
+    this.#decodeQueue.push(entry);
+    this.#drainDecodeQueue();
+  }
+
+  #drainDecodeQueue(): void {
+    while (
+      !this.#disposed
+      && this.#activeDecodeReservations < DEFAULT_DECODED_TEXTURE_RESERVATIONS
+    ) {
+      const entry = this.#decodeQueue.shift();
+      if (entry === undefined) return;
+      if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
+      entry.queued = false;
+      entry.decodeReservation = true;
+      this.#activeDecodeReservations += 1;
+      this.#decode(entry);
+    }
+  }
+
+  #releaseDecodeReservation(entry: AssetEntry): void {
+    if (!entry.decodeReservation) return;
+    entry.decodeReservation = false;
+    this.#activeDecodeReservations -= 1;
+    this.#drainDecodeQueue();
+  }
+
+  #decode(entry: AssetEntry): void {
     const controller = new AbortController();
     entry.controller = controller;
     const asset = entry.asset;
@@ -355,7 +402,8 @@ export class TextureAssetOwner {
         || controller.signal.aborted
       ) return;
       entry.controller = undefined;
-      if (terminalFailure || entry.residentStorageKeys.size === 0) {
+      this.#releaseDecodeReservation(entry);
+      if (entry.residentStorageKeys.size === 0) {
         entry.decoded = undefined;
         entry.decodedReleased = false;
         entry.snapshot = { error: formatFailure(error), state: "error" };
