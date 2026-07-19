@@ -94,6 +94,7 @@ type GpuSurface = {
   bindings: readonly GpuTextureBinding[];
   readonly geometry: GpuGeometry;
   readonly instanceCount: number;
+  readonly mode: number;
   program: StandardProgram | UnlitProgram;
   surface: CanonicalDrawSurface;
   textureUnits: number;
@@ -152,6 +153,7 @@ const sharesMultiDrawState = (left: GpuSurface, right: GpuSurface): boolean => (
   left.instanceCount === 0
   && right.instanceCount === 0
   && left.program.program === right.program.program
+  && left.mode === right.mode
   && left.surface.materialSource === right.surface.materialSource
   && left.surface.material.alphaBlend !== true
   && right.surface.material.alphaBlend !== true
@@ -1016,7 +1018,7 @@ export class SurfaceGpuOwner {
         }
         if (drawCount > 1) {
           this.#multiDraw.multiDrawElementsWEBGL(
-            gl.TRIANGLES,
+            resource.mode,
             this.#multiDrawCounts,
             0,
             resource.geometry.indexType,
@@ -1027,7 +1029,7 @@ export class SurfaceGpuOwner {
           index = nextIndex - 1;
         } else {
           gl.drawElements(
-            gl.TRIANGLES,
+            resource.mode,
             resource.geometry.indexCount,
             resource.geometry.indexType,
             resource.geometry.indexOffset,
@@ -1035,7 +1037,7 @@ export class SurfaceGpuOwner {
         }
       } else if (resource.instanceCount > 0) {
         gl.drawElementsInstanced(
-          gl.TRIANGLES,
+          resource.mode,
           resource.geometry.indexCount,
           resource.geometry.indexType,
           resource.geometry.indexOffset,
@@ -1043,7 +1045,7 @@ export class SurfaceGpuOwner {
         );
       } else {
         gl.drawElements(
-          gl.TRIANGLES,
+          resource.mode,
           resource.geometry.indexCount,
           resource.geometry.indexType,
           resource.geometry.indexOffset,
@@ -1197,6 +1199,7 @@ export class SurfaceGpuOwner {
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
+      mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
       program: this.#programs.get(
         material.kind,
         features,

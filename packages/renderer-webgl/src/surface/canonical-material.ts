@@ -238,9 +238,6 @@ export const resolveCanonicalMaterialTexture = (
 
 /** Erases the public material shape while retaining cold texture recipes. */
 export const prepareCanonicalMaterialSource = (material: Material): CanonicalSurfaceMaterial => {
-  if (material.kind === "wireframe") {
-    throw new Error("Royal canonical surface slice does not yet support wireframe materials");
-  }
   const source = material.baseColor;
   const baseColor = source.kind === "solid"
     ? source.color
@@ -252,7 +249,7 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
     ...(source.kind === "virtual-asset" ? { baseColorVirtualAsset: source } : {}),
     requiresTextureCoordinates: source.kind !== "solid",
   };
-  return material.kind === "unlit"
+  return material.kind !== "standard"
     ? { ...common, kind: "unlit" }
     : {
       ...common,

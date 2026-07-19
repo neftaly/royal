@@ -14,6 +14,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   virtualTexture,
+  wireframeMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
@@ -118,6 +119,27 @@ describe("canonical direct surface lowering", () => {
 
     expect(prepared.surfaces[1]!.geometry).toBe(prepared.surfaces[0]!.geometry);
     expect(prepared.surfaces[1]!.materialSource).toBe(prepared.surfaces[0]!.materialSource);
+  });
+
+  it("lowers wireframes to shared unlit lines while retaining triangle picking", () => {
+    const geometry = boxGeometry(2);
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 5] }),
+      nodes: [mesh({
+        geometry,
+        material: wireframeMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      })],
+    }));
+    const surface = prepared.surfaces[0]!;
+    const pickSurface = prepared.pickSurfaces[0]!;
+
+    expect(surface).toMatchObject({
+      material: { baseColor: [0.2, 0.4, 0.8, 1], kind: "unlit" },
+      topology: "lines",
+    });
+    expect(surface.geometry.indices).toHaveLength(72);
+    expect(pickSurface.pickingGeometry.indices).toHaveLength(36);
+    expect(surface.geometry.positions).toBe(pickSurface.pickingGeometry.positions);
   });
 
   it("uses one upper-left UV convention and retains textured geometry during fallback", () => {

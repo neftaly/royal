@@ -12,6 +12,7 @@ import {
   standardMaterial,
   studioEnvironment,
   unlitMaterial,
+  wireframeMaterial,
   type RenderRoot,
 } from "@royal/renderer-core";
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
@@ -115,6 +116,26 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws public wireframes through native line topology", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: wireframeMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements).toHaveBeenCalledWith(
+      canvas.gl.LINES,
+      12,
+      canvas.gl.UNSIGNED_BYTE,
+      0,
+    );
   });
 
   it("admits large surface sets across follow-up frames without duplicating geometry", () => {

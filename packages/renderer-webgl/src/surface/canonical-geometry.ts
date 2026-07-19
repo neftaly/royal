@@ -111,3 +111,31 @@ export const prepareCanonicalGeometry = (
       return boxGeometry(geometry.size[0], geometry.size[1], geometry.size[2], textureCoordinates);
   }
 };
+
+/** Reuses triangle vertex streams while expanding their indices to native line topology. */
+export const prepareCanonicalWireframeGeometry = (
+  triangle: CanonicalTriangleGeometry,
+): CanonicalTriangleGeometry => {
+  const IndexArray = triangle.indices.constructor as
+    | typeof Uint8Array
+    | typeof Uint16Array
+    | typeof Uint32Array;
+  const indices = new IndexArray(triangle.indices.length * 2);
+  for (let source = 0; source < triangle.indices.length; source += 3) {
+    const target = source * 2;
+    const a = triangle.indices[source]!;
+    const b = triangle.indices[source + 1]!;
+    const c = triangle.indices[source + 2]!;
+    indices[target] = a;
+    indices[target + 1] = b;
+    indices[target + 2] = b;
+    indices[target + 3] = c;
+    indices[target + 4] = c;
+    indices[target + 5] = a;
+  }
+  return {
+    ...triangle,
+    indices,
+    key: `${triangle.key}:wireframe`,
+  };
+};

@@ -32,6 +32,7 @@ import {
 } from "./canonical-material";
 import {
   prepareCanonicalGeometry,
+  prepareCanonicalWireframeGeometry,
   type CanonicalTriangleGeometry,
 } from "./canonical-geometry";
 import type { CanonicalCamera } from "./camera-source-owner";
@@ -67,6 +68,7 @@ export type CanonicalDrawSurface = Readonly<{
   node: MeshNode | GltfNode | GltfInstancesNode;
   normalTransform: Mat4;
   textureKeys: readonly string[];
+  topology?: "lines";
   worldBounds: WorldBounds;
 }>;
 
@@ -319,6 +321,7 @@ export const prepareCanonicalSurfaceScene = (
   const directMaterials = new WeakMap<Material, CanonicalSurfaceMaterial>();
   const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
+  const directWireframeGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directGeometry = (
     geometry: Geometry,
     textureCoordinates = false,
@@ -328,6 +331,14 @@ export const prepareCanonicalSurfaceScene = (
     if (canonical === undefined) {
       canonical = prepareCanonicalGeometry(geometry, textureCoordinates);
       retained.set(geometry, canonical);
+    }
+    return canonical;
+  };
+  const wireframeGeometry = (geometry: Geometry): CanonicalTriangleGeometry => {
+    let canonical = directWireframeGeometry.get(geometry);
+    if (canonical === undefined) {
+      canonical = prepareCanonicalWireframeGeometry(directGeometry(geometry));
+      directWireframeGeometry.set(geometry, canonical);
     }
     return canonical;
   };
@@ -609,10 +620,13 @@ export const prepareCanonicalSurfaceScene = (
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
-    const geometry = directGeometry(
-      node.geometry,
-      material.requiresTextureCoordinates,
-    );
+    const pickingGeometry = node.pickingGeometry === undefined
+      ? directGeometry(node.geometry)
+      : directGeometry(node.pickingGeometry);
+    const wireframe = node.material.kind === "wireframe";
+    const geometry = wireframe
+      ? wireframeGeometry(node.geometry)
+      : directGeometry(node.geometry, material.requiresTextureCoordinates);
     const model = transformMat4(node.transform);
     const surface = {
       geometry,
@@ -623,10 +637,9 @@ export const prepareCanonicalSurfaceScene = (
       materialSource,
       node,
       normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
-      pickingGeometry: node.pickingGeometry === undefined
-        ? geometry
-        : directGeometry(node.pickingGeometry),
+      pickingGeometry,
       textureKeys: canonicalMaterialTextureKeys(materialSource),
+      ...(wireframe ? { topology: "lines" as const } : {}),
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
     surfaces.push(surface);
