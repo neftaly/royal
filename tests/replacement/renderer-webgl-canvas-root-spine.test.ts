@@ -390,10 +390,12 @@ describe("clear-only canvas root", () => {
     callbacks.shift()!();
     await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     vi.mocked(canvas.gl.uniform4fv).mockClear();
+    vi.mocked(canvas.gl.uniformMatrix4fv).mockClear();
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(7);
+    expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
   });
 
   it("uses one canonical transform and identity for visible and exact picking work", () => {

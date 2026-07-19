@@ -1,6 +1,7 @@
 import {
   cameraWorldPositionFromViewInto,
   identityMat4,
+  mat4ValuesEqual,
   multiplyMat4Into,
   type Mat4,
   type MutableMat4,
@@ -442,6 +443,8 @@ export class SurfaceGpuOwner {
     let normalCoordinates: CanonicalTextureCoordinates | undefined;
     let occlusionCoordinates: CanonicalTextureCoordinates | undefined;
     let standardGlobalsProgram: WebGLProgram | null = null;
+    let transformModel: Mat4 | null = null;
+    let transformProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
     this.#sortBlendedSurfaces(view);
@@ -468,6 +471,12 @@ export class SurfaceGpuOwner {
         initializedProgram = program.program;
       }
       const programChanged = materialProgram !== program.program;
+      const transformChanged = transformProgram !== program.program
+        || transformModel === null
+        || (
+          transformModel !== surface.model
+          && !mat4ValuesEqual(transformModel, surface.model)
+        );
       const materialChanged = programChanged
         || materialSource !== surface.materialSource;
       if (programChanged) {
@@ -478,8 +487,10 @@ export class SurfaceGpuOwner {
         occlusionCoordinates = undefined;
       }
       if (program.kind === "unlit") {
-        multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
-        gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
+        if (transformChanged) {
+          multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
+          gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
+        }
         if (materialChanged) {
           gl.uniform4fv(
             program.color,
@@ -534,8 +545,10 @@ export class SurfaceGpuOwner {
           gl.uniform4fv(program.presentation, this.#presentation);
           standardGlobalsProgram = program.program;
         }
-        gl.uniformMatrix4fv(program.model, false, surface.model);
-        gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
+        if (transformChanged) {
+          gl.uniformMatrix4fv(program.model, false, surface.model);
+          gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
+        }
         if (materialChanged) {
           gl.uniform4fv(
             program.baseColor,
@@ -589,6 +602,8 @@ export class SurfaceGpuOwner {
       }
       materialProgram = program.program;
       materialSource = surface.materialSource;
+      transformModel = surface.model;
+      transformProgram = program.program;
       if (resource.instanceCount > 0) {
         gl.drawElementsInstanced(
           gl.TRIANGLES,
