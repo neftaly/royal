@@ -1,10 +1,32 @@
-import { decodeDracoMesh, type Mesh } from "minidraco";
+import { decodeDracoMesh } from "minidraco";
 
 type JsonObject = Record<string, unknown>;
+export type DracoAttributeSemantic =
+  | "NORMAL"
+  | "POSITION"
+  | "TANGENT"
+  | "TEXCOORD_0"
+  | "TEXCOORD_1";
+
 export type DecodedDracoPrimitive = Readonly<{
-  attributes: ReadonlyMap<string, Float32Array>;
+  attribute: (semantic: DracoAttributeSemantic) => Float32Array | undefined;
   indices: Uint8Array | Uint16Array | Uint32Array;
 }>;
+
+type DracoMesh = Readonly<{
+  faces_: ArrayLike<number>;
+  getAttributeByUniqueId: (id: number) => Readonly<{
+    extractTo: (
+      output: Float32ArrayConstructor,
+      pointCount: number,
+    ) => Float32Array;
+    numComponents: number;
+  }> | null;
+  numFaces: () => number;
+  numPoints: () => number;
+}>;
+
+export type StaticDracoMeshDecoder = (bytes: Uint8Array) => DracoMesh;
 
 const object = (value: unknown, label: string): JsonObject => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -51,7 +73,7 @@ const normalizedValues = (values: Float32Array, accessor: JsonObject): Float32Ar
 };
 
 const decodedIndices = (
-  mesh: Mesh,
+  mesh: DracoMesh,
   accessor: JsonObject | undefined,
   label: string,
   path: string,
@@ -92,13 +114,11 @@ export const createStaticDracoDecoder = (
   document: JsonObject,
   binary: Uint8Array,
   label: string,
+  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
 ): ((primitive: JsonObject, path: string) => DecodedDracoPrimitive) => {
   const accessors = array(document.accessors, `${label} accessors`);
   const bufferViews = array(document.bufferViews, `${label} bufferViews`);
-  const retained = new WeakMap<JsonObject, DecodedDracoPrimitive>();
   return (primitive, path) => {
-    const cached = retained.get(primitive);
-    if (cached !== undefined) return cached;
     const extensions = object(primitive.extensions, `${label} ${path}.extensions`);
     const extension = object(
       extensions.KHR_draco_mesh_compression,
@@ -120,9 +140,9 @@ export const createStaticDracoDecoder = (
       || length <= 0
       || offset + length > binary.byteLength
     ) throw new Error(`${label} ${path} Draco bufferView exceeds the buffer`);
-    let mesh: Mesh;
+    let mesh: DracoMesh;
     try {
-      mesh = decodeDracoMesh(new Uint8Array(binary.buffer, binary.byteOffset + offset, length));
+      mesh = decodeMesh(new Uint8Array(binary.buffer, binary.byteOffset + offset, length));
     } catch (error) {
       throw new Error(`${label} ${path} Draco decode failed: ${
         error instanceof Error ? error.message : String(error)
@@ -133,9 +153,11 @@ export const createStaticDracoDecoder = (
     if (attributeIds.POSITION === undefined) {
       throw new Error(`${label} ${path} Draco attributes must include POSITION`);
     }
-    const attributes = new Map<string, Float32Array>();
-    for (const semantic of ["POSITION", "NORMAL", "TANGENT", "TEXCOORD_0"] as const) {
-      if (attributeIds[semantic] === undefined) continue;
+    const attributes = new Map<DracoAttributeSemantic, Float32Array>();
+    const attribute = (semantic: DracoAttributeSemantic): Float32Array | undefined => {
+      const cached = attributes.get(semantic);
+      if (cached !== undefined) return cached;
+      if (attributeIds[semantic] === undefined) return undefined;
       const uniqueId = Number(attributeIds[semantic]);
       if (!Number.isSafeInteger(uniqueId) || uniqueId < 0) {
         throw new Error(`${label} ${path} Draco ${semantic} id is invalid`);
@@ -155,11 +177,13 @@ export const createStaticDracoDecoder = (
       if (attribute === null || attribute.numComponents !== components) {
         throw new Error(`${label} ${path} Draco ${semantic} shape is invalid`);
       }
-      attributes.set(
-        semantic,
-        normalizedValues(attribute.extractTo(Float32Array, mesh.numPoints()), accessor),
+      const values = normalizedValues(
+        attribute.extractTo(Float32Array, mesh.numPoints()),
+        accessor,
       );
-    }
+      attributes.set(semantic, values);
+      return values;
+    };
     const indexAccessor = primitive.indices === undefined
       ? undefined
       : object(
@@ -167,10 +191,9 @@ export const createStaticDracoDecoder = (
         `${label} ${path}.indices accessor`,
       );
     const result = {
-      attributes,
+      attribute,
       indices: decodedIndices(mesh, indexAccessor, label, `${path}.indices`),
     };
-    retained.set(primitive, result);
     return result;
   };
 };

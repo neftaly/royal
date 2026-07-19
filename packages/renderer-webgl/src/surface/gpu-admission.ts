@@ -1,19 +1,5 @@
-import type { CanonicalDrawSurface } from "./scene-lowering";
 import { canonicalMaterialUsesTextureCoordinateSet } from "./canonical-material";
-
-export const surfaceUsesRuntimeTextureCoordinates = (
-  surface: CanonicalDrawSurface,
-): boolean => {
-  const material = surface.material;
-  return material.baseColorAsset !== undefined
-    || material.baseColorVirtualAsset !== undefined
-    || (material.kind === "standard" && (
-      material.metallicRoughnessAsset !== undefined
-      || material.normalAsset !== undefined
-      || material.occlusionAsset !== undefined
-      || material.emissiveAsset !== undefined
-    ));
-};
+import type { CanonicalDrawSurface } from "./scene-lowering";
 
 export const surfaceUsesTextureCoordinateSet = (
   surface: CanonicalDrawSurface,
@@ -31,9 +17,11 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
     && surface.geometry.tangents !== undefined
     ? "tangent"
     : "no-tangent";
-  const uvKey = surfaceUsesTextureCoordinateSet(surface, 1)
-    ? "uv01"
-    : surfaceUsesTextureCoordinateSet(surface, 0) ? "uv0" : "no-uv";
+  const usesTextureCoordinates0 = surfaceUsesTextureCoordinateSet(surface, 0);
+  const usesTextureCoordinates1 = surfaceUsesTextureCoordinateSet(surface, 1);
+  const uvKey = usesTextureCoordinates1
+    ? usesTextureCoordinates0 ? "uv01" : "uv1"
+    : usesTextureCoordinates0 ? "uv0" : "no-uv";
   return `${geometryBaseKey}:${uvKey}:${tangentKey}`;
 };
 

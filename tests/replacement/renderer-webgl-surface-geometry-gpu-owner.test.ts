@@ -13,6 +13,7 @@ import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/
 import {
   nextSurfaceAdmissionCount,
   retainedSurfaceAdmissionCount,
+  surfaceGeometryResourceKey,
 } from "../../packages/renderer-webgl/src/surface/gpu-admission";
 
 const fakeGl = (): WebGL2RenderingContext => ({
@@ -98,6 +99,49 @@ describe("surface geometry GPU owner", () => {
     expect(retainedSurfaceAdmissionCount(first, changedGeometry, 1)).toBe(0);
     expect(retainedSurfaceAdmissionCount(withInstances, withInstances, 1)).toBe(1);
     expect(retainedSurfaceAdmissionCount(withInstances, withDifferentInstances, 1)).toBe(0);
+  });
+
+  it("does not collapse UV1-only and UV0-plus-UV1 geometry layouts", () => {
+    const prepared = surface(planeGeometry(1))[0]!;
+    const texture = {
+      contentKey: "layout-texture",
+      kind: "asset" as const,
+      src: "/layout.png",
+    };
+    const textureCoordinates1 = {
+      row0: [1, 0, 0, 1] as const,
+      row1: [0, 1, 0, 0] as const,
+    };
+    const uv1Only = {
+      ...prepared,
+      material: {
+        ...prepared.material,
+        baseColorAsset: texture,
+        baseColorTextureCoordinates: textureCoordinates1,
+        requiresTextureCoordinates: true,
+      },
+    };
+    const uv0AndUv1 = {
+      ...prepared,
+      material: {
+        baseColor: [1, 1, 1, 1] as const,
+        baseColorAsset: texture,
+        baseColorTextureCoordinates: textureCoordinates1,
+        emissiveFactor: [0, 0, 0] as const,
+        kind: "standard" as const,
+        metallicFactor: 0,
+        normalAsset: { ...texture, contentKey: "layout-normal" },
+        normalScale: 1,
+        occlusionStrength: 1,
+        requiresTextureCoordinates: true,
+        roughnessFactor: 1,
+      },
+    };
+    expect(surfaceGeometryResourceKey(uv1Only)).toContain(":uv1:");
+    expect(surfaceGeometryResourceKey(uv0AndUv1)).toContain(":uv01:");
+    expect(surfaceGeometryResourceKey(uv1Only)).not.toBe(
+      surfaceGeometryResourceKey(uv0AndUv1),
+    );
   });
 
   it("retains committed handles and rolls back only newly prepared handles", () => {

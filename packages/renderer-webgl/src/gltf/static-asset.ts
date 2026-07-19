@@ -397,12 +397,12 @@ const prepareStaticDocument = (
       const positionAccessor = index(
         attributes.POSITION, accessors, label, `${path}.attributes.POSITION`,
       );
-      const decodedPositionValues = decoded?.attributes.get("POSITION");
+      const decodedPositionValues = decoded?.attribute("POSITION");
       const { bounds, positions } = decodedPositionValues === undefined
         ? readPositions(context, positionAccessor)
         : decodedPositions(decodedPositionValues, label, `${path}.attributes.POSITION`);
       const vertexCount = positions.length / 3;
-      const decodedNormalValues = decoded?.attributes.get("NORMAL");
+      const decodedNormalValues = decoded?.attribute("NORMAL");
       const normals = attributes.NORMAL === undefined
         ? undefined
         : decodedNormalValues === undefined
@@ -422,7 +422,7 @@ const prepareStaticDocument = (
       if (normals !== undefined && normals.length / 3 !== vertexCount) {
         fail(label, `${path}.attributes.NORMAL`, "count must match POSITION");
       }
-      const decodedTextureCoordinates = decoded?.attributes.get("TEXCOORD_0");
+      const decodedTextureCoordinates = decoded?.attribute("TEXCOORD_0");
       const textureCoordinates0 = attributes.TEXCOORD_0 === undefined
         ? undefined
         : decodedTextureCoordinates === undefined
@@ -507,7 +507,7 @@ const prepareStaticDocument = (
         1,
       );
       const decodedTextureCoordinates1 = usesTextureCoordinates1
-        ? decoded?.attributes.get("TEXCOORD_1")
+        ? decoded?.attribute("TEXCOORD_1")
         : undefined;
       const textureCoordinates1 = !usesTextureCoordinates1 || attributes.TEXCOORD_1 === undefined
         ? undefined
@@ -528,7 +528,7 @@ const prepareStaticDocument = (
       if (textureCoordinates1 !== undefined && textureCoordinates1.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_1`, "count must match POSITION");
       }
-      const decodedTangents = decoded?.attributes.get("TANGENT");
+      const decodedTangents = decoded?.attribute("TANGENT");
       const tangents = attributes.TANGENT === undefined
         ? undefined
         : decodedTangents === undefined
