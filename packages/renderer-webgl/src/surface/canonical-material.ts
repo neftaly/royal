@@ -58,6 +58,8 @@ export type CanonicalStandardMaterial = Readonly<{
   emissiveTexture?: CanonicalTextureBinding;
   emissiveTextureCoordinates?: CanonicalTextureCoordinates;
   kind: "standard";
+  /** Authored dielectric index of refraction; omitted for glTF's 1.5 default. */
+  indexOfRefraction?: number;
   metallicFactor: number;
   metallicRoughnessAsset?: TextureSourceRef;
   metallicRoughnessTexture?: CanonicalTextureBinding;
@@ -75,6 +77,13 @@ export type CanonicalStandardMaterial = Readonly<{
 }>;
 
 export type CanonicalSurfaceMaterial = CanonicalStandardMaterial | CanonicalUnlitMaterial;
+
+/** Pure glTF dielectric Fresnel-at-normal-incidence rule, including IOR 0 compatibility. */
+export const dielectricF0FromIndexOfRefraction = (indexOfRefraction: number): number => {
+  if (indexOfRefraction === 0) return 1;
+  const ratio = (indexOfRefraction - 1) / (indexOfRefraction + 1);
+  return ratio * ratio;
+};
 
 /** Reports whether one authored material use requires a particular UV stream. */
 export const canonicalMaterialUsesTextureCoordinateSet = (

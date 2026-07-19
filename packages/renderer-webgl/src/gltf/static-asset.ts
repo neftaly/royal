@@ -199,6 +199,7 @@ const prepareStaticDocument = (
     if (
       extension !== "KHR_materials_unlit"
       && extension !== "KHR_materials_emissive_strength"
+      && extension !== "KHR_materials_ior"
       && extension !== "EXT_texture_avif"
       && extension !== "EXT_texture_webp"
       && extension !== "EXT_mesh_gpu_instancing"

@@ -23,11 +23,17 @@ import {
   refreshCanonicalSurfaceTexture,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import { dielectricF0FromIndexOfRefraction } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
 
 describe("canonical direct surface lowering", () => {
+  it("computes authored dielectric F0 in the functional material core", () => {
+    expect(dielectricF0FromIndexOfRefraction(1.5)).toBeCloseTo(0.04);
+    expect(dielectricF0FromIndexOfRefraction(1.33)).toBeCloseTo(0.020_059, 5);
+    expect(dielectricF0FromIndexOfRefraction(0)).toBe(1);
+  });
   it("queues every base color before secondary material images", () => {
     const firstBase = imageTexture("/first-base.png");
     const firstEmissive = imageTexture("/first-emissive.png");

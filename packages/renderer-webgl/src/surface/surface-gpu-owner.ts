@@ -24,6 +24,7 @@ import type {
   CanonicalSurfaceMaterial,
   CanonicalTextureBinding,
 } from "./canonical-material";
+import { dielectricF0FromIndexOfRefraction } from "./canonical-material";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
@@ -647,7 +648,9 @@ export class SurfaceGpuOwner {
           this.#emissiveFactor[0] = material.emissiveFactor[0];
           this.#emissiveFactor[1] = material.emissiveFactor[1];
           this.#emissiveFactor[2] = material.emissiveFactor[2];
-          this.#emissiveFactor[3] = 0;
+          this.#emissiveFactor[3] = material.indexOfRefraction === undefined
+            ? 0.04
+            : dielectricF0FromIndexOfRefraction(material.indexOfRefraction);
           gl.uniform4fv(program.emissiveFactor, this.#emissiveFactor);
           this.#materialFactors[0] = material.metallicFactor;
           this.#materialFactors[1] = material.roughnessFactor;

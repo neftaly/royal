@@ -125,6 +125,30 @@ describe("static glTF preparation core", () => {
       });
   });
 
+  it("lowers KHR_materials_ior without taxing default material shaders", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_ior"];
+    document.extensionsUsed = ["KHR_materials_ior"];
+    document.materials = [{
+      extensions: { KHR_materials_ior: { ior: 1.33 } },
+      pbrMetallicRoughness: { metallicFactor: 0 },
+    }];
+    expect(prepareStaticGlb(staticTriangleGlb(document), "water").primitives[0]!.material)
+      .toMatchObject({ indexOfRefraction: 1.33, kind: "standard" });
+
+    const compatibility = staticTriangleDocument();
+    compatibility.extensionsRequired = ["KHR_materials_ior"];
+    compatibility.materials = [{ extensions: { KHR_materials_ior: { ior: 0 } } }];
+    expect(prepareStaticGlb(staticTriangleGlb(compatibility), "compat").primitives[0]!.material)
+      .toMatchObject({ indexOfRefraction: 0 });
+
+    const invalid = staticTriangleDocument();
+    invalid.extensionsRequired = ["KHR_materials_ior"];
+    invalid.materials = [{ extensions: { KHR_materials_ior: { ior: 0.9 } } }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalid), "invalid-ior"))
+      .toThrow("KHR_materials_ior.ior: must be zero or at least one");
+  });
+
   it("retains one canonical material identity for primitives sharing an authored material", () => {
     const document = staticTriangleDocument();
     const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;

@@ -168,7 +168,7 @@ void main() {
   roughness = clamp(roughness, 0.04, 1.0);
   float alpha = max(roughness * roughness, 0.001);
   float alphaSquared = alpha * alpha;
-  vec3 dielectric = vec3(0.04);
+  vec3 dielectric = vec3(emissiveFactor.w);
   vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
   float normalView = max(dot(normal, viewDirection), 0.0);

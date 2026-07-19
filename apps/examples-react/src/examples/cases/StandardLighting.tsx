@@ -20,10 +20,10 @@ import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcas
 
 
 export const StandardLighting = (): ReactNode => {
-  const requestedLightCount = Number(new URLSearchParams(globalThis.location?.search ?? '').get('lights') ?? 24);
+  const requestedLightCount = Number(new URLSearchParams(globalThis.location?.search ?? '').get('lights') ?? 8);
   const lightCount = Number.isFinite(requestedLightCount)
-    ? Math.max(0, Math.min(1000, Math.floor(requestedLightCount)))
-    : 24;
+    ? Math.max(0, Math.min(8, Math.floor(requestedLightCount)))
+    : 8;
   const pointLights = useMemo(() => Array.from({ length: lightCount }, (_, index) => {
     const angle = index * 2.399963229728653;
     const radius = 1.2 + (index % 7) * 0.32;

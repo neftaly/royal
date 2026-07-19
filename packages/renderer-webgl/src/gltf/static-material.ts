@@ -253,6 +253,29 @@ export const prepareMaterial = (
     label,
     `${materialPath}.extensions.KHR_materials_unlit`,
   );
+  const iorExtension = extensions.KHR_materials_ior === undefined
+    ? undefined
+    : object(
+      extensions.KHR_materials_ior,
+      label,
+      `${materialPath}.extensions.KHR_materials_ior`,
+    );
+  if (unlit && iorExtension !== undefined) {
+    fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_ior with KHR_materials_unlit");
+  }
+  const indexOfRefraction = finiteFactor(
+    iorExtension?.ior,
+    1.5,
+    label,
+    `${materialPath}.extensions.KHR_materials_ior.ior`,
+  );
+  if (indexOfRefraction !== 0 && indexOfRefraction < 1) {
+    fail(
+      label,
+      `${materialPath}.extensions.KHR_materials_ior.ior`,
+      "must be zero or at least one",
+    );
+  }
   if (
     material.alphaMode !== undefined
     && material.alphaMode !== "OPAQUE"
@@ -390,6 +413,7 @@ export const prepareMaterial = (
       ? {}
       : { emissiveTextureCoordinates: emissiveTexture.coordinates }),
     kind: "standard",
+    ...(iorExtension === undefined ? {} : { indexOfRefraction }),
     metallicFactor: factor01(pbr.metallicFactor, 1, label, `${materialPath}.pbrMetallicRoughness.metallicFactor`),
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessAsset: metallicRoughnessTexture.asset }),
     ...(metallicRoughnessTexture === undefined
