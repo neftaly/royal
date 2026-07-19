@@ -134,6 +134,20 @@ describe("static glTF preparation core", () => {
     expect(prepared.primitives[1]!.material).toBe(prepared.primitives[0]!.material);
   });
 
+  it("batches repeated mesh nodes while preserving their composed transforms", () => {
+    const document = staticTriangleDocument();
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes.push({ mesh: 0, translation: [5, 6, 0] });
+    const scenes = document.scenes as Array<{ nodes: number[] }>;
+    scenes[0]!.nodes.push(nodes.length - 1);
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "repeated-nodes");
+    expect(prepared.primitives).toHaveLength(1);
+    expect(prepared.primitives[0]!.instanceBatch).toMatchObject({ handedness: 1 });
+    const models = prepared.primitives[0]!.instanceBatch!.localModels;
+    expect([models[12], models[13], models[28], models[29]]).toEqual([1, 2, 5, 6]);
+    expect(prepared.bounds).toEqual({ max: [6, 7, 0], min: [0, 1, 0] });
+  });
+
   it("preserves alpha-mask and double-sided raster intent", () => {
     const document = staticTriangleDocument();
     const materials = document.materials as Array<Record<string, unknown>>;

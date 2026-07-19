@@ -10,6 +10,7 @@ import type { TextureSourceRef } from "../texture/asset-owner";
 import type { DecodedDracoPrimitive } from "./draco";
 import { parseGlb } from "./glb";
 import {
+  prepareStaticMatrixBatches,
   prepareStaticInstanceBatches,
   type StaticInstanceBatch,
 } from "./instance-transforms";
@@ -61,6 +62,58 @@ type PreparedMeshPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
 }>;
+
+/** Converges repeated ordinary node occurrences on the authored instance ABI. */
+export const batchRepeatedStaticPrimitives = (
+  primitives: readonly PreparedStaticGltfPrimitive[],
+): readonly PreparedStaticGltfPrimitive[] => {
+  const repeated = new Map<string, PreparedStaticGltfPrimitive[]>();
+  let hasRepeatedGeometry = false;
+  for (const primitive of primitives) {
+    if (primitive.instanceBatch !== undefined) continue;
+    const key = primitive.geometry.key;
+    const group = repeated.get(key);
+    if (group === undefined) repeated.set(key, [primitive]);
+    else {
+      group.push(primitive);
+      hasRepeatedGeometry = true;
+    }
+  }
+  if (!hasRepeatedGeometry) return primitives;
+  const emitted = new Set<string>();
+  const result: PreparedStaticGltfPrimitive[] = [];
+  for (const primitive of primitives) {
+    if (primitive.instanceBatch !== undefined) {
+      result.push(primitive);
+      continue;
+    }
+    const key = primitive.geometry.key;
+    const group = repeated.get(key)!;
+    if (group.length === 1) {
+      result.push(primitive);
+      continue;
+    }
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    const models = Array<Mat4>(group.length);
+    for (let index = 0; index < group.length; index += 1) {
+      models[index] = group[index]!.localModel;
+    }
+    const batches = prepareStaticMatrixBatches(models);
+    for (let batch = 0; batch < batches.length; batch += 1) {
+      result.push({
+        geometry: primitive.geometry,
+        instanceBatch: {
+          ...batches[batch]!,
+          key: `${key}:repeated:${batches[batch]!.handedness}`,
+        },
+        localModel: identityMat4(),
+        material: primitive.material,
+      });
+    }
+  }
+  return result;
+};
 
 const prepareStaticDocument = (
   document: JsonObject,
@@ -387,8 +440,9 @@ const prepareStaticDocument = (
     visit(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`), identityMat4());
   }
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
+  const batchedPrimitives = batchRepeatedStaticPrimitives(primitives);
   const claimedTextures = new Map<string, TextureSourceRef>();
-  for (const primitive of primitives) {
+  for (const primitive of batchedPrimitives) {
     const material = primitive.material;
     const assets = material.kind === "unlit"
       ? [material.baseColorAsset]
@@ -406,8 +460,8 @@ const prepareStaticDocument = (
     }
   }
   return {
-    bounds: staticGltfBounds(primitives),
-    primitives,
+    bounds: staticGltfBounds(batchedPrimitives),
+    primitives: batchedPrimitives,
     textureAssets: [...claimedTextures.values()],
   };
 };

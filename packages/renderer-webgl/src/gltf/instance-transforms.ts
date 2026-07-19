@@ -96,6 +96,60 @@ const copyFlatMatrix = (
   }
 };
 
+const matrixHandedness = (matrix: ArrayLike<number>, offset: number): 1 | -1 =>
+  matrix[offset]! * (
+    matrix[offset + 5]! * matrix[offset + 10]!
+    - matrix[offset + 6]! * matrix[offset + 9]!
+  ) - matrix[offset + 4]! * (
+    matrix[offset + 1]! * matrix[offset + 10]!
+    - matrix[offset + 2]! * matrix[offset + 9]!
+  ) + matrix[offset + 8]! * (
+    matrix[offset + 1]! * matrix[offset + 6]!
+    - matrix[offset + 2]! * matrix[offset + 5]!
+  ) < 0 ? -1 : 1;
+
+const splitStaticInstanceMatrices = (
+  all: Float32Array,
+  negativeCount: number,
+): readonly StaticInstanceBatch[] => {
+  const count = all.length / 16;
+  if (negativeCount === 0) return [{ handedness: 1, localModels: all }];
+  if (negativeCount === count) return [{ handedness: -1, localModels: all }];
+  const positive = new Float32Array((count - negativeCount) * 16);
+  const negative = new Float32Array(negativeCount * 16);
+  let positiveOffset = 0;
+  let negativeOffset = 0;
+  for (let instance = 0; instance < count; instance += 1) {
+    const sourceOffset = instance * 16;
+    if (matrixHandedness(all, sourceOffset) < 0) {
+      copyFlatMatrix(negative, negativeOffset, all, sourceOffset);
+      negativeOffset += 16;
+    } else {
+      copyFlatMatrix(positive, positiveOffset, all, sourceOffset);
+      positiveOffset += 16;
+    }
+  }
+  return [
+    { handedness: 1, localModels: positive },
+    { handedness: -1, localModels: negative },
+  ];
+};
+
+/** Purely batches already-composed transforms without changing their authored values. */
+export const prepareStaticMatrixBatches = (
+  models: readonly Mat4[],
+): readonly StaticInstanceBatch[] => {
+  if (models.length === 0) throw new Error("instance matrices must not be empty");
+  const all = new Float32Array(models.length * 16);
+  let negativeCount = 0;
+  for (let instance = 0; instance < models.length; instance += 1) {
+    const model = models[instance]!;
+    copyMatrix(all, instance * 16, model);
+    if (matrixHandedness(model, 0) < 0) negativeCount += 1;
+  }
+  return splitStaticInstanceMatrices(all, negativeCount);
+};
+
 /** Purely lowers instance TRS streams into compact, front-face-compatible matrix batches. */
 export const prepareStaticInstanceBatches = (
   nodeModel: Mat4,
@@ -115,39 +169,14 @@ export const prepareStaticInstanceBatches = (
     }
   }
   const all = new Float32Array(streams.count * 16);
-  const handedness = new Int8Array(streams.count);
   const instanceMatrix = identityMat4();
   const localModel = identityMat4();
   let negativeCount = 0;
   for (let instance = 0; instance < streams.count; instance += 1) {
     composeInstanceMatrixInto(instanceMatrix, streams, instance);
     multiplyMat4Into(localModel, nodeModel, instanceMatrix);
-    const nodeSign = localModel[0] * (localModel[5] * localModel[10] - localModel[6] * localModel[9])
-      - localModel[4] * (localModel[1] * localModel[10] - localModel[2] * localModel[9])
-      + localModel[8] * (localModel[1] * localModel[6] - localModel[2] * localModel[5]) < 0
-      ? -1
-      : 1;
-    handedness[instance] = nodeSign;
-    if (nodeSign < 0) negativeCount += 1;
+    if (matrixHandedness(localModel, 0) < 0) negativeCount += 1;
     copyMatrix(all, instance * 16, localModel);
   }
-  if (negativeCount === 0) return [{ handedness: 1, localModels: all }];
-  if (negativeCount === streams.count) return [{ handedness: -1, localModels: all }];
-  const positive = new Float32Array((streams.count - negativeCount) * 16);
-  const negative = new Float32Array(negativeCount * 16);
-  let positiveOffset = 0;
-  let negativeOffset = 0;
-  for (let instance = 0; instance < streams.count; instance += 1) {
-    if (handedness[instance]! < 0) {
-      copyFlatMatrix(negative, negativeOffset, all, instance * 16);
-      negativeOffset += 16;
-    } else {
-      copyFlatMatrix(positive, positiveOffset, all, instance * 16);
-      positiveOffset += 16;
-    }
-  }
-  return [
-    { handedness: 1, localModels: positive },
-    { handedness: -1, localModels: negative },
-  ];
+  return splitStaticInstanceMatrices(all, negativeCount);
 };
