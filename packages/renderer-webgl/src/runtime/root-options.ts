@@ -5,7 +5,7 @@ export type CanvasRootOptions = Readonly<{
   alpha?: boolean;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `true` */
   antialias?: boolean;
-  /** Persistent GPU allocation ceiling in bytes. @defaultValue 512 MiB */
+  /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
 }>;
 

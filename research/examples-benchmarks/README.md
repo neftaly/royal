@@ -82,6 +82,22 @@ is true and `warnings` is empty or understood.
   validates that GPU-local framebuffer copies are measured by the GL trace but
   no longer consume the CPU-to-GPU upload governor budget.
 
+2026-07-20 iPad Safari resource-floor pass:
+
+- `ipad-safari/2026-07-19T18-53-59-935Z-gltf-scenes.json` completes the 52.7 MB
+  Sponza scene on the physical A10/iPadOS 17.7 floor for 12/12 frames at `17ms`
+  p95. The portable 256 MiB persistent-GPU ceiling retains 210,238,614 bytes,
+  fits 68 of 69 ordinary textures, and denies no claims. A preceding 512 MiB
+  run left WebKit unresponsive past its bounded measurement window. The one
+  retained diagnostic is WebKit's delayed module-preload warning while texture
+  completion takes 12.2 seconds; it is not a Royal runtime or WebGL failure.
+- `ipad-safari/2026-07-19T18-54-12-080Z-gltf-ghostscript-tiger-svg.json`
+  completes 12/12 frames at `17ms` p95 with no browser diagnostics or resource
+  denials.
+- `ipad-safari/2026-07-19T18-54-27-468Z-virtual-texture-stress.json` completes
+  12/12 frames at `18ms` p95. VT settles with five resident pages and zero
+  pending pages, page failures, manifest failures, diagnostics, or GPU denials.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at

@@ -1,0 +1,312 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": [
+      {
+        "kind": "console",
+        "level": "warning",
+        "text": "The resource http://192.168.1.91:4673/assets/index-3MrOsbLb.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it wasn't preloaded for nothing.",
+        "timestamp": 1784487238.592068,
+        "url": "",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    ]
+  },
+  "receivedAt": "2026-07-19T18:54:00.285Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 368,
+        "cssWidth": 736,
+        "height": 736,
+        "width": 1472
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-scenes",
+      "path": "/gltf-scenes",
+      "sourceFile": "examples/cases/GltfScenes.tsx",
+      "title": "glTF Scenes"
+    },
+    "frameStats": {
+      "averageMs": 16.75,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 0,
+      "maxMs": 18,
+      "minMs": 16,
+      "p50Ms": 17,
+      "p95Ms": 17,
+      "p99Ms": 17,
+      "requestedSampleCount": 12,
+      "sampleCount": 12,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 60000
+    },
+    "generatedAt": "2026-07-19T18:53:59.935Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 0,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 0,
+        "drawElements": 0,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "nonInstancedDrawCalls": 0,
+        "stateChanges": 0,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 0,
+        "uniformMatrixCalls": 0,
+        "useProgram": 0
+      },
+      "setup": {
+        "bindBuffer": 523,
+        "bindTexture": 918,
+        "bindVertexArray": 157,
+        "bufferDataBytes": 12386274,
+        "bufferDataCalls": 9,
+        "bufferSubDataBytes": 12386274,
+        "bufferSubDataCalls": 514,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 133,
+        "drawElements": 133,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "nonInstancedDrawCalls": 133,
+        "stateChanges": 1702,
+        "texImage2D": 69,
+        "texSubImage2D": 0,
+        "uniformCalls": 3079,
+        "uniformMatrixCalls": 416,
+        "useProgram": 104
+      }
+    },
+    "options": {
+      "autorun": true,
+      "frames": 12,
+      "timeoutMs": 60000,
+      "warmupFrames": 4
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 180,
+        "duration": 181,
+        "loadEventEnd": 181,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 94,
+        "totalDecodedBodySize": 0,
+        "totalEncodedBodySize": 0,
+        "totalTransferSize": 23100
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 27,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 219.99999999999997,
+                "imagesComplete": 3975,
+                "preparation": 113.99999999999991,
+                "externalResourceRead": 72.00000000000006,
+                "sourceRead": 34
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": null,
+        "resourcePressure": {
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 210238614
+        },
+        "resourceLifetime": null,
+        "textureResidency": {
+          "fitted": 68,
+          "resources": 69
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 27,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 219.99999999999997,
+                "imagesComplete": 3975,
+                "preparation": 113.99999999999991,
+                "externalResourceRead": 72.00000000000006,
+                "sourceRead": 34
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": null,
+        "resourcePressure": {
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 210238614
+        },
+        "resourceLifetime": null,
+        "textureResidency": {
+          "fitted": 68,
+          "resources": 69
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 0,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 27,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 219.99999999999997,
+                "imagesComplete": 3975,
+                "preparation": 113.99999999999991,
+                "externalResourceRead": 72.00000000000006,
+                "sourceRead": 34
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "planning": null,
+        "resourcePressure": {
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 210238614
+        },
+        "resourceLifetime": null,
+        "textureResidency": {
+          "fitted": 68,
+          "resources": 69
+        },
+        "virtualTexturing": null
+      }
+    },
+    "url": "http://192.168.1.91:4673/gltf-scenes?scene=sponza&bench=auto&frames=12&warmup=4&timeoutMs=60000&run=1784487235282",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 4382
+  }
+}

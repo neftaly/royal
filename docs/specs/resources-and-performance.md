@@ -22,7 +22,7 @@ geometry, re-upload static instances, or resubscribe resources.
 Each root admits work against five public ceilings:
 
 - retained decoded CPU bytes (default 512 MiB);
-- retained persistent GPU bytes (default 512 MiB);
+- retained persistent GPU bytes (default 256 MiB);
 - concurrent transient/scratch peak bytes (default 192 MiB);
 - GPU upload traffic per rendered frame (default 16 MiB);
 - concurrent asynchronous preparation jobs (default 8).
@@ -56,6 +56,12 @@ it selects the largest aspect-preserving decoded size that fits each active
 storage share before upload. This bounds ordinary glTF sets without an
 asset-specific branch. Authored close-range detail that must remain independent
 of scene-wide residency belongs in KTX2/VT representations.
+
+The 256 MiB default is a portable safety ceiling, not a recommended texture
+working-set size. It keeps unoptimized ordinary assets viable on the A10/Safari
+floor; offline ETC2/KTX2 retains materially more authored detail inside the same
+ceiling. Applications with measured headroom may explicitly raise the immutable
+root option.
 
 CPU alpha retained for exact `MASK` picking is bounded to one byte per fitted
 pixel, at most one quarter of the corresponding admitted RGBA base-level bytes,

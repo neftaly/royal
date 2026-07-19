@@ -293,7 +293,7 @@ describe("canvas root asset publication", () => {
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "asset", src: "/models/albedo.png" }),
       expect.any(AbortSignal),
-      402_653_184,
+      201_326_592,
     );
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
@@ -334,7 +334,7 @@ describe("canvas root asset publication", () => {
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "embedded-asset", mimeType: "image/png" }),
       expect.any(AbortSignal),
-      402_653_184,
+      201_326_592,
     );
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
@@ -379,7 +379,7 @@ describe("canvas root asset publication", () => {
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ src: "/models/cutout.png" }),
       expect.any(AbortSignal),
-      402_653_184,
+      201_326_592,
       true,
     );
     expect(root.pick({ clientX: 150, clientY: 100 })?.target).toMatchObject({ node });

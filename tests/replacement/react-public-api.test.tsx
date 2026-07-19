@@ -138,12 +138,12 @@ describe("replacement React public API", () => {
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:536870912");
-    expect(rendererRootOptionsSemanticKey({})).toBe("11:536870912");
+    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:268435456");
+    expect(rendererRootOptionsSemanticKey({})).toBe("11:268435456");
     expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
-      .toBe("11:536870912");
-    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:536870912");
-    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:536870912");
+      .toBe("11:268435456");
+    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:268435456");
+    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:268435456");
     expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 })).toBe("11:1024");
   });
 
