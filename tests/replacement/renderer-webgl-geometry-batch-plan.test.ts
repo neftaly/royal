@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   planGeometryBatch,
+  planGeometryBatchLayout,
+  rebaseGeometryIndices,
 } from "../../packages/renderer-webgl/src/surface/geometry-batch-plan";
 
 describe("geometry batch planning core", () => {
@@ -35,6 +37,30 @@ describe("geometry batch planning core", () => {
       { indices: new Uint16Array([0]), vertexCount: 65_536 },
       { indices: new Uint8Array([0]), vertexCount: 1 },
     ]).indexBytes).toBe(4);
+  });
+
+  it("separates capacity planning from bounded admission uploads", () => {
+    const layout = planGeometryBatchLayout([
+      { indices: new Uint8Array([0, 1, 2]), vertexCount: 3 },
+      { indices: new Uint8Array([2, 0, 1]), vertexCount: 300 },
+    ]);
+    expect(layout).toEqual({
+      indexBytes: 2,
+      indexCount: 6,
+      ranges: [
+        { indexByteOffset: 0, indexCount: 3, vertexOffset: 0 },
+        { indexByteOffset: 6, indexCount: 3, vertexOffset: 3 },
+      ],
+      vertexCount: 303,
+    });
+    const admitted = rebaseGeometryIndices(
+      new Uint8Array([2, 0, 1]),
+      layout.ranges[1]!.vertexOffset,
+      layout.indexBytes,
+      300,
+    );
+    expect(admitted).toBeInstanceOf(Uint16Array);
+    expect([...admitted]).toEqual([5, 3, 4]);
   });
 
   it("matches a simple reference across randomized compatible batches", () => {

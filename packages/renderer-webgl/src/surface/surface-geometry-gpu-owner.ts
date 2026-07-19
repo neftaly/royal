@@ -8,7 +8,10 @@ import {
   surfaceUsesTextureCoordinateSet,
 } from "./gpu-admission";
 import {
-  planGeometryBatch,
+  planGeometryBatchLayout,
+  rebaseGeometryIndices,
+  type GeometryBatchLayoutPlan,
+  type GeometryBatchRange,
 } from "./geometry-batch-plan";
 
 type GpuGeometryArena = Readonly<{
@@ -87,11 +90,63 @@ type PendingGeometry = Readonly<{
   surface: CanonicalDrawSurface;
 }>;
 
+type PlannedGeometry = PendingGeometry & Readonly<{
+  range: GeometryBatchRange;
+}>;
+
+type PlannedGeometryArena = Readonly<{
+  batch: GeometryBatchLayoutPlan;
+  entries: readonly PlannedGeometry[];
+  layout: number;
+}>;
+
+const planGeometryArenas = (
+  surfaces: readonly CanonicalDrawSurface[],
+): Readonly<{ key: string; plans: readonly PlannedGeometryArena[] }> => {
+  const byLayout = new Map<number, PendingGeometry[]>();
+  const keys = new Set<string>();
+  for (const surface of surfaces) {
+    const key = surfaceGeometryResourceKey(surface);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    const layout = geometryLayout(surface);
+    const entries = byLayout.get(layout);
+    if (entries === undefined) byLayout.set(layout, [{ key, surface }]);
+    else entries.push({ key, surface });
+  }
+  const plans: PlannedGeometryArena[] = [];
+  const identity: unknown[] = [];
+  for (const [layout, entries] of byLayout) {
+    const batch = planGeometryBatchLayout(entries.map(({ surface }) => ({
+      indices: surface.geometry.indices,
+      vertexCount: surface.geometry.positions.length / 3,
+    })));
+    plans.push({
+      batch,
+      entries: entries.map((entry, index) => ({
+        ...entry,
+        range: batch.ranges[index]!,
+      })),
+      layout,
+    });
+    identity.push(layout, entries.map(({ key, surface }) => [
+      key,
+      surface.geometry.positions.length,
+      surface.geometry.indices.length,
+    ]));
+  }
+  return { key: JSON.stringify(identity), plans };
+};
+
 /** Owns geometry buffers and vertex arrays for one context generation. */
 export class SurfaceGeometryGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   #geometryArenas: readonly GpuGeometryArena[] = [];
+  #geometryPlanKey = "";
   #geometryResources: readonly GpuGeometry[] = [];
+  #uploadedGeometryKeys = new Set<string>();
+  #plannedGeometry: ReturnType<typeof planGeometryArenas> | null = null;
+  #plannedSurfaces: readonly CanonicalDrawSurface[] | null = null;
   #instanceResources: readonly GpuInstanceData[] = [];
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
 
@@ -101,11 +156,15 @@ export class SurfaceGeometryGpuOwner {
 
   dispose(): void {
     this.#deleteResources();
+    this.#plannedGeometry = null;
+    this.#plannedSurfaces = null;
   }
 
   invalidate(): void {
     this.#geometryArenas = [];
+    this.#geometryPlanKey = "";
     this.#geometryResources = [];
+    this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
   }
@@ -131,26 +190,23 @@ export class SurfaceGeometryGpuOwner {
     for (const resource of this.#instanceResources) this.#gl.deleteBuffer(resource.buffer);
     for (const arena of this.#geometryArenas) this.#deleteGeometryArena(arena);
     this.#geometryArenas = [];
+    this.#geometryPlanKey = "";
     this.#geometryResources = [];
+    this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
   }
 
-  #createGeometryBatch(entries: readonly PendingGeometry[]): Readonly<{
+  #createGeometryArena(plan: PlannedGeometryArena): Readonly<{
     arena: GpuGeometryArena;
     geometries: readonly GpuGeometry[];
   }> {
-    if (entries.length === 0) throw new Error("Royal cannot create an empty geometry batch");
     const gl = this.#gl;
-    const layout = geometryLayout(entries[0]!.surface);
+    const { batch, entries, layout } = plan;
     const hasNormals = (layout & 1) !== 0;
     const hasTangents = (layout & 2) !== 0;
     const hasTextureCoordinates = (layout & 4) !== 0;
     const hasTextureCoordinates1 = (layout & 8) !== 0;
-    const batch = planGeometryBatch(entries.map(({ surface }) => ({
-      indices: surface.geometry.indices,
-      vertexCount: surface.geometry.positions.length / 3,
-    })));
     const vertexArray = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
@@ -216,50 +272,7 @@ export class SurfaceGeometryGpuOwner {
         gl.vertexAttribPointer(10, 4, gl.FLOAT, false, 0, 0);
       }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, batch.indices, gl.STATIC_DRAW);
-      for (let index = 0; index < entries.length; index += 1) {
-        const range = batch.ranges[index]!;
-        const geometry = entries[index]!.surface.geometry;
-        const vertexOffset = range.vertexOffset;
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.positions);
-        if (normalBuffer !== null) {
-          if (geometry.normals === undefined) {
-            throw new Error("Royal geometry batch is missing NORMAL data");
-          }
-          gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-          gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.normals);
-        }
-        if (textureCoordinateBuffer !== null) {
-          if (geometry.textureCoordinates0 === undefined) {
-            throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
-          }
-          gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinateBuffer);
-          gl.bufferSubData(
-            gl.ARRAY_BUFFER,
-            vertexOffset * 2 * 4,
-            geometry.textureCoordinates0,
-          );
-        }
-        if (textureCoordinate1Buffer !== null) {
-          if (geometry.textureCoordinates1 === undefined) {
-            throw new Error("Royal textured surface requires TEXCOORD_1 geometry");
-          }
-          gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinate1Buffer);
-          gl.bufferSubData(
-            gl.ARRAY_BUFFER,
-            vertexOffset * 2 * 4,
-            geometry.textureCoordinates1,
-          );
-        }
-        if (tangentBuffer !== null) {
-          if (geometry.tangents === undefined) {
-            throw new Error("Royal geometry batch is missing TANGENT data");
-          }
-          gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
-          gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 4 * 4, geometry.tangents);
-        }
-      }
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, batch.indexCount * batch.indexBytes, gl.STATIC_DRAW);
       const arena = {
         indexBuffer,
         normalBuffer,
@@ -271,11 +284,11 @@ export class SurfaceGeometryGpuOwner {
       };
       return {
         arena,
-        geometries: entries.map((entry, index): GpuGeometry => ({
+        geometries: entries.map((entry): GpuGeometry => ({
           arena,
           indexBuffer,
-          indexCount: batch.ranges[index]!.indexCount,
-          indexOffset: batch.ranges[index]!.indexByteOffset,
+          indexCount: entry.range.indexCount,
+          indexOffset: entry.range.indexByteOffset,
           indexType: indexType(gl, batch.indexBytes),
           key: entry.key,
           normalBuffer,
@@ -295,6 +308,66 @@ export class SurfaceGeometryGpuOwner {
       gl.deleteBuffer(vertexBuffer);
       gl.deleteVertexArray(vertexArray);
       throw error;
+    }
+  }
+
+  #uploadGeometry(
+    arena: GpuGeometryArena,
+    plan: PlannedGeometryArena,
+    entry: PlannedGeometry,
+  ): void {
+    const gl = this.#gl;
+    const geometry = entry.surface.geometry;
+    const vertexOffset = entry.range.vertexOffset;
+    gl.bindVertexArray(arena.vertexArray);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, arena.indexBuffer);
+    gl.bufferSubData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      entry.range.indexByteOffset,
+      rebaseGeometryIndices(
+        geometry.indices,
+        vertexOffset,
+        plan.batch.indexBytes,
+        geometry.positions.length / 3,
+      ),
+    );
+    gl.bindBuffer(gl.ARRAY_BUFFER, arena.vertexBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.positions);
+    if (arena.normalBuffer !== null) {
+      if (geometry.normals === undefined) {
+        throw new Error("Royal geometry arena is missing NORMAL data");
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, arena.normalBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.normals);
+    }
+    if (arena.textureCoordinateBuffer !== null) {
+      if (geometry.textureCoordinates0 === undefined) {
+        throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, arena.textureCoordinateBuffer);
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER,
+        vertexOffset * 2 * 4,
+        geometry.textureCoordinates0,
+      );
+    }
+    if (arena.textureCoordinate1Buffer !== null) {
+      if (geometry.textureCoordinates1 === undefined) {
+        throw new Error("Royal textured surface requires TEXCOORD_1 geometry");
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, arena.textureCoordinate1Buffer);
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER,
+        vertexOffset * 2 * 4,
+        geometry.textureCoordinates1,
+      );
+    }
+    if (arena.tangentBuffer !== null) {
+      if (geometry.tangents === undefined) {
+        throw new Error("Royal geometry arena is missing TANGENT data");
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, arena.tangentBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 4 * 4, geometry.tangents);
     }
   }
 
@@ -428,24 +501,41 @@ export class SurfaceGeometryGpuOwner {
     surfaces: readonly CanonicalDrawSurface[],
     admittedCount = surfaces.length,
   ): SurfaceGeometryPlan {
-    const previousByKey = new Map(
-      this.#geometryResources.map((resource) => [resource.key, resource] as const),
-    );
+    let planned = this.#plannedGeometry;
+    if (this.#plannedSurfaces !== surfaces || planned === null) {
+      planned = planGeometryArenas(surfaces);
+      this.#plannedGeometry = planned;
+      this.#plannedSurfaces = surfaces;
+    }
+    const geometryPlanChanged = planned.key !== this.#geometryPlanKey;
     const previousInstancesByKey = new Map(
       this.#instanceResources.map((resource) => [resource.key, resource] as const),
     );
-    const previousInstanceVaosByKey = new Map(
-      this.#instanceVertexArrays.map((resource) => [resource.key, resource] as const),
-    );
-    const nextByKey = new Map<string, GpuGeometry>();
+    const previousInstanceVaosByKey = geometryPlanChanged
+      ? new Map<string, GpuInstanceVertexArray>()
+      : new Map(
+        this.#instanceVertexArrays.map((resource) => [resource.key, resource] as const),
+      );
     const nextInstancesByKey = new Map<string, GpuInstanceData>();
     const nextInstanceVaosByKey = new Map<string, GpuInstanceVertexArray>();
-    const nextGeometryResources: GpuGeometry[] = [];
-    const nextGeometryArenas: GpuGeometryArena[] = [];
+    const nextGeometryResources: GpuGeometry[] = geometryPlanChanged
+      ? []
+      : [...this.#geometryResources];
+    const nextGeometryArenas: GpuGeometryArena[] = geometryPlanChanged
+      ? []
+      : [...this.#geometryArenas];
+    const nextUploadedGeometryKeys = new Set(
+      geometryPlanChanged ? [] : this.#uploadedGeometryKeys,
+    );
     const nextInstanceResources: GpuInstanceData[] = [];
     const nextInstanceVertexArrays: GpuInstanceVertexArray[] = [];
     const nextSurfaces: GpuGeometrySurface[] = [];
-    const createdGeometryByKey = new Map<string, GpuGeometry>();
+    const geometryByKey = new Map<string, GpuGeometry>();
+    const uploadByKey = new Map<string, Readonly<{
+      arena: GpuGeometryArena;
+      entry: PlannedGeometry;
+      plan: PlannedGeometryArena;
+    }>>();
     const createdArenas: GpuGeometryArena[] = [];
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
@@ -454,38 +544,35 @@ export class SurfaceGeometryGpuOwner {
       values: Float32Array;
     }>>();
     try {
-      const pendingByLayout = new Map<number, PendingGeometry[]>();
-      const pendingKeys = new Set<string>();
-      for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
-        const surface = surfaces[surfaceIndex]!;
-        const key = surfaceGeometryResourceKey(surface);
-        if (previousByKey.has(key) || pendingKeys.has(key)) continue;
-        pendingKeys.add(key);
-        const layout = geometryLayout(surface);
-        const pending = pendingByLayout.get(layout);
-        if (pending === undefined) pendingByLayout.set(layout, [{ key, surface }]);
-        else pending.push({ key, surface });
-      }
-      for (const entries of pendingByLayout.values()) {
-        const created = this.#createGeometryBatch(entries);
-        createdArenas.push(created.arena);
-        for (const geometry of created.geometries) {
-          createdGeometryByKey.set(geometry.key, geometry);
+      if (
+        !geometryPlanChanged
+        && nextGeometryArenas.length !== planned.plans.length
+      ) throw new Error("Royal retained an inconsistent geometry arena plan");
+      for (let planIndex = 0; planIndex < planned.plans.length; planIndex += 1) {
+        const plan = planned.plans[planIndex]!;
+        let arena = nextGeometryArenas[planIndex];
+        if (arena === undefined) {
+          const created = this.#createGeometryArena(plan);
+          arena = created.arena;
+          createdArenas.push(arena);
+          nextGeometryArenas.push(arena);
+          nextGeometryResources.push(...created.geometries);
+        }
+        for (const entry of plan.entries) {
+          uploadByKey.set(entry.key, { arena, entry, plan });
         }
       }
+      for (const geometry of nextGeometryResources) geometryByKey.set(geometry.key, geometry);
       for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
         const surface = surfaces[surfaceIndex]!;
         const key = surfaceGeometryResourceKey(surface);
-        const geometry = nextByKey.get(key)
-          ?? previousByKey.get(key)
-          ?? createdGeometryByKey.get(key);
-        if (geometry === undefined) throw new Error("Royal geometry batch omitted a resource");
-        if (!nextByKey.has(key)) {
-          nextByKey.set(key, geometry);
-          nextGeometryResources.push(geometry);
-          if (!nextGeometryArenas.includes(geometry.arena)) {
-            nextGeometryArenas.push(geometry.arena);
-          }
+        const geometry = geometryByKey.get(key);
+        if (geometry === undefined) throw new Error("Royal geometry arena omitted a resource");
+        if (!nextUploadedGeometryKeys.has(key)) {
+          const upload = uploadByKey.get(key);
+          if (upload === undefined) throw new Error("Royal geometry arena omitted an upload range");
+          this.#uploadGeometry(upload.arena, upload.plan, upload.entry);
+          nextUploadedGeometryKeys.add(key);
         }
         let instanceCount = 0;
         let vertexArray = geometry.vertexArray;
@@ -529,15 +616,6 @@ export class SurfaceGeometryGpuOwner {
         }
         nextSurfaces.push({ geometry, instanceCount, surface, vertexArray });
       }
-      for (const geometry of this.#geometryResources) {
-        if (
-          nextGeometryArenas.includes(geometry.arena)
-          && !nextByKey.has(geometry.key)
-        ) {
-          nextByKey.set(geometry.key, geometry);
-          nextGeometryResources.push(geometry);
-        }
-      }
     } catch (error) {
       for (const resource of createdInstanceVaos) this.#gl.deleteVertexArray(resource.vertexArray);
       for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
@@ -565,11 +643,13 @@ export class SurfaceGeometryGpuOwner {
             this.#gl.deleteBuffer(resource.buffer);
           }
         }
-        for (const arena of this.#geometryArenas) {
-          if (!nextGeometryArenas.includes(arena)) this.#deleteGeometryArena(arena);
+        if (geometryPlanChanged) {
+          for (const arena of this.#geometryArenas) this.#deleteGeometryArena(arena);
         }
         this.#geometryArenas = nextGeometryArenas;
+        this.#geometryPlanKey = planned.key;
         this.#geometryResources = nextGeometryResources;
+        this.#uploadedGeometryKeys = nextUploadedGeometryKeys;
         this.#instanceResources = nextInstanceResources;
         this.#instanceVertexArrays = nextInstanceVertexArrays;
       },
