@@ -193,12 +193,42 @@ describe("static glTF preparation core", () => {
 
     const prepared = prepareStaticGlb(staticTriangleGlb(document), "lod-v1");
     expect(prepared.primitives).toHaveLength(2);
-    expect(prepared.primitives.map((primitive) => primitive.lod)).toEqual([
-      { group: "lod-v1:node:1:lod", level: 0, thresholds: [0.6, 0.02] },
-      { group: "lod-v1:node:1:lod", level: 1, thresholds: [0.6, 0.02] },
+    expect(prepared.primitives.map((primitive) => primitive.lods)).toEqual([
+      [{ group: "lod-v1:node:1:lod", level: 0, thresholds: [0.6, 0.02] }],
+      [{ group: "lod-v1:node:1:lod", level: 1, thresholds: [0.6, 0.02] }],
     ]);
     expect(prepared.primitives[0]!.localModel.slice(12, 15)).toEqual([1, 2, 0]);
     expect(prepared.primitives[1]!.localModel.slice(12, 15)).toEqual([1, 2, -1]);
+  });
+
+  it("lowers material MSFT_lod levels, including levels selected through variants", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = [
+      "KHR_materials_unlit",
+      "KHR_materials_variants",
+      "MSFT_lod",
+    ];
+    document.extensions = {
+      KHR_materials_variants: { variants: [{ name: "Ruby" }] },
+    };
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials.push({
+      extensions: { KHR_materials_unlit: {}, MSFT_lod: { ids: [2] } },
+      extras: { MSFT_screencoverage: [0.4, 0] },
+      pbrMetallicRoughness: { baseColorFactor: [0.9, 0.02, 0.03, 1] },
+    }, {
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [0.3, 0.01, 0.02, 1] },
+    });
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives[0]!.extensions = {
+      KHR_materials_variants: { mappings: [{ material: 1, variants: [0] }] },
+    };
+
+    const primitive = prepareStaticGlb(staticTriangleGlb(document), "material-lod").primitives[0]!;
+    expect(primitive.materialVariantLods?.get("Ruby")?.thresholds).toEqual([0.4, 0]);
+    expect(primitive.materialVariantLods?.get("Ruby")?.levels.map((level) => level.baseColor))
+      .toEqual([[0.9, 0.02, 0.03, 1], [0.3, 0.01, 0.02, 1]]);
   });
 
   it("rejects child and MSFT_lod cycles before publishing partial geometry", () => {

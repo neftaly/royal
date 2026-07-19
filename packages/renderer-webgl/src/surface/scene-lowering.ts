@@ -46,7 +46,7 @@ export type CanonicalDrawSurface = Readonly<{
     key: string;
     localModels: Float32Array;
   }>;
-  lod?: LodMembership;
+  lods?: readonly LodMembership[];
   material: CanonicalSurfaceMaterial;
   materialSource: CanonicalSurfaceMaterial;
   model: Mat4;
@@ -59,7 +59,7 @@ export type CanonicalDrawSurface = Readonly<{
 
 export type CanonicalPickSurface = Readonly<{
   inverseModel: Mat4 | undefined;
-  lod?: LodMembership;
+  lods?: readonly LodMembership[];
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
   pickingGeometry: CanonicalTriangleGeometry;
@@ -176,6 +176,7 @@ export const prepareCanonicalSurfaceScene = (
   const surfaces: CanonicalDrawSurface[] = [];
   const textureAssets: TextureSourceRef[] = [];
   const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
+  let materialLodGroupIndex = 0;
   for (const node of scene.nodes) {
     if (node.kind === "gltf") {
       gltfNodes.push(node);
@@ -231,7 +232,11 @@ export const prepareCanonicalSurfaceScene = (
         const materialSource = node.materialVariant === undefined
           ? primitive.material
           : primitive.materialVariants?.get(node.materialVariant) ?? primitive.material;
-        appendCanonicalMaterialTextureAssets(textureAssets, materialSource);
+        const materialLod = node.materialVariant === undefined
+          ? primitive.materialLod
+          : primitive.materialVariants?.has(node.materialVariant) === true
+            ? primitive.materialVariantLods?.get(node.materialVariant)
+            : primitive.materialLod;
         const model = instanceBatch === undefined
           ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
           : rootModel;
@@ -248,44 +253,30 @@ export const prepareCanonicalSurfaceScene = (
             );
           }
         }
-        let lod: LodMembership | undefined;
-        if (primitive.lod !== undefined) {
-          let selectionBounds = lodBounds.get(primitive.lod.group);
-          if (selectionBounds === undefined) {
-            selectionBounds = emptyWorldBounds();
-            lodBounds.set(primitive.lod.group, selectionBounds);
+        let geometryLods: LodMembership[] | undefined;
+        if (primitive.lods !== undefined) {
+          geometryLods = Array<LodMembership>(primitive.lods.length);
+          for (let lodIndex = 0; lodIndex < primitive.lods.length; lodIndex += 1) {
+            const primitiveLod = primitive.lods[lodIndex]!;
+            let selectionBounds = lodBounds.get(primitiveLod.group);
+            if (selectionBounds === undefined) {
+              selectionBounds = emptyWorldBounds();
+              lodBounds.set(primitiveLod.group, selectionBounds);
+            }
+            includeWorldBounds(selectionBounds, worldBounds);
+            geometryLods[lodIndex] = { ...primitiveLod, selectionBounds };
           }
-          includeWorldBounds(selectionBounds, worldBounds);
-          lod = { ...primitive.lod, selectionBounds };
         }
-        const surface: CanonicalDrawSurface = {
-          geometry: primitive.geometry,
-          ...(instanceBatch === undefined ? {} : {
-            instances: {
-              count: instanceBatch.localModels.length / 16,
-              key: instanceBatch.key,
-              localModels: instanceBatch.localModels,
-            },
-          }),
-          material: resolveCanonicalMaterialTexture(materialSource, decodedTexture),
-          materialSource,
-          ...(lod === undefined ? {} : { lod }),
-          model,
-          modelHandedness: instanceBatch === undefined
-            ? modelHandedness(model)
-            : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1,
-          node,
-          normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
-          textureKeys: canonicalMaterialTextureKeys(materialSource),
-          worldBounds,
-        };
+        const handedness = instanceBatch === undefined
+          ? modelHandedness(model)
+          : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1;
         if (proxyGeometry === undefined) {
           if (instanceBatch === undefined) {
             pickSurfaces.push({
               inverseModel: inverseMat4(model),
-              modelHandedness: surface.modelHandedness,
+              modelHandedness: handedness,
               node,
-              ...(lod === undefined ? {} : { lod }),
+              ...(geometryLods === undefined ? {} : { lods: geometryLods }),
               pickingGeometry: primitive.geometry,
             });
           } else {
@@ -295,16 +286,52 @@ export const prepareCanonicalSurfaceScene = (
               const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
               pickSurfaces.push({
                 inverseModel: inverseMat4(instanceModel),
-                modelHandedness: surface.modelHandedness,
+                modelHandedness: handedness,
                 node,
-                ...(lod === undefined ? {} : { lod }),
+                ...(geometryLods === undefined ? {} : { lods: geometryLods }),
                 pickingGeometry: primitive.geometry,
               });
             }
           }
-          surfaces.push(surface);
-        } else {
-          surfaces.push(surface);
+        }
+        const materialLevelCount = materialLod?.levels.length ?? 1;
+        const materialGroup = materialLod === undefined
+          ? undefined
+          : `${primitive.geometry.key}:mount:${materialLodGroupIndex++}:material-lod`;
+        for (let materialLevel = 0; materialLevel < materialLevelCount; materialLevel += 1) {
+          const levelMaterial = materialLod?.levels[materialLevel] ?? materialSource;
+          appendCanonicalMaterialTextureAssets(textureAssets, levelMaterial);
+          let lods = geometryLods;
+          if (materialLod !== undefined && materialGroup !== undefined) {
+            const materialMembership: LodMembership = {
+              group: materialGroup,
+              level: materialLevel,
+              selectionBounds: worldBounds,
+              thresholds: materialLod.thresholds,
+            };
+            lods = geometryLods === undefined
+              ? [materialMembership]
+              : [...geometryLods, materialMembership];
+          }
+          surfaces.push({
+            geometry: primitive.geometry,
+            ...(instanceBatch === undefined ? {} : {
+              instances: {
+                count: instanceBatch.localModels.length / 16,
+                key: instanceBatch.key,
+                localModels: instanceBatch.localModels,
+              },
+            }),
+            material: resolveCanonicalMaterialTexture(levelMaterial, decodedTexture),
+            materialSource: levelMaterial,
+            ...(lods === undefined ? {} : { lods }),
+            model,
+            modelHandedness: handedness,
+            node,
+            normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
+            textureKeys: canonicalMaterialTextureKeys(levelMaterial),
+            worldBounds,
+          });
         }
       }
       continue;

@@ -186,13 +186,40 @@ describe("canonical direct surface lowering", () => {
       () => asset,
     );
 
-    expect(prepared.surfaces.map((surface) => surface.lod?.level)).toEqual([0, 1]);
-    expect(prepared.surfaces[0]!.lod?.selectionBounds)
-      .toBe(prepared.surfaces[1]!.lod?.selectionBounds);
-    expect(prepared.surfaces[0]!.lod?.selectionBounds).toEqual({
+    expect(prepared.surfaces.map((surface) => surface.lods?.[0]?.level)).toEqual([0, 1]);
+    expect(prepared.surfaces[0]!.lods?.[0]?.selectionBounds)
+      .toBe(prepared.surfaces[1]!.lods?.[0]?.selectionBounds);
+    expect(prepared.surfaces[0]!.lods?.[0]?.selectionBounds).toEqual({
       max: [12, 3, 0],
       min: [10, 1, -2],
     });
+  });
+
+  it("lowers selected material LOD levels onto the same geometry and selector ABI", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    const materials = document.materials as Array<Record<string, unknown>>;
+    materials[0]!.extensions = { KHR_materials_unlit: {}, MSFT_lod: { ids: [1] } };
+    materials[0]!.extras = { MSFT_screencoverage: [0.5, 0] };
+    materials.push({
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorFactor: [0.05, 0.1, 0.2, 1] },
+    });
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "material-lod-asset");
+    const node = gltf({ src: "/material-lod.glb" });
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [node] }),
+      () => asset,
+    );
+
+    expect(prepared.surfaces).toHaveLength(2);
+    expect(prepared.surfaces[0]!.geometry).toBe(prepared.surfaces[1]!.geometry);
+    expect(prepared.surfaces.map((surface) => surface.lods?.[0]?.level)).toEqual([0, 1]);
+    expect(prepared.surfaces.map((surface) => surface.material.baseColor)).toEqual([
+      [0.2, 0.4, 0.8, 1],
+      [0.05, 0.1, 0.2, 1],
+    ]);
+    expect(prepared.pickSurfaces).toHaveLength(1);
   });
 
   it("normalizes standard material and directional-light state before touching WebGL", () => {

@@ -49,13 +49,20 @@ export type PreparedStaticLodMembership = Readonly<{
   thresholds: readonly number[];
 }>;
 
+export type PreparedStaticMaterialLod = Readonly<{
+  levels: readonly CanonicalSurfaceMaterial[];
+  thresholds: readonly number[];
+}>;
+
 export type PreparedStaticGltfPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   instanceBatch?: StaticInstanceBatch & Readonly<{ key: string }>;
   localModel: Mat4;
-  lod?: PreparedStaticLodMembership;
+  lods?: readonly PreparedStaticLodMembership[];
   material: CanonicalSurfaceMaterial;
+  materialLod?: PreparedStaticMaterialLod;
   materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
+  materialVariantLods?: ReadonlyMap<string, PreparedStaticMaterialLod>;
 }>;
 
 export type PreparedStaticGltf = Readonly<{
@@ -83,7 +90,9 @@ type StaticDracoDecoder = (
 type PreparedMeshPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
+  materialLod?: PreparedStaticMaterialLod;
   materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
+  materialVariantLods?: ReadonlyMap<string, PreparedStaticMaterialLod>;
 }>;
 
 const finiteNumber = (
@@ -106,7 +115,12 @@ export const batchRepeatedStaticPrimitives = (
   const repeated = new Map<string, PreparedStaticGltfPrimitive[]>();
   let hasRepeatedGeometry = false;
   for (const primitive of primitives) {
-    if (primitive.instanceBatch !== undefined || primitive.lod !== undefined) continue;
+    if (
+      primitive.instanceBatch !== undefined
+      || primitive.lods !== undefined
+      || primitive.materialLod !== undefined
+      || primitive.materialVariantLods !== undefined
+    ) continue;
     const key = primitive.geometry.key;
     const group = repeated.get(key);
     if (group === undefined) repeated.set(key, [primitive]);
@@ -119,7 +133,7 @@ export const batchRepeatedStaticPrimitives = (
   const emitted = new Set<string>();
   const result: PreparedStaticGltfPrimitive[] = [];
   for (const primitive of primitives) {
-    if (primitive.instanceBatch !== undefined || primitive.lod !== undefined) {
+    if (primitive.instanceBatch !== undefined || primitive.lods !== undefined) {
       result.push(primitive);
       continue;
     }
@@ -145,9 +159,13 @@ export const batchRepeatedStaticPrimitives = (
         },
         localModel: identityMat4(),
         material: primitive.material,
+        ...(primitive.materialLod === undefined ? {} : { materialLod: primitive.materialLod }),
         ...(primitive.materialVariants === undefined
           ? {}
           : { materialVariants: primitive.materialVariants }),
+        ...(primitive.materialVariantLods === undefined
+          ? {}
+          : { materialVariantLods: primitive.materialVariantLods }),
       });
     }
   }
@@ -289,15 +307,82 @@ const prepareStaticDocument = (
     else if (typeof materialIndex === "number") preparedMaterials.set(materialIndex, prepared);
     return prepared;
   };
+  const materialLodIds = (materialIndex: number): readonly number[] => {
+    const path = `materials[${materialIndex}]`;
+    const material = object(materials[materialIndex], label, path);
+    if (material.extensions === undefined) return [];
+    const extensions = object(material.extensions, label, `${path}.extensions`);
+    if (extensions.MSFT_lod === undefined) return [];
+    const extensionPath = `${path}.extensions.MSFT_lod`;
+    const extension = object(extensions.MSFT_lod, label, extensionPath);
+    const ids = array(extension.ids, label, `${extensionPath}.ids`);
+    if (ids.length === 0) fail(label, `${extensionPath}.ids`, "must not be empty");
+    return ids.map((id, lodIndex) => index(
+      id,
+      materials,
+      label,
+      `${extensionPath}.ids[${lodIndex}]`,
+    ));
+  };
+  const materialGraphState = new Uint8Array(materials.length);
+  const validateMaterialLodGraph = (materialIndex: number): void => {
+    if (materialGraphState[materialIndex] === 1) {
+      fail(label, `materials[${materialIndex}]`, "is part of an MSFT_lod cycle");
+    }
+    if (materialGraphState[materialIndex] === 2) return;
+    materialGraphState[materialIndex] = 1;
+    for (const lodMaterial of materialLodIds(materialIndex)) {
+      validateMaterialLodGraph(lodMaterial);
+    }
+    materialGraphState[materialIndex] = 2;
+  };
+  for (let materialIndex = 0; materialIndex < materials.length; materialIndex += 1) {
+    validateMaterialLodGraph(materialIndex);
+  }
+  const preparedMaterialLods = new Map<number, PreparedStaticMaterialLod>();
+  const prepareMaterialLod = (
+    materialIndex: number | undefined,
+  ): PreparedStaticMaterialLod | undefined => {
+    if (materialIndex === undefined) return undefined;
+    const retained = preparedMaterialLods.get(materialIndex);
+    if (retained !== undefined) return retained;
+    const ids = materialLodIds(materialIndex);
+    if (ids.length === 0) return undefined;
+    const path = `materials[${materialIndex}]`;
+    const material = object(materials[materialIndex], label, path);
+    const extras = material.extras === undefined
+      ? undefined
+      : object(material.extras, label, `${path}.extras`);
+    const hints = extras?.MSFT_screencoverage === undefined
+      ? undefined
+      : array(extras.MSFT_screencoverage, label, `${path}.extras.MSFT_screencoverage`);
+    const levels = [
+      preparePrimitiveMaterial(materialIndex, path),
+      ...ids.map((id) => preparePrimitiveMaterial(id, path)),
+    ];
+    const prepared = { levels, thresholds: normalizeLodThresholds(hints, levels.length) };
+    preparedMaterialLods.set(materialIndex, prepared);
+    return prepared;
+  };
   const materialSetUsesTextureCoordinates = (
     material: CanonicalSurfaceMaterial,
+    materialLod: PreparedStaticMaterialLod | undefined,
     variants: ReadonlyMap<string, CanonicalSurfaceMaterial> | undefined,
+    variantLods: ReadonlyMap<string, PreparedStaticMaterialLod> | undefined,
     set: 0 | 1,
   ): boolean => {
     if (canonicalMaterialUsesTextureCoordinateSet(material, set)) return true;
+    for (const level of materialLod?.levels ?? []) {
+      if (canonicalMaterialUsesTextureCoordinateSet(level, set)) return true;
+    }
     if (variants === undefined) return false;
     for (const variant of variants.values()) {
       if (canonicalMaterialUsesTextureCoordinateSet(variant, set)) return true;
+    }
+    for (const lod of variantLods?.values() ?? []) {
+      for (const level of lod.levels) {
+        if (canonicalMaterialUsesTextureCoordinateSet(level, set)) return true;
+      }
     }
     return false;
   };
@@ -373,8 +458,13 @@ const prepareStaticDocument = (
       if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
-      const material = preparePrimitiveMaterial(primitive.material, path);
+      const materialIndex = primitive.material === undefined
+        ? undefined
+        : index(primitive.material, materials, label, `${path}.material`);
+      const material = preparePrimitiveMaterial(materialIndex, path);
+      const materialLod = prepareMaterialLod(materialIndex);
       let materialVariants: Map<string, CanonicalSurfaceMaterial> | undefined;
+      let materialVariantLods: Map<string, PreparedStaticMaterialLod> | undefined;
       if (extensions.KHR_materials_variants !== undefined) {
         const extensionPath = `${path}.extensions.KHR_materials_variants`;
         const extension = object(
@@ -387,10 +477,14 @@ const prepareStaticDocument = (
         for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex += 1) {
           const mappingPath = `${extensionPath}.mappings[${mappingIndex}]`;
           const mapping = object(mappings[mappingIndex], label, mappingPath);
-          const mappedMaterial = preparePrimitiveMaterial(
-            index(mapping.material, materials, label, `${mappingPath}.material`),
-            mappingPath,
+          const mappedMaterialIndex = index(
+            mapping.material,
+            materials,
+            label,
+            `${mappingPath}.material`,
           );
+          const mappedMaterial = preparePrimitiveMaterial(mappedMaterialIndex, mappingPath);
+          const mappedMaterialLod = prepareMaterialLod(mappedMaterialIndex);
           const mappedVariants = array(mapping.variants, label, `${mappingPath}.variants`);
           if (mappedVariants.length === 0) {
             fail(label, `${mappingPath}.variants`, "must not be empty");
@@ -406,18 +500,26 @@ const prepareStaticDocument = (
               fail(label, `${mappingPath}.variants[${variantIndex}]`, `duplicates variant ${JSON.stringify(name)}`);
             }
             materialVariants.set(name, mappedMaterial);
+            if (mappedMaterialLod !== undefined) {
+              materialVariantLods ??= new Map();
+              materialVariantLods.set(name, mappedMaterialLod);
+            }
           }
         }
         if (materialVariants.size === 0) materialVariants = undefined;
       }
       const usesTextureCoordinates0 = materialSetUsesTextureCoordinates(
         material,
+        materialLod,
         materialVariants,
+        materialVariantLods,
         0,
       );
       const usesTextureCoordinates1 = materialSetUsesTextureCoordinates(
         material,
+        materialLod,
         materialVariants,
+        materialVariantLods,
         1,
       );
       const decodedTextureCoordinates1 = usesTextureCoordinates1
@@ -492,7 +594,9 @@ const prepareStaticDocument = (
           ...(textureCoordinates1 === undefined ? {} : { textureCoordinates1 }),
         },
         material,
+        ...(materialLod === undefined ? {} : { materialLod }),
         ...(materialVariants === undefined ? {} : { materialVariants }),
+        ...(materialVariantLods === undefined ? {} : { materialVariantLods }),
       };
     });
     preparedMeshes[meshIndex] = prepared;
@@ -614,7 +718,7 @@ const prepareStaticDocument = (
   const visit = (
     nodeIndex: number,
     parentModel: Mat4,
-    lod?: PreparedStaticLodMembership,
+    lods?: readonly PreparedStaticLodMembership[],
     applyOwnLod = true,
   ): void => {
     const path = `nodes[${nodeIndex}]`;
@@ -631,9 +735,21 @@ const prepareStaticDocument = (
           : array(extras.MSFT_screencoverage, label, `${path}.extras.MSFT_screencoverage`);
         const thresholds = normalizeLodThresholds(hints, levelCount);
         const group = `${contentKey}:node:${nodeIndex}:lod`;
-        visit(nodeIndex, parentModel, { group, level: 0, thresholds }, false);
+        const highMembership = { group, level: 0, thresholds };
+        visit(
+          nodeIndex,
+          parentModel,
+          lods === undefined ? [highMembership] : [...lods, highMembership],
+          false,
+        );
         for (let level = 1; level < levelCount; level += 1) {
-          visit(lodIds[level - 1]!, parentModel, { group, level, thresholds }, false);
+          const membership = { group, level, thresholds };
+          visit(
+            lodIds[level - 1]!,
+            parentModel,
+            lods === undefined ? [membership] : [...lods, membership],
+            false,
+          );
         }
         return;
       }
@@ -713,7 +829,7 @@ const prepareStaticDocument = (
           primitives.push({
             ...primitive,
             localModel: worldModel,
-            ...(lod === undefined ? {} : { lod }),
+            ...(lods === undefined ? {} : { lods }),
           });
           continue;
         }
@@ -725,7 +841,7 @@ const prepareStaticDocument = (
               key: `${contentKey}:node:${nodeIndex}:instances:${batch}`,
             },
             localModel: worldModel,
-            ...(lod === undefined ? {} : { lod }),
+            ...(lods === undefined ? {} : { lods }),
           });
         }
       }
@@ -735,7 +851,7 @@ const prepareStaticDocument = (
       visit(
         index(children[child], nodes, label, `${path}.children[${child}]`),
         worldModel,
-        lod,
+        lods,
       );
     }
   };
@@ -750,39 +866,39 @@ const prepareStaticDocument = (
     if (asset === undefined) return;
     claimedTextures.set(`${asset.contentKey as string}:${asset.colorSpace ?? "srgb"}`, asset);
   };
-  for (const primitive of batchedPrimitives) {
-    claimTexture(primitive.material.baseColorAsset);
-    for (const material of primitive.materialVariants?.values() ?? []) {
-      claimTexture(material.baseColorAsset);
+  const forEachPrimitiveMaterial = (
+    primitive: PreparedStaticGltfPrimitive,
+    visitMaterial: (material: CanonicalSurfaceMaterial) => void,
+  ): void => {
+    visitMaterial(primitive.material);
+    for (const level of primitive.materialLod?.levels ?? []) visitMaterial(level);
+    for (const material of primitive.materialVariants?.values() ?? []) visitMaterial(material);
+    for (const lod of primitive.materialVariantLods?.values() ?? []) {
+      for (const level of lod.levels) visitMaterial(level);
     }
+  };
+  for (const primitive of batchedPrimitives) {
+    forEachPrimitiveMaterial(primitive, (material) => claimTexture(material.baseColorAsset));
   }
   for (const primitive of batchedPrimitives) {
-    if (primitive.material.kind === "standard") {
-      claimTexture(primitive.material.emissiveAsset);
-    }
-    for (const material of primitive.materialVariants?.values() ?? []) {
+    forEachPrimitiveMaterial(primitive, (material) => {
       if (material.kind === "standard") claimTexture(material.emissiveAsset);
-    }
+    });
   }
   for (const primitive of batchedPrimitives) {
-    if (primitive.material.kind === "standard") {
-      claimTexture(primitive.material.metallicRoughnessAsset);
-    }
-    for (const material of primitive.materialVariants?.values() ?? []) {
+    forEachPrimitiveMaterial(primitive, (material) => {
       if (material.kind === "standard") claimTexture(material.metallicRoughnessAsset);
-    }
+    });
   }
   for (const primitive of batchedPrimitives) {
-    if (primitive.material.kind === "standard") claimTexture(primitive.material.normalAsset);
-    for (const material of primitive.materialVariants?.values() ?? []) {
+    forEachPrimitiveMaterial(primitive, (material) => {
       if (material.kind === "standard") claimTexture(material.normalAsset);
-    }
+    });
   }
   for (const primitive of batchedPrimitives) {
-    if (primitive.material.kind === "standard") claimTexture(primitive.material.occlusionAsset);
-    for (const material of primitive.materialVariants?.values() ?? []) {
+    forEachPrimitiveMaterial(primitive, (material) => {
       if (material.kind === "standard") claimTexture(material.occlusionAsset);
-    }
+    });
   }
   return {
     bounds: staticGltfBounds(batchedPrimitives),
