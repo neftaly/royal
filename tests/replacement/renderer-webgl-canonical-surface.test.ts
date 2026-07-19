@@ -225,6 +225,13 @@ describe("canonical direct surface lowering", () => {
       max: [12, 3, 0],
       min: [10, 1, -2],
     });
+    expect(prepared.lodGroups).toEqual([{
+      group: "lod-asset:node:1:lod",
+      levels: [0, 1],
+      selectionBounds: { max: [12, 3, 0], min: [10, 1, -2] },
+      surfaceIndices: [0, 1],
+      thresholds: [0.5, 0],
+    }]);
   });
 
   it("lowers selected material LOD levels onto the same geometry and selector ABI", () => {
@@ -251,6 +258,11 @@ describe("canonical direct surface lowering", () => {
       [0.2, 0.4, 0.8, 1],
       [0.05, 0.1, 0.2, 1],
     ]);
+    expect(prepared.lodGroups).toMatchObject([{
+      levels: [0, 1],
+      surfaceIndices: [0, 1],
+      thresholds: [0.5, 0],
+    }]);
     expect(prepared.pickSurfaces).toHaveLength(1);
   });
 

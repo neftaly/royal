@@ -71,12 +71,21 @@ export type CanonicalPickSurface = Readonly<{
   pickingGeometry: CanonicalTriangleGeometry;
 }>;
 
+export type CanonicalLodGroup = Readonly<{
+  group: string;
+  levels: readonly number[];
+  selectionBounds: WorldBounds;
+  surfaceIndices: readonly number[];
+  thresholds: readonly number[];
+}>;
+
 export type CanonicalSurfaceScene = Readonly<{
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
   environment?: CanonicalStudioEnvironment;
   exposure: number;
   gltfNodes: readonly (GltfNode | GltfInstancesNode)[];
+  lodGroups: readonly CanonicalLodGroup[];
   pickSurfaces: readonly CanonicalPickSurface[];
   punctualLights: readonly CanonicalPunctualLight[];
   surfaces: readonly CanonicalDrawSurface[];
@@ -98,6 +107,38 @@ const indexSurfaceTextures = (
     }
   }
   return indices;
+};
+
+const indexSurfaceLods = (
+  surfaces: readonly CanonicalDrawSurface[],
+): readonly CanonicalLodGroup[] => {
+  const groups = new Map<string, {
+    levels: number[];
+    membership: LodMembership;
+    surfaceIndices: number[];
+  }>();
+  for (let surfaceIndex = 0; surfaceIndex < surfaces.length; surfaceIndex += 1) {
+    for (const membership of surfaces[surfaceIndex]!.lods ?? []) {
+      const group = groups.get(membership.group);
+      if (group === undefined) {
+        groups.set(membership.group, {
+          levels: [membership.level],
+          membership,
+          surfaceIndices: [surfaceIndex],
+        });
+      } else {
+        group.levels.push(membership.level);
+        group.surfaceIndices.push(surfaceIndex);
+      }
+    }
+  }
+  return Array.from(groups, ([group, index]) => ({
+    group,
+    levels: index.levels,
+    selectionBounds: index.membership.selectionBounds,
+    surfaceIndices: index.surfaceIndices,
+    thresholds: index.membership.thresholds,
+  }));
 };
 
 export type CanonicalDirectionalLight = Readonly<{
@@ -505,6 +546,7 @@ export const prepareCanonicalSurfaceScene = (
     ...(environment === undefined ? {} : { environment }),
     exposure: sceneExposure(scene),
     gltfNodes,
+    lodGroups: indexSurfaceLods(surfaces),
     pickSurfaces,
     punctualLights,
     surfaces,

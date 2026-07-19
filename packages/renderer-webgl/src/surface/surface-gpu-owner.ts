@@ -205,15 +205,6 @@ const surfaceMatchesLodSelections = (
   return true;
 };
 
-const surfaceHasLodGroup = (surface: CanonicalDrawSurface, group: string): boolean => {
-  const lods = surface.lods;
-  if (lods === undefined) return false;
-  for (const lod of lods) {
-    if (lod.group === group) return true;
-  }
-  return false;
-};
-
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
@@ -347,7 +338,7 @@ export class SurfaceGpuOwner {
     }
     const scene = this.#scene;
     if (scene === null || this.#gpuSurfaces.length === 0) return this.#dirty;
-    this.#selectLods(views);
+    this.#selectLods(views, scene);
     for (const view of views) this.#drawView(view, framebuffer, state, scene);
     return this.#dirty || virtualTexturePending;
   }
@@ -557,53 +548,44 @@ export class SurfaceGpuOwner {
     }
   }
 
-  #selectLods(views: readonly SurfaceFrameView[]): void {
+  #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
     this.#lodGroups.clear();
-    for (const resource of this.#gpuSurfaces) {
-      const lods = resource.surface.lods;
-      if (lods === undefined) continue;
-      for (const lod of lods) {
-        if (this.#lodGroups.has(lod.group)) continue;
-        this.#lodGroups.add(lod.group);
-        const coverage = maximumProjectedBoundsScreenCoverage(
-          lod.selectionBounds,
-          views,
-          this.#lodProjection,
-        );
-        if (this.#lodDrawableLevels.length < lod.thresholds.length) {
-          this.#lodDrawableLevels = new Uint8Array(lod.thresholds.length);
-        } else this.#lodDrawableLevels.fill(0, 0, lod.thresholds.length);
-        for (const candidate of this.#gpuSurfaces) {
-          const candidateLods = candidate.surface.lods;
-          if (candidateLods === undefined) continue;
-          for (const candidateLod of candidateLods) {
-            if (candidateLod.group === lod.group) {
-              this.#lodDrawableLevels[candidateLod.level] = 1;
-            }
-          }
-        }
-        const previous = this.#lodSelections.get(lod.group);
-        const target = hystereticLodLevel(
-          coverage,
-          lod.thresholds,
-          previous,
-        );
-        this.#lodSelections.set(lod.group, closestDrawableLodLevel(
-          target,
-          previous,
-          this.#lodDrawableLevels,
-          lod.thresholds.length,
-        ));
+    for (const group of scene.lodGroups) {
+      if (this.#lodDrawableLevels.length < group.thresholds.length) {
+        this.#lodDrawableLevels = new Uint8Array(group.thresholds.length);
+      } else this.#lodDrawableLevels.fill(0, 0, group.thresholds.length);
+      let drawable = false;
+      for (let index = 0; index < group.surfaceIndices.length; index += 1) {
+        if (group.surfaceIndices[index]! >= this.#gpuSurfacesBySceneIndex.length) continue;
+        this.#lodDrawableLevels[group.levels[index]!] = 1;
+        drawable = true;
       }
+      if (!drawable) continue;
+      this.#lodGroups.add(group.group);
+      const coverage = maximumProjectedBoundsScreenCoverage(
+        group.selectionBounds,
+        views,
+        this.#lodProjection,
+      );
+      const previous = this.#lodSelections.get(group.group);
+      const target = hystereticLodLevel(coverage, group.thresholds, previous);
+      this.#lodSelections.set(group.group, closestDrawableLodLevel(
+        target,
+        previous,
+        this.#lodDrawableLevels,
+        group.thresholds.length,
+      ));
     }
     // Admission is prefix-bounded. Independent selectors may temporarily pick
     // a node/material combination whose complete packet is not uploaded yet;
     // retain one admitted combination for every affected set instead of a hole.
-    for (const group of this.#lodGroups) {
+    for (const group of scene.lodGroups) {
+      if (!this.#lodGroups.has(group.group)) continue;
       let matched = false;
       let fallback: CanonicalDrawSurface | undefined;
-      for (const candidate of this.#gpuSurfaces) {
-        if (!surfaceHasLodGroup(candidate.surface, group)) continue;
+      for (const surfaceIndex of group.surfaceIndices) {
+        const candidate = this.#gpuSurfacesBySceneIndex[surfaceIndex];
+        if (candidate === undefined) continue;
         fallback ??= candidate.surface;
         if (surfaceMatchesLodSelections(candidate.surface, this.#lodSelections)) {
           matched = true;
@@ -612,6 +594,9 @@ export class SurfaceGpuOwner {
       }
       if (matched || fallback?.lods === undefined) continue;
       for (const lod of fallback.lods) this.#lodSelections.set(lod.group, lod.level);
+    }
+    for (const group of this.#lodSelections.keys()) {
+      if (!this.#lodGroups.has(group)) this.#lodSelections.delete(group);
     }
   }
 
