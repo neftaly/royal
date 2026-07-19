@@ -768,13 +768,19 @@ const installBenchmarkHooks = async (session) => {
   };
   const labelProgram = (program) => {
     const sources = glProgramShaders.get(program)?.map((shader) => glShaderSources.get(shader) ?? '').join('\\n') ?? '';
+    const defines = (name) => sources.includes('#define ' + name + '\\n');
     const kind = sources.includes('uniform vec4 cameraWorldPosition')
       ? 'surface'
       : sources.includes('uniform vec4 linearColor') ? 'unlit' : 'unknown';
-    const instanced = sources.includes('in mat4 instanceModel') ? '-instanced' : '';
-    const samplers = [...sources.matchAll(/uniform(?: highp)? sampler(?:2D|Cube) ([A-Za-z0-9]+);/g)]
-      .map((match) => match[1].replace(/Texture$/u, ''));
-    const features = [...new Set(samplers)].sort();
+    const instanced = defines('INSTANCED') ? '-instanced' : '';
+    const features = [
+      ['BASE_COLOR_TEXTURED', 'baseColor'],
+      ['VIRTUAL_BASE_COLOR_TEXTURED', 'virtualBaseColor'],
+      ['METALLIC_ROUGHNESS_TEXTURED', 'metallicRoughness'],
+      ['NORMAL_TEXTURED', 'normal'],
+      ['EMISSIVE_TEXTURED', 'emissive'],
+      ['OCCLUSION_TEXTURED', 'occlusion'],
+    ].filter(([define]) => defines(define)).map(([, feature]) => feature).sort();
     glProgramLabels.set(program, kind + instanced + (features.length === 0 ? '' : ':' + features.join(',')));
   };
   let lastDrawGl;

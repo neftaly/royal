@@ -304,6 +304,10 @@ export class SurfaceGpuOwner {
     return this.#lodSelections;
   }
 
+  takeUploadedTextureStorageKeys(): readonly string[] {
+    return this.#textureGpu.takeUploadedStorageKeys();
+  }
+
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
     this.#admittedSurfaceCount = retainedSurfaceAdmissionCount(

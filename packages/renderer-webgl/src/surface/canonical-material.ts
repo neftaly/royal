@@ -11,6 +11,7 @@ import {
 import {
   decodedTextureKey,
   type DecodedTextureSource,
+  textureStorageKey,
   type TextureSourceRef,
 } from "../texture/asset-owner";
 import type { CanonicalTextureCoordinates } from "../gltf/texture-coordinates";
@@ -129,7 +130,7 @@ const textureBinding = (
       sampler.wrapS,
       sampler.wrapT,
     ]),
-    storageKey: JSON.stringify([decodedTextureKey(asset), colorSpace]),
+    storageKey: textureStorageKey(asset),
   };
 };
 

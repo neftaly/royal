@@ -344,11 +344,12 @@ export class CanvasRoot {
     intent.viewport.width = frame.size.width;
     this.#state.invalidate();
     this.#state.clear(intent);
-    const pending = this.#surfaceGpu.drawViews(
-      frame.views,
-      frame.framebuffer,
-      this.#state,
-    );
+    let pending: boolean;
+    try {
+      pending = this.#surfaceGpu.drawViews(frame.views, frame.framebuffer, this.#state);
+    } finally {
+      this.#releaseUploadedTextures();
+    }
     this.#frame += 1;
     this.#lastFrameFailure = undefined;
     this.#publish();
@@ -767,8 +768,12 @@ export class CanvasRoot {
       multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
       this.#canvasViewport.height = size.backingHeight;
       this.#canvasViewport.width = size.backingWidth;
-      if (this.#surfaceGpu.drawViews(this.#canvasViews, null, this.#state)) {
-        this.#clock.invalidate();
+      try {
+        if (this.#surfaceGpu.drawViews(this.#canvasViews, null, this.#state)) {
+          this.#clock.invalidate();
+        }
+      } finally {
+        this.#releaseUploadedTextures();
       }
     }
     this.#frame += 1;
@@ -782,6 +787,7 @@ export class CanvasRoot {
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#state.invalidate();
       this.#surfaceGpu.invalidate();
+      this.#textureAssets.invalidateResidency();
       if (this.#sizeInput !== null) {
         const previousSize = this.#size;
         this.#size = resolveCanvasSize(this.#sizeInput, this.#sizeLimits);
@@ -809,6 +815,10 @@ export class CanvasRoot {
         kind: "restoration-failed",
       });
     }
+  }
+
+  #releaseUploadedTextures(): void {
+    this.#textureAssets.releaseUploaded(this.#surfaceGpu.takeUploadedTextureStorageKeys());
   }
 
   #updateClearColor(color: LinearRgba): boolean {

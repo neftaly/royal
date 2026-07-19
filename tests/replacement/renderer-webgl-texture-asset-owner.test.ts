@@ -2,6 +2,7 @@ import { imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   decodedTextureKey,
+  textureStorageKey,
   TextureAssetOwner,
   type DecodedTextureSource,
 } from "../../packages/renderer-webgl/src/texture/asset-owner";
@@ -48,6 +49,54 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledWith(decodedTextureKey(first));
+  });
+
+  it("releases decoded pixels after upload while retaining the resident binding identity", async () => {
+    const close = vi.fn();
+    const source = decoded(close);
+    const decode = vi.fn(async () => source);
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/large.avif");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+
+    owner.releaseUploaded([textureStorageKey(asset)]);
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(owner.decoded(asset)).toBe(source);
+    owner.reconcile([asset]);
+    expect(decode).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-decodes released pixels when GPU residency is invalidated", async () => {
+    const firstClose = vi.fn();
+    const second = decoded();
+    const decode = vi.fn()
+      .mockResolvedValueOnce(decoded(firstClose))
+      .mockResolvedValueOnce(second);
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/restorable.avif");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    owner.releaseUploaded([textureStorageKey(asset)]);
+
+    owner.invalidateResidency();
+
+    expect(owner.decoded(asset)).toBeUndefined();
+    expect(owner.getSnapshot(asset)).toEqual({ state: "loading" });
+    await vi.waitFor(() => expect(owner.decoded(asset)).toBe(second));
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(firstClose).toHaveBeenCalledTimes(1);
   });
 
   it("aborts and closes released content while ignoring stale completion", async () => {

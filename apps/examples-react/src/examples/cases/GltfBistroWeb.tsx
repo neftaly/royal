@@ -16,7 +16,7 @@ const bistro = gltf({
     max: [20, 11, 8.25],
   },
   src: `${import.meta.env.BASE_URL}BistroWeb/Bistro.gltf`,
-  version: "web-draco-avif-v2",
+  version: "web-draco-avif-v3",
 });
 
 const bistroNodes = [

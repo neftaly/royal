@@ -112,6 +112,20 @@ const installBenchmarkHooks = async (session) => {
   let longTaskMaxMs = 0;
   let longTaskTotalMs = 0;
   let longTaskObserver = null;
+  let decodedImageCloseCalls = 0;
+
+  try {
+    const bitmapPrototype = globalThis.ImageBitmap?.prototype;
+    const originalClose = bitmapPrototype?.close;
+    if (typeof originalClose === 'function') {
+      bitmapPrototype.close = function (...args) {
+        decodedImageCloseCalls += 1;
+        return originalClose.apply(this, args);
+      };
+    }
+  } catch {
+    // Some browser builds expose a non-writable host prototype.
+  }
 
   const recordLongTasks = (entries) => {
     for (const entry of entries) {
@@ -851,6 +865,7 @@ const installBenchmarkHooks = async (session) => {
           ...counters,
           drawCalls: drawCalls(),
         },
+        decodedImages: { closeCalls: decodedImageCloseCalls },
         fullyLoadedAt,
         fullyLoadedState,
         firstDrawAt,
@@ -1094,6 +1109,7 @@ const buildReport = ({
         : [],
       gltfLoadDiagnostics,
       gltfLoadSummary: gltfLoadDiagnosticsSummary(gltfLoadDiagnostics),
+      decodedImages: snapshot.decodedImages ?? null,
       loadHitches: roundedLoadHitches(snapshot.loadHitches),
       renderFrame: snapshot.renderFrame ?? null,
       textures: {

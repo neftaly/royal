@@ -40,6 +40,7 @@ export class TextureGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
+  readonly #uploadedStorageKeys = new Set<string>();
   #unpackStateKnown = false;
 
   constructor(gl: WebGL2RenderingContext) {
@@ -51,12 +52,14 @@ export class TextureGpuOwner {
     for (const resource of this.#textures.values()) this.#gl.deleteTexture(resource.texture);
     this.#samplers.clear();
     this.#textures.clear();
+    this.#uploadedStorageKeys.clear();
   }
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
     this.#samplers.clear();
     this.#textures.clear();
+    this.#uploadedStorageKeys.clear();
     this.#unpackStateKnown = false;
   }
 
@@ -145,6 +148,13 @@ export class TextureGpuOwner {
     }
   }
 
+  takeUploadedStorageKeys(): readonly string[] {
+    if (this.#uploadedStorageKeys.size === 0) return [];
+    const keys = [...this.#uploadedStorageKeys];
+    this.#uploadedStorageKeys.clear();
+    return keys;
+  }
+
   #createSampler(binding: CanonicalTextureBinding): GpuSampler {
     const gl = this.#gl;
     const sampler = gl.createSampler();
@@ -179,6 +189,7 @@ export class TextureGpuOwner {
       );
       const mipmapped = usesMipmaps(binding.sampler.minFilter);
       if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
+      this.#uploadedStorageKeys.add(binding.storageKey);
       return {
         bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),
         mipmapped,

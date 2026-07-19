@@ -38,10 +38,13 @@ export type TextureAssetOwnerPlatform = Readonly<{
 }>;
 
 type AssetEntry = {
-  readonly asset: TextureSourceRef;
-  readonly controller: AbortController;
+  asset: TextureSourceRef;
+  readonly claimedStorageKeys: Set<string>;
+  controller: AbortController | undefined;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
+  decodedReleased: boolean;
+  readonly residentStorageKeys: Set<string>;
   snapshot: TextureAssetSnapshot;
 };
 
@@ -96,6 +99,10 @@ export const decodedTextureKey = (asset: TextureSourceRef): string => {
   return JSON.stringify([content, identityPart(asset.version, "version")]);
 };
 
+/** GPU storage identity; one decoded image may be interpreted in both color spaces. */
+export const textureStorageKey = (asset: TextureSourceRef): string =>
+  JSON.stringify([decodedTextureKey(asset), asset.colorSpace ?? "srgb"]);
+
 const diagnosticLabel = (asset: TextureSourceRef): string => {
   if (asset.kind === "embedded-asset") return asset.label;
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
@@ -109,6 +116,7 @@ export class TextureAssetOwner {
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new Map<string, Set<() => void>>();
   readonly #platform: TextureAssetOwnerPlatform;
+  readonly #storageEntries = new Map<string, AssetEntry>();
 
   constructor(platform: TextureAssetOwnerPlatform) {
     this.#platform = platform;
@@ -118,15 +126,20 @@ export class TextureAssetOwner {
     if (this.#disposed) return;
     this.#disposed = true;
     for (const entry of this.#entries.values()) {
-      entry.controller.abort();
-      entry.decoded?.close?.();
+      entry.controller?.abort();
+      if (!entry.decodedReleased) entry.decoded?.close?.();
     }
     this.#entries.clear();
     this.#listeners.clear();
+    this.#storageEntries.clear();
   }
 
   decoded(asset: TextureSourceRef): DecodedTextureSource | undefined {
-    return this.#entries.get(this.#key(asset))?.decoded;
+    const entry = this.#entries.get(this.#key(asset));
+    if (entry === undefined || entry.decoded === undefined) return undefined;
+    return !entry.decodedReleased || entry.residentStorageKeys.has(textureStorageKey(asset))
+      ? entry.decoded
+      : undefined;
   }
 
   getSnapshot(asset: TextureAssetRef): TextureAssetSnapshot {
@@ -139,18 +152,80 @@ export class TextureAssetOwner {
 
   reconcile(assets: readonly TextureSourceRef[]): void {
     if (this.#disposed) return;
-    const claimed = new Set<string>();
+    this.#storageEntries.clear();
+    const claimed = new Map<string, { asset: TextureSourceRef; storageKeys: Set<string> }>();
     for (const asset of assets) {
       const key = this.#key(asset);
-      claimed.add(key);
-      if (!this.#entries.has(key)) this.#start(asset, key);
+      const storageKey = textureStorageKey(asset);
+      const existing = claimed.get(key);
+      if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
+      else existing.storageKeys.add(storageKey);
+    }
+    for (const [key, claim] of claimed) {
+      const entry = this.#entries.get(key);
+      if (entry === undefined) {
+        this.#start(claim.asset, key, claim.storageKeys);
+        continue;
+      }
+      entry.asset = claim.asset;
+      entry.claimedStorageKeys.clear();
+      for (const storageKey of claim.storageKeys) entry.claimedStorageKeys.add(storageKey);
+      for (const storageKey of entry.residentStorageKeys) {
+        if (!claim.storageKeys.has(storageKey)) entry.residentStorageKeys.delete(storageKey);
+      }
+      if (
+        entry.decodedReleased
+        && [...claim.storageKeys].some((storageKey) => !entry.residentStorageKeys.has(storageKey))
+      ) this.#decode(entry, false);
+    }
+    for (const [key, claim] of claimed) {
+      const entry = this.#entries.get(key)!;
+      for (const storageKey of claim.storageKeys) this.#storageEntries.set(storageKey, entry);
     }
     for (const [key, entry] of this.#entries) {
       if (claimed.has(key)) continue;
-      entry.controller.abort();
-      entry.decoded?.close?.();
+      entry.controller?.abort();
+      if (!entry.decodedReleased) entry.decoded?.close?.();
       this.#entries.delete(key);
       this.#publish(key);
+    }
+  }
+
+  /** Releases browser decode storage after the claimed WebGL copies are resident. */
+  releaseUploaded(storageKeys: readonly string[]): void {
+    if (this.#disposed || storageKeys.length === 0) return;
+    const touched = new Set<AssetEntry>();
+    for (const storageKey of storageKeys) {
+      const entry = this.#storageEntries.get(storageKey);
+      if (entry === undefined) continue;
+      entry.residentStorageKeys.add(storageKey);
+      touched.add(entry);
+    }
+    for (const entry of touched) {
+      if (
+        entry.decodedReleased
+        || entry.decoded === undefined
+        || [...entry.claimedStorageKeys].some(
+          (storageKey) => !entry.residentStorageKeys.has(storageKey),
+        )
+      ) continue;
+      entry.decoded.close?.();
+      entry.decodedReleased = true;
+    }
+  }
+
+  /** Context restoration needs fresh upload sources, not retained decoded pixels. */
+  invalidateResidency(): void {
+    if (this.#disposed) return;
+    for (const entry of this.#entries.values()) {
+      entry.residentStorageKeys.clear();
+      if (!entry.decodedReleased) entry.decoded?.close?.();
+      entry.decodedReleased = true;
+      entry.snapshot = { state: "loading" };
+      this.#decode(entry, true);
+      this.#platform.onAssetChanged(entry.key);
+      this.#platform.onSnapshotChanged(entry.key);
+      this.#publish(entry.key);
     }
   }
 
@@ -202,18 +277,35 @@ export class TextureAssetOwner {
     return key;
   }
 
-  #start(asset: TextureSourceRef, key: string): void {
+  #start(asset: TextureSourceRef, key: string, storageKeys: Set<string>): void {
     const entry: AssetEntry = {
       asset,
-      controller: new AbortController(),
+      claimedStorageKeys: new Set(storageKeys),
+      controller: undefined,
       decoded: undefined,
+      decodedReleased: false,
       key,
+      residentStorageKeys: new Set(),
       snapshot: { state: "loading" },
     };
     this.#entries.set(key, entry);
     this.#publish(key);
-    void this.#platform.decode(asset, entry.controller.signal).then((decoded) => {
-      if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) {
+    this.#decode(entry, true);
+  }
+
+  #decode(entry: AssetEntry, terminalFailure: boolean): void {
+    if (entry.controller !== undefined) return;
+    const controller = new AbortController();
+    entry.controller = controller;
+    const asset = entry.asset;
+    const key = entry.key;
+    void this.#platform.decode(asset, controller.signal).then((decoded) => {
+      if (
+        this.#disposed
+        || this.#entries.get(key) !== entry
+        || entry.controller !== controller
+        || controller.signal.aborted
+      ) {
         decoded.close?.();
         return;
       }
@@ -226,15 +318,27 @@ export class TextureAssetOwner {
         decoded.close?.();
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid dimensions`);
       }
+      if (!entry.decodedReleased) entry.decoded?.close?.();
+      entry.controller = undefined;
       entry.decoded = decoded;
+      entry.decodedReleased = false;
       entry.snapshot = { height: decoded.height, state: "ready", width: decoded.width };
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
     }).catch((error: unknown) => {
-      if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
-      entry.decoded = undefined;
-      entry.snapshot = { error: formatFailure(error), state: "error" };
+      if (
+        this.#disposed
+        || this.#entries.get(key) !== entry
+        || entry.controller !== controller
+        || controller.signal.aborted
+      ) return;
+      entry.controller = undefined;
+      if (terminalFailure || entry.residentStorageKeys.size === 0) {
+        entry.decoded = undefined;
+        entry.decodedReleased = false;
+        entry.snapshot = { error: formatFailure(error), state: "error" };
+      }
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
     });
