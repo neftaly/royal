@@ -9,8 +9,6 @@ import {
 } from "./gpu-admission";
 import {
   planGeometryBatch,
-  writeRebasedGeometryIndices,
-  type GeometryIndexArray,
 } from "./geometry-batch-plan";
 
 type GpuGeometryArena = Readonly<{
@@ -198,21 +196,7 @@ export class SurfaceGeometryGpuOwner {
         gl.vertexAttribPointer(10, 4, gl.FLOAT, false, 0, 0);
       }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      const rebasedIndices: GeometryIndexArray = batch.indexBytes === 1
-        ? new Uint8Array(batch.indexCount)
-        : batch.indexBytes === 2
-          ? new Uint16Array(batch.indexCount)
-          : new Uint32Array(batch.indexCount);
-      for (let index = 0; index < entries.length; index += 1) {
-        const range = batch.ranges[index]!;
-        writeRebasedGeometryIndices(
-          rebasedIndices,
-          range.indexByteOffset / batch.indexBytes,
-          entries[index]!.surface.geometry.indices,
-          range.vertexOffset,
-        );
-      }
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, rebasedIndices, gl.STATIC_DRAW);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, batch.indices, gl.STATIC_DRAW);
       for (let index = 0; index < entries.length; index += 1) {
         const range = batch.ranges[index]!;
         const geometry = entries[index]!.surface.geometry;

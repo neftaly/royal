@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   planGeometryBatch,
-  writeRebasedGeometryIndices,
-  type GeometryIndexArray,
 } from "../../packages/renderer-webgl/src/surface/geometry-batch-plan";
-
-const outputFor = (indexBytes: 1 | 2 | 4, length: number): GeometryIndexArray =>
-  indexBytes === 1 ? new Uint8Array(length)
-    : indexBytes === 2 ? new Uint16Array(length) : new Uint32Array(length);
 
 describe("geometry batch planning core", () => {
   it("plans contiguous byte ranges and rebases local indices", () => {
@@ -16,7 +10,7 @@ describe("geometry batch planning core", () => {
       { indices: new Uint16Array([2, 0, 1]), vertexCount: 3 },
     ];
     const plan = planGeometryBatch(geometries);
-    expect(plan).toEqual({
+    expect(plan).toMatchObject({
       indexBytes: 1,
       indexCount: 6,
       ranges: [
@@ -25,17 +19,7 @@ describe("geometry batch planning core", () => {
       ],
       vertexCount: 6,
     });
-    const output = outputFor(plan.indexBytes, plan.indexCount);
-    for (let index = 0; index < geometries.length; index += 1) {
-      const range = plan.ranges[index]!;
-      writeRebasedGeometryIndices(
-        output,
-        range.indexByteOffset / plan.indexBytes,
-        geometries[index]!.indices,
-        range.vertexOffset,
-      );
-    }
-    expect([...output]).toEqual([0, 1, 2, 5, 3, 4]);
+    expect([...plan.indices]).toEqual([0, 1, 2, 5, 3, 4]);
   });
 
   it("selects the smallest legal shared index representation at boundaries", () => {
@@ -71,7 +55,6 @@ describe("geometry batch planning core", () => {
         return { indices, vertexCount };
       });
       const plan = planGeometryBatch(geometries);
-      const output = outputFor(plan.indexBytes, plan.indexCount);
       const reference: number[] = [];
       let vertexOffset = 0;
       let outputOffset = 0;
@@ -83,12 +66,11 @@ describe("geometry batch planning core", () => {
           indexCount: geometry.indices.length,
           vertexOffset,
         });
-        writeRebasedGeometryIndices(output, outputOffset, geometry.indices, vertexOffset);
         for (const value of geometry.indices) reference.push(vertexOffset + value);
         outputOffset += geometry.indices.length;
         vertexOffset += geometry.vertexCount;
       }
-      expect([...output]).toEqual(reference);
+      expect([...plan.indices]).toEqual(reference);
     }
   });
 });
