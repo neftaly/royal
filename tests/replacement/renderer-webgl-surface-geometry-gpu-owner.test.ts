@@ -25,6 +25,7 @@ const fakeGl = (): WebGL2RenderingContext => ({
   bindBuffer: vi.fn(),
   bindVertexArray: vi.fn(),
   bufferData: vi.fn(),
+  bufferSubData: vi.fn(),
   createBuffer: vi.fn(() => ({})),
   createVertexArray: vi.fn(() => ({})),
   deleteBuffer: vi.fn(),
@@ -75,5 +76,43 @@ describe("surface geometry GPU owner", () => {
     owner.dispose();
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(4);
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(2);
+  });
+
+  it("packs compatible admission work into one shared GPU arena", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const surfaces = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [
+        mesh({
+          geometry: planeGeometry(1),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+        mesh({
+          geometry: boxGeometry(1),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    })).surfaces;
+    const plan = owner.prepare(surfaces);
+    expect(plan.surfaces).toHaveLength(2);
+    expect(plan.surfaces[0]!.geometry.vertexArray)
+      .toBe(plan.surfaces[1]!.geometry.vertexArray);
+    expect(plan.surfaces[0]!.geometry.indexOffset).toBe(0);
+    expect(plan.surfaces[1]!.geometry.indexOffset).toBeGreaterThan(0);
+    expect(gl.createBuffer).toHaveBeenCalledTimes(2);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(2);
+    plan.commit();
+    owner.prepare([surfaces[0]!]).commit();
+    const restored = owner.prepare(surfaces);
+    expect(restored.surfaces[0]!.geometry.vertexArray)
+      .toBe(restored.surfaces[1]!.geometry.vertexArray);
+    expect(gl.createBuffer).toHaveBeenCalledTimes(2);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
+    restored.commit();
+    owner.dispose();
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+    expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);
   });
 });

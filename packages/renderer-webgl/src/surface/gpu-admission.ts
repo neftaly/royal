@@ -1,5 +1,17 @@
 import type { CanonicalDrawSurface } from "./scene-lowering";
 
+export const surfaceUsesRuntimeTextureCoordinates = (
+  surface: CanonicalDrawSurface,
+): boolean => {
+  const material = surface.material;
+  return material.baseColorAsset !== undefined
+    || (material.kind === "standard" && (
+      material.metallicRoughnessAsset !== undefined
+      || material.normalAsset !== undefined
+      || material.emissiveAsset !== undefined
+    ));
+};
+
 export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): string => {
   const geometryBaseKey = surface.material.kind === "standard"
     && surface.geometry.normals !== undefined
@@ -10,7 +22,7 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
     && surface.geometry.tangents !== undefined
     ? "tangent"
     : "no-tangent";
-  return `${geometryBaseKey}:${surface.material.requiresTextureCoordinates ? "uv0" : "no-uv"}:${tangentKey}`;
+  return `${geometryBaseKey}:${surfaceUsesRuntimeTextureCoordinates(surface) ? "uv0" : "no-uv"}:${tangentKey}`;
 };
 
 const surfaceAdmissionKey = (surface: CanonicalDrawSurface): string => JSON.stringify([

@@ -29,6 +29,7 @@ type FakeGl = WebGL2RenderingContext & {
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly bufferData: ReturnType<typeof vi.fn>;
+  readonly bufferSubData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
   readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
@@ -99,6 +100,7 @@ const fakeGl = (): FakeGl => {
     bindBuffer: vi.fn(),
     bindVertexArray: vi.fn(),
     bufferData: vi.fn(),
+    bufferSubData: vi.fn(),
     clear: vi.fn(),
     clearColor: vi.fn(),
     clearDepth: vi.fn(),
@@ -651,7 +653,7 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledWith(
       canvas.gl.TRIANGLES,
       3,
-      canvas.gl.UNSIGNED_SHORT,
+      canvas.gl.UNSIGNED_BYTE,
       0,
       2,
     );

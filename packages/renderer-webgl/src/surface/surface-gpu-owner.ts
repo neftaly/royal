@@ -288,7 +288,7 @@ export class SurfaceGpuOwner {
           gl.TRIANGLES,
           resource.geometry.indexCount,
           resource.geometry.indexType,
-          0,
+          resource.geometry.indexOffset,
           resource.instanceCount,
         );
       } else {
@@ -296,7 +296,7 @@ export class SurfaceGpuOwner {
           gl.TRIANGLES,
           resource.geometry.indexCount,
           resource.geometry.indexType,
-          0,
+          resource.geometry.indexOffset,
         );
       }
     }

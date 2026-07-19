@@ -3,10 +3,29 @@ import {
   identityMat4,
 } from "../math/mat4";
 import type { CanonicalDrawSurface } from "./scene-lowering";
-import { surfaceGeometryResourceKey } from "./gpu-admission";
+import {
+  surfaceGeometryResourceKey,
+  surfaceUsesRuntimeTextureCoordinates,
+} from "./gpu-admission";
+import {
+  planGeometryBatch,
+  writeRebasedGeometryIndices,
+  type GeometryIndexArray,
+} from "./geometry-batch-plan";
+
+type GpuGeometryArena = Readonly<{
+  indexBuffer: WebGLBuffer;
+  normalBuffer: WebGLBuffer | null;
+  tangentBuffer: WebGLBuffer | null;
+  textureCoordinateBuffer: WebGLBuffer | null;
+  vertexArray: WebGLVertexArrayObject;
+  vertexBuffer: WebGLBuffer;
+}>;
 
 export type GpuGeometry = Readonly<{
+  arena: GpuGeometryArena;
   indexBuffer: WebGLBuffer;
+  indexOffset: number;
   indexCount: number;
   indexType: number;
   key: string;
@@ -43,14 +62,32 @@ export type SurfaceGeometryPlan = Readonly<{
 
 const indexType = (
   gl: WebGL2RenderingContext,
-  indices: Uint8Array | Uint16Array | Uint32Array,
-): number => indices instanceof Uint32Array
+  indexBytes: 1 | 2 | 4,
+): number => indexBytes === 4
   ? gl.UNSIGNED_INT
-  : indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
+  : indexBytes === 2 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE;
+
+const geometryLayout = (surface: CanonicalDrawSurface): number => {
+  let layout = surface.material.kind === "standard"
+    && surface.geometry.normals !== undefined ? 1 : 0;
+  if (
+    surface.material.kind === "standard"
+    && surface.material.normalAsset !== undefined
+    && surface.geometry.tangents !== undefined
+  ) layout |= 2;
+  if (surfaceUsesRuntimeTextureCoordinates(surface)) layout |= 4;
+  return layout;
+};
+
+type PendingGeometry = Readonly<{
+  key: string;
+  surface: CanonicalDrawSurface;
+}>;
 
 /** Owns geometry buffers and vertex arrays for one context generation. */
 export class SurfaceGeometryGpuOwner {
   readonly #gl: WebGL2RenderingContext;
+  #geometryArenas: readonly GpuGeometryArena[] = [];
   #geometryResources: readonly GpuGeometry[] = [];
   #instanceResources: readonly GpuInstanceData[] = [];
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
@@ -64,20 +101,21 @@ export class SurfaceGeometryGpuOwner {
   }
 
   invalidate(): void {
+    this.#geometryArenas = [];
     this.#geometryResources = [];
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
   }
 
-  #deleteGeometry(resource: GpuGeometry): void {
-    this.#gl.deleteBuffer(resource.indexBuffer);
-    if (resource.normalBuffer !== null) this.#gl.deleteBuffer(resource.normalBuffer);
-    if (resource.tangentBuffer !== null) this.#gl.deleteBuffer(resource.tangentBuffer);
-    if (resource.textureCoordinateBuffer !== null) {
-      this.#gl.deleteBuffer(resource.textureCoordinateBuffer);
+  #deleteGeometryArena(arena: GpuGeometryArena): void {
+    this.#gl.deleteBuffer(arena.indexBuffer);
+    if (arena.normalBuffer !== null) this.#gl.deleteBuffer(arena.normalBuffer);
+    if (arena.tangentBuffer !== null) this.#gl.deleteBuffer(arena.tangentBuffer);
+    if (arena.textureCoordinateBuffer !== null) {
+      this.#gl.deleteBuffer(arena.textureCoordinateBuffer);
     }
-    this.#gl.deleteBuffer(resource.vertexBuffer);
-    this.#gl.deleteVertexArray(resource.vertexArray);
+    this.#gl.deleteBuffer(arena.vertexBuffer);
+    this.#gl.deleteVertexArray(arena.vertexArray);
   }
 
   #deleteResources(): void {
@@ -85,45 +123,40 @@ export class SurfaceGeometryGpuOwner {
       this.#gl.deleteVertexArray(resource.vertexArray);
     }
     for (const resource of this.#instanceResources) this.#gl.deleteBuffer(resource.buffer);
-    for (const resource of this.#geometryResources) this.#deleteGeometry(resource);
+    for (const arena of this.#geometryArenas) this.#deleteGeometryArena(arena);
+    this.#geometryArenas = [];
     this.#geometryResources = [];
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
   }
 
-  #createGeometry(surface: CanonicalDrawSurface, key: string): GpuGeometry {
+  #createGeometryBatch(entries: readonly PendingGeometry[]): Readonly<{
+    arena: GpuGeometryArena;
+    geometries: readonly GpuGeometry[];
+  }> {
+    if (entries.length === 0) throw new Error("Royal cannot create an empty geometry batch");
     const gl = this.#gl;
-    const normals = surface.material.kind === "standard" ? surface.geometry.normals : undefined;
-    const tangents = surface.material.kind === "standard"
-      && surface.material.normalAsset !== undefined
-      ? surface.geometry.tangents
-      : undefined;
-    const material = surface.material;
-    const usesRuntimeTexture = material.baseColorAsset !== undefined
-      || (material.kind === "standard" && (
-        material.metallicRoughnessAsset !== undefined
-        || material.normalAsset !== undefined
-        || material.emissiveAsset !== undefined
-      ));
-    const textureCoordinates = usesRuntimeTexture
-      ? surface.geometry.textureCoordinates0
-      : undefined;
-    if (usesRuntimeTexture && textureCoordinates === undefined) {
-      throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
-    }
+    const layout = geometryLayout(entries[0]!.surface);
+    const hasNormals = (layout & 1) !== 0;
+    const hasTangents = (layout & 2) !== 0;
+    const hasTextureCoordinates = (layout & 4) !== 0;
+    const batch = planGeometryBatch(entries.map(({ surface }) => ({
+      indices: surface.geometry.indices,
+      vertexCount: surface.geometry.positions.length / 3,
+    })));
     const vertexArray = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
-    const normalBuffer = normals === undefined ? null : gl.createBuffer();
-    const tangentBuffer = tangents === undefined ? null : gl.createBuffer();
-    const textureCoordinateBuffer = textureCoordinates === undefined ? null : gl.createBuffer();
+    const normalBuffer = hasNormals ? gl.createBuffer() : null;
+    const tangentBuffer = hasTangents ? gl.createBuffer() : null;
+    const textureCoordinateBuffer = hasTextureCoordinates ? gl.createBuffer() : null;
     if (
       vertexArray === null
       || vertexBuffer === null
       || indexBuffer === null
-      || (normals !== undefined && normalBuffer === null)
-      || (tangents !== undefined && tangentBuffer === null)
-      || (textureCoordinates !== undefined && textureCoordinateBuffer === null)
+      || (hasNormals && normalBuffer === null)
+      || (hasTangents && tangentBuffer === null)
+      || (hasTextureCoordinates && textureCoordinateBuffer === null)
     ) {
       if (vertexArray !== null) gl.deleteVertexArray(vertexArray);
       if (vertexBuffer !== null) gl.deleteBuffer(vertexBuffer);
@@ -136,46 +169,105 @@ export class SurfaceGeometryGpuOwner {
     try {
       gl.bindVertexArray(vertexArray);
       gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, surface.geometry.positions, gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 3 * 4, gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-      if (normals === undefined) {
+      if (normalBuffer === null) {
         gl.disableVertexAttribArray(1);
         gl.vertexAttrib3f(1, 0, 0, 0);
       } else {
         gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 3 * 4, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
       }
-      if (textureCoordinates === undefined) {
+      if (textureCoordinateBuffer === null) {
         gl.disableVertexAttribArray(2);
       } else {
         gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinateBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 2 * 4, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
       }
-      if (tangents === undefined) {
+      if (tangentBuffer === null) {
         gl.disableVertexAttribArray(10);
       } else {
         gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, tangents, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 4 * 4, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(10);
         gl.vertexAttribPointer(10, 4, gl.FLOAT, false, 0, 0);
       }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, surface.geometry.indices, gl.STATIC_DRAW);
-      return {
+      const rebasedIndices: GeometryIndexArray = batch.indexBytes === 1
+        ? new Uint8Array(batch.indexCount)
+        : batch.indexBytes === 2
+          ? new Uint16Array(batch.indexCount)
+          : new Uint32Array(batch.indexCount);
+      for (let index = 0; index < entries.length; index += 1) {
+        const range = batch.ranges[index]!;
+        writeRebasedGeometryIndices(
+          rebasedIndices,
+          range.indexByteOffset / batch.indexBytes,
+          entries[index]!.surface.geometry.indices,
+          range.vertexOffset,
+        );
+      }
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, rebasedIndices, gl.STATIC_DRAW);
+      for (let index = 0; index < entries.length; index += 1) {
+        const range = batch.ranges[index]!;
+        const geometry = entries[index]!.surface.geometry;
+        const vertexOffset = range.vertexOffset;
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.positions);
+        if (normalBuffer !== null) {
+          if (geometry.normals === undefined) {
+            throw new Error("Royal geometry batch is missing NORMAL data");
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+          gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.normals);
+        }
+        if (textureCoordinateBuffer !== null) {
+          if (geometry.textureCoordinates0 === undefined) {
+            throw new Error("Royal textured surface requires TEXCOORD_0 geometry");
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordinateBuffer);
+          gl.bufferSubData(
+            gl.ARRAY_BUFFER,
+            vertexOffset * 2 * 4,
+            geometry.textureCoordinates0,
+          );
+        }
+        if (tangentBuffer !== null) {
+          if (geometry.tangents === undefined) {
+            throw new Error("Royal geometry batch is missing TANGENT data");
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
+          gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 4 * 4, geometry.tangents);
+        }
+      }
+      const arena = {
         indexBuffer,
-        indexCount: surface.geometry.indices.length,
-        indexType: indexType(gl, surface.geometry.indices),
-        key,
         normalBuffer,
         tangentBuffer,
         textureCoordinateBuffer,
         vertexArray,
         vertexBuffer,
+      };
+      return {
+        arena,
+        geometries: entries.map((entry, index): GpuGeometry => ({
+          arena,
+          indexBuffer,
+          indexCount: batch.ranges[index]!.indexCount,
+          indexOffset: batch.ranges[index]!.indexByteOffset,
+          indexType: indexType(gl, batch.indexBytes),
+          key: entry.key,
+          normalBuffer,
+          tangentBuffer,
+          textureCoordinateBuffer,
+          vertexArray,
+          vertexBuffer,
+        })),
       };
     } catch (error) {
       gl.deleteBuffer(indexBuffer);
@@ -313,24 +405,47 @@ export class SurfaceGeometryGpuOwner {
     const nextInstancesByKey = new Map<string, GpuInstanceData>();
     const nextInstanceVaosByKey = new Map<string, GpuInstanceVertexArray>();
     const nextGeometryResources: GpuGeometry[] = [];
+    const nextGeometryArenas: GpuGeometryArena[] = [];
     const nextInstanceResources: GpuInstanceData[] = [];
     const nextInstanceVertexArrays: GpuInstanceVertexArray[] = [];
     const nextSurfaces: GpuGeometrySurface[] = [];
-    const createdGeometry: GpuGeometry[] = [];
+    const createdGeometryByKey = new Map<string, GpuGeometry>();
+    const createdArenas: GpuGeometryArena[] = [];
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     try {
+      const pendingByLayout = new Map<number, PendingGeometry[]>();
+      const pendingKeys = new Set<string>();
       for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
         const surface = surfaces[surfaceIndex]!;
         const key = surfaceGeometryResourceKey(surface);
-        let geometry = nextByKey.get(key) ?? previousByKey.get(key);
-        if (geometry === undefined) {
-          geometry = this.#createGeometry(surface, key);
-          createdGeometry.push(geometry);
+        if (previousByKey.has(key) || pendingKeys.has(key)) continue;
+        pendingKeys.add(key);
+        const layout = geometryLayout(surface);
+        const pending = pendingByLayout.get(layout);
+        if (pending === undefined) pendingByLayout.set(layout, [{ key, surface }]);
+        else pending.push({ key, surface });
+      }
+      for (const entries of pendingByLayout.values()) {
+        const created = this.#createGeometryBatch(entries);
+        createdArenas.push(created.arena);
+        for (const geometry of created.geometries) {
+          createdGeometryByKey.set(geometry.key, geometry);
         }
+      }
+      for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
+        const surface = surfaces[surfaceIndex]!;
+        const key = surfaceGeometryResourceKey(surface);
+        const geometry = nextByKey.get(key)
+          ?? previousByKey.get(key)
+          ?? createdGeometryByKey.get(key);
+        if (geometry === undefined) throw new Error("Royal geometry batch omitted a resource");
         if (!nextByKey.has(key)) {
           nextByKey.set(key, geometry);
           nextGeometryResources.push(geometry);
+          if (!nextGeometryArenas.includes(geometry.arena)) {
+            nextGeometryArenas.push(geometry.arena);
+          }
         }
         let instanceCount = 0;
         let vertexArray = geometry.vertexArray;
@@ -362,10 +477,19 @@ export class SurfaceGeometryGpuOwner {
         }
         nextSurfaces.push({ geometry, instanceCount, surface, vertexArray });
       }
+      for (const geometry of this.#geometryResources) {
+        if (
+          nextGeometryArenas.includes(geometry.arena)
+          && !nextByKey.has(geometry.key)
+        ) {
+          nextByKey.set(geometry.key, geometry);
+          nextGeometryResources.push(geometry);
+        }
+      }
     } catch (error) {
       for (const resource of createdInstanceVaos) this.#gl.deleteVertexArray(resource.vertexArray);
       for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
-      for (const resource of createdGeometry) this.#deleteGeometry(resource);
+      for (const arena of createdArenas) this.#deleteGeometryArena(arena);
       throw error;
     }
 
@@ -384,9 +508,10 @@ export class SurfaceGeometryGpuOwner {
             this.#gl.deleteBuffer(resource.buffer);
           }
         }
-        for (const resource of this.#geometryResources) {
-          if (nextByKey.get(resource.key) !== resource) this.#deleteGeometry(resource);
+        for (const arena of this.#geometryArenas) {
+          if (!nextGeometryArenas.includes(arena)) this.#deleteGeometryArena(arena);
         }
+        this.#geometryArenas = nextGeometryArenas;
         this.#geometryResources = nextGeometryResources;
         this.#instanceResources = nextInstanceResources;
         this.#instanceVertexArrays = nextInstanceVertexArrays;
@@ -398,7 +523,7 @@ export class SurfaceGeometryGpuOwner {
           this.#gl.deleteVertexArray(resource.vertexArray);
         }
         for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
-        for (const resource of createdGeometry) this.#deleteGeometry(resource);
+        for (const arena of createdArenas) this.#deleteGeometryArena(arena);
       },
       surfaces: nextSurfaces,
     };
