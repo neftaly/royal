@@ -251,8 +251,9 @@ camera-specific scheduler; panel and XR consume the same claim order.
 Encoding can materially improve load time: GLB reduces request overhead;
 Meshopt/Draco reduce geometry bytes and parsing; offline ETC2 KTX2 reduces texture
 bytes, upload footprint, and GPU memory without a runtime transcoder; authored
-LOD can improve time to useful
-pixels. Encoding never excuses an unbounded or serial runtime pipeline.
+LOD can improve time to useful pixels and steady-state vertex/fragment work.
+Geometry compression alone does not reduce submitted triangles after decode.
+Encoding never excuses an unbounded or serial runtime pipeline.
 
 ## Measurement
 

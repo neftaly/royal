@@ -41,6 +41,21 @@ The timer query is active only during the drag sample. Use
 when you need renderer/glTF churn beside the same input metric. Do not add
 route-specific fast paths to improve these numbers.
 
+For a scenario selected by a route query, keep route filtering and scenario
+selection separate. For example, profile the A Beautiful Game entry without
+adding another example route:
+
+```sh
+EXAMPLES_BENCH_ROUTE=gltf-scenes \
+EXAMPLES_BENCH_ROUTE_SEARCH='scene=a-beautiful-game' \
+EXAMPLES_BENCH_CAMERA_DRAG=1 \
+pnpm --filter @royal/examples-react bench:examples
+```
+
+For visual review of one selected hardware-rendered route, set
+`EXAMPLES_BENCH_SCREENSHOT=/tmp/royal-route.png`. The harness captures the
+settled first canvas after measurement and rejects a multi-route screenshot run.
+
 For a one-frame, draw-by-draw GPU breakdown, add
 `EXAMPLES_BENCH_GPU_DRAW_PROFILE=1` to a camera-drag run. The opt-in profile
 records timer-query duration, element/vertex count, instance count, and stable

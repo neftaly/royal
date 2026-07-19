@@ -20,7 +20,10 @@ import {
   exampleContract,
   rendererSnapshotExpression,
 } from './example-contract.mjs';
-import { selectBenchmarkRouteFilter } from './benchmark-route-selection.mjs';
+import {
+  mergeBenchmarkRouteSearch,
+  selectBenchmarkRouteFilter,
+} from './benchmark-route-selection.mjs';
 import { summarizeCpuProfile } from './cpu-profile-summary.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
@@ -36,9 +39,13 @@ const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
 const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'hardware-headless';
 const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
+const routeSearch = process.env.EXAMPLES_BENCH_ROUTE_SEARCH?.trim() ?? '';
 const invocationRoot = path.resolve(process.env.INIT_CWD?.trim() || process.cwd());
 const resolveInvocationPath = (value) => value === '' ? '' : path.resolve(invocationRoot, value);
 const outputPath = resolveInvocationPath(process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '');
+const screenshotOutputPath = resolveInvocationPath(
+  process.env.EXAMPLES_BENCH_SCREENSHOT?.trim() ?? '',
+);
 const traceEnabled = process.env.EXAMPLES_BENCH_TRACE === '1';
 const replaceJsonSuffix = (filePath, suffix) => filePath.endsWith('.json')
   ? `${filePath.slice(0, -5)}${suffix}.json`
@@ -338,15 +345,20 @@ const selectedRoutes = () => {
     ...sweepRoutes,
     ...fuzzRoutes,
   ];
-  if (routeFilter === '') return [
-    ...benchmarkRoutes,
-    ...labRoutes,
-    ...sweepRoutes,
-    ...fuzzRoutes,
-  ];
-  const selected = selectBenchmarkRouteFilter(allRoutes, routeFilter);
+  const selected = routeFilter === ''
+    ? [
+        ...benchmarkRoutes,
+        ...labRoutes,
+        ...sweepRoutes,
+        ...fuzzRoutes,
+      ]
+    : selectBenchmarkRouteFilter(allRoutes, routeFilter);
   if (selected.length === 0) throw new Error(`Examples benchmark route filter did not match: ${routeFilter}`);
-  return selected;
+  if (routeSearch === '') return selected;
+  return selected.map((route) => ({
+    ...route,
+    path: mergeBenchmarkRouteSearch(route.path, routeSearch),
+  }));
 };
 
 const connectPage = () => connectCdpPage({
@@ -2481,6 +2493,40 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
       sampleXr: prepared?.active !== false,
       xrOnly: (realXrEnabled || fakeXrEnabled) && prepared?.active === true,
     });
+    let screenshot;
+    if (screenshotOutputPath !== '') {
+      const clip = await evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas');
+  if (canvas === null) return null;
+  canvas.scrollIntoView({ block: 'center', inline: 'center' });
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const rect = canvas.getBoundingClientRect();
+  return {
+    height: rect.height,
+    width: rect.width,
+    x: rect.left + scrollX,
+    y: rect.top + scrollY,
+  };
+})()
+`);
+      if (
+        clip === null
+        || !Number.isFinite(clip.width)
+        || !Number.isFinite(clip.height)
+        || clip.width <= 0
+        || clip.height <= 0
+      ) throw new Error('EXAMPLES_BENCH_SCREENSHOT could not resolve a visible canvas');
+      const captured = await session.call('Page.captureScreenshot', {
+        captureBeyondViewport: false,
+        clip: { ...clip, scale: 1 },
+        format: 'png',
+        fromSurface: true,
+      });
+      await mkdir(path.dirname(screenshotOutputPath), { recursive: true });
+      await writeFile(screenshotOutputPath, Buffer.from(captured.data, 'base64'));
+      screenshot = { height: clip.height, outputPath: screenshotOutputPath, width: clip.width };
+    }
     const activationFailure = prepared?.active === false
       ? {
         error: prepared.error,
@@ -2494,6 +2540,7 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
       ...route,
       ...(prepared === undefined ? {} : { prepared }),
       ...(virtualTextureClose === undefined ? {} : { virtualTextureClose }),
+      ...(screenshot === undefined ? {} : { screenshot }),
       ...(activationFailure === undefined ? {} : { xrActivationFailure: activationFailure }),
       ...(activationFailure === undefined || !fakeXrEnabled
         ? {}
@@ -2977,6 +3024,9 @@ const main = async () => {
     if (traceEnabled && !realXrEnabled) performanceTrace = await startPerformanceTrace(session);
 
     const benchmarkRoutes = selectedRoutes();
+    if (screenshotOutputPath !== '' && benchmarkRoutes.length !== 1) {
+      throw new Error('EXAMPLES_BENCH_SCREENSHOT requires exactly one selected route');
+    }
     if (cpuProfileEnabled && benchmarkRoutes.length !== 1) {
       throw new Error('EXAMPLES_BENCH_CPU_PROFILE requires EXAMPLES_BENCH_ROUTE to select exactly one route');
     }

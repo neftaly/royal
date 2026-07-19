@@ -94,7 +94,13 @@ level that preserves content. A positive authored terminal threshold MAY cull
 the whole set below that coverage. LOD changes MUST NOT alter logical picking
 identity.
 
-Royal does not currently generate mesh LODs in the browser.
+Royal does not generate mesh LODs in the browser. Automatic Royal LOD is an
+offline authoring/preparation concern: it emits explicit levels and coverage
+thresholds that enter this same authored selection path. The runtime MUST NOT
+silently simplify, decimate, or omit dense geometry to meet a frame-rate goal.
+Geometry compression changes transfer/decode cost, not the selected triangle
+work; a dense scene that is GPU-bound after loading needs authored/offline LOD,
+not a different compression claim.
 
 ## Resource reconciliation
 
