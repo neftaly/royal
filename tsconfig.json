@@ -76,6 +76,7 @@
     "packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts",
     "packages/renderer-webgl/src/surface/surface-program-owner.ts",
     "packages/renderer-webgl/src/surface/surface-picker.ts",
+    "packages/renderer-webgl/src/surface/surface-visibility.ts",
     "packages/renderer-webgl/src/webgl/clear-state-transition.ts",
     "packages/renderer-webgl/src/webgl/draw-state-transition.ts",
     "packages/renderer-webgl/src/webgl/state-owner.ts",

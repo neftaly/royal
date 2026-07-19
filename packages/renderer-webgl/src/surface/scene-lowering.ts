@@ -27,6 +27,12 @@ import {
 import type { CanonicalCamera } from "./camera-source-owner";
 import type { DecodedTextureSource } from "../texture/asset-owner";
 import type { TextureSourceRef } from "../texture/asset-owner";
+import {
+  emptyWorldBounds,
+  includeTransformedBounds,
+  transformedWorldBounds,
+  type WorldBounds,
+} from "./surface-visibility";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -42,6 +48,7 @@ export type CanonicalDrawSurface = Readonly<{
   node: MeshNode | GltfNode;
   normalTransform: Mat4;
   textureKeys: readonly string[];
+  worldBounds: WorldBounds;
 }>;
 
 export type CanonicalPickSurface = Readonly<{
@@ -138,10 +145,13 @@ export const prepareCanonicalSurfaceScene = (
       if (prepared === undefined) continue;
       textureAssets.push(...prepared.textureAssets);
       for (const primitive of prepared.primitives) {
-        const instanceBatch = primitive.instanceBatch;
-        const model = instanceBatch === undefined
-          ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
-          : rootModel;
+      const instanceBatch = primitive.instanceBatch;
+      const model = instanceBatch === undefined
+        ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
+        : rootModel;
+      const worldBounds = instanceBatch === undefined
+        ? transformedWorldBounds(primitive.geometry.bounds, model)
+        : emptyWorldBounds();
         const surface: CanonicalDrawSurface = {
           geometry: primitive.geometry,
           ...(instanceBatch === undefined ? {} : {
@@ -160,6 +170,7 @@ export const prepareCanonicalSurfaceScene = (
           node,
           normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
           textureKeys: canonicalMaterialTextureKeys(primitive.material),
+          worldBounds,
         };
         if (proxyGeometry === undefined) {
           if (instanceBatch === undefined) {
@@ -174,6 +185,7 @@ export const prepareCanonicalSurfaceScene = (
             for (let offset = 0; offset < localModels.length; offset += 16) {
               const localModel = mat4At(localModels, offset);
               const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
+              includeTransformedBounds(worldBounds, primitive.geometry.bounds, instanceModel);
               pickSurfaces.push({
                 inverseModel: inverseMat4(instanceModel),
                 modelHandedness: surface.modelHandedness,
@@ -184,6 +196,17 @@ export const prepareCanonicalSurfaceScene = (
           }
           surfaces.push(surface);
         } else {
+          if (instanceBatch !== undefined) {
+            const localModels = instanceBatch.localModels;
+            for (let offset = 0; offset < localModels.length; offset += 16) {
+              const localModel = mat4At(localModels, offset);
+              includeTransformedBounds(
+                worldBounds,
+                primitive.geometry.bounds,
+                multiplyMat4Into(identityMat4(), rootModel, localModel),
+              );
+            }
+          }
           surfaces.push(surface);
         }
       }
@@ -234,6 +257,7 @@ export const prepareCanonicalSurfaceScene = (
         ? geometry
         : prepareCanonicalGeometry(node.pickingGeometry),
       textureKeys: canonicalMaterialTextureKeys(materialSource),
+      worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
     surfaces.push(surface);
     pickSurfaces.push(surface);

@@ -487,6 +487,21 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps off-frustum surfaces out of the draw shell", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        transform: { position: [100, 0, 0] },
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+  });
+
   it("uploads shared authored material uniforms once per program", async () => {
     const document = staticTriangleDocument();
     delete document.extensionsRequired;

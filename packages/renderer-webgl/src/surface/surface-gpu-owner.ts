@@ -31,6 +31,7 @@ import {
   nextSurfaceAdmissionCount,
   retainedSurfaceAdmissionCount,
 } from "./gpu-admission";
+import { frustumPlanesInto, worldBoundsVisible } from "./surface-visibility";
 
 type GpuSurface = Readonly<{
   bindings: readonly GpuTextureBinding[];
@@ -114,6 +115,7 @@ export class SurfaceGpuOwner {
   #dirty = false;
   #drawIntent: MutableOpaqueDrawIntent | null = null;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
+  readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   #gpuSurfaces: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
@@ -203,8 +205,10 @@ export class SurfaceGpuOwner {
     let materialSource: CanonicalSurfaceMaterial | null = null;
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
+    frustumPlanesInto(this.#frustumPlanes, viewProjection);
     for (const resource of this.#gpuSurfaces) {
       const surface = resource.surface;
+      if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
