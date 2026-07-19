@@ -169,8 +169,9 @@ Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
 Encoding can materially improve load time: GLB reduces request overhead;
-Meshopt/Draco reduce geometry bytes and parsing; KTX2/Basis reduce texture bytes,
-decode/upload footprint, and GPU memory; authored LOD can improve time to useful
+Meshopt/Draco reduce geometry bytes and parsing; offline ETC2 KTX2 reduces texture
+bytes, upload footprint, and GPU memory without a runtime transcoder; authored
+LOD can improve time to useful
 pixels. Encoding never excuses an unbounded or serial runtime pipeline.
 
 ## Measurement

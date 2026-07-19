@@ -6,6 +6,7 @@ export const surfaceUsesRuntimeTextureCoordinates = (
 ): boolean => {
   const material = surface.material;
   return material.baseColorAsset !== undefined
+    || material.baseColorVirtualAsset !== undefined
     || (material.kind === "standard" && (
       material.metallicRoughnessAsset !== undefined
       || material.normalAsset !== undefined

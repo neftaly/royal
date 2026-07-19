@@ -27,7 +27,7 @@ first-class behaviors conform:
 | React Canvas, controls, focused observation, picking events and imperative root | Built-in glTF animation, skins, morph targets or animation pointer |
 | Static `.gltf`/`.glb`, validated buffers/accessors, progressive asset/image lifecycle | Physics, collision, interactivity, audio or application runtime |
 | Core metallic-roughness plus the accepted static material extension profile | Browser-side mesh simplification, meshlets or GPU-driven scene architecture |
-| Ordinary raster, KTX2/Basis, self-contained SVG and the specified orientation/color/alpha behavior | IES lights, node visibility or other deferred optional glTF extensions |
+| Ordinary raster, offline ETC2 KTX2, self-contained SVG and the specified orientation/color/alpha behavior | IES lights, node visibility or other deferred optional glTF extensions |
 | Authored and automatic VT with close-view, near-plane, ground-plane, stereo and fallback behavior | Float64 accessors, video/procedural textures or path tracing |
 | Repeated nodes, GPU-authored instances, explicit bulk instances, variants and `MSFT_lod` | Optional WebGL accelerations without measured target-device value |
 | Exact shared-path picking, including alpha-mask silhouette behavior | Transparent blended per-texel picking |

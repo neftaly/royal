@@ -6,6 +6,7 @@ import {
   type TextureColorSpace,
   type TextureSamplerFilter,
   type TextureSamplerWrap,
+  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
   decodedTextureKey,
@@ -33,6 +34,7 @@ export type CanonicalUnlitMaterial = Readonly<{
   alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
+  baseColorVirtualAsset?: VirtualTextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   doubleSided?: true;
@@ -44,6 +46,7 @@ export type CanonicalStandardMaterial = Readonly<{
   alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
+  baseColorVirtualAsset?: VirtualTextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   doubleSided?: true;
@@ -76,7 +79,7 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
   set: 0 | 1,
 ): boolean => {
   if (
-    material.baseColorAsset !== undefined
+    (material.baseColorAsset !== undefined || material.baseColorVirtualAsset !== undefined)
     && (material.baseColorTextureCoordinates?.row0[3] ?? 0) === set
   ) return true;
   if (material.kind === "unlit") return false;
@@ -97,7 +100,9 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
 
 const NEUTRAL_PERCEPTUAL_GREY: LinearRgba = [0.214_041, 0.214_041, 0.214_041, 1];
 
-const canonicalSampler = (asset: TextureSourceRef): CanonicalTextureSampler => ({
+export const canonicalTextureSampler = (
+  asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "sampler">,
+): CanonicalTextureSampler => ({
   magFilter: asset.sampler?.magFilter ?? defaultImageTextureSampler.magFilter ?? "linear",
   minFilter: asset.sampler?.minFilter
     ?? defaultImageTextureSampler.minFilter
@@ -111,7 +116,7 @@ const textureBinding = (
   decoded: DecodedTextureSource,
 ): CanonicalTextureBinding => {
   const colorSpace = asset.colorSpace ?? "srgb";
-  const sampler = canonicalSampler(asset);
+  const sampler = canonicalTextureSampler(asset);
   return {
     colorSpace,
     decoded,
@@ -173,9 +178,6 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
     throw new Error("Royal canonical surface slice does not yet support wireframe materials");
   }
   const source = material.baseColor;
-  if (source.kind === "virtual-asset") {
-    throw new Error("Royal canonical surface slice does not yet support virtual textures");
-  }
   if (source.kind === "solid" && source.color[3] !== 1) {
     throw new Error("Royal canonical surface slice does not yet support non-opaque materials");
   }
@@ -185,7 +187,8 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
   const common = {
     baseColor,
     ...(source.kind === "asset" ? { baseColorAsset: source } : {}),
-    requiresTextureCoordinates: source.kind === "asset",
+    ...(source.kind === "virtual-asset" ? { baseColorVirtualAsset: source } : {}),
+    requiresTextureCoordinates: source.kind !== "solid",
   };
   return material.kind === "unlit"
     ? { ...common, kind: "unlit" }

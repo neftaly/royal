@@ -20,7 +20,7 @@ boundaries, including non-power-of-two dimensions.
 ## Canonical prepared representation
 
 Source format is cold-path ingestion data. Every accepted source format—whether
-browser-decoded PNG/JPEG/WebP/AVIF, SVG, KTX2/Basis, a buffer view, a data URI,
+browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline ETC2 KTX2, a buffer view, a data URI,
 or a future decoder—MUST lower to one prepared texture upload contract containing
 semantic storage class, dimensions, mip slices, row/block layout, color/alpha
 interpretation, and reconstruction identity. This sentence does not add a
@@ -92,15 +92,16 @@ An authored manifest is JSON with `contractVersion: 2` and:
 - positive `virtualSize: [width, height]`, `pageSize`, and `borderTexels`;
 - optional `colorSpace` of `srgb` or `linear`;
 - optional positive `mipCount` no larger than the derived full chain;
-- optional `pageEncoding` of `image` (default) or `ktx2-basis`;
+- optional `pageEncoding` of `image` (default) or `ktx2-etc2`;
 - `pages.entries`, a URI template, or both;
 - optional positive `physicalSlots` and `physicalByteBudget` quality ceilings.
 
 An explicit entry wins over the template for the same page. Template tokens are
 `{page}`, `{mip}`, `{x}`, `{y}`, and `{key}`. Entries MUST be unique, in bounds,
 and well formed. A template denotes complete addressing; entries alone denote
-sparse addressing. For KTX2/Basis, stored page extent including both gutters
-MUST be block compatible.
+sparse addressing. For KTX2/ETC2, stored page extent including both gutters
+MUST be block compatible. Pages are offline-authored, unsupercompressed ETC2
+RGBA blocks; Royal does not ship a Basis WASM transcoder.
 
 Manifest ceilings do not preallocate memory and do not override stricter root
 budgets or hardware limits.
@@ -171,3 +172,8 @@ pages will ever become resident.
 root. Automatic VT falls back to ordinary rendering. An explicitly authored VT
 without a legal ordinary fallback reports the unsupported state and renders a
 neutral fallback rather than hanging.
+
+The React observation is `useVirtualTextureStatus(manifestUriOrRef)`. Its
+snapshot reports lifecycle state plus `residentPages`, `pendingPages`, and
+`failedPages`; observation is identity-focused and does not subscribe the
+component to every renderer frame.

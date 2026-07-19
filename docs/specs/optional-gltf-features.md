@@ -58,7 +58,7 @@ Priority classes:
 1. **Blocked compatibility:** common representative content cannot render
    correctly without it.
 2. **Measured delivery:** the same semantics become substantially cheaper
-   (KTX2/Basis, Meshopt, Draco compatibility).
+   (offline ETC2 KTX2, Meshopt, Draco compatibility).
 3. **Royal product feature:** deliberate visible/runtime capability with its own
    behavior spec (variants, advanced PBR, LOD).
 4. **Cheap ingestion:** format detail lowers completely but is not urgent.

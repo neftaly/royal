@@ -29,6 +29,11 @@ export type {
   TextureAssetStatus,
   TextureAssetStatusInput,
 } from "./observation/texture-asset";
+export { useVirtualTextureStatus } from "./observation/virtual-texture-asset";
+export type {
+  VirtualTextureStatus,
+  VirtualTextureStatusInput,
+} from "./observation/virtual-texture-asset";
 export {
   createOrbitCameraController,
   createOrbitControls,
@@ -60,4 +65,5 @@ export type {
   RendererRootOptions,
   RendererRootSnapshot,
   RoyalRendererRoot,
+  VirtualTextureAssetSnapshot,
 } from "@royal/renderer-webgl";

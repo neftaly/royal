@@ -18,6 +18,7 @@ import {
   useCanvasSize,
   useGltfAssetStatus,
   useTextureAssetStatus,
+  useVirtualTextureStatus,
   useOrbitCamera,
   useOrbitCameraView,
   useRendererLifecycle,
@@ -57,6 +58,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();
+    expectTypeOf(useVirtualTextureStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitControls).toBeFunction();
     expectTypeOf(GltfOrbitCameraFit).toBeFunction();
@@ -69,6 +71,20 @@ describe("replacement React public API", () => {
 
   it("server-renders exact glTF status as idle before root mount", () => {
     const Status = () => createElement("output", null, useGltfAssetStatus("/model.glb").state);
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle</output>");
+  });
+
+  it("server-renders authored VT status as idle before root mount", () => {
+    const Status = () => createElement(
+      "output",
+      null,
+      useVirtualTextureStatus("/map.vt.json").state,
+    );
     const html = renderToStaticMarkup(createElement(
       Canvas,
       { scene: emptyScene },

@@ -28,6 +28,7 @@ import {
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
   SURFACE_FEATURE_TANGENT,
+  SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SurfaceProgramOwner,
   type StandardProgram,
   type TextureCoordinatesProgram,
@@ -52,6 +53,10 @@ import {
   hystereticLodLevel,
   maximumProjectedBoundsScreenCoverage,
 } from "./lod-selection";
+import type {
+  VirtualTextureGpuBinding,
+  VirtualTextureRuntime,
+} from "../virtual-texture/runtime-contract";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -68,6 +73,7 @@ type GpuSurface = Readonly<{
   surface: CanonicalDrawSurface;
   textureUnits: number;
   vertexArray: WebGLVertexArrayObject;
+  virtualTexture?: VirtualTextureGpuBinding;
 }>;
 
 type MutableOpaqueDrawIntent = {
@@ -83,6 +89,8 @@ type MutableOpaqueDrawIntent = {
 
 const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
+const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
+const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, texture: null };
 
 const applyTextureCoordinates = (
   gl: WebGL2RenderingContext,
@@ -100,10 +108,12 @@ const materialTextureFeatures = (
   geometry: GpuGeometry,
   hasStudioEnvironment: boolean,
   hasPunctualLights: boolean,
+  hasVirtualBaseColor: boolean,
 ): number => {
   let features = surface.material.baseColorTexture === undefined
     ? 0
     : SURFACE_FEATURE_BASE_COLOR_TEXTURE;
+  if (hasVirtualBaseColor) features |= SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
   if (surface.material.kind !== "standard") return features;
   if (surface.material.metallicRoughnessTexture !== undefined) {
     features |= SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE;
@@ -126,7 +136,8 @@ const materialTextureFeatures = (
 
 const textureUnitMask = (features: number): number => (
   features & 0b1111
-) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0);
+) | (features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? 0b1_0000 : 0)
+  | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b10_0001 : 0);
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
   const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
@@ -210,6 +221,8 @@ export class SurfaceGpuOwner {
   readonly #textureGpu: TextureGpuOwner;
   readonly #texturePublicationKeys = new Set<string>();
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
+  #virtualTexture: VirtualTextureRuntime | null = null;
+  #virtualTextureBindingRevision = -1;
 
   constructor(gl: WebGL2RenderingContext) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl);
@@ -222,6 +235,7 @@ export class SurfaceGpuOwner {
     this.#geometryGpu.dispose();
     this.#textureGpu.dispose();
     this.#programs.dispose();
+    this.#virtualTexture?.dispose();
     this.#drawIntent = null;
     this.#admittedSurfaceCount = 0;
     this.#scene = null;
@@ -235,6 +249,7 @@ export class SurfaceGpuOwner {
     this.#gpuSurfaces = [];
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
+    this.#virtualTexture?.invalidate();
     this.#drawIntent = null;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
@@ -256,6 +271,17 @@ export class SurfaceGpuOwner {
     this.#scene = scene;
     this.#dirty = true;
     this.#texturePublicationKeys.clear();
+    this.#virtualTexture?.setScene(scene);
+  }
+
+  setVirtualTextureRuntime(runtime: VirtualTextureRuntime | null): void {
+    if (this.#virtualTexture === runtime) return;
+    this.#virtualTexture?.dispose();
+    this.#virtualTexture = runtime;
+    this.#virtualTextureBindingRevision = runtime?.bindingRevision ?? -1;
+    this.#programs.setVirtualTextureDeclarations(runtime?.shaderSource.declarations ?? "");
+    runtime?.setScene(this.#scene);
+    this.#dirty = true;
   }
 
   publishTextureScene(scene: CanonicalSurfaceScene, textureKey: string): void {
@@ -274,6 +300,16 @@ export class SurfaceGpuOwner {
     framebuffer: WebGLFramebuffer | null,
     state: WebGlStateOwner,
   ): boolean {
+    let virtualTexturePending = false;
+    if (this.#virtualTexture !== null) {
+      const update = this.#virtualTexture.update(views);
+      virtualTexturePending = update.pending;
+      if (update.webGlStateChanged) state.invalidateTextureBindings();
+      if (this.#virtualTextureBindingRevision !== this.#virtualTexture.bindingRevision) {
+        this.#virtualTextureBindingRevision = this.#virtualTexture.bindingRevision;
+        this.#dirty = true;
+      }
+    }
     if (this.#dirty) {
       const texturePublication = this.#texturePublicationKeys.size > 0;
       try {
@@ -288,7 +324,7 @@ export class SurfaceGpuOwner {
     if (scene === null || this.#gpuSurfaces.length === 0) return this.#dirty;
     this.#selectLods(views);
     for (const view of views) this.#drawView(view, framebuffer, state, scene);
-    return this.#dirty;
+    return this.#dirty || virtualTexturePending;
   }
 
   #drawView(
@@ -351,7 +387,13 @@ export class SurfaceGpuOwner {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
         if (materialChanged) {
-          gl.uniform4fv(program.color, surface.material.baseColor);
+          gl.uniform4fv(
+            program.color,
+            surface.material.baseColorVirtualAsset !== undefined
+              && resource.virtualTexture === undefined
+              ? NEUTRAL_PERCEPTUAL_GREY
+              : surface.material.baseColor,
+          );
           applyTextureCoordinates(
             gl,
             program.textureCoordinates,
@@ -360,6 +402,7 @@ export class SurfaceGpuOwner {
           if (program.alphaCutoff !== null) {
             gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
           }
+          this.#applyVirtualTexture(program, resource.virtualTexture);
         }
       } else {
         const material = surface.material;
@@ -402,7 +445,12 @@ export class SurfaceGpuOwner {
         gl.uniformMatrix4fv(program.model, false, surface.model);
         gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
         if (materialChanged) {
-          gl.uniform4fv(program.baseColor, material.baseColor);
+          gl.uniform4fv(
+            program.baseColor,
+            material.baseColorVirtualAsset !== undefined && resource.virtualTexture === undefined
+              ? NEUTRAL_PERCEPTUAL_GREY
+              : material.baseColor,
+          );
           applyTextureCoordinates(
             gl,
             program.textureCoordinates,
@@ -441,6 +489,7 @@ export class SurfaceGpuOwner {
           this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
           this.#materialFactors[3] = material.normalScale;
           gl.uniform4fv(program.materialFactors, this.#materialFactors);
+          this.#applyVirtualTexture(program, resource.virtualTexture);
         }
       }
       materialProgram = program.program;
@@ -541,11 +590,15 @@ export class SurfaceGpuOwner {
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
         const geometrySurface = geometryPlan.surfaces[index]!;
         const material = geometrySurface.surface.material;
+        const virtualTexture = material.baseColorVirtualAsset === undefined
+          ? undefined
+          : this.#virtualTexture?.binding(material.baseColorVirtualAsset);
         const features = materialTextureFeatures(
           geometrySurface.surface,
           geometrySurface.geometry,
           scene?.environment !== undefined,
           (scene?.punctualLights.length ?? 0) > 0,
+          virtualTexture !== undefined,
         );
         textureUnitMasks[index] = textureUnitMask(features);
         programs[index] = this.#programs.get(
@@ -581,7 +634,15 @@ export class SurfaceGpuOwner {
           textureBindings[offset + 2]!,
           textureBindings[offset + 3]!,
           textureBindings[offset + 4]!,
+          EMPTY_TEXTURE_BINDING,
         ];
+        const virtualTexture = geometrySurface.surface.material.baseColorVirtualAsset === undefined
+          ? undefined
+          : this.#virtualTexture?.binding(geometrySurface.surface.material.baseColorVirtualAsset);
+        if (virtualTexture !== undefined) {
+          bindings[0] = virtualTexture.atlas;
+          bindings[5] = virtualTexture.pageTable;
+        }
         nextSurfaces[index] = {
           bindings,
           geometry: geometrySurface.geometry,
@@ -591,6 +652,7 @@ export class SurfaceGpuOwner {
           surface: geometrySurface.surface,
           textureUnits: textureUnitMasks[index]!,
           vertexArray: geometrySurface.vertexArray,
+          ...(virtualTexture === undefined ? {} : { virtualTexture }),
         };
       }
       geometryPlan.commit();
@@ -668,6 +730,7 @@ export class SurfaceGpuOwner {
         previous.geometry,
         scene.environment !== undefined,
         scene.punctualLights.length > 0,
+        previous.virtualTexture !== undefined,
       );
       nextSurfaces[index] = {
         ...previous,
@@ -687,5 +750,22 @@ export class SurfaceGpuOwner {
     this.#texturePublicationKeys.clear();
     this.#dirty = false;
     this.#drawIntent = null;
+  }
+
+  #applyVirtualTexture(
+    program: StandardProgram | UnlitProgram,
+    binding: VirtualTextureGpuBinding | undefined,
+  ): void {
+    if (
+      binding === undefined
+      || program.virtualSettings0 === null
+      || program.virtualSettings1 === null
+      || program.virtualSettings2 === null
+      || program.virtualMipOffsets === null
+    ) return;
+    this.#gl.uniform4fv(program.virtualSettings0, binding.settings0);
+    this.#gl.uniform4fv(program.virtualSettings1, binding.settings1);
+    this.#gl.uniform4fv(program.virtualSettings2, binding.settings2);
+    this.#gl.uniform1fv(program.virtualMipOffsets, binding.mipOffsets);
   }
 }

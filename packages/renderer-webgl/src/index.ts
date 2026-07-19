@@ -9,4 +9,5 @@ export type { CanvasSizeInput, ResolvedCanvasSize } from "./frame/canvas-size";
 export type { ExternalFrameClock } from "./frame/frame-clock-owner";
 export type { GltfAssetSnapshot } from "./gltf/asset-owner";
 export type { TextureAssetSnapshot } from "./texture/asset-owner";
+export type { VirtualTextureAssetSnapshot } from "./virtual-texture/runtime-contract";
 export type { PickInput, PickResult } from "@royal/renderer-core";

@@ -11,7 +11,7 @@ Royal MUST make these paths first-class:
 
 - immutable scenes with perspective or orthographic cameras;
 - glTF 2.0 metallic-roughness rendering;
-- ordinary raster, KTX2/Basis, and self-contained SVG texture sources;
+- ordinary raster, offline ETC2 KTX2, and self-contained SVG texture sources;
 - explicit bulk instances and authored GPU instances;
 - authored and automatic virtual texturing where beneficial;
 - stable mesh, glTF occurrence, and instance picking;

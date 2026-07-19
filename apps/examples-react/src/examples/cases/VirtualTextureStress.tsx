@@ -3,6 +3,7 @@ import {
   OrbitControls,
   useOrbitCamera,
   useOrbitCameraView,
+  useVirtualTextureStatus,
 } from '@royal/react';
 import {
   imageTexture,
@@ -13,15 +14,14 @@ import {
   virtualTexture,
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
-import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
+const mapTexture = virtualTexture({
+  sampler: { magFilter: 'nearest', minFilter: 'nearest', wrapS: 'clamp-to-edge', wrapT: 'clamp-to-edge' },
+  manifestUri: `${fixtureRoot}map.vt.json`,
+});
 const mapMaterial = unlitMaterial({
-  texture: virtualTexture({
-    sampler: { magFilter: 'nearest', minFilter: 'nearest', wrapS: 'clamp-to-edge', wrapT: 'clamp-to-edge' },
-    manifestUri: `${fixtureRoot}map.vt.json`,
-  }),
+  texture: mapTexture,
 });
 const residencyMarkerGeometry = planeGeometry([0.24, 0.24]);
 const residencyMarkerSrc = 'data:image/png;base64,'
@@ -42,6 +42,15 @@ const views = {
 } as const;
 
 type ViewName = keyof typeof views;
+
+const VirtualTextureStatusLabel = (): ReactNode => {
+  const status = useVirtualTextureStatus(mapTexture);
+  return (
+    <output className="status" data-vt-state={status.state}>
+      {status.state} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
+    </output>
+  );
+};
 
 export const VirtualTextureStress = (): ReactNode => {
   const orbit = useOrbitCamera({ initial: views.Both, far: 80, near: 0.01 });
@@ -91,14 +100,13 @@ export const VirtualTextureStress = (): ReactNode => {
       <div className="vt-stress-canvas">
         <Canvas
           aria-label="Interactive giant virtual texture map"
-          rendererOptions={exampleCanvasRendererOptions}
           data-map-distance={orbitView.distance.toFixed(3)}
           data-map-target-x={orbitView.target[0].toFixed(3)}
           data-map-target-y={orbitView.target[1].toFixed(3)}
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >
-          <BenchmarkRendererSnapshot />
+          <VirtualTextureStatusLabel />
           <OrbitControls
             enablePan
             maxDistance={60}

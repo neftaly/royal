@@ -6,6 +6,7 @@ import {
   type PickResult,
   type RenderRoot,
   type TextureAssetRef,
+  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
@@ -40,6 +41,7 @@ import { CameraSourceOwner } from "../surface/camera-source-owner";
 import {
   prepareCanonicalSurfaceScene,
   refreshCanonicalSurfaceTexture,
+  type CanonicalSurfaceScene,
 } from "../surface/scene-lowering";
 import { SurfaceGpuOwner, type SurfaceFrameView } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
@@ -54,6 +56,11 @@ import {
   rendererRootOptionsSemanticKey,
   type CanvasRootOptions,
 } from "./root-options";
+import {
+  virtualTextureAssetKey,
+  type VirtualTextureAssetSnapshot,
+  type VirtualTextureRuntime,
+} from "../virtual-texture/runtime-contract";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -128,6 +135,19 @@ const lazyBrowserGltfPreparer = (): NonNullable<GltfAssetOwnerPlatform["prepare"
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
   return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
+};
+
+const IDLE_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
+  failedPages: 0,
+  pendingPages: 0,
+  residentPages: 0,
+  state: "idle",
+};
+const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
+  failedPages: 0,
+  pendingPages: 0,
+  residentPages: 0,
+  state: "loading",
 };
 
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
@@ -230,6 +250,11 @@ export class CanvasRoot {
   };
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: RenderRoot | null = null;
+  #virtualTextureActive = false;
+  #virtualTextureLoadGeneration = 0;
+  #virtualTextureRequested = false;
+  #virtualTextureRuntime: VirtualTextureRuntime | null = null;
+  readonly #virtualTextureListeners = new Map<string, Set<() => void>>();
 
   /** Canvas whose context and backing dimensions are owned by this root. */
   get canvas(): HTMLCanvasElement {
@@ -336,6 +361,7 @@ export class CanvasRoot {
     this.#unsubscribeContext();
     this.#listeners.clear();
     this.#sizeListeners.clear();
+    this.#virtualTextureListeners.clear();
   }
 
   flushInvalidated(): void {
@@ -371,6 +397,16 @@ export class CanvasRoot {
   /** Focused readiness for one exact decoded texture identity. */
   getTextureAssetSnapshot = (asset: TextureAssetRef): TextureAssetSnapshot =>
     this.#textureAssets.getSnapshot(asset);
+
+  /** Focused readiness and residency for one exact authored VT identity. */
+  getVirtualTextureAssetSnapshot = (asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot => {
+    if (this.#virtualTextureRuntime !== null) return this.#virtualTextureRuntime.snapshot(asset);
+    const key = virtualTextureAssetKey(asset);
+    const claimed = this.#surfaceScene?.virtualTextureAssets.some(
+      (candidate) => virtualTextureAssetKey(candidate) === key,
+    ) ?? false;
+    return claimed ? LOADING_VIRTUAL_TEXTURE : IDLE_VIRTUAL_TEXTURE;
+  };
 
   invalidate(): void {
     this.#assertLive("invalidate");
@@ -420,6 +456,7 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#surfaceGpu.setScene(prepared);
+    this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
@@ -491,6 +528,28 @@ export class CanvasRoot {
   /** Subscribes only to one exact decoded texture identity. */
   subscribeTextureAsset = (asset: TextureAssetRef, listener: () => void): (() => void) =>
     this.#textureAssets.subscribe(asset, listener);
+
+  /** Subscribes only to one exact authored VT identity. */
+  subscribeVirtualTextureAsset = (
+    asset: VirtualTextureAssetRef,
+    listener: () => void,
+  ): (() => void) => {
+    if (this.#disposed) return () => undefined;
+    const key = virtualTextureAssetKey(asset);
+    let listeners = this.#virtualTextureListeners.get(key);
+    if (listeners === undefined) {
+      listeners = new Set();
+      this.#virtualTextureListeners.set(key, listeners);
+    }
+    listeners.add(listener);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      listeners!.delete(listener);
+      if (listeners!.size === 0) this.#virtualTextureListeners.delete(key);
+    };
+  };
 
   #assertLive(operation: string): void {
     if (this.#disposed) throw new Error(`Cannot ${operation} on a disposed Royal renderer root`);
@@ -600,6 +659,7 @@ export class CanvasRoot {
     );
     this.#surfaceScene = prepared;
     this.#surfaceGpu.setScene(prepared);
+    this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets);
     this.#clock.invalidate();
@@ -616,6 +676,64 @@ export class CanvasRoot {
     this.#surfaceScene = prepared;
     this.#surfaceGpu.publishTextureScene(prepared, key);
     this.#clock.invalidate();
+  }
+
+  #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
+    const required = scene.virtualTextureAssets.length > 0;
+    if (!required) {
+      this.#virtualTextureLoadGeneration += 1;
+      this.#virtualTextureRequested = false;
+      if (this.#virtualTextureActive) {
+        this.#surfaceGpu.setVirtualTextureRuntime(null);
+        this.#virtualTextureActive = false;
+        this.#virtualTextureRuntime = null;
+      }
+      return;
+    }
+    if (this.#virtualTextureActive || this.#virtualTextureRequested) return;
+    this.#virtualTextureRequested = true;
+    const generation = ++this.#virtualTextureLoadGeneration;
+    void import("../virtual-texture/runtime").then((module) => {
+      if (
+        this.#disposed
+        || generation !== this.#virtualTextureLoadGeneration
+        || (this.#surfaceScene?.virtualTextureAssets.length ?? 0) === 0
+      ) return;
+      const runtime = module.createBrowserVirtualTextureRuntime(
+        this.#gl,
+        (asset) => {
+          if (this.#disposed) return;
+          this.#publishVirtualTexture(asset);
+          this.#clock.invalidate();
+        },
+      );
+      this.#virtualTextureRuntime = runtime;
+      this.#surfaceGpu.setVirtualTextureRuntime(runtime);
+      this.#virtualTextureActive = true;
+      this.#virtualTextureRequested = false;
+      this.#clock.invalidate();
+    }).catch((error: unknown) => {
+      if (this.#disposed || generation !== this.#virtualTextureLoadGeneration) return;
+      this.#virtualTextureRequested = false;
+      this.#captureScheduledFailure(error);
+    });
+  }
+
+  #publishVirtualTexture(asset: VirtualTextureAssetRef): void {
+    const listeners = this.#virtualTextureListeners.get(virtualTextureAssetKey(asset));
+    if (listeners === undefined) return;
+    for (const listener of listeners) {
+      if (!listeners.has(listener)) continue;
+      try {
+        listener();
+      } catch (error) {
+        try {
+          this.#platform.onListenerError(error);
+        } catch {
+          // A failing diagnostic sink must not interrupt later listeners.
+        }
+      }
+    }
   }
 
   #renderFrame(): void {

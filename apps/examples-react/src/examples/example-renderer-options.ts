@@ -1,8 +1,7 @@
-import { type RendererOptions } from '@royal/react';
+import { type RendererRootOptions } from '@royal/react';
 
 const defaultExampleCanvasRendererOptions = {
   alpha: true,
-  automaticVirtualTextures: true,
-} as const satisfies RendererOptions;
+} as const satisfies RendererRootOptions;
 
 export const exampleCanvasRendererOptions = defaultExampleCanvasRendererOptions;

@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+__VIRTUAL_TEXTURE_DECLARATIONS__
 #define MAX_DIRECTIONAL_LIGHTS __MAX_DIRECTIONAL_LIGHTS__
 #define MAX_PUNCTUAL_LIGHTS __MAX_PUNCTUAL_LIGHTS__
 in vec3 worldNormal;
@@ -7,6 +8,8 @@ in vec3 worldPosition;
 #ifdef BASE_COLOR_TEXTURED
 in vec2 surfaceBaseColorTextureCoordinate;
 uniform sampler2D baseColorTexture;
+#elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
+in vec2 surfaceBaseColorTextureCoordinate;
 #endif
 #ifdef METALLIC_ROUGHNESS_TEXTURED
 in vec2 surfaceMetallicRoughnessTextureCoordinate;
@@ -118,6 +121,8 @@ void main() {
   vec4 surfaceBaseColor = baseColor;
 #ifdef BASE_COLOR_TEXTURED
   surfaceBaseColor *= texture(baseColorTexture, surfaceBaseColorTextureCoordinate);
+#elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
+  surfaceBaseColor *= sampleVirtualBaseColor(surfaceBaseColorTextureCoordinate);
 #endif
 #ifdef ALPHA_MASK
   if (surfaceBaseColor.a < materialFactors.z) discard;

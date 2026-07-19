@@ -5,6 +5,7 @@ import type {
   LinearRgba,
   MeshNode,
   RenderRoot,
+  VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
   affineSurfaceNormalTransformInto,
@@ -80,6 +81,7 @@ export type CanonicalSurfaceScene = Readonly<{
   punctualLights: readonly CanonicalPunctualLight[];
   surfaces: readonly CanonicalDrawSurface[];
   textureAssets: readonly TextureSourceRef[];
+  virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
 }>;
 
@@ -185,6 +187,7 @@ export const prepareCanonicalSurfaceScene = (
   const pickSurfaces: CanonicalPickSurface[] = [];
   const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
+  const virtualTextureAssets: VirtualTextureAssetRef[] = [];
   const textureAssets: TextureSourceRef[] = [];
   const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
   let materialLodGroupIndex = 0;
@@ -455,6 +458,9 @@ export const prepareCanonicalSurfaceScene = (
     const materialSource = prepareCanonicalMaterialSource(node.material);
     const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
     if (node.material.baseColor.kind === "asset") textureAssets.push(node.material.baseColor);
+    if (node.material.baseColor.kind === "virtual-asset") {
+      virtualTextureAssets.push(node.material.baseColor);
+    }
     const geometry = prepareCanonicalGeometry(
       node.geometry,
       material.requiresTextureCoordinates,
@@ -488,6 +494,7 @@ export const prepareCanonicalSurfaceScene = (
     punctualLights,
     surfaces,
     textureAssets,
+    virtualTextureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
   };
 };

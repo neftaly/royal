@@ -117,5 +117,7 @@ if (globalThis.location.pathname.endsWith("/gltf-bistro-web")) {
   Example = (await import("./examples/cases/GltfBistroWeb")).GltfBistroWeb;
 } else if (globalThis.location.pathname.endsWith("/webxr-vr")) {
   Example = (await import("./examples/cases/WebXrVr")).WebXrVr;
+} else if (globalThis.location.pathname.endsWith("/virtual-texture-stress")) {
+  Example = (await import("./examples/cases/VirtualTextureStress")).VirtualTextureStress;
 }
 createRoot(rootElement).render(<StrictMode><Example /></StrictMode>);

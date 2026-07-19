@@ -1,11 +1,14 @@
 #version 300 es
 precision highp float;
+__VIRTUAL_TEXTURE_DECLARATIONS__
 uniform vec4 linearColor;
 #ifdef ALPHA_MASK
 uniform float alphaCutoff;
 #endif
-#ifdef TEXTURED
+#if defined(BASE_COLOR_TEXTURED) || defined(VIRTUAL_BASE_COLOR_TEXTURED)
 in vec2 surfaceBaseColorTextureCoordinate;
+#endif
+#ifdef BASE_COLOR_TEXTURED
 uniform sampler2D baseColorTexture;
 #endif
 out vec4 outputColor;
@@ -17,8 +20,10 @@ vec3 linearToSrgb(vec3 value) {
 }
 void main() {
   vec4 color = linearColor;
-#ifdef TEXTURED
+#ifdef BASE_COLOR_TEXTURED
   color *= texture(baseColorTexture, surfaceBaseColorTextureCoordinate);
+#elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
+  color *= sampleVirtualBaseColor(surfaceBaseColorTextureCoordinate);
 #endif
 #ifdef ALPHA_MASK
   if (color.a < alphaCutoff) discard;

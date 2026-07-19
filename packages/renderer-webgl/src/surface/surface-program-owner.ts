@@ -20,7 +20,13 @@ export const SURFACE_FEATURE_TANGENT = 16;
 export const SURFACE_FEATURE_OCCLUSION_TEXTURE = 32;
 export const SURFACE_FEATURE_STUDIO_ENVIRONMENT = 64;
 export const SURFACE_FEATURE_PUNCTUAL_LIGHTS = 128;
-export const SURFACE_TEXTURE_FEATURES = 0b11_1111;
+export const SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE = 256;
+export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
+  | SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
+  | SURFACE_FEATURE_NORMAL_TEXTURE
+  | SURFACE_FEATURE_EMISSIVE_TEXTURE
+  | SURFACE_FEATURE_OCCLUSION_TEXTURE
+  | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
 
 export type UnlitProgram = Readonly<{
   alphaCutoff: WebGLUniformLocation | null;
@@ -29,6 +35,11 @@ export type UnlitProgram = Readonly<{
   program: WebGLProgram;
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
+  virtualPageTable: WebGLUniformLocation | null;
+  virtualMipOffsets: WebGLUniformLocation | null;
+  virtualSettings0: WebGLUniformLocation | null;
+  virtualSettings1: WebGLUniformLocation | null;
+  virtualSettings2: WebGLUniformLocation | null;
   viewProjectionModel: WebGLUniformLocation;
 }>;
 
@@ -59,6 +70,11 @@ export type StandardProgram = Readonly<{
   presentation: WebGLUniformLocation;
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
+  virtualPageTable: WebGLUniformLocation | null;
+  virtualMipOffsets: WebGLUniformLocation | null;
+  virtualSettings0: WebGLUniformLocation | null;
+  virtualSettings1: WebGLUniformLocation | null;
+  virtualSettings2: WebGLUniformLocation | null;
   punctualLightColors: WebGLUniformLocation | null;
   punctualLightCount: WebGLUniformLocation | null;
   punctualLightDirections: WebGLUniformLocation | null;
@@ -137,9 +153,13 @@ const shaderVariant = (
   instanced: boolean,
   alphaMasked: boolean,
   doubleSided: boolean,
+  virtualDeclarations: string,
 ): string => source.replace(
+  "__VIRTUAL_TEXTURE_DECLARATIONS__",
+  features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
+).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -170,21 +190,34 @@ const createUnlitProgram = (
   instanced: boolean,
   alphaMasked: boolean,
   doubleSided: boolean,
+  virtualDeclarations: string,
 ): UnlitProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided),
-    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided),
+    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, ""),
+    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations),
   );
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
     color: uniform(gl, program, "linearColor"),
     kind: "unlit",
     program,
-    texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
-    textureCoordinates: features & 1
+    texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
+      ? uniform(gl, program, "baseColorTexture")
+      : null,
+    textureCoordinates: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
+    virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualPageTable") : null,
+    virtualMipOffsets: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualMipOffsets[0]") : null,
+    virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings0") : null,
+    virtualSettings1: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings1") : null,
+    virtualSettings2: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings2") : null,
     viewProjectionModel: uniform(gl, program, "viewProjectionModel"),
   };
 };
@@ -195,11 +228,12 @@ const createStandardProgram = (
   instanced: boolean,
   alphaMasked: boolean,
   doubleSided: boolean,
+  virtualDeclarations: string,
 ): StandardProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided),
-    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided),
+    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, ""),
+    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations),
   );
   return {
     alphaMasked,
@@ -263,10 +297,22 @@ const createStandardProgram = (
     punctualLightSpotCones: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
       ? uniform(gl, program, "punctualLightSpotCones")
       : null,
-    texture: features & 1 ? uniform(gl, program, "baseColorTexture") : null,
-    textureCoordinates: features & 1
+    texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
+      ? uniform(gl, program, "baseColorTexture")
+      : null,
+    textureCoordinates: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
+    virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualPageTable") : null,
+    virtualMipOffsets: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualMipOffsets[0]") : null,
+    virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings0") : null,
+    virtualSettings1: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings1") : null,
+    virtualSettings2: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualSettings2") : null,
     viewProjection: uniform(gl, program, "viewProjection"),
   };
 };
@@ -275,6 +321,7 @@ export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   #initializedSamplers = new WeakSet<WebGLProgram>();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
+  #virtualDeclarations = "";
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
@@ -305,8 +352,8 @@ export class SurfaceProgramOwner {
     const retained = this.#programs.get(key);
     if (retained !== undefined) return retained;
     const created = kind === "unlit"
-      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false)
-      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided);
+      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false, this.#virtualDeclarations)
+      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided, this.#virtualDeclarations);
     this.#programs.set(key, created);
     return created;
   }
@@ -320,11 +367,20 @@ export class SurfaceProgramOwner {
       if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 3);
       if (program.occlusion !== null) this.#gl.uniform1i(program.occlusion, 4);
     }
+    if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 5);
     this.#initializedSamplers.add(program.program);
   }
 
   invalidate(): void {
     this.#programs.clear();
     this.#initializedSamplers = new WeakSet<WebGLProgram>();
+  }
+
+  setVirtualTextureDeclarations(declarations: string): void {
+    if (this.#virtualDeclarations === declarations) return;
+    for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
+    this.#programs.clear();
+    this.#initializedSamplers = new WeakSet<WebGLProgram>();
+    this.#virtualDeclarations = declarations;
   }
 }

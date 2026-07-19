@@ -49,6 +49,12 @@
     "src/surface/surface-picker.ts",
     "src/texture/asset-owner.ts",
     "src/texture/gpu-owner.ts",
+    "src/virtual-texture/manifest.ts",
+    "src/virtual-texture/ktx2-etc2.ts",
+    "src/virtual-texture/demand.ts",
+    "src/virtual-texture/residency.ts",
+    "src/virtual-texture/runtime-contract.ts",
+    "src/virtual-texture/runtime.ts",
     "src/webgl/clear-state-transition.ts",
     "src/webgl/draw-state-transition.ts",
     "src/webgl/state-owner.ts"

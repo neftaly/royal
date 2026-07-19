@@ -13,6 +13,7 @@ import {
   spotLight,
   studioEnvironment,
   unlitMaterial,
+  virtualTexture,
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
@@ -64,6 +65,27 @@ describe("canonical direct surface lowering", () => {
     );
     expect(ready.surfaces[0]!.geometry.key).toBe(pending.surfaces[0]!.geometry.key);
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(source);
+  });
+
+  it("retains authored virtual textures as an optional canonical binding", () => {
+    const texture = virtualTexture({
+      manifestUri: "/map.vt.json",
+      sampler: { wrapS: "repeat", wrapT: "mirrored-repeat" },
+    });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: planeGeometry(2),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+    expect(prepared.textureAssets).toEqual([]);
+    expect(prepared.virtualTextureAssets).toEqual([texture]);
+    expect(prepared.surfaces[0]!.material).toMatchObject({
+      baseColorVirtualAsset: texture,
+      requiresTextureCoordinates: true,
+    });
+    expect(prepared.surfaces[0]!.geometry.textureCoordinates0).toBeInstanceOf(Float32Array);
   });
 
   it("publishes one decoded texture without rebuilding unrelated scene structure", () => {
