@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createGltfInstanceTransforms } from "@royal/renderer-core";
 import {
+  prepareGltfInstanceBatches,
   prepareStaticInstanceBatches,
 } from "../../packages/renderer-webgl/src/gltf/instance-transforms";
 import { translationMat4 } from "../../packages/renderer-webgl/src/math/mat4";
@@ -48,5 +50,21 @@ describe("static glTF instance transform core", () => {
       count: 1,
       rotations: new Float32Array([0, 0, 0, 0]),
     })).toThrow("rotation must be a finite non-zero quaternion");
+  });
+
+  it("composes public Euler streams with asset-local models and stable source indices", () => {
+    const source = createGltfInstanceTransforms({
+      count: 2,
+      positions: [1, 2, 3, -4, -5, -6],
+      rotations: [0, 0, 0, 0, 0, Math.PI / 2],
+      scales: [1, 1, 1, -1, 1, 1],
+    });
+    const batches = prepareGltfInstanceBatches(source, translationMat4([10, 0, 0]), 1);
+
+    expect(batches.map((batch) => [batch.handedness, batch.sourceIndices[0]]))
+      .toEqual([[1, 0], [-1, 1]]);
+    expect(batches[0]!.localModels.slice(12, 15)).toEqual(new Float32Array([11, 2, 3]));
+    expect(batches[1]!.localModels[12]).toBeCloseTo(-4);
+    expect(batches[1]!.localModels.slice(13, 15)).toEqual(new Float32Array([-15, -6]));
   });
 });

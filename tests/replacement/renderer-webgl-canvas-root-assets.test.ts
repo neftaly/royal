@@ -1,6 +1,8 @@
 import {
+  createGltfInstanceTransforms,
   directionalLight,
   gltf,
+  gltfInstances,
   perspectiveCamera,
   planeGeometry,
   scene,
@@ -103,6 +105,61 @@ describe("canvas root asset publication", () => {
       2,
     );
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+  });
+
+  it("renders, picks, and republishes explicit instances through one canonical batch", async () => {
+    const document = staticTriangleDocument();
+    document.nodes = [{ mesh: 0 }];
+    document.scenes = [{ nodes: [0] }];
+    const transforms = createGltfInstanceTransforms({
+      count: 2,
+      logicalIds: ["left", "right"],
+      positions: [-1, 0, 0, 1, 0, 0],
+    });
+    const node = gltfInstances({
+      instances: transforms,
+      pickingGeometry: planeGeometry(0.8),
+      pickingId: "fleet",
+      src: "/explicit-instances.glb",
+      version: "v1",
+    });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+
+    expect(root.pick({ clientX: 92, clientY: 100 })?.target).toMatchObject({
+      instanceId: "left",
+      instanceIndex: 0,
+      kind: "gltf-instances",
+      pickingId: "fleet",
+    });
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenLastCalledWith(
+      canvas.gl.TRIANGLES,
+      3,
+      canvas.gl.UNSIGNED_BYTE,
+      0,
+      2,
+    );
+
+    const allocations = canvas.gl.bufferData.mock.calls.length;
+    const patches = canvas.gl.bufferSubData.mock.calls.length;
+    transforms.positions[0] = -0.5;
+    transforms.commitPosition(0, 1);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData.mock.calls.length).toBe(allocations);
+    expect(canvas.gl.bufferSubData.mock.calls.length).toBeGreaterThan(patches);
+
+    transforms.scales[0] = -1;
+    transforms.commitScale(0, 1);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData.mock.calls.length).toBeGreaterThan(allocations);
   });
 
   it("submits exactly one retained node LOD level", async () => {

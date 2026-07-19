@@ -1,9 +1,11 @@
 import {
+  composeEulerMat4Into,
   identityMat4,
   multiplyMat4Into,
   type Mat4,
   type MutableMat4,
 } from "../math/mat4";
+import type { GltfInstanceTransforms } from "@royal/renderer-core";
 
 export type StaticInstanceStreams = Readonly<{
   count: number;
@@ -15,6 +17,10 @@ export type StaticInstanceStreams = Readonly<{
 export type StaticInstanceBatch = Readonly<{
   handedness: 1 | -1;
   localModels: Float32Array;
+}>;
+
+export type IndexedStaticInstanceBatch = StaticInstanceBatch & Readonly<{
+  sourceIndices: Uint32Array;
 }>;
 
 const composeInstanceMatrixInto = (
@@ -179,4 +185,79 @@ export const prepareStaticInstanceBatches = (
     copyMatrix(all, instance * 16, localModel);
   }
   return splitStaticInstanceMatrices(all, negativeCount);
+};
+
+/** Lowers public mutable Euler-TRS streams and asset-local models to one instance ABI. */
+export const prepareGltfInstanceBatches = (
+  source: GltfInstanceTransforms,
+  innerModels: ArrayLike<number>,
+  innerCount: number,
+): readonly IndexedStaticInstanceBatch[] => {
+  if (!Number.isSafeInteger(innerCount) || innerCount < 1 || innerModels.length !== innerCount * 16) {
+    throw new Error("explicit glTF instance inner matrix storage is invalid");
+  }
+  const total = source.count * innerCount;
+  if (!Number.isSafeInteger(total) || total < 1 || total > 0xffff_ffff) {
+    throw new Error("explicit glTF instance expansion exceeds the safe count range");
+  }
+  const all = new Float32Array(total * 16);
+  const sourceIndices = new Uint32Array(total);
+  const instanceModel = identityMat4();
+  const innerModel = identityMat4();
+  const composed = identityMat4();
+  let negativeCount = 0;
+  let outputIndex = 0;
+  for (let instance = 0; instance < source.count; instance += 1) {
+    const offset = instance * 3;
+    const rotationX = source.rotations[offset]!;
+    const rotationY = source.rotations[offset + 1]!;
+    const rotationZ = source.rotations[offset + 2]!;
+    composeEulerMat4Into(
+      instanceModel,
+      source.positions,
+      source.scales,
+      offset,
+      Math.cos(rotationX),
+      Math.sin(rotationX),
+      Math.cos(rotationY),
+      Math.sin(rotationY),
+      Math.cos(rotationZ),
+      Math.sin(rotationZ),
+    );
+    for (let inner = 0; inner < innerCount; inner += 1) {
+      const innerOffset = inner * 16;
+      for (let component = 0; component < 16; component += 1) {
+        innerModel[component] = innerModels[innerOffset + component]!;
+      }
+      multiplyMat4Into(composed, instanceModel, innerModel);
+      copyMatrix(all, outputIndex * 16, composed);
+      sourceIndices[outputIndex] = instance;
+      if (matrixHandedness(composed, 0) < 0) negativeCount += 1;
+      outputIndex += 1;
+    }
+  }
+  if (negativeCount === 0) return [{ handedness: 1, localModels: all, sourceIndices }];
+  if (negativeCount === total) return [{ handedness: -1, localModels: all, sourceIndices }];
+  const positiveCount = total - negativeCount;
+  const positiveModels = new Float32Array(positiveCount * 16);
+  const positiveIndices = new Uint32Array(positiveCount);
+  const negativeModels = new Float32Array(negativeCount * 16);
+  const negativeIndices = new Uint32Array(negativeCount);
+  let positive = 0;
+  let negative = 0;
+  for (let item = 0; item < total; item += 1) {
+    if (matrixHandedness(all, item * 16) < 0) {
+      copyFlatMatrix(negativeModels, negative * 16, all, item * 16);
+      negativeIndices[negative] = sourceIndices[item]!;
+      negative += 1;
+    } else {
+      copyFlatMatrix(positiveModels, positive * 16, all, item * 16);
+      positiveIndices[positive] = sourceIndices[item]!;
+      positive += 1;
+    }
+  }
+  return [
+    { handedness: 1, localModels: positiveModels, sourceIndices: positiveIndices },
+    { handedness: -1, localModels: negativeModels, sourceIndices: negativeIndices },
+  ];
 };

@@ -1,4 +1,9 @@
-import type { GltfAssetBounds, GltfAssetRef, GltfNode } from "@royal/renderer-core";
+import type {
+  GltfAssetBounds,
+  GltfAssetRef,
+  GltfInstancesNode,
+  GltfNode,
+} from "@royal/renderer-core";
 import type { PreparedStaticGltf } from "./static-asset";
 
 export type GltfAssetSnapshot =
@@ -10,6 +15,8 @@ export type GltfAssetSnapshot =
     state: "ready";
   }>
   | Readonly<{ error: string; state: "error" }>;
+
+export type GltfAssetNode = GltfNode | GltfInstancesNode;
 
 export type GltfAssetOwnerPlatform = Readonly<{
   onAssetChanged(): void;
@@ -118,7 +125,7 @@ export class GltfAssetOwner {
     return this.#entries.get(gltfAssetKey(asset))?.prepared;
   }
 
-  reconcile(nodes: readonly GltfNode[]): void {
+  reconcile(nodes: readonly GltfAssetNode[]): void {
     if (this.#disposed) return;
     const claimed = new Set<string>();
     for (const node of nodes) {

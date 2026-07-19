@@ -72,6 +72,33 @@ export class SurfacePicker {
     )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
+    let target: PickResult["target"];
+    if (surface.node.kind === "mesh") {
+      target = {
+        kind: "mesh",
+        node: surface.node,
+        ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
+      };
+    } else if (surface.node.kind === "gltf-instances") {
+      const instanceIndex = surface.instanceIndex;
+      if (instanceIndex === undefined) {
+        throw new Error("Royal explicit-instance pick is missing its stable source index");
+      }
+      const instanceId = surface.node.instances.logicalIds?.[instanceIndex];
+      target = {
+        instanceIndex,
+        kind: "gltf-instances",
+        node: surface.node,
+        ...(instanceId === undefined ? {} : { instanceId }),
+        ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
+      };
+    } else {
+      target = {
+        kind: "gltf",
+        node: surface.node,
+        ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
+      };
+    }
     return {
       clientX: input.clientX,
       clientY: input.clientY,
@@ -81,17 +108,7 @@ export class SurfacePicker {
         ray.origin[1] + ray.direction[1] * distance,
         ray.origin[2] + ray.direction[2] * distance,
       ],
-      target: surface.node.kind === "mesh"
-        ? {
-          kind: "mesh",
-          node: surface.node,
-          ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
-        }
-        : {
-          kind: "gltf",
-          node: surface.node,
-          ...(surface.node.pickingId === undefined ? {} : { pickingId: surface.node.pickingId }),
-        },
+      target,
     };
   }
 

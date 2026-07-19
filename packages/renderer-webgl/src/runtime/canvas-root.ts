@@ -1,5 +1,6 @@
 import {
   validatePickInput,
+  type GltfInstanceTransforms,
   type GltfAssetRef,
   type PickInput,
   type PickResult,
@@ -180,6 +181,7 @@ export class CanvasRoot {
   readonly #gltfAssets: GltfAssetOwner;
   #lastFrameFailure: string | undefined;
   readonly #listeners = new Set<() => void>();
+  readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
   readonly #platform: CanvasRootPlatform;
@@ -271,6 +273,8 @@ export class CanvasRoot {
     this.#gltfAssets.dispose();
     this.#textureAssets.dispose();
     this.#surfaceGpu.dispose();
+    for (const unsubscribe of this.#instanceSubscriptions.values()) unsubscribe();
+    this.#instanceSubscriptions.clear();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
     this.#listeners.clear();
@@ -361,6 +365,7 @@ export class CanvasRoot {
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(prepared.gltfNodes);
+    this.#reconcileInstanceSources(scene);
     this.#textureAssets.reconcile(prepared.textureAssets);
     this.#clock.invalidate();
   }
@@ -501,6 +506,30 @@ export class CanvasRoot {
     const intent = this.#createFrameIntent(size, this.#clearColor);
     validateClearFrameIntent(intent);
     this.#frameIntent = intent;
+  }
+
+  #reconcileInstanceSources(scene: RenderRoot): void {
+    const claimed = new Set<GltfInstanceTransforms>();
+    for (const node of scene.nodes) {
+      if (node.kind !== "gltf-instances") continue;
+      const source = node.instances;
+      claimed.add(source);
+      if (this.#instanceSubscriptions.has(source)) continue;
+      const unsubscribe = source.subscribe(() => {
+        if (this.#disposed) return;
+        try {
+          this.#refreshPreparedScene();
+        } catch (error) {
+          this.#captureScheduledFailure(error);
+        }
+      });
+      this.#instanceSubscriptions.set(source, unsubscribe);
+    }
+    for (const [source, unsubscribe] of this.#instanceSubscriptions) {
+      if (claimed.has(source)) continue;
+      unsubscribe();
+      this.#instanceSubscriptions.delete(source);
+    }
   }
 
   #refreshPreparedScene(): void {

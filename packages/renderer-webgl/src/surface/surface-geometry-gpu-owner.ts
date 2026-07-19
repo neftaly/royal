@@ -43,11 +43,12 @@ export type GpuGeometrySurface = Readonly<{
   vertexArray: WebGLVertexArrayObject;
 }>;
 
-type GpuInstanceData = Readonly<{
+type GpuInstanceData = {
   buffer: WebGLBuffer;
   count: number;
   key: string;
-}>;
+  revision?: string;
+};
 
 type GpuInstanceVertexArray = Readonly<{
   key: string;
@@ -297,7 +298,7 @@ export class SurfaceGeometryGpuOwner {
     }
   }
 
-  #createInstanceData(surface: CanonicalDrawSurface): GpuInstanceData {
+  #prepareInstanceValues(surface: CanonicalDrawSurface): Float32Array {
     const instances = surface.instances;
     if (
       instances === undefined
@@ -329,12 +330,23 @@ export class SurfaceGeometryGpuOwner {
         values[normalTarget + 3] = column === 2 ? normal[15] : 0;
       }
     }
+    return values;
+  }
+
+  #createInstanceData(surface: CanonicalDrawSurface): GpuInstanceData {
+    const instances = surface.instances!;
+    const values = this.#prepareInstanceValues(surface);
     const buffer = this.#gl.createBuffer();
     if (buffer === null) throw new Error("Royal could not allocate instance transforms");
     try {
       this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, buffer);
       this.#gl.bufferData(this.#gl.ARRAY_BUFFER, values, this.#gl.STATIC_DRAW);
-      return { buffer, count: instances.count, key: instances.key };
+      return {
+        buffer,
+        count: instances.count,
+        key: instances.key,
+        ...(instances.revision === undefined ? {} : { revision: instances.revision }),
+      };
     } catch (error) {
       this.#gl.deleteBuffer(buffer);
       throw error;
@@ -437,6 +449,10 @@ export class SurfaceGeometryGpuOwner {
     const createdArenas: GpuGeometryArena[] = [];
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
+    const pendingInstanceUpdates = new Map<GpuInstanceData, Readonly<{
+      revision: string;
+      values: Float32Array;
+    }>>();
     try {
       const pendingByLayout = new Map<number, PendingGeometry[]>();
       const pendingKeys = new Set<string>();
@@ -480,6 +496,18 @@ export class SurfaceGeometryGpuOwner {
           if (instanceData === undefined) {
             instanceData = this.#createInstanceData(surface);
             createdInstances.push(instanceData);
+          } else if (
+            instances.revision !== undefined
+            && instances.revision !== instanceData.revision
+            && !pendingInstanceUpdates.has(instanceData)
+          ) {
+            if (instances.count !== instanceData.count) {
+              throw new Error("Royal retained instance count changed without a new resource key");
+            }
+            pendingInstanceUpdates.set(instanceData, {
+              revision: instances.revision,
+              values: this.#prepareInstanceValues(surface),
+            });
           }
           if (!nextInstancesByKey.has(instances.key)) {
             nextInstancesByKey.set(instances.key, instanceData);
@@ -522,6 +550,11 @@ export class SurfaceGeometryGpuOwner {
       commit: () => {
         if (settled) return;
         settled = true;
+        for (const [resource, update] of pendingInstanceUpdates) {
+          this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, resource.buffer);
+          this.#gl.bufferSubData(this.#gl.ARRAY_BUFFER, 0, update.values);
+          resource.revision = update.revision;
+        }
         for (const resource of this.#instanceVertexArrays) {
           if (nextInstanceVaosByKey.get(resource.key) !== resource) {
             this.#gl.deleteVertexArray(resource.vertexArray);

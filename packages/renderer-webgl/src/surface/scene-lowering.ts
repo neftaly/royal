@@ -1,5 +1,6 @@
 import type {
   Direction3,
+  GltfInstancesNode,
   GltfNode,
   LinearRgba,
   MeshNode,
@@ -16,6 +17,7 @@ import {
   type Mat4,
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
+import { prepareGltfInstanceBatches } from "../gltf/instance-transforms";
 import {
   appendCanonicalMaterialTextureAssets,
   canonicalMaterialTextureKeys,
@@ -45,23 +47,26 @@ export type CanonicalDrawSurface = Readonly<{
     count: number;
     key: string;
     localModels: Float32Array;
+    revision?: string;
+    sourceIndices?: Uint32Array;
   }>;
   lods?: readonly LodMembership[];
   material: CanonicalSurfaceMaterial;
   materialSource: CanonicalSurfaceMaterial;
   model: Mat4;
   modelHandedness: 1 | -1;
-  node: MeshNode | GltfNode;
+  node: MeshNode | GltfNode | GltfInstancesNode;
   normalTransform: Mat4;
   textureKeys: readonly string[];
   worldBounds: WorldBounds;
 }>;
 
 export type CanonicalPickSurface = Readonly<{
+  instanceIndex?: number;
   inverseModel: Mat4 | undefined;
   lods?: readonly LodMembership[];
   modelHandedness: 1 | -1;
-  node: MeshNode | GltfNode;
+  node: MeshNode | GltfNode | GltfInstancesNode;
   pickingGeometry: CanonicalTriangleGeometry;
 }>;
 
@@ -70,7 +75,7 @@ export type CanonicalSurfaceScene = Readonly<{
   directionalLights: readonly CanonicalDirectionalLight[];
   environment?: CanonicalStudioEnvironment;
   exposure: number;
-  gltfNodes: readonly GltfNode[];
+  gltfNodes: readonly (GltfNode | GltfInstancesNode)[];
   pickSurfaces: readonly CanonicalPickSurface[];
   punctualLights: readonly CanonicalPunctualLight[];
   surfaces: readonly CanonicalDrawSurface[];
@@ -157,20 +162,26 @@ const prepareStudioEnvironment = (
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
-  preparedGltf: (node: GltfNode) => PreparedStaticGltf | undefined = () => undefined,
+  preparedGltf: (
+    node: GltfNode | GltfInstancesNode,
+  ) => PreparedStaticGltf | undefined = () => undefined,
   camera: CanonicalCamera = staticCamera(scene),
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined = () => undefined,
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {
-    if (node.kind === "gltf" || (node.kind === "mesh" && node.material.kind === "standard")) {
+    if (
+      node.kind === "gltf"
+      || node.kind === "gltf-instances"
+      || (node.kind === "mesh" && node.material.kind === "standard")
+    ) {
       requiresLighting = true;
       break;
     }
   }
   const environment = prepareStudioEnvironment(scene, requiresLighting);
   const directionalLights: CanonicalDirectionalLight[] = [];
-  const gltfNodes: GltfNode[] = [];
+  const gltfNodes: Array<GltfNode | GltfInstancesNode> = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
   const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
@@ -178,57 +189,108 @@ export const prepareCanonicalSurfaceScene = (
   const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
   let materialLodGroupIndex = 0;
   for (const node of scene.nodes) {
-    if (node.kind === "gltf") {
+    if (node.kind === "gltf" || node.kind === "gltf-instances") {
       gltfNodes.push(node);
-      const rootModel = transformMat4(node.transform);
+      const mountIndex = gltfNodes.length - 1;
+      const rootModel = node.kind === "gltf" ? transformMat4(node.transform) : identityMat4();
       const proxyGeometry = node.pickingGeometry === undefined
         ? undefined
         : prepareCanonicalGeometry(node.pickingGeometry);
       if (proxyGeometry !== undefined) {
-        pickSurfaces.push({
-          inverseModel: inverseMat4(rootModel),
-          modelHandedness: modelHandedness(rootModel),
-          node,
-          pickingGeometry: proxyGeometry,
-        });
+        if (node.kind === "gltf") {
+          pickSurfaces.push({
+            inverseModel: inverseMat4(rootModel),
+            modelHandedness: modelHandedness(rootModel),
+            node,
+            pickingGeometry: proxyGeometry,
+          });
+        } else {
+          const proxyBatches = prepareGltfInstanceBatches(node.instances, identityMat4(), 1);
+          for (const batch of proxyBatches) {
+            for (let offset = 0; offset < batch.localModels.length; offset += 16) {
+              const instanceIndex = batch.sourceIndices[offset / 16]!;
+              pickSurfaces.push({
+                instanceIndex,
+                inverseModel: inverseMat4(mat4At(batch.localModels, offset)),
+                modelHandedness: batch.handedness,
+                node,
+                pickingGeometry: proxyGeometry,
+              });
+            }
+          }
+        }
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
       for (const light of prepared.lights) {
-        const lightModel = multiplyMat4Into(identityMat4(), rootModel, light.localModel);
         const color: LinearRgba = [
           light.color[0] * light.intensity,
           light.color[1] * light.intensity,
           light.color[2] * light.intensity,
           1,
         ];
-        const direction = transformDirection(lightModel, [0, 0, -1]);
-        if (light.kind === "directional") {
-          if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
-            throw new Error(
-              `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
-            );
+        const appendLight = (lightModel: Mat4): void => {
+          const direction = transformDirection(lightModel, [0, 0, -1]);
+          if (light.kind === "directional") {
+            if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
+              throw new Error(
+                `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+              );
+            }
+            directionalLights.push({ color, direction });
+          } else {
+            if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
+              throw new Error(
+                `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
+              );
+            }
+            punctualLights.push({
+              color,
+              direction,
+              innerConeCosine: Math.cos(light.innerConeAngle),
+              kind: light.kind,
+              outerConeCosine: Math.cos(light.outerConeAngle),
+              position: transformPoint(lightModel, [0, 0, 0]),
+              range: light.range,
+            });
           }
-          directionalLights.push({ color, direction });
+        };
+        if (node.kind === "gltf") {
+          appendLight(multiplyMat4Into(identityMat4(), rootModel, light.localModel));
         } else {
-          if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
-            throw new Error(
-              `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
-            );
+          const batches = prepareGltfInstanceBatches(node.instances, light.localModel, 1);
+          for (const batch of batches) {
+            for (let offset = 0; offset < batch.localModels.length; offset += 16) {
+              appendLight(mat4At(batch.localModels, offset));
+            }
           }
-          punctualLights.push({
-            color,
-            direction,
-            innerConeCosine: Math.cos(light.innerConeAngle),
-            kind: light.kind,
-            outerConeCosine: Math.cos(light.outerConeAngle),
-            position: transformPoint(lightModel, [0, 0, 0]),
-            range: light.range,
-          });
         }
       }
       for (const primitive of prepared.primitives) {
-        const instanceBatch = primitive.instanceBatch;
+        const preparedInstanceBatches = node.kind === "gltf-instances"
+          ? prepareGltfInstanceBatches(
+            node.instances,
+            primitive.instanceBatch?.localModels ?? primitive.localModel,
+            primitive.instanceBatch?.localModels.length === undefined
+              ? 1
+              : primitive.instanceBatch.localModels.length / 16,
+          ).map((batch, batchIndex) => ({
+            ...batch,
+            key: `${primitive.geometry.key}:mount:${mountIndex}:explicit:scale:${node.instances.scaleVersion}:hand:${batch.handedness}:${batchIndex}`,
+            revision: String(node.instances.poseVersion),
+          }))
+          : [primitive.instanceBatch];
+        for (const instanceBatch of preparedInstanceBatches) {
+        const sourceIndices = instanceBatch !== undefined
+          && "sourceIndices" in instanceBatch
+          && instanceBatch.sourceIndices instanceof Uint32Array
+          ? instanceBatch.sourceIndices
+          : undefined;
+        const instanceRevision = instanceBatch !== undefined
+          && "revision" in instanceBatch
+          && typeof instanceBatch.revision === "string"
+          ? instanceBatch.revision
+          : undefined;
         const materialSource = node.materialVariant === undefined
           ? primitive.material
           : primitive.materialVariants?.get(node.materialVariant) ?? primitive.material;
@@ -286,6 +348,9 @@ export const prepareCanonicalSurfaceScene = (
               const instanceModel = multiplyMat4Into(identityMat4(), rootModel, localModel);
               pickSurfaces.push({
                 inverseModel: inverseMat4(instanceModel),
+                ...(sourceIndices === undefined
+                  ? {}
+                  : { instanceIndex: sourceIndices[offset / 16]! }),
                 modelHandedness: handedness,
                 node,
                 ...(geometryLods === undefined ? {} : { lods: geometryLods }),
@@ -316,10 +381,14 @@ export const prepareCanonicalSurfaceScene = (
           surfaces.push({
             geometry: primitive.geometry,
             ...(instanceBatch === undefined ? {} : {
-              instances: {
-                count: instanceBatch.localModels.length / 16,
-                key: instanceBatch.key,
-                localModels: instanceBatch.localModels,
+            instances: {
+              count: instanceBatch.localModels.length / 16,
+              key: instanceBatch.key,
+              localModels: instanceBatch.localModels,
+              ...(instanceRevision === undefined
+                ? {}
+                : { revision: instanceRevision }),
+              ...(sourceIndices === undefined ? {} : { sourceIndices }),
               },
             }),
             material: resolveCanonicalMaterialTexture(levelMaterial, decodedTexture),
@@ -332,6 +401,7 @@ export const prepareCanonicalSurfaceScene = (
             textureKeys: canonicalMaterialTextureKeys(levelMaterial),
             worldBounds,
           });
+        }
         }
       }
       continue;
@@ -379,7 +449,8 @@ export const prepareCanonicalSurfaceScene = (
         });
         continue;
       }
-      throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
+      const unsupportedKind = (node as { readonly kind?: unknown }).kind;
+      throw new Error(`Royal direct-surface slice does not yet support ${String(unsupportedKind)} nodes`);
     }
     const materialSource = prepareCanonicalMaterialSource(node.material);
     const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
