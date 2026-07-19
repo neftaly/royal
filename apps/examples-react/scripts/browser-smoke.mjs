@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   connectCdpPage,
+  createBoundedProcessDiagnostics,
   evaluate,
   spawnLogged,
   startVitePreview,
@@ -1634,6 +1635,9 @@ const disposedRendererResourcesReleased = (snapshot) => {
 };
 
 const main = async () => {
+  const nativeGpuDiagnostics = createBoundedProcessDiagnostics(
+    /GL_INVALID_(?:ENUM|VALUE|OPERATION|FRAMEBUFFER_OPERATION)|Feedback loop formed between Framebuffer and active Texture|GPU process (?:crashed|exited unexpectedly)/iu,
+  );
   const profileDir = browserMode === 'chromium'
     ? await mkdtemp(path.join(tmpdir(), 'royal-examples-smoke-'))
     : undefined;
@@ -1654,7 +1658,7 @@ const main = async () => {
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${profileDir}`,
       'about:blank',
-    ], { cwd: appRoot })
+    ], { cwd: appRoot, onStderr: nativeGpuDiagnostics.write })
     : undefined;
 
   let session;
@@ -1708,6 +1712,7 @@ const main = async () => {
 
     for (const route of selectedRoutes) {
       const routeExceptionStart = exceptions.length;
+      const routeConsoleStart = consoleMessages.length;
       const routeUrl = new URL(baseUrl + route.path);
       for (const [name, value] of new URLSearchParams(routeQuery)) {
         routeUrl.searchParams.set(name, value);
@@ -1790,6 +1795,16 @@ const main = async () => {
         const routeExceptions = exceptions.slice(routeExceptionStart);
         if (routeExceptions.length > 0) {
           throw new Error(`${route.id}: browser runtime exceptions: ${routeExceptions.join('; ')}`);
+        }
+        const routeConsoleErrors = consoleMessages
+          .slice(routeConsoleStart)
+          .filter((message) => message.startsWith('error:'));
+        if (routeConsoleErrors.length > 0) {
+          throw new Error(`${route.id}: browser console errors: ${routeConsoleErrors.join('; ')}`);
+        }
+        const nativeErrors = nativeGpuDiagnostics.snapshot();
+        if (nativeErrors.length > 0) {
+          throw new Error(`${route.id}: native GPU errors: ${nativeErrors.join('; ')}`);
         }
         assertRoute(effectiveRoute, state);
       } catch (error) {

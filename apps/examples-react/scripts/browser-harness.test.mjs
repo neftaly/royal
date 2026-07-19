@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CdpSession,
   captureBrowserDiagnostics,
+  createBoundedProcessDiagnostics,
   replaceWebSocketAuthority,
   selectCdpPage,
   startPerformanceTrace,
@@ -39,6 +40,24 @@ const fakeSession = () => {
 };
 
 describe('browser harness', () => {
+  it('matches diagnostics across chunks and retains bounded complete lines', () => {
+    const diagnostics = createBoundedProcessDiagnostics(/GL_INVALID_OPERATION/u, 2);
+    diagnostics.write('benign warning\nGL_INVALID_');
+    diagnostics.write('OPERATION first\nGL_INVALID_OPERATION second\n');
+    diagnostics.write('GL_INVALID_OPERATION third');
+    expect(diagnostics.snapshot()).toEqual([
+      'GL_INVALID_OPERATION second',
+      'GL_INVALID_OPERATION third',
+    ]);
+  });
+
+  it('validates process diagnostic configuration', () => {
+    expect(() => createBoundedProcessDiagnostics('error'))
+      .toThrow('pattern must be a RegExp');
+    expect(() => createBoundedProcessDiagnostics(/error/u, 0))
+      .toThrow('capacity must be a positive safe integer');
+  });
+
   it('waits for the first CDP event matching a lifecycle predicate', async () => {
     const socket = new EventTarget();
     socket.send = () => undefined;

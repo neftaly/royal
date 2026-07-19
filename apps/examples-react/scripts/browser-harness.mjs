@@ -326,10 +326,51 @@ export const startPerformanceTrace = async (session, options = {}) => {
   };
 };
 
-export const spawnLogged = (command, args, options) => {
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
-  child.stdout.on('data', (chunk) => process.stdout.write(chunk));
-  child.stderr.on('data', (chunk) => process.stderr.write(chunk));
+/** Retains matching complete process-output lines without depending on stream chunk boundaries. */
+export const createBoundedProcessDiagnostics = (pattern, maxEntries = 16) => {
+  if (!(pattern instanceof RegExp)) throw new TypeError('Process diagnostic pattern must be a RegExp');
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+    throw new RangeError('Process diagnostic capacity must be a positive safe integer');
+  }
+  let pending = '';
+  const entries = [];
+  const matches = (line) => {
+    pattern.lastIndex = 0;
+    return pattern.test(line);
+  };
+  const append = (line) => {
+    if (!matches(line)) return;
+    if (entries.length === maxEntries) entries.shift();
+    entries.push(line);
+  };
+  return {
+    snapshot: () => {
+      const snapshot = [...entries];
+      if (pending !== '' && matches(pending)) {
+        if (snapshot.length === maxEntries) snapshot.shift();
+        snapshot.push(pending);
+      }
+      return snapshot;
+    },
+    write: (chunk) => {
+      const lines = (pending + String(chunk)).split(/\r?\n/u);
+      pending = lines.pop() ?? '';
+      for (const line of lines) append(line);
+    },
+  };
+};
+
+export const spawnLogged = (command, args, options = {}) => {
+  const { onStderr, onStdout, ...spawnOptions } = options;
+  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...spawnOptions });
+  child.stdout.on('data', (chunk) => {
+    onStdout?.(chunk);
+    process.stdout.write(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    onStderr?.(chunk);
+    process.stderr.write(chunk);
+  });
   return child;
 };
 
