@@ -14,7 +14,8 @@ import {
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
-  prepareCanonicalMaterial,
+  canonicalMaterialTextureKeys,
+  prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
   type CanonicalSurfaceMaterial,
 } from "./canonical-material";
@@ -34,9 +35,11 @@ export type CanonicalDrawSurface = Readonly<{
     localModels: Float32Array;
   }>;
   material: CanonicalSurfaceMaterial;
+  materialSource: CanonicalSurfaceMaterial;
   model: Mat4;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
+  textureKeys: readonly string[];
 }>;
 
 export type CanonicalPickSurface = Readonly<{
@@ -147,11 +150,13 @@ export const prepareCanonicalSurfaceScene = (
             },
           }),
           material: resolveCanonicalMaterialTexture(primitive.material, decodedTexture),
+          materialSource: primitive.material,
           model,
           modelHandedness: instanceBatch === undefined
             ? modelHandedness(model)
             : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1,
           node,
+          textureKeys: canonicalMaterialTextureKeys(primitive.material),
         };
         if (proxyGeometry === undefined) {
           if (instanceBatch === undefined) {
@@ -205,7 +210,8 @@ export const prepareCanonicalSurfaceScene = (
       }
       throw new Error(`Royal direct-surface slice does not yet support ${node.kind} nodes`);
     }
-    const material = prepareCanonicalMaterial(node.material, decodedTexture);
+    const materialSource = prepareCanonicalMaterialSource(node.material);
+    const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
     if (node.material.baseColor.kind === "asset") textureAssets.push(node.material.baseColor);
     const geometry = prepareCanonicalGeometry(
       node.geometry,
@@ -218,10 +224,12 @@ export const prepareCanonicalSurfaceScene = (
       model,
       modelHandedness: modelHandedness(model),
       material,
+      materialSource,
       node,
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry
         : prepareCanonicalGeometry(node.pickingGeometry),
+      textureKeys: canonicalMaterialTextureKeys(materialSource),
     };
     surfaces.push(surface);
     pickSurfaces.push(surface);
@@ -236,4 +244,23 @@ export const prepareCanonicalSurfaceScene = (
     textureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
   };
+};
+
+/** Re-resolves only surfaces which claim one newly published decoded texture. */
+export const refreshCanonicalSurfaceTexture = (
+  scene: CanonicalSurfaceScene,
+  textureKey: string,
+  decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
+): CanonicalSurfaceScene => {
+  let surfaces: CanonicalDrawSurface[] | undefined;
+  for (let index = 0; index < scene.surfaces.length; index += 1) {
+    const surface = scene.surfaces[index]!;
+    if (!surface.textureKeys.includes(textureKey)) continue;
+    surfaces ??= scene.surfaces.slice();
+    surfaces[index] = {
+      ...surface,
+      material: resolveCanonicalMaterialTexture(surface.materialSource, decodedTexture),
+    };
+  }
+  return surfaces === undefined ? scene : { ...scene, surfaces };
 };

@@ -135,11 +135,8 @@ export const resolveCanonicalMaterialTexture = (
   };
 };
 
-/** Erases the public material shape before frame or WebGL work. */
-export const prepareCanonicalMaterial = (
-  material: Material,
-  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined,
-): CanonicalSurfaceMaterial => {
+/** Erases the public material shape while retaining cold texture recipes. */
+export const prepareCanonicalMaterialSource = (material: Material): CanonicalSurfaceMaterial => {
   if (material.kind === "wireframe") {
     throw new Error("Royal canonical surface slice does not yet support wireframe materials");
   }
@@ -150,16 +147,12 @@ export const prepareCanonicalMaterial = (
   if (source.kind === "solid" && source.color[3] !== 1) {
     throw new Error("Royal canonical surface slice does not yet support non-opaque materials");
   }
-  const decoded = source.kind === "asset" ? decodedTexture(source) : undefined;
   const baseColor = source.kind === "solid"
     ? source.color
-    : decoded === undefined ? NEUTRAL_PERCEPTUAL_GREY : [1, 1, 1, 1] as const;
-  const baseColorTexture = source.kind === "asset" && decoded !== undefined
-    ? textureBinding(source, decoded)
-    : undefined;
+    : [1, 1, 1, 1] as const;
   const common = {
     baseColor,
-    ...(baseColorTexture === undefined ? {} : { baseColorTexture }),
+    ...(source.kind === "asset" ? { baseColorAsset: source } : {}),
     requiresTextureCoordinates: source.kind === "asset",
   };
   return material.kind === "unlit"
@@ -173,4 +166,36 @@ export const prepareCanonicalMaterial = (
       occlusionStrength: 1,
       roughnessFactor: material.roughnessFactor,
     };
+};
+
+/** Erases the public material shape before frame or WebGL work. */
+export const prepareCanonicalMaterial = (
+  material: Material,
+  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined,
+): CanonicalSurfaceMaterial =>
+  resolveCanonicalMaterialTexture(
+    prepareCanonicalMaterialSource(material),
+    (asset) => asset.kind === "asset" ? decodedTexture(asset) : undefined,
+  );
+
+const EMPTY_TEXTURE_KEYS: readonly string[] = [];
+
+/** Stable decoded-content claims used to target asynchronous texture publication. */
+export const canonicalMaterialTextureKeys = (
+  material: CanonicalSurfaceMaterial,
+): readonly string[] => {
+  const keys: string[] = [];
+  const add = (asset: TextureSourceRef | undefined): void => {
+    if (asset === undefined) return;
+    const key = decodedTextureKey(asset);
+    if (!keys.includes(key)) keys.push(key);
+  };
+  add(material.baseColorAsset);
+  if (material.kind === "standard") {
+    add(material.metallicRoughnessAsset);
+    add(material.normalAsset);
+    add(material.occlusionAsset);
+    add(material.emissiveAsset);
+  }
+  return keys.length === 0 ? EMPTY_TEXTURE_KEYS : keys;
 };

@@ -13,7 +13,11 @@ import {
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
-import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import {
+  prepareCanonicalSurfaceScene,
+  refreshCanonicalSurfaceTexture,
+} from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 describe("canonical direct surface lowering", () => {
   it("lowers planes and boxes to the same indexed triangle ABI", () => {
@@ -55,6 +59,42 @@ describe("canonical direct surface lowering", () => {
     );
     expect(ready.surfaces[0]!.geometry.key).toBe(pending.surfaces[0]!.geometry.key);
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(source);
+  });
+
+  it("publishes one decoded texture without rebuilding unrelated scene structure", () => {
+    const firstTexture = imageTexture("/first.png");
+    const secondTexture = imageTexture("/second.png");
+    const pending = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [
+        mesh({
+          geometry: planeGeometry(1),
+          material: unlitMaterial({ texture: firstTexture }),
+        }),
+        mesh({
+          geometry: planeGeometry(2),
+          material: unlitMaterial({ texture: secondTexture }),
+        }),
+      ],
+    }));
+    const firstSurface = pending.surfaces[0]!;
+    const secondSurface = pending.surfaces[1]!;
+    const decoded = { height: 8, source: {} as ImageBitmap, width: 16 };
+    const ready = refreshCanonicalSurfaceTexture(
+      pending,
+      decodedTextureKey(firstTexture),
+      (asset) => decodedTextureKey(asset) === decodedTextureKey(firstTexture)
+        ? decoded
+        : undefined,
+    );
+
+    expect(ready).not.toBe(pending);
+    expect(ready.pickSurfaces).toBe(pending.pickSurfaces);
+    expect(ready.surfaces[0]).not.toBe(firstSurface);
+    expect(ready.surfaces[0]!.geometry).toBe(firstSurface.geometry);
+    expect(ready.surfaces[0]!.model).toBe(firstSurface.model);
+    expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(decoded);
+    expect(ready.surfaces[1]).toBe(secondSurface);
   });
 
   it("keeps one node transform and identity while replacing only exact pick triangles", () => {

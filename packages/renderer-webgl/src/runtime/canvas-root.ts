@@ -31,7 +31,10 @@ import {
   viewMat4Into,
 } from "../math/mat4";
 import { CameraSourceOwner } from "../surface/camera-source-owner";
-import { prepareCanonicalSurfaceScene } from "../surface/scene-lowering";
+import {
+  prepareCanonicalSurfaceScene,
+  refreshCanonicalSurfaceTexture,
+} from "../surface/scene-lowering";
 import { SurfaceGpuOwner } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
@@ -226,7 +229,7 @@ export class CanvasRoot {
     });
     this.#textureAssets = new TextureAssetOwner({
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
-      onAssetChanged: () => this.#refreshPreparedScene(),
+      onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
     });
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
@@ -512,6 +515,19 @@ export class CanvasRoot {
     this.#surfaceGpu.setScene(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets);
+    this.#clock.invalidate();
+  }
+
+  #refreshPreparedTexture(key: string): void {
+    if (this.#disposed || this.#surfaceScene === null) return;
+    const prepared = refreshCanonicalSurfaceTexture(
+      this.#surfaceScene,
+      key,
+      (asset) => this.#textureAssets.decoded(asset),
+    );
+    if (prepared === this.#surfaceScene) return;
+    this.#surfaceScene = prepared;
+    this.#surfaceGpu.setScene(prepared);
     this.#clock.invalidate();
   }
 

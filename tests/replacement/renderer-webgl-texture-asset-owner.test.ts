@@ -46,6 +46,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     }));
     expect(decode).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith(decodedTextureKey(first));
   });
 
   it("aborts and closes released content while ignoring stale completion", async () => {
