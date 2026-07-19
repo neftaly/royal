@@ -84,28 +84,33 @@ diagnosed once.
 
 ## Extensions and codecs
 
-Current supported extension declarations are:
+The current replacement implementation accepts these required declarations:
 
-- `EXT_lights_image_based`, `EXT_mesh_gpu_instancing`,
-  `EXT_meshopt_compression`, and `EXT_texture_webp`;
-- `KHR_draco_mesh_compression`, `KHR_lights_punctual`,
-  `KHR_materials_anisotropy`, `KHR_materials_clearcoat`,
-  `KHR_materials_diffuse_transmission`, `KHR_materials_dispersion`,
-  `KHR_materials_emissive_strength`, `KHR_materials_ior`,
-  `KHR_materials_iridescence`, `KHR_materials_sheen`,
+- `EXT_mesh_gpu_instancing` and `EXT_texture_webp`;
+- `KHR_draco_mesh_compression` through demanded async codec preparation;
+- `KHR_lights_punctual`;
+- `KHR_materials_emissive_strength`, `KHR_materials_ior`,
   `KHR_materials_specular`, `KHR_materials_transmission`,
-  `KHR_materials_unlit`, `KHR_materials_variants`, `KHR_materials_volume`,
-  `KHR_mesh_quantization`, `KHR_texture_basisu`, and `KHR_texture_transform`;
+  `KHR_materials_unlit`, `KHR_materials_variants`, and
+  `KHR_materials_volume`;
+- `KHR_texture_transform`;
 - `MSFT_lod` plus its `MSFT_screencoverage` convention.
+
+This is an implementation ledger, not the desired eventual static profile.
+Notably, glTF `KHR_texture_basisu`, `EXT_meshopt_compression`,
+`KHR_mesh_quantization`, image-based-light extensions, and the remaining PBR
+family are not yet accepted as required. Direct Royal KTX2/Basis ingestion does
+not imply support for the glTF texture extension.
 
 Unknown `extensionsUsed` declarations do not fail core content. An unknown
 `extensionsRequired` declaration MUST fail before knowingly incomplete content
 is published. Royal MUST NOT claim support for imaginary, draft, or similarly
 named extensions merely because it can ignore them.
 
-Draco, Meshopt, and Basis/KTX2 adapters load only when demanded. Codec output is
-validated as strictly as uncompressed input. Codec absence or worker absence
-for a required path produces an explicit asset/image failure; it MUST NOT hang.
+The Draco adapter loads only when demanded. Codec output is validated as
+strictly as uncompressed input. Codec or worker absence for a required path
+produces an explicit asset failure; it MUST NOT hang. Meshopt and glTF Basis
+remain unsupported until they have equivalently owned ingestion paths.
 
 ## Variants, lights, LOD, and instances
 

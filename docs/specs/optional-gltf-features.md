@@ -209,10 +209,13 @@ Other vendor material, outline, articulation, media, and metadata extensions
 require a concrete Royal product workload and independent behavior spec before
 support. Vendor registry presence alone is insufficient.
 
-## Already broad enough
+## Current breadth
 
-Royal already implements nearly the whole ratified static PBR material family,
-compressed geometry/textures, texture transforms, GPU instancing, variants,
-punctual lights, image-based lights, and vendor LOD. The highest-value work is
-therefore correctness, visual oracles, preparation/resource efficiency, and
-canonical hot paths—not maximizing extension count.
+Royal's replacement currently has a useful but deliberately narrower static
+profile: baseline metallic-roughness/unlit, emissive strength, IOR, specular,
+transmission/volume, Draco, WebP, texture transforms, GPU instancing, variants,
+punctual lights, and vendor LOD. Basis-in-glTF, Meshopt, mesh quantization,
+image-based-light extensions, and the rest of the ratified static PBR family
+remain candidates rather than claims. The highest-value work is still
+correctness, visual oracles, preparation/resource efficiency, and canonical hot
+paths—not maximizing extension count.

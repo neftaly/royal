@@ -125,13 +125,6 @@ export const createTextureAssetReader = (
     const textureExtensions = texture.extensions === undefined
       ? {}
       : object(texture.extensions, label, `${texturePath}.extensions`);
-    const avifExtension = textureExtensions.EXT_texture_avif === undefined
-      ? undefined
-      : object(
-        textureExtensions.EXT_texture_avif,
-        label,
-        `${texturePath}.extensions.EXT_texture_avif`,
-      );
     const webpExtension = textureExtensions.EXT_texture_webp === undefined
       ? undefined
       : object(
@@ -139,10 +132,8 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.EXT_texture_webp`,
       );
-    const selectedExtension = avifExtension === undefined
-      ? webpExtension === undefined ? undefined : "EXT_texture_webp"
-      : "EXT_texture_avif";
-    const sourceValue = avifExtension?.source ?? webpExtension?.source ?? texture.source;
+    const selectedExtension = webpExtension === undefined ? undefined : "EXT_texture_webp";
+    const sourceValue = webpExtension?.source ?? texture.source;
     const sourcePath = selectedExtension === undefined
       ? `${texturePath}.source`
       : `${texturePath}.extensions.${selectedExtension}.source`;

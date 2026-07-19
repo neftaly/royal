@@ -138,7 +138,6 @@ describe("canonical direct surface lowering", () => {
     const asset = prepareStaticGlb(staticTexturedTriangleGlb(
       undefined,
       "cutout.png",
-      "core",
       (document) => {
         const materials = document.materials as Array<Record<string, unknown>>;
         materials[0]!.alphaMode = "MASK";

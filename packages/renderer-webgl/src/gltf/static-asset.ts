@@ -42,6 +42,7 @@ import {
 } from "./static-material";
 import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
 import { normalizeLodThresholds } from "../surface/lod-selection";
+import { validateRequiredExtensionProfile } from "./required-extension-profile";
 
 export type PreparedStaticLodMembership = Readonly<{
   group: string;
@@ -194,28 +195,7 @@ const prepareStaticDocument = (
   const requiredExtensions = optionalArray(
     document.extensionsRequired, label, "extensionsRequired",
   );
-  for (let extensionIndex = 0; extensionIndex < requiredExtensions.length; extensionIndex += 1) {
-    const extension = requiredExtensions[extensionIndex];
-    if (
-      extension !== "KHR_materials_unlit"
-      && extension !== "KHR_materials_emissive_strength"
-      && extension !== "KHR_materials_ior"
-      && extension !== "KHR_materials_specular"
-      && extension !== "KHR_materials_transmission"
-      && extension !== "KHR_materials_volume"
-      && extension !== "EXT_texture_avif"
-      && extension !== "EXT_texture_webp"
-      && extension !== "EXT_mesh_gpu_instancing"
-      && extension !== "KHR_texture_transform"
-      && extension !== "KHR_lights_punctual"
-      && extension !== "KHR_materials_variants"
-      && extension !== "MSFT_lod"
-      && !(extension === "KHR_draco_mesh_compression" && decodeDraco !== undefined)
-      && !(extension === "KHR_mesh_quantization" && decodeDraco !== undefined)
-    ) {
-      fail(label, `extensionsRequired[${extensionIndex}]`, "is unsupported");
-    }
-  }
+  validateRequiredExtensionProfile(document, requiredExtensions, label, decodeDraco !== undefined);
 
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");

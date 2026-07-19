@@ -82,6 +82,21 @@ describe("static glTF preparation core", () => {
     extensionDocument.extensionsRequired = ["KHR_future_geometry"];
     expect(() => prepareStaticGlb(staticTriangleGlb(extensionDocument), "future", "future.glb"))
       .toThrow("extensionsRequired[0]: is unsupported");
+    extensionDocument.extensionsRequired = ["KHR_mesh_quantization"];
+    extensionDocument.extensionsUsed = ["KHR_mesh_quantization"];
+    expect(() => prepareStaticGlb(staticTriangleGlb(extensionDocument), "quantized"))
+      .toThrow("extensionsRequired[0]: is unsupported");
+    const misplaced = staticTriangleDocument();
+    misplaced.extensionsRequired = ["KHR_materials_ior"];
+    misplaced.extensionsUsed = ["KHR_materials_ior"];
+    const misplacedNodes = misplaced.nodes as Array<Record<string, unknown>>;
+    misplacedNodes[1]!.extensions = { KHR_materials_ior: { ior: 1.4 } };
+    expect(() => prepareStaticGlb(staticTriangleGlb(misplaced), "misplaced"))
+      .toThrow("nodes[1].extensions.KHR_materials_ior: is outside Royal's supported placement profile");
+    const duplicated = staticTriangleDocument();
+    duplicated.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_unlit"];
+    expect(() => prepareStaticGlb(staticTriangleGlb(duplicated), "duplicated"))
+      .toThrow("extensionsRequired[1]: must not be duplicated");
     expect(() => prepareStaticGlb(staticTriangleGlb(undefined, 3), "bad-index", "bad.glb"))
       .toThrow("vertex index is out of range");
   });
@@ -147,6 +162,26 @@ describe("static glTF preparation core", () => {
     invalid.materials = [{ extensions: { KHR_materials_ior: { ior: 0.9 } } }];
     expect(() => prepareStaticGlb(staticTriangleGlb(invalid), "invalid-ior"))
       .toThrow("KHR_materials_ior.ior: must be zero or at least one");
+  });
+
+  it("lowers and validates KHR_materials_emissive_strength in the cold material reader", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_emissive_strength"];
+    document.extensionsUsed = ["KHR_materials_emissive_strength"];
+    document.materials = [{
+      emissiveFactor: [0.25, 0.5, 1],
+      extensions: { KHR_materials_emissive_strength: { emissiveStrength: 4 } },
+    }];
+    expect(prepareStaticGlb(staticTriangleGlb(document), "emissive-strength")
+      .primitives[0]!.material).toMatchObject({ emissiveFactor: [1, 2, 4] });
+
+    const invalid = staticTriangleDocument();
+    invalid.extensionsRequired = ["KHR_materials_emissive_strength"];
+    invalid.materials = [{
+      extensions: { KHR_materials_emissive_strength: { emissiveStrength: -1 } },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalid), "invalid-emissive-strength"))
+      .toThrow("emissiveStrength: must not be negative");
   });
 
   it("retains one canonical material identity for primitives sharing an authored material", () => {
@@ -432,26 +467,30 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets[0]).toMatchObject({ kind: "asset", src: uri });
   });
 
-  it("selects EXT_texture_avif sources through the ordinary texture lifecycle", () => {
-    const external = prepareStaticGlb(
-      staticTexturedTriangleGlb(undefined, "albedo.avif", "avif"),
-      "avif-external",
-      "/models/asset.glb",
-      "/models/asset.glb",
-    );
-    expect(external.textureAssets[0]).toMatchObject({
-      kind: "asset",
-      src: "/models/albedo.avif",
-    });
+  it("rejects imaginary required AVIF extensions and ignores optional occurrences", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "imaginary-avif.glb");
+    const required = parsed.document as Record<string, unknown>;
+    required.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
+    required.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
+    required.textures = [{
+      extensions: { EXT_texture_avif: { source: 99 } },
+      source: 0,
+    }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(required, parsed.binaryChunk!),
+      "imaginary-required",
+    )).toThrow("extensionsRequired[1]: is unsupported");
 
-    const embedded = prepareStaticGlb(
-      staticTexturedTriangleGlb(new Uint8Array([0, 0, 0, 1]), "unused", "avif"),
-      "avif-embedded",
-      "embedded.glb",
+    delete required.extensionsRequired;
+    const optional = prepareStaticGlb(
+      glbFromDocument(required, parsed.binaryChunk!),
+      "imaginary-optional",
+      "asset.glb",
+      "/models/asset.glb",
     );
-    expect(embedded.textureAssets[0]).toMatchObject({
-      kind: "embedded-asset",
-      mimeType: "image/avif",
+    expect(optional.textureAssets[0]).toMatchObject({
+      kind: "asset",
+      src: "/models/albedo.png",
     });
   });
 

@@ -82,7 +82,6 @@ export const staticTriangleGlb = (
 export const staticTexturedTriangleGlb = (
   embeddedImage?: Uint8Array,
   imageUri = "albedo.png",
-  format: "avif" | "core" = "core",
   configureDocument?: (document: Record<string, unknown>) => void,
 ): Uint8Array => {
   const document = staticTriangleDocument();
@@ -105,16 +104,10 @@ export const staticTexturedTriangleGlb = (
     bufferViews.push({ buffer: 0, byteLength: embeddedImage.byteLength, byteOffset: 68 });
     document.images = [{
       bufferView: 3,
-      mimeType: format === "avif" ? "image/avif" : "image/png",
+      mimeType: "image/png",
     }];
   }
-  if (format === "avif") {
-    document.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
-    document.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
-    document.textures = [{ extensions: { EXT_texture_avif: { source: 0 } } }];
-  } else {
-    document.textures = [{ source: 0 }];
-  }
+  document.textures = [{ source: 0 }];
   document.materials = [{
     extensions: { KHR_materials_unlit: {} },
     pbrMetallicRoughness: {

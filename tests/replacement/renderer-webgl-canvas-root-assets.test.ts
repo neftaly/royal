@@ -313,7 +313,6 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
       undefined,
       "cutout.png",
-      "core",
       (document) => {
         const materials = document.materials as Array<Record<string, unknown>>;
         materials[0]!.alphaMode = "MASK";
