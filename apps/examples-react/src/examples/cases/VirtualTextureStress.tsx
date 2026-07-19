@@ -47,9 +47,12 @@ type ViewName = keyof typeof views;
 const VirtualTextureStatusLabel = (): ReactNode => {
   const status = useVirtualTextureStatus(mapTexture);
   return (
-    <output className="status" data-vt-state={status.state}>
-      {status.state} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
-    </output>
+    <>
+      <BenchmarkRendererSnapshot virtualTextureStatus={status} />
+      <output className="status" data-vt-state={status.state}>
+        {status.state} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
+      </output>
+    </>
   );
 };
 
@@ -107,7 +110,6 @@ export const VirtualTextureStress = (): ReactNode => {
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >
-          <BenchmarkRendererSnapshot />
           <VirtualTextureStatusLabel />
           <OrbitControls
             enablePan

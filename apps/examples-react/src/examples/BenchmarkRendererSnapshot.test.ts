@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { gltf } from '@royal/react/scene';
-import { benchmarkGltfDiagnostics } from './BenchmarkRendererSnapshot';
+import {
+  benchmarkGltfDiagnostics,
+  benchmarkVirtualTextureDiagnostics,
+} from './BenchmarkRendererSnapshot';
 import { copyVirtualTexturingCounters } from './BenchmarkRendererSnapshotCounters';
 
 describe('copyVirtualTexturingCounters', () => {
@@ -85,6 +88,25 @@ describe('current benchmark glTF adapter', () => {
       imagesLoaded: 108,
       phaseMs: { imagesComplete: 1_200 },
       status: 'degraded',
+    });
+  });
+});
+
+describe('current benchmark VT adapter', () => {
+  it('reports focused manifest and residency progress without frame counters', () => {
+    expect(benchmarkVirtualTextureDiagnostics(undefined)).toBeNull();
+    expect(benchmarkVirtualTextureDiagnostics({
+      failedPages: 2,
+      pendingPages: 3,
+      residentPages: 17,
+      state: 'ready',
+    })).toEqual({
+      failedPages: 2,
+      manifestFailures: 0,
+      manifestRequests: 1,
+      manifestsReady: 1,
+      pendingPages: 3,
+      residentPages: 17,
     });
   });
 });

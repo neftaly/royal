@@ -580,7 +580,10 @@ const installBenchmarkHooks = async (session) => {
     }
     const pathname = url.pathname.toLowerCase();
     if (pathname.endsWith('.vt.json')) return 'vtManifest';
-    if (url.search.includes('vt-page=') || /\\/pages\\/mip-/u.test(pathname)) return 'vtPage';
+    if (
+      url.search.includes('vt-page=')
+      || /\\/[^/]*pages\\/m(?:ip-)?\\d+-\\d+-\\d+\\.[^/]+$/u.test(pathname)
+    ) return 'vtPage';
     if (pathname.endsWith('.gltf') || pathname.endsWith('.glb')) return 'gltf';
     if (pathname.endsWith('.bin')) return 'gltfBuffer';
     if (/\\.(?:avif|gif|jpe?g|ktx2|png|webp)$/u.test(pathname)) return 'image';
@@ -823,7 +826,8 @@ const installBenchmarkHooks = async (session) => {
         previous = now;
         const vt = renderer?.virtualTexturing;
         if (vt !== undefined && vt !== null && index > 0) {
-          const settled = (vt.pendingPages ?? 0) === 0 && (vt.uploadedPages ?? 0) > 0;
+          const resident = vt.residentPages ?? vt.uploadedPages ?? 0;
+          const settled = (vt.pendingPages ?? 0) === 0 && resident > 0;
           if (settledFrame === null && settled) settledFrame = index;
         }
       }

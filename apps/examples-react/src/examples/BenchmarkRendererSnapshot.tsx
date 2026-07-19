@@ -2,6 +2,7 @@ import type { GltfAssetRef } from '@royal/react/scene';
 import {
   useCanvasRoot,
   type GltfAssetStatus,
+  type VirtualTextureStatus,
 } from '@royal/react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import {
@@ -13,7 +14,20 @@ import {
 export type BenchmarkRendererSnapshotProps = Readonly<{
   asset?: GltfAssetRef;
   status?: GltfAssetStatus;
+  virtualTextureStatus?: VirtualTextureStatus;
 }>;
+
+/** @internal Focused VT adapter; it does not poll the root frame snapshot. */
+export const benchmarkVirtualTextureDiagnostics = (
+  status: VirtualTextureStatus | undefined,
+): Record<string, number> | null => status === undefined ? null : {
+  failedPages: status.failedPages,
+  manifestFailures: status.state === 'error' || status.state === 'unsupported' ? 1 : 0,
+  manifestRequests: 1,
+  manifestsReady: status.state === 'ready' ? 1 : 0,
+  pendingPages: status.pendingPages,
+  residentPages: status.residentPages,
+};
 
 /** @internal Pure adapter shared with the benchmark contract test. */
 export const benchmarkGltfDiagnostics = (
@@ -58,11 +72,13 @@ export const benchmarkGltfDiagnostics = (
 export const BenchmarkRendererSnapshot = ({
   asset,
   status,
+  virtualTextureStatus,
 }: BenchmarkRendererSnapshotProps = {}): ReactNode => {
   const root = useCanvasRoot();
-  const observation = useRef({ asset, status });
+  const observation = useRef({ asset, status, virtualTextureStatus });
   observation.current.asset = asset;
   observation.current.status = status;
+  observation.current.virtualTextureStatus = virtualTextureStatus;
 
   useLayoutEffect(() => {
     if (root === null) return undefined;
@@ -93,7 +109,9 @@ export const BenchmarkRendererSnapshot = ({
           fitted: current.resources.ordinaryTextures.fittedTextures,
           resources: current.resources.ordinaryTextures.residentTextures,
         },
-        virtualTexturing: null,
+        virtualTexturing: benchmarkVirtualTextureDiagnostics(
+          observed.virtualTextureStatus,
+        ),
       };
     };
     const renderNow = (): void => {
