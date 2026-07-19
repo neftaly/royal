@@ -43,6 +43,13 @@ The root owns one WebGL2 context, its backing dimensions, frame scheduling,
 context-loss recovery, and WebGL state. `alpha` and `antialias` default to
 `true`; they are immutable because browsers fix context attributes at context
 creation. Invalid values and unknown option fields fail synchronously.
+`persistentGpuByteBudget` defaults to 256 MiB.
+`maxConcurrentPreparationJobs` defaults to 8 and is one root-wide FIFO ceiling
+shared by glTF asset pipelines, ordinary texture decode, virtual-texture
+transport/decode, and prefiltered-environment preparation. It is neither a
+worker count nor a preallocation. Queued claims are cancellable, and
+`getSnapshot().resources.asyncPreparation` reports the immutable limit plus
+active and queued job counts.
 
 `invalidate()` requests one coalesced frame. `flushInvalidated()` is available
 to deliberate imperative hosts, while `acquireExternalClock()` transfers frame

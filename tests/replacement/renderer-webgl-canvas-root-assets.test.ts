@@ -90,6 +90,48 @@ describe("canvas root asset publication", () => {
     expect(root.getSnapshot().lastFrameFailure).toMatch(/prefiltered environment/u);
   });
 
+  it("shares one immutable preparation limit across environment and texture work", async () => {
+    let finishEnvironment: ((source: ArrayBuffer) => void) | undefined;
+    const environmentRead = new Promise<ArrayBuffer>((resolve) => {
+      finishEnvironment = resolve;
+    });
+    const decodeTexture = vi.fn(async () => ({
+      height: 2,
+      source: {} as ImageBitmap,
+      width: 2,
+    }));
+    const environment = prefilteredEnvironment({ src: "/environment.ktx" });
+    const texture = imageTexture("/texture.png");
+    const { root } = harness({
+      decodeTexture,
+      preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
+      readPrefilteredEnvironment: async () => environmentRead,
+    }, {}, { maxConcurrentPreparationJobs: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      environment,
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: standardMaterial({ texture }),
+      })],
+    }));
+
+    expect(root.getSnapshot().resources.asyncPreparation).toEqual({
+      activeJobs: 1,
+      jobLimit: 1,
+      queuedJobs: 1,
+    });
+    expect(decodeTexture).not.toHaveBeenCalled();
+    finishEnvironment?.(environmentKtx1Fixture(2).source);
+    await vi.waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    expect(root.getSnapshot().resources.asyncPreparation).toEqual({
+      activeJobs: 0,
+      jobLimit: 1,
+      queuedJobs: 0,
+    });
+  });
+
   it("keeps texture publication incremental while a large scene is still admitting", async () => {
     let resolveDecode: ((source: {
       height: number;

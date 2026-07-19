@@ -162,6 +162,13 @@ match the asset and texture specifications. Root-wide diagnostics are cold,
 bounded operational observation and MUST NOT be the only way to drive normal
 loading, variants, fitting, retries, or lifecycle UI.
 
+`rendererOptions.maxConcurrentPreparationJobs` is an immutable positive integer
+with default 8. It bounds admitted asynchronous asset-preparation lifecycles
+across glTF, ordinary textures, authored VT, and prefiltered environments; it
+does not request workers. Broad renderer diagnostics expose
+`resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs }` for
+operational inspection. Focused asset status remains the product lifecycle.
+
 `usePrefilteredEnvironmentStatus(environment)` observes the exact `src` and
 typed `version` identity. `ready` means the artifact bytes have been fetched
 and validated and reports its face size, mip count, and provenance. GPU budget

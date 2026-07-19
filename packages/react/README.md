@@ -62,9 +62,12 @@ React `style` may override either default; CSS should keep at least one axis
 independent of the canvas's intrinsic dimensions.
 
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
-both defaulting to `true`. A semantic option change replaces both the root and
-canvas. `rendererRef` exposes the active lower-level root or `null` during the
-mount lifecycle.
+both defaulting to `true`, plus immutable resource policy. The default
+`persistentGpuByteBudget` is 256 MiB and `maxConcurrentPreparationJobs` is 8.
+The latter is a root-wide FIFO ceiling shared by glTF, ordinary texture, VT,
+and prefiltered-environment preparation; it is not a worker count. A semantic
+option change replaces both the root and canvas. `rendererRef`
+exposes the active lower-level root or `null` during the mount lifecycle.
 
 Focused hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents

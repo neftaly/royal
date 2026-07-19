@@ -88,6 +88,13 @@ Every root-bound callback carries or closes over a generation token. A stale
 generation MAY finish independently owned cache work, but MUST NOT invalidate,
 publish into, allocate for, or retain the superseded root.
 
+The root's asynchronous-preparation owner admits each claimed asset lifecycle
+against one immutable root-wide limit. Admission starts available work
+immediately, preserves FIFO order for queued work, removes an aborted queued
+claim before it starts, and releases an active slot before settling the
+consumer-facing promise. Disposal rejects queued work and prevents later active
+completion from publishing root diagnostics.
+
 One root owns at most one active explicit prefiltered-environment identity.
 Replacing it aborts the old root claim, and a stale fetch or parse completion
 cannot publish. Parsed bytes are retained as the reconstruction recipe while

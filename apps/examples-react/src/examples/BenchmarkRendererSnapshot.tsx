@@ -109,6 +109,9 @@ export const BenchmarkRendererSnapshot = ({
         },
         planning: null,
         resourcePressure: {
+          activePreparationJobs: current.resources.asyncPreparation.activeJobs,
+          preparationJobLimit: current.resources.asyncPreparation.jobLimit,
+          queuedPreparationJobs: current.resources.asyncPreparation.queuedJobs,
           persistentGpuBudgetBytes: current.resources.persistentGpu.budgetBytes,
           persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,
           persistentGpuRetainedBytes: current.resources.persistentGpu.retainedBytes,

@@ -14,5 +14,6 @@ export type {
 } from "./gltf/asset-owner";
 export type { TextureAssetSnapshot } from "./texture/asset-owner";
 export type { PrefilteredEnvironmentAssetSnapshot } from "./environment/asset-owner";
+export type { AsyncPreparationSnapshot } from "./resource/async-preparation-owner";
 export type { VirtualTextureAssetSnapshot } from "./virtual-texture/runtime-contract";
 export type { PickInput, PickResult } from "@royal/renderer-core";

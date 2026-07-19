@@ -9,6 +9,7 @@ import type {
   TextureAssetSnapshot,
   TextureSourceRef,
 } from "../texture/asset-owner";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 export type GltfTextureProgress = Readonly<{
   failed: number;
@@ -56,6 +57,7 @@ export type GltfAssetOwnerPlatform = Readonly<{
   ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readResource(uri: string, signal: AbortSignal): Promise<Uint8Array>;
+  schedule?: AsyncPreparationScheduler;
 }>;
 
 type AssetEntry = {
@@ -277,7 +279,9 @@ export class GltfAssetOwner {
     const preparation = this.#platform.prepare === undefined
       ? import("./static-asset")
       : undefined;
-    void this.#platform.read(asset, entry.controller.signal).then(async (bytes) => {
+    const load = async (): Promise<void> => {
+      const startedReadingAt = performance.now();
+      const bytes = await this.#platform.read(asset, entry.controller.signal);
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const readCompletedAt = performance.now();
       let externalResourceReadDurationMs = 0;
@@ -325,13 +329,17 @@ export class GltfAssetOwner {
             0,
             preparedAt - readCompletedAt - externalResourceReadDurationMs,
           ),
-          sourceReadDurationMs: readCompletedAt - entry.startedAt,
+          sourceReadDurationMs: readCompletedAt - startedReadingAt,
         },
         textures,
       };
       this.#platform.onAssetChanged();
       this.#publish(key);
-    }).catch((error: unknown) => {
+    };
+    const loading = this.#platform.schedule === undefined
+      ? load()
+      : this.#platform.schedule(entry.controller.signal, load);
+    void loading.catch((error: unknown) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.snapshot = { error: formatFailure(error), state: "error" };
       this.#publish(key);

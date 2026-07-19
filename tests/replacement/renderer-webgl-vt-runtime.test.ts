@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
@@ -45,6 +46,11 @@ describe("browser virtual texture runtime", () => {
     const texSubImage2D = vi.fn();
     Object.assign(gl, { texStorage2D, texSubImage2D });
     const changed = vi.fn();
+    const scheduled = vi.fn();
+    const schedule: AsyncPreparationScheduler = (signal, work) => {
+      scheduled(signal);
+      return work();
+    };
     const texture = virtualTexture("https://example.test/vt.json");
     const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({}),
@@ -57,6 +63,7 @@ describe("browser virtual texture runtime", () => {
       gl,
       changed,
       new PersistentGpuBudgetOwner(),
+      schedule,
     );
     const matrix = identityMat4();
     const view: SurfaceFrameView = {
@@ -67,9 +74,11 @@ describe("browser virtual texture runtime", () => {
 
     runtime.setScene(prepared);
     await vi.waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    expect(scheduled).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     runtime.update([view]);
     await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(3));
+    expect(scheduled.mock.calls.length).toBeGreaterThan(1);
 
     runtime.update([view]);
     await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(12));

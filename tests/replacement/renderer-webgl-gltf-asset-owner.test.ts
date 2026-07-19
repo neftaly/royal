@@ -2,6 +2,7 @@ import { gltf, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
+import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
 
 const prepareStatic = (
@@ -24,12 +25,18 @@ describe("glTF asset lifecycle owner", () => {
     } as const;
     const prepare = vi.fn(async () => prepared);
     const readResource = vi.fn();
+    const scheduled = vi.fn();
+    const schedule: AsyncPreparationScheduler = (signal, work) => {
+      scheduled(signal);
+      return work();
+    };
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
       prepare,
       read: vi.fn(async () => bytes),
       readResource,
+      schedule,
     });
     const node = gltf("/models/large.gltf");
     owner.reconcile([node]);
@@ -43,6 +50,7 @@ describe("glTF asset lifecycle owner", () => {
       expect.any(Function),
     );
     expect(readResource).not.toHaveBeenCalled();
+    expect(scheduled).toHaveBeenCalledOnce();
   });
 
   it("keeps external JSON buffer IO in the same cancellable asset lifecycle", async () => {

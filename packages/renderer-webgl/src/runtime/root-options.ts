@@ -1,4 +1,5 @@
 import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-budget";
+import { DEFAULT_ASYNC_PREPARATION_JOB_LIMIT } from "../resource/async-preparation-owner";
 
 export type CanvasRootOptions = Readonly<{
   /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `true` */
@@ -7,6 +8,8 @@ export type CanvasRootOptions = Readonly<{
   antialias?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
+  /** Root-wide concurrent asynchronous asset-preparation ceiling. @defaultValue `8` */
+  maxConcurrentPreparationJobs?: number;
 }>;
 
 /** Validates immutable root options and returns their stable semantic identity. */
@@ -15,7 +18,12 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
     throw new TypeError("Royal renderer options must be an object");
   }
   for (const key of Reflect.ownKeys(options)) {
-    if (key !== "alpha" && key !== "antialias" && key !== "persistentGpuByteBudget") {
+    if (
+      key !== "alpha"
+      && key !== "antialias"
+      && key !== "persistentGpuByteBudget"
+      && key !== "maxConcurrentPreparationJobs"
+    ) {
       throw new TypeError(`Royal renderer options contain unsupported field ${String(key)}`);
     }
   }
@@ -30,5 +38,12 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
   if (!Number.isSafeInteger(persistentGpuByteBudget) || persistentGpuByteBudget < 1) {
     throw new RangeError("Royal renderer option persistentGpuByteBudget must be a positive safe integer");
   }
-  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}:${persistentGpuByteBudget}`;
+  const maxConcurrentPreparationJobs = options.maxConcurrentPreparationJobs
+    ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT;
+  if (!Number.isSafeInteger(maxConcurrentPreparationJobs) || maxConcurrentPreparationJobs < 1) {
+    throw new RangeError(
+      "Royal renderer option maxConcurrentPreparationJobs must be a positive safe integer",
+    );
+  }
+  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}`;
 };

@@ -5,6 +5,7 @@ import type {
   TextureVersion,
 } from "@royal/renderer-core";
 import type { Ktx2Etc2Level } from "./etc2-storage";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
@@ -68,6 +69,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
+  schedule?: AsyncPreparationScheduler;
 }>;
 
 type AssetEntry = {
@@ -459,9 +461,12 @@ export class TextureAssetOwner {
     const key = entry.key;
     const retainAlpha = entry.retainAlpha;
     entry.decodeRetainsAlpha = retainAlpha;
-    const decoding = retainAlpha
+    const decode = (): Promise<DecodedTextureSource> => retainAlpha
       ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
       : this.#platform.decode(asset, controller.signal, this.#maxStorageBytes);
+    const decoding = this.#platform.schedule === undefined
+      ? decode()
+      : this.#platform.schedule(controller.signal, decode);
     void decoding.then((decoded) => {
       if (
         this.#disposed

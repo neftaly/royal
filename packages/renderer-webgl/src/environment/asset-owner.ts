@@ -1,5 +1,6 @@
 import type { PrefilteredEnvironmentLight } from "@royal/renderer-core";
 import type { PreparedRoyalEnvironment } from "./royal-environment-ktx1";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 export type PrefilteredEnvironmentAssetSnapshot =
   | Readonly<{ state: "idle" }>
@@ -17,6 +18,7 @@ export type PrefilteredEnvironmentAssetOwnerOptions = Readonly<{
   onListenerError: (error: unknown) => void;
   prepare?: (source: ArrayBuffer) => Promise<PreparedRoyalEnvironment>;
   read?: (src: string, signal: AbortSignal) => Promise<ArrayBuffer>;
+  schedule?: AsyncPreparationScheduler;
 }>;
 
 type ActiveEnvironment = {
@@ -55,6 +57,8 @@ const prepareLazily = async (source: ArrayBuffer): Promise<PreparedRoyalEnvironm
   return parseRoyalEnvironmentKtx1(source);
 };
 
+const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare();
+
 /** Owns transport, identity, cancellation, and observation around the pure artifact parser. */
 export class PrefilteredEnvironmentAssetOwner {
   #active: ActiveEnvironment | undefined;
@@ -67,6 +71,7 @@ export class PrefilteredEnvironmentAssetOwner {
       ...options,
       prepare: options.prepare ?? prepareLazily,
       read: options.read ?? readWithFetch,
+      schedule: options.schedule ?? prepareDirectly,
     };
   }
 
@@ -164,8 +169,10 @@ export class PrefilteredEnvironmentAssetOwner {
   async #load(active: ActiveEnvironment, src: string): Promise<void> {
     let prepared = false;
     try {
-      const source = await this.#options.read(src, active.controller.signal);
-      const result = await this.#options.prepare(source);
+      const result = await this.#options.schedule(active.controller.signal, async () => {
+        const source = await this.#options.read(src, active.controller.signal);
+        return this.#options.prepare(source);
+      });
       if (this.#disposed || this.#active !== active || active.controller.signal.aborted) return;
       active.prepared = result;
       active.snapshot = {

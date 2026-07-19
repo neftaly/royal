@@ -32,6 +32,14 @@ to fill. Hardware limits and subsystem-specific correctness constraints may be
 stricter. Omitted overrides retain defaults; options are immutable for the root
 lifetime.
 
+The asynchronous job ceiling is one root-owned FIFO admission authority shared
+by glTF asset pipelines, ordinary texture decode, authored-VT transport/decode,
+and prefiltered-environment work. A job is an admitted asset-preparation
+lifecycle, not a promise that a browser created a worker or only one underlying
+request. A queued claim can be aborted without starting; active claims retain
+their slot until their promise settles. Root diagnostics expose the immutable
+limit and current active/queued counts without polling or waking rendering.
+
 One physical allocation MUST have one accounting owner. Diagnostics may project
 the same allocation in a subsystem view but MUST identify overlap rather than
 sum it as independent memory. Persistent, transient, upload-traffic, and decoded
@@ -188,7 +196,9 @@ Large scenes should become useful progressively:
 4. optional fidelity such as finer VT pages streams by view demand.
 
 Requests SHOULD prioritize work that can make visible content renderable.
-Parallelism is bounded globally so one asset cannot starve all other work.
+Parallelism is bounded globally. FIFO admission prevents a later stream of one
+resource kind from overtaking already-demanded work from another kind; richer
+visibility priority remains a later scheduler refinement.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 

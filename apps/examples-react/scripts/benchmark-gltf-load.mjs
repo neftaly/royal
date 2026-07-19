@@ -107,6 +107,11 @@ const installBenchmarkHooks = async (session) => {
   const loadFrameDeltas = [];
   let loadFramePreviousAt = performance.now();
   let loadFrameRequest = null;
+  const preparationPressureHighWater = {
+    activeJobs: 0,
+    jobLimit: 0,
+    queuedJobs: 0,
+  };
   let loadHitchSampling = true;
   let longTaskCount = 0;
   let longTaskMaxMs = 0;
@@ -151,6 +156,17 @@ const installBenchmarkHooks = async (session) => {
     const delta = now - loadFramePreviousAt;
     if (delta > 0) loadFrameDeltas.push(delta);
     loadFramePreviousAt = now;
+    const pressure = readRendererSnapshot()?.resourcePressure;
+    preparationPressureHighWater.activeJobs = Math.max(
+      preparationPressureHighWater.activeJobs,
+      pressure?.activePreparationJobs ?? 0,
+    );
+    preparationPressureHighWater.jobLimit = pressure?.preparationJobLimit
+      ?? preparationPressureHighWater.jobLimit;
+    preparationPressureHighWater.queuedJobs = Math.max(
+      preparationPressureHighWater.queuedJobs,
+      pressure?.queuedPreparationJobs ?? 0,
+    );
     loadFrameRequest = requestAnimationFrame(sampleLoadFrame);
   };
   loadFrameRequest = requestAnimationFrame(sampleLoadFrame);
@@ -726,6 +742,7 @@ const installBenchmarkHooks = async (session) => {
       supported: longTaskObserver !== null,
       totalMs: longTaskTotalMs,
     },
+    preparationPressureHighWater: { ...preparationPressureHighWater },
   });
   const gpuTimingSnapshot = () => {
     pollGpuTimers();
@@ -935,6 +952,11 @@ const roundedLoadHitches = (snapshot) => {
       maxMs: round(longTasks.maxMs ?? 0),
       supported: longTasks.supported === true,
       totalMs: round(longTasks.totalMs ?? 0),
+    },
+    preparationPressureHighWater: {
+      activeJobs: snapshot.preparationPressureHighWater?.activeJobs ?? 0,
+      jobLimit: snapshot.preparationPressureHighWater?.jobLimit ?? 0,
+      queuedJobs: snapshot.preparationPressureHighWater?.queuedJobs ?? 0,
     },
   };
 };
@@ -1203,6 +1225,9 @@ const printSummary = (report) => {
       ` loadFrameP95=${metrics.loadHitches?.frameStats?.p95Ms ?? 'n/a'}ms` +
       ` loadFrameMax=${metrics.loadHitches?.frameStats?.maxMs ?? 'n/a'}ms` +
       ` loadLongTasks=${metrics.loadHitches?.longTasks?.count ?? 'n/a'}` +
+      ` prepHighWater=${metrics.loadHitches?.preparationPressureHighWater?.activeJobs ?? 'n/a'}` +
+      `/${metrics.loadHitches?.preparationPressureHighWater?.queuedJobs ?? 'n/a'}` +
+      `/${metrics.loadHitches?.preparationPressureHighWater?.jobLimit ?? 'n/a'}` +
       ` vtFrameP95=${metrics.vtFrameSample?.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms` +
       ` retainedHeap=${metrics.heap.retainedGrowthBytes ?? 'n/a'}B`,
   );

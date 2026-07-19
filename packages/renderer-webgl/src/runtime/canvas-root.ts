@@ -78,6 +78,11 @@ import {
   type PrefilteredEnvironmentAssetSnapshot,
 } from "../environment/asset-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
+import {
+  AsyncPreparationOwner,
+  DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
+  type AsyncPreparationSnapshot,
+} from "../resource/async-preparation-owner";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -86,6 +91,7 @@ export type CanvasRootSnapshot = Readonly<{
   frame: number;
   lastFrameFailure?: string;
   resources: Readonly<{
+    asyncPreparation: AsyncPreparationSnapshot;
     ordinaryTextures: OrdinaryTextureGpuSnapshot;
     persistentGpu: PersistentGpuBudgetSnapshot;
   }>;
@@ -225,6 +231,7 @@ const createContext = (
 
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot {
+  readonly #asyncPreparation: AsyncPreparationOwner;
   readonly #canvas: HTMLCanvasElement;
   readonly #cameraSource: CameraSourceOwner;
   readonly #clock: FrameClockOwner;
@@ -322,6 +329,12 @@ export class CanvasRoot {
     this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
       options.persistentGpuByteBudget ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
     );
+    this.#asyncPreparation = new AsyncPreparationOwner(
+      options.maxConcurrentPreparationJobs ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
+      () => {
+        if (!this.#disposed) this.#publish();
+      },
+    );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
     this.#surfaceGpu = new SurfaceGpuOwner(
@@ -345,6 +358,7 @@ export class CanvasRoot {
       ...(platform.readPrefilteredEnvironment === undefined
         ? {}
         : { read: platform.readPrefilteredEnvironment }),
+      schedule: this.#asyncPreparation.run,
     });
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
@@ -352,12 +366,14 @@ export class CanvasRoot {
       prepare: lazyBrowserGltfPreparer(),
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
+      schedule: this.#asyncPreparation.run,
     });
     this.#textureAssets = new TextureAssetOwner({
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
       onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
+      schedule: this.#asyncPreparation.run,
     }, Math.floor(this.#persistentGpuBudget.snapshot().budgetBytes * 0.75));
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
@@ -441,6 +457,7 @@ export class CanvasRoot {
     this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
     this.#textureAssets.dispose();
+    this.#asyncPreparation.dispose();
     this.#surfaceGpu.dispose();
     for (const unsubscribe of this.#instanceSubscriptions.values()) unsubscribe();
     this.#instanceSubscriptions.clear();
@@ -465,6 +482,7 @@ export class CanvasRoot {
           ? {}
           : { lastFrameFailure: this.#lastFrameFailure }),
         resources: {
+          asyncPreparation: this.#asyncPreparation.snapshot(),
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
         },
@@ -865,6 +883,7 @@ export class CanvasRoot {
           this.#invalidatePresentation();
         },
         this.#persistentGpuBudget,
+        this.#asyncPreparation.run,
       );
       this.#virtualTextureRuntime = runtime;
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);

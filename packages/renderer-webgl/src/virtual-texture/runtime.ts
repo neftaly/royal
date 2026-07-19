@@ -40,6 +40,7 @@ import type {
 import { virtualTextureAssetKey } from "./runtime-contract";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "./shader-source";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 const DEFAULT_PHYSICAL_SLOTS = 24;
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
@@ -59,6 +60,7 @@ const FRAME_RESULTS = [
   { pending: false, webGlStateChanged: true },
   { pending: true, webGlStateChanged: true },
 ];
+const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare();
 
 type ReadyPage = Readonly<{
   decoded: DecodedVirtualTexturePage;
@@ -285,6 +287,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #gl: WebGL2RenderingContext;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #onChanged: (asset: VirtualTextureAssetRef) => void;
+  readonly #schedule: AsyncPreparationScheduler;
   readonly #resources = new Map<string, RuntimeResource>();
   readonly #assetKeys = new WeakMap<VirtualTextureAssetRef, string>();
   #scene: CanonicalSurfaceScene | null = null;
@@ -294,10 +297,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gl: WebGL2RenderingContext,
     onChanged: (asset: VirtualTextureAssetRef) => void,
     budget: PersistentGpuBudgetOwner,
+    schedule: AsyncPreparationScheduler,
   ) {
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#budget = budget;
+    this.#schedule = schedule;
   }
 
   get bindingRevision(): number {
@@ -592,10 +597,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   async #readManifest(resource: RuntimeResource): Promise<void> {
     try {
-      const uri = absoluteUri(resource.asset.manifestUri);
-      const response = await fetch(uri, { signal: resource.abort.signal });
-      if (!response.ok) throw new Error(`Royal VT manifest request failed with HTTP ${response.status}`);
-      const manifest = parseVirtualTextureManifest(await response.json());
+      const manifest = await this.#schedule(resource.abort.signal, async () => {
+        const uri = absoluteUri(resource.asset.manifestUri);
+        const response = await fetch(uri, { signal: resource.abort.signal });
+        if (!response.ok) {
+          throw new Error(`Royal VT manifest request failed with HTTP ${response.status}`);
+        }
+        return parseVirtualTextureManifest(await response.json());
+      });
       if (resource.abort.signal.aborted || this.#disposed) return;
       resource.manifest = manifest;
       resource.manifestPending = false;
@@ -618,12 +627,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource.loadingPages.add(pageKey);
     this.#activeJobs += 1;
     this.#onChanged(resource.asset);
-    void readVirtualTexturePage(
+    void this.#schedule(resource.abort.signal, () => readVirtualTexturePage(
       absoluteUri(resource.asset.manifestUri),
       manifest,
       page,
       resource.abort.signal,
-    ).then((decoded) => {
+    )).then((decoded) => {
       if (decoded === undefined) resource.failedPages.add(pageKey);
       else if (
         resource.abort.signal.aborted
@@ -754,4 +763,5 @@ export const createBrowserVirtualTextureRuntime = (
   gl: WebGL2RenderingContext,
   onChanged: (asset: VirtualTextureAssetRef) => void,
   budget = new PersistentGpuBudgetOwner(),
-): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(gl, onChanged, budget);
+  schedule: AsyncPreparationScheduler = prepareDirectly,
+): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(gl, onChanged, budget, schedule);

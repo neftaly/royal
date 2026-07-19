@@ -155,13 +155,15 @@ describe("replacement React public API", () => {
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:268435456");
-    expect(rendererRootOptionsSemanticKey({})).toBe("11:268435456");
+    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:268435456:8");
+    expect(rendererRootOptionsSemanticKey({})).toBe("11:268435456:8");
     expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
-      .toBe("11:268435456");
-    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:268435456");
-    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:268435456");
-    expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 })).toBe("11:1024");
+      .toBe("11:268435456:8");
+    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:268435456:8");
+    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:268435456:8");
+    expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 })).toBe("11:1024:8");
+    expect(rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 2 }))
+      .toBe("11:268435456:2");
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {
@@ -177,6 +179,9 @@ describe("replacement React public API", () => {
     );
     expect(() => rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 0 })).toThrow(
       "persistentGpuByteBudget must be a positive safe integer",
+    );
+    expect(() => rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 0 })).toThrow(
+      "maxConcurrentPreparationJobs must be a positive safe integer",
     );
   });
 
