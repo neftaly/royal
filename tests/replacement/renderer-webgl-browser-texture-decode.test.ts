@@ -42,7 +42,7 @@ describe("browser texture decode shell", () => {
     expect(createImageBitmap).not.toHaveBeenCalled();
   });
 
-  it("keeps source fetch concurrent while bounding browser bitmap decode", async () => {
+  it("bounds complete jobs and browser bitmap decode as one pipeline", async () => {
     const releases: Array<(bitmap: ImageBitmap) => void> = [];
     const createImageBitmap = vi.fn(() => new Promise<ImageBitmap>((resolve) => {
       releases.push(resolve);
@@ -54,15 +54,16 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(2);
+    const decode = createBrowserTextureDecoder(2, 2);
     const signal = new AbortController().signal;
     const requests = ["/a.avif", "/b.avif", "/c.avif"].map((src) => decode({
       kind: "asset",
       src,
     }, signal));
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
     releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(3));
     for (const release of releases) {
       release({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);

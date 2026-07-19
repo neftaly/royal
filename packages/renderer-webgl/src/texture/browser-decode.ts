@@ -5,7 +5,7 @@ export type BrowserTextureDecoder = (
   signal: AbortSignal,
 ) => Promise<DecodedTextureSource>;
 
-type PendingDecode = {
+type PendingWork = {
   readonly reject: (error: unknown) => void;
   readonly resolve: (decoded: DecodedTextureSource) => void;
   readonly run: () => Promise<DecodedTextureSource>;
@@ -14,11 +14,11 @@ type PendingDecode = {
 
 const aborted = (): DOMException => new DOMException("Texture decode was aborted", "AbortError");
 
-/** Bounds only the CPU-heavy browser decode phase; source IO remains concurrent. */
-class BrowserDecodeQueue {
+/** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */
+class BrowserWorkQueue {
   #active = 0;
   readonly #limit: number;
-  readonly #pending: PendingDecode[] = [];
+  readonly #pending: PendingWork[] = [];
 
   constructor(limit: number) {
     if (!Number.isSafeInteger(limit) || limit < 1) {
@@ -105,17 +105,22 @@ const decodeTextureBlob = async (
 };
 
 /**
- * Creates one root-local browser decoder. Fetch remains concurrent while AVIF,
- * PNG, and JPEG bitmap creation is bounded to avoid decode-task bursts.
+ * Creates one root-local browser decoder. Complete jobs and CPU-heavy bitmap
+ * decodes have separate bounds so response blobs cannot pile up behind decode.
  */
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
+  maxParallelJobs = 8,
 ): BrowserTextureDecoder => {
-  const queue = new BrowserDecodeQueue(maxParallelDecodes);
-  return async (asset, signal) => {
+  if (maxParallelJobs < maxParallelDecodes) {
+    throw new RangeError("Royal browser texture jobs must not be fewer than decodes");
+  }
+  const jobs = new BrowserWorkQueue(maxParallelJobs);
+  const decodes = new BrowserWorkQueue(maxParallelDecodes);
+  return (asset, signal) => jobs.run(signal, async () => {
     const blob = await readTextureBlob(asset, signal);
-    return queue.run(signal, () => decodeTextureBlob(asset, blob, signal));
-  };
+    return decodes.run(signal, () => decodeTextureBlob(asset, blob, signal));
+  });
 };
 
 /** Standalone adapter; renderer roots create their own queue through the factory. */
