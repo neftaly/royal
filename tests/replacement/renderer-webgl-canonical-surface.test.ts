@@ -105,6 +105,21 @@ describe("canonical direct surface lowering", () => {
     expect(box.bounds).toEqual({ max: [1, 2, 3], min: [-1, -2, -3] });
   });
 
+  it("canonicalizes shared direct descriptors once per scene lowering", () => {
+    const geometry = boxGeometry(2);
+    const material = unlitMaterial({ color: [0.2, 0.4, 0.8, 1] });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 5] }),
+      nodes: [
+        mesh({ geometry, material, transform: { position: [-1, 0, 0] } }),
+        mesh({ geometry, material, transform: { position: [1, 0, 0] } }),
+      ],
+    }));
+
+    expect(prepared.surfaces[1]!.geometry).toBe(prepared.surfaces[0]!.geometry);
+    expect(prepared.surfaces[1]!.materialSource).toBe(prepared.surfaces[0]!.materialSource);
+  });
+
   it("uses one upper-left UV convention and retains textured geometry during fallback", () => {
     const texture = imageTexture("/checker.png");
     const renderScene = scene({

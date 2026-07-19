@@ -1,8 +1,10 @@
 import type {
   Direction3,
+  Geometry,
   GltfInstancesNode,
   GltfNode,
   LinearRgba,
+  Material,
   MeshNode,
   RenderRoot,
   VirtualTextureAssetRef,
@@ -314,6 +316,21 @@ export const prepareCanonicalSurfaceScene = (
   const surfaces: CanonicalDrawSurface[] = [];
   const virtualTextureAssets: VirtualTextureAssetRef[] = [];
   const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
+  const directMaterials = new WeakMap<Material, CanonicalSurfaceMaterial>();
+  const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
+  const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
+  const directGeometry = (
+    geometry: Geometry,
+    textureCoordinates = false,
+  ): CanonicalTriangleGeometry => {
+    const retained = textureCoordinates ? directTexturedGeometry : directPlainGeometry;
+    let canonical = retained.get(geometry);
+    if (canonical === undefined) {
+      canonical = prepareCanonicalGeometry(geometry, textureCoordinates);
+      retained.set(geometry, canonical);
+    }
+    return canonical;
+  };
   let materialLodGroupIndex = 0;
   for (const node of scene.nodes) {
     if (node.kind === "gltf" || node.kind === "gltf-instances") {
@@ -322,7 +339,7 @@ export const prepareCanonicalSurfaceScene = (
       const rootModel = node.kind === "gltf" ? transformMat4(node.transform) : identityMat4();
       const proxyGeometry = node.pickingGeometry === undefined
         ? undefined
-        : prepareCanonicalGeometry(node.pickingGeometry);
+        : directGeometry(node.pickingGeometry);
       if (proxyGeometry !== undefined) {
         if (node.kind === "gltf") {
           pickSurfaces.push({
@@ -583,12 +600,16 @@ export const prepareCanonicalSurfaceScene = (
       const unsupportedKind = (node as { readonly kind?: unknown }).kind;
       throw new Error(`Royal direct-surface slice does not yet support ${String(unsupportedKind)} nodes`);
     }
-    const materialSource = prepareCanonicalMaterialSource(node.material);
+    let materialSource = directMaterials.get(node.material);
+    if (materialSource === undefined) {
+      materialSource = prepareCanonicalMaterialSource(node.material);
+      directMaterials.set(node.material, materialSource);
+    }
     const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
-    const geometry = prepareCanonicalGeometry(
+    const geometry = directGeometry(
       node.geometry,
       material.requiresTextureCoordinates,
     );
@@ -604,7 +625,7 @@ export const prepareCanonicalSurfaceScene = (
       normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry
-        : prepareCanonicalGeometry(node.pickingGeometry),
+        : directGeometry(node.pickingGeometry),
       textureKeys: canonicalMaterialTextureKeys(materialSource),
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
