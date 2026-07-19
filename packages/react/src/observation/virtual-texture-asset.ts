@@ -19,8 +19,10 @@ const IDLE: VirtualTextureAssetSnapshot = {
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): VirtualTextureAssetSnapshot => IDLE;
 
-const resolveInput = (input: VirtualTextureStatusInput): VirtualTextureAssetRef => {
-  if (typeof input === "string") return virtualTexture(input);
+const inputDescriptor = (
+  input: VirtualTextureStatusInput,
+): VirtualTextureAssetRef | undefined => {
+  if (typeof input === "string") return undefined;
   if (
     typeof input !== "object"
     || input === null
@@ -40,7 +42,32 @@ export const useVirtualTextureStatus = (
   options?: RendererObservationOptions,
 ): VirtualTextureStatus => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useVirtualTextureStatus");
-  const asset = useMemo(() => resolveInput(input), [input]);
+  const descriptor = inputDescriptor(input);
+  const manifestUri = descriptor === undefined ? input as string : descriptor.manifestUri;
+  const colorSpace = descriptor?.colorSpace;
+  const contentKey = descriptor?.contentKey;
+  const version = descriptor?.version;
+  const magFilter = descriptor?.sampler?.magFilter;
+  const minFilter = descriptor?.sampler?.minFilter;
+  const wrapS = descriptor?.sampler?.wrapS;
+  const wrapT = descriptor?.sampler?.wrapT;
+  const asset = useMemo(() => virtualTexture({
+    manifestUri,
+    ...(colorSpace === undefined ? {} : { colorSpace }),
+    ...(contentKey === undefined ? {} : { contentKey }),
+    ...(version === undefined ? {} : { version }),
+    ...(magFilter === undefined
+      && minFilter === undefined
+      && wrapS === undefined
+      && wrapT === undefined
+      ? {}
+      : { sampler: {
+        ...(magFilter === undefined ? {} : { magFilter }),
+        ...(minFilter === undefined ? {} : { minFilter }),
+        ...(wrapS === undefined ? {} : { wrapS }),
+        ...(wrapT === undefined ? {} : { wrapT }),
+      } }),
+  }), [colorSpace, contentKey, magFilter, manifestUri, minFilter, version, wrapS, wrapT]);
   const subscribe = useCallback(
     (listener: () => void) => root?.subscribeVirtualTextureAsset(asset, listener) ?? subscribeIdle(),
     [asset, root],

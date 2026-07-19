@@ -33,11 +33,18 @@ export type VirtualTextureFrameUpdate = Readonly<{
 
 export type VirtualTextureAssetSnapshot = Readonly<{
   failedPages: number;
-  failure?: string;
   pendingPages: number;
   residentPages: number;
-  state: "error" | "idle" | "loading" | "ready" | "unsupported";
-}>;
+}> & (
+  | Readonly<{
+    error?: never;
+    state: "idle" | "loading" | "ready";
+  }>
+  | Readonly<{
+    error: string;
+    state: "error" | "unsupported";
+  }>
+);
 
 /** Narrow optional-feature seam; implementation and shader body remain lazy. */
 export interface VirtualTextureRuntime {

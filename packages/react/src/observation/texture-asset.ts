@@ -1,4 +1,4 @@
-import type { TextureAssetRef } from "@royal/renderer-core";
+import { textureAsset, type TextureAssetRef } from "@royal/renderer-core";
 import type { TextureAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas";
@@ -16,8 +16,7 @@ const getIdle = (): TextureAssetSnapshot => IDLE;
 
 const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {
   if (typeof input === "string") {
-    if (input.length === 0) throw new TypeError("useTextureAssetStatus source must not be empty");
-    return { kind: "asset", src: input };
+    return textureAsset({ src: input });
   }
   if (
     typeof input !== "object"
@@ -27,7 +26,11 @@ const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {
   ) {
     throw new TypeError("useTextureAssetStatus input must be a source string or texture asset identity");
   }
-  return input;
+  return textureAsset({
+    src: input.src,
+    ...(input.contentKey === undefined ? {} : { contentKey: input.contentKey }),
+    ...(input.version === undefined ? {} : { version: input.version }),
+  });
 };
 
 /** Observes one decoded content/version identity without polling or frame-wide subscriptions. */

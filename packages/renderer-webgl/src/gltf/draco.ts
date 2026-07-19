@@ -26,8 +26,6 @@ type DracoMesh = Readonly<{
   numPoints: () => number;
 }>;
 
-export type StaticDracoMeshDecoder = (bytes: Uint8Array) => DracoMesh;
-
 const object = (value: unknown, label: string): JsonObject => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
@@ -114,7 +112,7 @@ export const createStaticDracoDecoder = (
   document: JsonObject,
   binary: Uint8Array,
   label: string,
-  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+  decodeMesh: (bytes: Uint8Array) => DracoMesh = decodeDracoMesh,
 ): ((primitive: JsonObject, path: string) => DecodedDracoPrimitive) => {
   const accessors = array(document.accessors, `${label} accessors`);
   const bufferViews = array(document.bufferViews, `${label} bufferViews`);

@@ -337,8 +337,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let next: VirtualTextureAssetSnapshot;
     if (resource.manifestFailure !== undefined) {
       next = {
+        error: resource.manifestFailure,
         failedPages: resource.failedPages.size,
-        failure: resource.manifestFailure,
         pendingPages: 0,
         residentPages: resource.gpu?.residentSlots.size ?? 0,
         state: resource.manifestFailureState ?? "error",
@@ -358,7 +358,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       && previous.failedPages === next.failedPages
       && previous.pendingPages === next.pendingPages
       && previous.residentPages === next.residentPages
-      && previous.failure === next.failure
+      && previous.error === next.error
     ) return previous;
     resource.snapshot = next;
     return next;

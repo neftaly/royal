@@ -18,6 +18,7 @@ import {
   useCanvasSize,
   useGltfAssetStatus,
   useTextureAssetStatus,
+  type VirtualTextureStatus,
   useVirtualTextureStatus,
   useOrbitCamera,
   useOrbitCameraView,
@@ -101,6 +102,39 @@ describe("replacement React public API", () => {
       createElement(Status),
     ));
     expect(html).toContain("<output>idle</output>");
+  });
+
+  it("rejects invalid observed texture identity before a renderer mounts", () => {
+    const Status = () => createElement("output", null, useTextureAssetStatus({
+      contentKey: "",
+      kind: "asset",
+      src: "/texture.png",
+    }).state);
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ))).toThrow("texture asset contentKey must be a non-empty string");
+  });
+
+  it("exposes one predictable error field for failed and unsupported VT", () => {
+    const message = (status: VirtualTextureStatus): string | undefined =>
+      status.state === "error" || status.state === "unsupported"
+        ? status.error
+        : undefined;
+    expect(message({
+      error: "atlas is too large",
+      failedPages: 0,
+      pendingPages: 0,
+      residentPages: 0,
+      state: "unsupported",
+    })).toBe("atlas is too large");
+    expect(message({
+      failedPages: 0,
+      pendingPages: 0,
+      residentPages: 2,
+      state: "ready",
+    })).toBeUndefined();
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {

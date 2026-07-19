@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import {
-  createStaticDracoDecoder,
-  type StaticDracoMeshDecoder,
-} from "../../packages/renderer-webgl/src/gltf/draco";
+import { createStaticDracoDecoder } from "../../packages/renderer-webgl/src/gltf/draco";
+
+type TestDracoMeshDecoder = NonNullable<
+  Parameters<typeof createStaticDracoDecoder>[3]
+>;
 
 describe("static Draco adapter", () => {
   it("decodes and retains only demanded canonical attributes, including TEXCOORD_1", () => {
     const requested: number[] = [];
-    const decodeMesh: StaticDracoMeshDecoder = () => ({
+    const decodeMesh: TestDracoMeshDecoder = () => ({
       faces_: new Int32Array([0, 1, 2]),
       getAttributeByUniqueId: (id: number) => {
         requested.push(id);
