@@ -12,6 +12,7 @@ import {
   worldBoundsVisible,
   type WorldBounds,
 } from "../../packages/renderer-webgl/src/surface/surface-visibility";
+import { forEachFuzzCase } from "../fuzz";
 
 const explicitClipVisibility = (bounds: WorldBounds, matrix: Mat4): boolean => {
   const clip = Array.from({ length: 6 }, () => true);
@@ -63,14 +64,9 @@ describe("surface frustum selection core", () => {
     );
     const planes = new Float32Array(24);
     frustumPlanesInto(planes, viewProjection);
-    let seed = 0x51_f1_5e_ed;
-    const random = (): number => {
-      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
-      return seed / 0x1_00_00_00_00;
-    };
-    for (let sample = 0; sample < 2_000; sample += 1) {
-      const center = [random() * 60 - 30, random() * 40 - 20, random() * 80 - 50];
-      const extent = [random() * 8 + 0.001, random() * 8 + 0.001, random() * 8 + 0.001];
+    forEachFuzzCase({ cases: 2_000, seed: 0x51_f1_5e_ed }, ({ random }) => {
+      const center = [random.number(-30, 30), random.number(-20, 20), random.number(-50, 30)];
+      const extent = [random.number(0.001, 8.001), random.number(0.001, 8.001), random.number(0.001, 8.001)];
       const bounds: WorldBounds = {
         max: [center[0]! + extent[0]!, center[1]! + extent[1]!, center[2]! + extent[2]!],
         min: [center[0]! - extent[0]!, center[1]! - extent[1]!, center[2]! - extent[2]!],
@@ -78,6 +74,6 @@ describe("surface frustum selection core", () => {
       if (explicitClipVisibility(bounds, viewProjection)) {
         expect(worldBoundsVisible(bounds, planes)).toBe(true);
       }
-    }
+    });
   });
 });

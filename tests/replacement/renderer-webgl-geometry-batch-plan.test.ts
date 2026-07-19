@@ -4,6 +4,7 @@ import {
   planGeometryBatchLayout,
   rebaseGeometryIndices,
 } from "../../packages/renderer-webgl/src/surface/geometry-batch-plan";
+import { forEachFuzzCase } from "../fuzz";
 
 describe("geometry batch planning core", () => {
   it("plans contiguous byte ranges and rebases local indices", () => {
@@ -64,19 +65,14 @@ describe("geometry batch planning core", () => {
   });
 
   it("matches a simple reference across randomized compatible batches", () => {
-    let seed = 0x51_7a_2c_09;
-    const random = (): number => {
-      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
-      return seed / 0x1_0000_0000;
-    };
-    for (let iteration = 0; iteration < 500; iteration += 1) {
-      const geometryCount = 1 + Math.floor(random() * 12);
+    forEachFuzzCase({ cases: 500, seed: 0x51_7a_2c_09 }, ({ random }) => {
+      const geometryCount = random.int(1, 13);
       const geometries = Array.from({ length: geometryCount }, () => {
-        const vertexCount = 1 + Math.floor(random() * 20_000);
-        const indexCount = 1 + Math.floor(random() * 40);
+        const vertexCount = random.int(1, 20_001);
+        const indexCount = random.int(1, 41);
         const indices = new Uint32Array(indexCount);
         for (let index = 0; index < indexCount; index += 1) {
-          indices[index] = Math.floor(random() * vertexCount);
+          indices[index] = random.int(0, vertexCount);
         }
         return { indices, vertexCount };
       });
@@ -97,6 +93,6 @@ describe("geometry batch planning core", () => {
         vertexOffset += geometry.vertexCount;
       }
       expect([...plan.indices]).toEqual(reference);
-    }
+    });
   });
 });

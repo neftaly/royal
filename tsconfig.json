@@ -99,6 +99,7 @@
     "packages/react/src/runtime",
     "packages/react/src/observation",
     "tests/replacement",
+    "tests/tooling",
     "vite.config.ts",
     "types/*.d.ts"
   ]

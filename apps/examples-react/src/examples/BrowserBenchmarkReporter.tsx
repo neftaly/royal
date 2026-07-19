@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Example } from '../examples';
+import { benchmarkWarnings } from '../benchmark-warnings';
 import {
   exampleContract,
   readRendererBenchmarkSnapshot,
@@ -470,31 +471,6 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
           version: gl.getParameter(gl.VERSION) as string,
         },
   };
-};
-
-export const benchmarkWarnings = ({
-  canvasPresent,
-  ready,
-  rendererPresent,
-  stats,
-  warmupComplete,
-  webglPresent,
-}: {
-  readonly canvasPresent: boolean;
-  readonly ready: boolean;
-  readonly rendererPresent: boolean;
-  readonly stats: ReturnType<typeof frameStats>;
-  readonly warmupComplete: boolean;
-  readonly webglPresent: boolean;
-}): readonly string[] => {
-  const warnings: string[] = [];
-  if (!ready) warnings.push('Document/canvas readiness timed out before sampling');
-  if (!warmupComplete) warnings.push('Warmup timed out before sampling');
-  if (stats.timedOut) warnings.push(`Captured ${stats.sampleCount}/${stats.requestedSampleCount} requested frames`);
-  if (!canvasPresent) warnings.push('Canvas disappeared before benchmark finalization');
-  if (!webglPresent) warnings.push('WebGL context was unavailable at benchmark finalization');
-  if (!rendererPresent) warnings.push('Renderer snapshot was unavailable at benchmark finalization');
-  return warnings;
 };
 
 const runBrowserBenchmark = async (

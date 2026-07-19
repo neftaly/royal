@@ -1,7 +1,10 @@
 import {
   boxGeometry,
+  linearRgbaFromSrgb,
   mesh,
+  metresPerWorldUnit,
   perspectiveCamera,
+  royalCoordinateConvention,
   scene,
   unlitMaterial,
   type WorldSize3,
@@ -9,6 +12,23 @@ import {
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 describe("TypeScript-first descriptor immutability", () => {
+  it("names Royal's physical and coordinate convention at the public boundary", () => {
+    expect(metresPerWorldUnit).toBe(1);
+    expect(royalCoordinateConvention).toEqual({
+      angleUnit: "radian",
+      handedness: "right",
+      linearUnit: "metre",
+      up: "+y",
+      viewForward: "-z",
+    });
+    expect(linearRgbaFromSrgb([0.5, 0.25, 1, 0.75])).toEqual([
+      expect.closeTo(0.214_041, 5),
+      expect.closeTo(0.050_876, 5),
+      1,
+      0.75,
+    ]);
+  });
+
   it("copies caller-owned arrays while relying on readonly types instead of runtime freezing", () => {
     const inputSize: [number, number, number] = [1, 2, 3];
     const geometry = boxGeometry(inputSize);
