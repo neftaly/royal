@@ -68,6 +68,22 @@ export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspa
   workspace.overflow.value = false;
 };
 
+/** Retains one ancestor-first capacity prefix and removes its discarded protection keys. */
+export const truncateVirtualTextureDemand = (
+  workspace: VirtualTextureDemandWorkspace,
+  capacity: number,
+): void => {
+  if (!Number.isSafeInteger(capacity) || capacity < 1) {
+    throw new RangeError("Royal VT demand capacity must be a positive safe integer");
+  }
+  if (workspace.count <= capacity) return;
+  for (const [key, index] of workspace.keys) {
+    if (index >= capacity) workspace.keys.delete(key);
+  }
+  workspace.count = capacity;
+  workspace.overflow.value = true;
+};
+
 const addPage = (
   workspace: VirtualTextureDemandWorkspace,
   mip: number,

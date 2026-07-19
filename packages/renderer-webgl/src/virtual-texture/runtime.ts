@@ -11,6 +11,7 @@ import {
   collectVirtualTextureSurfaceDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
+  truncateVirtualTextureDemand,
   type VirtualTextureDemandSurface,
   type VirtualTextureDemandWorkspace,
 } from "./demand";
@@ -450,6 +451,18 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
             resource.sampler,
           );
         }
+        truncateVirtualTextureDemand(resource.workspace, gpu.slotKeys.length);
+        let retainedReadyPages = 0;
+        for (let index = 0; index < resource.readyPages.length; index += 1) {
+          const ready = resource.readyPages[index]!;
+          if (!resource.workspace.keys.has(ready.pageKey)) {
+            ready.decoded.close();
+            continue;
+          }
+          resource.readyPages[retainedReadyPages] = ready;
+          retainedReadyPages += 1;
+        }
+        resource.readyPages.length = retainedReadyPages;
       }
       for (let index = 0; index < resource.workspace.count; index += 1) {
         const mip = resource.workspace.mips[index]!;
@@ -610,7 +623,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       resource.abort.signal,
     ).then((decoded) => {
       if (decoded === undefined) resource.failedPages.add(pageKey);
-      else if (resource.abort.signal.aborted || this.#disposed) decoded.close();
+      else if (
+        resource.abort.signal.aborted
+        || this.#disposed
+        || !resource.workspace.keys.has(pageKey)
+      ) decoded.close();
       else resource.readyPages.push({ decoded, page, pageKey });
     }).catch(() => {
       if (!resource.abort.signal.aborted) resource.failedPages.add(pageKey);

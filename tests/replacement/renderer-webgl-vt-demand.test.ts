@@ -7,6 +7,7 @@ import {
   collectVirtualTextureSurfaceDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
+  truncateVirtualTextureDemand,
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
 
@@ -83,6 +84,22 @@ describe("VT2 clipped projected demand", () => {
     expect(workspace.count).toBe(3);
     expect(workspace.overflow.value).toBe(true);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+  });
+
+  it("truncates protection to one drawable physical-capacity prefix", () => {
+    const workspace = createVirtualTextureDemandWorkspace(64);
+    const close = identityMat4();
+    close[0] = 16;
+    close[5] = 16;
+    collectVirtualTextureSurfaceDemand(workspace, manifest, surface, [view(close)], sampler);
+    expect(workspace.count).toBeGreaterThan(4);
+
+    truncateVirtualTextureDemand(workspace, 4);
+    expect(workspace.count).toBe(4);
+    expect(workspace.keys.size).toBe(4);
+    expect([...workspace.keys.values()].every((index) => index < 4)).toBe(true);
+    expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+    expect(workspace.overflow.value).toBe(true);
   });
 
   it("falls back to the coarsest page for non-finite authored coverage", () => {
