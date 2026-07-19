@@ -147,7 +147,7 @@ describe("canonical direct surface lowering", () => {
         {
           kind: "directional-light",
           color: [0.5, 0.25, 1, 1],
-          direction: [0, -1, 0],
+          direction: [0, -2, 0],
           illuminanceLux: 8,
         },
         mesh({

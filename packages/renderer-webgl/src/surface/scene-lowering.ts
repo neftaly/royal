@@ -101,6 +101,15 @@ const sceneExposure = (scene: RenderRoot): number => scene.exposureEv100 === und
   ? 1 / 1.2
   : 1 / (1.2 * 2 ** scene.exposureEv100);
 
+const normalizedDirection = (direction: Direction3): Direction3 => {
+  const inverseLength = 1 / Math.hypot(direction[0], direction[1], direction[2]);
+  return [
+    direction[0] * inverseLength,
+    direction[1] * inverseLength,
+    direction[2] * inverseLength,
+  ];
+};
+
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
   scene: RenderRoot,
@@ -227,7 +236,7 @@ export const prepareCanonicalSurfaceScene = (
             node.color[2] * node.illuminanceLux,
             1,
           ],
-          direction: node.direction,
+          direction: normalizedDirection(node.direction),
         });
         continue;
       }

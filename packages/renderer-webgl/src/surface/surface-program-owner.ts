@@ -177,7 +177,9 @@ uniform vec4 presentation;
 out vec4 outputColor;
 const float PI = 3.141592653589793;
 float fresnelPower(float cosine) {
-  return pow(clamp(1.0 - cosine, 0.0, 1.0), 5.0);
+  float value = clamp(1.0 - cosine, 0.0, 1.0);
+  float squared = value * value;
+  return squared * squared * value;
 }
 float ggxDistribution(float normalHalf, float roughness) {
   float alpha = max(roughness * roughness, 0.001);
@@ -269,17 +271,17 @@ void main() {
   vec3 dielectric = vec3(0.04);
   vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
+  float normalView = max(dot(normal, viewDirection), 0.0);
   vec3 lit = vec3(0.0);
   for (int index = 0; index < MAX_DIRECTIONAL_LIGHTS; index += 1) {
     if (index >= directionalLightCount) break;
-    vec3 lightDirection = normalize(-directionalLightDirections[index].xyz);
+    vec3 lightDirection = -directionalLightDirections[index].xyz;
     float normalLight = max(dot(normal, lightDirection), 0.0);
     if (normalLight <= 0.0) continue;
     vec3 halfwayInput = lightDirection + viewDirection;
     vec3 halfway = dot(halfwayInput, halfwayInput) <= 0.00000001
       ? normal
       : normalize(halfwayInput);
-    float normalView = max(dot(normal, viewDirection), 0.0);
     float normalHalf = max(dot(normal, halfway), 0.0);
     float viewHalf = max(dot(viewDirection, halfway), 0.0);
     vec3 fresnel = mix(f0, vec3(1.0), fresnelPower(viewHalf));
