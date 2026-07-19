@@ -1,5 +1,4 @@
 import {
-  affineSurfaceNormalTransformInto,
   cameraWorldPositionFromViewInto,
   identityMat4,
   multiplyMat4Into,
@@ -18,7 +17,6 @@ import {
 import type { CanonicalTextureBinding } from "./canonical-material";
 import {
   SurfaceProgramOwner,
-  surfaceProgramVariantKey,
   type StandardProgram,
   type UnlitProgram,
 } from "./surface-program-owner";
@@ -35,6 +33,7 @@ type GpuSurface = Readonly<{
   bindings: readonly GpuTextureBinding[];
   geometry: GpuGeometry;
   instanceCount: number;
+  program: StandardProgram | UnlitProgram;
   surface: CanonicalDrawSurface;
   vertexArray: WebGLVertexArrayObject;
 }>;
@@ -53,27 +52,23 @@ type MutableOpaqueDrawIntent = {
 const MATERIAL_TEXTURE_UNITS = 5;
 const SURFACE_UPLOADS_PER_FRAME = 16;
 
-const materialTextureFeatures = (surface: GpuSurface): number => {
-  let features = surface.bindings[0]!.texture === null ? 0 : 1;
-  if (surface.surface.material.kind !== "standard") return features;
-  if (surface.bindings[1]!.texture !== null) features |= 2;
-  if (surface.bindings[2]!.texture !== null) features |= 4;
-  if ((features & 4) !== 0 && surface.geometry.tangentBuffer !== null) features |= 16;
-  if (surface.bindings[4]!.texture !== null) features |= 8;
+const materialTextureFeatures = (
+  surface: CanonicalDrawSurface,
+  geometry: GpuGeometry,
+): number => {
+  let features = surface.material.baseColorTexture === undefined ? 0 : 1;
+  if (surface.material.kind !== "standard") return features;
+  if (surface.material.metallicRoughnessTexture !== undefined) features |= 2;
+  if (surface.material.normalTexture !== undefined) features |= 4;
+  if ((features & 4) !== 0 && geometry.tangentBuffer !== null) features |= 16;
+  if (surface.material.emissiveTexture !== undefined) features |= 8;
   return features;
 };
 
 const groupSurfacesByProgram = (surfaces: readonly GpuSurface[]): readonly GpuSurface[] => {
-  const groups = new Map<string, GpuSurface[]>();
+  const groups = new Map<WebGLProgram, GpuSurface[]>();
   for (const resource of surfaces) {
-    const material = resource.surface.material;
-    const key = surfaceProgramVariantKey(
-      material.kind,
-      materialTextureFeatures(resource),
-      resource.instanceCount > 0,
-      material.alphaCutoff !== undefined,
-      material.doubleSided === true,
-    );
+    const key = resource.program.program;
     const group = groups.get(key);
     if (group === undefined) groups.set(key, [resource]);
     else group.push(resource);
@@ -104,7 +99,6 @@ export class SurfaceGpuOwner {
   #gpuSurfaces: readonly GpuSurface[] = [];
   readonly #materialFactors = new Float32Array(4);
   readonly #emissiveFactor = new Float32Array(4);
-  readonly #normalTransform: MutableMat4 = identityMat4();
   readonly #programs: SurfaceProgramOwner;
   #scene: CanonicalSurfaceScene | null = null;
   readonly #textureGpu: TextureGpuOwner;
@@ -166,13 +160,7 @@ export class SurfaceGpuOwner {
     let drawIntent = this.#drawIntent;
     if (drawIntent === null) {
       const firstSurface = this.#gpuSurfaces[0]!;
-      const first = this.#programFor(
-        firstSurface.surface.material.kind,
-        materialTextureFeatures(firstSurface),
-        firstSurface.instanceCount > 0,
-        firstSurface.surface.material.alphaCutoff !== undefined,
-        firstSurface.surface.material.doubleSided === true,
-      );
+      const first = firstSurface.program;
       drawIntent = {
         cullBackFaces: firstSurface.surface.material.doubleSided !== true,
         framebuffer: null,
@@ -193,13 +181,7 @@ export class SurfaceGpuOwner {
     const gl = this.#gl;
     for (const resource of this.#gpuSurfaces) {
       const surface = resource.surface;
-      const program = this.#programFor(
-        surface.material.kind,
-        materialTextureFeatures(resource),
-        resource.instanceCount > 0,
-        surface.material.alphaCutoff !== undefined,
-        surface.material.doubleSided === true,
-      );
+      const program = resource.program;
       drawIntent.cullBackFaces = surface.material.doubleSided !== true;
       drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
       drawIntent.program = program.program;
@@ -235,8 +217,7 @@ export class SurfaceGpuOwner {
           standardGlobalsProgram = program.program;
         }
         gl.uniformMatrix4fv(program.model, false, surface.model);
-        affineSurfaceNormalTransformInto(this.#normalTransform, surface.model);
-        gl.uniformMatrix4fv(program.normalTransform, false, this.#normalTransform);
+        gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
         gl.uniform4fv(program.baseColor, material.baseColor);
         this.#emissiveFactor[0] = material.emissiveFactor[0];
         this.#emissiveFactor[1] = material.emissiveFactor[1];
@@ -269,16 +250,6 @@ export class SurfaceGpuOwner {
     return this.#dirty;
   }
 
-  #programFor(
-    kind: "standard" | "unlit",
-    features: number,
-    instanced: boolean,
-    alphaMasked: boolean,
-    doubleSided: boolean,
-  ): StandardProgram | UnlitProgram {
-    return this.#programs.get(kind, features, instanced, alphaMasked, doubleSided);
-  }
-
   #reconcile(): void {
     this.#dirty = false;
     const scene = this.#scene;
@@ -290,11 +261,20 @@ export class SurfaceGpuOwner {
     );
     const geometryPlan = this.#geometryGpu.prepare(surfaces, admittedSurfaceCount);
     try {
+      const programs = Array<StandardProgram | UnlitProgram>(geometryPlan.surfaces.length);
       const textureInputs = Array<CanonicalTextureBinding | undefined>(
         geometryPlan.surfaces.length * MATERIAL_TEXTURE_UNITS,
       );
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
-        const material = geometryPlan.surfaces[index]!.surface.material;
+        const geometrySurface = geometryPlan.surfaces[index]!;
+        const material = geometrySurface.surface.material;
+        programs[index] = this.#programs.get(
+          material.kind,
+          materialTextureFeatures(geometrySurface.surface, geometrySurface.geometry),
+          geometrySurface.instanceCount > 0,
+          material.alphaCutoff !== undefined,
+          material.doubleSided === true,
+        );
         const offset = index * MATERIAL_TEXTURE_UNITS;
         textureInputs[offset] = material.baseColorTexture;
         textureInputs[offset + 1] = material.kind === "standard"
@@ -315,16 +295,18 @@ export class SurfaceGpuOwner {
       for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
         const geometrySurface = geometryPlan.surfaces[index]!;
         const offset = index * MATERIAL_TEXTURE_UNITS;
+        const bindings = [
+          textureBindings[offset]!,
+          textureBindings[offset + 1]!,
+          textureBindings[offset + 2]!,
+          textureBindings[offset + 3]!,
+          textureBindings[offset + 4]!,
+        ];
         nextSurfaces[index] = {
-          bindings: [
-            textureBindings[offset]!,
-            textureBindings[offset + 1]!,
-            textureBindings[offset + 2]!,
-            textureBindings[offset + 3]!,
-            textureBindings[offset + 4]!,
-          ],
+          bindings,
           geometry: geometrySurface.geometry,
           instanceCount: geometrySurface.instanceCount,
+          program: programs[index]!,
           surface: geometrySurface.surface,
           vertexArray: geometrySurface.vertexArray,
         };

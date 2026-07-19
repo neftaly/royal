@@ -93,6 +93,7 @@ describe("canonical direct surface lowering", () => {
     expect(ready.surfaces[0]).not.toBe(firstSurface);
     expect(ready.surfaces[0]!.geometry).toBe(firstSurface.geometry);
     expect(ready.surfaces[0]!.model).toBe(firstSurface.model);
+    expect(ready.surfaces[0]!.normalTransform).toBe(firstSurface.normalTransform);
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(decoded);
     expect(ready.surfaces[1]).toBe(secondSurface);
   });

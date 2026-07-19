@@ -6,6 +6,7 @@ import type {
   RenderRoot,
 } from "@royal/renderer-core";
 import {
+  affineSurfaceNormalTransformInto,
   identityMat4,
   inverseMat4,
   multiplyMat4Into,
@@ -39,6 +40,7 @@ export type CanonicalDrawSurface = Readonly<{
   model: Mat4;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode;
+  normalTransform: Mat4;
   textureKeys: readonly string[];
 }>;
 
@@ -156,6 +158,7 @@ export const prepareCanonicalSurfaceScene = (
             ? modelHandedness(model)
             : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1,
           node,
+          normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
           textureKeys: canonicalMaterialTextureKeys(primitive.material),
         };
         if (proxyGeometry === undefined) {
@@ -226,6 +229,7 @@ export const prepareCanonicalSurfaceScene = (
       material,
       materialSource,
       node,
+      normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
       pickingGeometry: node.pickingGeometry === undefined
         ? geometry
         : prepareCanonicalGeometry(node.pickingGeometry),
