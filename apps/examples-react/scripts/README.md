@@ -265,6 +265,11 @@ IPAD_BENCH_HOST=<host-lan-ip> \
 pnpm --filter @royal/examples-react bench:ipad-safari -- --route=/gltf-instancing --frames=24 --warmup=8
 ```
 
+Add `--cold-cache=true` to disable WebKit resource caching for the inspected
+target. Use it for load-path evidence; omit it for steady-state frame samples.
+Failure reports retain the last responsive renderer/resource progress sample,
+so a later inspector stall does not erase where the load reached.
+
 Kitchen sink:
 
 ```sh

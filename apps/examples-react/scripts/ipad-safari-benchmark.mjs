@@ -25,6 +25,10 @@ const route = optionValue('route', process.env.IPAD_BENCH_ROUTE ?? '/gltf-instan
 const frames = numericOption('frames', Number.parseInt(process.env.IPAD_BENCH_FRAMES ?? '120', 10));
 const warmup = numericOption('warmup', Number.parseInt(process.env.IPAD_BENCH_WARMUP ?? '20', 10));
 const timeoutMs = numericOption('timeout-ms', Number.parseInt(process.env.IPAD_BENCH_TIMEOUT_MS ?? '30000', 10));
+const coldCache = optionValue(
+  'cold-cache',
+  process.env.IPAD_BENCH_COLD_CACHE ?? 'false',
+) === 'true';
 const waitForPhysicalOrientation = optionValue(
   'wait-for-orientation',
   process.env.IPAD_BENCH_WAIT_FOR_ORIENTATION ?? 'false',
@@ -41,6 +45,7 @@ const outputDir = path.resolve(
 );
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let lastBenchmarkProgress;
 
 const jsonGet = (url) =>
   new Promise((resolve, reject) => {
@@ -333,11 +338,18 @@ const waitForReport = async (client, targetId) => {
         client,
         targetId,
         [
-          'globalThis.__royalBrowserBenchmarkError !== undefined',
-          '? JSON.stringify({ error: globalThis.__royalBrowserBenchmarkError })',
-          ': globalThis.__royalBrowserBenchmarkReport === undefined',
-          '? null',
-          ': JSON.stringify({ report: globalThis.__royalBrowserBenchmarkReport })',
+          'JSON.stringify((() => {',
+          'if (globalThis.__royalBrowserBenchmarkError !== undefined)',
+          'return { error: globalThis.__royalBrowserBenchmarkError };',
+          'if (globalThis.__royalBrowserBenchmarkReport !== undefined)',
+          'return { report: globalThis.__royalBrowserBenchmarkReport };',
+          'return { progress: {',
+          'elapsedMs: performance.now(),',
+          'readyState: document.readyState,',
+          'renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,',
+          'resourceCount: performance.getEntriesByType("resource").length',
+          '} };',
+          '})())',
         ].join(' '),
         5_000,
       );
@@ -353,6 +365,7 @@ const waitForReport = async (client, targetId) => {
     if (typeof value === 'string') {
       const parsed = JSON.parse(value);
       if (typeof parsed.error === 'string') throw new Error(parsed.error);
+      if (parsed.progress !== undefined) lastBenchmarkProgress = parsed.progress;
       if (parsed.report !== undefined) {
         const reportUrl = new URL(parsed.report.url);
         if (
@@ -524,7 +537,11 @@ const run = async () => {
 
   try {
     await targetCommand(client, targetId, 'Console.enable');
+    await targetCommand(client, targetId, 'Network.enable');
     await targetCommand(client, targetId, 'Runtime.enable');
+    await targetCommand(client, targetId, 'Network.setResourceCachingDisabled', {
+      disabled: coldCache,
+    });
     const url = benchmarkUrl();
     console.log(`Navigating iPad Safari to ${url}`);
     await evaluate(
@@ -578,6 +595,7 @@ const run = async () => {
     const outputPath = path.join(outputDir, filename);
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: diagnosticSnapshot,
+      coldCache,
       physicalOrientation,
       receivedAt: new Date().toISOString(),
       report,
@@ -615,9 +633,11 @@ const run = async () => {
     }
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: browserDiagnostics.snapshot(),
+      coldCache,
       error: error instanceof Error ? error.stack ?? error.message : String(error),
       generatedAt,
       page: parsedPage,
+      progress: lastBenchmarkProgress,
       report,
       route,
     }, null, 2)}\n`);
