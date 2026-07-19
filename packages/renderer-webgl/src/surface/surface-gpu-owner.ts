@@ -527,6 +527,17 @@ export class SurfaceGpuOwner {
     this.#dirty = true;
   }
 
+  /** Commits pending texture representations without requiring a scene presentation. */
+  flushTexturePublications(state: WebGlStateOwner): boolean {
+    if (!this.#dirty || this.#texturePublicationKeys.size === 0) return false;
+    try {
+      this.#reconcileTexturePublications();
+    } finally {
+      state.invalidateTextureBindings();
+    }
+    return true;
+  }
+
   drawViews(
     views: readonly SurfaceFrameView[],
     framebuffer: WebGLFramebuffer | null,
@@ -594,13 +605,13 @@ export class SurfaceGpuOwner {
       }
     }
     if (this.#dirty) {
-      const texturePublication = this.#texturePublicationKeys.size > 0;
-      try {
-        if (texturePublication) this.#reconcileTexturePublications();
-        else this.#reconcile();
-      } finally {
-        if (!texturePublication) state.invalidateVertexArray();
-        state.invalidateTextureBindings();
+      if (!this.flushTexturePublications(state)) {
+        try {
+          this.#reconcile();
+        } finally {
+          state.invalidateVertexArray();
+          state.invalidateTextureBindings();
+        }
       }
     }
     if (

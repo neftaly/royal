@@ -15,7 +15,10 @@ import {
   type RenderRoot,
 } from "@royal/renderer-core";
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
-import { CanvasRoot } from "../../packages/renderer-webgl/src/runtime/canvas-root";
+import {
+  CanvasRoot,
+  type CanvasRootPlatform,
+} from "../../packages/renderer-webgl/src/runtime/canvas-root";
 import {
   staticTriangleDocument,
   staticTriangleGlb,
@@ -180,6 +183,70 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
       String(shader).includes("#define TEXTURED"))).toBe(true);
+  });
+
+  it("commits intermediate texture resources without presenting the whole scene", async () => {
+    let now = 0;
+    let nextDelay = 1;
+    const delays = new Map<number, () => void>();
+    const resolvers = new Map<string, (source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void>();
+    const decodeTexture = vi.fn<NonNullable<CanvasRootPlatform["decodeTexture"]>>(
+      (asset) => new Promise((resolve) => {
+        if (asset.kind !== "asset") throw new Error("expected direct test texture");
+        resolvers.set(asset.src, resolve);
+      }),
+    );
+    const { callbacks, canvas, root } = harness({
+      cancelDelay: (handle) => delays.delete(handle as number),
+      decodeTexture,
+      now: () => now,
+      requestDelay: (callback) => {
+        const handle = nextDelay;
+        nextDelay += 1;
+        delays.set(handle, callback);
+        return handle;
+      },
+    });
+    const textures = ["/one.png", "/two.png", "/three.png"].map((src) => imageTexture(src));
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: textures.map((texture, index) => mesh({
+        geometry,
+        material: unlitMaterial({ texture }),
+        transform: { position: [index * 0.1, 0, 0] },
+      })),
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
+
+    resolvers.get("/one.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
+    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    callbacks.shift()!();
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+
+    now = 10;
+    resolvers.get("/two.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
+    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    callbacks.shift()!();
+    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+    expect(root.getSnapshot().frame).toBe(2);
+    expect(delays.size).toBe(1);
+
+    now = 100;
+    delays.values().next().value!();
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(9);
+    expect(root.getSnapshot().frame).toBe(3);
+    root.dispose();
   });
 
   it("initializes fixed sampler units once per program rather than once per draw", async () => {
