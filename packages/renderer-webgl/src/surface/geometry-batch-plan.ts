@@ -33,6 +33,54 @@ const indexArray = (
   ? new Uint8Array(length)
   : indexBytes === 2 ? new Uint16Array(length) : new Uint32Array(length);
 
+const maximumIndexFor = (indices: GeometryIndexArray): number => indices.BYTES_PER_ELEMENT === 1
+  ? 0xff
+  : indices.BYTES_PER_ELEMENT === 2 ? 0xffff : 0xffff_ffff;
+
+/** Validates that a local index stream addresses only its declared vertices. */
+export const validateGeometryIndices = (
+  indices: GeometryIndexArray,
+  vertexCount: number,
+): void => {
+  if (!Number.isSafeInteger(vertexCount) || vertexCount < 1) {
+    throw new Error("Royal geometry batch received an invalid vertex count");
+  }
+  for (let index = 0; index < indices.length; index += 1) {
+    if (indices[index]! >= vertexCount) {
+      throw new Error("Royal geometry batch index exceeds its vertex range");
+    }
+  }
+};
+
+/** Writes one rebased stream into caller-owned storage without allocating. */
+export const writeRebasedGeometryIndices = (
+  output: GeometryIndexArray,
+  indices: GeometryIndexArray,
+  vertexOffset: number,
+  vertexCount: number,
+  outputOffset = 0,
+): void => {
+  if (
+    !Number.isSafeInteger(outputOffset)
+    || outputOffset < 0
+    || output.length - outputOffset < indices.length
+  ) {
+    throw new Error("Royal geometry batch index workspace is too small");
+  }
+  if (!Number.isSafeInteger(vertexOffset) || vertexOffset < 0) {
+    throw new Error("Royal geometry batch received an invalid vertex offset");
+  }
+  validateGeometryIndices(indices, vertexCount);
+  const maximumIndex = maximumIndexFor(output);
+  for (let index = 0; index < indices.length; index += 1) {
+    const rebasedIndex = vertexOffset + indices[index]!;
+    if (rebasedIndex > maximumIndex) {
+      throw new Error("Royal geometry batch exceeds its index storage");
+    }
+    output[outputOffset + index] = rebasedIndex;
+  }
+};
+
 /** Plans shared allocation and draw ranges without allocating merged index storage. */
 export const planGeometryBatchLayout = (
   geometries: readonly GeometryBatchInput[],
@@ -87,13 +135,7 @@ export const rebaseGeometryIndices = (
   vertexCount: number,
 ): GeometryIndexArray => {
   const output = indexArray(indices.length, indexBytes);
-  for (let index = 0; index < indices.length; index += 1) {
-    const sourceIndex = indices[index]!;
-    if (sourceIndex >= vertexCount) {
-      throw new Error("Royal geometry batch index exceeds its vertex range");
-    }
-    output[index] = vertexOffset + sourceIndex;
-  }
+  writeRebasedGeometryIndices(output, indices, vertexOffset, vertexCount);
   return output;
 };
 
@@ -107,14 +149,14 @@ export const planGeometryBatch = (
   for (let geometryIndex = 0; geometryIndex < geometries.length; geometryIndex += 1) {
     const geometry = geometries[geometryIndex]!;
     const range = layout.ranges[geometryIndex]!;
-    for (let index = 0; index < geometry.indices.length; index += 1) {
-      const sourceIndex = geometry.indices[index]!;
-      if (sourceIndex >= geometry.vertexCount) {
-        throw new Error("Royal geometry batch index exceeds its vertex range");
-      }
-      indices[outputOffset] = range.vertexOffset + sourceIndex;
-      outputOffset += 1;
-    }
+    writeRebasedGeometryIndices(
+      indices,
+      geometry.indices,
+      range.vertexOffset,
+      geometry.vertexCount,
+      outputOffset,
+    );
+    outputOffset += geometry.indices.length;
   }
   return { ...layout, indices };
 };

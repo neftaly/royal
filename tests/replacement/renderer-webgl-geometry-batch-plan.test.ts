@@ -3,6 +3,8 @@ import {
   planGeometryBatch,
   planGeometryBatchLayout,
   rebaseGeometryIndices,
+  validateGeometryIndices,
+  writeRebasedGeometryIndices,
 } from "../../packages/renderer-webgl/src/surface/geometry-batch-plan";
 import { forEachFuzzCase } from "../fuzz";
 
@@ -62,6 +64,20 @@ describe("geometry batch planning core", () => {
     );
     expect(admitted).toBeInstanceOf(Uint16Array);
     expect([...admitted]).toEqual([5, 3, 4]);
+  });
+
+  it("writes into larger caller-owned storage without allocating", () => {
+    const workspace = new Uint16Array(8);
+    writeRebasedGeometryIndices(workspace, new Uint8Array([2, 0, 1]), 300, 3);
+    expect([...workspace]).toEqual([302, 300, 301, 0, 0, 0, 0, 0]);
+    expect(() => writeRebasedGeometryIndices(
+      new Uint8Array(3),
+      new Uint8Array([2, 0, 1]),
+      300,
+      3,
+    )).toThrow("exceeds its index storage");
+    expect(() => validateGeometryIndices(new Uint8Array([0, 3]), 3))
+      .toThrow("index exceeds its vertex range");
   });
 
   it("matches a simple reference across randomized compatible batches", () => {

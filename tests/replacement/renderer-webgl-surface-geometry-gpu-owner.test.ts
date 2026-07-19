@@ -48,6 +48,21 @@ const surface = (geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof 
   })).surfaces;
 
 describe("surface geometry GPU owner", () => {
+  it("borrows an already compatible zero-offset index stream", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const [prepared] = surface(planeGeometry(1));
+    const indices = new Uint8Array(prepared!.geometry.indices);
+    owner.prepare([{
+      ...prepared!,
+      geometry: { ...prepared!.geometry, indices },
+    }]).commit();
+    const [upload] = vi.mocked(gl.bufferSubData).mock.calls
+      .filter(([target]) => target === gl.ELEMENT_ARRAY_BUFFER);
+    expect(upload).toHaveLength(3);
+    expect(upload![2]).toBe(indices);
+  });
+
   it("accounts committed geometry and denies allocation before crossing the root budget", () => {
     const budget = new PersistentGpuBudgetOwner(1024);
     const owner = new SurfaceGeometryGpuOwner(fakeGl(), budget);
@@ -113,11 +128,11 @@ describe("surface geometry GPU owner", () => {
       camera: perspectiveCamera({}),
       nodes: [
         mesh({
-          geometry: planeGeometry(1),
+          geometry: boxGeometry(1),
           material: unlitMaterial({ color: [1, 1, 1, 1] }),
         }),
         mesh({
-          geometry: boxGeometry(1),
+          geometry: planeGeometry(1),
           material: unlitMaterial({ color: [1, 1, 1, 1] }),
         }),
       ],
@@ -138,6 +153,12 @@ describe("surface geometry GPU owner", () => {
     expect(gl.createBuffer).toHaveBeenCalledTimes(2);
     expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
     expect(gl.bufferSubData).toHaveBeenCalledTimes(4);
+    const indexUploads = vi.mocked(gl.bufferSubData).mock.calls
+      .filter(([target]) => target === gl.ELEMENT_ARRAY_BUFFER);
+    expect(indexUploads).toHaveLength(2);
+    expect(indexUploads[0]).toHaveLength(5);
+    expect(indexUploads[1]).toHaveLength(5);
+    expect(indexUploads[0]![2]).toBe(indexUploads[1]![2]);
     secondAdmission.commit();
 
     owner.prepare(surfaces, 2).commit();

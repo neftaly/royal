@@ -9,7 +9,9 @@ import {
 } from "./gpu-admission";
 import {
   planGeometryBatchLayout,
-  rebaseGeometryIndices,
+  validateGeometryIndices,
+  writeRebasedGeometryIndices,
+  type GeometryIndexArray,
   type GeometryBatchLayoutPlan,
   type GeometryBatchRange,
 } from "./geometry-batch-plan";
@@ -103,6 +105,35 @@ type PlannedGeometryArena = Readonly<{
   layout: number;
 }>;
 
+type GeometryIndexUploadWorkspace = {
+  uint8?: Uint8Array;
+  uint16?: Uint16Array;
+  uint32?: Uint32Array;
+};
+
+const indexUploadWorkspace = (
+  workspace: GeometryIndexUploadWorkspace,
+  indexBytes: 1 | 2 | 4,
+  length: number,
+): GeometryIndexArray => {
+  if (indexBytes === 1) {
+    if (workspace.uint8 === undefined || workspace.uint8.length < length) {
+      workspace.uint8 = new Uint8Array(length);
+    }
+    return workspace.uint8;
+  }
+  if (indexBytes === 2) {
+    if (workspace.uint16 === undefined || workspace.uint16.length < length) {
+      workspace.uint16 = new Uint16Array(length);
+    }
+    return workspace.uint16;
+  }
+  if (workspace.uint32 === undefined || workspace.uint32.length < length) {
+    workspace.uint32 = new Uint32Array(length);
+  }
+  return workspace.uint32;
+};
+
 const planGeometryArenas = (
   surfaces: readonly CanonicalDrawSurface[],
 ): Readonly<{ key: string; plans: readonly PlannedGeometryArena[] }> => {
@@ -148,6 +179,7 @@ export class SurfaceGeometryGpuOwner {
   #geometryArenas: readonly GpuGeometryArena[] = [];
   #geometryPlanKey = "";
   #geometryResources: readonly GpuGeometry[] = [];
+  #indexUploadWorkspace: GeometryIndexUploadWorkspace = {};
   #uploadedGeometryKeys = new Set<string>();
   #plannedGeometry: ReturnType<typeof planGeometryArenas> | null = null;
   #plannedSurfaces: readonly CanonicalDrawSurface[] | null = null;
@@ -161,6 +193,7 @@ export class SurfaceGeometryGpuOwner {
 
   dispose(): void {
     this.#deleteResources();
+    this.#indexUploadWorkspace = {};
     this.#plannedGeometry = null;
     this.#plannedSurfaces = null;
   }
@@ -171,6 +204,7 @@ export class SurfaceGeometryGpuOwner {
     this.#geometryArenas = [];
     this.#geometryPlanKey = "";
     this.#geometryResources = [];
+    this.#indexUploadWorkspace = {};
     this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
@@ -340,22 +374,44 @@ export class SurfaceGeometryGpuOwner {
     arena: GpuGeometryArena,
     plan: PlannedGeometryArena,
     entry: PlannedGeometry,
+    indexWorkspace: GeometryIndexUploadWorkspace,
   ): void {
     const gl = this.#gl;
     const geometry = entry.surface.geometry;
     const vertexOffset = entry.range.vertexOffset;
     gl.bindVertexArray(arena.vertexArray);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, arena.indexBuffer);
-    gl.bufferSubData(
-      gl.ELEMENT_ARRAY_BUFFER,
-      entry.range.indexByteOffset,
-      rebaseGeometryIndices(
+    const vertexCount = geometry.positions.length / 3;
+    if (
+      vertexOffset === 0
+      && geometry.indices.BYTES_PER_ELEMENT === plan.batch.indexBytes
+    ) {
+      validateGeometryIndices(geometry.indices, vertexCount);
+      gl.bufferSubData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        entry.range.indexByteOffset,
+        geometry.indices,
+      );
+    } else {
+      const rebasedIndices = indexUploadWorkspace(
+        indexWorkspace,
+        plan.batch.indexBytes,
+        geometry.indices.length,
+      );
+      writeRebasedGeometryIndices(
+        rebasedIndices,
         geometry.indices,
         vertexOffset,
-        plan.batch.indexBytes,
-        geometry.positions.length / 3,
-      ),
-    );
+        vertexCount,
+      );
+      gl.bufferSubData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        entry.range.indexByteOffset,
+        rebasedIndices,
+        0,
+        geometry.indices.length,
+      );
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, arena.vertexBuffer);
     gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.positions);
     if (arena.normalBuffer !== null) {
@@ -542,6 +598,7 @@ export class SurfaceGeometryGpuOwner {
       this.#plannedSurfaces = surfaces;
     }
     const geometryPlanChanged = planned.key !== this.#geometryPlanKey;
+    if (geometryPlanChanged) this.#indexUploadWorkspace = {};
     const previousInstancesByKey = new Map(
       this.#instanceResources.map((resource) => [resource.key, resource] as const),
     );
@@ -605,7 +662,12 @@ export class SurfaceGeometryGpuOwner {
         if (!nextUploadedGeometryKeys.has(key)) {
           const upload = uploadByKey.get(key);
           if (upload === undefined) throw new Error("Royal geometry arena omitted an upload range");
-          this.#uploadGeometry(upload.arena, upload.plan, upload.entry);
+          this.#uploadGeometry(
+            upload.arena,
+            upload.plan,
+            upload.entry,
+            this.#indexUploadWorkspace,
+          );
           nextUploadedGeometryKeys.add(key);
         }
         let instanceCount = 0;
@@ -649,6 +711,9 @@ export class SurfaceGeometryGpuOwner {
           vertexArray = instanceVao.vertexArray;
         }
         nextSurfaces.push({ geometry, instanceCount, surface, vertexArray });
+      }
+      if (nextUploadedGeometryKeys.size === nextGeometryResources.length) {
+        this.#indexUploadWorkspace = {};
       }
     } catch (error) {
       for (const resource of createdInstanceVaos) this.#gl.deleteVertexArray(resource.vertexArray);
