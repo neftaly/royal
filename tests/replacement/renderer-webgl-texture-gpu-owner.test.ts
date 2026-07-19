@@ -69,7 +69,8 @@ describe("ordinary texture GPU owner", () => {
     expect(first[0]!.texture).toBe(first[1]!.texture);
     expect(first[0]!.sampler).not.toBe(first[1]!.sampler);
 
-    owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
+    const retained = owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
+    expect(retained[0]).toBe(first[1]);
     expect(gl.createTexture).toHaveBeenCalledTimes(1);
     expect(gl.generateMipmap).toHaveBeenCalledTimes(1);
     owner.reconcile([]);
@@ -84,5 +85,18 @@ describe("ordinary texture GPU owner", () => {
     expect(() => owner.reconcile([binding("broken", "nearest")]))
       .toThrow("could not allocate a texture sampler");
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+  });
+
+  it("rolls back new sampler work without disturbing retained storage or bindings", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    const first = owner.reconcile([binding("nearest", "nearest")]);
+    vi.mocked(gl.createSampler).mockReturnValueOnce(null as unknown as WebGLSampler);
+    expect(() => owner.reconcile([binding("broken", "nearest")]))
+      .toThrow("could not allocate a texture sampler");
+    const retained = owner.reconcile([binding("nearest", "nearest")]);
+    expect(retained[0]).toBe(first[0]);
+    expect(gl.createTexture).toHaveBeenCalledTimes(1);
+    expect(gl.deleteTexture).not.toHaveBeenCalled();
   });
 });

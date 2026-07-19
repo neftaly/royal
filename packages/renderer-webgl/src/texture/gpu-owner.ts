@@ -1,7 +1,11 @@
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
 
-type GpuTexture = { key: string; mipmapped: boolean; texture: WebGLTexture };
-type GpuSampler = Readonly<{ key: string; sampler: WebGLSampler }>;
+type GpuTexture = {
+  readonly bindings: WeakMap<WebGLSampler, GpuTextureBinding>;
+  mipmapped: boolean;
+  readonly texture: WebGLTexture;
+};
+type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
 export type GpuTextureBinding = Readonly<{
   sampler: WebGLSampler | null;
@@ -36,80 +40,82 @@ const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 /** Owns ordinary texture storage and sampler resources for one context generation. */
 export class TextureGpuOwner {
   readonly #gl: WebGL2RenderingContext;
-  #samplers: readonly GpuSampler[] = [];
-  #textures: readonly GpuTexture[] = [];
+  readonly #samplers = new Map<string, GpuSampler>();
+  readonly #textures = new Map<string, GpuTexture>();
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
   }
 
   dispose(): void {
-    for (const resource of this.#samplers) this.#gl.deleteSampler(resource.sampler);
-    for (const resource of this.#textures) this.#gl.deleteTexture(resource.texture);
-    this.#samplers = [];
-    this.#textures = [];
+    for (const resource of this.#samplers.values()) this.#gl.deleteSampler(resource.sampler);
+    for (const resource of this.#textures.values()) this.#gl.deleteTexture(resource.texture);
+    this.#samplers.clear();
+    this.#textures.clear();
   }
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
-    this.#samplers = [];
-    this.#textures = [];
+    this.#samplers.clear();
+    this.#textures.clear();
   }
 
   reconcile(
     bindings: readonly (CanonicalTextureBinding | undefined)[],
   ): readonly GpuTextureBinding[] {
-    const previousTextures = new Map(this.#textures.map((value) => [value.key, value] as const));
-    const previousSamplers = new Map(this.#samplers.map((value) => [value.key, value] as const));
-    const nextTextures = new Map<string, GpuTexture>();
-    const nextSamplers = new Map<string, GpuSampler>();
-    const textureResources: GpuTexture[] = [];
-    const samplerResources: GpuSampler[] = [];
+    const claimedTextures = new Set<string>();
+    const claimedSamplers = new Set<string>();
     const result: GpuTextureBinding[] = [];
-    const createdTextures: GpuTexture[] = [];
-    const createdSamplers: GpuSampler[] = [];
+    const createdTextures = new Map<string, GpuTexture>();
+    const createdSamplers = new Map<string, GpuSampler>();
+    const insertedBindings: [GpuTexture, WebGLSampler][] = [];
     try {
       for (const binding of bindings) {
         if (binding === undefined) {
           result.push(EMPTY_BINDING);
           continue;
         }
-        let texture = nextTextures.get(binding.storageKey)
-          ?? previousTextures.get(binding.storageKey);
+        let texture = createdTextures.get(binding.storageKey)
+          ?? this.#textures.get(binding.storageKey);
         if (texture === undefined) {
           texture = this.#createTexture(binding);
-          createdTextures.push(texture);
+          createdTextures.set(binding.storageKey, texture);
         }
         if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
-        if (!nextTextures.has(binding.storageKey)) {
-          nextTextures.set(binding.storageKey, texture);
-          textureResources.push(texture);
-        }
-        let sampler = nextSamplers.get(binding.samplerKey)
-          ?? previousSamplers.get(binding.samplerKey);
+        claimedTextures.add(binding.storageKey);
+        let sampler = createdSamplers.get(binding.samplerKey)
+          ?? this.#samplers.get(binding.samplerKey);
         if (sampler === undefined) {
           sampler = this.#createSampler(binding);
-          createdSamplers.push(sampler);
+          createdSamplers.set(binding.samplerKey, sampler);
         }
-        if (!nextSamplers.has(binding.samplerKey)) {
-          nextSamplers.set(binding.samplerKey, sampler);
-          samplerResources.push(sampler);
+        claimedSamplers.add(binding.samplerKey);
+        let resolved = texture.bindings.get(sampler.sampler);
+        if (resolved === undefined) {
+          resolved = { sampler: sampler.sampler, texture: texture.texture };
+          texture.bindings.set(sampler.sampler, resolved);
+          insertedBindings.push([texture, sampler.sampler]);
         }
-        result.push({ sampler: sampler.sampler, texture: texture.texture });
+        result.push(resolved);
       }
     } catch (error) {
-      for (const resource of createdSamplers) this.#gl.deleteSampler(resource.sampler);
-      for (const resource of createdTextures) this.#gl.deleteTexture(resource.texture);
+      for (const [texture, sampler] of insertedBindings) texture.bindings.delete(sampler);
+      for (const resource of createdSamplers.values()) this.#gl.deleteSampler(resource.sampler);
+      for (const resource of createdTextures.values()) this.#gl.deleteTexture(resource.texture);
       throw error;
     }
-    for (const resource of this.#samplers) {
-      if (nextSamplers.get(resource.key) !== resource) this.#gl.deleteSampler(resource.sampler);
+    for (const [key, resource] of this.#samplers) {
+      if (claimedSamplers.has(key)) continue;
+      this.#gl.deleteSampler(resource.sampler);
+      this.#samplers.delete(key);
     }
-    for (const resource of this.#textures) {
-      if (nextTextures.get(resource.key) !== resource) this.#gl.deleteTexture(resource.texture);
+    for (const [key, resource] of this.#textures) {
+      if (claimedTextures.has(key)) continue;
+      this.#gl.deleteTexture(resource.texture);
+      this.#textures.delete(key);
     }
-    this.#samplers = samplerResources;
-    this.#textures = textureResources;
+    for (const [key, resource] of createdSamplers) this.#samplers.set(key, resource);
+    for (const [key, resource] of createdTextures) this.#textures.set(key, resource);
     return result;
   }
 
@@ -122,7 +128,7 @@ export class TextureGpuOwner {
       gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, samplerFilter(gl, binding.sampler.minFilter));
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, samplerWrap(gl, binding.sampler.wrapS));
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, samplerWrap(gl, binding.sampler.wrapT));
-      return { key: binding.samplerKey, sampler };
+      return { sampler };
     } catch (error) {
       gl.deleteSampler(sampler);
       throw error;
@@ -149,7 +155,11 @@ export class TextureGpuOwner {
       );
       const mipmapped = usesMipmaps(binding.sampler.minFilter);
       if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
-      return { key: binding.storageKey, mipmapped, texture };
+      return {
+        bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),
+        mipmapped,
+        texture,
+      };
     } catch (error) {
       gl.deleteTexture(texture);
       throw error;
