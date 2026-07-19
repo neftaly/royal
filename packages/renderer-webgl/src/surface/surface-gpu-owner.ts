@@ -210,6 +210,7 @@ export class SurfaceGpuOwner {
       }
       drawIntent.vertexArray = resource.vertexArray;
       state.applyOpaqueDraw(drawIntent as OpaqueDrawStateIntent);
+      this.#programs.initializeSamplers(program);
       if (program.kind === "unlit") {
         multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
         gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
@@ -217,7 +218,6 @@ export class SurfaceGpuOwner {
         if (program.alphaCutoff !== null) {
           gl.uniform1f(program.alphaCutoff, surface.material.alphaCutoff ?? 0.5);
         }
-        if (program.texture !== null) gl.uniform1i(program.texture, 0);
       } else {
         const material = surface.material;
         if (material.kind !== "standard") {
@@ -238,10 +238,6 @@ export class SurfaceGpuOwner {
         affineSurfaceNormalTransformInto(this.#normalTransform, surface.model);
         gl.uniformMatrix4fv(program.normalTransform, false, this.#normalTransform);
         gl.uniform4fv(program.baseColor, material.baseColor);
-        if (program.texture !== null) gl.uniform1i(program.texture, 0);
-        if (program.metallicRoughness !== null) gl.uniform1i(program.metallicRoughness, 1);
-        if (program.normalTexture !== null) gl.uniform1i(program.normalTexture, 2);
-        if (program.emissive !== null) gl.uniform1i(program.emissive, 4);
         this.#emissiveFactor[0] = material.emissiveFactor[0];
         this.#emissiveFactor[1] = material.emissiveFactor[1];
         this.#emissiveFactor[2] = material.emissiveFactor[2];

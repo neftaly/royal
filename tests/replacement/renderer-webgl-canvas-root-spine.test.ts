@@ -360,6 +360,34 @@ describe("clear-only canvas root", () => {
       String(shader).includes("#define TEXTURED"))).toBe(true);
   });
 
+  it("initializes fixed sampler units once per program rather than once per draw", async () => {
+    const decodeTexture = vi.fn(async () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const { callbacks, canvas, root } = harness({ decodeTexture });
+    const texture = imageTexture("/shared.png");
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({ geometry, material: unlitMaterial({ texture }) }),
+        mesh({
+          geometry,
+          material: unlitMaterial({ texture }),
+          transform: { position: [0.25, 0, 0] },
+        }),
+      ],
+    }));
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.uniform1i).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.uniform1i).toHaveBeenCalledWith(expect.anything(), 0);
+  });
+
   it("renders committed camera-resource changes without rebuilding scene resources", () => {
     const { callbacks, canvas, root } = harness();
     const camera = createCameraViewResource(perspectiveCamera({ position: [0, 0, 3] }));

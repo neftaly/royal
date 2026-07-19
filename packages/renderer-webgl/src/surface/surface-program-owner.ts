@@ -432,6 +432,7 @@ const createStandardProgram = (
 
 export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
+  #initializedSamplers = new WeakSet<WebGLProgram>();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
 
   constructor(gl: WebGL2RenderingContext) {
@@ -469,7 +470,19 @@ export class SurfaceProgramOwner {
     return created;
   }
 
+  initializeSamplers(program: StandardProgram | UnlitProgram): void {
+    if (this.#initializedSamplers.has(program.program)) return;
+    if (program.texture !== null) this.#gl.uniform1i(program.texture, 0);
+    if (program.kind === "standard") {
+      if (program.metallicRoughness !== null) this.#gl.uniform1i(program.metallicRoughness, 1);
+      if (program.normalTexture !== null) this.#gl.uniform1i(program.normalTexture, 2);
+      if (program.emissive !== null) this.#gl.uniform1i(program.emissive, 4);
+    }
+    this.#initializedSamplers.add(program.program);
+  }
+
   invalidate(): void {
     this.#programs.clear();
+    this.#initializedSamplers = new WeakSet<WebGLProgram>();
   }
 }
