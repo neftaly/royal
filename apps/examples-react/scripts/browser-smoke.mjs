@@ -334,12 +334,14 @@ const routeCanvasReady = (route, state) => {
 const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
   const deadline = Date.now() + timeoutMs;
   let lastState;
+  let readyReads = 0;
 
   while (Date.now() < deadline) {
     lastState = await evaluate(session, smokeExpression);
     if (routeCanvasReady(route, lastState)) {
-      return lastState;
-    }
+      readyReads += 1;
+      if (readyReads >= (route.stableReadyReads ?? 1)) return lastState;
+    } else readyReads = 0;
     await sleep(100);
   }
 
@@ -1724,10 +1726,18 @@ const main = async () => {
         : {
           ...route,
           absentResourceSubstrings: [],
-          minColorBuckets: 1,
+          minColorBuckets: selectedCase.features.includes('KHR_materials_transmission') ? 8 : 1,
           minPaintedRatio: 0.0001,
           path: routeUrl.pathname + routeUrl.search,
-          resourceSubstrings: [gltfLabResourceSubstring(selectedCase)],
+          resourceSubstrings: [
+            gltfLabResourceSubstring(selectedCase),
+            ...(selectedCase.features.includes('KHR_materials_transmission')
+              ? ['surface-composite-owner']
+              : []),
+          ],
+          ...(selectedCase.features.includes('KHR_materials_transmission')
+            ? { stableReadyReads: 12 }
+            : {}),
         };
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });

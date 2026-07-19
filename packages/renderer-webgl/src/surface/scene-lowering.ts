@@ -20,6 +20,8 @@ import {
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import { prepareGltfInstanceBatches } from "../gltf/instance-transforms";
 import {
+  canonicalMaterialHasTransmission,
+  canonicalMaterialHasVolume,
   canonicalMaterialTextureKeys,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
@@ -121,6 +123,8 @@ export const collectCanonicalSurfaceTextureAssets = (
     add(materialSource.occlusionAsset);
     add(materialSource.specularColorAsset);
     add(materialSource.specularTextureAsset);
+    if (canonicalMaterialHasVolume(materialSource)) add(materialSource.thicknessAsset);
+    if (canonicalMaterialHasTransmission(materialSource)) add(materialSource.transmissionAsset);
   }
   return assets;
 };

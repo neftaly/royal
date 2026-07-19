@@ -55,6 +55,7 @@ uniform vec4 specularColorTextureCoordinates0;
 uniform vec4 specularColorTextureCoordinates1;
 out vec2 surfaceSpecularColorTextureCoordinate;
 #endif
+__TRANSMISSION_VERTEX_DECLARATIONS__
 uniform mat4 viewProjection;
 uniform mat4 model;
 uniform mat4 normalTransform;
@@ -104,6 +105,7 @@ void main() {
     specularColorTextureCoordinates1
   );
 #endif
+__TRANSMISSION_VERTEX_BODY__
 #endif
   vec4 localPosition = vec4(position, 1.0);
 #ifdef INSTANCED

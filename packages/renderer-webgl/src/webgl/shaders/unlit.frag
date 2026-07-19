@@ -28,5 +28,9 @@ void main() {
 #ifdef ALPHA_MASK
   if (color.a < alphaCutoff) discard;
 #endif
+#ifdef LINEAR_OUTPUT
+  outputColor = color;
+#else
   outputColor = vec4(linearToSrgb(color.rgb), color.a);
+#endif
 }

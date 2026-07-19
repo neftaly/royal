@@ -22,6 +22,8 @@ export class WebGlStateOwner {
     ...createUnknownClearState(),
     alphaBlend: null,
     cullBackFaces: null,
+    depthTest: null,
+    depthWrite: null,
     fixedPipelineKnown: false,
     frontFace: null,
     program: null,
@@ -39,6 +41,8 @@ export class WebGlStateOwner {
     this.#state.fixedPipelineKnown = false;
     this.#state.alphaBlend = null;
     this.#state.cullBackFaces = null;
+    this.#state.depthTest = null;
+    this.#state.depthWrite = null;
     this.#state.frontFace = null;
     this.#state.program = null;
     this.#state.textureBindings.length = 0;
@@ -54,6 +58,14 @@ export class WebGlStateOwner {
   /** Resource preparation may bind texture unit zero without owning draw state. */
   invalidateTextureBindings(): void {
     this.#state.textureBindingsKnown = false;
+  }
+
+  /** Detaches a private sampled texture before its storage becomes a render target. */
+  unbindTextureUnit(unit: number): void {
+    this.#gl.activeTexture(this.#gl.TEXTURE0 + unit);
+    this.#gl.bindTexture(this.#gl.TEXTURE_2D, null);
+    this.#gl.bindSampler(unit, null);
+    this.#state.textureBindings[unit] = undefined;
   }
 
   clear(intent: ClearFrameIntent): void {
@@ -109,8 +121,10 @@ export class WebGlStateOwner {
         } else gl.disable(gl.BLEND);
         gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.STENCIL_TEST);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthFunc(gl.LEQUAL);
+        if (intent.depthTest) {
+          gl.enable(gl.DEPTH_TEST);
+          gl.depthFunc(gl.LEQUAL);
+        } else gl.disable(gl.DEPTH_TEST);
       }
       if (transition.cullMode) {
         if (intent.cullBackFaces) {
@@ -123,7 +137,7 @@ export class WebGlStateOwner {
       if (transition.frontFace) gl.frontFace(intent.frontFace);
       if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
-        gl.depthMask(!intent.alphaBlend);
+        gl.depthMask(intent.depthWrite);
         gl.stencilMask(0xff_ff_ff_ff);
       }
       if (transition.program) gl.useProgram(intent.program);

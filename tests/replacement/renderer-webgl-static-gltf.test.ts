@@ -588,6 +588,127 @@ describe("static glTF preparation core", () => {
       .toThrow("must not combine KHR_materials_specular with KHR_materials_unlit");
   });
 
+  it("lowers transmission and volume semantics through ordinary texture recipes", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "volume.glb");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = [
+      "KHR_materials_ior",
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_texture_transform",
+    ];
+    document.images = [{ uri: "transmission.png" }, { uri: "thickness.png" }];
+    document.textures = [{ source: 0 }, { source: 1 }];
+    document.materials = [{
+      extensions: {
+        KHR_materials_ior: { ior: 1.33 },
+        KHR_materials_transmission: {
+          transmissionFactor: 0.75,
+          transmissionTexture: {
+            extensions: { KHR_texture_transform: { offset: [0.25, 0.5] } },
+            index: 0,
+          },
+        },
+        KHR_materials_volume: {
+          attenuationColor: [0.2, 0.5, 1],
+          attenuationDistance: 4,
+          thicknessFactor: 2,
+          thicknessTexture: { index: 1 },
+        },
+      },
+      pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 0.1 },
+    }];
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "volume-v1",
+      "volume.glb",
+      "/models/volume.glb",
+    );
+    expect(prepared.textureAssets.map((asset) => [asset.colorSpace, asset.kind === "asset"
+      ? asset.src
+      : asset.label])).toEqual([
+      ["linear", "/models/thickness.png"],
+      ["linear", "/models/transmission.png"],
+    ]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      attenuationColor: [0.2, 0.5, 1],
+      attenuationDistance: 4,
+      indexOfRefraction: 1.33,
+      kind: "standard",
+      requiresTextureCoordinates: true,
+      thicknessFactor: 2,
+      transmissionFactor: 0.75,
+      transmissionTextureCoordinates: {
+        row0: [1, 0, 0.25, 0],
+        row1: [0, 1, 0.5, 0],
+      },
+    });
+  });
+
+  it("keeps semantically inactive transmission and thickness images out of loading", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    document.images = [{ uri: "unused-transmission.png" }, { uri: "unused-thickness.png" }];
+    document.textures = [{ source: 0 }, { source: 1 }];
+    document.materials = [{
+      extensions: {
+        KHR_materials_transmission: {
+          transmissionFactor: 0,
+          transmissionTexture: { index: 0 },
+        },
+        KHR_materials_volume: {
+          thicknessFactor: 2,
+          thicknessTexture: { index: 1 },
+        },
+      },
+    }];
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "inactive-transmission");
+    expect(prepared.textureAssets).toEqual([]);
+    expect(prepared.primitives[0]!.material).toMatchObject({
+      requiresTextureCoordinates: false,
+      thicknessFactor: 2,
+      transmissionFactor: 0,
+    });
+  });
+
+  it("rejects malformed volume values and unlit transmission combinations", () => {
+    const standaloneVolume = staticTriangleDocument();
+    standaloneVolume.extensionsRequired = ["KHR_materials_volume"];
+    standaloneVolume.materials = [{ extensions: { KHR_materials_volume: {} } }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(standaloneVolume), "standalone-volume"))
+      .toThrow("KHR_materials_volume: requires KHR_materials_transmission");
+
+    const invalidDistance = staticTriangleDocument();
+    invalidDistance.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    invalidDistance.materials = [{
+      extensions: {
+        KHR_materials_transmission: {},
+        KHR_materials_volume: { attenuationDistance: 0 },
+      },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalidDistance), "invalid-distance"))
+      .toThrow("KHR_materials_volume.attenuationDistance: must be greater than zero");
+
+    const invalidThickness = staticTriangleDocument();
+    invalidThickness.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    invalidThickness.materials = [{
+      extensions: {
+        KHR_materials_transmission: {},
+        KHR_materials_volume: { thicknessFactor: -1 },
+      },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalidThickness), "invalid-thickness"))
+      .toThrow("KHR_materials_volume.thicknessFactor: must not be negative");
+
+    const unlitTransmission = staticTriangleDocument();
+    unlitTransmission.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_unlit"];
+    unlitTransmission.materials = [{
+      extensions: { KHR_materials_transmission: {}, KHR_materials_unlit: {} },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(unlitTransmission), "unlit-transmission"))
+      .toThrow("must not combine transmission or volume with KHR_materials_unlit");
+  });
+
   it("schedules authored occlusion through the ordinary texture lifecycle", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "occlusion.glb");
     const document = parsed.document as Record<string, unknown>;

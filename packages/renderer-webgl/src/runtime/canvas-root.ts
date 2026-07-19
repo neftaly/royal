@@ -301,7 +301,12 @@ export class CanvasRoot {
     );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
-    this.#surfaceGpu = new SurfaceGpuOwner(this.#gl, this.#persistentGpuBudget);
+    this.#surfaceGpu = new SurfaceGpuOwner(
+      this.#gl,
+      this.#persistentGpuBudget,
+      () => this.#clock.invalidate(),
+      (error) => this.#captureScheduledFailure(error),
+    );
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
@@ -359,7 +364,12 @@ export class CanvasRoot {
     this.#state.clear(intent);
     let pending: boolean;
     try {
-      pending = this.#surfaceGpu.drawViews(frame.views, frame.framebuffer, this.#state);
+      pending = this.#surfaceGpu.drawViews(
+        frame.views,
+        frame.framebuffer,
+        this.#state,
+        this.#clearColor,
+      );
     } finally {
       this.#releaseUploadedTextures();
     }
@@ -787,7 +797,12 @@ export class CanvasRoot {
       this.#canvasViewport.height = size.backingHeight;
       this.#canvasViewport.width = size.backingWidth;
       try {
-        if (this.#surfaceGpu.drawViews(this.#canvasViews, null, this.#state)) {
+        if (this.#surfaceGpu.drawViews(
+          this.#canvasViews,
+          null,
+          this.#state,
+          this.#clearColor,
+        )) {
           this.#clock.invalidate();
         }
       } finally {

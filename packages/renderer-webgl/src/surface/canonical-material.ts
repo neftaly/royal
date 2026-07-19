@@ -47,6 +47,8 @@ export type CanonicalUnlitMaterial = Readonly<{
 export type CanonicalStandardMaterial = Readonly<{
   alphaBlend?: true;
   alphaCutoff?: number;
+  attenuationColor?: readonly [number, number, number];
+  attenuationDistance?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
   baseColorVirtualAsset?: VirtualTextureAssetRef;
@@ -82,9 +84,27 @@ export type CanonicalStandardMaterial = Readonly<{
   specularTextureAsset?: TextureSourceRef;
   specularTexture?: CanonicalTextureBinding;
   specularTextureCoordinates?: CanonicalTextureCoordinates;
+  thicknessAsset?: TextureSourceRef;
+  thicknessFactor?: number;
+  thicknessTexture?: CanonicalTextureBinding;
+  thicknessTextureCoordinates?: CanonicalTextureCoordinates;
+  transmissionAsset?: TextureSourceRef;
+  transmissionFactor?: number;
+  transmissionTexture?: CanonicalTextureBinding;
+  transmissionTextureCoordinates?: CanonicalTextureCoordinates;
 }>;
 
 export type CanonicalSurfaceMaterial = CanonicalStandardMaterial | CanonicalUnlitMaterial;
+
+export const canonicalMaterialHasTransmission = (
+  material: CanonicalSurfaceMaterial,
+): material is CanonicalStandardMaterial => material.kind === "standard"
+  && (material.transmissionFactor ?? 0) > 0;
+
+export const canonicalMaterialHasVolume = (
+  material: CanonicalSurfaceMaterial,
+): material is CanonicalStandardMaterial => canonicalMaterialHasTransmission(material)
+  && (material.thicknessFactor ?? 0) > 0;
 
 /** Pure glTF dielectric Fresnel-at-normal-incidence rule, including IOR 0 compatibility. */
 export const dielectricF0FromIndexOfRefraction = (indexOfRefraction: number): number => {
@@ -121,6 +141,14 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
   ) || (
     material.specularColorAsset !== undefined
       && (material.specularColorTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    canonicalMaterialHasTransmission(material)
+      && material.transmissionAsset !== undefined
+      && (material.transmissionTextureCoordinates?.row0[3] ?? 0) === set
+  ) || (
+    canonicalMaterialHasVolume(material)
+      && material.thicknessAsset !== undefined
+      && (material.thicknessTextureCoordinates?.row0[3] ?? 0) === set
   );
 };
 
@@ -191,6 +219,10 @@ export const resolveCanonicalMaterialTexture = (
   const occlusionTexture = resolve(material.occlusionAsset);
   const specularTexture = resolve(material.specularTextureAsset);
   const specularColorTexture = resolve(material.specularColorAsset);
+  const thicknessTexture = resolve(canonicalMaterialHasVolume(material)
+    ? material.thicknessAsset : undefined);
+  const transmissionTexture = resolve(canonicalMaterialHasTransmission(material)
+    ? material.transmissionAsset : undefined);
   return {
     ...common,
     ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
@@ -199,6 +231,8 @@ export const resolveCanonicalMaterialTexture = (
     ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
     ...(specularTexture === undefined ? {} : { specularTexture }),
     ...(specularColorTexture === undefined ? {} : { specularColorTexture }),
+    ...(thicknessTexture === undefined ? {} : { thicknessTexture }),
+    ...(transmissionTexture === undefined ? {} : { transmissionTexture }),
   };
 };
 
@@ -261,6 +295,8 @@ export const canonicalMaterialTextureKeys = (
     add(material.occlusionAsset);
     add(material.specularColorAsset);
     add(material.specularTextureAsset);
+    if (canonicalMaterialHasVolume(material)) add(material.thicknessAsset);
+    if (canonicalMaterialHasTransmission(material)) add(material.transmissionAsset);
   }
   return keys.length === 0 ? EMPTY_TEXTURE_KEYS : keys;
 };

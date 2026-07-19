@@ -39,6 +39,7 @@ uniform sampler2D specularTexture;
 in vec2 surfaceSpecularColorTextureCoordinate;
 uniform sampler2D specularColorTexture;
 #endif
+__TRANSMISSION_DECLARATIONS__
 #ifdef STUDIO_ENVIRONMENT
 uniform mat4 environmentRotation;
 uniform vec4 environmentSettings;
@@ -280,7 +281,13 @@ void main() {
 #ifdef EMISSIVE_TEXTURED
   emissive *= texture(emissiveTexture, surfaceEmissiveTextureCoordinate).rgb;
 #endif
-  vec3 exposed = (lit + emissive) * max(presentation.x, 0.0);
+  vec3 linear = lit + emissive;
+__TRANSMISSION_BODY__
+#ifdef LINEAR_OUTPUT
+  outputColor = vec4(linear, surfaceBaseColor.a);
+#else
+  vec3 exposed = linear * max(presentation.x, 0.0);
   vec3 mapped = presentation.y > 0.5 ? pbrNeutral(exposed) : clamp(exposed, 0.0, 1.0);
   outputColor = vec4(linearToSrgb(mapped), surfaceBaseColor.a);
+#endif
 }

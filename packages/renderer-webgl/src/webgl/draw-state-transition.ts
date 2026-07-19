@@ -8,6 +8,8 @@ export type TextureUnitBinding = Readonly<{
 export type SurfaceDrawStateIntent = Readonly<{
   alphaBlend: boolean;
   cullBackFaces: boolean;
+  depthTest: boolean;
+  depthWrite: boolean;
   framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
@@ -32,6 +34,8 @@ export type SurfaceDrawStateTransition = {
 export type AppliedSurfaceDrawState = AppliedClearState & {
   alphaBlend: boolean | null;
   cullBackFaces: boolean | null;
+  depthTest: boolean | null;
+  depthWrite: boolean | null;
   fixedPipelineKnown: boolean;
   frontFace: number | null;
   program: WebGLProgram | null;
@@ -68,14 +72,15 @@ export const planSurfaceDrawStateTransition = (
   output.fixedPipeline = unknown
     || !previous.fixedPipelineKnown
     || previous.scissorEnabled
-    || previous.alphaBlend !== next.alphaBlend;
+    || previous.alphaBlend !== next.alphaBlend
+    || previous.depthTest !== next.depthTest;
   output.cullMode = unknown
     || !previous.fixedPipelineKnown
     || previous.cullBackFaces !== next.cullBackFaces;
   output.frontFace = unknown || previous.frontFace !== next.frontFace;
   output.writeMasks = unknown
     || !previous.writeMasksKnown
-    || previous.alphaBlend !== next.alphaBlend;
+    || previous.depthWrite !== next.depthWrite;
   output.program = unknown || previous.program !== next.program;
   output.textureUnits = 0;
   let remainingUnits = next.textureUnits;
@@ -96,6 +101,8 @@ export const commitAppliedSurfaceDrawState = (
 ): void => {
   state.alphaBlend = intent.alphaBlend;
   state.cullBackFaces = intent.cullBackFaces;
+  state.depthTest = intent.depthTest;
+  state.depthWrite = intent.depthWrite;
   state.fixedPipelineKnown = true;
   state.framebuffer = intent.framebuffer;
   state.frontFace = intent.frontFace;

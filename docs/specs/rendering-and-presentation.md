@@ -78,6 +78,28 @@ not path-traced refraction. It MUST obey material IOR, thickness/volume and
 attenuation data within that model. Geometry outside the available screen copy
 or behind unsupported ordering uses a stable documented fallback.
 
+The implemented path is private and demand-loaded. For each active view, Royal
+renders opaque/masked work into one scene-linear color/depth target, snapshots
+that color for transmission, draws transmission followed by blended work, and
+performs tone mapping/output encoding once while presenting to the destination
+framebuffer. A renderable half-float target is used only when both float-color
+and float-blend support are present; otherwise the same semantics use a clamped
+RGBA8 linear target. Budget denial or target incompleteness keeps the core PBR
+material as a stable opaque fallback rather than exposing partial or stale
+screen color.
+
+Rough transmission samples the opaque snapshot mip chain. Royal allocates and
+regenerates that chain only when an active transmission material has meaningful
+roughness or an authored metallic-roughness texture; sharp transmission uses
+level zero. Refraction projects the IOR-bent volume ray back into the current
+view, and attenuation uses its grazing-angle-adjusted travel distance. Samples
+outside the current view fall back to the material's lit reflection result.
+Royal's static profile requires `KHR_materials_volume` to be paired with
+`KHR_materials_transmission`; inert factor-zero transmission and thickness
+textures do not enter the loading lifecycle. For an active nonzero-thickness
+volume boundary, authored `doubleSided` state has no effect, as required by the
+glTF volume model.
+
 Dispersion may use a bounded three-channel approximation. It MUST activate only
 for materials that request it and MUST NOT impose shader or screen-copy cost on
 ordinary materials.

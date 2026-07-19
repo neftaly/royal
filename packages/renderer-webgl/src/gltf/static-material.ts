@@ -273,6 +273,30 @@ export const prepareMaterial = (
   if (unlit && specularExtension !== undefined) {
     fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_specular with KHR_materials_unlit");
   }
+  const transmissionExtension = extensions.KHR_materials_transmission === undefined
+    ? undefined
+    : object(
+      extensions.KHR_materials_transmission,
+      label,
+      `${materialPath}.extensions.KHR_materials_transmission`,
+    );
+  const volumeExtension = extensions.KHR_materials_volume === undefined
+    ? undefined
+    : object(
+      extensions.KHR_materials_volume,
+      label,
+      `${materialPath}.extensions.KHR_materials_volume`,
+    );
+  if (volumeExtension !== undefined && transmissionExtension === undefined) {
+    fail(
+      label,
+      `${materialPath}.extensions.KHR_materials_volume`,
+      "requires KHR_materials_transmission in Royal's static profile",
+    );
+  }
+  if (unlit && (transmissionExtension !== undefined || volumeExtension !== undefined)) {
+    fail(label, `${materialPath}.extensions`, "must not combine transmission or volume with KHR_materials_unlit");
+  }
   const indexOfRefraction = finiteFactor(
     iorExtension?.ior,
     1.5,
@@ -378,6 +402,16 @@ export const prepareMaterial = (
     `${materialPath}.extensions.KHR_materials_specular.specularColorTexture`,
     "srgb",
   );
+  const transmissionTexture = materialTexture(
+    transmissionExtension?.transmissionTexture,
+    `${materialPath}.extensions.KHR_materials_transmission.transmissionTexture`,
+    "linear",
+  );
+  const thicknessTexture = materialTexture(
+    volumeExtension?.thicknessTexture,
+    `${materialPath}.extensions.KHR_materials_volume.thicknessTexture`,
+    "linear",
+  );
   const specularColor = finiteTuple(
     specularExtension?.specularColorFactor,
     3,
@@ -432,6 +466,58 @@ export const prepareMaterial = (
   const occlusionTexture = material.occlusionTexture === undefined
     ? undefined
     : object(material.occlusionTexture, label, `${materialPath}.occlusionTexture`);
+  const attenuationColor = finiteTuple(
+    volumeExtension?.attenuationColor,
+    3,
+    [1, 1, 1],
+    label,
+    `${materialPath}.extensions.KHR_materials_volume.attenuationColor`,
+  );
+  for (let channel = 0; channel < 3; channel += 1) {
+    if (attenuationColor[channel]! < 0 || attenuationColor[channel]! > 1) {
+      fail(
+        label,
+        `${materialPath}.extensions.KHR_materials_volume.attenuationColor[${channel}]`,
+        "must be within 0..1",
+      );
+    }
+  }
+  const attenuationDistance = volumeExtension?.attenuationDistance === undefined
+    ? undefined
+    : finiteFactor(
+      volumeExtension.attenuationDistance,
+      1,
+      label,
+      `${materialPath}.extensions.KHR_materials_volume.attenuationDistance`,
+    );
+  if (attenuationDistance !== undefined && attenuationDistance <= 0) {
+    fail(
+      label,
+      `${materialPath}.extensions.KHR_materials_volume.attenuationDistance`,
+      "must be greater than zero",
+    );
+  }
+  const thicknessFactor = finiteFactor(
+    volumeExtension?.thicknessFactor,
+    0,
+    label,
+    `${materialPath}.extensions.KHR_materials_volume.thicknessFactor`,
+  );
+  if (thicknessFactor < 0) {
+    fail(
+      label,
+      `${materialPath}.extensions.KHR_materials_volume.thicknessFactor`,
+      "must not be negative",
+    );
+  }
+  const transmissionFactor = factor01(
+    transmissionExtension?.transmissionFactor,
+    0,
+    label,
+    `${materialPath}.extensions.KHR_materials_transmission.transmissionFactor`,
+  );
+  const transmissionActive = transmissionFactor > 0;
+  const volumeActive = transmissionActive && thicknessFactor > 0;
   return {
     ...presentation,
     baseColor,
@@ -477,7 +563,9 @@ export const prepareMaterial = (
       || occlusionTextureUse !== undefined
       || emissiveTexture !== undefined
       || specularTexture !== undefined
-      || specularColorTexture !== undefined,
+      || specularColorTexture !== undefined
+      || (volumeActive && thicknessTexture !== undefined)
+      || (transmissionActive && transmissionTexture !== undefined),
     roughnessFactor: factor01(pbr.roughnessFactor, 1, label, `${materialPath}.pbrMetallicRoughness.roughnessFactor`),
     ...(specularExtension === undefined ? {} : {
       specularColorFactor: [specularColor[0]!, specularColor[1]!, specularColor[2]!] as const,
@@ -496,5 +584,30 @@ export const prepareMaterial = (
     ...(specularColorTexture === undefined || specularColorTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
       ? {}
       : { specularColorTextureCoordinates: specularColorTexture.coordinates }),
+    ...(transmissionExtension === undefined ? {} : {
+      transmissionFactor,
+    }),
+    ...(!transmissionActive || transmissionTexture === undefined
+      ? {} : { transmissionAsset: transmissionTexture.asset }),
+    ...(!transmissionActive
+      || transmissionTexture === undefined
+      || transmissionTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { transmissionTextureCoordinates: transmissionTexture.coordinates }),
+    ...(volumeExtension === undefined ? {} : {
+      attenuationColor: [
+        attenuationColor[0]!,
+        attenuationColor[1]!,
+        attenuationColor[2]!,
+      ] as const,
+      ...(attenuationDistance === undefined ? {} : { attenuationDistance }),
+      thicknessFactor,
+    }),
+    ...(!volumeActive || thicknessTexture === undefined ? {} : { thicknessAsset: thicknessTexture.asset }),
+    ...(!volumeActive
+      || thicknessTexture === undefined
+      || thicknessTexture.coordinates === IDENTITY_TEXTURE_COORDINATES
+      ? {}
+      : { thicknessTextureCoordinates: thicknessTexture.coordinates }),
   };
 };

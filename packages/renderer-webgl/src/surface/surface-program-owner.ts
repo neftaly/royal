@@ -12,6 +12,20 @@ export type TextureCoordinatesProgram = Readonly<{
   row1: WebGLUniformLocation;
 }>;
 
+export type SurfaceTransmissionShaderSource = Readonly<{
+  fragmentBody: string;
+  fragmentDeclarations: string;
+  vertexBody: string;
+  vertexDeclarations: string;
+}>;
+
+const EMPTY_TRANSMISSION_SHADER_SOURCE: SurfaceTransmissionShaderSource = {
+  fragmentBody: "",
+  fragmentDeclarations: "",
+  vertexBody: "",
+  vertexDeclarations: "",
+};
+
 export const SURFACE_FEATURE_BASE_COLOR_TEXTURE = 1;
 export const SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE = 2;
 export const SURFACE_FEATURE_NORMAL_TEXTURE = 4;
@@ -24,6 +38,10 @@ export const SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE = 256;
 export const SURFACE_FEATURE_SPECULAR_TEXTURE = 512;
 export const SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE = 1024;
 export const SURFACE_FEATURE_SPECULAR_MATERIAL = 2048;
+export const SURFACE_FEATURE_LINEAR_OUTPUT = 4096;
+export const SURFACE_FEATURE_TRANSMISSION_MATERIAL = 8192;
+export const SURFACE_FEATURE_TRANSMISSION_TEXTURE = 16384;
+export const SURFACE_FEATURE_THICKNESS_TEXTURE = 32768;
 export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
   | SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
   | SURFACE_FEATURE_NORMAL_TEXTURE
@@ -31,6 +49,8 @@ export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
   | SURFACE_FEATURE_OCCLUSION_TEXTURE
   | SURFACE_FEATURE_SPECULAR_TEXTURE
   | SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
+  | SURFACE_FEATURE_TRANSMISSION_TEXTURE
+  | SURFACE_FEATURE_THICKNESS_TEXTURE
   | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
 
 export type UnlitProgram = Readonly<{
@@ -51,6 +71,7 @@ export type UnlitProgram = Readonly<{
 export type StandardProgram = Readonly<{
   alphaMasked: boolean;
   baseColor: WebGLUniformLocation;
+  attenuationColor: WebGLUniformLocation | null;
   cameraWorldPosition: WebGLUniformLocation;
   directionalLightColors: WebGLUniformLocation;
   directionalLightCount: WebGLUniformLocation;
@@ -72,7 +93,7 @@ export type StandardProgram = Readonly<{
   occlusionCoordinates: TextureCoordinatesProgram | null;
   occlusionStrength: WebGLUniformLocation | null;
   program: WebGLProgram;
-  presentation: WebGLUniformLocation;
+  presentation: WebGLUniformLocation | null;
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
   virtualPageTable: WebGLUniformLocation | null;
@@ -90,6 +111,12 @@ export type StandardProgram = Readonly<{
   specularColorCoordinates: TextureCoordinatesProgram | null;
   specularCoordinates: TextureCoordinatesProgram | null;
   specularFactors: WebGLUniformLocation | null;
+  sceneColor: WebGLUniformLocation | null;
+  thickness: WebGLUniformLocation | null;
+  thicknessCoordinates: TextureCoordinatesProgram | null;
+  transmission: WebGLUniformLocation | null;
+  transmissionCoordinates: TextureCoordinatesProgram | null;
+  transmissionFactors: WebGLUniformLocation | null;
   viewProjection: WebGLUniformLocation;
 }>;
 
@@ -120,7 +147,8 @@ const compileShader = (
   if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
     const detail = gl.getShaderInfoLog(shader) ?? "unknown compiler failure";
     gl.deleteShader(shader);
-    throw new Error(`Royal surface shader compilation failed: ${detail}`);
+    const stage = type === gl.VERTEX_SHADER ? "vertex" : "fragment";
+    throw new Error(`Royal surface ${stage} shader compilation failed: ${detail}`);
   }
   return shader;
 };
@@ -164,12 +192,29 @@ const shaderVariant = (
   alphaMasked: boolean,
   doubleSided: boolean,
   virtualDeclarations: string,
+  transmissionSource: SurfaceTransmissionShaderSource,
 ): string => source.replace(
   "__VIRTUAL_TEXTURE_DECLARATIONS__",
   features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
 ).replace(
+  "__TRANSMISSION_DECLARATIONS__",
+  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+    ? transmissionSource.fragmentDeclarations : "",
+).replace(
+  "__TRANSMISSION_BODY__",
+  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+    ? transmissionSource.fragmentBody : "",
+).replace(
+  "__TRANSMISSION_VERTEX_DECLARATIONS__",
+  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+    ? transmissionSource.vertexDeclarations : "",
+).replace(
+  "__TRANSMISSION_VERTEX_BODY__",
+  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+    ? transmissionSource.vertexBody : "",
+).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
 );
 
 const uniform = (
@@ -201,11 +246,12 @@ const createUnlitProgram = (
   alphaMasked: boolean,
   doubleSided: boolean,
   virtualDeclarations: string,
+  transmissionSource: SurfaceTransmissionShaderSource,
 ): UnlitProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, ""),
-    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations),
+    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, "", transmissionSource),
+    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
@@ -239,14 +285,18 @@ const createStandardProgram = (
   alphaMasked: boolean,
   doubleSided: boolean,
   virtualDeclarations: string,
+  transmissionSource: SurfaceTransmissionShaderSource,
 ): StandardProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, ""),
-    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations),
+    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, "", transmissionSource),
+    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
   return {
     alphaMasked,
+    attenuationColor: features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? uniform(gl, program, "attenuationColor")
+      : null,
     baseColor: uniform(gl, program, "baseColor"),
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
     directionalLightColors: uniform(gl, program, "directionalLightColors"),
@@ -290,7 +340,9 @@ const createStandardProgram = (
     occlusionStrength: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
       ? uniform(gl, program, "occlusionStrength")
       : null,
-    presentation: uniform(gl, program, "presentation"),
+    presentation: features & SURFACE_FEATURE_LINEAR_OUTPUT
+      ? null
+      : uniform(gl, program, "presentation"),
     program,
     punctualLightColors: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
       ? uniform(gl, program, "punctualLightColors")
@@ -322,6 +374,24 @@ const createStandardProgram = (
     specularFactors: features & SURFACE_FEATURE_SPECULAR_MATERIAL
       ? uniform(gl, program, "specularFactors")
       : null,
+    sceneColor: features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? uniform(gl, program, "sceneColor")
+      : null,
+    thickness: features & SURFACE_FEATURE_THICKNESS_TEXTURE
+      ? uniform(gl, program, "thicknessTexture")
+      : null,
+    thicknessCoordinates: features & SURFACE_FEATURE_THICKNESS_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "thickness")
+      : null,
+    transmission: features & SURFACE_FEATURE_TRANSMISSION_TEXTURE
+      ? uniform(gl, program, "transmissionTexture")
+      : null,
+    transmissionCoordinates: features & SURFACE_FEATURE_TRANSMISSION_TEXTURE
+      ? textureCoordinatesProgram(gl, program, "transmission")
+      : null,
+    transmissionFactors: features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? uniform(gl, program, "transmissionFactors")
+      : null,
     texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? uniform(gl, program, "baseColorTexture")
       : null,
@@ -346,6 +416,7 @@ export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   #initializedSamplers = new WeakSet<WebGLProgram>();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
+  #transmissionSource = EMPTY_TRANSMISSION_SHADER_SOURCE;
   #virtualDeclarations = "";
 
   constructor(gl: WebGL2RenderingContext) {
@@ -377,8 +448,8 @@ export class SurfaceProgramOwner {
     const retained = this.#programs.get(key);
     if (retained !== undefined) return retained;
     const created = kind === "unlit"
-      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false, this.#virtualDeclarations)
-      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided, this.#virtualDeclarations);
+      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false, this.#virtualDeclarations, this.#transmissionSource)
+      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided, this.#virtualDeclarations, this.#transmissionSource);
     this.#programs.set(key, created);
     return created;
   }
@@ -393,6 +464,9 @@ export class SurfaceProgramOwner {
       if (program.occlusion !== null) this.#gl.uniform1i(program.occlusion, 4);
       if (program.specular !== null) this.#gl.uniform1i(program.specular, 5);
       if (program.specularColor !== null) this.#gl.uniform1i(program.specularColor, 6);
+      if (program.transmission !== null) this.#gl.uniform1i(program.transmission, 8);
+      if (program.thickness !== null) this.#gl.uniform1i(program.thickness, 9);
+      if (program.sceneColor !== null) this.#gl.uniform1i(program.sceneColor, 10);
     }
     if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 7);
     this.#initializedSamplers.add(program.program);
@@ -409,5 +483,13 @@ export class SurfaceProgramOwner {
     this.#programs.clear();
     this.#initializedSamplers = new WeakSet<WebGLProgram>();
     this.#virtualDeclarations = declarations;
+  }
+
+  setTransmissionShaderSource(source: SurfaceTransmissionShaderSource): void {
+    if (this.#transmissionSource === source) return;
+    for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
+    this.#programs.clear();
+    this.#initializedSamplers = new WeakSet<WebGLProgram>();
+    this.#transmissionSource = source;
   }
 }

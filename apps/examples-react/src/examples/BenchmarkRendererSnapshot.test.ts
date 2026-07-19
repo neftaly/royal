@@ -96,6 +96,12 @@ describe('current benchmark VT adapter', () => {
   it('reports focused manifest and residency progress without frame counters', () => {
     expect(benchmarkVirtualTextureDiagnostics(undefined)).toBeNull();
     expect(benchmarkVirtualTextureDiagnostics({
+      failedPages: 0,
+      pendingPages: 0,
+      residentPages: 0,
+      state: 'idle',
+    })?.manifestRequests).toBe(0);
+    expect(benchmarkVirtualTextureDiagnostics({
       failedPages: 2,
       pendingPages: 3,
       residentPages: 17,

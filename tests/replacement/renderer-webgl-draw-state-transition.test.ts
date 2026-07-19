@@ -14,6 +14,8 @@ const state = (): AppliedSurfaceDrawState => ({
   ...createUnknownClearState(),
   alphaBlend: null,
   cullBackFaces: null,
+  depthTest: null,
+  depthWrite: null,
   fixedPipelineKnown: false,
   frontFace: null,
   program: null,
@@ -25,6 +27,8 @@ const state = (): AppliedSurfaceDrawState => ({
 const intent = (): SurfaceDrawStateIntent => ({
   alphaBlend: false,
   cullBackFaces: true,
+  depthTest: true,
+  depthWrite: true,
   framebuffer: null,
   frontFace: 0x0901,
   program: handle<WebGLProgram>(),
@@ -146,11 +150,29 @@ describe("surface draw state transition core", () => {
     const opaque = intent();
     commitAppliedSurfaceDrawState(previous, opaque);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, { ...opaque, alphaBlend: true }, transition);
+    planSurfaceDrawStateTransition(previous, {
+      ...opaque,
+      alphaBlend: true,
+      depthWrite: false,
+    }, transition);
     expect(transition.fixedPipeline).toBe(true);
     expect(transition.writeMasks).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "fixedPipeline" && key !== "writeMasks")
       .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("represents a fullscreen pass without coupling depth behavior to blending", () => {
+    const previous = state();
+    const opaque = intent();
+    commitAppliedSurfaceDrawState(previous, opaque);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, {
+      ...opaque,
+      depthTest: false,
+      depthWrite: false,
+    }, transition);
+    expect(transition.fixedPipeline).toBe(true);
+    expect(transition.writeMasks).toBe(true);
   });
 });
