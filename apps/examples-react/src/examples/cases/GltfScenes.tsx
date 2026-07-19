@@ -75,7 +75,7 @@ const sceneEntries = [
   },
   {
     bytes: 3_085_416,
-    camera: { distance: 205, pitch: 0.34, target: [0, 24, 1.43], yaw: 0.66 },
+    camera: { distance: 30, pitch: 0.58, target: [0, 18, 1.43], yaw: 0.66 },
     credit: '3DRT',
     description: 'Compact city scene with 234 nodes and 167 materials; its authored animation is shown paused.',
     far: 1_200,
