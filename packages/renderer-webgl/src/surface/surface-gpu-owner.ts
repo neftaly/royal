@@ -222,7 +222,8 @@ export class SurfaceGpuOwner {
     let standardGlobalsProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     frustumPlanesInto(this.#frustumPlanes, viewProjection);
-    for (const resource of this.#gpuSurfaces) {
+    for (let index = 0; index < this.#gpuSurfaces.length; index += 1) {
+      const resource = this.#gpuSurfaces[index]!;
       const surface = resource.surface;
       if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;

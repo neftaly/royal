@@ -181,15 +181,11 @@ float fresnelPower(float cosine) {
   float squared = value * value;
   return squared * squared * value;
 }
-float ggxDistribution(float normalHalf, float roughness) {
-  float alpha = max(roughness * roughness, 0.001);
-  float alphaSquared = alpha * alpha;
+float ggxDistribution(float normalHalf, float alphaSquared) {
   float denominator = normalHalf * normalHalf * (alphaSquared - 1.0) + 1.0;
   return alphaSquared / max(PI * denominator * denominator, 0.0001);
 }
-float smithVisibility(float normalLight, float normalView, float roughness) {
-  float alpha = max(roughness * roughness, 0.001);
-  float alphaSquared = alpha * alpha;
+float smithVisibility(float normalLight, float normalView, float alphaSquared) {
   float lambdaView = normalLight * sqrt(max(
     normalView * normalView * (1.0 - alphaSquared) + alphaSquared,
     0.0
@@ -268,6 +264,8 @@ void main() {
   roughness *= metallicRoughnessSample.g;
 #endif
   roughness = clamp(roughness, 0.04, 1.0);
+  float alpha = max(roughness * roughness, 0.001);
+  float alphaSquared = alpha * alpha;
   vec3 dielectric = vec3(0.04);
   vec3 f0 = mix(dielectric, surfaceBaseColor.rgb, metallic);
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
@@ -287,8 +285,8 @@ void main() {
     vec3 fresnel = mix(f0, vec3(1.0), fresnelPower(viewHalf));
     vec3 diffuse = diffuseColor * (1.0 - max(max(fresnel.r, fresnel.g), fresnel.b)) / PI;
     vec3 specular = fresnel
-      * ggxDistribution(normalHalf, roughness)
-      * smithVisibility(normalLight, normalView, roughness);
+      * ggxDistribution(normalHalf, alphaSquared)
+      * smithVisibility(normalLight, normalView, alphaSquared);
     lit += (diffuse + specular) * directionalLightColors[index].rgb * normalLight;
   }
   vec3 emissive = emissiveFactor.rgb;
