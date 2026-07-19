@@ -252,9 +252,3 @@ export const virtualTexturePageUri = (
     }
   });
 };
-
-export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTexturePageId => ({
-  mip: page.mip + 1,
-  x: Math.floor(page.x / 2),
-  y: Math.floor(page.y / 2),
-});

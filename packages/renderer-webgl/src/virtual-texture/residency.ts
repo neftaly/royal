@@ -1,6 +1,6 @@
 import {
-  parentVirtualTexturePage,
   virtualTexturePageKey,
+  virtualTexturePageKeyParts,
   type VirtualTextureManifest,
   type VirtualTexturePageId,
 } from "./manifest";
@@ -80,12 +80,20 @@ export const writeVirtualTexturePageTable = (
     const layout = manifest.mipLayouts[mip]!;
     for (let y = 0; y < layout.height; y += 1) {
       for (let x = 0; x < layout.width; x += 1) {
-        let ancestor = { mip, x, y };
+        let ancestorMip = mip;
+        let ancestorX = x;
+        let ancestorY = y;
         let slot: number | undefined;
-        while (ancestor.mip < manifest.mipCount) {
-          slot = residentSlots.get(virtualTexturePageKey(ancestor));
+        while (ancestorMip < manifest.mipCount) {
+          slot = residentSlots.get(virtualTexturePageKeyParts(
+            ancestorMip,
+            ancestorX,
+            ancestorY,
+          ));
           if (slot !== undefined) break;
-          ancestor = parentVirtualTexturePage(ancestor);
+          ancestorMip += 1;
+          ancestorX = Math.floor(ancestorX / 2);
+          ancestorY = Math.floor(ancestorY / 2);
         }
         if (slot === undefined) continue;
         const slotX = slot % atlasColumns;
@@ -94,7 +102,7 @@ export const writeVirtualTexturePageTable = (
         const offset = ((layout.tableY + y) * manifest.tableWidth + x) * 4;
         target[offset] = slotX;
         target[offset + 1] = slotY;
-        target[offset + 2] = ancestor.mip;
+        target[offset + 2] = ancestorMip;
         target[offset + 3] = 255;
       }
     }

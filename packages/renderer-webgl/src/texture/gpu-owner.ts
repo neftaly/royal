@@ -1,4 +1,6 @@
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
+
+const EMPTY_STORAGE_KEYS: readonly string[] = [];
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { ordinaryTextureStorageBytes } from "./storage";
@@ -207,14 +209,14 @@ export class TextureGpuOwner {
   }
 
   takeUploadedStorageKeys(): readonly string[] {
-    if (this.#uploadedStorageKeys.size === 0) return [];
+    if (this.#uploadedStorageKeys.size === 0) return EMPTY_STORAGE_KEYS;
     const keys = [...this.#uploadedStorageKeys];
     this.#uploadedStorageKeys.clear();
     return keys;
   }
 
   takeDeniedStorageKeys(): readonly string[] {
-    if (this.#deniedStorageKeys.size === 0) return [];
+    if (this.#deniedStorageKeys.size === 0) return EMPTY_STORAGE_KEYS;
     const keys = [...this.#deniedStorageKeys];
     this.#deniedStorageKeys.clear();
     return keys;

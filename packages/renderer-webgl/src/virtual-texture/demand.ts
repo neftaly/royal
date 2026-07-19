@@ -244,6 +244,33 @@ const copyInstanceModel = (
   }
 };
 
+const addClampedRange = (
+  workspace: VirtualTextureDemandWorkspace,
+  manifest: VirtualTextureManifest,
+  mip: number,
+  minU: number,
+  maxU: number,
+  minV: number,
+  maxV: number,
+): void => {
+  const layout = manifest.mipLayouts[mip]!;
+  const x0 = Math.min(layout.width - 1, Math.max(0, Math.floor(minU * layout.width)));
+  const y0 = Math.min(layout.height - 1, Math.max(0, Math.floor(minV * layout.height)));
+  const x1 = Math.min(
+    layout.width - 1,
+    Math.max(0, Math.floor(Math.max(0, maxU - Number.EPSILON) * layout.width)),
+  );
+  const y1 = Math.min(
+    layout.height - 1,
+    Math.max(0, Math.floor(Math.max(0, maxV - Number.EPSILON) * layout.height)),
+  );
+  for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y += 1) {
+    for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 1) {
+      addPageWithAncestors(workspace, manifest, mip, x, y);
+    }
+  }
+};
+
 const addWrappedRange = (
   workspace: VirtualTextureDemandWorkspace,
   manifest: VirtualTextureManifest,
@@ -254,28 +281,13 @@ const addWrappedRange = (
   maximumV: number,
   sampler: CanonicalTextureSampler,
 ): void => {
-  const layout = manifest.mipLayouts[mip]!;
-  const addClamped = (minU: number, maxU: number, minV: number, maxV: number): void => {
-    const x0 = Math.min(layout.width - 1, Math.max(0, Math.floor(minU * layout.width)));
-    const y0 = Math.min(layout.height - 1, Math.max(0, Math.floor(minV * layout.height)));
-    const x1 = Math.min(
-      layout.width - 1,
-      Math.max(0, Math.floor(Math.max(0, maxU - Number.EPSILON) * layout.width)),
-    );
-    const y1 = Math.min(
-      layout.height - 1,
-      Math.max(0, Math.floor(Math.max(0, maxV - Number.EPSILON) * layout.height)),
-    );
-    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y += 1) {
-      for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 1) {
-        addPageWithAncestors(workspace, manifest, mip, x, y);
-      }
-    }
-  };
   const repeatsU = sampler.wrapS !== "clamp-to-edge";
   const repeatsV = sampler.wrapT !== "clamp-to-edge";
   if (!repeatsU && !repeatsV) {
-    addClamped(
+    addClampedRange(
+      workspace,
+      manifest,
+      mip,
       Math.max(0, Math.min(1, minimumU)),
       Math.max(0, Math.min(1, maximumU)),
       Math.max(0, Math.min(1, minimumV)),
@@ -290,7 +302,10 @@ const addWrappedRange = (
   const vStart = repeatsV ? Math.floor(minimumV) : 0;
   const vEnd = repeatsV ? Math.floor(maximumV) : 0;
   if ((repeatsU && uSpan >= 1) || (repeatsV && vSpan >= 1)) {
-    addClamped(
+    addClampedRange(
+      workspace,
+      manifest,
+      mip,
       repeatsU && uSpan >= 1 ? 0 : minimumU - Math.floor(minimumU),
       repeatsU && uSpan >= 1 ? 1 : maximumU - Math.floor(minimumU),
       repeatsV && vSpan >= 1 ? 0 : minimumV - Math.floor(minimumV),
@@ -314,7 +329,10 @@ const addWrappedRange = (
         localMinV = 1 - localMaxV;
         localMaxV = 1 - previousMinimum;
       }
-      addClamped(
+      addClampedRange(
+        workspace,
+        manifest,
+        mip,
         localMinU,
         localMaxU,
         localMinV,

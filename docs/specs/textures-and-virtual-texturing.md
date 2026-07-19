@@ -125,6 +125,14 @@ pages sample the closest resident ancestor. Sparse-addressing holes use the
 nearest authored ancestor when one exists and otherwise use the ordinary or
 neutral fallback—never stale atlas contents.
 
+Scene publication indexes each VT resource directly to its canonical demand
+surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
+Atlas uploads admitted in one resource/frame batch normally publish through one
+complete page-table revision and one lifecycle notification after every
+successful atlas write. A failed overwrite may publish an immediate repair
+revision only to remove the now-invalid old slot mapping; failed or partial
+page bytes never receive a logical mapping.
+
 At very close range, required detail is capped by source resolution, configured
 quality, hardware limits, and budgets rather than by an arbitrary camera
 distance. Near-plane clipping is camera geometry, not a VT quality policy.

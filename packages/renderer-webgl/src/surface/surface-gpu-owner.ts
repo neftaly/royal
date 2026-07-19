@@ -771,6 +771,10 @@ export class SurfaceGpuOwner {
 
   #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
     this.#lodGroups.clear();
+    if (scene.lodGroups.length === 0) {
+      this.#lodSelections.clear();
+      return;
+    }
     for (const group of scene.lodGroups) {
       if (this.#lodDrawableLevels.length < group.thresholds.length) {
         this.#lodDrawableLevels = new Uint8Array(group.thresholds.length);

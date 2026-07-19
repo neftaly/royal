@@ -11,6 +11,7 @@ import {
   collectVirtualTextureSurfaceDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
+  type VirtualTextureDemandSurface,
   type VirtualTextureDemandWorkspace,
 } from "./demand";
 import {
@@ -29,6 +30,7 @@ import type {
   VirtualTextureGpuBinding,
   VirtualTextureRuntime,
   VirtualTextureAssetSnapshot,
+  VirtualTextureFrameUpdate,
 } from "./runtime-contract";
 import { virtualTextureAssetKey } from "./runtime-contract";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "./shader-source";
@@ -48,6 +50,12 @@ const IDLE_VIRTUAL_TEXTURE_SNAPSHOT: VirtualTextureAssetSnapshot = {
   residentPages: 0,
   state: "idle",
 };
+const FRAME_RESULTS = [
+  { pending: false, webGlStateChanged: false },
+  { pending: true, webGlStateChanged: false },
+  { pending: false, webGlStateChanged: true },
+  { pending: true, webGlStateChanged: true },
+];
 
 type ReadyPage = Readonly<{
   decoded: DecodedVirtualTexturePage;
@@ -85,6 +93,7 @@ type RuntimeResource = {
   readonly readyPages: ReadyPage[];
   readonly sampler: CanonicalTextureSampler;
   snapshot: VirtualTextureAssetSnapshot | undefined;
+  readonly surfaces: VirtualTextureDemandSurface[];
   viewCount: number;
   viewState: Float64Array;
   readonly workspace: VirtualTextureDemandWorkspace;
@@ -373,6 +382,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         readyPages: [],
         sampler: canonicalTextureSampler(asset),
         snapshot: undefined,
+        surfaces: [],
         viewCount: -1,
         viewState: new Float64Array(0),
         workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
@@ -387,10 +397,24 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#bindingRevision += 1;
       this.#onChanged(resource.asset);
     }
+    for (const resource of this.#resources.values()) resource.surfaces.length = 0;
+    for (const surface of scene?.surfaces ?? []) {
+      const asset = surface.material.baseColorVirtualAsset;
+      if (asset === undefined) continue;
+      const resource = this.#resources.get(this.#keyForAsset(asset));
+      if (resource === undefined) continue;
+      resource.surfaces.push({
+        geometry: surface.geometry,
+        ...(surface.instances === undefined ? {} : { instances: surface.instances }),
+        model: surface.model,
+        textureCoordinates: surface.material.baseColorTextureCoordinates
+          ?? IDENTITY_TEXTURE_COORDINATES,
+      });
+    }
   }
 
-  update(views: readonly SurfaceFrameView[]): { pending: boolean; webGlStateChanged: boolean } {
-    if (this.#disposed) return { pending: false, webGlStateChanged: false };
+  update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate {
+    if (this.#disposed) return FRAME_RESULTS[0]!;
     this.#frame += 1;
     let pending = false;
     let webGlStateChanged = false;
@@ -417,21 +441,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const gpu = resource.gpu;
       if (this.#demandViewsChanged(resource, views)) {
         resetVirtualTextureDemand(resource.workspace);
-        for (const surface of this.#scene?.surfaces ?? []) {
-          if (
-            surface.material.baseColorVirtualAsset === undefined
-            || this.#keyForAsset(surface.material.baseColorVirtualAsset) !== resource.key
-          ) continue;
+        for (let index = 0; index < resource.surfaces.length; index += 1) {
           collectVirtualTextureSurfaceDemand(
             resource.workspace,
             manifest,
-            {
-              geometry: surface.geometry,
-              ...(surface.instances === undefined ? {} : { instances: surface.instances }),
-              model: surface.model,
-              textureCoordinates: surface.material.baseColorTextureCoordinates
-                ?? IDENTITY_TEXTURE_COORDINATES,
-            },
+            resource.surfaces[index]!,
             views,
             resource.sampler,
           );
@@ -445,11 +459,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         const slot = gpu.residentSlots.get(key);
         if (slot !== undefined) gpu.lastUsedFrames[slot] = this.#frame;
       }
+      let uploadedPages = 0;
+      let settledPages = 0;
       while (uploadsRemaining > 0 && resource.readyPages.length > 0) {
         const ready = resource.readyPages[0]!;
         if (gpu.residentSlots.has(ready.pageKey)) {
           resource.readyPages.shift();
           ready.decoded.close();
+          settledPages += 1;
           continue;
         }
         let uploaded: boolean;
@@ -464,8 +481,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         resource.readyPages.shift();
         ready.decoded.close();
         uploadsRemaining -= 1;
+        uploadedPages += 1;
+        settledPages += 1;
         webGlStateChanged = true;
       }
+      if (uploadedPages > 0) this.#publishPageTable(resource);
+      if (settledPages > 0) this.#onChanged(resource.asset);
       for (
         let index = 0;
         index < resource.workspace.count && this.#activeJobs < MAX_DECODE_JOBS;
@@ -485,7 +506,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       if (resource.readyPages.length > 0 && uploadsRemaining === 0) pending = true;
     }
-    return { pending, webGlStateChanged };
+    return FRAME_RESULTS[(pending ? 1 : 0) | (webGlStateChanged ? 2 : 0)]!;
   }
 
   #destroyResource(resource: RuntimeResource, deleteGpu: boolean): void {
@@ -680,12 +701,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gpu.lastUsedFrames[plan.slot] = this.#frame;
     const firstResident = gpu.residentSlots.size === 0;
     gpu.residentSlots.set(plan.pageKey, plan.slot);
+    if (firstResident) this.#bindingRevision += 1;
+    return true;
+  }
+
+  #publishPageTable(resource: RuntimeResource): void {
+    const gpu = resource.gpu!;
+    const manifest = resource.manifest!;
     writeVirtualTexturePageTable(
-      resource.manifest!,
+      manifest,
       gpu.residentSlots,
       gpu.atlasColumns,
       gpu.pageTableBytes,
     );
+    const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, gpu.pageTableTexture);
     gl.texSubImage2D(
@@ -693,15 +722,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       0,
       0,
       0,
-      resource.manifest!.tableWidth,
-      resource.manifest!.tableHeight,
+      manifest.tableWidth,
+      manifest.tableHeight,
       gl.RGBA,
       gl.UNSIGNED_BYTE,
       gpu.pageTableBytes,
     );
-    if (firstResident) this.#bindingRevision += 1;
-    this.#onChanged(resource.asset);
-    return true;
   }
 }
 
