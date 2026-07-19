@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
-import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import {
+  ordinaryTextureStorageBytes,
+  TextureGpuOwner,
+} from "../../packages/renderer-webgl/src/texture/gpu-owner";
 
 const fakeGl = (): WebGL2RenderingContext => ({
   CLAMP_TO_EDGE: 0x812f,
@@ -56,6 +60,34 @@ const binding = (
 });
 
 describe("ordinary texture GPU owner", () => {
+  it("computes exact RGBA storage and coherently denies a mip expansion over budget", () => {
+    expect(ordinaryTextureStorageBytes(8, 8, false)).toBe(256);
+    expect(ordinaryTextureStorageBytes(8, 8, true)).toBe(340);
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(300);
+    const owner = new TextureGpuOwner(gl, budget);
+
+    const bindings = owner.reconcile([
+      binding("nearest", "nearest"),
+      binding("mipmapped", "linear-mipmap-linear"),
+    ]);
+
+    expect(bindings[0]!.texture).not.toBeNull();
+    expect(bindings[1]).toEqual({ sampler: null, texture: null });
+    expect(gl.generateMipmap).not.toHaveBeenCalled();
+    expect(budget.snapshot()).toEqual({ budgetBytes: 300, deniedClaims: 1, retainedBytes: 256 });
+  });
+
+  it("does not create GL storage when the initial persistent claim is denied", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(300);
+    const owner = new TextureGpuOwner(gl, budget);
+    const bindings = owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
+    expect(bindings[0]).toEqual({ sampler: null, texture: null });
+    expect(gl.createTexture).not.toHaveBeenCalled();
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
   it("shares storage, separates samplers, and adds mipmaps once when later demanded", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
@@ -86,6 +118,7 @@ describe("ordinary texture GPU owner", () => {
     expect(() => owner.reconcile([binding("broken", "nearest")]))
       .toThrow("could not allocate a texture sampler");
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    expect(owner.takeUploadedStorageKeys()).toEqual([]);
   });
 
   it("rolls back new sampler work without disturbing retained storage or bindings", () => {

@@ -1,14 +1,20 @@
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
+import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 
 type GpuTexture = {
   readonly bindings: WeakMap<WebGLSampler, GpuTextureBinding>;
+  readonly budgetIdentity: object;
+  byteLength: number;
+  readonly height: number;
   mipmapped: boolean;
   readonly texture: WebGLTexture;
+  readonly width: number;
 };
 type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
 export type GpuTextureBinding = TextureUnitBinding;
+export type OrdinaryTextureGpuSnapshot = Readonly<{ residentTextures: number }>;
 
 const EMPTY_BINDING: GpuTextureBinding = { sampler: null, texture: null };
 
@@ -35,30 +41,70 @@ const samplerWrap = (gl: WebGL2RenderingContext, wrap: string): number => {
 
 const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 
+/** Exact RGBA8/sRGB8-alpha allocation size, including a generated mip chain. */
+export const ordinaryTextureStorageBytes = (
+  width: number,
+  height: number,
+  mipmapped: boolean,
+): number => {
+  if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1) {
+    throw new RangeError("Royal ordinary texture dimensions must be positive safe integers");
+  }
+  let levelWidth = width;
+  let levelHeight = height;
+  let texels = 0;
+  for (;;) {
+    texels += levelWidth * levelHeight;
+    if (!Number.isSafeInteger(texels)) {
+      throw new RangeError("Royal ordinary texture allocation exceeds safe integer range");
+    }
+    if (!mipmapped || (levelWidth === 1 && levelHeight === 1)) break;
+    levelWidth = Math.max(1, Math.floor(levelWidth / 2));
+    levelHeight = Math.max(1, Math.floor(levelHeight / 2));
+  }
+  const bytes = texels * 4;
+  if (!Number.isSafeInteger(bytes)) {
+    throw new RangeError("Royal ordinary texture allocation exceeds safe integer range");
+  }
+  return bytes;
+};
+
 /** Owns ordinary texture storage and sampler resources for one context generation. */
 export class TextureGpuOwner {
+  readonly #budget: PersistentGpuBudgetOwner;
+  readonly #deniedStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
   readonly #uploadedStorageKeys = new Set<string>();
   #unpackStateKnown = false;
 
-  constructor(gl: WebGL2RenderingContext) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    budget = new PersistentGpuBudgetOwner(),
+  ) {
     this.#gl = gl;
+    this.#budget = budget;
   }
 
   dispose(): void {
     for (const resource of this.#samplers.values()) this.#gl.deleteSampler(resource.sampler);
-    for (const resource of this.#textures.values()) this.#gl.deleteTexture(resource.texture);
+    for (const resource of this.#textures.values()) {
+      this.#gl.deleteTexture(resource.texture);
+      this.#budget.release(resource.budgetIdentity);
+    }
     this.#samplers.clear();
     this.#textures.clear();
+    this.#deniedStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
   }
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
     this.#samplers.clear();
+    for (const resource of this.#textures.values()) this.#budget.release(resource.budgetIdentity);
     this.#textures.clear();
+    this.#deniedStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
     this.#unpackStateKnown = false;
   }
@@ -82,9 +128,19 @@ export class TextureGpuOwner {
           ?? this.#textures.get(binding.storageKey);
         if (texture === undefined) {
           texture = this.#createTexture(binding);
+          if (texture === undefined) {
+            result.push(EMPTY_BINDING);
+            continue;
+          }
           createdTextures.set(binding.storageKey, texture);
         }
-        if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
+        if (
+          usesMipmaps(binding.sampler.minFilter)
+          && !this.#ensureMipmaps(texture, binding.storageKey)
+        ) {
+          result.push(EMPTY_BINDING);
+          continue;
+        }
         claimedTextures.add(binding.storageKey);
         let sampler = createdSamplers.get(binding.samplerKey)
           ?? this.#samplers.get(binding.samplerKey);
@@ -104,7 +160,10 @@ export class TextureGpuOwner {
     } catch (error) {
       for (const [texture, sampler] of insertedBindings) texture.bindings.delete(sampler);
       for (const resource of createdSamplers.values()) this.#gl.deleteSampler(resource.sampler);
-      for (const resource of createdTextures.values()) this.#gl.deleteTexture(resource.texture);
+      for (const resource of createdTextures.values()) {
+        this.#gl.deleteTexture(resource.texture);
+        this.#budget.release(resource.budgetIdentity);
+      }
       throw error;
     }
     for (const [key, resource] of this.#samplers) {
@@ -115,10 +174,14 @@ export class TextureGpuOwner {
     for (const [key, resource] of this.#textures) {
       if (claimedTextures.has(key)) continue;
       this.#gl.deleteTexture(resource.texture);
+      this.#budget.release(resource.budgetIdentity);
       this.#textures.delete(key);
     }
     for (const [key, resource] of createdSamplers) this.#samplers.set(key, resource);
-    for (const [key, resource] of createdTextures) this.#textures.set(key, resource);
+    for (const [key, resource] of createdTextures) {
+      this.#textures.set(key, resource);
+      this.#uploadedStorageKeys.add(key);
+    }
     return result;
   }
 
@@ -131,19 +194,35 @@ export class TextureGpuOwner {
     const createdSampler = sampler === undefined;
     try {
       texture ??= this.#createTexture(binding);
-      if (usesMipmaps(binding.sampler.minFilter)) this.#ensureMipmaps(texture);
+      if (texture === undefined) return EMPTY_BINDING;
+      if (
+        usesMipmaps(binding.sampler.minFilter)
+        && !this.#ensureMipmaps(texture, binding.storageKey)
+      ) {
+        if (createdTexture) {
+          this.#gl.deleteTexture(texture.texture);
+          this.#budget.release(texture.budgetIdentity);
+        }
+        return EMPTY_BINDING;
+      }
       sampler ??= this.#createSampler(binding);
       let resolved = texture.bindings.get(sampler.sampler);
       if (resolved === undefined) {
         resolved = { sampler: sampler.sampler, texture: texture.texture };
         texture.bindings.set(sampler.sampler, resolved);
       }
-      if (createdTexture) this.#textures.set(binding.storageKey, texture);
+      if (createdTexture) {
+        this.#textures.set(binding.storageKey, texture);
+        this.#uploadedStorageKeys.add(binding.storageKey);
+      }
       if (createdSampler) this.#samplers.set(binding.samplerKey, sampler);
       return resolved;
     } catch (error) {
       if (createdSampler && sampler !== undefined) this.#gl.deleteSampler(sampler.sampler);
-      if (createdTexture && texture !== undefined) this.#gl.deleteTexture(texture.texture);
+      if (createdTexture && texture !== undefined) {
+        this.#gl.deleteTexture(texture.texture);
+        this.#budget.release(texture.budgetIdentity);
+      }
       throw error;
     }
   }
@@ -153,6 +232,17 @@ export class TextureGpuOwner {
     const keys = [...this.#uploadedStorageKeys];
     this.#uploadedStorageKeys.clear();
     return keys;
+  }
+
+  takeDeniedStorageKeys(): readonly string[] {
+    if (this.#deniedStorageKeys.size === 0) return [];
+    const keys = [...this.#deniedStorageKeys];
+    this.#deniedStorageKeys.clear();
+    return keys;
+  }
+
+  snapshot(): OrdinaryTextureGpuSnapshot {
+    return { residentTextures: this.#textures.size };
   }
 
   #createSampler(binding: CanonicalTextureBinding): GpuSampler {
@@ -171,10 +261,25 @@ export class TextureGpuOwner {
     }
   }
 
-  #createTexture(binding: CanonicalTextureBinding): GpuTexture {
+  #createTexture(binding: CanonicalTextureBinding): GpuTexture | undefined {
     const gl = this.#gl;
+    const mipmapped = usesMipmaps(binding.sampler.minFilter);
+    const byteLength = ordinaryTextureStorageBytes(
+      binding.decoded.width,
+      binding.decoded.height,
+      mipmapped,
+    );
+    const budgetIdentity = {};
+    if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
+      this.#deniedStorageKeys.add(binding.storageKey);
+      return undefined;
+    }
+    this.#deniedStorageKeys.delete(binding.storageKey);
     const texture = gl.createTexture();
-    if (texture === null) throw new Error("Royal could not allocate an ordinary texture");
+    if (texture === null) {
+      this.#budget.release(budgetIdentity);
+      throw new Error("Royal could not allocate an ordinary texture");
+    }
     try {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -187,16 +292,19 @@ export class TextureGpuOwner {
         gl.UNSIGNED_BYTE,
         binding.decoded.source,
       );
-      const mipmapped = usesMipmaps(binding.sampler.minFilter);
       if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
-      this.#uploadedStorageKeys.add(binding.storageKey);
       return {
         bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),
+        budgetIdentity,
+        byteLength,
+        height: binding.decoded.height,
         mipmapped,
         texture,
+        width: binding.decoded.width,
       };
     } catch (error) {
       gl.deleteTexture(texture);
+      this.#budget.release(budgetIdentity);
       throw error;
     }
   }
@@ -210,12 +318,25 @@ export class TextureGpuOwner {
     this.#unpackStateKnown = true;
   }
 
-  #ensureMipmaps(resource: GpuTexture): void {
-    if (resource.mipmapped) return;
+  #ensureMipmaps(resource: GpuTexture, storageKey: string): boolean {
+    if (resource.mipmapped) return true;
+    const byteLength = ordinaryTextureStorageBytes(resource.width, resource.height, true);
+    if (!this.#budget.tryClaim(resource.budgetIdentity, byteLength)) {
+      this.#deniedStorageKeys.add(storageKey);
+      return false;
+    }
+    this.#deniedStorageKeys.delete(storageKey);
     const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    resource.mipmapped = true;
+    try {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, resource.texture);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      resource.byteLength = byteLength;
+      resource.mipmapped = true;
+      return true;
+    } catch (error) {
+      this.#budget.tryClaim(resource.budgetIdentity, resource.byteLength);
+      throw error;
+    }
   }
 }

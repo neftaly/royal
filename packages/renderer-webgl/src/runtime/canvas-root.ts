@@ -64,6 +64,12 @@ import {
   type VirtualTextureAssetSnapshot,
   type VirtualTextureRuntime,
 } from "../virtual-texture/runtime-contract";
+import {
+  DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
+  PersistentGpuBudgetOwner,
+  type PersistentGpuBudgetSnapshot,
+} from "../resource/persistent-gpu-budget";
+import type { OrdinaryTextureGpuSnapshot } from "../texture/gpu-owner";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -71,6 +77,10 @@ export type CanvasRootSnapshot = Readonly<{
   context: ContextLifecycleSnapshot;
   frame: number;
   lastFrameFailure?: string;
+  resources: Readonly<{
+    ordinaryTextures: OrdinaryTextureGpuSnapshot;
+    persistentGpu: PersistentGpuBudgetSnapshot;
+  }>;
   size: ResolvedCanvasSize | null;
 }>;
 
@@ -219,6 +229,7 @@ export class CanvasRoot {
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
   readonly #platform: CanvasRootPlatform;
+  readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #revision = 0;
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
@@ -284,9 +295,12 @@ export class CanvasRoot {
     this.#canvas = canvas;
     this.#platform = platform;
     this.#gl = createContext(canvas, options);
+    this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
+      options.persistentGpuByteBudget ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
+    );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
-    this.#surfaceGpu = new SurfaceGpuOwner(this.#gl);
+    this.#surfaceGpu = new SurfaceGpuOwner(this.#gl, this.#persistentGpuBudget);
     const usesDefaultGltfIo = platform.readGltf === undefined
       && platform.readGltfResource === undefined;
     this.#gltfAssets = new GltfAssetOwner({
@@ -388,6 +402,10 @@ export class CanvasRoot {
         ...(this.#lastFrameFailure === undefined
           ? {}
           : { lastFrameFailure: this.#lastFrameFailure }),
+        resources: {
+          ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
+          persistentGpu: this.#persistentGpuBudget.snapshot(),
+        },
         size: this.#size,
       };
       this.#snapshotRevision = this.#revision;
@@ -726,6 +744,7 @@ export class CanvasRoot {
           this.#publishVirtualTexture(asset);
           this.#clock.invalidate();
         },
+        this.#persistentGpuBudget,
       );
       this.#virtualTextureRuntime = runtime;
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
@@ -819,6 +838,7 @@ export class CanvasRoot {
 
   #releaseUploadedTextures(): void {
     this.#textureAssets.releaseUploaded(this.#surfaceGpu.takeUploadedTextureStorageKeys());
+    this.#textureAssets.rejectGpuStorage(this.#surfaceGpu.takeDeniedTextureStorageKeys());
   }
 
   #updateClearColor(color: LinearRgba): boolean {

@@ -94,11 +94,13 @@ describe("replacement React public API", () => {
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11");
-    expect(rendererRootOptionsSemanticKey({})).toBe("11");
-    expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true })).toBe("11");
-    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01");
-    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10");
+    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:1342177280");
+    expect(rendererRootOptionsSemanticKey({})).toBe("11:1342177280");
+    expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
+      .toBe("11:1342177280");
+    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:1342177280");
+    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:1342177280");
+    expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 })).toBe("11:1024");
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {
@@ -111,6 +113,9 @@ describe("replacement React public API", () => {
       alpha: 1,
     } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
       "option alpha must be a boolean",
+    );
+    expect(() => rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 0 })).toThrow(
+      "persistentGpuByteBudget must be a positive safe integer",
     );
   });
 

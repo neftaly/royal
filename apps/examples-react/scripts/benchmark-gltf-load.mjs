@@ -636,10 +636,11 @@ const installBenchmarkHooks = async (session) => {
       updateFirstUsable();
       const rendererSettled = rendererGltfAssetsSettled(renderer, false);
       const rendererReady = rendererGltfAssetsSettled(renderer, true);
-      const sample = firstUsableSample ?? sampleCanvas(rendererReady);
+      const sample = firstUsableSample ?? sampleCanvas(rendererSettled);
       lastState = {
         documentReadyState: document.readyState,
         renderer,
+        rendererReady,
         rendererSettled,
         resourceCount,
         resources,
@@ -649,7 +650,6 @@ const installBenchmarkHooks = async (session) => {
       if (
         document.readyState === 'complete' &&
         rendererSettled &&
-        rendererReady &&
         (firstUsableAt !== null || isUsableSample(sample)) &&
         performance.now() - stableSince >= stableMs &&
         rendererVirtualTexturingDone() &&

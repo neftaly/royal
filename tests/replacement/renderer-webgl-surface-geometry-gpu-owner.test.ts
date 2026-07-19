@@ -8,6 +8,7 @@ import {
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import {
   nextSurfaceAdmissionCount,
@@ -47,6 +48,19 @@ const surface = (geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof 
   })).surfaces;
 
 describe("surface geometry GPU owner", () => {
+  it("accounts committed geometry and denies allocation before crossing the root budget", () => {
+    const budget = new PersistentGpuBudgetOwner(1024);
+    const owner = new SurfaceGeometryGpuOwner(fakeGl(), budget);
+    owner.prepare(surface(planeGeometry(1))).commit();
+    expect(budget.snapshot().retainedBytes).toBeGreaterThan(0);
+    owner.dispose();
+    expect(budget.snapshot().retainedBytes).toBe(0);
+
+    const denied = new SurfaceGeometryGpuOwner(fakeGl(), new PersistentGpuBudgetOwner(1));
+    expect(() => denied.prepare(surface(planeGeometry(1))))
+      .toThrow("persistent GPU budget denied surface geometry");
+  });
+
   it("advances bounded prefixes and retains only reusable resource identities", () => {
     const first = surface(planeGeometry(1));
     const sameGeometry = surface(planeGeometry(1));

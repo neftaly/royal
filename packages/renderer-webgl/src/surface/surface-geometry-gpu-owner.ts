@@ -13,8 +13,10 @@ import {
   type GeometryBatchLayoutPlan,
   type GeometryBatchRange,
 } from "./geometry-batch-plan";
+import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 
 type GpuGeometryArena = Readonly<{
+  budgetIdentity: object;
   indexBuffer: WebGLBuffer;
   normalBuffer: WebGLBuffer | null;
   tangentBuffer: WebGLBuffer | null;
@@ -47,6 +49,7 @@ export type GpuGeometrySurface = Readonly<{
 }>;
 
 type GpuInstanceData = {
+  budgetIdentity: object;
   buffer: WebGLBuffer;
   count: number;
   key: string;
@@ -140,6 +143,7 @@ const planGeometryArenas = (
 
 /** Owns geometry buffers and vertex arrays for one context generation. */
 export class SurfaceGeometryGpuOwner {
+  readonly #budget: PersistentGpuBudgetOwner;
   readonly #gl: WebGL2RenderingContext;
   #geometryArenas: readonly GpuGeometryArena[] = [];
   #geometryPlanKey = "";
@@ -150,8 +154,9 @@ export class SurfaceGeometryGpuOwner {
   #instanceResources: readonly GpuInstanceData[] = [];
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
 
-  constructor(gl: WebGL2RenderingContext) {
+  constructor(gl: WebGL2RenderingContext, budget = new PersistentGpuBudgetOwner()) {
     this.#gl = gl;
+    this.#budget = budget;
   }
 
   dispose(): void {
@@ -161,6 +166,8 @@ export class SurfaceGeometryGpuOwner {
   }
 
   invalidate(): void {
+    for (const resource of this.#instanceResources) this.#budget.release(resource.budgetIdentity);
+    for (const arena of this.#geometryArenas) this.#budget.release(arena.budgetIdentity);
     this.#geometryArenas = [];
     this.#geometryPlanKey = "";
     this.#geometryResources = [];
@@ -181,13 +188,17 @@ export class SurfaceGeometryGpuOwner {
     }
     this.#gl.deleteBuffer(arena.vertexBuffer);
     this.#gl.deleteVertexArray(arena.vertexArray);
+    this.#budget.release(arena.budgetIdentity);
   }
 
   #deleteResources(): void {
     for (const resource of this.#instanceVertexArrays) {
       this.#gl.deleteVertexArray(resource.vertexArray);
     }
-    for (const resource of this.#instanceResources) this.#gl.deleteBuffer(resource.buffer);
+    for (const resource of this.#instanceResources) {
+      this.#gl.deleteBuffer(resource.buffer);
+      this.#budget.release(resource.budgetIdentity);
+    }
     for (const arena of this.#geometryArenas) this.#deleteGeometryArena(arena);
     this.#geometryArenas = [];
     this.#geometryPlanKey = "";
@@ -207,6 +218,17 @@ export class SurfaceGeometryGpuOwner {
     const hasTangents = (layout & 2) !== 0;
     const hasTextureCoordinates = (layout & 4) !== 0;
     const hasTextureCoordinates1 = (layout & 8) !== 0;
+    const byteLength = batch.indexCount * batch.indexBytes + batch.vertexCount * (
+      3 * 4
+      + (hasNormals ? 3 * 4 : 0)
+      + (hasTangents ? 4 * 4 : 0)
+      + (hasTextureCoordinates ? 2 * 4 : 0)
+      + (hasTextureCoordinates1 ? 2 * 4 : 0)
+    );
+    const budgetIdentity = {};
+    if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
+      throw new Error("Royal persistent GPU budget denied surface geometry");
+    }
     const vertexArray = gl.createVertexArray();
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
@@ -230,6 +252,7 @@ export class SurfaceGeometryGpuOwner {
       if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
+      this.#budget.release(budgetIdentity);
       throw new Error("Royal could not allocate surface geometry");
     }
     try {
@@ -274,6 +297,7 @@ export class SurfaceGeometryGpuOwner {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, batch.indexCount * batch.indexBytes, gl.STATIC_DRAW);
       const arena = {
+        budgetIdentity,
         indexBuffer,
         normalBuffer,
         tangentBuffer,
@@ -307,6 +331,7 @@ export class SurfaceGeometryGpuOwner {
       if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
       gl.deleteBuffer(vertexBuffer);
       gl.deleteVertexArray(vertexArray);
+      this.#budget.release(budgetIdentity);
       throw error;
     }
   }
@@ -409,12 +434,20 @@ export class SurfaceGeometryGpuOwner {
   #createInstanceData(surface: CanonicalDrawSurface): GpuInstanceData {
     const instances = surface.instances!;
     const values = this.#prepareInstanceValues(surface);
+    const budgetIdentity = {};
+    if (!this.#budget.tryClaim(budgetIdentity, values.byteLength)) {
+      throw new Error("Royal persistent GPU budget denied instance transforms");
+    }
     const buffer = this.#gl.createBuffer();
-    if (buffer === null) throw new Error("Royal could not allocate instance transforms");
+    if (buffer === null) {
+      this.#budget.release(budgetIdentity);
+      throw new Error("Royal could not allocate instance transforms");
+    }
     try {
       this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, buffer);
       this.#gl.bufferData(this.#gl.ARRAY_BUFFER, values, this.#gl.STATIC_DRAW);
       return {
+        budgetIdentity,
         buffer,
         count: instances.count,
         key: instances.key,
@@ -422,6 +455,7 @@ export class SurfaceGeometryGpuOwner {
       };
     } catch (error) {
       this.#gl.deleteBuffer(buffer);
+      this.#budget.release(budgetIdentity);
       throw error;
     }
   }
@@ -618,7 +652,10 @@ export class SurfaceGeometryGpuOwner {
       }
     } catch (error) {
       for (const resource of createdInstanceVaos) this.#gl.deleteVertexArray(resource.vertexArray);
-      for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
+      for (const resource of createdInstances) {
+        this.#gl.deleteBuffer(resource.buffer);
+        this.#budget.release(resource.budgetIdentity);
+      }
       for (const arena of createdArenas) this.#deleteGeometryArena(arena);
       throw error;
     }
@@ -641,6 +678,7 @@ export class SurfaceGeometryGpuOwner {
         for (const resource of this.#instanceResources) {
           if (nextInstancesByKey.get(resource.key) !== resource) {
             this.#gl.deleteBuffer(resource.buffer);
+            this.#budget.release(resource.budgetIdentity);
           }
         }
         if (geometryPlanChanged) {
@@ -659,7 +697,10 @@ export class SurfaceGeometryGpuOwner {
         for (const resource of createdInstanceVaos) {
           this.#gl.deleteVertexArray(resource.vertexArray);
         }
-        for (const resource of createdInstances) this.#gl.deleteBuffer(resource.buffer);
+        for (const resource of createdInstances) {
+          this.#gl.deleteBuffer(resource.buffer);
+          this.#budget.release(resource.budgetIdentity);
+        }
         for (const arena of createdArenas) this.#deleteGeometryArena(arena);
       },
       surfaces: nextSurfaces,

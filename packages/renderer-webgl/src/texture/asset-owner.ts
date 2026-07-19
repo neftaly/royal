@@ -214,6 +214,27 @@ export class TextureAssetOwner {
     }
   }
 
+  /** Settles denied GPU representations without retaining their decoded pixels. */
+  rejectGpuStorage(storageKeys: readonly string[]): void {
+    if (this.#disposed || storageKeys.length === 0) return;
+    const rejected = new Set<AssetEntry>();
+    for (const storageKey of storageKeys) {
+      const entry = this.#storageEntries.get(storageKey);
+      if (entry !== undefined) rejected.add(entry);
+    }
+    for (const entry of rejected) {
+      if (!entry.decodedReleased) entry.decoded?.close?.();
+      entry.decodedReleased = true;
+      entry.snapshot = {
+        error: "Royal persistent GPU budget denied texture storage",
+        state: "error",
+      };
+      this.#platform.onAssetChanged(entry.key);
+      this.#platform.onSnapshotChanged(entry.key);
+      this.#publish(entry.key);
+    }
+  }
+
   /** Context restoration needs fresh upload sources, not retained decoded pixels. */
   invalidateResidency(): void {
     if (this.#disposed) return;

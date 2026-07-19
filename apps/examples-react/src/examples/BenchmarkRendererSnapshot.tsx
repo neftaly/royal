@@ -70,9 +70,15 @@ export const BenchmarkRendererSnapshot = ({
             : current.context.phase === 'disposed' ? 'disposed' : 'unavailable',
         },
         planning: null,
-        resourcePressure: null,
+        resourcePressure: {
+          persistentGpuBudgetBytes: current.resources.persistentGpu.budgetBytes,
+          persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,
+          persistentGpuRetainedBytes: current.resources.persistentGpu.retainedBytes,
+        },
         resourceLifetime: null,
-        textureResidency: null,
+        textureResidency: {
+          resources: current.resources.ordinaryTextures.residentTextures,
+        },
         virtualTexturing: null,
       };
     };

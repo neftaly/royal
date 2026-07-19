@@ -32,6 +32,7 @@ import type {
 } from "./runtime-contract";
 import { virtualTextureAssetKey } from "./runtime-contract";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "./shader-source";
+import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 
 const DEFAULT_PHYSICAL_SLOTS = 24;
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
@@ -59,6 +60,7 @@ type GpuVirtualTexture = Readonly<{
   atlasRows: number;
   atlasSampler: WebGLSampler;
   atlasTexture: WebGLTexture;
+  budgetIdentity: object;
   binding: VirtualTextureGpuBinding;
   compressed: boolean;
   lastUsedFrames: Uint32Array;
@@ -117,6 +119,7 @@ const createGpuVirtualTexture = (
   gl: WebGL2RenderingContext,
   asset: VirtualTextureAssetRef,
   manifest: VirtualTextureManifest,
+  budget: PersistentGpuBudgetOwner,
 ): GpuVirtualTexture => {
   if (manifest.mipCount > MAX_SHADER_MIPS) {
     throw new RangeError(`Royal VT currently supports at most ${MAX_SHADER_MIPS} mip levels`);
@@ -139,11 +142,23 @@ const createGpuVirtualTexture = (
   if (slotCount < 1) throw new RangeError("Royal VT budget cannot hold one physical page");
   const atlasColumns = Math.min(maximumAxisSlots, Math.ceil(Math.sqrt(slotCount)));
   const atlasRows = Math.ceil(slotCount / atlasColumns);
-  const atlasTexture = allocateTexture(gl, "atlas texture");
-  const pageTableTexture = allocateTexture(gl, "page-table texture");
-  const atlasSampler = allocateSampler(gl, "atlas sampler");
-  const pageTableSampler = allocateSampler(gl, "page-table sampler");
+  const allocationBytes = atlasColumns * atlasRows * bytesPerPage
+    + virtualTexturePageTableByteLength(manifest);
+  const budgetIdentity = {};
+  let budgetClaimed = false;
+  let atlasTexture: WebGLTexture | null = null;
+  let pageTableTexture: WebGLTexture | null = null;
+  let atlasSampler: WebGLSampler | null = null;
+  let pageTableSampler: WebGLSampler | null = null;
   try {
+    atlasTexture = allocateTexture(gl, "atlas texture");
+    pageTableTexture = allocateTexture(gl, "page-table texture");
+    atlasSampler = allocateSampler(gl, "atlas sampler");
+    pageTableSampler = allocateSampler(gl, "page-table sampler");
+    if (!budget.tryClaim(budgetIdentity, allocationBytes)) {
+      throw new Error("Royal persistent GPU budget denied virtual texture storage");
+    }
+    budgetClaimed = true;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
     gl.texStorage2D(
@@ -196,6 +211,7 @@ const createGpuVirtualTexture = (
       atlasRows,
       atlasSampler,
       atlasTexture,
+      budgetIdentity,
       binding: {
         atlas: { sampler: atlasSampler, texture: atlasTexture },
         mipOffsets,
@@ -228,19 +244,25 @@ const createGpuVirtualTexture = (
       slotKeys: Array<VirtualTexturePageKey | undefined>(slotCount),
     };
   } catch (error) {
-    gl.deleteSampler(atlasSampler);
-    gl.deleteSampler(pageTableSampler);
-    gl.deleteTexture(atlasTexture);
-    gl.deleteTexture(pageTableTexture);
+    if (atlasSampler !== null) gl.deleteSampler(atlasSampler);
+    if (pageTableSampler !== null) gl.deleteSampler(pageTableSampler);
+    if (atlasTexture !== null) gl.deleteTexture(atlasTexture);
+    if (pageTableTexture !== null) gl.deleteTexture(pageTableTexture);
+    if (budgetClaimed) budget.release(budgetIdentity);
     throw error;
   }
 };
 
-const destroyGpuVirtualTexture = (gl: WebGL2RenderingContext, gpu: GpuVirtualTexture): void => {
+const destroyGpuVirtualTexture = (
+  gl: WebGL2RenderingContext,
+  gpu: GpuVirtualTexture,
+  budget: PersistentGpuBudgetOwner,
+): void => {
   gl.deleteSampler(gpu.atlasSampler);
   gl.deleteSampler(gpu.pageTableSampler);
   gl.deleteTexture(gpu.atlasTexture);
   gl.deleteTexture(gpu.pageTableTexture);
+  budget.release(gpu.budgetIdentity);
 };
 
 class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
@@ -249,15 +271,21 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #disposed = false;
   #frame = 0;
   readonly #gl: WebGL2RenderingContext;
+  readonly #budget: PersistentGpuBudgetOwner;
   readonly #onChanged: (asset: VirtualTextureAssetRef) => void;
   readonly #resources = new Map<string, RuntimeResource>();
   readonly #assetKeys = new WeakMap<VirtualTextureAssetRef, string>();
   #scene: CanonicalSurfaceScene | null = null;
   readonly shaderSource = { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS };
 
-  constructor(gl: WebGL2RenderingContext, onChanged: (asset: VirtualTextureAssetRef) => void) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    onChanged: (asset: VirtualTextureAssetRef) => void,
+    budget: PersistentGpuBudgetOwner,
+  ) {
     this.#gl = gl;
     this.#onChanged = onChanged;
+    this.#budget = budget;
   }
 
   get bindingRevision(): number {
@@ -282,6 +310,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   invalidate(): void {
     for (const resource of this.#resources.values()) {
       if (resource.gpu !== undefined) {
+        this.#budget.release(resource.gpu.budgetIdentity);
         resource.gpu = undefined;
         this.#bindingRevision += 1;
       }
@@ -371,7 +400,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (manifest === undefined || resource.manifestFailure !== undefined) continue;
       if (resource.gpu === undefined) {
         try {
-          resource.gpu = createGpuVirtualTexture(this.#gl, resource.asset, manifest);
+          resource.gpu = createGpuVirtualTexture(
+            this.#gl,
+            resource.asset,
+            manifest,
+            this.#budget,
+          );
           webGlStateChanged = true;
         } catch (error) {
           resource.manifestFailure = error instanceof Error ? error.message : String(error);
@@ -458,7 +492,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource.abort.abort();
     for (const ready of resource.readyPages) ready.decoded.close();
     resource.readyPages.length = 0;
-    if (deleteGpu && resource.gpu !== undefined) destroyGpuVirtualTexture(this.#gl, resource.gpu);
+    if (deleteGpu && resource.gpu !== undefined) {
+      destroyGpuVirtualTexture(this.#gl, resource.gpu, this.#budget);
+    }
   }
 
   #demandViewsChanged(
@@ -672,4 +708,5 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 export const createBrowserVirtualTextureRuntime = (
   gl: WebGL2RenderingContext,
   onChanged: (asset: VirtualTextureAssetRef) => void,
-): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(gl, onChanged);
+  budget = new PersistentGpuBudgetOwner(),
+): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(gl, onChanged, budget);
