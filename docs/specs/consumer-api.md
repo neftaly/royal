@@ -223,9 +223,10 @@ pick, focused asset/texture observation, lifecycle/frame observation, bounded
 diagnostics, snapshot, and idempotent dispose operations.
 
 Creation options are immutable for a root. In React, changing a creation option
-replaces the root; changing `scene` does not. Backend-only scheduling classes,
-GL handles, extension objects, and internal resource policies are not product
-options.
+replaces the root and canvas; changing `scene` does not. The replacement mount
+publishes `null` rather than a stale disposed root until the new canvas-owned
+root is live. Backend-only scheduling classes, GL handles, extension objects,
+and internal resource policies are not product options.
 
 ## Consumer-DX adversarial review
 

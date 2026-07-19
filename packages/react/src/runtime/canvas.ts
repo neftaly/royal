@@ -53,6 +53,7 @@ export interface CanvasProps
 }
 
 type CanvasRuntime = Readonly<{
+  canvas: HTMLCanvasElement | null;
   error: unknown;
   root: RoyalRendererRoot | null;
 }>;
@@ -62,7 +63,21 @@ type CanvasAttachment = Readonly<{
   optionsKey: string;
 }>;
 
-const EMPTY_RUNTIME: CanvasRuntime = { error: null, root: null };
+const EMPTY_RUNTIME: CanvasRuntime = { canvas: null, error: null, root: null };
+
+/** A root belongs only to the exact canvas generation that created it. */
+const activeCanvasRuntime = (
+  runtime: CanvasRuntime,
+  canvas: HTMLCanvasElement | null,
+): CanvasRuntime => runtime.canvas === canvas ? runtime : EMPTY_RUNTIME;
+
+/** @internal Pure ownership check used by the React lifecycle shell. */
+export const selectOwnedCanvasRoot = <Root,>(
+  ownerCanvas: HTMLCanvasElement | null,
+  currentCanvas: HTMLCanvasElement | null,
+  ownedRoot: Root | null,
+  liveRoot: Root | null,
+): Root | null => ownerCanvas === currentCanvas && ownedRoot === liveRoot ? ownedRoot : null;
 
 const assignRef = <Value>(
   ref: Ref<Value> | undefined,
@@ -184,6 +199,7 @@ export const Canvas = ({
   const [attachment, setAttachment] = useState<CanvasAttachment | null>(null);
   const canvas = attachment?.optionsKey === optionsKey ? attachment.canvas : null;
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
+  const liveRootRef = useRef<RoyalRendererRoot | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pointerInteractionStateRef] = useState<CanvasPointerInteractionStateRef>(() => ({
     current: createCanvasPointerInteractionState(),
@@ -213,22 +229,34 @@ export const Canvas = ({
     try {
       root = createRendererRoot(canvas, rendererOptions);
     } catch (error) {
-      setRuntime({ error, root: null });
+      setRuntime({ canvas, error, root: null });
       return undefined;
     }
-    setRuntime({ error: null, root });
-    return () => root.dispose();
+    liveRootRef.current = root;
+    setRuntime({ canvas, error: null, root });
+    return () => {
+      if (liveRootRef.current === root) liveRootRef.current = null;
+      root.dispose();
+    };
   }, [canvas, optionsKey]);
 
-  useLayoutEffect(() => {
-    const root = runtime.root;
-    if (root === null) return undefined;
-    return observeCanvasSize(root.canvas, root);
-  }, [runtime.root]);
+  const activeRuntime = activeCanvasRuntime(runtime, canvas);
+  const activeRoot = selectOwnedCanvasRoot(
+    activeRuntime.canvas,
+    canvas,
+    activeRuntime.root,
+    liveRootRef.current,
+  );
 
   useLayoutEffect(() => {
-    runtime.root?.render(scene);
-  }, [runtime.root, scene]);
+    const root = activeRoot;
+    if (root === null) return undefined;
+    return observeCanvasSize(root.canvas, root);
+  }, [activeRoot]);
+
+  useLayoutEffect(() => {
+    if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.render(scene);
+  }, [activeRoot, scene]);
 
   useLayoutEffect(() => {
     reconcileCanvasPointerInteractionScene({
@@ -240,7 +268,7 @@ export const Canvas = ({
   }, [lastPointerEventRef, pointerInteractionStateRef, sceneInteractions, sceneInteractionsRef]);
 
   useLayoutEffect(() => {
-    const root = runtime.root;
+    const root = activeRoot;
     if (canvas === null || root === null || !sceneInteractions.hasPointerEventTargets) {
       return undefined;
     }
@@ -255,20 +283,20 @@ export const Canvas = ({
     canvas,
     lastPointerEventRef,
     pointerInteractionStateRef,
-    runtime.root,
+    activeRoot,
     sceneInteractions.hasPointerEventTargets,
     sceneInteractionsRef,
   ]);
 
   useLayoutEffect(() => {
-    const releaseExternalRef = assignRef(rendererRef, runtime.root);
+    const releaseExternalRef = assignRef(rendererRef, activeRoot);
     return () => {
       if (releaseExternalRef === undefined) assignRef(rendererRef, null);
       else releaseExternalRef();
     };
-  }, [rendererRef, runtime.root]);
+  }, [activeRoot, rendererRef]);
 
-  if (runtime.error !== null) throw runtime.error;
+  if (activeRuntime.error !== null) throw activeRuntime.error;
 
   const canvasNode = createElement("canvas", {
     ...canvasProps,
@@ -281,7 +309,7 @@ export const Canvas = ({
     { value: canvas },
     createElement(
       CanvasRootContext.Provider,
-      { value: runtime.root },
+      { value: activeRoot },
       canvasNode,
       children,
     ),

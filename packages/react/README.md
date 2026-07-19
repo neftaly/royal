@@ -67,7 +67,8 @@ both defaulting to `true`, plus immutable resource policy. The default
 The latter is a root-wide FIFO ceiling shared by glTF, ordinary texture, VT,
 and prefiltered-environment preparation; it is not a worker count. A semantic
 option change replaces both the root and canvas. `rendererRef`
-exposes the active lower-level root or `null` during the mount lifecycle.
+exposes the active lower-level root or `null` during the mount/replacement
+lifecycle; a disposed root is never published for a newer canvas generation.
 `ordinaryTextureUploadByteBudgetPerFrame` defaults to 16 MiB and paces new ordinary-texture
 transfer across real canvas/XR frames without changing focused asset readiness.
 One individually larger texture is admitted alone rather than starving.

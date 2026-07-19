@@ -130,6 +130,11 @@ control cleanup MUST therefore be complete and idempotent. An abandoned mount
 MUST leave no listener, RAF, session callback, renderer root, observer, or
 resource claim alive.
 
+Each React root publication belongs to the exact canvas element generation that
+created it. During immutable-option replacement or development hot refresh,
+context, callbacks, rendering, and external refs MUST expose `null` rather than
+an older disposed root until the new generation is live.
+
 Hooks that observe external renderer state MUST use stable subscription
 semantics and detached TypeScript-readonly snapshots. Runtime freezing is not
 part of the contract. Observer callbacks that are documented as immediate MUST
