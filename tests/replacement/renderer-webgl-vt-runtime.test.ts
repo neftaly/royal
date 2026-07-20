@@ -118,6 +118,68 @@ describe("browser virtual texture runtime", () => {
     runtime.dispose();
   });
 
+  it("round-robins newly available page slots across visible texture resources", async () => {
+    const manifest = {
+      borderTexels: 1,
+      contractVersion: 2,
+      pageSize: 128,
+      pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" },
+      physicalSlots: 8,
+      virtualSize: [512, 512],
+    };
+    const pageReads: Array<{
+      resolve(response: Response): void;
+      url: string;
+    }> = [];
+    const createImageBitmap = vi.fn(async () => ({
+      close: vi.fn(),
+      height: 130,
+      width: 130,
+    }));
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", vi.fn((input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url.endsWith("vt.json")) {
+        return Promise.resolve(new Response(JSON.stringify(manifest), {
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      return new Promise<Response>((resolve) => { pageReads.push({ resolve, url }); });
+    }));
+    const textures = Array.from({ length: 5 }, (_, index) =>
+      virtualTexture(`https://example.test/${index}/vt.json`));
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: textures.map((texture) => mesh({
+        geometry: planeGeometry(2),
+        material: unlitMaterial({ texture }),
+      })),
+    }));
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn());
+    const identity = identityMat4();
+    const view: SurfaceFrameView = {
+      view: identity,
+      viewProjection: identity,
+      viewport: { height: 1024, width: 1024, x: 0, y: 0 },
+    };
+
+    runtime.setScene(prepared);
+    await vi.waitFor(() => {
+      expect(textures.every((texture) => runtime.snapshot(texture).state === "ready")).toBe(true);
+    });
+    runtime.update([view]);
+    expect(pageReads.map(({ url }) => new URL(url).pathname.split("/")[1]))
+      .toEqual(["0", "1", "2", "3"]);
+
+    pageReads[0]!.resolve(new Response(new Blob([new Uint8Array([1])])));
+    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce());
+    runtime.update([view]);
+
+    expect(new URL(pageReads[4]!.url).pathname.split("/")[1]).toBe("4");
+    runtime.dispose();
+  });
+
   it("publishes one page-table revision for a frame's admitted page batch", async () => {
     const manifest = {
       borderTexels: 1,

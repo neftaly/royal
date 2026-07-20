@@ -313,6 +313,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #frame = 0;
   #pageRequests = 0;
   #readyPages = 0;
+  #scheduleCursor = 0;
+  readonly #scheduleResources: RuntimeResource[] = [];
   #uploadedPages = 0;
   #viewCount = 0;
   #viewRevision = 0;
@@ -367,6 +369,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#disposed = true;
     for (const resource of this.#resources.values()) this.#destroyResource(resource, true);
     this.#resources.clear();
+    this.#scheduleResources.length = 0;
+    this.#scheduleCursor = 0;
     this.#scene = null;
   }
 
@@ -603,6 +607,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         worldBounds: surface.worldBounds,
       });
     }
+    this.#scheduleResources.length = 0;
+    for (const resource of this.#resources.values()) {
+      if (resource.surfaces.length > 0) this.#scheduleResources.push(resource);
+    }
+    if (this.#scheduleCursor >= this.#scheduleResources.length) this.#scheduleCursor = 0;
   }
 
   /** Re-evaluates demand after retained instance matrices move in the same scene. */
@@ -727,27 +736,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       if (uploadedPages > 0) this.#publishPageTable(resource);
       if (settledPages > 0) this.#changed(resource);
-      for (
-        let index = 0;
-        index < resource.workspace.count
-          && this.#activeJobs + this.#readyPages < MAX_DECODE_JOBS;
-        index += 1
-      ) {
-        const mip = resource.workspace.mips[index]!;
-        const x = resource.workspace.xs[index]!;
-        const y = resource.workspace.ys[index]!;
-        const key = virtualTexturePageKeyParts(mip, x, y);
-        if (
-          gpu.residentSlots.has(key)
-          || resource.loadingPages.has(key)
-          || resource.readyPageKeys.has(key)
-          || resource.failedPages.has(key)
-          || !this.#publicationAncestorReady(resource, mip, x, y)
-        ) continue;
-        this.#startPageRead(resource, { mip, x, y }, key);
-      }
       if (resource.readyPages.length > 0 && uploadsRemaining === 0) pending = true;
     }
+    this.#schedulePageReads();
     return FRAME_RESULTS[(pending ? 1 : 0) | (webGlStateChanged ? 2 : 0)]!;
   }
 
@@ -830,6 +821,43 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (!resource.failedPages.has(key)) return false;
     }
     return true;
+  }
+
+  #schedulePageReads(): void {
+    const resources = this.#scheduleResources;
+    let idleVisits = 0;
+    while (
+      resources.length > 0
+      && idleVisits < resources.length
+      && this.#activeJobs + this.#readyPages < MAX_DECODE_JOBS
+    ) {
+      if (this.#scheduleCursor >= resources.length) this.#scheduleCursor = 0;
+      const resource = resources[this.#scheduleCursor]!;
+      this.#scheduleCursor += 1;
+      if (this.#startNextPageRead(resource)) idleVisits = 0;
+      else idleVisits += 1;
+    }
+  }
+
+  #startNextPageRead(resource: RuntimeResource): boolean {
+    const gpu = resource.gpu;
+    if (gpu === undefined || resource.source === undefined) return false;
+    for (let index = 0; index < resource.workspace.count; index += 1) {
+      const mip = resource.workspace.mips[index]!;
+      const x = resource.workspace.xs[index]!;
+      const y = resource.workspace.ys[index]!;
+      const key = virtualTexturePageKeyParts(mip, x, y);
+      if (
+        gpu.residentSlots.has(key)
+        || resource.loadingPages.has(key)
+        || resource.readyPageKeys.has(key)
+        || resource.failedPages.has(key)
+        || !this.#publicationAncestorReady(resource, mip, x, y)
+      ) continue;
+      this.#startPageRead(resource, { mip, x, y }, key);
+      return true;
+    }
+    return false;
   }
 
   async #openSource(resource: RuntimeResource): Promise<void> {
