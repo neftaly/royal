@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
@@ -51,6 +52,32 @@ describe("surface program ownership", () => {
     const vertexSources = gl.shaderSource.mock.calls.filter(([, source]) =>
       String(source).includes("layout(location = 0) in vec3 position"));
     expect(vertexSources).toHaveLength(1);
+  });
+
+  it("removes directional-light work from environment-only fragments", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get("standard", SURFACE_FEATURE_STUDIO_ENVIRONMENT, false, false, false);
+
+    const environmentOnly = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .find((source) => source.includes("ggxDistribution"));
+    expect(environmentOnly).not.toContain("#define DIRECTIONAL_LIGHTS");
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "directionalLightCount",
+    );
+
+    owner.get(
+      "standard",
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
+      false,
+      false,
+      false,
+    );
+    expect(gl.getUniformLocation).toHaveBeenCalledWith(
+      expect.anything(),
+      "directionalLightCount",
+    );
   });
 
   it("only includes environment rotation work for an authored rotation", () => {

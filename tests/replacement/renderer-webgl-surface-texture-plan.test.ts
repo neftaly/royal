@@ -11,6 +11,7 @@ import {
 } from "../../packages/renderer-webgl/src/surface/surface-texture-plan";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
@@ -189,18 +190,21 @@ describe("surface texture planning core", () => {
       true,
       SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
       true,
+      true,
       false,
       0b1_1111_1111,
       true,
     );
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
     expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
+    expect(features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS).not.toBe(0);
 
     const virtualFeatures = surfaceTextureFeatureBits(
       material,
       true,
       true,
       SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+      true,
       true,
       true,
       0b1_1111_1111,

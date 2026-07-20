@@ -73,9 +73,11 @@ uniform samplerCube environmentSpecularTexture;
 #endif
 uniform vec4 baseColor;
 uniform vec4 cameraWorldPosition;
+#ifdef DIRECTIONAL_LIGHTS
 uniform vec4 directionalLightColors[MAX_DIRECTIONAL_LIGHTS];
 uniform int directionalLightCount;
 uniform vec4 directionalLightDirections[MAX_DIRECTIONAL_LIGHTS];
+#endif
 uniform vec4 emissiveFactor;
 uniform vec4 materialFactors;
 uniform vec4 presentation;
@@ -223,6 +225,7 @@ void main() {
   vec3 diffuseColor = surfaceBaseColor.rgb * (1.0 - metallic);
   float normalView = max(dot(normal, viewDirection), 0.0);
   vec3 lit = vec3(0.0);
+#ifdef DIRECTIONAL_LIGHTS
   for (int index = 0; index < MAX_DIRECTIONAL_LIGHTS; index += 1) {
     if (index >= directionalLightCount) break;
     vec3 lightDirection = -directionalLightDirections[index].xyz;
@@ -237,6 +240,7 @@ void main() {
       alphaSquared
     ) * directionalLightColors[index].rgb;
   }
+#endif
 #ifdef PUNCTUAL_LIGHTS
   for (int index = 0; index < MAX_PUNCTUAL_LIGHTS; index += 1) {
     if (index >= punctualLightCount) break;

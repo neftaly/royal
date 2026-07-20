@@ -585,7 +585,7 @@ describe("clear-only canvas root", () => {
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(7);
+    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(5);
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
 
     vi.mocked(canvas.gl.uniform4fv).mockClear();

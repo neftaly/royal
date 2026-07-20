@@ -9,6 +9,7 @@ import standardFragmentShader from "../webgl/shaders/surface.frag";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_LINEAR_OUTPUT,
@@ -70,9 +71,9 @@ export type StandardProgram = Readonly<{
   baseColor: WebGLUniformLocation;
   attenuationColor: WebGLUniformLocation | null;
   cameraWorldPosition: WebGLUniformLocation;
-  directionalLightColors: WebGLUniformLocation;
-  directionalLightCount: WebGLUniformLocation;
-  directionalLightDirections: WebGLUniformLocation;
+  directionalLightColors: WebGLUniformLocation | null;
+  directionalLightCount: WebGLUniformLocation | null;
+  directionalLightDirections: WebGLUniformLocation | null;
   emissive: WebGLUniformLocation | null;
   emissiveCoordinates: TextureCoordinatesProgram | null;
   emissiveFactor: WebGLUniformLocation;
@@ -225,7 +226,7 @@ const shaderVariant = (
     ? transmissionSource.vertexBody : "",
 ).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS ? "#define DIRECTIONAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
   );
   return features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
     ? variant.replace(SEMANTIC_TEXTURE_COORDINATE, "surfaceTextureCoordinate")
@@ -317,9 +318,12 @@ const createStandardProgram = (
       : null,
     baseColor: uniform(gl, program, "baseColor"),
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
-    directionalLightColors: uniform(gl, program, "directionalLightColors"),
-    directionalLightCount: uniform(gl, program, "directionalLightCount"),
-    directionalLightDirections: uniform(gl, program, "directionalLightDirections"),
+    directionalLightColors: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+      ? uniform(gl, program, "directionalLightColors") : null,
+    directionalLightCount: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+      ? uniform(gl, program, "directionalLightCount") : null,
+    directionalLightDirections: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+      ? uniform(gl, program, "directionalLightDirections") : null,
     emissive: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
       ? uniform(gl, program, "emissiveTexture")
       : null,

@@ -840,9 +840,15 @@ export class SurfaceGpuOwner {
             this.#standardProgramSceneGlobals.get(program.program)
               !== this.#sceneGlobalsRevision
           ) {
-            gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
-            gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
-            gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
+            if (
+              program.directionalLightCount !== null
+              && program.directionalLightColors !== null
+              && program.directionalLightDirections !== null
+            ) {
+              gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
+              gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
+              gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
+            }
             if (
               program.punctualLightCount !== null
               && program.punctualLightColors !== null
@@ -1171,6 +1177,7 @@ export class SurfaceGpuOwner {
       geometrySurface.geometry.colorBuffer !== null,
       geometrySurface.geometry.tangentBuffer !== null,
       sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+      (scene?.directionalLights.length ?? 0) > 0,
       (scene?.punctualLights.length ?? 0) > 0,
       virtualTexture !== undefined,
       presentableOrdinaryTextureMask(material, ordinaryBindings, bindingOffset),
@@ -1350,6 +1357,7 @@ export class SurfaceGpuOwner {
           resource.geometry.colorBuffer !== null,
           resource.geometry.tangentBuffer !== null,
           sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+          scene.directionalLights.length > 0,
           scene.punctualLights.length > 0,
           resource.virtualTexture !== undefined,
           presentableOrdinaryTextureMask(material, ordinaryBindings, 0),

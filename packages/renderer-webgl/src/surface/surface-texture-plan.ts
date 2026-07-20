@@ -8,6 +8,7 @@ import {
 } from "./canonical-material";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_LINEAR_OUTPUT,
@@ -90,6 +91,7 @@ export const surfaceTextureFeatureBits = (
   hasVertexColor: boolean,
   hasTangent: boolean,
   environmentFeatures: number,
+  hasDirectionalLights: boolean,
   hasPunctualLights: boolean,
   hasVirtualBaseColor: boolean,
   ordinaryTextureMask: number,
@@ -116,6 +118,7 @@ export const surfaceTextureFeatureBits = (
     features |= environmentFeatures;
     if (ordinaryTextureMask & 16) features |= SURFACE_FEATURE_OCCLUSION_TEXTURE;
   }
+  if (hasDirectionalLights) features |= SURFACE_FEATURE_DIRECTIONAL_LIGHTS;
   if (hasPunctualLights) features |= SURFACE_FEATURE_PUNCTUAL_LIGHTS;
   if (material.specularFactor !== undefined) {
     features |= SURFACE_FEATURE_SPECULAR_MATERIAL;
