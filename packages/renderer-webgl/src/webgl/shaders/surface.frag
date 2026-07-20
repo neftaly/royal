@@ -273,7 +273,7 @@ void main() {
   diffuseRadiance = max(diffuseRadiance, vec3(0.0));
   vec3 specularRadiance = textureLod(
     environmentSpecularTexture,
-    normalize(environmentReflection),
+    environmentReflection,
     roughness * environmentSettings.y
   ).rgb;
   vec4 brdf0 = vec4(-1.0, -0.0275, -0.572, 0.022);
