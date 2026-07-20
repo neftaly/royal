@@ -109,6 +109,7 @@ type RuntimeResource = {
   readonly abort: AbortController;
   readonly asset: TextureSourceRef | VirtualTextureAssetRef;
   readonly authored: boolean;
+  demandRevision: number;
   readonly failedPages: Set<VirtualTexturePageKey>;
   gpu: GpuVirtualTexture | undefined;
   readonly key: string;
@@ -124,8 +125,6 @@ type RuntimeResource = {
   snapshot: VirtualTextureAssetSnapshot | undefined;
   source?: VirtualTexturePageSource;
   readonly surfaces: VirtualTextureDemandSurface[];
-  viewCount: number;
-  viewState: Float64Array;
   readonly workspace: VirtualTextureDemandWorkspace;
 };
 
@@ -315,6 +314,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #pageRequests = 0;
   #readyPages = 0;
   #uploadedPages = 0;
+  #viewCount = 0;
+  #viewRevision = 0;
+  #viewState = new Float64Array(0);
   readonly #gl: WebGL2RenderingContext;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions | undefined;
@@ -452,7 +454,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#disposed || this.#scene === scene) return;
     this.#scene = scene;
-    for (const resource of this.#resources.values()) resource.viewCount = -1;
+    for (const resource of this.#resources.values()) resource.demandRevision = -1;
     const claimed = new Set<string>();
     for (const asset of scene?.virtualTextureAssets ?? []) {
       const key = virtualTextureAssetKey(asset);
@@ -463,6 +465,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         abort: new AbortController(),
         asset,
         authored: true,
+        demandRevision: -1,
         failedPages: new Set(),
         gpu: undefined,
         key,
@@ -473,8 +476,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         sampler: canonicalTextureSampler(asset),
         snapshot: undefined,
         surfaces: [],
-        viewCount: -1,
-        viewState: new Float64Array(0),
         workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
       };
       this.#resources.set(key, resource);
@@ -558,6 +559,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           abort: new AbortController(),
           asset,
           authored: false,
+          demandRevision: -1,
           failedPages: new Set(),
           gpu: undefined,
           key,
@@ -571,8 +573,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           snapshot: undefined,
           source,
           surfaces: [],
-          viewCount: -1,
-          viewState: new Float64Array(0),
           workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
         });
       }
@@ -612,10 +612,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let pending = false;
     let webGlStateChanged = false;
     let uploadsRemaining = MAX_UPLOADS_PER_FRAME;
+    if (this.#demandViewsChanged(views)) this.#viewRevision += 1;
     for (const resource of this.#resources.values()) {
       const manifest = resource.manifest;
       if (manifest === undefined || resource.manifestFailure !== undefined) continue;
-      const demandChanged = this.#demandViewsChanged(resource, views);
+      const demandChanged = resource.demandRevision !== this.#viewRevision;
       if (demandChanged) {
         resetVirtualTextureDemand(resource.workspace);
         collectVirtualTextureDemand(
@@ -625,6 +626,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           views,
           resource.sampler,
         );
+        resource.demandRevision = this.#viewRevision;
       }
       // Do not reserve one atlas per declared asset before it contributes to a view.
       if (resource.workspace.count === 0) {
@@ -758,32 +760,31 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #demandViewsChanged(
-    resource: RuntimeResource,
     views: readonly SurfaceFrameView[],
   ): boolean {
     const stride = 20;
     const length = views.length * stride;
-    if (resource.viewState.length !== length) resource.viewState = new Float64Array(length);
-    let changed = resource.viewCount !== views.length;
+    if (this.#viewState.length !== length) this.#viewState = new Float64Array(length);
+    let changed = this.#viewCount !== views.length;
     for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
       const view = views[viewIndex]!;
       const offset = viewIndex * stride;
       for (let component = 0; component < 16; component += 1) {
         const value = view.viewProjection[component]!;
-        if (resource.viewState[offset + component] !== value) changed = true;
-        resource.viewState[offset + component] = value;
+        if (this.#viewState[offset + component] !== value) changed = true;
+        this.#viewState[offset + component] = value;
       }
       const viewport = view.viewport;
-      if (resource.viewState[offset + 16] !== viewport.x) changed = true;
-      if (resource.viewState[offset + 17] !== viewport.y) changed = true;
-      if (resource.viewState[offset + 18] !== viewport.width) changed = true;
-      if (resource.viewState[offset + 19] !== viewport.height) changed = true;
-      resource.viewState[offset + 16] = viewport.x;
-      resource.viewState[offset + 17] = viewport.y;
-      resource.viewState[offset + 18] = viewport.width;
-      resource.viewState[offset + 19] = viewport.height;
+      if (this.#viewState[offset + 16] !== viewport.x) changed = true;
+      if (this.#viewState[offset + 17] !== viewport.y) changed = true;
+      if (this.#viewState[offset + 18] !== viewport.width) changed = true;
+      if (this.#viewState[offset + 19] !== viewport.height) changed = true;
+      this.#viewState[offset + 16] = viewport.x;
+      this.#viewState[offset + 17] = viewport.y;
+      this.#viewState[offset + 18] = viewport.width;
+      this.#viewState[offset + 19] = viewport.height;
     }
-    resource.viewCount = views.length;
+    this.#viewCount = views.length;
     return changed;
   }
 
