@@ -7,7 +7,7 @@ export default (env: ConfigEnv): UserConfig => {
 
   return mergeConfig(baseConfig, {
     build: {
-      sourcemap: false,
+      sourcemap: process.env.EXAMPLES_PROFILE_SOURCEMAPS === '1' ? 'hidden' : false,
       rollupOptions: {
         checks: { pluginTimings: false },
       },

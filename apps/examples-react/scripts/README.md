@@ -416,6 +416,10 @@ adding instrumentation to renderer code; `EXAMPLES_GLTF_LOAD_FILMSTRIP_INTERVAL_
 controls the requested cadence. Screenshot capture perturbs timing, so compare
 performance with a separate ordinary run. Set `EXAMPLES_GLTF_LOAD_CPU_PROFILE`
 to retain the navigation-through-settlement V8 profile instead.
+Set `EXAMPLES_PROFILE_SOURCEMAPS=1` only for source attribution. It emits hidden
+maps beside the production-shaped chunks without publishing map URLs to the
+browser; keep a normal no-map run as the timing baseline because generating the
+large maps can disturb a memory-constrained host before the benchmark starts.
 
 Focused auto-VT load and hitch probe:
 

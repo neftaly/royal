@@ -13,8 +13,6 @@ import {
   geometryBatchLayoutByteLength,
   planGeometryBatchChunks,
   planGeometryBatchLayout,
-  validateGeometryIndices,
-  writeRebasedGeometryIndices,
   type GeometryIndexArray,
   type GeometryBatchLayoutPlan,
   type GeometryBatchRange,
@@ -441,12 +439,10 @@ export class SurfaceGeometryGpuOwner {
     const vertexOffset = entry.range.vertexOffset;
     gl.bindVertexArray(arena.vertexArray);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, arena.indexBuffer);
-    const vertexCount = geometry.positions.length / 3;
     if (
       vertexOffset === 0
       && geometry.indices.BYTES_PER_ELEMENT === plan.batch.indexBytes
     ) {
-      validateGeometryIndices(geometry.indices, vertexCount);
       gl.bufferSubData(
         gl.ELEMENT_ARRAY_BUFFER,
         entry.range.indexByteOffset,
@@ -458,12 +454,9 @@ export class SurfaceGeometryGpuOwner {
         plan.batch.indexBytes,
         geometry.indices.length,
       );
-      writeRebasedGeometryIndices(
-        rebasedIndices,
-        geometry.indices,
-        vertexOffset,
-        vertexCount,
-      );
+      for (let index = 0; index < geometry.indices.length; index += 1) {
+        rebasedIndices[index] = vertexOffset + geometry.indices[index]!;
+      }
       gl.bufferSubData(
         gl.ELEMENT_ARRAY_BUFFER,
         entry.range.indexByteOffset,
