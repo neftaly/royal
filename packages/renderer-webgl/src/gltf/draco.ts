@@ -27,6 +27,37 @@ type DracoMesh = Readonly<{
   numPoints: () => number;
 }>;
 
+export type StaticDracoAttributeTask = Readonly<{
+  accessor: JsonObject;
+  components: number;
+  semantic: DracoAttributeSemantic;
+  uniqueId: number;
+}>;
+
+/** Serializable codec task; document and buffer-layout variation ends here. */
+export type StaticDracoDecodeTask = Readonly<{
+  attributes: readonly StaticDracoAttributeTask[];
+  bytes: Uint8Array;
+  indexAccessor?: JsonObject;
+  label: string;
+  path: string;
+}>;
+
+export type StaticDracoMeshDecoder = (bytes: Uint8Array) => DracoMesh;
+export type StaticDracoTaskPlanner = (
+  primitive: JsonObject,
+  path: string,
+) => StaticDracoDecodeTask;
+
+const ATTRIBUTE_SEMANTICS: readonly DracoAttributeSemantic[] = [
+  "POSITION",
+  "NORMAL",
+  "TANGENT",
+  "TEXCOORD_0",
+  "TEXCOORD_1",
+  "COLOR_0",
+];
+
 const object = (value: unknown, label: string): JsonObject => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
@@ -108,91 +139,140 @@ const decodedIndices = (
   return values;
 };
 
+const planTask = (
+  accessors: readonly unknown[],
+  bufferViews: readonly unknown[],
+  binary: Uint8Array,
+  label: string,
+  primitive: JsonObject,
+  path: string,
+): StaticDracoDecodeTask => {
+  const extensions = object(primitive.extensions, `${label} ${path}.extensions`);
+  const extension = object(
+    extensions.KHR_draco_mesh_compression,
+    `${label} ${path}.extensions.KHR_draco_mesh_compression`,
+  );
+  const viewIndex = index(
+    extension.bufferView,
+    bufferViews.length,
+    `${label} ${path} Draco bufferView`,
+  );
+  const view = object(bufferViews[viewIndex], `${label} bufferViews[${viewIndex}]`);
+  if (view.buffer !== 0) throw new Error(`${label} bufferViews[${viewIndex}].buffer must be 0`);
+  const offset = view.byteOffset === undefined ? 0 : Number(view.byteOffset);
+  const length = Number(view.byteLength);
+  if (
+    !Number.isSafeInteger(offset)
+    || offset < 0
+    || !Number.isSafeInteger(length)
+    || length <= 0
+    || offset + length > binary.byteLength
+  ) throw new Error(`${label} ${path} Draco bufferView exceeds the buffer`);
+  const attributeIds = object(extension.attributes, `${label} ${path} Draco attributes`);
+  const primitiveAttributes = object(primitive.attributes, `${label} ${path}.attributes`);
+  if (attributeIds.POSITION === undefined) {
+    throw new Error(`${label} ${path} Draco attributes must include POSITION`);
+  }
+  const attributes: StaticDracoAttributeTask[] = [];
+  for (const semantic of ATTRIBUTE_SEMANTICS) {
+    if (attributeIds[semantic] === undefined || primitiveAttributes[semantic] === undefined) continue;
+    const uniqueId = Number(attributeIds[semantic]);
+    if (!Number.isSafeInteger(uniqueId) || uniqueId < 0) {
+      throw new Error(`${label} ${path} Draco ${semantic} id is invalid`);
+    }
+    const accessorIndex = index(
+      primitiveAttributes[semantic],
+      accessors.length,
+      `${label} ${path}.attributes.${semantic}`,
+    );
+    const accessor = object(accessors[accessorIndex], `${label} accessors[${accessorIndex}]`);
+    attributes.push({
+      accessor,
+      components: componentCount(accessor.type, `${label} accessors[${accessorIndex}]`),
+      semantic,
+      uniqueId,
+    });
+  }
+  const indexAccessor = primitive.indices === undefined
+    ? undefined
+    : object(
+      accessors[index(primitive.indices, accessors.length, `${label} ${path}.indices`)],
+      `${label} ${path}.indices accessor`,
+    );
+  return {
+    attributes,
+    bytes: new Uint8Array(binary.buffer, binary.byteOffset + offset, length),
+    ...(indexAccessor === undefined ? {} : { indexAccessor }),
+    label,
+    path,
+  };
+};
+
+/** Executes one normalized codec task and lazily extracts requested attributes. */
+export const decodeStaticDracoTask = (
+  task: StaticDracoDecodeTask,
+  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+): DecodedDracoPrimitive => {
+  let mesh: DracoMesh;
+  try {
+    mesh = decodeMesh(task.bytes);
+  } catch (error) {
+    throw new Error(`${task.label} ${task.path} Draco decode failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`);
+  }
+  const decodedAttributes = new Map<DracoAttributeSemantic, Float32Array>();
+  const attribute = (semantic: DracoAttributeSemantic): Float32Array | undefined => {
+    const cached = decodedAttributes.get(semantic);
+    if (cached !== undefined) return cached;
+    const planned = task.attributes.find((candidate) => candidate.semantic === semantic);
+    if (planned === undefined) return undefined;
+    const count = Number(planned.accessor.count);
+    if (!Number.isSafeInteger(count) || count !== mesh.numPoints()) {
+      throw new Error(`${task.label} ${task.path} Draco ${semantic} count does not match decoded points`);
+    }
+    const source = mesh.getAttributeByUniqueId(planned.uniqueId);
+    if (source === null || source.numComponents !== planned.components) {
+      throw new Error(`${task.label} ${task.path} Draco ${semantic} shape is invalid`);
+    }
+    const values = normalizedValues(
+      source.extractTo(Float32Array, mesh.numPoints()),
+      planned.accessor,
+    );
+    decodedAttributes.set(semantic, values);
+    return values;
+  };
+  return {
+    attribute,
+    indices: decodedIndices(mesh, task.indexAccessor, task.label, `${task.path}.indices`),
+  };
+};
+
+/** Creates a demand decoder; compressed primitives decode only when selected-scene traversal reaches them. */
+export const createStaticDracoTaskPlanner = (
+  document: JsonObject,
+  binary: Uint8Array,
+  label: string,
+): StaticDracoTaskPlanner => {
+  const accessors = array(document.accessors, `${label} accessors`);
+  const bufferViews = array(document.bufferViews, `${label} bufferViews`);
+  return (primitive, path) => planTask(
+    accessors,
+    bufferViews,
+    binary,
+    label,
+    primitive,
+    path,
+  );
+};
+
 /** Creates a demand decoder; compressed primitives decode only when selected-scene traversal reaches them. */
 export const createStaticDracoDecoder = (
   document: JsonObject,
   binary: Uint8Array,
   label: string,
-  decodeMesh: (bytes: Uint8Array) => DracoMesh = decodeDracoMesh,
+  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
 ): ((primitive: JsonObject, path: string) => DecodedDracoPrimitive) => {
-  const accessors = array(document.accessors, `${label} accessors`);
-  const bufferViews = array(document.bufferViews, `${label} bufferViews`);
-  return (primitive, path) => {
-    const extensions = object(primitive.extensions, `${label} ${path}.extensions`);
-    const extension = object(
-      extensions.KHR_draco_mesh_compression,
-      `${label} ${path}.extensions.KHR_draco_mesh_compression`,
-    );
-    const viewIndex = index(
-      extension.bufferView,
-      bufferViews.length,
-      `${label} ${path} Draco bufferView`,
-    );
-    const view = object(bufferViews[viewIndex], `${label} bufferViews[${viewIndex}]`);
-    if (view.buffer !== 0) throw new Error(`${label} bufferViews[${viewIndex}].buffer must be 0`);
-    const offset = view.byteOffset === undefined ? 0 : Number(view.byteOffset);
-    const length = Number(view.byteLength);
-    if (
-      !Number.isSafeInteger(offset)
-      || offset < 0
-      || !Number.isSafeInteger(length)
-      || length <= 0
-      || offset + length > binary.byteLength
-    ) throw new Error(`${label} ${path} Draco bufferView exceeds the buffer`);
-    let mesh: DracoMesh;
-    try {
-      mesh = decodeMesh(new Uint8Array(binary.buffer, binary.byteOffset + offset, length));
-    } catch (error) {
-      throw new Error(`${label} ${path} Draco decode failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`);
-    }
-    const attributeIds = object(extension.attributes, `${label} ${path} Draco attributes`);
-    const primitiveAttributes = object(primitive.attributes, `${label} ${path}.attributes`);
-    if (attributeIds.POSITION === undefined) {
-      throw new Error(`${label} ${path} Draco attributes must include POSITION`);
-    }
-    const attributes = new Map<DracoAttributeSemantic, Float32Array>();
-    const attribute = (semantic: DracoAttributeSemantic): Float32Array | undefined => {
-      const cached = attributes.get(semantic);
-      if (cached !== undefined) return cached;
-      if (attributeIds[semantic] === undefined) return undefined;
-      const uniqueId = Number(attributeIds[semantic]);
-      if (!Number.isSafeInteger(uniqueId) || uniqueId < 0) {
-        throw new Error(`${label} ${path} Draco ${semantic} id is invalid`);
-      }
-      const accessorIndex = index(
-        primitiveAttributes[semantic],
-        accessors.length,
-        `${label} ${path}.attributes.${semantic}`,
-      );
-      const accessor = object(accessors[accessorIndex], `${label} accessors[${accessorIndex}]`);
-      const components = componentCount(accessor.type, `${label} accessors[${accessorIndex}]`);
-      const count = Number(accessor.count);
-      if (!Number.isSafeInteger(count) || count !== mesh.numPoints()) {
-        throw new Error(`${label} ${path} Draco ${semantic} count does not match decoded points`);
-      }
-      const attribute = mesh.getAttributeByUniqueId(uniqueId);
-      if (attribute === null || attribute.numComponents !== components) {
-        throw new Error(`${label} ${path} Draco ${semantic} shape is invalid`);
-      }
-      const values = normalizedValues(
-        attribute.extractTo(Float32Array, mesh.numPoints()),
-        accessor,
-      );
-      attributes.set(semantic, values);
-      return values;
-    };
-    const indexAccessor = primitive.indices === undefined
-      ? undefined
-      : object(
-        accessors[index(primitive.indices, accessors.length, `${label} ${path}.indices`)],
-        `${label} ${path}.indices accessor`,
-      );
-    const result = {
-      attribute,
-      indices: decodedIndices(mesh, indexAccessor, label, `${path}.indices`),
-    };
-    return result;
-  };
+  const plan = createStaticDracoTaskPlanner(document, binary, label);
+  return (primitive, path) => decodeStaticDracoTask(plan(primitive, path), decodeMesh);
 };

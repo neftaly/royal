@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createStaticDracoDecoder } from "../../packages/renderer-webgl/src/gltf/draco";
+import {
+  createStaticDracoDecoder,
+  createStaticDracoTaskPlanner,
+  decodeStaticDracoTask,
+} from "../../packages/renderer-webgl/src/gltf/draco";
 
 type TestDracoMeshDecoder = NonNullable<
   Parameters<typeof createStaticDracoDecoder>[3]
@@ -62,5 +66,45 @@ describe("static Draco adapter", () => {
     expect(requested).toEqual([7, 8, 9]);
     expect(decoded.attribute("TEXCOORD_1")).toBe(decoded.attribute("TEXCOORD_1"));
     expect(requested).toEqual([7, 8, 9]);
+  });
+
+  it("erases document and buffer layout before codec execution", () => {
+    const binary = new Uint8Array([9, 8, 7, 6]);
+    const plan = createStaticDracoTaskPlanner({
+      accessors: [
+        { componentType: 5126, count: 3, type: "VEC3" },
+        { componentType: 5123, count: 3, type: "SCALAR" },
+      ],
+      bufferViews: [{ buffer: 0, byteLength: 2, byteOffset: 1 }],
+    }, binary, "planned.glb");
+    const task = plan({
+      attributes: { POSITION: 0 },
+      extensions: {
+        KHR_draco_mesh_compression: {
+          attributes: { POSITION: 4 },
+          bufferView: 0,
+        },
+      },
+      indices: 1,
+    }, "meshes[0].primitives[0]");
+
+    expect(task).toMatchObject({
+      attributes: [{ components: 3, semantic: "POSITION", uniqueId: 4 }],
+      label: "planned.glb",
+      path: "meshes[0].primitives[0]",
+    });
+    expect(task.bytes).toEqual(new Uint8Array([8, 7]));
+    expect(structuredClone(task)).toEqual(task);
+    const decoded = decodeStaticDracoTask(task, () => ({
+      faces_: new Int32Array([0, 1, 2]),
+      getAttributeByUniqueId: () => ({
+        extractTo: () => new Float32Array(9),
+        numComponents: 3,
+      }),
+      numFaces: () => 1,
+      numPoints: () => 3,
+    }));
+    expect(decoded.indices).toEqual(new Uint16Array([0, 1, 2]));
+    expect(decoded.attribute("POSITION")).toEqual(new Float32Array(9));
   });
 });
