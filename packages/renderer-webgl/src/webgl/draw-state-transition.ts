@@ -20,6 +20,21 @@ export type SurfaceDrawStateIntent = Readonly<{
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
 
+/** Caller-retained workspace accepted by the readonly draw-state contract. */
+export type MutableSurfaceDrawStateIntent = {
+  alphaBlend: boolean;
+  cullBackFaces: boolean;
+  depthTest: boolean;
+  depthWrite: boolean;
+  framebuffer: WebGLFramebuffer | null;
+  frontFace: number;
+  program: WebGLProgram;
+  textureBindings: readonly TextureUnitBinding[];
+  textureUnits: number;
+  vertexArray: WebGLVertexArrayObject;
+  viewport: { height: number; width: number; x: number; y: number };
+};
+
 export type SurfaceDrawStateTransition = {
   cullMode: boolean;
   fixedPipeline: boolean;

@@ -22,6 +22,17 @@ export type ClearFrameIntent = Readonly<{
   viewport: FrameViewport;
 }>;
 
+/** Caller-retained workspace accepted by the readonly clear contract. */
+export type MutableClearFrameIntent = {
+  clearColor: LinearRgba;
+  clearDepth: number;
+  clearStencil: number;
+  framebuffer: WebGLFramebuffer | null;
+  scissor: FrameViewport | null;
+  size: { height: number; width: number };
+  viewport: { height: number; width: number; x: number; y: number };
+};
+
 const requireInteger = (value: number, field: string): void => {
   if (!Number.isSafeInteger(value)) {
     throw new TypeError(`Royal clear frame ${field} must be a safe integer`);

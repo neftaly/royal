@@ -13,7 +13,11 @@ import {
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
-import type { ClearFrameIntent, LinearRgba } from "../frame/clear-frame";
+import type {
+  ClearFrameIntent,
+  LinearRgba,
+  MutableClearFrameIntent,
+} from "../frame/clear-frame";
 import { validateClearFrameIntent, validateLinearRgba } from "../frame/clear-frame";
 import {
   resolveCanvasSize,
@@ -313,15 +317,7 @@ export class CanvasRoot {
     viewProjection: this.#viewProjection,
     viewport: this.#canvasViewport,
   }];
-  readonly #externalClearIntent: {
-    clearColor: LinearRgba;
-    clearDepth: number;
-    clearStencil: number;
-    framebuffer: WebGLFramebuffer | null;
-    scissor: null;
-    size: { height: number; width: number };
-    viewport: { height: number; width: number; x: number; y: number };
-  } = {
+  readonly #externalClearIntent: MutableClearFrameIntent = {
     clearColor: this.#clearColor,
     clearDepth: 1,
     clearStencil: 0,

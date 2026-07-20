@@ -1,8 +1,9 @@
 import type { LinearRgba } from "@royal/renderer-core";
-import type { FrameViewport } from "../frame/clear-frame";
+import type { FrameViewport, MutableClearFrameIntent } from "../frame/clear-frame";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import type { GpuTextureBinding } from "../texture/gpu-owner";
 import type { WebGlStateOwner } from "../webgl/state-owner";
+import type { MutableSurfaceDrawStateIntent } from "../webgl/draw-state-transition";
 import presentationFragmentShader from "../webgl/shaders/presentation.frag";
 import presentationVertexShader from "../webgl/shaders/presentation.vert";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
@@ -190,10 +191,25 @@ export class SurfaceCompositeOwner {
   #bindingRevision = 0;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
+  readonly #clearIntent: MutableClearFrameIntent = {
+    clearColor: [0, 0, 0, 0],
+    clearDepth: 1,
+    clearStencil: 0,
+    framebuffer: null,
+    scissor: null,
+    size: { height: 1, width: 1 },
+    viewport: { height: 1, width: 1, x: 0, y: 0 },
+  };
   readonly #capabilities: LinearCompositeCapabilities;
   readonly #gl: WebGL2RenderingContext;
   #deniedSize = "";
   #mipmapsRequired = false;
+  readonly #presentationBindings: GpuTextureBinding[] = [{
+    sampler: null,
+    target: "2d",
+    texture: null,
+  }];
+  #presentationIntent: MutableSurfaceDrawStateIntent | null = null;
   #program: WebGLProgram | null = null;
   #presentationLocation: WebGLUniformLocation | null = null;
   readonly #presentationValues = new Float32Array(4);
@@ -256,6 +272,8 @@ export class SurfaceCompositeOwner {
     if (this.#vertexArray !== null) gl.deleteVertexArray(this.#vertexArray);
     this.#program = null;
     this.#presentationLocation = null;
+    this.#presentationIntent = null;
+    this.#presentationBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
@@ -330,15 +348,14 @@ export class SurfaceCompositeOwner {
     const resources = this.#resources;
     if (resources === null) throw new Error("Royal composite target is not available");
     state.unbindTextureUnit(0);
-    state.clear({
-      clearColor: color,
-      clearDepth: 1,
-      clearStencil: 0,
-      framebuffer: resources.framebuffer,
-      scissor: null,
-      size: { height: resources.height, width: resources.width },
-      viewport: { height: resources.height, width: resources.width, x: 0, y: 0 },
-    });
+    const intent = this.#clearIntent;
+    intent.clearColor = color;
+    intent.framebuffer = resources.framebuffer;
+    intent.size.height = resources.height;
+    intent.size.width = resources.width;
+    intent.viewport.height = resources.height;
+    intent.viewport.width = resources.width;
+    state.clear(intent);
   }
 
   snapshot(state: WebGlStateOwner): void {
@@ -379,23 +396,41 @@ export class SurfaceCompositeOwner {
       || vertexArray === null
       || this.#presentationLocation === null
     ) throw new Error("Royal composite presentation is not available");
-    state.applySurfaceDraw({
-      alphaBlend: false,
-      cullBackFaces: false,
-      depthTest: false,
-      depthWrite: false,
-      framebuffer,
-      frontFace: this.#gl.CCW,
-      program,
-      textureBindings: [{
+    const retainedBinding = this.#presentationBindings[0]!;
+    if (
+      retainedBinding.sampler !== this.#presentationSampler
+      || retainedBinding.texture !== resources.color
+    ) {
+      this.#presentationBindings[0] = {
         sampler: this.#presentationSampler,
         target: "2d",
         texture: resources.color,
-      }],
-      textureUnits: 1,
-      vertexArray,
-      viewport,
-    });
+      };
+    }
+    let intent = this.#presentationIntent;
+    if (intent === null) {
+      intent = {
+        alphaBlend: false,
+        cullBackFaces: false,
+        depthTest: false,
+        depthWrite: false,
+        framebuffer,
+        frontFace: this.#gl.CCW,
+        program,
+        textureBindings: this.#presentationBindings,
+        textureUnits: 1,
+        vertexArray,
+        viewport: { height: viewport.height, width: viewport.width, x: viewport.x, y: viewport.y },
+      };
+      this.#presentationIntent = intent;
+    } else {
+      intent.framebuffer = framebuffer;
+      intent.viewport.height = viewport.height;
+      intent.viewport.width = viewport.width;
+      intent.viewport.x = viewport.x;
+      intent.viewport.y = viewport.y;
+    }
+    state.applySurfaceDraw(intent);
     this.#presentationValues[0] = exposure;
     this.#presentationValues[1] = toneMapping === "pbr-neutral" ? 1 : 0;
     this.#presentationValues[2] = viewport.width / resources.width;
@@ -408,6 +443,8 @@ export class SurfaceCompositeOwner {
     this.#resources = null;
     this.#program = null;
     this.#presentationLocation = null;
+    this.#presentationIntent = null;
+    this.#presentationBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
