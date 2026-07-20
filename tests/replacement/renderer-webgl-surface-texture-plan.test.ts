@@ -3,6 +3,7 @@ import type { CanonicalSurfaceMaterial, CanonicalTextureBinding } from "../../pa
 import {
   composeSurfaceTextureBindings,
   materialTextureBindingAt,
+  presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
   surfaceTextureFeatureBits,
   surfaceTextureUnitMask,
@@ -139,6 +140,35 @@ describe("surface texture planning core", () => {
     });
     expect(Array.from({ length: 9 }, (_, unit) => materialTextureBindingAt(material, unit)))
       .toEqual(authored);
+  });
+
+  it("publishes paced lighting maps only as one coherent material set", () => {
+    const empty: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
+    const resident = gpuBinding("resident");
+    const metallicRoughnessTexture = canonicalBinding("metallic-roughness");
+    const normalTexture = canonicalBinding("normal");
+    const material = standard({
+      metallicRoughnessAsset: { kind: "asset", src: "/metallic-roughness.png" },
+      metallicRoughnessTexture,
+      normalAsset: { kind: "asset", src: "/normal.png" },
+      normalTexture,
+    });
+
+    expect(presentableOrdinaryTextureMask(
+      { ...material, mapWaits: 1 },
+      [resident, resident, resident, empty, empty, empty, empty, empty, empty],
+      0,
+    )).toBe(0b1);
+    expect(presentableOrdinaryTextureMask(
+      material,
+      [resident, resident, empty, empty, empty, empty, empty, empty, empty],
+      0,
+    )).toBe(0b1);
+    expect(presentableOrdinaryTextureMask(
+      material,
+      [resident, resident, resident, empty, empty, empty, empty, empty, empty],
+      0,
+    )).toBe(0b111);
   });
 
   it("selects every standard texture feature without aliasing shader units", () => {

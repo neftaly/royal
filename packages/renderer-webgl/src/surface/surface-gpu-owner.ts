@@ -72,7 +72,7 @@ import {
   composeSurfaceTextureBindings,
   MATERIAL_TEXTURE_UNITS,
   materialTextureBindingAt,
-  residentOrdinaryTextureMask,
+  presentableOrdinaryTextureMask,
   surfaceTextureFeatureBits,
   surfaceTextureUnitMask,
 } from "./surface-texture-plan";
@@ -1139,7 +1139,7 @@ export class SurfaceGpuOwner {
       sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
       (scene?.punctualLights.length ?? 0) > 0,
       virtualTexture !== undefined,
-      residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
+      presentableOrdinaryTextureMask(material, ordinaryBindings, bindingOffset),
       this.#compositeActive,
     );
     return {
@@ -1307,7 +1307,7 @@ export class SurfaceGpuOwner {
           sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
           scene.punctualLights.length > 0,
           resource.virtualTexture !== undefined,
-          residentOrdinaryTextureMask(ordinaryBindings, 0),
+          presentableOrdinaryTextureMask(material, ordinaryBindings, 0),
           this.#compositeActive,
         );
         const program = this.#programs.get(

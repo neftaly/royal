@@ -74,6 +74,8 @@ export type CanonicalStandardMaterial = Readonly<{
   occlusionStrength: number;
   occlusionTexture?: CanonicalTextureBinding;
   occlusionTextureCoordinates?: CanonicalTextureCoordinates;
+  /** Bit 0 waits for lighting maps; bit 1 waits for transmission/volume maps. */
+  mapWaits?: number;
   requiresTextureCoordinates: boolean;
   roughnessFactor: number;
   specularColorAsset?: TextureSourceRef;
@@ -189,6 +191,7 @@ const textureBinding = (
 export const resolveCanonicalMaterialTexture = (
   material: CanonicalSurfaceMaterial,
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
+  texturePending: (asset: TextureSourceRef) => boolean = () => true,
 ): CanonicalSurfaceMaterial => {
   const baseColorAsset = material.baseColorAsset;
   const baseColorDecoded = baseColorAsset === undefined ? undefined : decodedTexture(baseColorAsset);
@@ -223,8 +226,33 @@ export const resolveCanonicalMaterialTexture = (
     ? material.thicknessAsset : undefined);
   const transmissionTexture = resolve(canonicalMaterialHasTransmission(material)
     ? material.transmissionAsset : undefined);
+  const pending = (
+    asset: TextureSourceRef | undefined,
+    binding: CanonicalTextureBinding | undefined,
+  ): boolean => asset !== undefined && binding === undefined && texturePending(asset);
+  const detailTexturesPending = pending(
+    material.metallicRoughnessAsset,
+    metallicRoughnessTexture,
+  ) || pending(material.normalAsset, normalTexture)
+    || pending(material.occlusionAsset, occlusionTexture)
+    || pending(material.specularTextureAsset, specularTexture)
+    || pending(material.specularColorAsset, specularColorTexture);
+  const transmissionTexturesPending = pending(
+    canonicalMaterialHasTransmission(material) ? material.transmissionAsset : undefined,
+    transmissionTexture,
+  ) || pending(
+    canonicalMaterialHasVolume(material) ? material.thicknessAsset : undefined,
+    thicknessTexture,
+  );
+  const {
+    mapWaits: _previousMapWaits,
+    ...stableCommon
+  } = common as CanonicalStandardMaterial;
+  const mapWaits = (detailTexturesPending ? 1 : 0)
+    | (transmissionTexturesPending ? 2 : 0);
   return {
-    ...common,
+    ...stableCommon,
+    ...(mapWaits === 0 ? {} : { mapWaits }),
     ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
     ...(normalTexture === undefined ? {} : { normalTexture }),

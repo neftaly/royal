@@ -278,6 +278,10 @@ export class CanvasRoot {
     this.#gltfAssets.prepared(node.asset);
   readonly #getTextureSnapshot = (asset: TextureSourceRef): TextureAssetSnapshot =>
     this.#textureAssets.getSourceSnapshot(asset);
+  readonly #isTexturePending = (asset: TextureSourceRef): boolean => {
+    const state = this.#getTextureSnapshot(asset).state;
+    return state === "idle" || state === "loading";
+  };
   #lastFrameFailure: string | undefined;
   readonly #listeners = new Set<() => void>();
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
@@ -602,6 +606,7 @@ export class CanvasRoot {
       this.#getGltfAsset,
       camera.camera,
       this.#getDecodedTexture,
+      this.#isTexturePending,
     );
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
@@ -823,6 +828,7 @@ export class CanvasRoot {
       this.#getGltfAsset,
       camera.camera,
       this.#getDecodedTexture,
+      this.#isTexturePending,
     );
     this.#surfaceScene = prepared;
     this.#progressiveTexturePresentation.reset();
@@ -843,6 +849,7 @@ export class CanvasRoot {
         this.#surfaceScene,
         key,
         this.#getDecodedTexture,
+        this.#isTexturePending,
       );
       if (prepared !== this.#surfaceScene) {
         this.#surfaceScene = prepared;

@@ -102,6 +102,37 @@ export const residentOrdinaryTextureMask = (
   return mask;
 };
 
+const DETAIL_TEXTURE_MASK = 0b001_110_110;
+const TRANSMISSION_TEXTURE_MASK = 0b110_000_000;
+
+/**
+ * Selects only visually coherent map groups. GPU uploads may be paced across
+ * frames, but a material never presents a half-arrived lighting or volume set.
+ */
+export const presentableOrdinaryTextureMask = (
+  material: CanonicalSurfaceMaterial,
+  bindings: readonly GpuTextureBinding[],
+  offset: number,
+): number => {
+  let resident = residentOrdinaryTextureMask(bindings, offset);
+  if (material.kind !== "standard") return resident;
+  const detail = (material.metallicRoughnessTexture === undefined ? 0 : 1 << 1)
+    | (material.normalTexture === undefined ? 0 : 1 << 2)
+    | (material.occlusionTexture === undefined ? 0 : 1 << 4)
+    | (material.specularTexture === undefined ? 0 : 1 << 5)
+    | (material.specularColorTexture === undefined ? 0 : 1 << 6);
+  if (((material.mapWaits ?? 0) & 1) !== 0 || (resident & detail) !== detail) {
+    resident &= ~DETAIL_TEXTURE_MASK;
+  }
+  const transmission = (material.transmissionTexture === undefined ? 0 : 1 << 7)
+    | (material.thicknessTexture === undefined ? 0 : 1 << 8);
+  if (
+    ((material.mapWaits ?? 0) & 2) !== 0
+    || (resident & transmission) !== transmission
+  ) resident &= ~TRANSMISSION_TEXTURE_MASK;
+  return resident;
+};
+
 export const materialTextureBindingAt = (
   material: CanonicalSurfaceMaterial,
   unit: number,

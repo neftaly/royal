@@ -312,6 +312,7 @@ export const prepareCanonicalSurfaceScene = (
   ) => PreparedStaticGltf | undefined = () => undefined,
   camera: CanonicalCamera = staticCamera(scene),
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined = () => undefined,
+  texturePending: (asset: TextureSourceRef) => boolean = () => true,
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {
@@ -543,7 +544,7 @@ export const prepareCanonicalSurfaceScene = (
               ...(sourceIndices === undefined ? {} : { sourceIndices }),
               },
             }),
-            material: resolveCanonicalMaterialTexture(levelMaterial, decodedTexture),
+            material: resolveCanonicalMaterialTexture(levelMaterial, decodedTexture, texturePending),
             materialSource: levelMaterial,
             ...(lods === undefined ? {} : { lods }),
             model,
@@ -641,7 +642,7 @@ export const prepareCanonicalSurfaceScene = (
       materialSource = prepareCanonicalMaterialSource(node.material);
       directMaterials.set(node.material, materialSource);
     }
-    const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture);
+    const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture, texturePending);
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
@@ -702,6 +703,7 @@ export const refreshCanonicalSurfaceTexture = (
   scene: CanonicalSurfaceScene,
   textureKey: string,
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
+  texturePending: (asset: TextureSourceRef) => boolean = () => true,
 ): CanonicalSurfaceScene => {
   const affected = scene.textureSurfaceIndices.get(textureKey);
   if (affected === undefined) return scene;
@@ -710,7 +712,11 @@ export const refreshCanonicalSurfaceTexture = (
     const surface = scene.surfaces[index]!;
     surfaces[index] = {
       ...surface,
-      material: resolveCanonicalMaterialTexture(surface.materialSource, decodedTexture),
+      material: resolveCanonicalMaterialTexture(
+        surface.materialSource,
+        decodedTexture,
+        texturePending,
+      ),
     };
   }
   return { ...scene, surfaces };

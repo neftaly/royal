@@ -352,7 +352,8 @@ describe("ordinary texture asset lifecycle owner", () => {
     if (snapshot.state === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);
     owner.reconcile([asset]);
     expect(decode).toHaveBeenCalledTimes(1);
-    expect(changed).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledOnce();
+    expect(changed).toHaveBeenCalledWith(decodedTextureKey(asset));
     expect(snapshotChanged).toHaveBeenCalledWith(decodedTextureKey(asset));
   });
 });

@@ -22,6 +22,7 @@ const routePathInput = process.env.EXAMPLES_GLTF_LOAD_ROUTE?.trim() || '/gltf-he
 const routePath = routePathInput.startsWith('/') ? routePathInput : `/${routePathInput}`;
 const outputPath = process.env.EXAMPLES_GLTF_LOAD_OUTPUT?.trim() ?? '';
 const cpuProfilePath = process.env.EXAMPLES_GLTF_LOAD_CPU_PROFILE?.trim() ?? '';
+const filmstripDir = process.env.EXAMPLES_GLTF_LOAD_FILMSTRIP_DIR?.trim() ?? '';
 const managePreview = process.env.EXAMPLES_GLTF_LOAD_PREVIEW !== '0';
 
 const envNumber = (name, fallback) => {
@@ -34,6 +35,7 @@ const envNumber = (name, fallback) => {
 
 const readyTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_READY_TIMEOUT_MS', 20_000);
 const fullyLoadedStableMs = envNumber('EXAMPLES_GLTF_LOAD_STABLE_MS', 500);
+const filmstripIntervalMs = envNumber('EXAMPLES_GLTF_LOAD_FILMSTRIP_INTERVAL_MS', 100);
 const vtFrameSampleEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_FRAME_SAMPLE === '1';
 const vtFrameSampleCount = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAMES', 60);
 const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS', 10_000);
@@ -48,6 +50,40 @@ if (!Number.isInteger(resourceTimingBufferSize)) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const connectPage = () => connectCdpPage({ debugHost: host, debugPort });
+
+const startLoadFilmstrip = async (routeStartedAt) => {
+  if (filmstripDir === '') return async () => undefined;
+  await mkdir(filmstripDir, { recursive: true });
+  const session = await connectPage();
+  await session.call('Page.enable');
+  let stopped = false;
+  const capture = (async () => {
+    let frame = 0;
+    while (!stopped) {
+      const elapsedMs = Math.max(0, Math.round(performance.now() - routeStartedAt));
+      await session.call('Runtime.evaluate', {
+        expression: `document.querySelector('.gltf-scenes-canvas, canvas')?.scrollIntoView({ block: 'center' })`,
+      });
+      const { data } = await session.call('Page.captureScreenshot', {
+        captureBeyondViewport: false,
+        format: 'png',
+        fromSurface: true,
+      });
+      const name = `${String(frame).padStart(3, '0')}-${String(elapsedMs).padStart(5, '0')}ms.png`;
+      await writeFile(path.join(filmstripDir, name), Buffer.from(data, 'base64'));
+      frame += 1;
+      await sleep(filmstripIntervalMs);
+    }
+  })();
+  return async () => {
+    stopped = true;
+    try {
+      await capture;
+    } finally {
+      session.close();
+    }
+  };
+};
 
 const installBenchmarkHooks = async (session) => {
   const hookConfig = JSON.stringify({
@@ -1277,6 +1313,7 @@ const main = async () => {
   ], { cwd: appRoot });
 
   let session;
+  let stopFilmstrip = async () => undefined;
   const exceptions = [];
   const consoleMessages = [];
 
@@ -1323,6 +1360,7 @@ const main = async () => {
     const loaded = session.once('Page.loadEventFired');
     const routeStartedAt = performance.now();
     await session.call('Page.navigate', { url: baseUrl + routePath });
+    stopFilmstrip = await startLoadFilmstrip(routeStartedAt);
     await Promise.race([loaded, sleep(10_000)]);
     if (!await waitForHook(session)) throw new Error('Browser load benchmark hook was not installed');
 
@@ -1338,6 +1376,8 @@ const main = async () => {
     const fullState = await evaluate(session, `
 (async () => globalThis.__royalGltfLoadBench.waitForFullyLoaded(${readyTimeoutMs}, ${fullyLoadedStableMs}))()
 `);
+    await stopFilmstrip();
+    stopFilmstrip = async () => undefined;
     const afterFullyLoadedHeap = await session.call('Runtime.getHeapUsage');
     await session.call('HeapProfiler.collectGarbage');
     const afterFinalGcHeap = await session.call('Runtime.getHeapUsage');
@@ -1375,6 +1415,7 @@ const main = async () => {
       console.log(`wrote ${cpuProfilePath}`);
     }
   } finally {
+    await stopFilmstrip();
     session?.close();
     await stopProcess(browser);
     await stopProcess(preview);

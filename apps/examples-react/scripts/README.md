@@ -410,6 +410,13 @@ EXAMPLES_GLTF_LOAD_OUTPUT=research/gltf-load-host.json \
 pnpm --filter @royal/examples-react bench:gltf-load
 ```
 
+For a visual cold-load timeline, set `EXAMPLES_GLTF_LOAD_FILMSTRIP_DIR` to an
+empty output directory. A separate CDP session captures viewport PNGs without
+adding instrumentation to renderer code; `EXAMPLES_GLTF_LOAD_FILMSTRIP_INTERVAL_MS`
+controls the requested cadence. Screenshot capture perturbs timing, so compare
+performance with a separate ordinary run. Set `EXAMPLES_GLTF_LOAD_CPU_PROFILE`
+to retain the navigation-through-settlement V8 profile instead.
+
 Focused auto-VT load and hitch probe:
 
 ```sh

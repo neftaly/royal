@@ -585,6 +585,7 @@ export class TextureAssetOwner {
         entry.decodedReleased = false;
         entry.snapshot = { error: formatFailure(error), state: "error" };
       }
+      this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
     });
