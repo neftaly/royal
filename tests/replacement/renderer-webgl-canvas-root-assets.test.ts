@@ -175,7 +175,7 @@ describe("canvas root asset publication", () => {
     }
   });
 
-  it("defers texture upload traffic across frames without failing ready assets", async () => {
+  it("paces texture uploads without leaking cached material state into deferred surfaces", async () => {
     const first = imageTexture("/first.png");
     const second = imageTexture("/second.png");
     const { callbacks, canvas, root } = harness({
@@ -201,16 +201,32 @@ describe("canvas root asset publication", () => {
     await vi.waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
     await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
 
+    vi.mocked(canvas.gl.uniform4fv).mockClear();
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return Math.abs(values[0]! - 0.214_041) < 0.000_001
+        && Math.abs(values[1]! - 0.214_041) < 0.000_001
+        && Math.abs(values[2]! - 0.214_041) < 0.000_001
+        && values[3] === 1;
+    })).toBe(true);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
       deferredUploads: 1,
     });
     expect(root.getTextureAssetSnapshot(second).state).toBe("ready");
+    vi.mocked(canvas.gl.uniform4fv).mockClear();
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return Math.abs(values[0]! - 0.214_041) < 0.000_001
+        && Math.abs(values[1]! - 0.214_041) < 0.000_001
+        && Math.abs(values[2]! - 0.214_041) < 0.000_001
+        && values[3] === 1;
+    })).toBe(false);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,

@@ -1307,6 +1307,11 @@ export class SurfaceGpuOwner {
   #reconcileTexturePublications(): void {
     const scene = this.#scene!;
     const surfaces = this.#gpuSurfacesBySceneIndex;
+    // A decoded texture can remain upload-deferred while its authored material
+    // identity stays stable. Republish material uniforms after every GPU texture
+    // reconciliation so the shared program cannot retain another surface's
+    // factors instead of the neutral not-yet-resident fallback.
+    this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     let regroup = false;
     for (const key of this.#texturePublicationKeys) {
       const indices = scene.textureSurfaceIndices.get(key);
