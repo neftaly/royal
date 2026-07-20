@@ -554,12 +554,14 @@ export class SurfaceGpuOwner {
         }
       }
     }
+    if (scene === null) return virtualTexturePending;
+    const presentationWorkPending = virtualTexturePending
+      || this.#admittedSurfaceCount < scene.surfaces.length;
     if (
-      scene === null
-      || this.#opaqueSurfaces.length
+      this.#opaqueSurfaces.length
         + this.#transmissionSurfaces.length
         + this.#blendedSurfaces.length === 0
-    ) return this.#dirty;
+    ) return presentationWorkPending;
     this.#selectLods(views, scene);
     if (!this.#compositeActive) {
       for (const view of views) this.#drawView(view, framebuffer, state, scene, "all");
@@ -597,7 +599,7 @@ export class SurfaceGpuOwner {
       }
       this.#gl.flush();
     }
-    return this.#dirty || virtualTexturePending;
+    return presentationWorkPending;
   }
 
   #requestCompositeOwner(): void {

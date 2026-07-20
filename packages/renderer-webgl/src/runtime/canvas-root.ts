@@ -887,15 +887,7 @@ export class CanvasRoot {
 
   #refreshGltfTextureProgress(): void {
     this.#gltfAssets.refreshTextureProgress(this.#getTextureSnapshot);
-    const assets = this.#surfaceScene?.textureAssets;
-    if (
-      assets !== undefined
-      && assets.length > 0
-      && assets.every((asset) => {
-        const state = this.#getTextureSnapshot(asset).state;
-        return state === "ready" || state === "error";
-      })
-    ) this.#progressiveTexturePresentation.settled();
+    if (this.#textureAssetsSettled()) this.#progressiveTexturePresentation.settled();
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
@@ -983,13 +975,20 @@ export class CanvasRoot {
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
     this.#surfaceGpu.beginFrame();
     if (this.#textureResourcesPending) {
+      let texturesUploaded: boolean;
       try {
         if (!this.#surfaceGpu.flushTexturePublications(this.#state)) {
           this.#presentationRequired = true;
         }
       } finally {
         this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-        this.#releaseUploadedTextures();
+        texturesUploaded = this.#releaseUploadedTextures();
+      }
+      if (texturesUploaded && !this.#presentationRequired) {
+        this.#progressiveTexturePresentation.changed();
+        if (this.#textureAssetsSettled() && !this.#textureResourcesPending) {
+          this.#progressiveTexturePresentation.settled();
+        }
       }
       if (this.#textureResourcesPending) this.#clock.invalidate();
     }
@@ -1062,15 +1061,25 @@ export class CanvasRoot {
     }
   }
 
-  #releaseUploadedTextures(): void {
+  #releaseUploadedTextures(): boolean {
     // Keep the bounded decode handoff alive until the lazy automatic-VT owner can claim it.
     if (
       this.#automaticVirtualTexturing
       && this.#virtualTextureRequested
       && !this.#virtualTextureActive
-    ) return;
-    this.#textureAssets.releaseUploaded(this.#surfaceGpu.takeUploadedTextureStorageKeys());
+    ) return false;
+    const uploaded = this.#surfaceGpu.takeUploadedTextureStorageKeys();
+    this.#textureAssets.releaseUploaded(uploaded);
     this.#textureAssets.rejectGpuStorage(this.#surfaceGpu.takeDeniedTextureStorageKeys());
+    return uploaded.length !== 0;
+  }
+
+  #textureAssetsSettled(): boolean {
+    const assets = this.#surfaceScene?.textureAssets ?? [];
+    return assets.length !== 0 && assets.every((asset) => {
+      const state = this.#getTextureSnapshot(asset).state;
+      return state === "ready" || state === "error";
+    });
   }
 
   #updateClearColor(color: LinearRgba): boolean {
