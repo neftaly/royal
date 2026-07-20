@@ -57,6 +57,9 @@ The intended entrypoints are:
 The main React entrypoint MUST NOT re-export the scene-constructor barrel.
 Examples use the React entrypoint for runtime behavior and `/scene` for authored
 renderer data so imports communicate ownership and tree-shaking boundaries.
+Pure orbit view, fit, transform, and camera helpers follow the same `/scene`
+rule; the main entrypoint exposes only controllers, controls, hooks, and the
+view types those runtime APIs consume or return.
 
 Importing an entrypoint performs no probing, worker creation, fetch, global
 registration, or GL work. XR, VT rasterization, IBL transport, and codecs are
@@ -124,6 +127,13 @@ Unknown fields, invalid unions, non-finite values, invalid ranges, contradictory
 options, and empty identity/source strings fail synchronously with the operation
 and field named. There are no spelling aliases, positional Boolean flags,
 runtime TypeScript enums, backend handles, or callbacks inside scene data.
+
+Public authoring failures also follow ordinary JavaScript error classes:
+`TypeError` means the supplied value has the wrong shape, scalar type,
+finiteness, or closed-union choice; `RangeError` means a correctly shaped
+finite numeric value, count, bound, or combination is outside the accepted
+domain. Plain `Error` is reserved for invalid lifecycle operations such as
+re-entrant resource commits, not descriptor validation.
 
 Public types and editor documentation state units, color domain, default,
 lifetime, identity, readiness, and invalidation behavior where relevant.

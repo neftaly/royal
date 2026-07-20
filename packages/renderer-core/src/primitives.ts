@@ -47,16 +47,31 @@ export type Direction3 = readonly [x: number, y: number, z: number];
 export type EulerRads = readonly [x: Rads, y: Rads, z: Rads];
 
 const linearChannelFromSrgb = (value: number): number => {
-  if (!Number.isFinite(value)) throw new Error(`sRGB color channel must be finite; received ${String(value)}`);
-  const channel = Math.min(1, Math.max(0, value));
-  return channel <= 0.04045
-    ? channel / 12.92
-    : ((channel + 0.055) / 1.055) ** 2.4;
+  if (typeof value !== 'number') {
+    throw new TypeError(`sRGB color channel must be a number; received ${String(value)}`);
+  }
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`sRGB color channel must be finite; received ${String(value)}`);
+  }
+  if (value < 0 || value > 1) {
+    throw new RangeError(`sRGB color channel must be within 0..1; received ${String(value)}`);
+  }
+  return value <= 0.04045
+    ? value / 12.92
+    : ((value + 0.055) / 1.055) ** 2.4;
 };
 
 const normalizedAlpha = (value: number): number => {
-  if (!Number.isFinite(value)) throw new Error(`sRGB color alpha must be finite; received ${String(value)}`);
-  return Math.min(1, Math.max(0, value));
+  if (typeof value !== 'number') {
+    throw new TypeError(`sRGB color alpha must be a number; received ${String(value)}`);
+  }
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`sRGB color alpha must be finite; received ${String(value)}`);
+  }
+  if (value < 0 || value > 1) {
+    throw new RangeError(`sRGB color alpha must be within 0..1; received ${String(value)}`);
+  }
+  return value;
 };
 
 /** Converts an artist-authored normalized sRGB tuple to Royal's scene-linear color domain. */

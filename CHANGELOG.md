@@ -27,6 +27,11 @@ versions identify source-level prerelease checkpoints in this repository.
   objects and made every focused status hook reject misspelled input fields.
 - Kept authored `standardMaterial` values named `metallic` and `roughness` in
   both constructor input and normalized public output.
+- Moved pure orbit authoring helpers from the React runtime barrel to
+  `@royal/react/scene`, alongside the rest of the pure scene vocabulary.
+- Standardized authoring failures on `TypeError` for malformed values and
+  `RangeError` for invalid finite ranges, and stopped silently clamping invalid
+  normalized sRGB input.
 
 ### Examples
 

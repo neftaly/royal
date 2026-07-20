@@ -8,16 +8,9 @@ import {
   type OrbitControlsHandle,
 } from "./controls-runtime";
 
-export {
-  orbitCameraTransform,
-  orbitPerspectiveCamera,
-  resolveOrbitCameraView,
-} from "@royal/renderer-core";
 export type {
-  OrbitCameraTransform,
   OrbitCameraView,
   OrbitCameraViewOptions,
-  OrbitPerspectiveCameraOptions,
   WorldPosition3,
 } from "@royal/renderer-core";
 export {

@@ -33,6 +33,9 @@ Scene data is TypeScript-`readonly` intent and contains no WebGL or React
 objects. Constructors copy caller-owned tuples and arrays but do not add runtime
 freezing. World-space positions and sizes are metres, rotations are radians,
 and public color fields are scene-linear `LinearRgba` values.
+Invalid authoring fails synchronously: malformed types and closed choices throw
+`TypeError`, while invalid numeric ranges and contradictory bounds throw
+`RangeError`.
 
 Source names remain stable across constructor inputs and normalized
 descriptors: glTF and ordinary image references expose `src`; authored virtual

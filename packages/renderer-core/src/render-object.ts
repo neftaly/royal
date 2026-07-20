@@ -239,7 +239,7 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
   set(valueOrX: Vec3 | number, y?: number, z?: number): void {
     if (typeof valueOrX === 'number') {
       if (y === undefined || z === undefined) {
-        throw new Error('Render object vector set expects x, y, and z');
+        throw new TypeError('Render object vector set expects x, y, and z');
       }
 
       this.#setVector([valueOrX, y, z]);

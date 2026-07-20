@@ -69,8 +69,11 @@ const GLTF_INSTANCE_TRANSFORM_FIELDS = [
 ] as const;
 
 const positiveCount = (count: number): number => {
+  if (typeof count !== 'number') {
+    throw new TypeError(`glTF instance transform count must be a number; received ${String(count)}`);
+  }
   if (!Number.isSafeInteger(count) || count < 1) {
-    throw new Error(`glTF instance transform count must be a positive safe integer; received ${String(count)}`);
+    throw new RangeError(`glTF instance transform count must be a positive safe integer; received ${String(count)}`);
   }
   return count;
 };
@@ -94,8 +97,11 @@ const validateInstanceTransforms = (value: unknown): GltfInstanceTransforms => {
     }
   }
   for (const field of ['poseVersion', 'scaleVersion'] as const) {
-    if (!Number.isSafeInteger(resource[field]) || !(resource[field]! >= 1)) {
+    if (typeof resource[field] !== 'number') {
       throw new TypeError(`glTF instances instances.${field} must be a positive safe integer`);
+    }
+    if (!Number.isSafeInteger(resource[field]) || !(resource[field]! >= 1)) {
+      throw new RangeError(`glTF instances instances.${field} must be a positive safe integer`);
     }
   }
   for (const field of [
@@ -105,8 +111,20 @@ const validateInstanceTransforms = (value: unknown): GltfInstanceTransforms => {
       throw new TypeError(`glTF instances instances.${field} must be a function`);
     }
   }
-  if (resource.logicalIds !== undefined && resource.logicalIds.length !== count) {
-    throw new TypeError(`glTF instances instances.logicalIds must contain ${count} strings`);
+  if (resource.logicalIds !== undefined) {
+    if (!Array.isArray(resource.logicalIds) || resource.logicalIds.length !== count) {
+      throw new TypeError(`glTF instances instances.logicalIds must contain ${count} strings`);
+    }
+    const uniqueLogicalIds = new Set<string>();
+    resource.logicalIds.forEach((logicalId, index) => {
+      uniqueLogicalIds.add(resolvePickingId(
+        logicalId,
+        `glTF instances instances.logicalIds[${index}]`,
+      )!);
+    });
+    if (uniqueLogicalIds.size !== count) {
+      throw new RangeError('glTF instances instances.logicalIds must be unique');
+    }
   }
   return resource as GltfInstanceTransforms;
 };
@@ -118,14 +136,37 @@ const copyChannel = (
   label: string,
 ): Float32Array => {
   const length = count * 3;
-  if (source !== undefined && source.length !== length) {
-    throw new Error(`glTF instance ${label} must contain ${length} numbers; received ${source.length}`);
-  }
   const channel = new Float32Array(length);
   if (source === undefined) {
     if (fallback !== 0) channel.fill(fallback);
   } else {
-    channel.set(source);
+    if ((typeof source !== 'object' && typeof source !== 'function') || source === null) {
+      throw new TypeError(`glTF instance ${label} must be an array-like object`);
+    }
+    if (source.length !== length) {
+      throw new TypeError(
+        `glTF instance ${label} must contain ${length} numbers; received ${String(source.length)}`,
+      );
+    }
+    for (let index = 0; index < length; index += 1) {
+      const value = source[index];
+      if (typeof value !== 'number') {
+        throw new TypeError(
+          `glTF instance ${label}[${index}] must be a number; received ${String(value)}`,
+        );
+      }
+      if (!Number.isFinite(value)) {
+        throw new TypeError(
+          `glTF instance ${label}[${index}] must be finite; received ${String(value)}`,
+        );
+      }
+      channel[index] = value;
+      if (!Number.isFinite(channel[index])) {
+        throw new RangeError(
+          `glTF instance ${label}[${index}] cannot be represented as a finite float`,
+        );
+      }
+    }
   }
   return channel;
 };
@@ -137,6 +178,9 @@ const assertCommittedRange = (
 ): void => {
   const start = startIndex ?? 0;
   const committedCount = count ?? total - start;
+  if (typeof start !== 'number' || typeof committedCount !== 'number') {
+    throw new TypeError('glTF instance commit startIndex and count must be numbers');
+  }
   if (
     !Number.isInteger(start)
     || !Number.isInteger(committedCount)
@@ -144,7 +188,7 @@ const assertCommittedRange = (
     || committedCount < 1
     || start + committedCount > total
   ) {
-    throw new Error(
+    throw new RangeError(
       `glTF instance commit range must be within 0..${total}; received start=${String(start)} count=${String(committedCount)}`,
     );
   }
@@ -158,7 +202,7 @@ const validateFiniteChannel = (
 ): void => {
   for (let index = startOffset; index < endOffset; index += 1) {
     if (!Number.isFinite(values[index])) {
-      throw new Error(`glTF instance ${label} must be finite; received ${String(values[index])}`);
+      throw new TypeError(`glTF instance ${label} must be finite; received ${String(values[index])}`);
     }
   }
 };
@@ -168,13 +212,16 @@ const logicalIdsFrom = (
   count: number,
 ): readonly PickingId[] | undefined => {
   if (logicalIds === undefined) return undefined;
+  if (!Array.isArray(logicalIds)) {
+    throw new TypeError('glTF instance logicalIds must be an array of strings');
+  }
   if (logicalIds.length !== count) {
-    throw new Error(`glTF instance logicalIds must contain ${count} strings; received ${logicalIds.length}`);
+    throw new TypeError(`glTF instance logicalIds must contain ${count} strings; received ${logicalIds.length}`);
   }
   const copy = logicalIds.map((logicalId, index) =>
     resolvePickingId(logicalId, `glTF instance logicalIds[${index}]`)!);
   const unique = new Set(copy);
-  if (unique.size !== copy.length) throw new Error('glTF instance logicalIds must be unique');
+  if (unique.size !== copy.length) throw new RangeError('glTF instance logicalIds must be unique');
   return copy;
 };
 
@@ -196,9 +243,6 @@ export const createGltfInstanceTransforms = (
   const rotations = copyChannel(options.rotations, count, 0, 'rotations');
   const scales = copyChannel(options.scales, count, 1, 'scales');
   const logicalIds = logicalIdsFrom(options.logicalIds, count);
-  validateFiniteChannel(positions, 'positions');
-  validateFiniteChannel(rotations, 'rotations');
-  validateFiniteChannel(scales, 'scales');
   let notifying = false;
   const notify = (
     channel: GltfInstanceTransformChannel,

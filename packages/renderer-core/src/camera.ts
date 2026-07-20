@@ -76,8 +76,8 @@ export const perspectiveCamera = (options: PerspectiveCameraOptions): Perspectiv
   finiteNumber(fovY, 'camera fovY');
   finiteNumber(near, 'camera near');
   finiteNumber(far, 'camera far');
-  if (!(fovY > 0 && fovY < Math.PI)) throw new Error('perspective camera fovY must be within (0, PI)');
-  if (!(near > 0 && far > near)) throw new Error('perspective camera requires 0 < near < far');
+  if (!(fovY > 0 && fovY < Math.PI)) throw new RangeError('perspective camera fovY must be within (0, PI)');
+  if (!(near > 0 && far > near)) throw new RangeError('perspective camera requires 0 < near < far');
   return {
     kind: 'perspective-camera', position, rotation,
     fovY, near, far
@@ -96,8 +96,8 @@ export const orthographicCamera = (options: OrthographicCameraOptions): Orthogra
   finiteNumber(options.top, 'camera top');
   finiteNumber(near, 'camera near');
   finiteNumber(far, 'camera far');
-  if (options.left === options.right || options.bottom === options.top) throw new Error('orthographic camera bounds must have non-zero width and height');
-  if (!(far > near)) throw new Error('orthographic camera requires near < far');
+  if (options.left === options.right || options.bottom === options.top) throw new RangeError('orthographic camera bounds must have non-zero width and height');
+  if (!(far > near)) throw new RangeError('orthographic camera requires near < far');
   return {
     kind: 'orthographic-camera', position, rotation,
     left: options.left, right: options.right, bottom: options.bottom, top: options.top, near, far

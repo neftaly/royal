@@ -6,6 +6,8 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import * as reactApi from "../../packages/react/src/index";
+import * as sceneApi from "../../packages/react/src/scene";
 import {
   Canvas,
   createOrbitCameraController,
@@ -31,6 +33,12 @@ import {
   useRendererSnapshot,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
+import {
+  clampOrbitCameraView,
+  orbitPerspectiveCamera,
+  resolveOrbitCameraView,
+  type OrbitCameraViewConstraints,
+} from "../../packages/react/src/scene";
 import {
   observeCanvasSize,
   resolveCanvasPixelRatio,
@@ -94,6 +102,16 @@ describe("replacement React public API", () => {
       .toMatchTypeOf<PrefilteredEnvironmentStatusIdentity>();
     expectTypeOf({ manifestUri: "/map.vt.json", version: "v2" })
       .toMatchTypeOf<VirtualTextureAssetStatusIdentity>();
+  });
+
+  it("keeps pure orbit authoring on the scene entrypoint", () => {
+    expect("orbitPerspectiveCamera" in reactApi).toBe(false);
+    expect("orbitPerspectiveCamera" in sceneApi).toBe(true);
+    const constraints = { minDistance: 0.1 } satisfies OrbitCameraViewConstraints;
+    expect(clampOrbitCameraView({ distance: 0.01 }, constraints).distance).toBe(0.1);
+    expect(resolveOrbitCameraView({ distance: 2 }).distance).toBe(2);
+    expect(orbitPerspectiveCamera({ view: { distance: 2 } }).kind)
+      .toBe("perspective-camera");
   });
 
   it("server-renders broad renderer diagnostics as unavailable before mount", () => {

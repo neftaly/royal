@@ -158,7 +158,15 @@ import {
   type ScenePointerEvent,
   type ScenePointerEvents,
 } from '@royal/react';
-import { mesh, scene, triangleGeometry, unlitMaterial, type Scene } from '@royal/react/scene';
+import {
+  clampOrbitCameraView,
+  mesh,
+  orbitPerspectiveCamera,
+  scene,
+  triangleGeometry,
+  unlitMaterial,
+  type Scene,
+} from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
 import type { ReactNode } from 'react';
 
@@ -169,6 +177,10 @@ const orbit = createOrbitCameraController({
   near: 0.1,
 });
 const rendererOptions = resolveRendererRootOptions({ antialias: true });
+const pureOrbitCamera = orbitPerspectiveCamera({
+  view: clampOrbitCameraView({ distance: 0.01 }, { minDistance: 0.1 }),
+});
+void pureOrbitCamera;
 // @ts-expect-error Orbit camera mutation belongs to the controller.
 orbit.camera.commit();
 const renderScene: Scene = scene({

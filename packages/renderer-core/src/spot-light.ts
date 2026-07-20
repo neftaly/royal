@@ -1,10 +1,11 @@
 import {
-  resolveDirection3,
-  resolveRgba,
-  resolveVec3,
+  finiteNumber,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
   positiveFiniteNumber,
+  resolveDirection3,
+  resolveRgba,
+  resolveVec3,
 } from './descriptor-values';
 import type { Direction3, LinearRgba, Metres, Rads, WorldPosition3 } from './primitives';
 
@@ -47,11 +48,13 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   objectWithAllowedFields(options, SPOT_LIGHT_FIELDS, 'spot light');
   const outerConeAngle = options.outerConeAngle ?? Math.PI / 4;
   const innerConeAngle = options.innerConeAngle ?? 0;
-  if (!Number.isFinite(outerConeAngle) || outerConeAngle <= 0 || outerConeAngle > Math.PI / 2) {
-    throw new Error('spot light outerConeAngle must be in (0, PI/2]');
+  finiteNumber(outerConeAngle, 'spot light outerConeAngle');
+  finiteNumber(innerConeAngle, 'spot light innerConeAngle');
+  if (outerConeAngle <= 0 || outerConeAngle > Math.PI / 2) {
+    throw new RangeError('spot light outerConeAngle must be in (0, PI/2]');
   }
-  if (!Number.isFinite(innerConeAngle) || innerConeAngle < 0 || innerConeAngle >= outerConeAngle) {
-    throw new Error('spot light innerConeAngle must be in [0, outerConeAngle)');
+  if (innerConeAngle < 0 || innerConeAngle >= outerConeAngle) {
+    throw new RangeError('spot light innerConeAngle must be in [0, outerConeAngle)');
   }
   return {
     kind: 'spot-light',

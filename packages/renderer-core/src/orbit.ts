@@ -96,10 +96,10 @@ const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void
   const minPitch = finiteOptional(constraints.minPitch, 'orbit minPitch');
   const maxPitch = finiteOptional(constraints.maxPitch, 'orbit maxPitch');
   if (minDistance !== undefined && maxDistance !== undefined && minDistance > maxDistance) {
-    throw new Error('orbit minDistance must not exceed maxDistance');
+    throw new RangeError('orbit minDistance must not exceed maxDistance');
   }
   if (minPitch !== undefined && maxPitch !== undefined && minPitch > maxPitch) {
-    throw new Error('orbit minPitch must not exceed maxPitch');
+    throw new RangeError('orbit minPitch must not exceed maxPitch');
   }
 };
 
@@ -142,10 +142,10 @@ export const fitOrbitCameraView = (
   const aspectRatio = positiveFiniteNumber(options.aspectRatio, 'orbit camera fit aspectRatio');
   const fovY = finiteNumber(options.fovY ?? Math.PI / 4, 'orbit camera fit fovY');
   if (!(fovY > 0 && fovY < Math.PI)) {
-    throw new Error('orbit camera fit fovY must be within (0, PI)');
+    throw new RangeError('orbit camera fit fovY must be within (0, PI)');
   }
   const padding = finiteNumber(options.padding ?? 1, 'orbit camera fit padding');
-  if (padding < 1) throw new Error('orbit camera fit padding must be at least 1');
+  if (padding < 1) throw new RangeError('orbit camera fit padding must be at least 1');
   const minDistance = options.minDistance === undefined
     ? undefined
     : positiveFiniteNumber(options.minDistance, 'orbit camera fit minDistance');
@@ -156,7 +156,7 @@ export const fitOrbitCameraView = (
     finiteNumber(min[axis]!, `orbit camera fit bounds.min[${axis}]`);
     finiteNumber(max[axis]!, `orbit camera fit bounds.max[${axis}]`);
     if (min[axis]! > max[axis]!) {
-      throw new Error(`orbit camera fit bounds.min[${axis}] must not exceed bounds.max[${axis}]`);
+      throw new RangeError(`orbit camera fit bounds.min[${axis}] must not exceed bounds.max[${axis}]`);
     }
   }
   const halfX = (max[0] - min[0]) / 2;

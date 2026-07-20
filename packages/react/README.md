@@ -110,6 +110,9 @@ deliberate: automatic VT policy remains root diagnostics rather than a second
 asset descriptor.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
+Pure orbit view/camera helpers such as `orbitPerspectiveCamera` and
+`fitOrbitCameraView` are exported from `@royal/react/scene`, alongside the
+other scene-authoring functions.
 `useOrbitCamera({ initial })` packages that resource as `orbit.camera` with a
 stable controller; pass it directly to `scene({ camera: orbit.camera })`.
 Place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,

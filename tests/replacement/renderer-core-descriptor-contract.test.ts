@@ -6,6 +6,7 @@ import {
   gltf,
   gltfInstances,
   imageTexture,
+  linearRgbaFromSrgb,
   mesh,
   orthographicCamera,
   perspectiveCamera,
@@ -37,6 +38,30 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
+  it("uses stable JavaScript error classes at public authoring boundaries", () => {
+    expect(() => perspectiveCamera({
+      fovY: "wide" as unknown as number,
+    })).toThrow(TypeError);
+    expect(() => perspectiveCamera({ fovY: 0 })).toThrow(RangeError);
+    expect(() => directionalLight({ direction: [0, 0, 0] })).toThrow(RangeError);
+    expect(() => gltf("")).toThrow(TypeError);
+    expect(() => createGltfInstanceTransforms({
+      count: 1,
+      positions: [0, "0", 0] as unknown as number[],
+    })).toThrow(TypeError);
+    expect(() => createGltfInstanceTransforms({
+      count: 1,
+      positions: [0, Number.MAX_VALUE, 0],
+    })).toThrow(RangeError);
+    expect(() => createGltfInstanceTransforms({ count: 0 })).toThrow(RangeError);
+    expect(() => createGltfInstanceTransforms({
+      count: 2,
+      logicalIds: ["same", "same"],
+    })).toThrow(RangeError);
+    expect(() => linearRgbaFromSrgb([1.01, 0, 0, 1])).toThrow(RangeError);
+    expect(() => linearRgbaFromSrgb([1, 1, 1, -0.01])).toThrow(RangeError);
+  });
+
   it("copies and validates caller-authored triangle channels once", () => {
     const positions = [
       -1, -1, 0,

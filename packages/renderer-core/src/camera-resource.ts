@@ -90,7 +90,12 @@ const normalizedCamera = (camera: Camera): Camera => {
 };
 
 const finite = (value: number, label: string): void => {
-  if (!Number.isFinite(value)) throw new Error(`camera view ${label} must be finite; received ${String(value)}`);
+  if (typeof value !== 'number') {
+    throw new TypeError(`camera view ${label} must be a number; received ${String(value)}`);
+  }
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`camera view ${label} must be finite; received ${String(value)}`);
+  }
 };
 
 const validatePose = (position: Float64Array, rotation: Float64Array): void => {
@@ -103,7 +108,7 @@ const validatePose = (position: Float64Array, rotation: Float64Array): void => {
 const validateDepth = (near: number, far: number): void => {
   finite(near, 'near');
   finite(far, 'far');
-  if (!(far > near)) throw new Error(`camera view far must be greater than near; received near=${near} far=${far}`);
+  if (!(far > near)) throw new RangeError(`camera view far must be greater than near; received near=${near} far=${far}`);
 };
 
 const same3 = (left: Float64Array, right: Float64Array): boolean =>
@@ -189,9 +194,9 @@ export function createCameraViewResource(camera: Camera): CameraViewResource {
       if (notifying) throw new Error('camera view commit cannot run from a camera view subscriber');
       validatePose(position, rotation);
       finite(fovY, 'fovY');
-      if (!(fovY > 0 && fovY < Math.PI)) throw new Error(`camera view fovY must be within 0..PI; received ${fovY}`);
+      if (!(fovY > 0 && fovY < Math.PI)) throw new RangeError(`camera view fovY must be within 0..PI; received ${fovY}`);
       validateDepth(near, far);
-      if (!(near > 0)) throw new Error(`perspective camera view near must be positive; received ${near}`);
+      if (!(near > 0)) throw new RangeError(`perspective camera view near must be positive; received ${near}`);
       if (same3(position, committedPosition) && same3(rotation, committedRotation)
         && fovY === committedFovY && near === committedNear && far === committedFar) return;
       copy3(committedPosition, position);
@@ -252,7 +257,7 @@ export function createCameraViewResource(camera: Camera): CameraViewResource {
     validatePose(position, rotation);
     finite(left, 'left'); finite(right, 'right'); finite(bottom, 'bottom'); finite(top, 'top');
     validateDepth(near, far);
-    if (left === right || bottom === top) throw new Error('camera view orthographic bounds must have non-zero width and height');
+    if (left === right || bottom === top) throw new RangeError('camera view orthographic bounds must have non-zero width and height');
     if (same3(position, committedPosition) && same3(rotation, committedRotation)
       && left === committedLeft && right === committedRight
       && bottom === committedBottom && top === committedTop

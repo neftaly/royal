@@ -18,19 +18,24 @@ export const objectWithAllowedFields = <Options extends object>(
 };
 
 export const finiteNumber = (value: number, label: string): number => {
-  if (!Number.isFinite(value)) throw new Error(`${label} must be finite; received ${String(value)}`);
+  if (typeof value !== 'number') {
+    throw new TypeError(`${label} must be a number; received ${String(value)}`);
+  }
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`${label} must be finite; received ${String(value)}`);
+  }
   return value;
 };
 
 export const positiveFiniteNumber = (value: number, label: string): number => {
   finiteNumber(value, label);
-  if (!(value > 0)) throw new Error(`${label} must be positive; received ${String(value)}`);
+  if (!(value > 0)) throw new RangeError(`${label} must be positive; received ${String(value)}`);
   return value;
 };
 
 export const nonNegativeFiniteNumber = (value: number, label: string): number => {
   finiteNumber(value, label);
-  if (value < 0) throw new Error(`${label} must be non-negative; received ${String(value)}`);
+  if (value < 0) throw new RangeError(`${label} must be non-negative; received ${String(value)}`);
   return value;
 };
 
@@ -51,7 +56,7 @@ export const resolveVec3 = (value: unknown, label: string): Vec3 =>
 export const resolveDirection3 = (value: Vec3, label: string): Vec3 => {
   const direction = resolveVec3(value, label);
   if (!(Math.hypot(direction[0], direction[1], direction[2]) > 0)) {
-    throw new Error(`${label} must be non-zero`);
+    throw new RangeError(`${label} must be non-zero`);
   }
   return direction;
 };
@@ -79,14 +84,14 @@ export const resolveBounds3 = <Bounds extends { readonly max: Vec3; readonly min
   const min = resolveVec3(bounds.min, `${label} min`);
   const max = resolveVec3(bounds.max, `${label} max`);
   for (let axis = 0; axis < 3; axis += 1) {
-    if (min[axis]! > max[axis]!) throw new Error(`${label} min must not exceed max`);
+    if (min[axis]! > max[axis]!) throw new RangeError(`${label} min must not exceed max`);
   }
   return { min, max } as Bounds;
 };
 
 export const nonEmptyString = (value: unknown, label: string): string => {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`${label} must be a non-empty string`);
+    throw new TypeError(`${label} must be a non-empty string`);
   }
   return value;
 };
@@ -97,7 +102,7 @@ export const stringChoice = <Choice extends string>(
   label: string,
 ): Choice => {
   if (typeof value !== 'string' || !choices.includes(value as Choice)) {
-    throw new Error(`${label} must be one of ${choices.join(', ')}`);
+    throw new TypeError(`${label} must be one of ${choices.join(', ')}`);
   }
   return value as Choice;
 };
