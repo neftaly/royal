@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
@@ -69,6 +70,33 @@ describe("surface program ownership", () => {
     expect(vertex).toContain("transformedTangent - unitNormal * dot(unitNormal, transformedTangent)");
     expect(fragment).toContain("worldBitangent * mappedNormal.y");
     expect(fragment).not.toContain("normalize(worldTangent.xyz");
+  });
+
+  it("uses one varying and no coordinate uniforms for the canonical identity lane", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get(
+      "standard",
+      SURFACE_FEATURE_BASE_COLOR_TEXTURE
+        | SURFACE_FEATURE_NORMAL_TEXTURE
+        | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
+      false,
+      false,
+      false,
+    );
+
+    const sources = gl.shaderSource.mock.calls.map(([, source]) => String(source));
+    const vertex = sources.find((source) => source.includes("layout(location = 1) in vec3 normal"));
+    expect(vertex).toContain("#define IDENTITY_TEXTURE_COORDINATES");
+    expect(vertex).toContain("surfaceTextureCoordinate = textureCoordinate0");
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "baseColorTextureCoordinates0",
+    );
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "normalTextureCoordinates0",
+    );
   });
 
   it("invalidates only programs that depend on lazy transmission source", () => {

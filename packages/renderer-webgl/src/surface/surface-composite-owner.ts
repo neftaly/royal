@@ -22,11 +22,15 @@ uniform vec4 transmissionFactors;
 uniform mat4 viewProjection;
 #endif
 #ifdef TRANSMISSION_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceTransmissionTextureCoordinate;
+#endif
 uniform sampler2D transmissionTexture;
 #endif
 #ifdef THICKNESS_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceThicknessTextureCoordinate;
+#endif
 uniform sampler2D thicknessTexture;
 #endif
 `,
@@ -72,28 +76,36 @@ uniform sampler2D thicknessTexture;
 `,
   vertexDeclarations: `
 #ifdef TRANSMISSION_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 uniform vec4 transmissionTextureCoordinates0;
 uniform vec4 transmissionTextureCoordinates1;
 out vec2 surfaceTransmissionTextureCoordinate;
 #endif
+#endif
 #ifdef THICKNESS_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 uniform vec4 thicknessTextureCoordinates0;
 uniform vec4 thicknessTextureCoordinates1;
 out vec2 surfaceThicknessTextureCoordinate;
 #endif
+#endif
 `,
   vertexBody: `
 #ifdef TRANSMISSION_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
   surfaceTransmissionTextureCoordinate = transformedTextureCoordinate(
     transmissionTextureCoordinates0,
     transmissionTextureCoordinates1
   );
 #endif
+#endif
 #ifdef THICKNESS_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
   surfaceThicknessTextureCoordinate = transformedTextureCoordinate(
     thicknessTextureCoordinates0,
     thicknessTextureCoordinates1
   );
+#endif
 #endif
 `,
 };

@@ -9,6 +9,7 @@ import {
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
+  SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_LINEAR_OUTPUT,
   SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
   SURFACE_FEATURE_NORMAL_TEXTURE,
@@ -24,6 +25,7 @@ import {
   SURFACE_FEATURE_TRANSMISSION_TEXTURE,
   SURFACE_FEATURE_VERTEX_COLOR,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
+  SURFACE_TEXTURE_FEATURES,
 } from "./surface-program-features";
 
 export const MATERIAL_TEXTURE_UNITS = 9;
@@ -36,6 +38,51 @@ export const baseColorTextureFeatureBits = (
 ): number => virtualResident
   ? SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
   : ordinaryResident ? SURFACE_FEATURE_BASE_COLOR_TEXTURE : 0;
+
+/** Whether every sampled material slot uses the canonical untransformed TEXCOORD_0 lane. */
+export const surfaceTexturesUseIdentityCoordinates = (
+  material: CanonicalSurfaceMaterial,
+  features: number,
+): boolean => {
+  if ((features & SURFACE_TEXTURE_FEATURES) === 0) return false;
+  if (
+    (features & (
+      SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+    )) !== 0
+    && material.baseColorTextureCoordinates !== undefined
+  ) return false;
+  if (material.kind !== "standard") return true;
+  if (
+    (features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE) !== 0
+    && material.metallicRoughnessTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_NORMAL_TEXTURE) !== 0
+    && material.normalTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_EMISSIVE_TEXTURE) !== 0
+    && material.emissiveTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_OCCLUSION_TEXTURE) !== 0
+    && material.occlusionTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_SPECULAR_TEXTURE) !== 0
+    && material.specularTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE) !== 0
+    && material.specularColorTextureCoordinates !== undefined
+  ) return false;
+  if (
+    (features & SURFACE_FEATURE_TRANSMISSION_TEXTURE) !== 0
+    && material.transmissionTextureCoordinates !== undefined
+  ) return false;
+  return (features & SURFACE_FEATURE_THICKNESS_TEXTURE) === 0
+    || material.thicknessTextureCoordinates === undefined;
+};
 
 /** Selects one shader feature set from canonical material and resident GPU state. */
 export const surfaceTextureFeatureBits = (
@@ -54,7 +101,11 @@ export const surfaceTextureFeatureBits = (
   );
   if (hasVertexColor) features |= SURFACE_FEATURE_VERTEX_COLOR;
   if (linearOutput) features |= SURFACE_FEATURE_LINEAR_OUTPUT;
-  if (material.kind !== "standard") return features;
+  if (material.kind !== "standard") {
+    return surfaceTexturesUseIdentityCoordinates(material, features)
+      ? features | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
+      : features;
+  }
   if (ordinaryTextureMask & 2) features |= SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE;
   if (ordinaryTextureMask & 4) features |= SURFACE_FEATURE_NORMAL_TEXTURE;
   if ((features & SURFACE_FEATURE_NORMAL_TEXTURE) !== 0 && hasTangent) {
@@ -76,7 +127,9 @@ export const surfaceTextureFeatureBits = (
     if (ordinaryTextureMask & 128) features |= SURFACE_FEATURE_TRANSMISSION_TEXTURE;
     if (ordinaryTextureMask & 256) features |= SURFACE_FEATURE_THICKNESS_TEXTURE;
   }
-  return features;
+  return surfaceTexturesUseIdentityCoordinates(material, features)
+    ? features | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
+    : features;
 };
 
 /** Texture units consumed by one selected shader feature set. */

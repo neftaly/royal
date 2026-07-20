@@ -5,10 +5,16 @@ import {
   materialTextureBindingAt,
   presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
+  surfaceTexturesUseIdentityCoordinates,
   surfaceTextureFeatureBits,
   surfaceTextureUnitMask,
 } from "../../packages/renderer-webgl/src/surface/surface-texture-plan";
-import { SURFACE_FEATURE_PREFILTERED_ENVIRONMENT } from "../../packages/renderer-webgl/src/surface/surface-program-features";
+import {
+  SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
+  SURFACE_FEATURE_NORMAL_TEXTURE,
+  SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+} from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import type { GpuTextureBinding } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { VirtualTextureGpuBinding } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
 import type { PrefilteredEnvironmentGpuBinding } from "../../packages/renderer-webgl/src/environment/gpu-owner";
@@ -188,6 +194,7 @@ describe("surface texture planning core", () => {
       true,
     );
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
+    expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
 
     const virtualFeatures = surfaceTextureFeatureBits(
       material,
@@ -200,5 +207,17 @@ describe("surface texture planning core", () => {
       true,
     );
     expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111);
+  });
+
+  it("shares only the complete canonical identity coordinate lane", () => {
+    const features = SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_NORMAL_TEXTURE;
+    expect(surfaceTexturesUseIdentityCoordinates(standard(), features)).toBe(true);
+    expect(surfaceTexturesUseIdentityCoordinates(standard({
+      normalTextureCoordinates: {
+        row0: [1, 0, 0.25, 0],
+        row1: [0, 1, 0, 0],
+      },
+    }), features)).toBe(false);
+    expect(surfaceTexturesUseIdentityCoordinates(standard(), 0)).toBe(false);
   });
 });

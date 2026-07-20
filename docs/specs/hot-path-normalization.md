@@ -70,6 +70,12 @@ Texture-unit admission and binding plans compile before submission. Program
 identity uses stable numeric feature/pipeline keys. Newly needed shaders may
 compile lazily; settled draws reuse linked programs and uniform locations.
 
+All active texture slots that use untransformed `TEXCOORD_0` share one varying
+and require no coordinate-transform uniforms. A material with any transformed
+or alternate-coordinate slot takes the general per-slot path for exact glTF
+semantics. This is a pure plan decision made from the canonical material and
+resident feature mask, not a draw-time heuristic.
+
 Feature specialization MUST be reviewed for program explosion. Closely related
 cheap arithmetic may remain in a shared shader when another variant costs more
 compile time/memory than the branch saves. Screen-copy, VT, alpha mode, unlit,

@@ -10,6 +10,9 @@ layout(location = 3) in mat4 instanceModel;
 #ifdef TEXTURED
 layout(location = 2) in vec2 textureCoordinate0;
 layout(location = 11) in vec2 textureCoordinate1;
+#ifdef IDENTITY_TEXTURE_COORDINATES
+out vec2 surfaceTextureCoordinate;
+#else
 uniform vec4 baseColorTextureCoordinates0;
 uniform vec4 baseColorTextureCoordinates1;
 out vec2 surfaceBaseColorTextureCoordinate;
@@ -19,16 +22,21 @@ vec2 transformedTextureCoordinate(vec4 row0, vec4 row1) {
   return vec2(dot(row0.xyz, source), dot(row1.xyz, source));
 }
 #endif
+#endif
 uniform mat4 viewProjectionModel;
 void main() {
 #ifdef VERTEX_COLOR
   surfaceVertexColor = color;
 #endif
 #ifdef TEXTURED
+#ifdef IDENTITY_TEXTURE_COORDINATES
+  surfaceTextureCoordinate = textureCoordinate0;
+#else
   surfaceBaseColorTextureCoordinate = transformedTextureCoordinate(
     baseColorTextureCoordinates0,
     baseColorTextureCoordinates1
   );
+#endif
 #endif
   vec4 localPosition = vec4(position, 1.0);
 #ifdef INSTANCED

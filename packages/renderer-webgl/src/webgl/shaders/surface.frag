@@ -5,21 +5,30 @@ __VIRTUAL_TEXTURE_DECLARATIONS__
 #define MAX_PUNCTUAL_LIGHTS __MAX_PUNCTUAL_LIGHTS__
 in vec3 worldNormal;
 in vec3 worldPosition;
+#ifdef IDENTITY_TEXTURE_COORDINATES
+in vec2 surfaceTextureCoordinate;
+#endif
 #ifdef VERTEX_COLOR
 in vec4 surfaceVertexColor;
 #endif
-#ifdef BASE_COLOR_TEXTURED
-in vec2 surfaceBaseColorTextureCoordinate;
-uniform sampler2D baseColorTexture;
-#elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
+#if defined(BASE_COLOR_TEXTURED) || defined(VIRTUAL_BASE_COLOR_TEXTURED)
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceBaseColorTextureCoordinate;
 #endif
+#endif
+#ifdef BASE_COLOR_TEXTURED
+uniform sampler2D baseColorTexture;
+#endif
 #ifdef METALLIC_ROUGHNESS_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceMetallicRoughnessTextureCoordinate;
+#endif
 uniform sampler2D metallicRoughnessTexture;
 #endif
 #ifdef NORMAL_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceNormalTextureCoordinate;
+#endif
 uniform sampler2D normalTexture;
 #ifdef TANGENT
 in vec3 worldBitangent;
@@ -27,20 +36,28 @@ in vec3 worldTangent;
 #endif
 #endif
 #ifdef EMISSIVE_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceEmissiveTextureCoordinate;
+#endif
 uniform sampler2D emissiveTexture;
 #endif
 #ifdef OCCLUSION_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceOcclusionTextureCoordinate;
+#endif
 uniform sampler2D occlusionTexture;
 uniform float occlusionStrength;
 #endif
 #ifdef SPECULAR_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceSpecularTextureCoordinate;
+#endif
 uniform sampler2D specularTexture;
 #endif
 #ifdef SPECULAR_COLOR_TEXTURED
+#ifndef IDENTITY_TEXTURE_COORDINATES
 in vec2 surfaceSpecularColorTextureCoordinate;
+#endif
 uniform sampler2D specularColorTexture;
 #endif
 __TRANSMISSION_DECLARATIONS__

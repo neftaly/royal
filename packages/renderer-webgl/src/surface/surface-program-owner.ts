@@ -10,6 +10,7 @@ import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
+  SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_LINEAR_OUTPUT,
   SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
   SURFACE_FEATURE_NORMAL_TEXTURE,
@@ -152,13 +153,17 @@ const compileShader = (
 };
 
 const STANDARD_VERTEX_FEATURES = SURFACE_TEXTURE_FEATURES
+  | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
   | SURFACE_FEATURE_TANGENT
   | SURFACE_FEATURE_TRANSMISSION_MATERIAL
   | SURFACE_FEATURE_VERTEX_COLOR;
 
 const UNLIT_VERTEX_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
+  | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
   | SURFACE_FEATURE_VERTEX_COLOR
   | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
+
+const SEMANTIC_TEXTURE_COORDINATE = /surface(?:BaseColor|MetallicRoughness|Normal|Emissive|Occlusion|Specular(?:Color)?|Transmission|Thickness)TextureCoordinate/g;
 
 /** Pure projection from material features to the subset that changes vertex code. */
 export const surfaceVertexFeatures = (
@@ -197,7 +202,8 @@ const shaderVariant = (
   doubleSided: boolean,
   virtualDeclarations: string,
   transmissionSource: SurfaceTransmissionShaderSource,
-): string => source.replace(
+): string => {
+  const variant = source.replace(
   "__VIRTUAL_TEXTURE_DECLARATIONS__",
   features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
 ).replace(
@@ -218,8 +224,12 @@ const shaderVariant = (
     ? transmissionSource.vertexBody : "",
 ).replace(
   "\n",
-  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
-);
+  `\n${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+  );
+  return features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
+    ? variant.replace(SEMANTIC_TEXTURE_COORDINATE, "surfaceTextureCoordinate")
+    : variant;
+};
 
 const uniform = (
   gl: WebGL2RenderingContext,
@@ -257,6 +267,7 @@ const createUnlitProgram = (
     vertex,
     shaderVariant(UNLIT_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
+  const transformedCoordinates = (features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES) === 0;
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
     color: uniform(gl, program, "linearColor"),
@@ -265,7 +276,8 @@ const createUnlitProgram = (
     texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? uniform(gl, program, "baseColorTexture")
       : null,
-    textureCoordinates: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
+    textureCoordinates: transformedCoordinates
+      && features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
@@ -296,6 +308,7 @@ const createStandardProgram = (
     vertex,
     shaderVariant(STANDARD_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
+  const transformedCoordinates = (features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES) === 0;
   return {
     alphaMasked,
     attenuationColor: features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
@@ -309,7 +322,7 @@ const createStandardProgram = (
     emissive: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
       ? uniform(gl, program, "emissiveTexture")
       : null,
-    emissiveCoordinates: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
+    emissiveCoordinates: transformedCoordinates && features & SURFACE_FEATURE_EMISSIVE_TEXTURE
       ? textureCoordinatesProgram(gl, program, "emissive")
       : null,
     emissiveFactor: uniform(gl, program, "emissiveFactor"),
@@ -334,7 +347,8 @@ const createStandardProgram = (
     metallicRoughness: features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
       ? uniform(gl, program, "metallicRoughnessTexture")
       : null,
-    metallicRoughnessCoordinates: features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
+    metallicRoughnessCoordinates: transformedCoordinates
+      && features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
       ? textureCoordinatesProgram(gl, program, "metallicRoughness")
       : null,
     model: uniform(gl, program, "model"),
@@ -342,13 +356,13 @@ const createStandardProgram = (
     normalTexture: features & SURFACE_FEATURE_NORMAL_TEXTURE
       ? uniform(gl, program, "normalTexture")
       : null,
-    normalTextureCoordinates: features & SURFACE_FEATURE_NORMAL_TEXTURE
+    normalTextureCoordinates: transformedCoordinates && features & SURFACE_FEATURE_NORMAL_TEXTURE
       ? textureCoordinatesProgram(gl, program, "normal")
       : null,
     occlusion: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
       ? uniform(gl, program, "occlusionTexture")
       : null,
-    occlusionCoordinates: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
+    occlusionCoordinates: transformedCoordinates && features & SURFACE_FEATURE_OCCLUSION_TEXTURE
       ? textureCoordinatesProgram(gl, program, "occlusion")
       : null,
     occlusionStrength: features & SURFACE_FEATURE_OCCLUSION_TEXTURE
@@ -379,10 +393,11 @@ const createStandardProgram = (
     specularColor: features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
       ? uniform(gl, program, "specularColorTexture")
       : null,
-    specularColorCoordinates: features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
+    specularColorCoordinates: transformedCoordinates
+      && features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE
       ? textureCoordinatesProgram(gl, program, "specularColor")
       : null,
-    specularCoordinates: features & SURFACE_FEATURE_SPECULAR_TEXTURE
+    specularCoordinates: transformedCoordinates && features & SURFACE_FEATURE_SPECULAR_TEXTURE
       ? textureCoordinatesProgram(gl, program, "specular")
       : null,
     specularFactors: features & SURFACE_FEATURE_SPECULAR_MATERIAL
@@ -394,13 +409,13 @@ const createStandardProgram = (
     thickness: features & SURFACE_FEATURE_THICKNESS_TEXTURE
       ? uniform(gl, program, "thicknessTexture")
       : null,
-    thicknessCoordinates: features & SURFACE_FEATURE_THICKNESS_TEXTURE
+    thicknessCoordinates: transformedCoordinates && features & SURFACE_FEATURE_THICKNESS_TEXTURE
       ? textureCoordinatesProgram(gl, program, "thickness")
       : null,
     transmission: features & SURFACE_FEATURE_TRANSMISSION_TEXTURE
       ? uniform(gl, program, "transmissionTexture")
       : null,
-    transmissionCoordinates: features & SURFACE_FEATURE_TRANSMISSION_TEXTURE
+    transmissionCoordinates: transformedCoordinates && features & SURFACE_FEATURE_TRANSMISSION_TEXTURE
       ? textureCoordinatesProgram(gl, program, "transmission")
       : null,
     transmissionFactors: features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
@@ -409,7 +424,8 @@ const createStandardProgram = (
     texture: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? uniform(gl, program, "baseColorTexture")
       : null,
-    textureCoordinates: features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
+    textureCoordinates: transformedCoordinates
+      && features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
