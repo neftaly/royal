@@ -41,7 +41,6 @@ export type AppliedSurfaceDrawState = AppliedClearState & {
   frontFace: number | null;
   program: WebGLProgram | null;
   textureBindings: (TextureUnitBinding | undefined)[];
-  textureBindingsKnown: boolean;
   vertexArray: WebGLVertexArrayObject | null;
 };
 
@@ -89,7 +88,6 @@ export const planSurfaceDrawStateTransition = (
     if ((remainingUnits & 1) === 0) continue;
     if (
       unknown
-      || !previous.textureBindingsKnown
       || previous.textureBindings[unit] !== next.textureBindings[unit]
     ) output.textureUnits |= 1 << unit;
   }
@@ -115,7 +113,6 @@ export const commitAppliedSurfaceDrawState = (
     state.textureBindings[unit] = intent.textureBindings[unit];
   }
   state.scissorEnabled = false;
-  state.textureBindingsKnown = true;
   state.vertexArray = intent.vertexArray;
   state.viewportHeight = intent.viewport.height;
   state.viewportWidth = intent.viewport.width;

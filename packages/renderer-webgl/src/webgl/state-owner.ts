@@ -28,7 +28,6 @@ export class WebGlStateOwner {
     frontFace: null,
     program: null,
     textureBindings: [],
-    textureBindingsKnown: false,
     vertexArray: null,
   };
 
@@ -38,16 +37,9 @@ export class WebGlStateOwner {
 
   invalidate(): void {
     this.#state.known = false;
-    this.#state.fixedPipelineKnown = false;
-    this.#state.alphaBlend = null;
-    this.#state.cullBackFaces = null;
-    this.#state.depthTest = null;
-    this.#state.depthWrite = null;
-    this.#state.frontFace = null;
-    this.#state.program = null;
+    // Unknown scalar state is ignored by every transition. Texture bindings
+    // use absent entries as their per-unit unknown state.
     this.#state.textureBindings.length = 0;
-    this.#state.textureBindingsKnown = false;
-    this.#state.vertexArray = null;
   }
 
   /** Resource preparation binds VAOs without disturbing the remaining pipeline shadow. */
@@ -57,7 +49,7 @@ export class WebGlStateOwner {
 
   /** Resource preparation may bind texture unit zero without owning draw state. */
   invalidateTextureBindings(): void {
-    this.#state.textureBindingsKnown = false;
+    this.#state.textureBindings.length = 0;
   }
 
   /** Detaches a private sampled texture before its storage becomes a render target. */

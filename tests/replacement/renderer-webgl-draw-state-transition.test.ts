@@ -20,7 +20,6 @@ const state = (): AppliedSurfaceDrawState => ({
   frontFace: null,
   program: null,
   textureBindings: [],
-  textureBindingsKnown: false,
   vertexArray: null,
 });
 
@@ -144,6 +143,30 @@ describe("surface draw state transition core", () => {
     expect(transition.textureUnits).toBe(0);
     commitAppliedSurfaceDrawState(previous, untextured);
     expect(previous.textureBindings[0]).toBe(textured.textureBindings[0]);
+  });
+
+  it("does not let an untextured draw validate texture units dirtied by an upload", () => {
+    const previous = state();
+    const textured: SurfaceDrawStateIntent = {
+      ...intent(),
+      textureBindings: [{
+        sampler: handle<WebGLSampler>(),
+        target: "2d",
+        texture: handle<WebGLTexture>(),
+      }],
+    };
+    commitAppliedSurfaceDrawState(previous, textured);
+    previous.textureBindings.length = 0;
+
+    const untextured = { ...textured, textureUnits: 0 };
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, untextured, transition);
+    expect(transition.textureUnits).toBe(0);
+    commitAppliedSurfaceDrawState(previous, untextured);
+    expect(previous.textureBindings).toEqual([]);
+
+    planSurfaceDrawStateTransition(previous, textured, transition);
+    expect(transition.textureUnits).toBe(1);
   });
 
   it("changes only blend/depth pipeline state when crossing the transparent boundary", () => {
