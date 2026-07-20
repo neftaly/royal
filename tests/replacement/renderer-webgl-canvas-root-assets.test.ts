@@ -464,6 +464,54 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps authored emissive contribution neutral until its image is drawable", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      undefined,
+      "emissive.png",
+      (document) => {
+        delete document.extensionsRequired;
+        delete document.extensionsUsed;
+        document.materials = [{
+          emissiveFactor: [0.25, 0.5, 1],
+          emissiveTexture: { index: 0 },
+          pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] },
+        }];
+      },
+    ));
+    const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
+    const node = gltf("/models/emissive.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+    callbacks.shift()!();
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return values[0] === 0 && values[1] === 0 && values[2] === 0
+        && Math.abs(values[3]! - 0.04) < 0.000_001;
+    })).toBe(true);
+
+    vi.mocked(canvas.gl.uniform4fv).mockClear();
+    resolveDecode?.({ height: 8, source: {} as ImageBitmap, width: 8 });
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return values[0] === 0.25 && values[1] === 0.5 && values[2] === 1
+        && Math.abs(values[3]! - 0.04) < 0.000_001;
+    })).toBe(true);
+  });
+
   it("streams embedded GLB images through that same texture owner and GPU path", async () => {
     let resolveDecode: ((source: {
       height: number;

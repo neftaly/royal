@@ -563,7 +563,7 @@ export class SurfaceGpuOwner {
       for (const view of views) this.#drawView(view, framebuffer, state, scene, "all");
     } else {
       const composite = this.#compositeGpu;
-      if (composite === null) throw new Error("Royal transmission pass is missing its composite owner");
+      if (composite === null) throw new Error("Royal transmission composite owner is missing");
       for (const view of views) {
         this.#compositeViewport.width = view.viewport.width;
         this.#compositeViewport.height = view.viewport.height;
@@ -793,7 +793,7 @@ export class SurfaceGpuOwner {
       } else {
         const material = surface.material;
         if (material.kind !== "standard") {
-          throw new Error("Royal standard surface program received a non-standard material");
+          throw new Error("Royal standard program got a non-standard material");
         }
         if (standardGlobalsProgram !== program.program) {
           gl.uniformMatrix4fv(program.viewProjection, false, viewProjection);
@@ -821,7 +821,7 @@ export class SurfaceGpuOwner {
             if (program.environmentRotation !== null && program.environmentSettings !== null) {
               const environment = scene.environment;
               if (environment === undefined) {
-                throw new Error("Royal studio-environment program is missing canonical state");
+                throw new Error("Royal studio environment state is missing");
               }
               gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
               this.#environmentSettings[0] = environment.radianceScaleNits;
@@ -832,7 +832,7 @@ export class SurfaceGpuOwner {
               gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
               if (program.environmentCoefficients !== null) {
                 if (prefiltered === undefined) {
-                  throw new Error("Royal prefiltered-environment program is missing GPU state");
+                  throw new Error("Royal prefiltered environment GPU state is missing");
                 }
                 gl.uniform4fv(program.environmentCoefficients, prefiltered.coefficients);
               }
@@ -915,9 +915,9 @@ export class SurfaceGpuOwner {
           if (program.occlusionStrength !== null) {
             gl.uniform1f(program.occlusionStrength, material.occlusionStrength);
           }
-          this.#emissiveFactor[0] = material.emissiveFactor[0];
-          this.#emissiveFactor[1] = material.emissiveFactor[1];
-          this.#emissiveFactor[2] = material.emissiveFactor[2];
+          if (material.emissiveAsset !== undefined && (resource.textureUnits & 8) === 0) {
+            this.#emissiveFactor.fill(0);
+          } else this.#emissiveFactor.set(material.emissiveFactor);
           this.#emissiveFactor[3] = material.indexOfRefraction === undefined
             ? 0.04
             : dielectricF0FromIndexOfRefraction(material.indexOfRefraction);
