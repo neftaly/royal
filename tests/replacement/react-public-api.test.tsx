@@ -1,6 +1,6 @@
 import { prefilteredEnvironment, type Scene } from "@royal/renderer-core";
 import {
-  rendererRootOptionsSemanticKey,
+  resolveRendererRootOptions,
   type RoyalRendererRoot,
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
@@ -159,46 +159,55 @@ describe("replacement React public API", () => {
     })).toBeUndefined();
   });
 
-  it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("000:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({})).toBe("000:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
-      .toBe("110:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ alpha: true })).toBe("100:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ antialias: true })).toBe("010:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ automaticVirtualTexturing: true }))
-      .toBe("001:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 }))
-      .toBe("000:1024:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 2 }))
-      .toBe("000:268435456:2:4194304");
-    expect(rendererRootOptionsSemanticKey({ ordinaryTextureUploadByteBudgetPerFrame: 1024 }))
-      .toBe("000:268435456:8:1024");
+  it("makes every renderer creation default explicit", () => {
+    expect(resolveRendererRootOptions()).toEqual({
+      alpha: false,
+      antialias: false,
+      automaticVirtualTexturing: false,
+      maxConcurrentPreparationJobs: 8,
+      ordinaryTextureUploadByteBudgetPerFrame: 4_194_304,
+      persistentGpuByteBudget: 268_435_456,
+    });
+    expect(resolveRendererRootOptions({
+      alpha: true,
+      antialias: true,
+      automaticVirtualTexturing: true,
+      maxConcurrentPreparationJobs: 2,
+      ordinaryTextureUploadByteBudgetPerFrame: 1024,
+      persistentGpuByteBudget: 2048,
+    })).toEqual({
+      alpha: true,
+      antialias: true,
+      automaticVirtualTexturing: true,
+      maxConcurrentPreparationJobs: 2,
+      ordinaryTextureUploadByteBudgetPerFrame: 1024,
+      persistentGpuByteBudget: 2048,
+    });
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {
-    expect(() => rendererRootOptionsSemanticKey({
+    expect(() => resolveRendererRootOptions({
       antiAlias: false,
-    } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
+    } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
       "unsupported field antiAlias",
     );
-    expect(() => rendererRootOptionsSemanticKey({
+    expect(() => resolveRendererRootOptions({
       alpha: 1,
-    } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
+    } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
       "option alpha must be a boolean",
     );
-    expect(() => rendererRootOptionsSemanticKey({
+    expect(() => resolveRendererRootOptions({
       automaticVirtualTexturing: 1,
-    } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
+    } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
       "option automaticVirtualTexturing must be a boolean",
     );
-    expect(() => rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 0 })).toThrow(
+    expect(() => resolveRendererRootOptions({ persistentGpuByteBudget: 0 })).toThrow(
       "persistentGpuByteBudget must be a positive safe integer",
     );
-    expect(() => rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 0 })).toThrow(
+    expect(() => resolveRendererRootOptions({ maxConcurrentPreparationJobs: 0 })).toThrow(
       "maxConcurrentPreparationJobs must be a positive safe integer",
     );
-    expect(() => rendererRootOptionsSemanticKey({
+    expect(() => resolveRendererRootOptions({
       ordinaryTextureUploadByteBudgetPerFrame: 0,
     })).toThrow(
       "ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",

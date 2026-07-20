@@ -2,7 +2,8 @@ import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-b
 import { DEFAULT_ASYNC_PREPARATION_JOB_LIMIT } from "../resource/async-preparation-owner";
 import { DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME } from "../resource/frame-upload-budget";
 
-export type CanvasRootOptions = Readonly<{
+/** Immutable creation policy for one renderer root and its WebGL2 context. */
+export type RendererRootOptions = Readonly<{
   /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `false` */
   alpha?: boolean;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `false` */
@@ -17,8 +18,20 @@ export type CanvasRootOptions = Readonly<{
   ordinaryTextureUploadByteBudgetPerFrame?: number;
 }>;
 
-/** Validates immutable root options and returns their stable semantic identity. */
-export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}): string => {
+/** Fully validated renderer creation policy with every default made explicit. */
+export type ResolvedRendererRootOptions = Readonly<{
+  alpha: boolean;
+  antialias: boolean;
+  automaticVirtualTexturing: boolean;
+  persistentGpuByteBudget: number;
+  maxConcurrentPreparationJobs: number;
+  ordinaryTextureUploadByteBudgetPerFrame: number;
+}>;
+
+/** Validates immutable renderer options and fills every documented default. */
+export const resolveRendererRootOptions = (
+  options: RendererRootOptions = {},
+): ResolvedRendererRootOptions => {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw new TypeError("Royal renderer options must be an object");
   }
@@ -68,5 +81,12 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
       "Royal renderer option ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
     );
   }
-  return `${options.alpha === true ? 1 : 0}${options.antialias === true ? 1 : 0}${options.automaticVirtualTexturing === true ? 1 : 0}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
+  return {
+    alpha: options.alpha === true,
+    antialias: options.antialias === true,
+    automaticVirtualTexturing: options.automaticVirtualTexturing === true,
+    maxConcurrentPreparationJobs,
+    ordinaryTextureUploadByteBudgetPerFrame,
+    persistentGpuByteBudget,
+  };
 };

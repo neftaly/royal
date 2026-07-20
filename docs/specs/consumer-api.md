@@ -236,6 +236,10 @@ orientation and color/alpha contract.
 pick, focused asset/texture observation, lifecycle/frame observation, bounded
 diagnostics, snapshot, and idempotent dispose operations.
 
+`resolveRendererRootOptions(options)` validates a creation policy and returns its
+fully explicit immutable values. It is intended for host wrappers that need to
+compare or report effective policy without reconstructing Royal's defaults.
+
 Creation options are immutable for a root. In React, changing a creation option
 replaces the root and canvas; changing `scene` does not. The replacement mount
 publishes `null` rather than a stale disposed root until the new canvas-owned

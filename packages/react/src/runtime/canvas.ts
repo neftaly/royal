@@ -1,8 +1,9 @@
 import type { PickInput, PickResult, Scene } from "@royal/renderer-core";
 import {
   createRendererRoot,
-  rendererRootOptionsSemanticKey,
+  resolveRendererRootOptions,
   type RendererRootOptions,
+  type ResolvedRendererRootOptions,
   type RoyalRendererRoot,
 } from "@royal/renderer-webgl";
 import {
@@ -62,10 +63,15 @@ type CanvasRuntime = Readonly<{
 
 type CanvasAttachment = Readonly<{
   canvas: HTMLCanvasElement;
+  options: ResolvedRendererRootOptions;
   optionsKey: string;
 }>;
 
 const EMPTY_RUNTIME: CanvasRuntime = { canvas: null, error: null, root: null };
+
+/** Private identity for exact immutable root-creation semantics. */
+const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
+  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}${options.automaticVirtualTexturing ? 1 : 0}:${options.persistentGpuByteBudget}:${options.maxConcurrentPreparationJobs}:${options.ordinaryTextureUploadByteBudgetPerFrame}`;
 
 /** A root belongs only to the exact canvas generation that created it. */
 const activeCanvasRuntime = (
@@ -174,14 +180,16 @@ export const Canvas = ({
   scenePointerEvents,
   ...canvasProps
 }: CanvasProps): ReactNode => {
-  const optionsKey = rendererRootOptionsSemanticKey(rendererOptions);
+  const resolvedOptions = resolveRendererRootOptions(rendererOptions);
+  const optionsKey = rendererRootOptionsKey(resolvedOptions);
   const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
   const sceneInteractions = useMemo(
     () => createRoyalScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
     [scenePickingIndex, scenePointerEvents],
   );
   const [attachment, setAttachment] = useState<CanvasAttachment | null>(null);
-  const canvas = attachment?.optionsKey === optionsKey ? attachment.canvas : null;
+  const activeAttachment = attachment?.optionsKey === optionsKey ? attachment : null;
+  const canvas = activeAttachment?.canvas ?? null;
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
   const liveRootRef = useRef<RoyalRendererRoot | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -197,7 +205,11 @@ export const Canvas = ({
 
   const attachCanvas = useCallback((element: HTMLCanvasElement | null) => {
     canvasRef.current = element;
-    setAttachment(element === null ? null : { canvas: element, optionsKey });
+    setAttachment(element === null ? null : {
+      canvas: element,
+      options: resolvedOptions,
+      optionsKey,
+    });
     const releaseExternalRef = assignRef(ref, element);
     if (element === null) return releaseExternalRef;
     return () => {
@@ -208,21 +220,22 @@ export const Canvas = ({
   }, [optionsKey, ref]);
 
   useLayoutEffect(() => {
-    if (canvas === null) return undefined;
+    if (activeAttachment === null) return undefined;
+    const { canvas: ownedCanvas, options } = activeAttachment;
     let root: RoyalRendererRoot;
     try {
-      root = createRendererRoot(canvas, rendererOptions);
+      root = createRendererRoot(ownedCanvas, options);
     } catch (error) {
-      setRuntime({ canvas, error, root: null });
+      setRuntime({ canvas: ownedCanvas, error, root: null });
       return undefined;
     }
     liveRootRef.current = root;
-    setRuntime({ canvas, error: null, root });
+    setRuntime({ canvas: ownedCanvas, error: null, root });
     return () => {
       if (liveRootRef.current === root) liveRootRef.current = null;
       root.dispose();
     };
-  }, [canvas, optionsKey]);
+  }, [activeAttachment]);
 
   const activeRuntime = activeCanvasRuntime(runtime, canvas);
   const activeRoot = selectOwnedCanvasRoot(

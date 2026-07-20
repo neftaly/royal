@@ -1,8 +1,9 @@
 export { createRendererRoot } from "./runtime/canvas-root";
-export { rendererRootOptionsSemanticKey } from "./runtime/root-options";
+export { resolveRendererRootOptions } from "./runtime/root-options";
 export type {
   RendererRootOptions,
   RendererRootSnapshot,
+  ResolvedRendererRootOptions,
   RoyalRendererRoot,
 } from "./runtime/canvas-root";
 export type { CanvasSizeInput, ResolvedCanvasSize } from "./frame/canvas-size";

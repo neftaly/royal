@@ -60,13 +60,14 @@ export type {
   OrbitControlsSetViewOptions,
   WorldPosition3,
 } from "./orbit/controls";
-export { createRendererRoot } from "@royal/renderer-webgl";
+export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
 export type {
   PickInput,
   PickResult,
   GltfTextureProgress,
   RendererRootOptions,
   RendererRootSnapshot,
+  ResolvedRendererRootOptions,
   RoyalRendererRoot,
   VirtualTextureAssetSnapshot,
 } from "@royal/renderer-webgl";

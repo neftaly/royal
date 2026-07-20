@@ -68,8 +68,9 @@ import {
 } from "../texture/asset-owner";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
-  rendererRootOptionsSemanticKey,
-  type CanvasRootOptions,
+  resolveRendererRootOptions,
+  type RendererRootOptions,
+  type ResolvedRendererRootOptions,
 } from "./root-options";
 import {
   virtualTextureAssetKey,
@@ -78,7 +79,6 @@ import {
   type VirtualTextureRuntimeSnapshot,
 } from "../virtual-texture/runtime-contract";
 import {
-  DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
   PersistentGpuBudgetOwner,
   type PersistentGpuBudgetSnapshot,
 } from "../resource/persistent-gpu-budget";
@@ -90,7 +90,6 @@ import {
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 import {
   AsyncPreparationOwner,
-  DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import {
@@ -103,7 +102,7 @@ import {
   RetainedListeners,
 } from "../resource/retained-listeners";
 
-export type { CanvasRootOptions } from "./root-options";
+export type { RendererRootOptions, ResolvedRendererRootOptions } from "./root-options";
 
 export type CanvasRootSnapshot = Readonly<{
   /** WebGL context lifecycle, including loss/restoration generations. */
@@ -129,8 +128,66 @@ export type CanvasRootSnapshot = Readonly<{
 /** Complete cold diagnostic snapshot returned by a Royal renderer root. */
 export type RendererRootSnapshot = CanvasRootSnapshot;
 
-/** Immutable creation options for one Royal renderer root. */
-export type RendererRootOptions = CanvasRootOptions;
+/** Imperative renderer lifetime owned by one canvas and one WebGL2 context. */
+export interface RoyalRendererRoot {
+  /** Canvas whose context and backing dimensions are owned by this root. */
+  readonly canvas: HTMLCanvasElement;
+  /** Temporarily transfers frame authority to an external host such as WebXR. */
+  acquireExternalClock(): ExternalFrameClock;
+  /** Idempotently releases all subscriptions, asynchronous work, and GPU resources. */
+  dispose(): void;
+  /** Immediately presents already-invalidated work from an imperative host. */
+  flushInvalidated(): void;
+  /** Stable getter for a cached, cold operational snapshot. */
+  readonly getSnapshot: () => RendererRootSnapshot;
+  /** Stable getter for one exact source/version identity. */
+  readonly getGltfAssetSnapshot: (asset: GltfAssetRef) => GltfAssetSnapshot;
+  /** Stable getter for the current context lifecycle. */
+  readonly getLifecycleSnapshot: () => ContextLifecycleSnapshot;
+  /** Stable getter for one exact offline environment identity. */
+  readonly getPrefilteredEnvironmentSnapshot: (
+    environment: PrefilteredEnvironmentLight,
+  ) => PrefilteredEnvironmentAssetSnapshot;
+  /** Stable getter for canvas size, or `null` before the host supplies one. */
+  readonly getSizeSnapshot: () => ResolvedCanvasSize | null;
+  /** Stable getter for one exact decoded texture identity. */
+  readonly getTextureAssetSnapshot: (asset: TextureAssetRef) => TextureAssetSnapshot;
+  /** Stable getter for one exact authored VT identity. */
+  readonly getVirtualTextureAssetSnapshot: (
+    asset: VirtualTextureAssetRef,
+  ) => VirtualTextureAssetSnapshot;
+  /** Requests one coalesced presentation frame without replacing scene intent. */
+  invalidate(): void;
+  /** Returns the nearest visible hit at one canvas-relative pointer position. */
+  pick(input: PickInput): PickResult | undefined;
+  /** Installs complete scene intent and requests one coalesced presentation frame. */
+  setScene(scene: Scene): void;
+  /** Sets CSS size and pixel density; Royal derives bounded backing dimensions. */
+  setSize(input: CanvasSizeInput): void;
+  /** Stable subscription function for broad operational snapshot changes. */
+  readonly subscribe: (listener: () => void) => () => void;
+  /** Stable subscription function for one exact glTF source/version identity. */
+  readonly subscribeGltfAsset: (asset: GltfAssetRef, listener: () => void) => () => void;
+  /** Stable subscription function for context lifecycle changes. */
+  readonly subscribeLifecycle: (listener: () => void) => () => void;
+  /** Stable subscription function for one exact offline environment identity. */
+  readonly subscribePrefilteredEnvironment: (
+    environment: PrefilteredEnvironmentLight,
+    listener: () => void,
+  ) => () => void;
+  /** Stable subscription function for semantic canvas-size changes. */
+  readonly subscribeSize: (listener: () => void) => () => void;
+  /** Stable subscription function for one exact decoded texture identity. */
+  readonly subscribeTextureAsset: (
+    asset: TextureAssetRef,
+    listener: () => void,
+  ) => () => void;
+  /** Stable subscription function for one exact authored VT identity. */
+  readonly subscribeVirtualTextureAsset: (
+    asset: VirtualTextureAssetRef,
+    listener: () => void,
+  ) => () => void;
+}
 
 export type CanvasRootPlatform = Readonly<{
   cancelDelay?(handle: unknown): void;
@@ -267,11 +324,11 @@ const readSizeLimits = (gl: WebGL2RenderingContext): CanvasSizeLimits => {
 
 const createContext = (
   canvas: HTMLCanvasElement,
-  options: CanvasRootOptions,
+  options: ResolvedRendererRootOptions,
 ): WebGL2RenderingContext => {
   const gl = canvas.getContext("webgl2", {
-    alpha: options.alpha ?? false,
-    antialias: options.antialias ?? false,
+    alpha: options.alpha,
+    antialias: options.antialias,
     depth: true,
     stencil: false,
   });
@@ -280,7 +337,7 @@ const createContext = (
 };
 
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
-export class CanvasRoot {
+export class CanvasRoot implements RoyalRendererRoot {
   readonly #asyncPreparation: AsyncPreparationOwner;
   readonly #canvas: HTMLCanvasElement;
   readonly #cameraSource: CameraSourceOwner;
@@ -366,25 +423,25 @@ export class CanvasRoot {
 
   constructor(
     canvas: HTMLCanvasElement,
-    options: CanvasRootOptions = {},
+    options: RendererRootOptions = {},
     platform: CanvasRootPlatform = defaultPlatform(),
   ) {
-    rendererRootOptionsSemanticKey(options);
+    const resolvedOptions = resolveRendererRootOptions(options);
     this.#canvas = canvas;
     this.#platform = platform;
-    this.#automaticVirtualTexturing = options.automaticVirtualTexturing === true;
-    this.#gl = createContext(canvas, options);
+    this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
+    this.#gl = createContext(canvas, resolvedOptions);
     this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
-      options.persistentGpuByteBudget ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
+      resolvedOptions.persistentGpuByteBudget,
     );
     this.#asyncPreparation = new AsyncPreparationOwner(
-      options.maxConcurrentPreparationJobs ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
+      resolvedOptions.maxConcurrentPreparationJobs,
       () => {
         if (!this.#disposed) this.#publish();
       },
     );
     this.#frameUploadBudget = new FrameUploadBudgetOwner(
-      options.ordinaryTextureUploadByteBudgetPerFrame,
+      resolvedOptions.ordinaryTextureUploadByteBudgetPerFrame,
     );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
@@ -1048,9 +1105,6 @@ export class CanvasRoot {
     return true;
   }
 }
-
-/** Renderer lifetime owned by one canvas and one WebGL2 context. */
-export type RoyalRendererRoot = CanvasRoot;
 
 /** Creates one imperative Royal renderer root for an existing canvas. */
 export const createRendererRoot = (

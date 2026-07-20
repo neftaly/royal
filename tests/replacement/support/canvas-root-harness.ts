@@ -3,7 +3,7 @@ import { perspectiveCamera } from "@royal/renderer-core";
 import { vi } from "vitest";
 import {
   CanvasRoot,
-  type CanvasRootOptions,
+  type RendererRootOptions,
   type CanvasRootPlatform,
 } from "../../../packages/renderer-webgl/src/runtime/canvas-root";
 
@@ -194,7 +194,7 @@ export class FakeCanvas extends EventTarget {
 export const canvasRootHarness = (
   platformOverrides: Partial<CanvasRootPlatform> = {},
   glOverrides: Partial<FakeGl> = {},
-  options: CanvasRootOptions = {},
+  options: RendererRootOptions = {},
 ) => {
   const callbacks: Array<() => void> = [];
   const gl = fakeGl();

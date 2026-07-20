@@ -34,7 +34,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 426 * 1024,
+  '@royal/renderer-webgl': 430 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -149,6 +149,7 @@ import {
   Canvas,
   createOrbitCameraController,
   OrbitControls,
+  resolveRendererRootOptions,
   useCanvasSize,
   useGltfAssetStatus,
   useRendererLifecycle,
@@ -164,6 +165,7 @@ const orbit = createOrbitCameraController({
   initial: { distance: 3 },
   near: 0.1,
 });
+const rendererOptions = resolveRendererRootOptions({ antialias: true });
 // @ts-expect-error Orbit camera mutation belongs to the controller.
 orbit.camera.commit();
 const renderScene: Scene = scene({
@@ -192,7 +194,12 @@ const XrControl = (): ReactNode => {
 
 export const App = (): ReactNode => {
   return (
-    <Canvas aria-label="Royal preview" data-testid="royal-canvas" scene={renderScene}>
+    <Canvas
+      aria-label="Royal preview"
+      data-testid="royal-canvas"
+      rendererOptions={rendererOptions}
+      scene={renderScene}
+    >
       <OrbitControls orbit={orbit} />
       <Status />
       <XrControl />

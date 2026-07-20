@@ -4,13 +4,12 @@ import {
   type ExternalFrameCapableRoot,
   type ExternalSurfaceFrame,
 } from "../frame/external-frame";
-import type { ExternalFrameClock } from "../frame/frame-clock-owner";
+import type { RoyalRendererRoot } from "../runtime/canvas-root";
 import {
   identityMat4,
   multiplyMat4Into,
   type MutableMat4,
 } from "../math/mat4";
-import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 
 export type XrReferenceSpaceType =
@@ -102,11 +101,7 @@ export type XrSessionRenderer = Readonly<{
   renderFrame(frame: XrFrame): boolean;
 }>;
 
-type XrRoot = ExternalFrameCapableRoot & Readonly<{
-  acquireExternalClock(): ExternalFrameClock;
-  getLifecycleSnapshot(): ContextLifecycleSnapshot;
-  subscribeLifecycle(listener: () => void): () => void;
-}>;
+type XrRoot = RoyalRendererRoot & ExternalFrameCapableRoot;
 
 export type XrSessionRendererPlatform = Readonly<{
   layerConstructor(): XrWebGlLayerConstructor | undefined;
@@ -409,8 +404,8 @@ export const createWebXrSessionRendererWithPlatform = async (
 
 /** Creates a retained, allocation-free-by-default renderer for one WebXR session. */
 export const createWebXrSessionRenderer = (
-  root: XrRoot,
+  root: RoyalRendererRoot,
   session: XrSession,
   options: XrSessionRendererOptions = {},
 ): Promise<XrSessionRenderer> =>
-  createWebXrSessionRendererWithPlatform(root, session, options, defaultPlatform);
+  createWebXrSessionRendererWithPlatform(root as XrRoot, session, options, defaultPlatform);
