@@ -63,8 +63,8 @@ export type TextureSourceRef = TextureAssetRef | EmbeddedTextureAssetRef;
 
 /**
  * Focused decode lifecycle for one exact texture identity. `ready` means a
- * fitted CPU upload source exists; GPU admission and residency remain
- * renderer-wide diagnostics because they depend on visible material claims.
+ * decoder established fitted dimensions successfully. The bounded CPU handoff
+ * may already be released; GPU admission and residency are root diagnostics.
  */
 export type TextureAssetSnapshot =
   | Readonly<{ state: "idle" }>
@@ -403,7 +403,7 @@ export class TextureAssetOwner {
     }
   }
 
-  /** Settles denied GPU representations without retaining their decoded pixels. */
+  /** Settles denied GPU representations without misclassifying decode readiness. */
   rejectGpuStorage(storageKeys: readonly string[]): void {
     if (this.#disposed || storageKeys.length === 0) return;
     const rejected = new Set<AssetEntry>();
@@ -418,13 +418,7 @@ export class TextureAssetOwner {
       if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
       entry.decodedReleased = entry.decodedClaims === 0;
       if (entry.decodedClaims === 0) this.#releaseDecodeReservation(entry);
-      entry.snapshot = {
-        error: "Royal persistent GPU budget denied texture storage",
-        state: "error",
-      };
       this.#platform.onAssetChanged(entry.key);
-      this.#platform.onSnapshotChanged(entry.key);
-      this.#publish(entry.key);
     }
   }
 

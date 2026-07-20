@@ -11,7 +11,8 @@ Royal distinguishes:
 - **component degradation**: renderable asset with one or more failed images;
   settle as `degraded` and retain per-image reasons;
 - **resource denial**: capacity policy rejected work; defer, fall back, or
-  settle the affected resource without corrupting unrelated content;
+  settle the affected resource without corrupting unrelated content or
+  relabeling a successful asset decode as a content failure;
 - **renderer interruption**: context lost/restoring; expose lifecycle and
   reconstruct;
 - **scheduled-frame failure**: capture and notify observers because there is no

@@ -187,9 +187,12 @@ such as bounds, sampler, color space, intensity, and rotation are not falsely
 advertised as status identity.
 
 `error` exists only in the corresponding failure state. Readiness definitions
-match the asset and texture specifications. Root-wide diagnostics are cold,
-bounded operational observation and MUST NOT be the only way to drive normal
-loading, variants, fitting, retries, or lifecycle UI.
+match the asset and texture specifications. Ordinary-texture `ready` means
+decode succeeded and reports the fitted dimensions; the bounded CPU handoff
+may already have been released. GPU admission denial stays in root resource
+diagnostics and does not rewrite successful decode status into a content error.
+Root-wide diagnostics are cold, bounded operational observation and MUST NOT be
+the only way to drive normal loading, variants, fitting, retries, or lifecycle UI.
 
 `rendererOptions.maxConcurrentPreparationJobs` is an immutable positive integer
 with default 8. It bounds admitted asynchronous asset-preparation lifecycles

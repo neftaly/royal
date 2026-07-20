@@ -390,7 +390,12 @@ export class SurfaceGpuOwner {
   }
 
   takeDeniedTextureStorageKeys(): readonly string[] {
-    return this.#textureGpu.takeDeniedStorageKeys();
+    const denied = this.#textureGpu.takeDeniedStorageKeys();
+    if (denied.length !== 0) {
+      this.#dirty = true;
+      this.#fullReconcileRequired = true;
+    }
+    return denied;
   }
 
   ordinaryTextureSnapshot(): OrdinaryTextureGpuSnapshot {

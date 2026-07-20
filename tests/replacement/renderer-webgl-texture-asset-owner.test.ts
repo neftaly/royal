@@ -374,11 +374,12 @@ describe("ordinary texture asset lifecycle owner", () => {
   it("closes and settles decoded pixels when persistent GPU admission is denied", async () => {
     const close = vi.fn();
     const changed = vi.fn();
+    const snapshotChanged = vi.fn();
     const owner = new TextureAssetOwner({
       decode: vi.fn(async () => decoded(close)),
       onAssetChanged: changed,
       onListenerError: vi.fn(),
-      onSnapshotChanged: vi.fn(),
+      onSnapshotChanged: snapshotChanged,
     });
     const asset = imageTexture("/over-budget.avif");
     owner.reconcile([asset]);
@@ -388,11 +389,9 @@ describe("ordinary texture asset lifecycle owner", () => {
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(owner.decoded(asset)).toBeUndefined();
-    expect(owner.getSnapshot(asset)).toEqual({
-      error: "Royal persistent GPU budget denied texture storage",
-      state: "error",
-    });
+    expect(owner.getSnapshot(asset)).toEqual({ height: 32, state: "ready", width: 64 });
     expect(changed).toHaveBeenCalledTimes(2);
+    expect(snapshotChanged).toHaveBeenCalledTimes(1);
   });
 
   it("aborts and closes released content while ignoring stale completion", async () => {

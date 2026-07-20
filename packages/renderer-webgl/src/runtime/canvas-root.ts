@@ -1183,8 +1183,9 @@ export class CanvasRoot implements RendererRoot {
       && !this.#virtualTextureActive
     ) return false;
     const uploaded = this.#surfaceGpu.takeUploadedTextureStorageKeys();
+    const denied = this.#surfaceGpu.takeDeniedTextureStorageKeys();
     this.#textureAssets.releaseUploaded(uploaded);
-    this.#textureAssets.rejectGpuStorage(this.#surfaceGpu.takeDeniedTextureStorageKeys());
+    this.#textureAssets.rejectGpuStorage(denied);
     return uploaded.length !== 0;
   }
 

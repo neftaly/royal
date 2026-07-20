@@ -30,6 +30,39 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("keeps decode readiness distinct from terminal GPU texture denial", async () => {
+    const texture = imageTexture("/over-budget.png");
+    const reconciledTextures = vi.spyOn(TextureGpuOwner.prototype, "reconcile");
+    const { flushScheduledFrames, root } = harness({
+      decodeTexture: async () => ({
+        height: 8,
+        source: {} as ImageBitmap,
+        width: 8,
+      }),
+    }, {}, { persistentGpuByteBudget: 100 });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture }) })],
+      }));
+      await waitFor(() => {
+        flushScheduledFrames();
+        expect(root.getSnapshot().resources.persistentGpu.deniedClaims).toBeGreaterThan(0);
+      });
+
+      expect(root.getTextureAssetSnapshot(texture)).toEqual({
+        height: 8,
+        state: "ready",
+        width: 8,
+      });
+      expect(reconciledTextures).toHaveBeenCalledTimes(2);
+    } finally {
+      root.dispose();
+      reconciledTextures.mockRestore();
+    }
+  });
+
   it("uses studio fallback until one offline environment becomes GPU-ready", async () => {
     const environment = prefilteredEnvironment({ src: "/environment.ktx", version: 2 });
     const source = environmentKtx1Fixture(2).source;
