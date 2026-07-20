@@ -1,7 +1,7 @@
 import type { PickResult } from "@royal/renderer-core";
 import type {
-  RoyalPointerEventTarget,
-  RoyalPointerEventType,
+  ScenePointerEventTarget,
+  ScenePointerEventType,
 } from "./picking-events";
 
 export type CanvasPointerTargetNode = PickResult["target"]["node"];
@@ -18,7 +18,7 @@ export interface CanvasPickedPointerTarget {
   readonly hit: PickResult;
   readonly identity: CanvasPointerInteractionIdentity;
   readonly node: CanvasPointerTargetNode;
-  readonly target: RoyalPointerEventTarget;
+  readonly target: ScenePointerEventTarget;
 }
 
 export interface CanvasPointerInteractionState {
@@ -56,7 +56,7 @@ export type CanvasPointerInteractionAction =
 
 export interface CanvasPointerInteractionDispatch {
   readonly picked: CanvasPickedPointerTarget;
-  readonly type: RoyalPointerEventType;
+  readonly type: ScenePointerEventType;
 }
 
 export interface CanvasPointerInteractionResult {

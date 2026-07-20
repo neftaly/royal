@@ -1,24 +1,24 @@
 import type { PickingId, Scene } from "@royal/renderer-core";
 import {
-  validateRoyalPointerEventHandlers,
-  type RoyalPointerEventHandlers,
-  type RoyalPointerEventTarget,
+  validateScenePointerEventHandlers,
+  type ScenePointerEventHandlers,
+  type ScenePointerEventTarget,
 } from "./picking-events";
 
 /** React-owned pointer handlers keyed by stable `pickingId` values declared in the scene. */
-export type ScenePointerEvents = Readonly<Record<PickingId, RoyalPointerEventHandlers>>;
+export type ScenePointerEvents = Readonly<Record<PickingId, ScenePointerEventHandlers>>;
 
-export interface RoyalScenePointerEventRegistry {
+export interface ScenePointerEventRegistry {
   readonly hasHoverEventTargets: boolean;
   readonly hasPointerEventTargets: boolean;
-  pointerEventTarget(pickingId: string | undefined): RoyalPointerEventTarget | undefined;
+  pointerEventTarget(pickingId: string | undefined): ScenePointerEventTarget | undefined;
 }
 
-export interface RoyalScenePickingIndex {
+export interface ScenePickingIndex {
   count(pickingId: string): number;
 }
 
-export const createRoyalScenePickingIndex = (scene: Scene): RoyalScenePickingIndex => {
+export const createScenePickingIndex = (scene: Scene): ScenePickingIndex => {
   const counts = new Map<string, number>();
   for (const node of scene.nodes) {
     if (node.kind !== "mesh" && node.kind !== "gltf" && node.kind !== "gltf-instances") continue;
@@ -28,10 +28,10 @@ export const createRoyalScenePickingIndex = (scene: Scene): RoyalScenePickingInd
   return { count: (pickingId) => counts.get(pickingId) ?? 0 };
 };
 
-export const createRoyalScenePointerEventRegistry = (
-  pickingIndex: RoyalScenePickingIndex,
+export const createScenePointerEventRegistry = (
+  pickingIndex: ScenePickingIndex,
   interactions: ScenePointerEvents | undefined,
-): RoyalScenePointerEventRegistry => {
+): ScenePointerEventRegistry => {
   if (interactions !== undefined && (
     typeof interactions !== "object"
     || interactions === null
@@ -39,11 +39,11 @@ export const createRoyalScenePointerEventRegistry = (
   )) {
     throw new TypeError("Canvas scenePointerEvents must be an object keyed by pickingId");
   }
-  const targets = new Map<string, RoyalPointerEventTarget>();
+  const targets = new Map<string, ScenePointerEventTarget>();
   let hasHoverEventTargets = false;
 
   for (const [pickingId, handlers] of Object.entries(interactions ?? {})) {
-    validateRoyalPointerEventHandlers(
+    validateScenePointerEventHandlers(
       handlers,
       `Canvas scenePointerEvents[${JSON.stringify(pickingId)}]`,
     );

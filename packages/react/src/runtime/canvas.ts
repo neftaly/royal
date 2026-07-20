@@ -4,7 +4,7 @@ import {
   resolveRendererRootOptions,
   type RendererRootOptions,
   type ResolvedRendererRootOptions,
-  type RoyalRendererRoot,
+  type RendererRoot,
 } from "@royal/renderer-webgl";
 import {
   createElement,
@@ -31,8 +31,8 @@ import {
   type CanvasSceneInteractionsRef,
 } from "../interaction/canvas-pointer-events";
 import {
-  createRoyalScenePickingIndex,
-  createRoyalScenePointerEventRegistry,
+  createScenePickingIndex,
+  createScenePointerEventRegistry,
   type ScenePointerEvents,
 } from "../interaction/scene-interactions";
 
@@ -48,7 +48,7 @@ export interface CanvasProps
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */
   readonly rendererOptions?: RendererRootOptions;
   /** Active root, or `null` before mount and after release. */
-  readonly rendererRef?: Ref<RoyalRendererRoot>;
+  readonly rendererRef?: Ref<RendererRoot>;
   /** React handlers keyed by one stable `pickingId` declared in the scene. */
   readonly scenePointerEvents?: ScenePointerEvents;
   /** Complete readonly renderer intent. */
@@ -58,7 +58,7 @@ export interface CanvasProps
 type CanvasRuntime = Readonly<{
   canvas: HTMLCanvasElement | null;
   error: unknown;
-  root: RoyalRendererRoot | null;
+  root: RendererRoot | null;
 }>;
 
 type CanvasAttachment = Readonly<{
@@ -101,7 +101,7 @@ const assignRef = <Value>(
 };
 
 const publishCanvasSize = (
-  root: RoyalRendererRoot,
+  root: RendererRoot,
   cssWidth: number,
   cssHeight: number,
   pixelRatio: number | undefined,
@@ -116,7 +116,7 @@ const publishCanvasSize = (
 /** @internal Browser shell for CSS-size and DPR observation. */
 export const observeCanvasSize = (
   canvas: HTMLCanvasElement,
-  root: RoyalRendererRoot,
+  root: RendererRoot,
   pixelRatio?: number,
 ): (() => void) => {
   const ResizeObserverConstructor = globalThis.ResizeObserver;
@@ -182,16 +182,16 @@ export const Canvas = ({
 }: CanvasProps): ReactNode => {
   const resolvedOptions = resolveRendererRootOptions(rendererOptions);
   const optionsKey = rendererRootOptionsKey(resolvedOptions);
-  const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
+  const scenePickingIndex = useMemo(() => createScenePickingIndex(scene), [scene]);
   const sceneInteractions = useMemo(
-    () => createRoyalScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
+    () => createScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
     [scenePickingIndex, scenePointerEvents],
   );
   const [attachment, setAttachment] = useState<CanvasAttachment | null>(null);
   const activeAttachment = attachment?.optionsKey === optionsKey ? attachment : null;
   const canvas = activeAttachment?.canvas ?? null;
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
-  const liveRootRef = useRef<RoyalRendererRoot | null>(null);
+  const liveRootRef = useRef<RendererRoot | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pointerInteractionStateRef] = useState<CanvasPointerInteractionStateRef>(() => ({
     current: createCanvasPointerInteractionState(),
@@ -222,7 +222,7 @@ export const Canvas = ({
   useLayoutEffect(() => {
     if (activeAttachment === null) return undefined;
     const { canvas: ownedCanvas, options } = activeAttachment;
-    let root: RoyalRendererRoot;
+    let root: RendererRoot;
     try {
       root = createRendererRoot(ownedCanvas, options);
     } catch (error) {

@@ -153,7 +153,7 @@ Every focused React observation hook follows one placement model:
 
 ```ts
 interface RendererObservationOptions {
-  readonly root: RoyalRendererRoot | null;
+  readonly root: RendererRoot | null;
 }
 ```
 
@@ -161,6 +161,11 @@ Inside `Canvas`, omit options and use context. In a parent that receives
 `Canvas.rendererRef`, pass `{ root }`. `null` represents the legitimate
 pre-mount state. This applies consistently to canvas size, glTF status, texture
 status, renderer lifecycle, and renderer diagnostics.
+
+`useRendererSnapshot()` is the broad React diagnostics subscription. It returns
+`undefined` before mount, accepts the same optional `{ root }`, and may wake for
+every submitted frame or resource change. It is deliberately unsuitable as a
+replacement for focused product-status hooks.
 
 Focused status hooks return small discriminated unions and push changes without
 polling. Product decisions use focused status:
@@ -206,6 +211,10 @@ Scene nodes declare `pickingId`; React callbacks live in
 `Canvas.scenePointerEvents` under that ID. Handler changes do not rebuild the
 scene. Duplicate handler-target IDs are rejected as ambiguous. Imperative
 `pick`, React pointer events, and XR rays return the same stable target shapes.
+The public callback vocabulary is `ScenePointerEvent`,
+`ScenePointerEventHandler`, `ScenePointerEventHandlers`, and
+`ScenePointerEventType`; package-brand prefixes and a misleading component
+`Props` alias are not part of the API.
 
 `pickingGeometry` changes only exact local-space triangle intersection. It does
 not change visual geometry, allocate GPU geometry, or create a second identity,

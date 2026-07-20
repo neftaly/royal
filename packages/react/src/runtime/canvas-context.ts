@@ -1,11 +1,11 @@
-import type { RoyalRendererRoot } from "@royal/renderer-webgl";
+import type { RendererRoot } from "@royal/renderer-webgl";
 import { createContext, useContext, type Context } from "react";
 
 /** Stable context identities shared by the Canvas shell and observation hooks. */
 export const CanvasElementContext: Context<HTMLCanvasElement | null | undefined> =
   createContext<HTMLCanvasElement | null | undefined>(undefined);
-export const CanvasRootContext: Context<RoyalRendererRoot | null | undefined> =
-  createContext<RoyalRendererRoot | null | undefined>(undefined);
+export const CanvasRootContext: Context<RendererRoot | null | undefined> =
+  createContext<RendererRoot | null | undefined>(undefined);
 
 /** Returns the surrounding canvas, or `null` before its ref is attached. */
 export const useCanvasElement = (): HTMLCanvasElement | null => {
@@ -15,11 +15,11 @@ export const useCanvasElement = (): HTMLCanvasElement | null => {
 };
 
 /** @internal Context probe for focused hooks that also accept an explicit root. */
-export const useOptionalCanvasRoot = (): RoyalRendererRoot | null | undefined =>
+export const useOptionalCanvasRoot = (): RendererRoot | null | undefined =>
   useContext(CanvasRootContext);
 
 /** Returns the surrounding renderer root, or `null` during its mount lifecycle. */
-export const useCanvasRoot = (): RoyalRendererRoot | null => {
+export const useCanvasRoot = (): RendererRoot | null => {
   const root = useOptionalCanvasRoot();
   if (root === undefined) throw new Error("useCanvasRoot must be used inside <Canvas>");
   return root;

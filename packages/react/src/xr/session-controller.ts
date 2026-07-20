@@ -1,4 +1,4 @@
-import type { RoyalRendererRoot } from "@royal/renderer-webgl";
+import type { RendererRoot } from "@royal/renderer-webgl";
 import type {
   XrFrame,
   XrSession as RendererXrSession,
@@ -57,7 +57,7 @@ export type XrSessionController = Readonly<{
 
 export type XrSessionControllerPlatform = Readonly<{
   createRenderer(
-    root: RoyalRendererRoot,
+    root: RendererRoot,
     session: BrowserXrSession,
     options?: XrSessionRendererOptions,
   ): Promise<XrSessionRenderer>;
@@ -204,7 +204,7 @@ const normalizeOptions = (
 
 /** @internal Injectable imperative shell around the pure XR state transition. */
 export const createXrSessionControllerWithPlatform = (
-  root: RoyalRendererRoot,
+  root: RendererRoot,
   options: XrSessionControllerOptions,
   platform: XrSessionControllerPlatform,
 ): XrSessionController => {
@@ -452,7 +452,7 @@ export const createXrSessionControllerWithPlatform = (
 };
 
 export const createXrSessionController = (
-  root: RoyalRendererRoot,
+  root: RendererRoot,
   options: XrSessionControllerOptions = {},
 ): XrSessionController =>
   createXrSessionControllerWithPlatform(root, options, defaultPlatform);

@@ -1,4 +1,4 @@
-import type { RoyalRendererRoot } from "@royal/renderer-webgl";
+import type { RendererRoot } from "@royal/renderer-webgl";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
@@ -12,7 +12,7 @@ import {
 
 export type UseXrSessionOptions = XrSessionControllerOptions & Readonly<{
   /** Explicit root for controls outside Canvas; omit inside Canvas. */
-  root?: RoyalRendererRoot | null;
+  root?: RendererRoot | null;
 }>;
 
 export type UseXrSessionResult = XrSessionSnapshot & Readonly<{

@@ -7,17 +7,17 @@ export {
 } from "./runtime/canvas";
 export type { CanvasProps } from "./runtime/canvas";
 export type {
-  RoyalPointerEvent,
-  RoyalPointerEventHandler,
-  RoyalPointerEventHandlers,
-  RoyalPointerEventProps,
-  RoyalPointerEventType,
+  ScenePointerEvent,
+  ScenePointerEventHandler,
+  ScenePointerEventHandlers,
+  ScenePointerEventType,
 } from "./interaction/picking-events";
 export type { ScenePointerEvents } from "./interaction/scene-interactions";
 export { useCanvasSize } from "./observation/canvas-size";
 export type { CanvasSize } from "./observation/canvas-size";
 export { useRendererLifecycle } from "./observation/renderer-lifecycle";
 export type { RendererLifecycleSnapshot } from "./observation/renderer-lifecycle";
+export { useRendererSnapshot } from "./observation/renderer-snapshot";
 export type { RendererObservationOptions } from "./observation/select-root";
 export { useGltfAssetStatus } from "./observation/gltf-asset";
 export type {
@@ -68,6 +68,6 @@ export type {
   RendererRootOptions,
   RendererRootSnapshot,
   ResolvedRendererRootOptions,
-  RoyalRendererRoot,
+  RendererRoot,
   VirtualTextureAssetSnapshot,
 } from "@royal/renderer-webgl";

@@ -4,7 +4,7 @@ import {
   type ExternalFrameCapableRoot,
   type ExternalSurfaceFrame,
 } from "../frame/external-frame";
-import type { RoyalRendererRoot } from "../runtime/canvas-root";
+import type { RendererRoot } from "../runtime/canvas-root";
 import {
   identityMat4,
   multiplyMat4Into,
@@ -101,7 +101,7 @@ export type XrSessionRenderer = Readonly<{
   renderFrame(frame: XrFrame): boolean;
 }>;
 
-type XrRoot = RoyalRendererRoot & ExternalFrameCapableRoot;
+type XrRoot = RendererRoot & ExternalFrameCapableRoot;
 
 export type XrSessionRendererPlatform = Readonly<{
   layerConstructor(): XrWebGlLayerConstructor | undefined;
@@ -404,7 +404,7 @@ export const createWebXrSessionRendererWithPlatform = async (
 
 /** Creates a retained, allocation-free-by-default renderer for one WebXR session. */
 export const createWebXrSessionRenderer = (
-  root: RoyalRendererRoot,
+  root: RendererRoot,
   session: XrSession,
   options: XrSessionRendererOptions = {},
 ): Promise<XrSessionRenderer> =>

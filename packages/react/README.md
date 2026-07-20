@@ -88,6 +88,9 @@ Focused hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents
 pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake for
 unrelated frames. `useInvalidate()` requests one coalesced frame.
+`useRendererSnapshot()` observes the broad root snapshot for diagnostics and
+tooling; it updates for submitted frames and resource changes, so product UI
+should prefer the focused lifecycle, size, and asset-status hooks.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact asset without polling or
@@ -109,6 +112,9 @@ observation; rendering itself does not subscribe React to camera motion.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
 values. Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
+Use `ScenePointerEvent` to annotate one callback or `ScenePointerEventHandlers`
+for the handler object stored under an ID; these are scene events, not canvas
+component props.
 
 Image-based lighting is explicit scene data and keeps its parser and transport
 lazy:

@@ -1,7 +1,7 @@
 import type {
   RendererRootSnapshot,
   ResolvedCanvasSize,
-  RoyalRendererRoot,
+  RendererRoot,
 } from "@royal/renderer-webgl";
 import { useSyncExternalStore } from "react";
 
@@ -13,7 +13,7 @@ const getUnavailable = (): undefined => UNAVAILABLE;
 
 /** @internal Observes context lifecycle without waking for frames or size changes. */
 export const useLifecycleSnapshot = (
-  root: RoyalRendererRoot | null,
+  root: RendererRoot | null,
 ): LifecycleSnapshot | undefined => useSyncExternalStore(
   root?.subscribeLifecycle ?? subscribeUnavailable,
   root?.getLifecycleSnapshot ?? getUnavailable,
@@ -22,7 +22,7 @@ export const useLifecycleSnapshot = (
 
 /** @internal Observes canvas size without waking for frames or lifecycle changes. */
 export const useSizeSnapshot = (
-  root: RoyalRendererRoot | null,
+  root: RendererRoot | null,
 ): ResolvedCanvasSize | null | undefined => useSyncExternalStore(
   root?.subscribeSize ?? subscribeUnavailable,
   root?.getSizeSnapshot ?? getUnavailable,

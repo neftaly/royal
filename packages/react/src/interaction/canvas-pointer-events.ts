@@ -7,26 +7,26 @@ import {
   type CanvasPointerInteractionState,
 } from "./canvas-pointer-interaction";
 import {
-  createRoyalPointerEvent,
-  handlerForRoyalPointerEvent,
-  type RoyalPointerEventTarget,
+  createScenePointerEvent,
+  handlerForScenePointerEvent,
+  type ScenePointerEventTarget,
 } from "./picking-events";
-import type { RoyalRendererRoot } from "@royal/renderer-webgl";
-import type { RoyalScenePointerEventRegistry } from "./scene-interactions";
+import type { RendererRoot } from "@royal/renderer-webgl";
+import type { ScenePointerEventRegistry } from "./scene-interactions";
 
 export type CanvasPointerInteractionStateRef = {
   current: CanvasPointerInteractionState;
 };
 
 export type CanvasSceneInteractionsRef = {
-  current: RoyalScenePointerEventRegistry;
+  current: ScenePointerEventRegistry;
 };
 
 export type CanvasLastPointerEventRef = {
   current: PointerEvent | undefined;
 };
 
-const hasHoverEventHandlers = (target: RoyalPointerEventTarget): boolean =>
+const hasHoverEventHandlers = (target: ScenePointerEventTarget): boolean =>
   target.handlers.onPointerEnter !== undefined
   || target.handlers.onPointerLeave !== undefined
   || target.handlers.onPointerMove !== undefined;
@@ -38,10 +38,10 @@ const dispatchCanvasPointerInteraction = (
   let firstFailure: unknown;
   let failed = false;
   for (const dispatch of dispatches) {
-    const handler = handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type);
+    const handler = handlerForScenePointerEvent(dispatch.picked.target, dispatch.type);
     if (handler === undefined) continue;
     try {
-      handler(createRoyalPointerEvent({
+      handler(createScenePointerEvent({
         hit: dispatch.picked.hit,
         nativeEvent,
         type: dispatch.type,
@@ -59,7 +59,7 @@ export interface CanvasPointerEventBindings {
   readonly lastPointerEventRef: CanvasLastPointerEventRef;
   readonly pointerInteractionStateRef: CanvasPointerInteractionStateRef;
   readonly sceneInteractionsRef: CanvasSceneInteractionsRef;
-  readonly root: Pick<RoyalRendererRoot, "pick">;
+  readonly root: Pick<RendererRoot, "pick">;
 }
 
 export const reconcileCanvasPointerInteractionScene = ({
@@ -70,7 +70,7 @@ export const reconcileCanvasPointerInteractionScene = ({
 }: {
   readonly lastPointerEventRef: CanvasLastPointerEventRef;
   readonly pointerInteractionStateRef: CanvasPointerInteractionStateRef;
-  readonly sceneInteractions: RoyalScenePointerEventRegistry;
+  readonly sceneInteractions: ScenePointerEventRegistry;
   readonly sceneInteractionsRef: CanvasSceneInteractionsRef;
 }): void => {
   sceneInteractionsRef.current = sceneInteractions;

@@ -1,7 +1,7 @@
 import { prefilteredEnvironment, type Scene } from "@royal/renderer-core";
 import {
   resolveRendererRootOptions,
-  type RoyalRendererRoot,
+  type RendererRoot,
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -24,6 +24,7 @@ import {
   useOrbitCameraView,
   usePrefilteredEnvironmentStatus,
   useRendererLifecycle,
+  useRendererSnapshot,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
 import { observeCanvasSize } from "../../packages/react/src/runtime/canvas";
@@ -60,7 +61,7 @@ describe("replacement React public API", () => {
     } satisfies CanvasProps;
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
-    expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RoyalRendererRoot>();
+    expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RendererRoot>();
     expectTypeOf<CanvasProps["scene"]>().toEqualTypeOf<Scene>();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
@@ -77,6 +78,21 @@ describe("replacement React public API", () => {
     expectTypeOf(useOrbitCameraView).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
+    expectTypeOf(useRendererSnapshot).toBeFunction();
+  });
+
+  it("server-renders broad renderer diagnostics as unavailable before mount", () => {
+    const Diagnostics = () => createElement(
+      "output",
+      null,
+      useRendererSnapshot() === undefined ? "unavailable" : "available",
+    );
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Diagnostics),
+    ));
+    expect(html).toContain("<output>unavailable</output>");
   });
 
   it("provides a stable CSS sizing default while preserving explicit style overrides", () => {
@@ -215,7 +231,7 @@ describe("replacement React public API", () => {
   });
 
   it("uses one context-or-explicit-root placement model", () => {
-    const root = {} as RoyalRendererRoot;
+    const root = {} as RendererRoot;
     expect(selectObservedRoot(undefined, { root }, "useThing")).toBe(root);
     expect(selectObservedRoot(undefined, { root: null }, "useThing")).toBeNull();
     expect(selectObservedRoot(root, undefined, "useThing")).toBe(root);
@@ -252,7 +268,7 @@ describe("replacement React public API", () => {
     try {
       const release = observeCanvasSize(canvas, {
         setSize,
-      } as unknown as RoyalRendererRoot);
+      } as unknown as RendererRoot);
       expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
       observe?.([
         { contentRect: { height: 180, width: 320 } } as ResizeObserverEntry,
@@ -309,7 +325,7 @@ describe("replacement React public API", () => {
       expect(html).not.toContain("pixelRatio");
       const release = observeCanvasSize({} as HTMLCanvasElement, {
         setSize,
-      } as unknown as RoyalRendererRoot, 1);
+      } as unknown as RendererRoot, 1);
       observe?.([
         { contentRect: { height: 180, width: 320 } } as ResizeObserverEntry,
       ], {} as ResizeObserver);

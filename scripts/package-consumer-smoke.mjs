@@ -153,7 +153,10 @@ import {
   useCanvasSize,
   useGltfAssetStatus,
   useRendererLifecycle,
-  type RoyalRendererRoot,
+  useRendererSnapshot,
+  type RendererRoot,
+  type ScenePointerEvent,
+  type ScenePointerEvents,
 } from '@royal/react';
 import { mesh, scene, triangleGeometry, unlitMaterial, type Scene } from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
@@ -176,15 +179,24 @@ const renderScene: Scene = scene({
       positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
     }),
     material: unlitMaterial({ color: [1, 1, 1, 1] }),
+    pickingId: 'hero',
   })],
 });
+
+const reportPick = (event: ScenePointerEvent): void => {
+  console.log(event.target.pickingId, event.hit.point);
+};
+const scenePointerEvents: ScenePointerEvents = {
+  hero: { onClick: reportPick },
+};
 
 const Status = (): ReactNode => {
   const size = useCanvasSize();
   const lifecycle = useRendererLifecycle();
+  const rendererSnapshot = useRendererSnapshot();
   const model = useGltfAssetStatus('/model.glb');
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: {size?.width ?? 0} by {size?.height ?? 0}; model {model.state}</output>;
+  return <output>{renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.width ?? 0} by {size?.height ?? 0}; model {model.state}</output>;
 };
 
 const XrControl = (): ReactNode => {
@@ -199,6 +211,7 @@ export const App = (): ReactNode => {
       data-testid="royal-canvas"
       rendererOptions={rendererOptions}
       scene={renderScene}
+      scenePointerEvents={scenePointerEvents}
     >
       <OrbitControls orbit={orbit} />
       <Status />
@@ -207,7 +220,7 @@ export const App = (): ReactNode => {
   );
 };
 
-export const requestAnotherFrame = (root: RoyalRendererRoot | null) => root?.invalidate();
+export const requestAnotherFrame = (root: RendererRoot | null) => root?.invalidate();
 `);
   writeFileSync(path.join(temporaryRoot, 'imports.mjs'), `
 const entrypoints = [

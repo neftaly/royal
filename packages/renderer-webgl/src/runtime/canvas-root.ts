@@ -134,7 +134,7 @@ export type CanvasRootSnapshot = Readonly<{
 export type RendererRootSnapshot = CanvasRootSnapshot;
 
 /** Imperative renderer lifetime owned by one canvas and one WebGL2 context. */
-export interface RoyalRendererRoot {
+export interface RendererRoot {
   /** Canvas whose context and backing dimensions are owned by this root. */
   readonly canvas: HTMLCanvasElement;
   /** Temporarily transfers frame authority to an external host such as WebXR. */
@@ -350,7 +350,7 @@ type InstanceSubscription = {
 };
 
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
-export class CanvasRoot implements RoyalRendererRoot {
+export class CanvasRoot implements RendererRoot {
   readonly #asyncPreparation: AsyncPreparationOwner;
   readonly #canvas: HTMLCanvasElement;
   readonly #cameraSource: CameraSourceOwner;
@@ -1207,4 +1207,4 @@ export class CanvasRoot implements RoyalRendererRoot {
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options: RendererRootOptions = {},
-): RoyalRendererRoot => new CanvasRoot(canvas, options);
+): RendererRoot => new CanvasRoot(canvas, options);

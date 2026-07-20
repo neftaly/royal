@@ -15,8 +15,8 @@ import {
 } from "../../packages/react/src/interaction/canvas-pointer-interaction";
 import { attachCanvasPointerEventHandlers } from "../../packages/react/src/interaction/canvas-pointer-events";
 import {
-  createRoyalScenePickingIndex,
-  createRoyalScenePointerEventRegistry,
+  createScenePickingIndex,
+  createScenePointerEventRegistry,
 } from "../../packages/react/src/interaction/scene-interactions";
 
 const material = unlitMaterial({ color: [0.2, 0.4, 0.8, 1] });
@@ -54,8 +54,8 @@ describe("React scene pointer events", () => {
     });
     const renderScene = scene({ camera, nodes: [node] });
     const types: string[] = [];
-    const registry = createRoyalScenePointerEventRegistry(
-      createRoyalScenePickingIndex(renderScene),
+    const registry = createScenePointerEventRegistry(
+      createScenePickingIndex(renderScene),
       {
         hero: {
           onClick: (event) => types.push(event.type),
@@ -113,11 +113,11 @@ describe("React scene pointer events", () => {
         mesh({ geometry: boxGeometry(2), material, pickingId: "same" }),
       ],
     });
-    const index = createRoyalScenePickingIndex(duplicateScene);
-    expect(() => createRoyalScenePointerEventRegistry(index, {
+    const index = createScenePickingIndex(duplicateScene);
+    expect(() => createScenePointerEventRegistry(index, {
       same: { onClick: () => undefined },
     })).toThrow("ambiguous because 2 scene nodes");
-    expect(() => createRoyalScenePointerEventRegistry(index, {
+    expect(() => createScenePointerEventRegistry(index, {
       missing: { onClick: () => undefined },
     })).toThrow("requires one scene node");
   });
