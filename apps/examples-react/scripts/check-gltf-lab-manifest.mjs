@@ -11,11 +11,34 @@ const manifest = JSON.parse(readFileSync(
 ));
 const statuses = new Set([
   'supported-oracle',
+  'core-fallback-oracle',
   'normalized-ingestion',
   'parsed-unsupported',
   'intentional-out-of-scope',
   'known-limitation',
   'expected-required-failure',
+]);
+const supportedRequiredExtensions = new Set([
+  'EXT_mesh_gpu_instancing',
+  'EXT_texture_webp',
+  'KHR_draco_mesh_compression',
+  'KHR_lights_punctual',
+  'KHR_materials_emissive_strength',
+  'KHR_materials_ior',
+  'KHR_materials_specular',
+  'KHR_materials_transmission',
+  'KHR_materials_unlit',
+  'KHR_materials_variants',
+  'KHR_materials_volume',
+  'KHR_mesh_quantization',
+  'KHR_texture_transform',
+  'MSFT_lod',
+]);
+const unsupportedVisibleFeatures = new Set([
+  'KHR_materials_clearcoat',
+  'KHR_materials_dispersion',
+  'KHR_materials_iridescence',
+  'KHR_materials_sheen',
 ]);
 
 const fixtureNames = readdirSync(fixtureRoot)
@@ -36,6 +59,22 @@ for (const entry of manifest.cases) {
   }
   if (!existsSync(path.join(publicRoot, decodeURIComponent(entry.provenance)))) {
     throw new Error(`${entry.name}: provenance file is missing`);
+  }
+  const unsupportedRequired = entry.extensionsRequired.filter(
+    (extension) => !supportedRequiredExtensions.has(extension),
+  );
+  if (unsupportedRequired.length > 0 && !new Set([
+    'expected-required-failure',
+    'known-limitation',
+    'parsed-unsupported',
+  ]).has(entry.status)) {
+    throw new Error(`${entry.name}: unsupported required extensions need a non-success status`);
+  }
+  const unsupportedVisible = entry.features.filter(
+    (feature) => unsupportedVisibleFeatures.has(feature),
+  );
+  if (unsupportedVisible.length > 0 && entry.status === 'supported-oracle') {
+    throw new Error(`${entry.name}: unsupported visible features need core-fallback-oracle status`);
   }
 
   const jsonLength = bytes.readUInt32LE(12);
@@ -61,5 +100,7 @@ for (const entry of manifest.cases) {
 }
 
 console.log(`glTF lab manifest: ${manifest.cases.length} fixtures, ` +
+  `${manifest.cases.filter((entry) => entry.status === 'core-fallback-oracle').length} core-fallback, ` +
+  `${manifest.cases.filter((entry) => entry.status === 'expected-required-failure').length} required-failure, ` +
   `${manifest.cases.filter((entry) => entry.status === 'parsed-unsupported').length} parsed-unsupported, ` +
   `${manifest.cases.filter((entry) => entry.status === 'known-limitation').length} known-limitation`);

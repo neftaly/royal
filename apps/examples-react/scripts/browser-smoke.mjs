@@ -1737,7 +1737,9 @@ const main = async () => {
         throw new Error(`Unknown glTF lab case: ${selectedCaseName}`);
       }
       if (selectedCase?.status !== undefined &&
-        selectedCase.status !== 'supported-oracle' && selectedCase.status !== 'normalized-ingestion') {
+        selectedCase.status !== 'supported-oracle' &&
+        selectedCase.status !== 'core-fallback-oracle' &&
+        selectedCase.status !== 'normalized-ingestion') {
         throw new Error(`glTF lab success smoke cannot render ${selectedCase.name}: ${selectedCase.status}`);
       }
       const effectiveRoute = selectedCase === undefined

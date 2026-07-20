@@ -2,6 +2,7 @@ import manifestJson from './gltf-lab-manifest.json';
 
 export type GltfLabCaseStatus =
   | 'supported-oracle'
+  | 'core-fallback-oracle'
   | 'normalized-ingestion'
   | 'parsed-unsupported'
   | 'intentional-out-of-scope'
@@ -42,5 +43,7 @@ export const gltfLabCaseByName = new Map(
 );
 
 export const runnableGltfLabCases = gltfLabManifest.cases.filter(
-  (entry) => entry.status === 'supported-oracle' || entry.status === 'normalized-ingestion',
+  (entry) => entry.status === 'supported-oracle'
+    || entry.status === 'core-fallback-oracle'
+    || entry.status === 'normalized-ingestion',
 );

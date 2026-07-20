@@ -13,6 +13,12 @@ Unknown optional extensions do not participate in selection and may use valid
 core fallback. Direct Royal features do not imply support for a similarly
 shaped glTF extension.
 
+The glTF Lab distinguishes a `supported-oracle` from a
+`core-fallback-oracle`. The latter proves that an optional extension's authored
+core fallback remains renderable; it is not evidence that Royal implements the
+extension's visible semantics. An asset that requires unsupported semantics is
+an `expected-required-failure` and is never included in a success sweep.
+
 | Required extension | Accepted placements | Canonical result |
 | --- | --- | --- |
 | `EXT_mesh_gpu_instancing` | node | validated instance transform batches sharing ordinary geometry/materials |

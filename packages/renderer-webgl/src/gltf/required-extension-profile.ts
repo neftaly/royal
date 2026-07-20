@@ -57,7 +57,13 @@ export const validateRequiredExtensionProfile = (
     if (
       profile === undefined
       || (extensionName === "KHR_draco_mesh_compression" && !dracoAvailable)
-    ) fail(label, `extensionsRequired[${index}]`, "is unsupported");
+    ) {
+      fail(
+        label,
+        `extensionsRequired[${index}]`,
+        `is unsupported (${JSON.stringify(extensionName)})`,
+      );
+    }
     if (required.has(extensionName)) {
       fail(label, `extensionsRequired[${index}]`, "must not be duplicated");
     }

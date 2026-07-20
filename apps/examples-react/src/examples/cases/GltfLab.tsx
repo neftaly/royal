@@ -119,7 +119,9 @@ export const GltfLab = (): ReactNode => {
           </div>
         )}
       </div>
-      {entry?.status === 'supported-oracle' || entry?.status === 'normalized-ingestion'
+      {entry?.status === 'supported-oracle'
+        || entry?.status === 'core-fallback-oracle'
+        || entry?.status === 'normalized-ingestion'
         ? <GltfLabCanvas entry={entry} />
         : entry === undefined
           ? null

@@ -241,7 +241,7 @@
     },
     {
       "name": "ClearCoatCarPaint",
-      "status": "supported-oracle",
+      "status": "expected-required-failure",
       "path": "fixtures/khronos/ClearCoatCarPaint/glTF-Binary/ClearCoatCarPaint.glb",
       "bytes": 116948,
       "sha256": "4d4b32f2ef6d341191f6b6d6834f2b192762c878cd25d44e6b4b14514cd4be93",
@@ -267,7 +267,7 @@
     },
     {
       "name": "ClearCoatTest",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/ClearCoatTest/glTF-Binary/ClearCoatTest.glb",
       "bytes": 258048,
       "sha256": "c3a1cbe318cd043b937130af4eb83ec2ea0b03613387b1b7d769dfab4ac15948",
@@ -290,7 +290,7 @@
     },
     {
       "name": "ClearcoatWicker",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/ClearcoatWicker/glTF-Binary/ClearcoatWicker.glb",
       "bytes": 1299752,
       "sha256": "f162b0cd7f8e6b7cef211eec57762165a78039676b8592ce1f965e2ddb34e843",
@@ -334,7 +334,7 @@
     },
     {
       "name": "CompareClearcoat",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/CompareClearcoat/glTF-Binary/CompareClearcoat.glb",
       "bytes": 193920,
       "sha256": "9dc6879f797c7dd9dd1322dc6a392ff66952855f329ac5239b9c58a68f804a88",
@@ -357,7 +357,7 @@
     },
     {
       "name": "CompareDispersion",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/CompareDispersion/glTF-Binary/CompareDispersion.glb",
       "bytes": 60432,
       "sha256": "1c3eff819615d7e6d06e605f728907006eb6c36ef2ead53cc328e65d38a215c4",
@@ -428,7 +428,7 @@
     },
     {
       "name": "CompareIridescence",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/CompareIridescence/glTF-Binary/CompareIridescence.glb",
       "bytes": 214756,
       "sha256": "abda6e8bcb13ad04534c90bc4ce9b21e80f2d8b74ac4d911800269f0009ff073",
@@ -513,7 +513,7 @@
     },
     {
       "name": "CompareSheen",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/CompareSheen/glTF-Binary/CompareSheen.glb",
       "bytes": 883968,
       "sha256": "70b6ab5ba8006aa71079b567783a81cfe778a11cca8abc44c45e5e0b1f4252cc",
@@ -760,7 +760,7 @@
     },
     {
       "name": "IridescenceSuzanne",
-      "status": "supported-oracle",
+      "status": "expected-required-failure",
       "path": "fixtures/khronos/IridescenceSuzanne/glTF-Binary/IridescenceSuzanne.glb",
       "bytes": 507608,
       "sha256": "866762602d60a0942b7608bfabf4e8686a29033636224f4b55c5e56abe8abf8f",
@@ -1090,7 +1090,7 @@
     },
     {
       "name": "SunglassesKhronos",
-      "status": "supported-oracle",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/SunglassesKhronos/glTF-Binary/SunglassesKhronos.glb",
       "bytes": 371188,
       "sha256": "25d72dd0869c99f94a3c0d6dfe0707714eca056e531f6ff77e7545719c86ab8c",
@@ -1196,7 +1196,7 @@
     },
     {
       "name": "TextureTransformMultiTest",
-      "status": "supported-oracle",
+      "status": "expected-required-failure",
       "path": "fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
       "bytes": 388264,
       "sha256": "569aedb53822d5721e7e06af5983348683d4b2ffb1d469338ad4f02bf6a74911",

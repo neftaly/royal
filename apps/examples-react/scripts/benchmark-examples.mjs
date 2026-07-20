@@ -73,7 +73,9 @@ const gltfLabManifest = JSON.parse(readFileSync(
   'utf8',
 ));
 const runnableGltfLabCases = gltfLabManifest.cases.filter((entry) =>
-  entry.status === 'supported-oracle' || entry.status === 'normalized-ingestion'
+  entry.status === 'supported-oracle'
+    || entry.status === 'core-fallback-oracle'
+    || entry.status === 'normalized-ingestion'
 );
 const gltfExampleIds = new Set(exampleContract.benchmark.gltfExampleIds);
 const gltfLabRoute = (entry) => ({
