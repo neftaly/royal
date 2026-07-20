@@ -1,6 +1,8 @@
 import { linearRgbaFromSrgb, studioEnvironment } from '@royal/react/scene';
 import type { CSSProperties } from 'react';
 
+const viewportClearColor = linearRgbaFromSrgb([9 / 255, 17 / 255, 29 / 255, 1]);
+
 /** Neutral, deterministic environment for renderer-reference scenes. */
 export const referenceEnvironment = studioEnvironment({ radianceScaleNits: 1 });
 
@@ -20,7 +22,7 @@ export const showcaseFillLight = {
 } as const;
 
 export const showcasePass = {
-  clearColor: [0, 0, 0, 0],
+  clearColor: viewportClearColor,
   exposureEv100: 7,
   toneMapping: 'pbr-neutral',
 } as const;
@@ -41,7 +43,7 @@ export const productFillLight = {
 } as const;
 
 export const productPass = {
-  clearColor: [0, 0, 0, 0],
+  clearColor: viewportClearColor,
   exposureEv100: 8,
   toneMapping: 'pbr-neutral',
 } as const;
@@ -62,14 +64,14 @@ export const materialFillLight = {
 } as const;
 
 export const materialPass = {
-  clearColor: [0, 0, 0, 0],
+  clearColor: viewportClearColor,
   exposureEv100: 7.5,
   toneMapping: 'pbr-neutral',
 } as const;
 
 /** Display-referred path for unlit illustration and authored 2D colors. */
 export const colorAccuratePass = {
-  clearColor: [0, 0, 0, 0],
+  clearColor: viewportClearColor,
   toneMapping: 'linear-clamp',
 } as const;
 

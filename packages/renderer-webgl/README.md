@@ -41,7 +41,8 @@ root.dispose();
 
 The root owns one WebGL2 context, its backing dimensions, frame scheduling,
 context-loss recovery, and WebGL state. `alpha` and `antialias` default to
-`true`; they are immutable because browsers fix context attributes at context
+`false`; opt into either cost when the application needs canvas compositing or
+browser multisampling. They are immutable because browsers fix context attributes at context
 creation. Invalid values and unknown option fields fail synchronously.
 `persistentGpuByteBudget` defaults to 256 MiB.
 `maxConcurrentPreparationJobs` defaults to 8 and is one root-wide FIFO ceiling

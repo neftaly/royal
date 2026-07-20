@@ -67,6 +67,7 @@ export type XrViewport = Readonly<{
 }>;
 
 export type XrWebGlLayerOptions = Readonly<{
+  /** Requests browser multisampling for the XR layer. @defaultValue `false` */
   antialias?: boolean;
   /** Scale applied to the browser-recommended XR framebuffer dimensions. */
   framebufferScaleFactor?: number;
@@ -278,7 +279,12 @@ export const createWebXrSessionRendererWithPlatform = async (
     assertSetupActive();
     const Layer = platform.layerConstructor();
     if (Layer === undefined) throw new Error("Royal XR requires XRWebGLLayer support");
-    const layer = new Layer(session, gl, options.webGlLayer);
+    const layer = new Layer(session, gl, {
+      antialias: options.webGlLayer?.antialias ?? false,
+      ...(options.webGlLayer?.framebufferScaleFactor === undefined
+        ? {}
+        : { framebufferScaleFactor: options.webGlLayer.framebufferScaleFactor }),
+    });
     await session.updateRenderState({ baseLayer: layer });
     assertSetupActive();
     const referenceSpace = await firstReferenceSpace(

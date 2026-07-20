@@ -51,6 +51,21 @@ describe("canvas size selection", () => {
 });
 
 describe("clear-only canvas root", () => {
+  it("defaults persistent context costs off and preserves explicit opt-ins", () => {
+    const defaults = new FakeCanvas();
+    const defaultRoot = new CanvasRoot(defaults as unknown as HTMLCanvasElement);
+    expect(defaults.contextAttributes).toMatchObject({ alpha: false, antialias: false });
+    defaultRoot.dispose();
+
+    const optedIn = new FakeCanvas();
+    const optedInRoot = new CanvasRoot(
+      optedIn as unknown as HTMLCanvasElement,
+      { alpha: true, antialias: true },
+    );
+    expect(optedIn.contextAttributes).toMatchObject({ alpha: true, antialias: true });
+    optedInRoot.dispose();
+  });
+
   it("rejects invalid and unknown creation options at the public boundary", () => {
     const canvas = new FakeCanvas();
     expect(() => new CanvasRoot(

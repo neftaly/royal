@@ -7,6 +7,7 @@ import {
   type XrSession,
   type XrView,
   type XrWebGlLayer,
+  type XrWebGlLayerOptions,
 } from "../../packages/renderer-webgl/src/xr/session-renderer";
 import { canvasRootHarness } from "./support/canvas-root-harness";
 
@@ -19,11 +20,18 @@ class FakeSession extends EventTarget implements XrSession {
 }
 
 class FakeLayer implements XrWebGlLayer {
+  static options: XrWebGlLayerOptions | undefined;
   readonly framebuffer = {} as WebGLFramebuffer;
   framebufferHeight = 100;
   framebufferWidth = 200;
 
-  constructor(_session: XrSession, _gl: WebGL2RenderingContext) {}
+  constructor(
+    _session: XrSession,
+    _gl: WebGL2RenderingContext,
+    options?: XrWebGlLayerOptions,
+  ) {
+    FakeLayer.options = options;
+  }
 
   getViewport(view: XrView) {
     return view === LEFT_VIEW
@@ -63,6 +71,7 @@ describe("WebXR session renderer", () => {
     );
 
     expect(makeXRCompatible).toHaveBeenCalledTimes(1);
+    expect(FakeLayer.options).toEqual({ antialias: false });
     expect(session.requestReferenceSpace.mock.calls.map(([type]) => type))
       .toEqual(["local-floor", "local"]);
     expect(renderer.renderFrame({ getViewerPose: () => ({ views: [LEFT_VIEW, RIGHT_VIEW] }) }))

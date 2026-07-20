@@ -3,9 +3,9 @@ import { DEFAULT_ASYNC_PREPARATION_JOB_LIMIT } from "../resource/async-preparati
 import { DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME } from "../resource/frame-upload-budget";
 
 export type CanvasRootOptions = Readonly<{
-  /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `true` */
+  /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `false` */
   alpha?: boolean;
-  /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `true` */
+  /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `false` */
   antialias?: boolean;
   /** Generates VT pages for eligible base-color raster/SVG assets. @defaultValue `false` */
   automaticVirtualTexturing?: boolean;
@@ -68,5 +68,5 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
       "Royal renderer option ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
     );
   }
-  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}${options.automaticVirtualTexturing === true ? 1 : 0}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
+  return `${options.alpha === true ? 1 : 0}${options.antialias === true ? 1 : 0}${options.automaticVirtualTexturing === true ? 1 : 0}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
 };

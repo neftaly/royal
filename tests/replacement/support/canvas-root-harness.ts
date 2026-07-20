@@ -162,6 +162,7 @@ export const fakeGl = (): FakeGl => ({
 export class FakeCanvas extends EventTarget {
   height = 150;
   width = 300;
+  contextAttributes: WebGLContextAttributes | undefined;
   readonly gl: FakeGl;
 
   constructor(gl = fakeGl()) {
@@ -169,7 +170,11 @@ export class FakeCanvas extends EventTarget {
     this.gl = gl;
   }
 
-  getContext(kind: string): WebGL2RenderingContext | null {
+  getContext(
+    kind: string,
+    attributes?: WebGLContextAttributes,
+  ): WebGL2RenderingContext | null {
+    this.contextAttributes = attributes;
     return kind === "webgl2" ? this.gl : null;
   }
 

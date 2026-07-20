@@ -160,20 +160,20 @@ describe("replacement React public API", () => {
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("110:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({})).toBe("110:268435456:8:4194304");
+    expect(rendererRootOptionsSemanticKey(undefined)).toBe("000:268435456:8:4194304");
+    expect(rendererRootOptionsSemanticKey({})).toBe("000:268435456:8:4194304");
     expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
       .toBe("110:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("010:268435456:8:4194304");
-    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("100:268435456:8:4194304");
+    expect(rendererRootOptionsSemanticKey({ alpha: true })).toBe("100:268435456:8:4194304");
+    expect(rendererRootOptionsSemanticKey({ antialias: true })).toBe("010:268435456:8:4194304");
     expect(rendererRootOptionsSemanticKey({ automaticVirtualTexturing: true }))
-      .toBe("111:268435456:8:4194304");
+      .toBe("001:268435456:8:4194304");
     expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 }))
-      .toBe("110:1024:8:4194304");
+      .toBe("000:1024:8:4194304");
     expect(rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 2 }))
-      .toBe("110:268435456:2:4194304");
+      .toBe("000:268435456:2:4194304");
     expect(rendererRootOptionsSemanticKey({ ordinaryTextureUploadByteBudgetPerFrame: 1024 }))
-      .toBe("110:268435456:8:1024");
+      .toBe("000:268435456:8:1024");
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {

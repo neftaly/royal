@@ -13,6 +13,12 @@ JavaScriptCore, V8, and SpiderMonkey by using stable shapes, bounded lifetime,
 and low allocation naturally; it does not contort source around speculative JIT
 behavior.
 
+Canvas alpha compositing and browser/XR multisampling are explicit opt-ins.
+Opaque non-multisampled targets are the default because both context attributes
+carry persistent bandwidth and resolve/compositor cost even when a scene does
+not need them. Applications retain exact control through immutable root and XR
+layer options; Royal does not silently reduce backing resolution.
+
 A settled ordinary scene performs no JavaScript frame work and no GL calls.
 Camera-only frames do not reparse assets, rebuild scene topology, recreate
 geometry, re-upload static instances, or resubscribe resources.

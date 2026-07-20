@@ -9,6 +9,7 @@ import { gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { colorAccuratePass } from '../presentation';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
 const svgRendererOptions = {
@@ -38,7 +39,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
     camera: orbit.camera,
-    toneMapping: 'linear-clamp',
+    ...colorAccuratePass,
     nodes: [tigerCard],
   }), [orbit.camera]);
   return (

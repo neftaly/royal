@@ -261,8 +261,8 @@ const createContext = (
   options: CanvasRootOptions,
 ): WebGL2RenderingContext => {
   const gl = canvas.getContext("webgl2", {
-    alpha: options.alpha ?? true,
-    antialias: options.antialias ?? true,
+    alpha: options.alpha ?? false,
+    antialias: options.antialias ?? false,
     depth: true,
     stencil: true,
   });

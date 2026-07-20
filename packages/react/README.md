@@ -67,7 +67,8 @@ CSS pixel explicitly. Updating `pixelRatio` resizes the retained renderer; it
 does not recreate the canvas, root, or WebGL context.
 
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
-both defaulting to `true`, plus immutable resource policy. The default
+both defaulting to `false`, plus immutable resource policy. Opt into alpha for
+page compositing and antialias for browser multisampling. The default
 `persistentGpuByteBudget` is 256 MiB and `maxConcurrentPreparationJobs` is 8.
 The latter is a root-wide FIFO ceiling shared by glTF, ordinary texture, VT,
 and prefiltered-environment preparation; it is not a worker count. A semantic
