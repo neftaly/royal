@@ -1,4 +1,5 @@
-import { prepareStaticGltfSource, type PreparedStaticGltf } from "./static-asset";
+import { prepareStaticGltfSource } from "./static-asset";
+import { preparedStaticGltfTransferBuffers } from "./static-transfer";
 
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
@@ -46,30 +47,6 @@ const readResource = (uri: string): Promise<Uint8Array> =>
     workerScope.postMessage({ id, kind: "read-resource", uri });
   });
 
-const transferBuffers = (prepared: PreparedStaticGltf): ArrayBuffer[] => {
-  const buffers = new Set<ArrayBuffer>();
-  const seen = new Set<object>();
-  const visit = (value: unknown): void => {
-    if (typeof value !== "object" || value === null || seen.has(value)) return;
-    seen.add(value);
-    if (ArrayBuffer.isView(value)) {
-      if (value.buffer instanceof ArrayBuffer) buffers.add(value.buffer);
-      return;
-    }
-    if (value instanceof ArrayBuffer) {
-      buffers.add(value);
-      return;
-    }
-    if (Array.isArray(value)) {
-      for (const child of value) visit(child);
-      return;
-    }
-    for (const child of Object.values(value)) visit(child);
-  };
-  visit(prepared);
-  return [...buffers];
-};
-
 workerScope.addEventListener("message", (event) => {
   const request = event.data;
   if (request.kind === "read-resource-ready") {
@@ -103,7 +80,7 @@ workerScope.addEventListener("message", (event) => {
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },
-      transferBuffers(prepared),
+      preparedStaticGltfTransferBuffers(prepared),
     );
   }).catch((error: unknown) => {
     workerScope.postMessage({ error: formatFailure(error), kind: "error" });
