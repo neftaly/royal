@@ -57,7 +57,7 @@ export const planVirtualTextureAdmission = (
 
 export const virtualTexturePageTableByteLength = (
   manifest: VirtualTextureManifest,
-): number => manifest.tableWidth * manifest.tableHeight * 4;
+): number => manifest.tableByteLength;
 
 /**
  * Writes every logical page's closest resident ancestor. A newly uploaded page
@@ -99,7 +99,8 @@ export const writeVirtualTexturePageTable = (
         const slotX = slot % atlasColumns;
         const slotY = Math.floor(slot / atlasColumns);
         if (slotY > 255) throw new RangeError("Royal VT atlas rows must be within 1..256");
-        const offset = ((layout.tableY + y) * manifest.tableWidth + x) * 4;
+        const storageWidth = Math.max(1, manifest.tableWidth / 2 ** mip);
+        const offset = layout.byteOffset + (y * storageWidth + x) * 4;
         target[offset] = slotX;
         target[offset + 1] = slotY;
         target[offset + 2] = ancestorMip;

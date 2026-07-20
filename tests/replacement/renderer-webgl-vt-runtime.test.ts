@@ -132,18 +132,22 @@ describe("browser virtual texture runtime", () => {
     changed.mockClear();
 
     runtime.update([view]);
-    expect(texSubImage2D).toHaveBeenCalledTimes(3);
+    expect(texSubImage2D).toHaveBeenCalledTimes(4);
+    expect(texSubImage2D.mock.calls.filter((call) => call.length === 9)
+      .map((call) => call[1])).toEqual([0, 1]);
     expect(changed).toHaveBeenCalled();
     expect(runtime.runtimeSnapshot()).toMatchObject({
-      admittedUploadBytes: 96,
+      admittedUploadBytes: 92,
       deferredUploads: 1,
       uploadBudgetBytes: 100,
     });
     texSubImage2D.mockClear();
     runtime.update([view]);
-    expect(texSubImage2D).toHaveBeenCalledTimes(3);
+    expect(texSubImage2D).toHaveBeenCalledTimes(4);
+    expect(texSubImage2D.mock.calls.filter((call) => call.length === 9)
+      .map((call) => call[1])).toEqual([0, 1]);
     expect(runtime.runtimeSnapshot()).toMatchObject({
-      admittedUploadBytes: 96,
+      admittedUploadBytes: 92,
       deferredUploads: 0,
     });
     const settled = runtime.update([view]);

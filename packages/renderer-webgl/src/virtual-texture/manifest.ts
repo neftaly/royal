@@ -5,8 +5,8 @@ export const DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS = 24;
 export type VirtualTexturePageId = Readonly<{ mip: number; x: number; y: number }>;
 export type VirtualTexturePageEntry = VirtualTexturePageId & Readonly<{ uri: string }>;
 export type VirtualTextureMipLayout = Readonly<{
+  byteOffset: number;
   height: number;
-  tableY: number;
   width: number;
 }>;
 
@@ -22,6 +22,7 @@ export type VirtualTextureManifest = Readonly<{
   pageSize: number;
   physicalByteBudget?: number;
   physicalSlots?: number;
+  tableByteLength: number;
   tableHeight: number;
   tableWidth: number;
   uriTemplate?: string;
@@ -102,21 +103,27 @@ const buildMipLayouts = (
   height: number,
   pageSize: number,
   mipCount: number,
-): { layouts: readonly VirtualTextureMipLayout[]; tableHeight: number; tableWidth: number } => {
+): Readonly<{
+  layouts: readonly VirtualTextureMipLayout[];
+  tableByteLength: number;
+  tableHeight: number;
+  tableWidth: number;
+}> => {
   const layouts: VirtualTextureMipLayout[] = [];
-  let tableHeight = 0;
-  let tableWidth = 0;
+  const tableWidth = 2 ** Math.ceil(Math.log2(Math.ceil(width / pageSize)));
+  const tableHeight = 2 ** Math.ceil(Math.log2(Math.ceil(height / pageSize)));
+  let tableByteLength = 0;
   for (let mip = 0; mip < mipCount; mip += 1) {
     const mipWidth = Math.max(1, Math.ceil(width / (pageSize * 2 ** mip)));
     const mipHeight = Math.max(1, Math.ceil(height / (pageSize * 2 ** mip)));
-    layouts.push({ height: mipHeight, tableY: tableHeight, width: mipWidth });
-    tableHeight += mipHeight;
-    tableWidth = Math.max(tableWidth, mipWidth);
+    layouts.push({ byteOffset: tableByteLength, height: mipHeight, width: mipWidth });
+    tableByteLength += Math.max(1, tableWidth / 2 ** mip)
+      * Math.max(1, tableHeight / 2 ** mip) * 4;
   }
-  if (!Number.isSafeInteger(tableHeight) || !Number.isSafeInteger(tableWidth)) {
-    throw new RangeError("Royal VT page table dimensions exceed safe integer capacity");
+  if (!Number.isSafeInteger(tableByteLength)) {
+    throw new RangeError("Royal VT page table exceeds safe integer capacity");
   }
-  return { layouts, tableHeight, tableWidth };
+  return { layouts, tableByteLength, tableHeight, tableWidth };
 };
 
 const TEMPLATE_TOKEN = /\{([^}]+)\}/gu;
@@ -180,7 +187,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
   if (uriTemplate === undefined && (rawEntries === undefined || rawEntries.length === 0)) {
     throw new TypeError("Royal VT manifest must provide page entries or a URI template");
   }
-  const { layouts, tableHeight, tableWidth } = buildMipLayouts(
+  const { layouts, tableByteLength, tableHeight, tableWidth } = buildMipLayouts(
     width,
     height,
     pageSize,
@@ -226,6 +233,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     pageSize,
     ...(physicalByteBudget === undefined ? {} : { physicalByteBudget }),
     ...(physicalSlots === undefined ? {} : { physicalSlots }),
+    tableByteLength,
     tableHeight,
     tableWidth,
     ...(uriTemplate === undefined ? {} : { uriTemplate }),
@@ -253,7 +261,7 @@ export const createGeneratedVirtualTextureManifest = (options: Readonly<{
     throw new RangeError("Royal generated VT stored page dimensions exceed safe integer capacity");
   }
   const mipCount = derivedVirtualTextureMipCount(width, height, pageSize);
-  const { layouts, tableHeight, tableWidth } = buildMipLayouts(
+  const { layouts, tableByteLength, tableHeight, tableWidth } = buildMipLayouts(
     width,
     height,
     pageSize,
@@ -269,6 +277,7 @@ export const createGeneratedVirtualTextureManifest = (options: Readonly<{
     pageAddressing: "complete",
     pageEncoding: "image",
     pageSize,
+    tableByteLength,
     tableHeight,
     tableWidth,
     width,

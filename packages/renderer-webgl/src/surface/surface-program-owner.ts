@@ -59,7 +59,6 @@ export type UnlitProgram = Readonly<{
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
   virtualPageTable: WebGLUniformLocation | null;
-  virtualMipOffsets: WebGLUniformLocation | null;
   virtualSettings0: WebGLUniformLocation | null;
   virtualSettings1: WebGLUniformLocation | null;
   virtualSettings2: WebGLUniformLocation | null;
@@ -97,7 +96,6 @@ export type StandardProgram = Readonly<{
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
   virtualPageTable: WebGLUniformLocation | null;
-  virtualMipOffsets: WebGLUniformLocation | null;
   virtualSettings0: WebGLUniformLocation | null;
   virtualSettings1: WebGLUniformLocation | null;
   virtualSettings2: WebGLUniformLocation | null;
@@ -284,8 +282,6 @@ const createUnlitProgram = (
       : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualPageTable") : null,
-    virtualMipOffsets: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
-      ? uniform(gl, program, "virtualMipOffsets[0]") : null,
     virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualSettings0") : null,
     virtualSettings1: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
@@ -433,8 +429,6 @@ const createStandardProgram = (
       : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualPageTable") : null,
-    virtualMipOffsets: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
-      ? uniform(gl, program, "virtualMipOffsets[0]") : null,
     virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualSettings0") : null,
     virtualSettings1: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE

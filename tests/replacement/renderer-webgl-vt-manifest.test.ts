@@ -22,14 +22,33 @@ describe("VT2 manifest contract", () => {
     const manifest = parseVirtualTextureManifest(fixture());
     expect(derivedVirtualTextureMipCount(4096, 4096, 512)).toBe(4);
     expect(manifest.mipLayouts).toEqual([
-      { height: 8, tableY: 0, width: 8 },
-      { height: 4, tableY: 8, width: 4 },
-      { height: 2, tableY: 12, width: 2 },
-      { height: 1, tableY: 14, width: 1 },
+      { byteOffset: 0, height: 8, width: 8 },
+      { byteOffset: 256, height: 4, width: 4 },
+      { byteOffset: 320, height: 2, width: 2 },
+      { byteOffset: 336, height: 1, width: 1 },
     ]);
-    expect(manifest).toMatchObject({ tableHeight: 15, tableWidth: 8 });
+    expect(manifest).toMatchObject({
+      tableByteLength: 340,
+      tableHeight: 8,
+      tableWidth: 8,
+    });
     expect(virtualTexturePageUri(manifest, { mip: 2, x: 1, y: 0 }))
       .toBe("pages/m2-1-0.svg");
+  });
+
+  it("pads odd page grids so every logical mip fits WebGL mip storage", () => {
+    const manifest = parseVirtualTextureManifest({
+      ...fixture(),
+      mipCount: 3,
+      virtualSize: [2561, 1537],
+    });
+    expect(manifest).toMatchObject({ tableHeight: 4, tableWidth: 8 });
+    expect(manifest.mipLayouts).toEqual([
+      { byteOffset: 0, height: 4, width: 6 },
+      { byteOffset: 128, height: 2, width: 3 },
+      { byteOffset: 160, height: 1, width: 2 },
+    ]);
+    expect(manifest.tableByteLength).toBe(168);
   });
 
   it("lets an exact sparse entry override complete template addressing", () => {

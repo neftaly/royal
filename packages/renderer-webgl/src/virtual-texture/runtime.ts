@@ -67,7 +67,6 @@ const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
 const MAX_DECODE_JOBS = 4;
 const MAX_UPLOADS_PER_FRAME = 4;
 const MAX_DEMAND_PAGES = 512;
-const MAX_SHADER_MIPS = 16;
 const MAX_AUTOMATIC_DECODED_BYTES = 64 * 1024 * 1024;
 const IDLE_VIRTUAL_TEXTURE_SNAPSHOT: VirtualTextureAssetSnapshot = {
   failedPages: 0,
@@ -99,6 +98,7 @@ type GpuVirtualTexture = Readonly<{
   compressed: boolean;
   lastUsedFrames: Uint32Array;
   pageTableBytes: Uint8Array;
+  pageTableLevels: readonly Uint8Array[];
   pageTableSampler: WebGLSampler;
   pageTableTexture: WebGLTexture;
   residentSlots: Map<VirtualTexturePageKey, number>;
@@ -160,9 +160,6 @@ const createGpuVirtualTexture = (
   manifest: VirtualTextureManifest,
   budget: PersistentGpuBudgetOwner,
 ): GpuVirtualTexture => {
-  if (manifest.mipCount > MAX_SHADER_MIPS) {
-    throw new RangeError(`Royal VT currently supports at most ${MAX_SHADER_MIPS} mip levels`);
-  }
   const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   if (
     !Number.isSafeInteger(maxTextureSize)
@@ -227,11 +224,18 @@ const createGpuVirtualTexture = (
     gl.samplerParameteri(atlasSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.samplerParameteri(atlasSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const pageTableBytes = new Uint8Array(virtualTexturePageTableByteLength(manifest));
+    const pageTableLevels: Uint8Array[] = [];
+    for (let mip = 0; mip < manifest.mipCount; mip += 1) {
+      const offset = manifest.mipLayouts[mip]!.byteOffset;
+      const width = Math.max(1, manifest.tableWidth / 2 ** mip);
+      const height = Math.max(1, manifest.tableHeight / 2 ** mip);
+      pageTableLevels.push(pageTableBytes.subarray(offset, offset + width * height * 4));
+    }
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
     gl.texStorage2D(
       gl.TEXTURE_2D,
-      1,
+      manifest.mipCount,
       gl.RGBA8,
       manifest.tableWidth,
       manifest.tableHeight,
@@ -240,10 +244,6 @@ const createGpuVirtualTexture = (
     gl.samplerParameteri(pageTableSampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.samplerParameteri(pageTableSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.samplerParameteri(pageTableSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const mipOffsets = new Float32Array(MAX_SHADER_MIPS);
-    for (let mip = 0; mip < manifest.mipCount; mip += 1) {
-      mipOffsets[mip] = manifest.mipLayouts[mip]!.tableY;
-    }
     return {
       atlasColumns,
       atlasRows,
@@ -252,7 +252,6 @@ const createGpuVirtualTexture = (
       budgetIdentity,
       binding: {
         atlas: { sampler: atlasSampler, target: "2d", texture: atlasTexture },
-        mipOffsets,
         pageTable: { sampler: pageTableSampler, target: "2d", texture: pageTableTexture },
         settings0: new Float32Array([
           manifest.width,
@@ -276,6 +275,7 @@ const createGpuVirtualTexture = (
       compressed,
       lastUsedFrames: new Uint32Array(slotCount),
       pageTableBytes,
+      pageTableLevels,
       pageTableSampler,
       pageTableTexture,
       residentSlots: new Map(),
@@ -932,17 +932,19 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, gpu.pageTableTexture);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      0,
-      0,
-      manifest.tableWidth,
-      manifest.tableHeight,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      gpu.pageTableBytes,
-    );
+    for (let mip = 0; mip < manifest.mipCount; mip += 1) {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        mip,
+        0,
+        0,
+        Math.max(1, manifest.tableWidth / 2 ** mip),
+        Math.max(1, manifest.tableHeight / 2 ** mip),
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        gpu.pageTableLevels[mip]!,
+      );
+    }
   }
 }
 

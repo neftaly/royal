@@ -98,10 +98,12 @@ describe("VT2 bounded planning properties", () => {
       }
       const table = new Uint8Array(virtualTexturePageTableByteLength(manifest));
       writeVirtualTexturePageTable(manifest, residents, 8, table);
-      for (const layout of manifest.mipLayouts) {
+      for (let mip = 0; mip < manifest.mipCount; mip += 1) {
+        const layout = manifest.mipLayouts[mip]!;
+        const storageWidth = Math.max(1, manifest.tableWidth / 2 ** mip);
         for (let y = 0; y < layout.height; y += 1) {
           for (let x = 0; x < layout.width; x += 1) {
-            const offset = ((layout.tableY + y) * manifest.tableWidth + x) * 4;
+            const offset = layout.byteOffset + (y * storageWidth + x) * 4;
             assertFuzz(table[offset + 3] === 255, "coarsest resident ancestor was lost");
             assertFuzz(table[offset + 2]! < manifest.mipCount, "resident mip escaped manifest");
           }

@@ -30,7 +30,6 @@ export type VirtualTextureShaderSource = Readonly<{
 
 export type VirtualTextureGpuBinding = Readonly<{
   atlas: TextureUnitBinding;
-  mipOffsets: Float32Array;
   pageTable: TextureUnitBinding;
   settings0: Float32Array;
   settings1: Float32Array;

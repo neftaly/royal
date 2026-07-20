@@ -175,6 +175,16 @@ levels until the retained working set fits. It does not keep an arbitrary
 spatial prefix at fine detail, because a stable uniformly coarser image is
 preferred to a hard moving boundary between sharp and ancestor-resolved areas.
 
+The GPU page table is one mipmapped `RGBA8` texture. Its base page grid is
+padded to power-of-two dimensions so every ceil-divided logical grid fits the
+corresponding WebGL mip level; unused cells remain invalid. Sampling selects
+the desired mip with derivatives and performs one explicit-level page-table
+fetch followed by one atlas fetch. This avoids dynamic uniform-array indexing
+in every fragment. Publication uploads each retained table level after an atlas
+batch, trading a few cold driver calls and bounded padding bytes for the smaller
+Quest/Safari fragment path. All padded storage is charged to the VT GPU and
+per-frame upload budgets.
+
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
 Each ordered view computes one retained frustum broad phase for all of those

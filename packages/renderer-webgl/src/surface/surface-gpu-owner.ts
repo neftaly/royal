@@ -1462,12 +1462,10 @@ export class SurfaceGpuOwner {
       || program.virtualSettings0 === null
       || program.virtualSettings1 === null
       || program.virtualSettings2 === null
-      || program.virtualMipOffsets === null
     ) return;
     this.#gl.uniform4fv(program.virtualSettings0, binding.settings0);
     this.#gl.uniform4fv(program.virtualSettings1, binding.settings1);
     this.#gl.uniform4fv(program.virtualSettings2, binding.settings2);
-    this.#gl.uniform1fv(program.virtualMipOffsets, binding.mipOffsets);
   }
 
   #planOpaqueMultiDrawRuns(): void {

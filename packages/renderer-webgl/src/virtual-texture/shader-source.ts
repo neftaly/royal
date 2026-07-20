@@ -5,7 +5,6 @@ uniform sampler2D virtualPageTable;
 uniform vec4 virtualSettings0;
 uniform vec4 virtualSettings1;
 uniform vec4 virtualSettings2;
-uniform float virtualMipOffsets[16];
 
 float royalVirtualWrap(float coordinate, float mode) {
   if (mode < 0.5) return clamp(coordinate, 0.0, 0.99999994);
@@ -22,19 +21,15 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
   float pageSize = virtualSettings0.z;
   vec2 texelDx = dFdx(authoredUv) * virtualSize;
   vec2 texelDy = dFdy(authoredUv) * virtualSize;
-  float footprint = max(length(texelDx), length(texelDy));
+  float footprintSquared = max(dot(texelDx, texelDx), dot(texelDy, texelDy));
   int desiredMip = int(clamp(
-    floor(log2(max(footprint, 1.0))),
+    floor(0.5 * log2(max(footprintSquared, 1.0))),
     0.0,
     virtualSettings2.x - 1.0
   ));
   float desiredScale = exp2(float(desiredMip));
   vec2 desiredPage = floor((uv * virtualSize / desiredScale) / pageSize);
-  ivec2 tableCoordinate = ivec2(
-    desiredPage.x,
-    virtualMipOffsets[desiredMip] + desiredPage.y
-  );
-  vec4 entry = texelFetch(virtualPageTable, tableCoordinate, 0);
+  vec4 entry = texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip);
   if (entry.a < 0.5) return vec4(0.214041, 0.214041, 0.214041, 1.0);
   vec3 decoded = floor(entry.rgb * 255.0 + 0.5);
   float residentScale = exp2(decoded.z);

@@ -51,8 +51,8 @@ describe("VT2 residency core", () => {
     const bytes = new Uint8Array(virtualTexturePageTableByteLength(manifest));
     writeVirtualTexturePageTable(manifest, residents, 2, bytes);
     const mip0 = manifest.mipLayouts[0]!;
-    const exactOffset = ((mip0.tableY + 1) * manifest.tableWidth + 1) * 4;
-    const fallbackOffset = ((mip0.tableY + 3) * manifest.tableWidth + 3) * 4;
+    const exactOffset = mip0.byteOffset + (manifest.tableWidth + 1) * 4;
+    const fallbackOffset = mip0.byteOffset + (manifest.tableWidth * 3 + 3) * 4;
     expect(Array.from(bytes.slice(exactOffset, exactOffset + 4))).toEqual([1, 1, 0, 255]);
     expect(Array.from(bytes.slice(fallbackOffset, fallbackOffset + 4))).toEqual([0, 0, 2, 255]);
   });

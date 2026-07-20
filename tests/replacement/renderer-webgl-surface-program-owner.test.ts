@@ -17,6 +17,7 @@ import {
   surfaceVertexFeatures,
 } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { fakeGl } from "./support/canvas-root-harness";
+import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-webgl/src/virtual-texture/shader-source";
 
 describe("surface program ownership", () => {
   it("projects only stage-relevant material features into vertex variants", () => {
@@ -216,5 +217,14 @@ describe("surface program ownership", () => {
     expect(owner.get("unlit", virtualFeatures, false, false, false)).not.toBe(virtual);
     expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
     expect(gl.compileShader).toHaveBeenCalledTimes(5);
+  });
+
+  it("addresses the virtual page table through native texture mip levels", () => {
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
+      "texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip)",
+    );
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain("footprintSquared");
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("virtualMipOffsets");
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("length(texelDx)");
   });
 });

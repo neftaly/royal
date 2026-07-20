@@ -62,7 +62,6 @@ describe("surface texture planning core", () => {
     const environment = gpuBinding("environment");
     const virtualTexture = {
       atlas,
-      mipOffsets: new Float32Array(),
       pageTable,
       settings0: new Float32Array(),
       settings1: new Float32Array(),
