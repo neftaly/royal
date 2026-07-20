@@ -23,11 +23,10 @@ export const canonicalSurfacePassKind = (
   return material.alphaBlend === true ? "transparent" : "opaque";
 };
 
-/** Whether transmission needs a filtered scene-color mip chain rather than level zero. */
-export const canonicalTransmissionNeedsMipmaps = (
+/** Largest material roughness that visible transmission can use from scene color. */
+export const canonicalTransmissionSceneColorRoughness = (
   material: CanonicalSurfaceMaterial,
-): boolean => canonicalMaterialHasTransmission(material)
-  && (material.roughnessFactor >= 0.1 || material.metallicRoughnessAsset !== undefined);
+): number => canonicalMaterialHasTransmission(material) ? material.roughnessFactor : 0;
 
 /** Whether this draw pass reaches work whose ordering depends on the current view. */
 export const surfaceDrawPassNeedsDepthOrder = (

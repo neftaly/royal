@@ -10,6 +10,11 @@ import type {
 import presentationFragmentShader from "../webgl/shaders/presentation.frag";
 import presentationVertexShader from "../webgl/shaders/presentation.vert";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
+import {
+  compositeTargetByteLength,
+  transmissionSceneColorMaxLod,
+  transmissionSceneColorMipLevels,
+} from "./surface-composite-plan";
 import type { SurfaceTransmissionShaderSource } from "./surface-program-owner";
 import {
   linearCompositeColorBytesPerPixel,
@@ -124,33 +129,6 @@ type CompositeResources = Readonly<{
   width: number;
 }>;
 
-const mipLevels = (width: number, height: number): number =>
-  Math.floor(Math.log2(Math.max(width, height))) + 1;
-
-const mipPixelCount = (width: number, height: number): number => {
-  let pixels = 0;
-  while (true) {
-    pixels += width * height;
-    if (width === 1 && height === 1) return pixels;
-    width = Math.max(1, width >>> 1);
-    height = Math.max(1, height >>> 1);
-  }
-};
-
-export const compositeTargetByteLength = (
-  width: number,
-  height: number,
-  colorBytesPerPixel: 4 | 8,
-  options: Readonly<{
-    mipmappedSceneColor?: boolean;
-    sceneColor?: boolean;
-  }> = {},
-): number => width * height * (colorBytesPerPixel + 4)
-  + (options.sceneColor === false
-    ? 0
-    : (options.mipmappedSceneColor === false ? width * height : mipPixelCount(width, height))
-      * colorBytesPerPixel);
-
 const compileShader = (
   gl: WebGL2RenderingContext,
   type: number,
@@ -217,7 +195,7 @@ export class SurfaceCompositeOwner {
   readonly #capabilities: LinearCompositeCapabilities;
   readonly #gl: WebGL2RenderingContext;
   #deniedSize = "";
-  #mipmapsRequired = false;
+  #sceneColorMaxRoughness = 0;
   readonly #presentationBindings: GpuTextureBinding[] = [{
     sampler: null,
     target: "2d",
@@ -253,7 +231,8 @@ export class SurfaceCompositeOwner {
   }
 
   get sceneColorMaxLod(): number {
-    return this.#mipmapsRequired ? (this.#resources?.sceneColorLevels ?? 1) - 1 : 0;
+    if (this.#sceneColorMaxRoughness < 0.1 || this.#resources === null) return 0;
+    return transmissionSceneColorMaxLod(this.#resources.width, this.#resources.height);
   }
 
   get retainedTarget(): boolean {
@@ -264,17 +243,18 @@ export class SurfaceCompositeOwner {
     this.#deniedSize = "";
   }
 
-  setMipmapsRequired(required: boolean): void {
-    if (this.#mipmapsRequired === required) return;
-    this.#mipmapsRequired = required;
-    if (this.#sceneSampler !== null) {
+  setSceneColorMaxRoughness(maxRoughness: number): void {
+    if (this.#sceneColorMaxRoughness === maxRoughness) return;
+    const mipmapsWereRequired = this.#sceneColorMaxRoughness >= 0.1;
+    const mipmapsRequired = maxRoughness >= 0.1;
+    this.#sceneColorMaxRoughness = maxRoughness;
+    if (this.#sceneSampler !== null && mipmapsWereRequired !== mipmapsRequired) {
       this.#gl.samplerParameteri(
         this.#sceneSampler,
         this.#gl.TEXTURE_MIN_FILTER,
-        required ? this.#gl.LINEAR_MIPMAP_LINEAR : this.#gl.LINEAR,
+        mipmapsRequired ? this.#gl.LINEAR_MIPMAP_LINEAR : this.#gl.LINEAR,
       );
     }
-    this.#bindingRevision += 1;
   }
 
   setSceneColorRequired(required: boolean): void {
@@ -313,7 +293,7 @@ export class SurfaceCompositeOwner {
       throw new RangeError("Royal composite target dimensions must be positive safe integers");
     }
     const desiredLevels = this.#sceneColorRequired
-      ? this.#mipmapsRequired ? mipLevels(width, height) : 1
+      ? transmissionSceneColorMipLevels(width, height, this.#sceneColorMaxRoughness)
       : 0;
     const preferredColorBytesPerPixel = linearCompositeColorBytesPerPixel(
       this.#capabilities,
@@ -393,7 +373,7 @@ export class SurfaceCompositeOwner {
       resources.width,
       resources.height,
     );
-    if (this.#mipmapsRequired) gl.generateMipmap(gl.TEXTURE_2D);
+    if (resources.sceneColorLevels > 1) gl.generateMipmap(gl.TEXTURE_2D);
     state.invalidateTextureUnit(10);
   }
 
@@ -470,8 +450,10 @@ export class SurfaceCompositeOwner {
       height,
       colorBytesPerPixel,
       {
-        mipmappedSceneColor: this.#mipmapsRequired,
         sceneColor: this.#sceneColorRequired,
+        sceneColorLevels: this.#sceneColorRequired
+          ? transmissionSceneColorMipLevels(width, height, this.#sceneColorMaxRoughness)
+          : 0,
       },
     );
     if (!this.#budget.tryClaim(this.#claim, bytes)) return false;
@@ -493,12 +475,15 @@ export class SurfaceCompositeOwner {
       throw new Error("Royal could not allocate composite target resources");
     }
     const internalFormat = colorBytesPerPixel === 8 ? gl.RGBA16F : gl.RGBA8;
-    const levels = sceneColor === null ? 0 : this.#mipmapsRequired ? mipLevels(width, height) : 1;
+    const levels = sceneColor === null
+      ? 0
+      : transmissionSceneColorMipLevels(width, height, this.#sceneColorMaxRoughness);
     gl.bindTexture(gl.TEXTURE_2D, color);
     gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height);
     if (sceneColor !== null) {
       gl.bindTexture(gl.TEXTURE_2D, sceneColor);
       gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levels - 1);
     }
     gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
@@ -582,7 +567,7 @@ export class SurfaceCompositeOwner {
     gl.samplerParameteri(
       sceneSampler,
       gl.TEXTURE_MIN_FILTER,
-      this.#mipmapsRequired ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
+      this.#sceneColorMaxRoughness >= 0.1 ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
     );
     gl.useProgram(program);
     gl.uniform1i(sceneColor, 0);

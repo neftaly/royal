@@ -3,7 +3,7 @@ import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src
 import {
   canonicalSurfacePassKind,
   canonicalSurfaceIsDoubleSided,
-  canonicalTransmissionNeedsMipmaps,
+  canonicalTransmissionSceneColorRoughness,
   planGroupedSurfacePasses,
   planSurfacePasses,
   surfaceDrawPassNeedsDepthOrder,
@@ -12,7 +12,10 @@ import {
   linearCompositeColorBytesPerPixel,
   terminalPresentationRequested,
 } from "../../packages/renderer-webgl/src/surface/terminal-presentation-plan";
-import { compositeTargetByteLength } from "../../packages/renderer-webgl/src/surface/surface-composite-owner";
+import {
+  compositeTargetByteLength,
+  transmissionSceneColorMipLevels,
+} from "../../packages/renderer-webgl/src/surface/surface-composite-plan";
 
 const standard = (
   overrides: Partial<Extract<CanonicalSurfaceMaterial, { kind: "standard" }>> = {},
@@ -35,11 +38,16 @@ describe("fixed surface pass planning", () => {
     expect(surfaceDrawPassNeedsDepthOrder("remaining")).toBe(true);
   });
 
-  it("accounts for target color, depth, and the complete source mip chain", () => {
+  it("accounts for target color, depth, and the retained source mip prefix", () => {
     expect(compositeTargetByteLength(2, 2, 4)).toBe(52);
-    expect(compositeTargetByteLength(2, 2, 4, { mipmappedSceneColor: false })).toBe(48);
+    expect(compositeTargetByteLength(2, 2, 4, { sceneColorLevels: 1 })).toBe(48);
     expect(compositeTargetByteLength(2, 2, 4, { sceneColor: false })).toBe(32);
     expect(compositeTargetByteLength(1, 1, 8)).toBe(20);
+    expect(transmissionSceneColorMipLevels(1_024, 512, 0.099)).toBe(1);
+    expect(transmissionSceneColorMipLevels(1_024, 512, 0.1)).toBe(2);
+    expect(transmissionSceneColorMipLevels(1_024, 512, 0.11)).toBe(3);
+    expect(transmissionSceneColorMipLevels(1_024, 512, 0.5)).toBe(6);
+    expect(transmissionSceneColorMipLevels(1_024, 512, 1)).toBe(11);
   });
 
   it("keeps ordinary scenes on the direct opaque/transparent path", () => {
@@ -108,11 +116,11 @@ describe("fixed surface pass planning", () => {
     });
   });
 
-  it("requests source mipmaps only for active rough or roughness-textured transmission", () => {
-    expect(canonicalTransmissionNeedsMipmaps(standard({ transmissionFactor: 0, roughnessFactor: 1 }))).toBe(false);
-    expect(canonicalTransmissionNeedsMipmaps(standard({ transmissionFactor: 1, roughnessFactor: 0.099 }))).toBe(false);
-    expect(canonicalTransmissionNeedsMipmaps(standard({ transmissionFactor: 1, roughnessFactor: 0.1 }))).toBe(true);
-    expect(canonicalTransmissionNeedsMipmaps(standard({
+  it("reports the maximum reachable roughness only for active transmission", () => {
+    expect(canonicalTransmissionSceneColorRoughness(standard({ transmissionFactor: 0, roughnessFactor: 1 }))).toBe(0);
+    expect(canonicalTransmissionSceneColorRoughness(standard({ transmissionFactor: 1, roughnessFactor: 0.099 }))).toBe(0.099);
+    expect(canonicalTransmissionSceneColorRoughness(standard({ transmissionFactor: 1, roughnessFactor: 0.1 }))).toBe(0.1);
+    expect(canonicalTransmissionSceneColorRoughness(standard({
       metallicRoughnessAsset: {
         bytes: new Uint8Array(),
         contentKey: "roughness",
@@ -122,7 +130,7 @@ describe("fixed surface pass planning", () => {
       },
       transmissionFactor: 1,
       roughnessFactor: 0,
-    }))).toBe(true);
+    }))).toBe(0);
   });
 
   it("ignores authored double-sided state for a nonzero-thickness volume boundary", () => {

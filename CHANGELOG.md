@@ -40,6 +40,12 @@ versions identify source-level prerelease checkpoints in this repository.
   City, and Damaged Helmet, with source-pinned Khronos fixtures and browser
   smoke coverage for every entry.
 
+### Renderer
+
+- Limited rough-transmission scene-color storage to the mip prefix reachable by
+  visible authored roughness, preserving the original LOD mapping while
+  avoiding unreachable target memory and mip generation.
+
 ## 0.0.1 - 2026-07-14
 
 Initial source-level prerelease for application development inside the Royal

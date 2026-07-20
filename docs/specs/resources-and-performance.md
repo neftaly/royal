@@ -182,6 +182,11 @@ transmission is inactive, and falls back to direct presentation on admission
 denial. It MUST NOT silently lower canvas resolution or skip authored work to
 improve a frame-rate report.
 
+When transmission roughness cannot reach the complete scene-color mip pyramid,
+admission and allocation retain only the reachable prefix while shading keeps
+the full-resolution LOD scale. This removes unreachable persistent bytes and
+mip generation without changing authored roughness behavior.
+
 Work may move to the GPU when it removes a measured CPU bottleneck without
 introducing blocking readback, excessive bandwidth, duplicate state, or an
 incompatible fallback architecture. Work may move to the CPU when a GPU pass or

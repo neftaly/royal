@@ -155,10 +155,12 @@ presentation without transmission. Budget denial or target incompleteness
 keeps the core PBR material as a stable opaque fallback rather than exposing
 partial or stale screen color.
 
-Rough transmission samples the opaque snapshot mip chain. Royal allocates and
-regenerates that chain only when an active transmission material has meaningful
-roughness or an authored metallic-roughness texture; sharp transmission uses
-level zero. Refraction projects the IOR-bent volume ray back into the current
+Rough transmission samples the opaque snapshot mip chain. Royal retains and
+regenerates only the prefix reachable by the greatest visible authored
+roughness; sharp transmission uses level zero, and a roughness texture cannot
+raise the material's multiplicative roughness-factor ceiling. The shader keeps
+the complete-resolution LOD scale, so truncating unreachable suffix levels does
+not change samples within that ceiling. Refraction projects the IOR-bent volume ray back into the current
 view, and attenuation uses its grazing-angle-adjusted travel distance. Samples
 outside the current view fall back to the material's lit reflection result.
 Royal's static profile requires `KHR_materials_volume` to be paired with

@@ -84,7 +84,7 @@ import {
 } from "./surface-texture-plan";
 import {
   canonicalSurfaceIsDoubleSided,
-  canonicalTransmissionNeedsMipmaps,
+  canonicalTransmissionSceneColorRoughness,
   planGroupedSurfacePasses,
   planSurfacePasses,
   surfaceDrawPassNeedsDepthOrder,
@@ -521,7 +521,7 @@ export class SurfaceGpuOwner {
   ): boolean {
     const scene = this.#scene;
     let transmissionRequested = false;
-    let roughSceneColorRequired = false;
+    let sceneColorMaxRoughness = 0;
     const visibilityStride = this.#transmissionCandidateIndices.length;
     const visibilityLength = visibilityStride * views.length;
     if (this.#transmissionVisibility.length < visibilityLength) {
@@ -539,7 +539,10 @@ export class SurfaceGpuOwner {
           this.#transmissionVisibility[visibilityOffset + slot] = visible ? 1 : 0;
           if (!visible) continue;
           transmissionRequested = true;
-          roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(surface.material);
+          sceneColorMaxRoughness = Math.max(
+            sceneColorMaxRoughness,
+            canonicalTransmissionSceneColorRoughness(surface.material),
+          );
         }
       }
     }
@@ -555,7 +558,7 @@ export class SurfaceGpuOwner {
       if (composite === null) this.#requestCompositeOwner();
       else {
         composite.setSceneColorRequired(transmissionRequested);
-        composite.setMipmapsRequired(roughSceneColorRequired);
+        composite.setSceneColorMaxRoughness(sceneColorMaxRoughness);
         let width = 1;
         let height = 1;
         for (const view of views) {
