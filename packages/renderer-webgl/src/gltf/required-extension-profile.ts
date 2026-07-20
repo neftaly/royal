@@ -37,16 +37,31 @@ const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> 
   MSFT_lod: (path) => material.test(path) || node.test(path),
 };
 
+const extensionsPath = (parentPath: string): string =>
+  `${parentPath.length === 0 ? "" : `${parentPath}.`}extensions`;
+
 const extensionPath = (parentPath: string, extension: string): string =>
-  `${parentPath.length === 0 ? "" : `${parentPath}.`}extensions.${extension}`;
+  `${extensionsPath(parentPath)}.${extension}`;
 
 /** Validates declaration support and all observed placements before semantic readers run. */
 export const validateRequiredExtensionProfile = (
   document: JsonObject,
   requiredExtensions: readonly unknown[],
+  usedExtensions: readonly unknown[],
   label: string,
   dracoAvailable: boolean,
 ): void => {
+  const used = new Set<string>();
+  for (let index = 0; index < usedExtensions.length; index += 1) {
+    const extension = usedExtensions[index];
+    const extensionName = typeof extension === "string" && extension.length > 0
+      ? extension
+      : fail(label, `extensionsUsed[${index}]`, "must be a non-empty string");
+    if (used.has(extensionName)) {
+      fail(label, `extensionsUsed[${index}]`, "must not be duplicated");
+    }
+    used.add(extensionName);
+  }
   const required = new Set<string>();
   for (let index = 0; index < requiredExtensions.length; index += 1) {
     const extension = requiredExtensions[index];
@@ -69,7 +84,15 @@ export const validateRequiredExtensionProfile = (
     }
     required.add(extensionName);
   }
-  if (required.size === 0) return;
+  for (const extension of required) {
+    if (!used.has(extension)) {
+      fail(
+        label,
+        "extensionsRequired",
+        `${JSON.stringify(extension)} must also appear in extensionsUsed`,
+      );
+    }
+  }
 
   const seen = new WeakSet<object>();
   const visit = (value: unknown, path: string): void => {
@@ -83,9 +106,19 @@ export const validateRequiredExtensionProfile = (
     }
     const objectValue = value as JsonObject;
     const extensions = objectValue.extensions;
-    if (typeof extensions === "object" && extensions !== null && !Array.isArray(extensions)) {
+    if (extensions !== undefined) {
+      const extensionObject = typeof extensions === "object"
+        && extensions !== null
+        && !Array.isArray(extensions)
+        ? extensions
+        : fail(label, extensionsPath(path), "must be an object");
+      for (const extension of Object.keys(extensionObject)) {
+        if (!used.has(extension)) {
+          fail(label, extensionPath(path, extension), "must be declared in extensionsUsed");
+        }
+      }
       for (const extension of required) {
-        if (!Object.hasOwn(extensions, extension)) continue;
+        if (!Object.hasOwn(extensionObject, extension)) continue;
         const profile = REQUIRED_EXTENSION_PLACEMENTS[extension]!;
         if (!profile(path)) {
           fail(label, extensionPath(path, extension), "is outside Royal's supported placement profile");

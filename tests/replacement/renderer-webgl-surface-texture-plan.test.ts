@@ -3,6 +3,7 @@ import type { CanonicalSurfaceMaterial, CanonicalTextureBinding } from "../../pa
 import {
   composeSurfaceTextureBindings,
   materialTextureBindingAt,
+  presentableBaseColorInto,
   presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
   surfaceTexturesUseIdentityCoordinates,
@@ -54,6 +55,35 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("keeps one neutral fallback for ordinary and virtual base-color representations", () => {
+    const output = new Float32Array(4);
+    const solid = standard({ baseColor: [0.2, 0.4, 0.8, 0.6] });
+    expect(presentableBaseColorInto(output, solid, false)).toBe(solid.baseColor);
+
+    const ordinary = standard({
+      baseColor: [0.5, 0.75, 1, 0.6],
+      baseColorAsset: { kind: "asset", src: "/albedo.png" },
+    });
+    expect(Array.from(presentableBaseColorInto(output, ordinary, false))).toEqual([
+      expect.closeTo(0.5 * 0.214_041, 6),
+      expect.closeTo(0.75 * 0.214_041, 6),
+      expect.closeTo(0.214_041, 6),
+      expect.closeTo(0.6, 6),
+    ]);
+    expect(presentableBaseColorInto(output, ordinary, true)).toBe(ordinary.baseColor);
+
+    const virtual = standard({
+      baseColor: [0.5, 0.75, 1, 0.6],
+      baseColorVirtualAsset: { kind: "virtual-asset", manifestUri: "/albedo.vt.json" },
+    });
+    expect(Array.from(presentableBaseColorInto(output, virtual, false))).toEqual([
+      expect.closeTo(0.5 * 0.214_041, 6),
+      expect.closeTo(0.75 * 0.214_041, 6),
+      expect.closeTo(0.214_041, 6),
+      expect.closeTo(0.6, 6),
+    ]);
+  });
+
   it("composes the fixed unit ABI without moving ordinary material slots", () => {
     const ordinary = Array.from({ length: 11 }, (_, index) => gpuBinding(`ordinary-${index}`));
     const atlas = gpuBinding("virtual-atlas");

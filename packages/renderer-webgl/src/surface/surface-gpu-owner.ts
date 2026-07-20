@@ -79,6 +79,7 @@ import {
   composeSurfaceTextureBindings,
   MATERIAL_TEXTURE_UNITS,
   materialTextureBindingAt,
+  presentableBaseColorInto,
   presentableOrdinaryTextureMask,
   surfaceTextureFeatureBits,
   surfaceTextureUnitMask,
@@ -139,7 +140,6 @@ type WebGlMultiDraw = Readonly<{
 }>;
 
 const SURFACE_UPLOADS_PER_FRAME = 16;
-const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const DEFAULT_ATTENUATION_COLOR = new Float32Array([1, 1, 1]);
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 
@@ -1095,21 +1095,11 @@ export class SurfaceGpuOwner {
     material: CanonicalSurfaceMaterial,
     resource: GpuSurface,
   ): Float32List {
-    if (material.baseColorVirtualAsset !== undefined && resource.virtualTexture === undefined) {
-      return NEUTRAL_PERCEPTUAL_GREY;
-    }
-    if (
-      material.baseColorTexture === undefined
-      || resource.drawPacket.textureBindings[0]!.texture !== null
-    ) {
-      return material.baseColor as unknown as Float32List;
-    }
-    const fallback = this.#fallbackBaseColor;
-    fallback[0] = material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY[0]!;
-    fallback[1] = material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY[1]!;
-    fallback[2] = material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY[2]!;
-    fallback[3] = material.baseColor[3];
-    return fallback;
+    return presentableBaseColorInto(
+      this.#fallbackBaseColor,
+      material,
+      resource.drawPacket.textureBindings[0]!.texture !== null,
+    );
   }
 
   #sortBackToFrontSurfaces(surfaces: GpuSurface[], view: Mat4): void {

@@ -153,8 +153,6 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
   );
 };
 
-const NEUTRAL_PERCEPTUAL_GREY: LinearRgba = [0.214_041, 0.214_041, 0.214_041, 1];
-
 export const canonicalTextureSampler = (
   asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "sampler">,
 ): CanonicalTextureSampler => ({
@@ -198,14 +196,6 @@ export const resolveCanonicalMaterialTexture = (
   const common = {
     ...material,
     ...(baseColorTexture === undefined ? {} : { baseColorTexture }),
-    ...(baseColorAsset !== undefined && baseColorDecoded === undefined ? {
-      baseColor: [
-        material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY[0],
-        material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY[1],
-        material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY[2],
-        material.baseColor[3],
-      ] as LinearRgba,
-    } : {}),
   };
   if (material.kind === "unlit") return common;
   const resolve = (asset: TextureSourceRef | undefined): CanonicalTextureBinding | undefined => {

@@ -14,6 +14,15 @@ import {
 } from "./support/static-glb";
 
 describe("static glTF preparation core", () => {
+  const requireExtensions = (
+    document: Record<string, unknown>,
+    ...extensions: string[]
+  ): void => {
+    const declarations = ["KHR_materials_unlit", ...extensions];
+    document.extensionsRequired = declarations;
+    document.extensionsUsed = declarations;
+  };
+
   it("loads a JSON glTF external buffer relative to the document", async () => {
     const fixture = staticTriangleGltf();
     const read = async (uri: string): Promise<Uint8Array> => {
@@ -102,8 +111,7 @@ describe("static glTF preparation core", () => {
 
   it("loads the Draco codec only for a document that declares compressed geometry", async () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_draco_mesh_compression"];
-    document.extensionsUsed = ["KHR_draco_mesh_compression"];
+    requireExtensions(document, "KHR_draco_mesh_compression");
     const meshes = document.meshes as Array<{
       primitives: Array<Record<string, unknown>>;
     }>;
@@ -126,8 +134,7 @@ describe("static glTF preparation core", () => {
   it("rejects the static profile before starting declared codec work", async () => {
     const document = staticTriangleDocument();
     document.asset = { version: "1.0" };
-    document.extensionsRequired = ["KHR_draco_mesh_compression"];
-    document.extensionsUsed = ["KHR_draco_mesh_compression"];
+    requireExtensions(document, "KHR_draco_mesh_compression");
     const meshes = document.meshes as Array<{
       primitives: Array<Record<string, unknown>>;
     }>;
@@ -192,15 +199,14 @@ describe("static glTF preparation core", () => {
   it("rejects unknown required extensions and out-of-range triangle indices", () => {
     const extensionDocument = staticTriangleDocument();
     extensionDocument.extensionsRequired = ["KHR_future_geometry"];
+    extensionDocument.extensionsUsed = ["KHR_materials_unlit", "KHR_future_geometry"];
     expect(() => prepareStaticGlb(staticTriangleGlb(extensionDocument), "future", "future.glb"))
       .toThrow("extensionsRequired[0]: is unsupported");
-    extensionDocument.extensionsRequired = ["KHR_mesh_quantization"];
-    extensionDocument.extensionsUsed = ["KHR_mesh_quantization"];
+    requireExtensions(extensionDocument, "KHR_mesh_quantization");
     expect(prepareStaticGlb(staticTriangleGlb(extensionDocument), "quantized").primitives)
       .toHaveLength(1);
     const uncompressedQuantized = staticTriangleDocument();
-    uncompressedQuantized.extensionsRequired = ["KHR_mesh_quantization"];
-    uncompressedQuantized.extensionsUsed = ["KHR_mesh_quantization"];
+    requireExtensions(uncompressedQuantized, "KHR_mesh_quantization");
     (uncompressedQuantized.accessors as unknown[]).push({
       bufferView: 0,
       componentType: 5122,
@@ -217,16 +223,35 @@ describe("static glTF preparation core", () => {
       "uncompressed-quantized",
     )).toThrow("accessors[2].normalized: is invalid for this accessor");
     const misplaced = staticTriangleDocument();
-    misplaced.extensionsRequired = ["KHR_materials_ior"];
-    misplaced.extensionsUsed = ["KHR_materials_ior"];
+    requireExtensions(misplaced, "KHR_materials_ior");
     const misplacedNodes = misplaced.nodes as Array<Record<string, unknown>>;
     misplacedNodes[1]!.extensions = { KHR_materials_ior: { ior: 1.4 } };
     expect(() => prepareStaticGlb(staticTriangleGlb(misplaced), "misplaced"))
       .toThrow("nodes[1].extensions.KHR_materials_ior: is outside Royal's supported placement profile");
     const duplicated = staticTriangleDocument();
     duplicated.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_unlit"];
+    duplicated.extensionsUsed = ["KHR_materials_unlit"];
     expect(() => prepareStaticGlb(staticTriangleGlb(duplicated), "duplicated"))
       .toThrow("extensionsRequired[1]: must not be duplicated");
+    const undeclared = staticTriangleDocument();
+    (undeclared.nodes as Array<Record<string, unknown>>)[1]!.extensions = {
+      KHR_optional_future: {},
+    };
+    expect(() => prepareStaticGlb(staticTriangleGlb(undeclared), "undeclared"))
+      .toThrow("nodes[1].extensions.KHR_optional_future: must be declared in extensionsUsed");
+    const requiredButUnused = staticTriangleDocument();
+    requiredButUnused.extensionsRequired = ["KHR_materials_unlit"];
+    requiredButUnused.extensionsUsed = [];
+    expect(() => prepareStaticGlb(staticTriangleGlb(requiredButUnused), "required-unused"))
+      .toThrow('extensionsRequired: "KHR_materials_unlit" must also appear in extensionsUsed');
+    const duplicateUsed = staticTriangleDocument();
+    duplicateUsed.extensionsUsed = [
+      "KHR_materials_unlit",
+      "KHR_optional_future",
+      "KHR_optional_future",
+    ];
+    expect(() => prepareStaticGlb(staticTriangleGlb(duplicateUsed), "duplicate-used"))
+      .toThrow("extensionsUsed[2]: must not be duplicated");
     expect(() => prepareStaticGlb(staticTriangleGlb(undefined, 3), "bad-index", "bad.glb"))
       .toThrow("vertex index is out of range");
   });
@@ -272,8 +297,7 @@ describe("static glTF preparation core", () => {
 
   it("lowers KHR_materials_ior without taxing default material shaders", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_materials_ior"];
-    document.extensionsUsed = ["KHR_materials_ior"];
+    requireExtensions(document, "KHR_materials_ior");
     document.materials = [{
       extensions: { KHR_materials_ior: { ior: 1.33 } },
       pbrMetallicRoughness: { metallicFactor: 0 },
@@ -282,13 +306,13 @@ describe("static glTF preparation core", () => {
       .toMatchObject({ indexOfRefraction: 1.33, kind: "standard" });
 
     const compatibility = staticTriangleDocument();
-    compatibility.extensionsRequired = ["KHR_materials_ior"];
+    requireExtensions(compatibility, "KHR_materials_ior");
     compatibility.materials = [{ extensions: { KHR_materials_ior: { ior: 0 } } }];
     expect(prepareStaticGlb(staticTriangleGlb(compatibility), "compat").primitives[0]!.material)
       .toMatchObject({ indexOfRefraction: 0 });
 
     const invalid = staticTriangleDocument();
-    invalid.extensionsRequired = ["KHR_materials_ior"];
+    requireExtensions(invalid, "KHR_materials_ior");
     invalid.materials = [{ extensions: { KHR_materials_ior: { ior: 0.9 } } }];
     expect(() => prepareStaticGlb(staticTriangleGlb(invalid), "invalid-ior"))
       .toThrow("KHR_materials_ior.ior: must be zero or at least one");
@@ -296,8 +320,7 @@ describe("static glTF preparation core", () => {
 
   it("lowers and validates KHR_materials_emissive_strength in the cold material reader", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_materials_emissive_strength"];
-    document.extensionsUsed = ["KHR_materials_emissive_strength"];
+    requireExtensions(document, "KHR_materials_emissive_strength");
     document.materials = [{
       emissiveFactor: [0.25, 0.5, 1],
       extensions: { KHR_materials_emissive_strength: { emissiveStrength: 4 } },
@@ -306,7 +329,7 @@ describe("static glTF preparation core", () => {
       .primitives[0]!.material).toMatchObject({ emissiveFactor: [1, 2, 4] });
 
     const invalid = staticTriangleDocument();
-    invalid.extensionsRequired = ["KHR_materials_emissive_strength"];
+    requireExtensions(invalid, "KHR_materials_emissive_strength");
     invalid.materials = [{
       extensions: { KHR_materials_emissive_strength: { emissiveStrength: -1 } },
     }];
@@ -392,11 +415,7 @@ describe("static glTF preparation core", () => {
 
   it("lowers material MSFT_lod levels, including levels selected through variants", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = [
-      "KHR_materials_unlit",
-      "KHR_materials_variants",
-      "MSFT_lod",
-    ];
+    requireExtensions(document, "KHR_materials_variants", "MSFT_lod");
     document.extensions = {
       KHR_materials_variants: { variants: [{ name: "Ruby" }] },
     };
@@ -422,7 +441,7 @@ describe("static glTF preparation core", () => {
 
   it("rejects child and MSFT_lod cycles before publishing partial geometry", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    requireExtensions(document, "MSFT_lod");
     const nodes = document.nodes as Array<Record<string, unknown>>;
     nodes[1]!.extensions = { MSFT_lod: { ids: [0] } };
     expect(() => prepareStaticGlb(staticTriangleGlb(document), "lod-cycle"))
@@ -741,7 +760,7 @@ describe("static glTF preparation core", () => {
 
   it("rejects invalid KHR_materials_specular factors and unlit combinations", () => {
     const negativeColor = staticTriangleDocument();
-    negativeColor.extensionsRequired = ["KHR_materials_specular"];
+    requireExtensions(negativeColor, "KHR_materials_specular");
     negativeColor.materials = [{
       extensions: { KHR_materials_specular: { specularColorFactor: [1, -1, 1] } },
     }];
@@ -749,7 +768,7 @@ describe("static glTF preparation core", () => {
       .toThrow("specularColorFactor[1]: must not be negative");
 
     const invalidCombination = staticTriangleDocument();
-    invalidCombination.extensionsRequired = ["KHR_materials_unlit", "KHR_materials_specular"];
+    requireExtensions(invalidCombination, "KHR_materials_specular");
     invalidCombination.materials = [{
       extensions: { KHR_materials_specular: {}, KHR_materials_unlit: {} },
     }];
@@ -760,12 +779,13 @@ describe("static glTF preparation core", () => {
   it("lowers transmission and volume semantics through ordinary texture recipes", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "volume.glb");
     const document = parsed.document as Record<string, unknown>;
-    document.extensionsRequired = [
+    requireExtensions(
+      document,
       "KHR_materials_ior",
       "KHR_materials_transmission",
       "KHR_materials_volume",
       "KHR_texture_transform",
-    ];
+    );
     document.images = [{ uri: "transmission.png" }, { uri: "thickness.png" }];
     document.textures = [{ source: 0 }, { source: 1 }];
     document.materials = [{
@@ -816,7 +836,7 @@ describe("static glTF preparation core", () => {
 
   it("keeps semantically inactive transmission and thickness images out of loading", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    requireExtensions(document, "KHR_materials_transmission", "KHR_materials_volume");
     document.images = [{ uri: "unused-transmission.png" }, { uri: "unused-thickness.png" }];
     document.textures = [{ source: 0 }, { source: 1 }];
     document.materials = [{
@@ -842,13 +862,13 @@ describe("static glTF preparation core", () => {
 
   it("rejects malformed volume values and unlit transmission combinations", () => {
     const standaloneVolume = staticTriangleDocument();
-    standaloneVolume.extensionsRequired = ["KHR_materials_volume"];
+    requireExtensions(standaloneVolume, "KHR_materials_volume");
     standaloneVolume.materials = [{ extensions: { KHR_materials_volume: {} } }];
     expect(() => prepareStaticGlb(staticTriangleGlb(standaloneVolume), "standalone-volume"))
       .toThrow("KHR_materials_volume: requires KHR_materials_transmission");
 
     const invalidDistance = staticTriangleDocument();
-    invalidDistance.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    requireExtensions(invalidDistance, "KHR_materials_transmission", "KHR_materials_volume");
     invalidDistance.materials = [{
       extensions: {
         KHR_materials_transmission: {},
@@ -859,7 +879,7 @@ describe("static glTF preparation core", () => {
       .toThrow("KHR_materials_volume.attenuationDistance: must be greater than zero");
 
     const invalidThickness = staticTriangleDocument();
-    invalidThickness.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_volume"];
+    requireExtensions(invalidThickness, "KHR_materials_transmission", "KHR_materials_volume");
     invalidThickness.materials = [{
       extensions: {
         KHR_materials_transmission: {},
@@ -870,7 +890,7 @@ describe("static glTF preparation core", () => {
       .toThrow("KHR_materials_volume.thicknessFactor: must not be negative");
 
     const unlitTransmission = staticTriangleDocument();
-    unlitTransmission.extensionsRequired = ["KHR_materials_transmission", "KHR_materials_unlit"];
+    requireExtensions(unlitTransmission, "KHR_materials_transmission");
     unlitTransmission.materials = [{
       extensions: { KHR_materials_transmission: {}, KHR_materials_unlit: {} },
     }];

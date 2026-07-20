@@ -207,8 +207,14 @@ const preflightStaticDocument = (
   const requiredExtensions = optionalArray(
     document.extensionsRequired, label, "extensionsRequired",
   );
-  validateRequiredExtensionProfile(document, requiredExtensions, label, dracoAvailable);
   const usedExtensions = optionalArray(document.extensionsUsed, label, "extensionsUsed");
+  validateRequiredExtensionProfile(
+    document,
+    requiredExtensions,
+    usedExtensions,
+    label,
+    dracoAvailable,
+  );
 
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");

@@ -31,6 +31,27 @@ import {
 
 export const MATERIAL_TEXTURE_UNITS = 9;
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
+const NEUTRAL_PERCEPTUAL_GREY_LINEAR = 0.214_041;
+
+/**
+ * Resolves one base-color presentation without changing canonical authored
+ * material factors. Missing ordinary and virtual representations share the
+ * same 50%-sRGB neutral fallback and caller-owned output storage.
+ */
+export const presentableBaseColorInto = (
+  output: Float32Array,
+  material: CanonicalSurfaceMaterial,
+  textureResident: boolean,
+): Float32List => {
+  const textured = material.baseColorAsset !== undefined
+    || material.baseColorVirtualAsset !== undefined;
+  if (!textured || textureResident) return material.baseColor as unknown as Float32List;
+  output[0] = material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY_LINEAR;
+  output[1] = material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY_LINEAR;
+  output[2] = material.baseColor[2] * NEUTRAL_PERCEPTUAL_GREY_LINEAR;
+  output[3] = material.baseColor[3];
+  return output;
+};
 
 /** Pure representation choice: one base-color sampler contract owns texture unit zero. */
 export const baseColorTextureFeatureBits = (

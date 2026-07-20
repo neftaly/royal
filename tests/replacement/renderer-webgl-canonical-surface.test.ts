@@ -188,7 +188,7 @@ describe("canonical direct surface lowering", () => {
       new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
     );
     expect(pending.surfaces[0]!.material).toMatchObject({
-      baseColor: [0.214_041, 0.214_041, 0.214_041, 1],
+      baseColor: [1, 1, 1, 1],
       requiresTextureCoordinates: true,
     });
 
@@ -400,6 +400,7 @@ describe("canonical direct surface lowering", () => {
   it("shares one world-space LOD selection bound across authored levels", () => {
     const document = staticTriangleDocument();
     document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    document.extensionsUsed = ["KHR_materials_unlit", "MSFT_lod"];
     const nodes = document.nodes as Array<Record<string, unknown>>;
     nodes[1]!.extensions = { MSFT_lod: { ids: [2] } };
     nodes[1]!.extras = { MSFT_screencoverage: [0.5, 0] };
@@ -430,6 +431,7 @@ describe("canonical direct surface lowering", () => {
   it("lowers selected material LOD levels onto the same geometry and selector ABI", () => {
     const document = staticTriangleDocument();
     document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    document.extensionsUsed = ["KHR_materials_unlit", "MSFT_lod"];
     const materials = document.materials as Array<Record<string, unknown>>;
     materials[0]!.extensions = { KHR_materials_unlit: {}, MSFT_lod: { ids: [1] } };
     materials[0]!.extras = { MSFT_screencoverage: [0.5, 0] };
