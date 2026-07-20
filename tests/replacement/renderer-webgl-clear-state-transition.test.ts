@@ -11,7 +11,6 @@ import {
 const frame = (overrides: Partial<ClearFrameIntent> = {}): ClearFrameIntent => ({
   clearColor: [0.1, 0.2, 0.3, 1],
   clearDepth: 1,
-  clearStencil: 0,
   framebuffer: null,
   scissor: null,
   size: { height: 360, width: 640 },
@@ -44,12 +43,11 @@ describe("clear WebGL state transition", () => {
     expect(output).toEqual({
       clearColor: true,
       clearDepth: true,
-      clearStencil: true,
+      colorMask: true,
       framebuffer: true,
       scissorMode: true,
       scissorRectangle: false,
       viewport: true,
-      writeMasks: true,
     });
   });
 
@@ -62,12 +60,11 @@ describe("clear WebGL state transition", () => {
     expect(output).toEqual({
       clearColor: false,
       clearDepth: false,
-      clearStencil: false,
+      colorMask: false,
       framebuffer: false,
       scissorMode: false,
       scissorRectangle: false,
       viewport: false,
-      writeMasks: false,
     });
   });
 

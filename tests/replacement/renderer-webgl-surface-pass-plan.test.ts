@@ -35,7 +35,7 @@ describe("fixed surface pass planning", () => {
     expect(surfaceDrawPassNeedsDepthOrder("remaining")).toBe(true);
   });
 
-  it("accounts for target color, depth-stencil, and the complete source mip chain", () => {
+  it("accounts for target color, depth, and the complete source mip chain", () => {
     expect(compositeTargetByteLength(2, 2, 4)).toBe(52);
     expect(compositeTargetByteLength(2, 2, 4, { mipmappedSceneColor: false })).toBe(48);
     expect(compositeTargetByteLength(2, 2, 4, { sceneColor: false })).toBe(32);

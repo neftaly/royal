@@ -147,10 +147,11 @@ compares the next intent with its last applied state and performs only required
 transitions.
 
 The state owner covers program, vertex array, framebuffer, viewport/scissor,
-depth/stencil/cull/blend/color masks, active textures/samplers, and other mutable
-bindings used by Royal. Feature subsystems MUST NOT keep competing shadows of
-the same GL state. The owner MUST NOT call `getParameter` or otherwise query
-state during ordinary submission.
+depth/cull/blend/color masks, active textures/samplers, and other mutable
+bindings used by Royal. Royal does not request, allocate, clear, or depend on a
+stencil buffer. Feature subsystems MUST NOT keep competing shadows of the same
+GL state. The owner MUST NOT call `getParameter` or otherwise query state during
+ordinary submission.
 
 The shadow is a call-suppression cache, not semantic state. It resets to unknown
 on context generation changes and after external/XR GL use. When unknown, the

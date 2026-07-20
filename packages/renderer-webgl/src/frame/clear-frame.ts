@@ -15,7 +15,6 @@ export type LinearRgba = readonly [red: number, green: number, blue: number, alp
 export type ClearFrameIntent = Readonly<{
   clearColor: LinearRgba;
   clearDepth: number;
-  clearStencil: number;
   framebuffer: WebGLFramebuffer | null;
   scissor: FrameViewport | null;
   size: FramebufferSize;
@@ -25,7 +24,6 @@ export type ClearFrameIntent = Readonly<{
 export type MutableClearFrameIntent = {
   clearColor: LinearRgba;
   clearDepth: number;
-  clearStencil: number;
   framebuffer: WebGLFramebuffer | null;
   scissor: FrameViewport | null;
   size: { height: number; width: number };
@@ -82,10 +80,6 @@ export const validateClearFrameIntent = (intent: ClearFrameIntent): void => {
   if (intent.scissor !== null) requireViewport(intent.scissor, intent.size, "scissor");
   validateLinearRgba(intent.clearColor);
   requireFiniteUnit(intent.clearDepth, "clearDepth");
-  requireInteger(intent.clearStencil, "clearStencil");
-  if (intent.clearStencil < -0x8000_0000 || intent.clearStencil > 0x7fff_ffff) {
-    throw new RangeError("Royal clear frame clearStencil must fit a signed 32-bit integer");
-  }
 };
 
 export const validateLinearRgba = (color: readonly number[]): void => {

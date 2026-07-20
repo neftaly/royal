@@ -30,7 +30,6 @@ export class WebGlStateOwner {
     depthWrite: null,
     frontFace: null,
     program: null,
-    rasterDefaultsKnown: false,
     textureBindings: [],
     vertexArray: null,
   };
@@ -81,13 +80,9 @@ export class WebGlStateOwner {
       }
       if (transition.clearColor) gl.clearColor(...intent.clearColor);
       if (transition.clearDepth) gl.clearDepth(intent.clearDepth);
-      if (transition.clearStencil) gl.clearStencil(intent.clearStencil);
-      if (transition.writeMasks) {
-        gl.colorMask(true, true, true, true);
-        gl.stencilMask(0xff_ff_ff_ff);
-      }
-      if (transition.writeMasks || this.#state.depthWrite !== true) gl.depthMask(true);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+      if (transition.colorMask) gl.colorMask(true, true, true, true);
+      if (transition.colorMask || this.#state.depthWrite !== true) gl.depthMask(true);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       commitAppliedClearState(this.#state, intent);
       this.#state.depthWrite = true;
     } catch (error) {
@@ -105,10 +100,7 @@ export class WebGlStateOwner {
       if (transition.viewport) {
         gl.viewport(frame.viewport.x, frame.viewport.y, frame.viewport.width, frame.viewport.height);
       }
-      if (transition.rasterDefaults) {
-        gl.disable(gl.SCISSOR_TEST);
-        gl.disable(gl.STENCIL_TEST);
-      }
+      if (transition.scissorReset) gl.disable(gl.SCISSOR_TEST);
       if (transition.blendMode) {
         if (packet.alphaBlend) gl.enable(gl.BLEND);
         else gl.disable(gl.BLEND);
@@ -132,10 +124,7 @@ export class WebGlStateOwner {
       }
       if (transition.cullFace) gl.cullFace(gl.BACK);
       if (transition.frontFace) gl.frontFace(packet.frontFace);
-      if (transition.writeMasks) {
-        gl.colorMask(true, true, true, true);
-        gl.stencilMask(0xff_ff_ff_ff);
-      }
+      if (transition.colorMask) gl.colorMask(true, true, true, true);
       if (transition.depthWrite) gl.depthMask(packet.depthWrite);
       if (transition.program) gl.useProgram(packet.program);
       let changedTextureUnits = transition.textureUnits;

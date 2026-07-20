@@ -54,7 +54,12 @@ describe("clear-only canvas root", () => {
   it("defaults persistent context costs off and preserves explicit opt-ins", () => {
     const defaults = new FakeCanvas();
     const defaultRoot = new CanvasRoot(defaults as unknown as HTMLCanvasElement);
-    expect(defaults.contextAttributes).toMatchObject({ alpha: false, antialias: false });
+    expect(defaults.contextAttributes).toMatchObject({
+      alpha: false,
+      antialias: false,
+      depth: true,
+      stencil: false,
+    });
     defaultRoot.dispose();
 
     const optedIn = new FakeCanvas();
@@ -97,6 +102,9 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.viewport).toHaveBeenCalledTimes(1);
     expect(canvas.gl.clearColor).toHaveBeenCalledTimes(1);
     expect(canvas.gl.clear).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.clear).toHaveBeenLastCalledWith(
+      canvas.gl.COLOR_BUFFER_BIT | canvas.gl.DEPTH_BUFFER_BIT,
+    );
   });
 
   it("publishes metadata-only size changes without invalidating backing state", () => {

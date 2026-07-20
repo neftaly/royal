@@ -22,7 +22,6 @@ const state = (): AppliedSurfaceDrawState => ({
   depthWrite: null,
   frontFace: null,
   program: null,
-  rasterDefaultsKnown: false,
   textureBindings: [],
   vertexArray: null,
 });
@@ -54,6 +53,7 @@ describe("surface draw state transition core", () => {
     expect(transition).toEqual({
       blendFunction: false,
       blendMode: true,
+      colorMask: true,
       cullFace: true,
       cullMode: true,
       depthFunction: true,
@@ -62,11 +62,10 @@ describe("surface draw state transition core", () => {
       framebuffer: true,
       frontFace: true,
       program: true,
-      rasterDefaults: true,
+      scissorReset: true,
       textureUnits: 1,
       vertexArray: true,
       viewport: true,
-      writeMasks: true,
     });
     commitAppliedSurfaceDrawState(previous, frame, packet);
     planSurfaceDrawStateTransition(previous, frame, packet, transition);
@@ -83,6 +82,7 @@ describe("surface draw state transition core", () => {
     expect(transition).toEqual({
       blendFunction: false,
       blendMode: false,
+      colorMask: false,
       cullFace: false,
       cullMode: false,
       depthFunction: false,
@@ -91,11 +91,10 @@ describe("surface draw state transition core", () => {
       framebuffer: false,
       frontFace: false,
       program: false,
-      rasterDefaults: false,
+      scissorReset: false,
       textureUnits: 0,
       vertexArray: true,
       viewport: false,
-      writeMasks: false,
     });
   });
 

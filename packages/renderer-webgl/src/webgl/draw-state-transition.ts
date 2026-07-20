@@ -31,6 +31,7 @@ export type MutableSurfaceDrawFrame = {
 export type SurfaceDrawStateTransition = {
   blendFunction: boolean;
   blendMode: boolean;
+  colorMask: boolean;
   cullFace: boolean;
   cullMode: boolean;
   depthFunction: boolean;
@@ -39,11 +40,10 @@ export type SurfaceDrawStateTransition = {
   framebuffer: boolean;
   frontFace: boolean;
   program: boolean;
-  rasterDefaults: boolean;
+  scissorReset: boolean;
   textureUnits: number;
   vertexArray: boolean;
   viewport: boolean;
-  writeMasks: boolean;
 };
 
 export type AppliedSurfaceDrawState = AppliedClearState & {
@@ -56,7 +56,6 @@ export type AppliedSurfaceDrawState = AppliedClearState & {
   depthWrite: boolean | null;
   frontFace: number | null;
   program: WebGLProgram | null;
-  rasterDefaultsKnown: boolean;
   textureBindings: (TextureUnitBinding | undefined)[];
   vertexArray: WebGLVertexArrayObject | null;
 };
@@ -64,6 +63,7 @@ export type AppliedSurfaceDrawState = AppliedClearState & {
 export const createSurfaceDrawStateTransition = (): SurfaceDrawStateTransition => ({
   blendFunction: false,
   blendMode: false,
+  colorMask: false,
   cullFace: false,
   cullMode: false,
   depthFunction: false,
@@ -72,11 +72,10 @@ export const createSurfaceDrawStateTransition = (): SurfaceDrawStateTransition =
   framebuffer: false,
   frontFace: false,
   program: false,
-  rasterDefaults: false,
+  scissorReset: false,
   textureUnits: 0,
   vertexArray: false,
   viewport: false,
-  writeMasks: false,
 });
 
 /** Plans one complete surface draw-state diff into caller-owned storage. */
@@ -93,9 +92,7 @@ export const planSurfaceDrawStateTransition = (
     || previous.viewportY !== frame.viewport.y
     || previous.viewportWidth !== frame.viewport.width
     || previous.viewportHeight !== frame.viewport.height;
-  output.rasterDefaults = unknown
-    || !previous.rasterDefaultsKnown
-    || previous.scissorEnabled;
+  output.scissorReset = unknown || previous.scissorEnabled;
   output.blendMode = unknown || previous.alphaBlend !== packet.alphaBlend;
   output.blendFunction = packet.alphaBlend
     && (unknown || !previous.blendFunctionKnown);
@@ -107,7 +104,7 @@ export const planSurfaceDrawStateTransition = (
   output.depthFunction = packet.depthTest
     && (unknown || !previous.depthFunctionKnown);
   output.frontFace = unknown || previous.frontFace !== packet.frontFace;
-  output.writeMasks = unknown || !previous.writeMasksKnown;
+  output.colorMask = unknown || !previous.colorMaskKnown;
   output.depthWrite = unknown || previous.depthWrite !== packet.depthWrite;
   output.program = unknown || previous.program !== packet.program;
   output.textureUnits = 0;
@@ -138,7 +135,6 @@ export const commitAppliedSurfaceDrawState = (
   state.frontFace = packet.frontFace;
   state.known = true;
   state.program = packet.program;
-  state.rasterDefaultsKnown = true;
   let remainingUnits = packet.textureUnits;
   for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
     if ((remainingUnits & 1) === 0) continue;
@@ -150,5 +146,5 @@ export const commitAppliedSurfaceDrawState = (
   state.viewportWidth = frame.viewport.width;
   state.viewportX = frame.viewport.x;
   state.viewportY = frame.viewport.y;
-  state.writeMasksKnown = true;
+  state.colorMaskKnown = true;
 };

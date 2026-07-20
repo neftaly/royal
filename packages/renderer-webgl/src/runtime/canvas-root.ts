@@ -273,7 +273,7 @@ const createContext = (
     alpha: options.alpha ?? false,
     antialias: options.antialias ?? false,
     depth: true,
-    stencil: true,
+    stencil: false,
   });
   if (gl === null) throw new Error("Royal renderer could not create a WebGL2 context");
   return gl;
@@ -340,7 +340,6 @@ export class CanvasRoot {
   readonly #externalClearIntent: MutableClearFrameIntent = {
     clearColor: this.#clearColor,
     clearDepth: 1,
-    clearStencil: 0,
     framebuffer: null,
     scissor: null,
     size: { height: 1, width: 1 },
@@ -730,7 +729,6 @@ export class CanvasRoot {
     return {
       clearColor: color,
       clearDepth: 1,
-      clearStencil: 0,
       framebuffer: null,
       scissor: null,
       size: { height: size.backingHeight, width: size.backingWidth },

@@ -116,7 +116,7 @@ out vec2 surfaceThicknessTextureCoordinate;
 type CompositeResources = Readonly<{
   color: WebGLTexture;
   colorBytesPerPixel: 4 | 8;
-  depthStencil: WebGLRenderbuffer;
+  depth: WebGLRenderbuffer;
   framebuffer: WebGLFramebuffer;
   height: number;
   sceneColor: WebGLTexture | null;
@@ -209,7 +209,6 @@ export class SurfaceCompositeOwner {
   readonly #clearIntent: MutableClearFrameIntent = {
     clearColor: [0, 0, 0, 0],
     clearDepth: 1,
-    clearStencil: 0,
     framebuffer: null,
     scissor: null,
     size: { height: 1, width: 1 },
@@ -478,16 +477,16 @@ export class SurfaceCompositeOwner {
     if (!this.#budget.tryClaim(this.#claim, bytes)) return false;
     const color = gl.createTexture();
     const sceneColor = this.#sceneColorRequired ? gl.createTexture() : null;
-    const depthStencil = gl.createRenderbuffer();
+    const depth = gl.createRenderbuffer();
     const framebuffer = gl.createFramebuffer();
     if (
       color === null
       || (this.#sceneColorRequired && sceneColor === null)
-      || depthStencil === null
+      || depth === null
       || framebuffer === null
     ) {
       if (framebuffer !== null) gl.deleteFramebuffer(framebuffer);
-      if (depthStencil !== null) gl.deleteRenderbuffer(depthStencil);
+      if (depth !== null) gl.deleteRenderbuffer(depth);
       if (sceneColor !== null) gl.deleteTexture(sceneColor);
       if (color !== null) gl.deleteTexture(color);
       this.#budget.release(this.#claim);
@@ -501,19 +500,19 @@ export class SurfaceCompositeOwner {
       gl.bindTexture(gl.TEXTURE_2D, sceneColor);
       gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
     }
-    gl.bindRenderbuffer(gl.RENDERBUFFER, depthStencil);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, width, height);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0);
     gl.framebufferRenderbuffer(
       gl.FRAMEBUFFER,
-      gl.DEPTH_STENCIL_ATTACHMENT,
+      gl.DEPTH_ATTACHMENT,
       gl.RENDERBUFFER,
-      depthStencil,
+      depth,
     );
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
       gl.deleteFramebuffer(framebuffer);
-      gl.deleteRenderbuffer(depthStencil);
+      gl.deleteRenderbuffer(depth);
       gl.deleteTexture(sceneColor);
       gl.deleteTexture(color);
       this.#budget.release(this.#claim);
@@ -522,7 +521,7 @@ export class SurfaceCompositeOwner {
     this.#resources = {
       color,
       colorBytesPerPixel,
-      depthStencil,
+      depth,
       framebuffer,
       height,
       sceneColor,
@@ -545,7 +544,7 @@ export class SurfaceCompositeOwner {
     if (resources === null) return;
     const gl = this.#gl;
     gl.deleteFramebuffer(resources.framebuffer);
-    gl.deleteRenderbuffer(resources.depthStencil);
+    gl.deleteRenderbuffer(resources.depth);
     if (resources.sceneColor !== null) gl.deleteTexture(resources.sceneColor);
     gl.deleteTexture(resources.color);
     this.#resources = null;
