@@ -7,8 +7,10 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Only fields that participate in glTF loading/status identity. */
+export type GltfAssetStatusIdentity = Readonly<Pick<GltfAssetRef, "src" | "version">>;
 /** Source string or exact source/version identity observed by `useGltfAssetStatus`. */
-export type GltfAssetStatusInput = string | GltfAssetRef;
+export type GltfAssetStatusInput = string | GltfAssetStatusIdentity;
 /** Focused lifecycle for one glTF asset; drawable states include bounds and texture progress. */
 export type GltfAssetStatus = GltfAssetSnapshot;
 

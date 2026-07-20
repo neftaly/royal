@@ -179,6 +179,13 @@ polling. Product decisions use focused status:
   `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
+Status-hook object inputs expose only fields that participate in their retained
+identity. glTF and prefiltered-environment status use `src`/`version`; ordinary
+decoded-texture status uses `src`/`contentKey`/`version`. Passing a complete
+scene descriptor remains structurally valid, but ignored presentation fields
+such as bounds, sampler, color space, intensity, and rotation are not falsely
+advertised as status identity.
+
 `error` exists only in the corresponding failure state. Readiness definitions
 match the asset and texture specifications. Root-wide diagnostics are cold,
 bounded operational observation and MUST NOT be the only way to drive normal

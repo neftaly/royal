@@ -16,7 +16,10 @@ import {
   createRendererRoot,
   useCanvasPick,
   useCanvasSize,
+  type GltfAssetStatusIdentity,
   useGltfAssetStatus,
+  type PrefilteredEnvironmentStatusIdentity,
+  type TextureAssetStatusIdentity,
   useTextureAssetStatus,
   type VirtualTextureAssetStatus,
   useVirtualTextureAssetStatus,
@@ -82,6 +85,12 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
     expectTypeOf(useRendererSnapshot).toBeFunction();
+    expectTypeOf({ src: "/model.glb", version: 2 })
+      .toMatchTypeOf<GltfAssetStatusIdentity>();
+    expectTypeOf({ kind: "asset" as const, src: "/texture.png", version: "v2" })
+      .toMatchTypeOf<TextureAssetStatusIdentity>();
+    expectTypeOf({ src: "/studio.ktx", version: "v2" })
+      .toMatchTypeOf<PrefilteredEnvironmentStatusIdentity>();
   });
 
   it("server-renders broad renderer diagnostics as unavailable before mount", () => {

@@ -7,8 +7,13 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Only descriptor fields that participate in decoded ordinary-texture identity. */
+export type TextureAssetStatusIdentity = Readonly<Pick<
+  TextureAssetRef,
+  "contentKey" | "kind" | "src" | "version"
+>>;
 /** Source string or exact decoded-content/version identity observed by `useTextureAssetStatus`. */
-export type TextureAssetStatusInput = string | TextureAssetRef;
+export type TextureAssetStatusInput = string | TextureAssetStatusIdentity;
 /** Focused decode lifecycle for one ordinary texture asset. */
 export type TextureAssetStatus = TextureAssetSnapshot;
 

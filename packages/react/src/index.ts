@@ -22,16 +22,19 @@ export type { RendererObservationOptions } from "./observation/select-root";
 export { useGltfAssetStatus } from "./observation/gltf-asset";
 export type {
   GltfAssetStatus,
+  GltfAssetStatusIdentity,
   GltfAssetStatusInput,
 } from "./observation/gltf-asset";
 export { useTextureAssetStatus } from "./observation/texture-asset";
 export type {
   TextureAssetStatus,
+  TextureAssetStatusIdentity,
   TextureAssetStatusInput,
 } from "./observation/texture-asset";
 export { usePrefilteredEnvironmentStatus } from "./observation/prefiltered-environment";
 export type {
   PrefilteredEnvironmentStatus,
+  PrefilteredEnvironmentStatusIdentity,
   PrefilteredEnvironmentStatusInput,
 } from "./observation/prefiltered-environment";
 export { useVirtualTextureAssetStatus } from "./observation/virtual-texture-asset";

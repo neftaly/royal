@@ -12,8 +12,13 @@ import {
 
 /** Focused transport/preparation lifecycle for one offline environment artifact. */
 export type PrefilteredEnvironmentStatus = PrefilteredEnvironmentAssetSnapshot;
+/** Only fields that participate in offline-environment loading/status identity. */
+export type PrefilteredEnvironmentStatusIdentity = Readonly<Pick<
+  PrefilteredEnvironmentLight,
+  "src" | "version"
+>>;
 /** Source string or exact environment descriptor observed by `usePrefilteredEnvironmentStatus`. */
-export type PrefilteredEnvironmentStatusInput = string | PrefilteredEnvironmentLight;
+export type PrefilteredEnvironmentStatusInput = string | PrefilteredEnvironmentStatusIdentity;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
