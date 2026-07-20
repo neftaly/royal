@@ -119,8 +119,9 @@ type GpuSurface = {
   readonly instanceCount: number;
   readonly mode: number;
   program: StandardProgram | UnlitProgram;
-  readonly sceneIndex: number;
   surface: CanonicalDrawSurface;
+  /** Dense transmission visibility slot, or -1 for another pass. */
+  readonly slot: number;
   readonly vertexArray: WebGLVertexArrayObject;
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
@@ -516,7 +517,7 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     let transmissionRequested = false;
     let roughSceneColorRequired = false;
-    const visibilityStride = scene?.surfaces.length ?? 0;
+    const visibilityStride = this.#transmissionCandidateIndices.length;
     const visibilityLength = visibilityStride * views.length;
     if (this.#transmissionVisibility.length < visibilityLength) {
       this.#transmissionVisibility = new Uint8Array(visibilityLength);
@@ -526,16 +527,14 @@ export class SurfaceGpuOwner {
         const view = views[viewIndex]!;
         frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
         const visibilityOffset = viewIndex * visibilityStride;
-        for (const sceneIndex of this.#transmissionCandidateIndices) {
+        for (let slot = 0; slot < visibilityStride; slot += 1) {
+          const sceneIndex = this.#transmissionCandidateIndices[slot]!;
           const surface = scene.surfaces[sceneIndex]!;
           const visible = worldBoundsVisible(surface.worldBounds, this.#frustumPlanes);
-          this.#transmissionVisibility[visibilityOffset + sceneIndex] = visible ? 1 : 0;
+          this.#transmissionVisibility[visibilityOffset + slot] = visible ? 1 : 0;
           if (!visible) continue;
-          const material = surface.material;
-          if (material.kind === "standard") {
-            transmissionRequested = true;
-            roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(material);
-          }
+          transmissionRequested = true;
+          roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(surface.material);
         }
       }
     }
@@ -626,7 +625,12 @@ export class SurfaceGpuOwner {
         + this.#transmissionSurfaces.length
         + this.#blendedSurfaces.length === 0
     ) return presentationWorkPending;
-    this.#selectLods(views, scene);
+    selectDrawableLodsInto(
+      scene.lodGroups,
+      views,
+      this.#gpuSurfacesBySceneIndex,
+      this.#lodSelection,
+    );
     if (!this.#compositeActive) {
       for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
         const view = views[viewIndex]!;
@@ -777,8 +781,8 @@ export class SurfaceGpuOwner {
     let transformProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     if (surfaceDrawPassNeedsDepthOrder(pass)) {
-      this.#sortBackToFrontSurfaces(this.#transmissionSurfaces, view);
-      this.#sortBackToFrontSurfaces(this.#blendedSurfaces, view);
+      sortSurfacesBackToFront(this.#transmissionSurfaces, view);
+      sortSurfacesBackToFront(this.#blendedSurfaces, view);
     }
     const opaqueCount = this.#opaqueSurfaces.length;
     const transmissionCount = this.#transmissionSurfaces.length;
@@ -796,7 +800,9 @@ export class SurfaceGpuOwner {
       if (!lodMembershipsSelected(surface.lods, this.#lodSelection.selections)) continue;
       if (index >= opaqueCount && index < transmissionEnd) {
         if (
-          this.#transmissionVisibility[viewIndex * visibilityStride + resource.sceneIndex] !== 1
+          this.#transmissionVisibility[
+            viewIndex * visibilityStride + resource.slot
+          ] !== 1
         ) continue;
       } else if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
@@ -834,7 +840,11 @@ export class SurfaceGpuOwner {
         if (materialChanged) {
           gl.uniform4fv(
             program.color,
-            this.#resolvedBaseColor(surface.material, resource),
+            presentableBaseColorInto(
+              this.#fallbackBaseColor,
+              surface.material,
+              resource.drawPacket.textureBindings[0]!.texture !== null,
+            ),
           );
           baseColorCoordinates = applyTextureCoordinates(
             gl,
@@ -921,7 +931,11 @@ export class SurfaceGpuOwner {
         if (materialChanged) {
           gl.uniform4fv(
             program.baseColor,
-            this.#resolvedBaseColor(material, resource),
+            presentableBaseColorInto(
+              this.#fallbackBaseColor,
+              material,
+              resource.drawPacket.textureBindings[0]!.texture !== null,
+            ),
           );
           baseColorCoordinates = applyTextureCoordinates(
             gl,
@@ -1086,30 +1100,6 @@ export class SurfaceGpuOwner {
     }
   }
 
-  #resolvedBaseColor(
-    material: CanonicalSurfaceMaterial,
-    resource: GpuSurface,
-  ): Float32List {
-    return presentableBaseColorInto(
-      this.#fallbackBaseColor,
-      material,
-      resource.drawPacket.textureBindings[0]!.texture !== null,
-    );
-  }
-
-  #sortBackToFrontSurfaces(surfaces: GpuSurface[], view: Mat4): void {
-    sortSurfacesBackToFront(surfaces, view);
-  }
-
-  #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
-    selectDrawableLodsInto(
-      scene.lodGroups,
-      views,
-      this.#gpuSurfacesBySceneIndex,
-      this.#lodSelection,
-    );
-  }
-
   #retainOrdinaryTextureBindings(
     material: CanonicalSurfaceMaterial,
   ): readonly GpuTextureBinding[] {
@@ -1177,8 +1167,10 @@ export class SurfaceGpuOwner {
       instanceCount: geometrySurface.instanceCount,
       mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
       program,
-      sceneIndex,
       surface: geometrySurface.surface,
+      slot: canonicalMaterialHasTransmission(material)
+        ? this.#transmissionCandidateSlot(sceneIndex)
+        : -1,
       vertexArray: geometrySurface.vertexArray,
       ...(virtualTexture === undefined ? {} : { virtualTexture }),
     };
@@ -1434,6 +1426,18 @@ export class SurfaceGpuOwner {
     this.#opaqueMultiDrawRunEnds = this.#multiDraw === null
       ? EMPTY_RUN_ENDS
       : planContiguousRunEnds(this.#opaqueSurfaces, surfacesShareMultiDrawState);
+  }
+
+  /** Candidate indices retain scene order, so cold preparation needs no lookup table. */
+  #transmissionCandidateSlot(sceneIndex: number): number {
+    let start = 0;
+    let end = this.#transmissionCandidateIndices.length;
+    while (start < end) {
+      const middle = (start + end) >>> 1;
+      if (this.#transmissionCandidateIndices[middle]! < sceneIndex) start = middle + 1;
+      else end = middle;
+    }
+    return start;
   }
 
 }
