@@ -494,6 +494,12 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled, gpuTimersEnabled)
     gpuTimersEnabled,
   );
   requireGlCounters(route.cameraDrag.gl, `${routeLabel}.cameraDrag.gl`);
+  if (requireObject(route.cameraDrag.renderer, `${routeLabel}.cameraDrag.renderer`)) {
+    requirePositiveNumber(
+      route.cameraDrag.renderer.frameDelta,
+      `${routeLabel}.cameraDrag.renderer.frameDelta`,
+    );
+  }
   if (route.profile?.kind === 'gltf-instancing') {
     checkGltfSampleEvidence(
       route.cameraDrag.renderer?.gltfInstancing,

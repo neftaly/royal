@@ -1982,10 +1982,16 @@ const collectPageMetrics = async (session, frames, options = {}) => {
               frameStats,
               gl: glCounterTotals(dragGl),
               renderer: {
+                frameDelta: rendererFrameDelta(dragRendererAfter, dragRendererBefore),
                 gltfInstancing: gltfInstancingSampleMetrics(
                   dragRendererAfter,
                   dragRendererBefore,
                   frameStats.sampleCount ?? cameraDragFrameCount,
+                ),
+                virtualTexturing: rendererRecordMetrics(
+                  dragRendererAfter,
+                  dragRendererBefore,
+                  'virtualTexturing',
                 ),
               },
             };
@@ -2643,6 +2649,7 @@ const routeSummary = (route) => {
   const frameRenderCallbackStats = route.frameWork?.renderCallbackDurationMs;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
+  const cameraDragRendererFrames = route.cameraDrag?.renderer?.frameDelta ?? 0;
   const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
   const cameraRenderCallbackStats = cameraDragFrameStats?.renderCallbackDurationMs;
   const gpuDrawProfile = cameraDragFrameStats?.gpuDrawProfile;
@@ -2675,7 +2682,11 @@ const routeSummary = (route) => {
     ? cameraDragFrameStats.reason
     : cameraDragFrameStats?.timedOut === true
       ? 'partial-timeout'
-      : undefined;
+      : cameraDragFrameStats !== undefined &&
+          (cameraDragFrameStats.sampleCount ?? 0) > 0 &&
+          cameraDragRendererFrames === 0
+        ? 'renderer-frame-not-advanced'
+        : undefined;
   const hasCameraDragStats =
     typeof cameraDragFrameStats?.p95Ms === 'number' &&
     typeof cameraDragDrawCallsPerFrame === 'number';
@@ -2797,8 +2808,9 @@ const routeSummary = (route) => {
     bufferSubDataBytesPerFrame: round(bufferSubDataBytesPerFrame),
     ...(hasCameraDragStats
       ? {
-    cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
-    cameraDragSubmissionCallsPerFrame: round(cameraDragSubmissionCallsPerFrame),
+          cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
+          cameraDragRendererFrames,
+          cameraDragSubmissionCallsPerFrame: round(cameraDragSubmissionCallsPerFrame),
         ...(typeof cameraDragStateChangesPerFrame === 'number' && cameraDragStateChangesPerFrame !== 0
           ? { cameraDragStateChangesPerFrame: round(cameraDragStateChangesPerFrame) }
           : {}),
@@ -3176,6 +3188,7 @@ const main = async () => {
             ...(typeof cameraDragFrameStats.raf?.p95Ms === 'number'
               ? [`dragRafP95=${cameraDragFrameStats.raf.p95Ms.toFixed(1)}ms`]
               : []),
+            `dragFrames=${result.cameraDrag?.renderer?.frameDelta ?? 0}`,
             ...(typeof cameraDragFrameStats.samplesMissing === 'number' && cameraDragFrameStats.samplesMissing > 0
               ? [`dragMiss=${cameraDragFrameStats.samplesMissing}`]
               : []),
