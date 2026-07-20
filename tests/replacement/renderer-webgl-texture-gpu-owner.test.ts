@@ -47,6 +47,8 @@ const fakeGl = (): WebGL2RenderingContext => ({
   pixelStorei: vi.fn(),
   samplerParameteri: vi.fn(),
   texImage2D: vi.fn(),
+  texStorage2D: vi.fn(),
+  texSubImage2D: vi.fn(),
 } as unknown as WebGL2RenderingContext);
 
 const binding = (
@@ -200,6 +202,25 @@ describe("ordinary texture GPU owner", () => {
     owner.reconcile([]);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteSampler).toHaveBeenCalledTimes(2);
+  });
+
+  it("allocates a known mip chain immutably before uploading its base level", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    expect(owner.reconcile([binding("mipmapped", "linear-mipmap-linear")])[0]!.texture)
+      .not.toBeNull();
+    expect(gl.texStorage2D).toHaveBeenCalledWith(gl.TEXTURE_2D, 4, gl.SRGB8_ALPHA8, 8, 8);
+    expect(gl.texSubImage2D).toHaveBeenCalledWith(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      expect.any(Object),
+    );
+    expect(gl.texImage2D).not.toHaveBeenCalled();
+    expect(gl.generateMipmap).toHaveBeenCalledOnce();
   });
 
   it("uploads a complete ETC2 pyramid directly with its exact compressed budget", () => {

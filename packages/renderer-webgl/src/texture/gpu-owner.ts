@@ -333,15 +333,36 @@ export class TextureGpuOwner {
         }
       } else {
         this.#applyUnpackState();
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          decoded.source,
-        );
-        if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
+        const internalFormat = binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+        if (mipmapped) {
+          gl.texStorage2D(
+            gl.TEXTURE_2D,
+            completeKtx2MipLevelCount(decoded.width, decoded.height),
+            internalFormat,
+            decoded.width,
+            decoded.height,
+          );
+          gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            decoded.source,
+          );
+          gl.generateMipmap(gl.TEXTURE_2D);
+        } else {
+          // Mutable base-only storage can still be promoted if a later sampler needs mipmaps.
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            internalFormat,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            decoded.source,
+          );
+        }
       }
       return {
         bindings: new WeakMap<WebGLSampler, GpuTextureBinding>(),

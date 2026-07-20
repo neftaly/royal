@@ -199,8 +199,8 @@ describe("clear-only canvas root", () => {
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.bindVertexArray).toHaveBeenCalledTimes(vertexArrayBindings);
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
-    expect(canvas.gl.texImage2D.mock.calls[0]!.at(-1)).toBe(source);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(canvas.gl.texSubImage2D).mock.calls[0]!.at(-1)).toBe(source);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
       String(shader).includes("#define TEXTURED"))).toBe(true);
@@ -280,14 +280,14 @@ describe("clear-only canvas root", () => {
     resolvers.get("/one.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
     await vi.waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
 
     now = 10;
     resolvers.get("/two.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
     await vi.waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
     expect(root.getSnapshot().frame).toBe(2);
     expect(delays.size).toBe(1);

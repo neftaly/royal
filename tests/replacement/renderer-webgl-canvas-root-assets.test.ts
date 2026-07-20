@@ -202,7 +202,7 @@ describe("canvas root asset publication", () => {
     await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
 
     callbacks.shift()!();
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
@@ -210,7 +210,7 @@ describe("canvas root asset publication", () => {
     });
     expect(root.getTextureAssetSnapshot(second).state).toBe("ready");
     callbacks.shift()!();
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
@@ -460,7 +460,7 @@ describe("canvas root asset publication", () => {
     });
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
@@ -495,7 +495,7 @@ describe("canvas root asset publication", () => {
     await vi.waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
-    expect(canvas.gl.texImage2D).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
   });
 
   it("uses retained alpha in the same exact query after a MASK texture becomes ready", async () => {
