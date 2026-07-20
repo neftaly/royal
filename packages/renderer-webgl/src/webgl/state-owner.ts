@@ -47,7 +47,6 @@ export class WebGlStateOwner {
     this.#state.vertexArray = null;
   }
 
-  /** Resource preparation borrowed one texture unit without owning draw state. */
   invalidateTextureUnit(unit: number): void {
     this.#state.textureBindings[unit] = undefined;
   }

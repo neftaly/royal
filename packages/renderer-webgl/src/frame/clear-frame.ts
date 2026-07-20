@@ -22,7 +22,6 @@ export type ClearFrameIntent = Readonly<{
   viewport: FrameViewport;
 }>;
 
-/** Caller-retained workspace accepted by the readonly clear contract. */
 export type MutableClearFrameIntent = {
   clearColor: LinearRgba;
   clearDepth: number;

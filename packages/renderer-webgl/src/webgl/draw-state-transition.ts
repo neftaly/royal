@@ -20,7 +20,6 @@ export type SurfaceDrawStateIntent = Readonly<{
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
 
-/** Caller-retained workspace accepted by the readonly draw-state contract. */
 export type MutableSurfaceDrawStateIntent = {
   alphaBlend: boolean;
   cullBackFaces: boolean;

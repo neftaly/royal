@@ -42,6 +42,8 @@ export interface CanvasProps
   readonly children?: ReactNode;
   /** The owned canvas element. CSS, rather than intrinsic dimensions, owns layout size. */
   readonly ref?: Ref<HTMLCanvasElement>;
+  /** Backing pixels per CSS pixel. Defaults to the browser device pixel ratio. */
+  readonly pixelRatio?: number;
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */
   readonly rendererOptions?: RendererRootOptions;
   /** Active root, or `null` before mount and after release. */
@@ -92,20 +94,16 @@ const assignRef = <Value>(
   return undefined;
 };
 
-const readDevicePixelRatio = (): number => {
-  const candidateDpr = globalThis.devicePixelRatio;
-  return Number.isFinite(candidateDpr) && candidateDpr > 0 ? candidateDpr : 1;
-};
-
 const publishCanvasSize = (
   root: RoyalRendererRoot,
   cssWidth: number,
   cssHeight: number,
+  pixelRatio: number | undefined,
 ): void => {
   root.setSize({
     cssHeight,
     cssWidth,
-    devicePixelRatio: readDevicePixelRatio(),
+    devicePixelRatio: pixelRatio ?? (globalThis.devicePixelRatio || 1),
   });
 };
 
@@ -113,12 +111,13 @@ const publishCanvasSize = (
 export const observeCanvasSize = (
   canvas: HTMLCanvasElement,
   root: RoyalRendererRoot,
+  pixelRatio?: number,
 ): (() => void) => {
   const ResizeObserverConstructor = globalThis.ResizeObserver;
   if (typeof ResizeObserverConstructor !== "function") {
     const update = (): void => {
       const box = canvas.getBoundingClientRect();
-      publishCanvasSize(root, box.width, box.height);
+      publishCanvasSize(root, box.width, box.height, pixelRatio);
     };
     update();
     globalThis.addEventListener?.("resize", update);
@@ -131,7 +130,7 @@ export const observeCanvasSize = (
     if (frame !== undefined) return;
     frame = globalThis.requestAnimationFrame(() => {
       frame = undefined;
-      publishCanvasSize(root, cssWidth, cssHeight);
+      publishCanvasSize(root, cssWidth, cssHeight, pixelRatio);
     });
   };
   const observer = new ResizeObserverConstructor((entries) => {
@@ -167,6 +166,7 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
 /** Renders one pure Royal scene into one ordinary, CSS-sized canvas. */
 export const Canvas = ({
   children,
+  pixelRatio,
   ref,
   rendererOptions,
   rendererRef,
@@ -235,8 +235,8 @@ export const Canvas = ({
   useLayoutEffect(() => {
     const root = activeRoot;
     if (root === null) return undefined;
-    return observeCanvasSize(root.canvas, root);
-  }, [activeRoot]);
+    return observeCanvasSize(root.canvas, root, pixelRatio);
+  }, [activeRoot, pixelRatio]);
 
   useLayoutEffect(() => {
     if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.render(scene);

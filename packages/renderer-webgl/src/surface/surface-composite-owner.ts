@@ -273,7 +273,6 @@ export class SurfaceCompositeOwner {
     this.#program = null;
     this.#presentationLocation = null;
     this.#presentationIntent = null;
-    this.#presentationBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
@@ -444,7 +443,6 @@ export class SurfaceCompositeOwner {
     this.#program = null;
     this.#presentationLocation = null;
     this.#presentationIntent = null;
-    this.#presentationBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };

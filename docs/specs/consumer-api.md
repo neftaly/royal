@@ -87,6 +87,11 @@ same React tree. There is no renderable JSX scene reconciler. CSS owns layout;
 Royal owns backing resolution. Native `width`/`height` props are excluded to
 avoid conflicting authorities.
 
+Backing resolution follows the browser device pixel ratio by default.
+`pixelRatio={1}` (or another positive finite ratio) is the explicit React
+policy override; changing it resizes the retained root without recreating the
+canvas or WebGL context. This is display policy, not a renderer creation option.
+
 Native canvas props, `aria-*`, `role`, class/style, event handlers, refs, and
 application `data-*` metadata pass through where they do not conflict with
 Royal ownership. Royal does not invent an accessibility tree for arbitrary 3D

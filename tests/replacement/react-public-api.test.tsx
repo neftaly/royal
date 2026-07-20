@@ -54,6 +54,7 @@ describe("replacement React public API", () => {
       "aria-label": "preview",
       "data-testid": "royal",
       className: "viewport",
+      pixelRatio: 1,
       rendererOptions: { alpha: false, antialias: true },
       scene: emptyScene,
     } satisfies CanvasProps;
@@ -266,6 +267,47 @@ describe("replacement React public API", () => {
       expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
       release();
       expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("publishes an explicit pixel ratio without forwarding a DOM prop", () => {
+    let observe: ResizeObserverCallback | undefined;
+    let frame: FrameRequestCallback | undefined;
+    const setSize = vi.fn();
+    vi.stubGlobal("devicePixelRatio", 3);
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) {
+        observe = callback;
+      }
+
+      disconnect = vi.fn();
+      observe = vi.fn();
+    });
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.stubGlobal("addEventListener", vi.fn());
+    vi.stubGlobal("removeEventListener", vi.fn());
+    try {
+      const html = renderToStaticMarkup(createElement(Canvas, { pixelRatio: 1, scene: emptyScene }));
+      expect(html).not.toContain("pixelRatio");
+      const release = observeCanvasSize({} as HTMLCanvasElement, {
+        setSize,
+      } as unknown as RoyalRendererRoot, 1);
+      observe?.([
+        { contentRect: { height: 180, width: 320 } } as ResizeObserverEntry,
+      ], {} as ResizeObserver);
+      frame?.(0);
+      expect(setSize).toHaveBeenCalledWith({
+        cssHeight: 180,
+        cssWidth: 320,
+        devicePixelRatio: 1,
+      });
+      release();
     } finally {
       vi.unstubAllGlobals();
     }

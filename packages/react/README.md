@@ -61,6 +61,11 @@ dimensions cannot feed back into unconstrained intrinsic CSS sizing. An explicit
 React `style` may override either default; CSS should keep at least one axis
 independent of the canvas's intrinsic dimensions.
 
+Backing resolution defaults to the browser device pixel ratio. Set
+`pixelRatio={1}` (or another positive finite value) to choose backing pixels per
+CSS pixel explicitly. Updating `pixelRatio` resizes the retained renderer; it
+does not recreate the canvas, root, or WebGL context.
+
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
 both defaulting to `true`, plus immutable resource policy. The default
 `persistentGpuByteBudget` is 256 MiB and `maxConcurrentPreparationJobs` is 8.
