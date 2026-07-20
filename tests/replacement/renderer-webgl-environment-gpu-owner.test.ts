@@ -2,10 +2,25 @@ import { describe, expect, it } from "vitest";
 import { PrefilteredEnvironmentGpuOwner } from "../../packages/renderer-webgl/src/environment/gpu-owner";
 import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
 import { fakeGl } from "./support/canvas-root-harness";
 
 describe("prefiltered environment GPU owner", () => {
+  it("does not create a lazily requested owner after the environment is deselected", async () => {
+    const gl = fakeGl();
+    const prepared = parseRoyalEnvironmentKtx1(environmentKtx1Fixture(2).source);
+    const owner = new SurfaceGpuOwner(gl);
+
+    expect(owner.setPrefilteredEnvironment(prepared)).toBe(false);
+    expect(owner.setPrefilteredEnvironment(undefined)).toBe(false);
+    await import("../../packages/renderer-webgl/src/environment/gpu-owner");
+    await Promise.resolve();
+
+    expect(gl.texSubImage2D).not.toHaveBeenCalled();
+    owner.dispose();
+  });
+
   it("uploads borrowed packed faces once and releases its exact budget claim", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(1024);

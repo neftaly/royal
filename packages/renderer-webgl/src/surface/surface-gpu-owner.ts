@@ -91,9 +91,9 @@ import {
   type LinearCompositeCapabilities,
 } from "./terminal-presentation-plan";
 import type { SurfaceCompositeOwner } from "./surface-composite-owner";
-import {
+import type {
   PrefilteredEnvironmentGpuOwner,
-  type PrefilteredEnvironmentGpuBinding,
+  PrefilteredEnvironmentGpuBinding,
 } from "../environment/gpu-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 
@@ -387,7 +387,10 @@ export class SurfaceGpuOwner {
   #drawIntent: MutableSurfaceDrawIntent | null = null;
   #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
-  readonly #environmentGpu: PrefilteredEnvironmentGpuOwner;
+  #environmentGpu: PrefilteredEnvironmentGpuOwner | null = null;
+  #environmentGpuLoadGeneration = 0;
+  #environmentGpuLoadRequested = false;
+  #environmentGpuPrepared: PreparedRoyalEnvironment | undefined;
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   readonly #onChanged: () => void;
@@ -441,7 +444,6 @@ export class SurfaceGpuOwner {
     uploadBudget = new FrameUploadBudgetOwner(),
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
-    this.#environmentGpu = new PrefilteredEnvironmentGpuOwner(gl, budget);
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#onFailure = onFailure;
@@ -462,7 +464,11 @@ export class SurfaceGpuOwner {
   }
 
   dispose(): void {
-    this.#environmentGpu.dispose();
+    this.#environmentGpuLoadGeneration += 1;
+    this.#environmentGpuLoadRequested = false;
+    this.#environmentGpuPrepared = undefined;
+    this.#environmentGpu?.dispose();
+    this.#environmentGpu = null;
     this.#geometryGpu.dispose();
     this.#textureGpu.dispose();
     this.#programs.dispose();
@@ -493,7 +499,11 @@ export class SurfaceGpuOwner {
   }
 
   invalidate(): void {
-    this.#environmentGpu.invalidate();
+    if (this.#environmentGpuLoadRequested) {
+      this.#environmentGpuLoadGeneration += 1;
+      this.#environmentGpuLoadRequested = false;
+    }
+    this.#environmentGpu?.invalidate();
     this.#geometryGpu.invalidate();
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
@@ -578,7 +588,17 @@ export class SurfaceGpuOwner {
   }
 
   setPrefilteredEnvironment(prepared: PreparedRoyalEnvironment | undefined): boolean {
-    if (!this.#environmentGpu.set(prepared)) return false;
+    this.#environmentGpuPrepared = prepared;
+    if (prepared === undefined && this.#environmentGpuLoadRequested) {
+      this.#environmentGpuLoadGeneration += 1;
+      this.#environmentGpuLoadRequested = false;
+    }
+    const owner = this.#environmentGpu;
+    if (owner === null) {
+      if (prepared !== undefined) this.#requestEnvironmentGpuOwner();
+      return false;
+    }
+    if (!owner.set(prepared)) return false;
     this.#dirty = true;
     this.#fullReconcileRequired = true;
     return true;
@@ -798,6 +818,34 @@ export class SurfaceGpuOwner {
     });
   }
 
+  #requestEnvironmentGpuOwner(): void {
+    if (this.#environmentGpuLoadRequested || this.#environmentGpuPrepared === undefined) return;
+    this.#environmentGpuLoadRequested = true;
+    const generation = ++this.#environmentGpuLoadGeneration;
+    void import("../environment/gpu-owner").then(({ PrefilteredEnvironmentGpuOwner }) => {
+      if (generation !== this.#environmentGpuLoadGeneration) return;
+      this.#environmentGpuLoadRequested = false;
+      const prepared = this.#environmentGpuPrepared;
+      if (prepared === undefined) return;
+      const owner = new PrefilteredEnvironmentGpuOwner(this.#gl, this.#resourceBudget);
+      try {
+        owner.set(prepared);
+      } catch (error) {
+        owner.dispose();
+        this.#onFailure(error);
+        return;
+      }
+      this.#environmentGpu = owner;
+      this.#dirty = true;
+      this.#fullReconcileRequired = true;
+      this.#onChanged();
+    }).catch((error: unknown) => {
+      if (generation !== this.#environmentGpuLoadGeneration) return;
+      this.#environmentGpuLoadRequested = false;
+      this.#onFailure(error);
+    });
+  }
+
   #drawView(
     frameView: SurfaceFrameView,
     framebuffer: WebGLFramebuffer | null,
@@ -956,7 +1004,7 @@ export class SurfaceGpuOwner {
             this.#environmentSettings[0] = environment.radianceScaleNits;
             const prefiltered = program.environmentCoefficients === null
               ? undefined
-              : this.#environmentGpu.binding;
+              : this.#environmentGpu?.binding;
             this.#environmentSettings[1] = (prefiltered?.mipCount ?? 1) - 1;
             gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
             if (program.environmentCoefficients !== null) {
@@ -1270,7 +1318,7 @@ export class SurfaceGpuOwner {
     const features = materialTextureFeatures(
       geometrySurface.surface,
       geometrySurface.geometry,
-      sceneEnvironmentFeatures(scene, this.#environmentGpu.binding),
+      sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
       (scene?.punctualLights.length ?? 0) > 0,
       virtualTexture !== undefined,
       residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
@@ -1286,7 +1334,7 @@ export class SurfaceGpuOwner {
           && canonicalMaterialHasTransmission(material)
           ? this.#compositeGpu?.sceneColorBinding()
           : undefined,
-        this.#environmentGpu.binding,
+        this.#environmentGpu?.binding,
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
@@ -1437,7 +1485,7 @@ export class SurfaceGpuOwner {
         const features = materialTextureFeatures(
           surface,
           resource.geometry,
-          sceneEnvironmentFeatures(scene, this.#environmentGpu.binding),
+          sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
           scene.punctualLights.length > 0,
           resource.virtualTexture !== undefined,
           residentOrdinaryTextureMask(ordinaryBindings, 0),
@@ -1460,7 +1508,7 @@ export class SurfaceGpuOwner {
             && canonicalMaterialHasTransmission(material)
             ? this.#compositeGpu?.sceneColorBinding()
             : undefined,
-          this.#environmentGpu.binding,
+          this.#environmentGpu?.binding,
         );
         resource.program = program;
         resource.surface = surface;
