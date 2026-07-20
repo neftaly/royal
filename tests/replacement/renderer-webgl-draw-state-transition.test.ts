@@ -14,12 +14,15 @@ const handle = <Value>(): Value => ({}) as Value;
 const state = (): AppliedSurfaceDrawState => ({
   ...createUnknownClearState(),
   alphaBlend: null,
+  blendFunctionKnown: false,
+  cullFaceKnown: false,
   cullBackFaces: null,
+  depthFunctionKnown: false,
   depthTest: null,
   depthWrite: null,
-  fixedPipelineKnown: false,
   frontFace: null,
   program: null,
+  rasterDefaultsKnown: false,
   textureBindings: [],
   vertexArray: null,
 });
@@ -49,11 +52,17 @@ describe("surface draw state transition core", () => {
     const transition = createSurfaceDrawStateTransition();
     planSurfaceDrawStateTransition(previous, frame, packet, transition);
     expect(transition).toEqual({
+      blendFunction: false,
+      blendMode: true,
+      cullFace: true,
       cullMode: true,
-      fixedPipeline: true,
+      depthFunction: true,
+      depthMode: true,
+      depthWrite: true,
       framebuffer: true,
       frontFace: true,
       program: true,
+      rasterDefaults: true,
       textureUnits: 1,
       vertexArray: true,
       viewport: true,
@@ -72,11 +81,17 @@ describe("surface draw state transition core", () => {
     const transition = createSurfaceDrawStateTransition();
     planSurfaceDrawStateTransition(previous, frame, next, transition);
     expect(transition).toEqual({
+      blendFunction: false,
+      blendMode: false,
+      cullFace: false,
       cullMode: false,
-      fixedPipeline: false,
+      depthFunction: false,
+      depthMode: false,
+      depthWrite: false,
       framebuffer: false,
       frontFace: false,
       program: false,
+      rasterDefaults: false,
       textureUnits: 0,
       vertexArray: true,
       viewport: false,
@@ -202,10 +217,11 @@ describe("surface draw state transition core", () => {
       alphaBlend: true,
       depthWrite: false,
     }, transition);
-    expect(transition.fixedPipeline).toBe(true);
-    expect(transition.writeMasks).toBe(true);
+    expect(transition.blendFunction).toBe(true);
+    expect(transition.blendMode).toBe(true);
+    expect(transition.depthWrite).toBe(true);
     expect(Object.entries(transition)
-      .filter(([key]) => key !== "fixedPipeline" && key !== "writeMasks")
+      .filter(([key]) => key !== "blendFunction" && key !== "blendMode" && key !== "depthWrite")
       .every(([, value]) => !value)).toBe(true);
   });
 
@@ -219,7 +235,27 @@ describe("surface draw state transition core", () => {
       depthTest: false,
       depthWrite: false,
     }, transition);
-    expect(transition.fixedPipeline).toBe(true);
-    expect(transition.writeMasks).toBe(true);
+    expect(transition.depthMode).toBe(true);
+    expect(transition.depthWrite).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "depthMode" && key !== "depthWrite")
+      .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("retains immutable blend, depth, and cull functions across mode toggles", () => {
+    const previous = state();
+    const { frame, packet: opaque } = draw();
+    const transparent = { ...opaque, alphaBlend: true, depthWrite: false };
+    commitAppliedSurfaceDrawState(previous, frame, transparent);
+    commitAppliedSurfaceDrawState(previous, frame, opaque);
+
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, frame, transparent, transition);
+
+    expect(transition.blendMode).toBe(true);
+    expect(transition.blendFunction).toBe(false);
+    expect(transition.depthWrite).toBe(true);
+    expect(transition.depthFunction).toBe(false);
+    expect(transition.cullFace).toBe(false);
   });
 });

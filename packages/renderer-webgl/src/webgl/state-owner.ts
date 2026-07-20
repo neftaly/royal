@@ -22,12 +22,15 @@ export class WebGlStateOwner {
   readonly #state: AppliedSurfaceDrawState = {
     ...createUnknownClearState(),
     alphaBlend: null,
+    blendFunctionKnown: false,
+    cullFaceKnown: false,
     cullBackFaces: null,
+    depthFunctionKnown: false,
     depthTest: null,
     depthWrite: null,
-    fixedPipelineKnown: false,
     frontFace: null,
     program: null,
+    rasterDefaultsKnown: false,
     textureBindings: [],
     vertexArray: null,
   };
@@ -79,11 +82,11 @@ export class WebGlStateOwner {
       if (transition.clearColor) gl.clearColor(...intent.clearColor);
       if (transition.clearDepth) gl.clearDepth(intent.clearDepth);
       if (transition.clearStencil) gl.clearStencil(intent.clearStencil);
-      if (transition.writeMasks || this.#state.depthWrite !== true) {
+      if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
-        gl.depthMask(true);
         gl.stencilMask(0xff_ff_ff_ff);
       }
+      if (transition.writeMasks || this.#state.depthWrite !== true) gl.depthMask(true);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
       commitAppliedClearState(this.#state, intent);
       this.#state.depthWrite = true;
@@ -102,37 +105,38 @@ export class WebGlStateOwner {
       if (transition.viewport) {
         gl.viewport(frame.viewport.x, frame.viewport.y, frame.viewport.width, frame.viewport.height);
       }
-      if (transition.fixedPipeline) {
-        if (packet.alphaBlend) {
-          gl.enable(gl.BLEND);
-          gl.blendFuncSeparate(
-            gl.SRC_ALPHA,
-            gl.ONE_MINUS_SRC_ALPHA,
-            gl.ONE,
-            gl.ONE_MINUS_SRC_ALPHA,
-          );
-        } else gl.disable(gl.BLEND);
+      if (transition.rasterDefaults) {
         gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.STENCIL_TEST);
-        if (packet.depthTest) {
-          gl.enable(gl.DEPTH_TEST);
-          gl.depthFunc(gl.LEQUAL);
-        } else gl.disable(gl.DEPTH_TEST);
       }
+      if (transition.blendMode) {
+        if (packet.alphaBlend) gl.enable(gl.BLEND);
+        else gl.disable(gl.BLEND);
+      }
+      if (transition.blendFunction) {
+        gl.blendFuncSeparate(
+          gl.SRC_ALPHA,
+          gl.ONE_MINUS_SRC_ALPHA,
+          gl.ONE,
+          gl.ONE_MINUS_SRC_ALPHA,
+        );
+      }
+      if (transition.depthMode) {
+        if (packet.depthTest) gl.enable(gl.DEPTH_TEST);
+        else gl.disable(gl.DEPTH_TEST);
+      }
+      if (transition.depthFunction) gl.depthFunc(gl.LEQUAL);
       if (transition.cullMode) {
-        if (packet.cullBackFaces) {
-          gl.enable(gl.CULL_FACE);
-          gl.cullFace(gl.BACK);
-        } else {
-          gl.disable(gl.CULL_FACE);
-        }
+        if (packet.cullBackFaces) gl.enable(gl.CULL_FACE);
+        else gl.disable(gl.CULL_FACE);
       }
+      if (transition.cullFace) gl.cullFace(gl.BACK);
       if (transition.frontFace) gl.frontFace(packet.frontFace);
       if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
-        gl.depthMask(packet.depthWrite);
         gl.stencilMask(0xff_ff_ff_ff);
       }
+      if (transition.depthWrite) gl.depthMask(packet.depthWrite);
       if (transition.program) gl.useProgram(packet.program);
       let changedTextureUnits = transition.textureUnits;
       for (let unit = 0; changedTextureUnits !== 0; unit += 1, changedTextureUnits >>>= 1) {
