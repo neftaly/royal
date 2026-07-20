@@ -145,12 +145,6 @@ const compileShader = (
   if (shader === null) throw new Error("Royal could not allocate a surface shader");
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-    const detail = gl.getShaderInfoLog(shader) ?? "unknown compiler failure";
-    gl.deleteShader(shader);
-    const stage = type === gl.VERTEX_SHADER ? "vertex" : "fragment";
-    throw new Error(`Royal surface ${stage} shader compilation failed: ${detail}`);
-  }
   return shader;
 };
 
@@ -187,12 +181,17 @@ const createProgram = (
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.linkProgram(program);
-  gl.deleteShader(fragment);
   if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    const detail = gl.getProgramInfoLog(program) ?? "unknown linker failure";
+    let detail = gl.getProgramInfoLog(program) || "unknown linker failure";
+    const vertexDetail = gl.getShaderInfoLog(vertex);
+    const fragmentDetail = gl.getShaderInfoLog(fragment);
+    if (vertexDetail) detail += `; vertex: ${vertexDetail}`;
+    if (fragmentDetail) detail += `; fragment: ${fragmentDetail}`;
+    gl.deleteShader(fragment);
     gl.deleteProgram(program);
     throw new Error(`Royal surface program link failed: ${detail}`);
   }
+  gl.deleteShader(fragment);
   return program;
 };
 

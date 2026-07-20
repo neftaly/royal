@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
@@ -76,9 +76,29 @@ describe("surface program ownership", () => {
 
     expect(gl.createProgram).toHaveBeenCalledTimes(2);
     expect(gl.compileShader).toHaveBeenCalledTimes(3);
+    expect(gl.getShaderParameter).not.toHaveBeenCalled();
     const vertexSources = gl.shaderSource.mock.calls.filter(([, source]) =>
       String(source).includes("layout(location = 0) in vec3 position"));
     expect(vertexSources).toHaveLength(1);
+  });
+
+  it("synchronizes once at link and reports stage logs only on failure", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getProgramParameter).mockReturnValue(false);
+    vi.mocked(gl.getProgramInfoLog).mockReturnValue("linker rejected the program");
+    vi.mocked(gl.getShaderInfoLog)
+      .mockReturnValueOnce("vertex failed")
+      .mockReturnValueOnce("fragment failed");
+    const owner = new SurfaceProgramOwner(gl);
+
+    expect(() => owner.get("standard", 0, false, false, false)).toThrow(
+      "Royal surface program link failed: linker rejected the program; "
+      + "vertex: vertex failed; fragment: fragment failed",
+    );
+    expect(gl.getShaderParameter).not.toHaveBeenCalled();
+    expect(gl.getProgramParameter).toHaveBeenCalledTimes(1);
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
+    expect(gl.deleteShader).toHaveBeenCalledTimes(1);
   });
 
   it("removes directional-light work from environment-only fragments", () => {

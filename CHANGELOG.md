@@ -48,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Consolidated shader validation at program link, allowing both stages to
+  compile before one synchronization while preserving stage-specific failure
+  logs without successful-path status polling.
 - Ordered depth-writing transmission front-to-back ahead of alpha-blended
   transmission, preserving screen-space composition while allowing early depth
   rejection in overlapping glass and volume scenes.

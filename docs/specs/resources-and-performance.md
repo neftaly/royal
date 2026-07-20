@@ -247,6 +247,12 @@ Parsing/preparation SHOULD yield or chunk only where it measurably improves
 input responsiveness. Lifecycle complexity is not justified solely to make a
 synthetic progress counter move.
 
+Shader stages compile before one program-link synchronization. Successful
+startup MUST NOT poll each stage separately; link failure is the validation
+boundary and includes the program plus non-empty vertex/fragment logs. Optional
+parallel-compilation publication remains unjustified while it delays first
+usable presentation or requires a second fallback-program lifecycle.
+
 ## Load performance
 
 Large scenes should become useful progressively:

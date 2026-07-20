@@ -147,11 +147,6 @@ const compileShader = (
   if (shader === null) throw new Error("Royal could not allocate a presentation shader");
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-    const detail = gl.getShaderInfoLog(shader) ?? "unknown compiler failure";
-    gl.deleteShader(shader);
-    throw new Error(`Royal presentation shader compilation failed: ${detail}`);
-  }
   return shader;
 };
 
@@ -178,13 +173,19 @@ const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.linkProgram(program);
-  gl.deleteShader(vertex);
-  gl.deleteShader(fragment);
   if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    const detail = gl.getProgramInfoLog(program) ?? "unknown linker failure";
+    let detail = gl.getProgramInfoLog(program) || "unknown linker failure";
+    const vertexDetail = gl.getShaderInfoLog(vertex);
+    const fragmentDetail = gl.getShaderInfoLog(fragment);
+    if (vertexDetail) detail += `; vertex: ${vertexDetail}`;
+    if (fragmentDetail) detail += `; fragment: ${fragmentDetail}`;
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
     gl.deleteProgram(program);
     throw new Error(`Royal presentation program link failed: ${detail}`);
   }
+  gl.deleteShader(vertex);
+  gl.deleteShader(fragment);
   return program;
 };
 
