@@ -242,6 +242,22 @@ const clipAgainstPlane = (
   return targetCount;
 };
 
+/** Exact homogeneous trivial accept/reject before the polygon clipping slow path. */
+const triangleClipKind = (vertices: Float64Array): -1 | 0 | 1 => {
+  let commonOutsidePlanes = 0b11_1111;
+  let anyOutsidePlanes = 0;
+  for (let vertex = 0; vertex < 3; vertex += 1) {
+    const offset = vertex * CLIP_VERTEX_COMPONENTS;
+    let outsidePlanes = 0;
+    for (let plane = 0; plane < 6; plane += 1) {
+      if (planeDistance(vertices, offset, plane) < 0) outsidePlanes |= 1 << plane;
+    }
+    commonOutsidePlanes &= outsidePlanes;
+    anyOutsidePlanes |= outsidePlanes;
+  }
+  return commonOutsidePlanes !== 0 ? -1 : anyOutsidePlanes === 0 ? 1 : 0;
+};
+
 const writeClipVertex = (
   target: Float64Array,
   targetOffset: number,
@@ -519,6 +535,21 @@ const collectModelDemand = (
     }
     if (!finite) {
       addCoarsestMip(workspace, manifest);
+      continue;
+    }
+    const clipKind = triangleClipKind(workspace.clipA);
+    if (clipKind < 0) continue;
+    if (clipKind > 0) {
+      addClippedTriangleDemand(
+        workspace,
+        manifest,
+        workspace.clipA,
+        0,
+        1,
+        2,
+        view.viewport,
+        sampler,
+      );
       continue;
     }
     let source = workspace.clipA;

@@ -138,4 +138,49 @@ describe("VT2 clipped projected demand", () => {
 
     expect(workspace.count).toBe(0);
   });
+
+  it("trivially rejects offscreen triangles inside a partly visible surface", () => {
+    const insideGeometry = {
+      ...surface.geometry,
+      indices: new Uint8Array([0, 1, 2]),
+      positions: new Float32Array([
+        -0.5, -0.5, 0,
+        0.5, -0.5, 0,
+        0.5, 0.5, 0,
+      ]),
+      textureCoordinates0: new Float32Array([0, 0, 1, 0, 1, 1]),
+    };
+    const mixedGeometry = {
+      ...insideGeometry,
+      bounds: { max: [11, 1, 0] as const, min: [-0.5, -0.5, 0] as const },
+      indices: new Uint8Array([0, 1, 2, 3, 4, 5]),
+      positions: new Float32Array([
+        ...insideGeometry.positions,
+        10, -0.5, 0,
+        11, -0.5, 0,
+        11, 0.5, 0,
+      ]),
+      textureCoordinates0: new Float32Array([
+        ...insideGeometry.textureCoordinates0,
+        0, 0, 1, 0, 1, 1,
+      ]),
+    };
+    const inside = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(
+      inside,
+      manifest,
+      [{ ...surface, geometry: insideGeometry }],
+      [view()],
+      sampler,
+    );
+    const mixed = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(
+      mixed,
+      manifest,
+      [{ ...surface, geometry: mixedGeometry, worldBounds: mixedGeometry.bounds }],
+      [view()],
+      sampler,
+    );
+    expect([...mixed.keys.keys()]).toEqual([...inside.keys.keys()]);
+  });
 });
