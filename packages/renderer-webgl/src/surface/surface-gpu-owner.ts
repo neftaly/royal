@@ -84,7 +84,7 @@ import { surfacesShareMultiDrawState } from "./surface-multi-draw";
 import {
   canonicalSurfaceIsDoubleSided,
   canonicalTransmissionNeedsMipmaps,
-  planSurfacePasses,
+  planGroupedSurfacePasses,
 } from "./surface-pass-plan";
 import {
   terminalPresentationRequested,
@@ -296,57 +296,13 @@ const materialTextureBindingAt = (
   }
 };
 
-type GroupedSurfaces = Readonly<{
-  blended: GpuSurface[];
-  opaque: readonly GpuSurface[];
-  requiresSceneColor: boolean;
-  transmission: GpuSurface[];
-}>;
-
-const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]): GroupedSurfaces => {
-  const passes = planSurfacePasses(surfaces, (resource) => resource.surface.material);
-  const groups = new Map<WebGLProgram, Map<CanonicalSurfaceMaterial, GpuSurface[]>>();
-  let materialGroupCount = 0;
-  for (const resource of passes.opaque) {
-    const program = resource.program.program;
-    let materialGroups = groups.get(program);
-    if (materialGroups === undefined) {
-      materialGroups = new Map<CanonicalSurfaceMaterial, GpuSurface[]>();
-      groups.set(program, materialGroups);
-    }
-    const material = resource.surface.materialSource;
-    const group = materialGroups.get(material);
-    if (group === undefined) {
-      materialGroups.set(material, [resource]);
-      materialGroupCount += 1;
-    } else group.push(resource);
-  }
-  const opaqueCount = passes.opaque.length;
-  if (materialGroupCount < 2) {
-    return {
-      blended: passes.transparent,
-      opaque: passes.opaque,
-      requiresSceneColor: passes.requiresSceneColor,
-      transmission: passes.transmission,
-    };
-  }
-  const grouped = Array<GpuSurface>(opaqueCount);
-  let index = 0;
-  for (const materialGroups of groups.values()) {
-    for (const group of materialGroups.values()) {
-      for (const resource of group) {
-        grouped[index] = resource;
-        index += 1;
-      }
-    }
-  }
-  return {
-    blended: passes.transparent,
-    opaque: grouped,
-    requiresSceneColor: passes.requiresSceneColor,
-    transmission: passes.transmission,
-  };
-};
+const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]) =>
+  planGroupedSurfacePasses(
+    surfaces,
+    (resource) => resource.surface.material,
+    (resource) => resource.surface.materialSource,
+    (resource) => resource.program.program,
+  );
 
 const surfaceMatchesLodSelections = (
   surface: CanonicalDrawSurface,
@@ -1420,7 +1376,7 @@ export class SurfaceGpuOwner {
       this.#gpuScene = scene;
       const grouped = groupSurfacesForDrawing(nextSurfaces);
       this.#opaqueSurfaces = grouped.opaque;
-      this.#blendedSurfaces = grouped.blended;
+      this.#blendedSurfaces = grouped.transparent;
       this.#requiresSceneColor = grouped.requiresSceneColor;
       this.#transmissionSurfaces = grouped.transmission;
       this.#planOpaqueMultiDrawRuns();
@@ -1519,7 +1475,7 @@ export class SurfaceGpuOwner {
     if (regroup) {
       const grouped = groupSurfacesForDrawing(surfaces);
       this.#opaqueSurfaces = grouped.opaque;
-      this.#blendedSurfaces = grouped.blended;
+      this.#blendedSurfaces = grouped.transparent;
       this.#requiresSceneColor = grouped.requiresSceneColor;
       this.#transmissionSurfaces = grouped.transmission;
     }

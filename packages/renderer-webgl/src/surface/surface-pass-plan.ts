@@ -56,3 +56,45 @@ export const planSurfacePasses = <Surface>(
     transparent,
   };
 };
+
+/**
+ * Builds the fixed pass buckets and groups only opaque draws by stable program
+ * and authored-material identity. Order remains stable within every group;
+ * transmission and transparent ordering are never changed here.
+ */
+export const planGroupedSurfacePasses = <Surface>(
+  surfaces: readonly Surface[],
+  materialOf: (surface: Surface) => CanonicalSurfaceMaterial,
+  materialIdentityOf: (surface: Surface) => object,
+  programIdentityOf: (surface: Surface) => object,
+): SurfacePassPlan<Surface> => {
+  const passes = planSurfacePasses(surfaces, materialOf);
+  const groups = new Map<object, Map<object, Surface[]>>();
+  let materialGroupCount = 0;
+  for (const surface of passes.opaque) {
+    const programIdentity = programIdentityOf(surface);
+    let materialGroups = groups.get(programIdentity);
+    if (materialGroups === undefined) {
+      materialGroups = new Map<object, Surface[]>();
+      groups.set(programIdentity, materialGroups);
+    }
+    const materialIdentity = materialIdentityOf(surface);
+    const group = materialGroups.get(materialIdentity);
+    if (group === undefined) {
+      materialGroups.set(materialIdentity, [surface]);
+      materialGroupCount += 1;
+    } else group.push(surface);
+  }
+  if (materialGroupCount < 2) return passes;
+  const opaque = Array<Surface>(passes.opaque.length);
+  let index = 0;
+  for (const materialGroups of groups.values()) {
+    for (const group of materialGroups.values()) {
+      for (const surface of group) {
+        opaque[index] = surface;
+        index += 1;
+      }
+    }
+  }
+  return { ...passes, opaque };
+};

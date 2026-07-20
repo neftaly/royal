@@ -4,6 +4,7 @@ import {
   canonicalSurfacePassKind,
   canonicalSurfaceIsDoubleSided,
   canonicalTransmissionNeedsMipmaps,
+  planGroupedSurfacePasses,
   planSurfacePasses,
 } from "../../packages/renderer-webgl/src/surface/surface-pass-plan";
 import {
@@ -44,6 +45,49 @@ describe("fixed surface pass planning", () => {
       transmission: [],
       transparent: [transparent],
     });
+  });
+
+  it("groups opaque work by program and authored material without crossing pass order", () => {
+    const programA = {};
+    const programB = {};
+    const materialA = standard();
+    const materialB = standard();
+    const transmissionMaterial = standard({ transmissionFactor: 1 });
+    const transparentMaterial = standard({ alphaBlend: true });
+    const surfaces = [
+      { id: "a1", material: materialA, materialIdentity: materialA, program: programA },
+      { id: "b1", material: materialB, materialIdentity: materialB, program: programA },
+      { id: "a2", material: materialA, materialIdentity: materialA, program: programA },
+      { id: "a-program-b", material: materialA, materialIdentity: materialA, program: programB },
+      {
+        id: "transmission",
+        material: transmissionMaterial,
+        materialIdentity: transmissionMaterial,
+        program: programB,
+      },
+      {
+        id: "transparent",
+        material: transparentMaterial,
+        materialIdentity: transparentMaterial,
+        program: programA,
+      },
+    ];
+    const plan = planGroupedSurfacePasses(
+      surfaces,
+      (surface) => surface.material,
+      (surface) => surface.materialIdentity,
+      (surface) => surface.program,
+    );
+
+    expect(plan.opaque.map((surface) => surface.id)).toEqual([
+      "a1",
+      "a2",
+      "b1",
+      "a-program-b",
+    ]);
+    expect(plan.transmission.map((surface) => surface.id)).toEqual(["transmission"]);
+    expect(plan.transparent.map((surface) => surface.id)).toEqual(["transparent"]);
+    expect(plan.requiresSceneColor).toBe(true);
   });
 
   it("gives requested transmission its fixed pass even when alpha blend is authored", () => {
