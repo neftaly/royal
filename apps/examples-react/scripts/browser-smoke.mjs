@@ -7,6 +7,7 @@ import {
   connectCdpPage,
   createBoundedProcessDiagnostics,
   evaluate,
+  gltfRendererSnapshotSettled,
   spawnLogged,
   startVitePreview,
   stopProcess,
@@ -165,6 +166,7 @@ const connectPage = () => connectCdpPage({
 const smokeExpression = `
 (async () => {
   const summarizeCanvasPixels = ${summarizeCanvasPixels.toString()};
+  const gltfRendererSnapshotSettled = ${gltfRendererSnapshotSettled.toString()};
   const smokeExpectations = ${JSON.stringify(Object.fromEntries(
     smokeRoutes.map(({ id, ...expectation }) => [id, expectation]),
   ))};
@@ -269,14 +271,7 @@ const smokeExpression = `
         state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets
       );
     const gltfDiagnosticsReady = !(state.route.gltfReady || state.route.id.startsWith('gltf-')) ||
-      (
-        Array.isArray(state.renderer?.gltfLoadDiagnostics?.assets) &&
-        state.renderer.gltfLoadDiagnostics.assets.length > 0 &&
-        state.renderer.gltfLoadDiagnostics.assets.some((asset) =>
-          (asset.status === 'streaming' || asset.status === 'degraded' || asset.status === 'ready') &&
-          asset.imagesLoaded >= state.route.minImagesLoaded
-        )
-      );
+      gltfRendererSnapshotSettled(state.renderer, state.route.minImagesLoaded);
     const prefilteredEnvironmentReady = state.route.prefilteredEnvironmentReady !== true
       || state.prefilteredEnvironmentState === 'ready';
     return canvasReady && resourceReady && gltfDiagnosticsReady && prefilteredEnvironmentReady;

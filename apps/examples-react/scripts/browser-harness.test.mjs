@@ -4,6 +4,7 @@ import {
   CdpSession,
   captureBrowserDiagnostics,
   createBoundedProcessDiagnostics,
+  gltfRendererSnapshotSettled,
   replaceWebSocketAuthority,
   selectCdpPage,
   startPerformanceTrace,
@@ -40,6 +41,29 @@ const fakeSession = () => {
 };
 
 describe('browser harness', () => {
+  it('requires final glTF image and GPU admission state for fidelity captures', () => {
+    const snapshot = ({ pressure = {}, ...asset } = {}) => ({
+      gltfLoadDiagnostics: {
+        assets: [{
+          imageFailures: 0,
+          imagesLoaded: 4,
+          imageRequests: 4,
+          status: 'ready',
+          ...asset,
+        }],
+      },
+      resourcePressure: pressure,
+    });
+
+    expect(gltfRendererSnapshotSettled(snapshot(), 4)).toBe(true);
+    expect(gltfRendererSnapshotSettled(snapshot({ status: 'streaming' }), 4)).toBe(false);
+    expect(gltfRendererSnapshotSettled(snapshot({ imagesLoaded: 3 }), 4)).toBe(false);
+    expect(gltfRendererSnapshotSettled(snapshot({ imagesLoaded: 3, imageFailures: 1 }), 3)).toBe(true);
+    expect(gltfRendererSnapshotSettled(snapshot({
+      pressure: { deferredOrdinaryTextureUploads: 1 },
+    }), 4)).toBe(false);
+  });
+
   it('matches diagnostics across chunks and retains bounded complete lines', () => {
     const diagnostics = createBoundedProcessDiagnostics(/GL_INVALID_OPERATION/u, 2);
     diagnostics.write('benign warning\nGL_INVALID_');

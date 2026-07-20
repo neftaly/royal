@@ -3,6 +3,26 @@ import { once } from 'node:events';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const gltfRendererSnapshotSettled = (snapshot, minImagesLoaded = 0) => {
+  const assets = snapshot?.gltfLoadDiagnostics?.assets;
+  if (!Array.isArray(assets) || assets.length === 0) return false;
+  const assetSettled = assets.some((asset) =>
+    (asset.status === 'degraded' || asset.status === 'ready')
+    && asset.imagesLoaded >= minImagesLoaded
+    && asset.imagesLoaded + asset.imageFailures >= asset.imageRequests);
+  if (!assetSettled) return false;
+  return ![
+    'activePreparationJobs',
+    'activeTextureDecodes',
+    'decodeReservations',
+    'deferredGeometryUploads',
+    'deferredOrdinaryTextureUploads',
+    'pendingOrdinaryTextureStorageRepresentations',
+    'pendingSurfaceUploads',
+    'queuedPreparationJobs',
+  ].some((field) => (snapshot.resourcePressure?.[field] ?? 0) > 0);
+};
+
 const waitForResponse = async (url, timeoutMs, read, fetchImpl = fetch) => {
   const deadline = Date.now() + timeoutMs;
   let lastError;
