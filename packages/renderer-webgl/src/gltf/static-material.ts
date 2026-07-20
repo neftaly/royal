@@ -65,24 +65,32 @@ export const resolveAssetUri = (baseUri: string, uri: string): string => {
   }
 };
 
+const GLTF_MIN_FILTERS = {
+  9728: "nearest",
+  9729: "linear",
+  9984: "nearest-mipmap-nearest",
+  9985: "linear-mipmap-nearest",
+  9986: "nearest-mipmap-linear",
+  9987: "linear-mipmap-linear",
+} as const satisfies Readonly<Record<number, NonNullable<TextureSampler["minFilter"]>>>;
+
+const gltfMinFilter = (
+  value: unknown,
+  label: string,
+  path: string,
+): NonNullable<TextureSampler["minFilter"]> => {
+  if (value === undefined) return "linear-mipmap-linear";
+  const filter = GLTF_MIN_FILTERS[integer(value, label, path) as keyof typeof GLTF_MIN_FILTERS];
+  return filter ?? fail(label, path, "is not a core glTF filter");
+};
+
 const gltfSampler = (value: JsonObject, label: string, path: string): TextureSampler => {
   const magFilter = value.magFilter === undefined
     ? "linear"
     : value.magFilter === 9728 ? "nearest"
       : value.magFilter === 9729 ? "linear"
         : fail(label, `${path}.magFilter`, "must be NEAREST or LINEAR");
-  const minFilters = new Map<number, NonNullable<TextureSampler["minFilter"]>>([
-    [9728, "nearest"],
-    [9729, "linear"],
-    [9984, "nearest-mipmap-nearest"],
-    [9985, "linear-mipmap-nearest"],
-    [9986, "nearest-mipmap-linear"],
-    [9987, "linear-mipmap-linear"],
-  ]);
-  const minFilter = value.minFilter === undefined
-    ? "linear-mipmap-linear"
-    : minFilters.get(integer(value.minFilter, label, `${path}.minFilter`))
-      ?? fail(label, `${path}.minFilter`, "is not a core glTF filter");
+  const minFilter = gltfMinFilter(value.minFilter, label, `${path}.minFilter`);
   const readWrap = (input: unknown, field: string): NonNullable<TextureSampler["wrapS"]> => {
     if (input === undefined || input === 10497) return "repeat";
     if (input === 33071) return "clamp-to-edge";

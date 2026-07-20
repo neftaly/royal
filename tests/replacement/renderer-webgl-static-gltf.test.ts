@@ -540,6 +540,37 @@ describe("static glTF preparation core", () => {
     });
   });
 
+  it.each([
+    [9728, "nearest"],
+    [9729, "linear"],
+    [9984, "nearest-mipmap-nearest"],
+    [9985, "linear-mipmap-nearest"],
+    [9986, "nearest-mipmap-linear"],
+    [9987, "linear-mipmap-linear"],
+  ] as const)("normalizes glTF minification filter %i without retained lookup state", (
+    minFilter,
+    expected,
+  ) => {
+    const prepared = prepareStaticGlb(staticTexturedTriangleGlb(
+      undefined,
+      "albedo.png",
+      (document) => {
+        document.samplers = [{ minFilter }];
+        document.textures = [{ sampler: 0, source: 0 }];
+      },
+    ), `min-filter:${minFilter}`);
+    expect(prepared.textureAssets[0]!.sampler?.minFilter).toBe(expected);
+  });
+
+  it("rejects a non-core glTF minification filter", () => {
+    const asset = staticTexturedTriangleGlb(undefined, "albedo.png", (document) => {
+      document.samplers = [{ minFilter: 1234 }];
+      document.textures = [{ sampler: 0, source: 0 }];
+    });
+    expect(() => prepareStaticGlb(asset, "invalid-min-filter"))
+      .toThrow("samplers[0].minFilter: is not a core glTF filter");
+  });
+
   it("lowers KHR_texture_transform and TEXCOORD_1 without a second texture path", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "transformed.glb");
     const document = parsed.document as Record<string, unknown>;
