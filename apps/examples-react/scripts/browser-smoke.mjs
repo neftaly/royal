@@ -17,6 +17,7 @@ import {
   rendererSnapshotExpression,
   requireExampleRoute,
 } from './example-contract.mjs';
+import { summarizeCanvasPixels } from './canvas-sample.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -163,6 +164,7 @@ const connectPage = () => connectCdpPage({
 
 const smokeExpression = `
 (async () => {
+  const summarizeCanvasPixels = ${summarizeCanvasPixels.toString()};
   const smokeExpectations = ${JSON.stringify(Object.fromEntries(
     smokeRoutes.map(({ id, ...expectation }) => [id, expectation]),
   ))};
@@ -178,47 +180,11 @@ const smokeExpression = `
     const context = sample.getContext('2d', { willReadFrequently: true });
     if (context === null) return undefined;
     context.drawImage(canvas, 0, 0, width, height);
-    const pixels = context.getImageData(0, 0, width, height).data;
-    const buckets = new Set();
-    let chromaSum = 0;
-    let luminanceSum = 0;
-    let saturationSum = 0;
-    const luminances = [];
-    let paintedPixels = 0;
-
-    for (let index = 0; index < pixels.length; index += 4) {
-      const alpha = pixels[index + 3];
-      if (alpha === 0) continue;
-      const red = pixels[index];
-      const green = pixels[index + 1];
-      const blue = pixels[index + 2];
-      paintedPixels += 1;
-      const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-      luminanceSum += luminance;
-      luminances.push(luminance);
-      const maximum = Math.max(red, green, blue);
-      const chroma = maximum - Math.min(red, green, blue);
-      chromaSum += chroma / 255;
-      saturationSum += maximum === 0 ? 0 : chroma / maximum;
-      buckets.add(\`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`);
-    }
-
-    luminances.sort((left, right) => left - right);
-    const quantile = (fraction) => luminances.length === 0
-      ? 0
-      : luminances[Math.min(luminances.length - 1, Math.floor(fraction * luminances.length))];
-
-    return {
-      colorBuckets: buckets.size,
-      meanPaintedChroma: paintedPixels === 0 ? 0 : chromaSum / paintedPixels,
-      meanPaintedLuminance: paintedPixels === 0 ? 0 : luminanceSum / paintedPixels,
-      meanPaintedSaturation: paintedPixels === 0 ? 0 : saturationSum / paintedPixels,
-      paintedLuminanceP25: quantile(0.25),
-      paintedLuminanceP50: quantile(0.5),
-      paintedLuminanceP75: quantile(0.75),
-      paintedPixels,
-      paintedRatio: paintedPixels / (width * height),
-    };
+    return summarizeCanvasPixels(
+      context.getImageData(0, 0, width, height).data,
+      width,
+      height,
+    );
   };
   const read = async () => {
     globalThis.__royalExamplesRenderNow?.();
@@ -438,6 +404,7 @@ const compositedCanvasSample = async (session) => {
   if (capture === undefined) return undefined;
   return evaluate(session, `
     (async () => {
+      const summarizeCanvasPixels = ${summarizeCanvasPixels.toString()};
       const response = await fetch('data:image/png;base64,${capture}');
       const bitmap = await createImageBitmap(await response.blob());
       const width = Math.max(1, Math.min(160, bitmap.width));
@@ -449,44 +416,11 @@ const compositedCanvasSample = async (session) => {
       if (context === null) return undefined;
       context.drawImage(bitmap, 0, 0, width, height);
       bitmap.close();
-      const pixels = context.getImageData(0, 0, width, height).data;
-      const buckets = new Set();
-      let chromaSum = 0;
-      let luminanceSum = 0;
-      let saturationSum = 0;
-      const luminances = [];
-      let paintedPixels = 0;
-      for (let index = 0; index < pixels.length; index += 4) {
-        const alpha = pixels[index + 3];
-        if (alpha === 0) continue;
-        const red = pixels[index];
-        const green = pixels[index + 1];
-        const blue = pixels[index + 2];
-        paintedPixels += 1;
-        const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-        luminanceSum += luminance;
-        luminances.push(luminance);
-        const maximum = Math.max(red, green, blue);
-        const chroma = maximum - Math.min(red, green, blue);
-        chromaSum += chroma / 255;
-        saturationSum += maximum === 0 ? 0 : chroma / maximum;
-        buckets.add([red >> 5, green >> 5, blue >> 5, alpha >> 6].join(':'));
-      }
-      luminances.sort((left, right) => left - right);
-      const quantile = (fraction) => luminances.length === 0
-        ? 0
-        : luminances[Math.min(luminances.length - 1, Math.floor(fraction * luminances.length))];
-      return {
-        colorBuckets: buckets.size,
-        meanPaintedChroma: paintedPixels === 0 ? 0 : chromaSum / paintedPixels,
-        meanPaintedLuminance: paintedPixels === 0 ? 0 : luminanceSum / paintedPixels,
-        meanPaintedSaturation: paintedPixels === 0 ? 0 : saturationSum / paintedPixels,
-        paintedLuminanceP25: quantile(0.25),
-        paintedLuminanceP50: quantile(0.5),
-        paintedLuminanceP75: quantile(0.75),
-        paintedPixels,
-        paintedRatio: paintedPixels / (width * height),
-      };
+      return summarizeCanvasPixels(
+        context.getImageData(0, 0, width, height).data,
+        width,
+        height,
+      );
     })()
   `);
 };
