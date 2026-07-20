@@ -132,7 +132,10 @@ vertex array compile into one retained draw packet. The active framebuffer and
 viewport form a separate per-view frame packet. Submission passes those two
 records directly to the state owner; it does not reconstruct retained state by
 assigning fields for every visible draw. Multi-draw compatibility compares the
-same retained packet consumed by ordinary submission.
+same retained packet consumed by ordinary submission. It MAY combine a maximal
+contiguous run in any pass only after that pass has established its required
+order. The extension call MUST preserve that order and MUST be semantically
+equivalent to submitting the same selected ranges individually.
 
 External GL use, including XR runtime work, crosses one explicit Royal state
 invalidation/restoration boundary so cached assumptions cannot leak between

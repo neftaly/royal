@@ -796,20 +796,24 @@ export class SurfaceGpuOwner {
       sortSurfacesBackToFront(this.#blendedSurfaces, view);
     }
     const opaqueCount = this.#opaqueSurfaces.length;
-    const transmissionCount = this.#transmissionSurfaces.length;
-    const transmissionEnd = opaqueCount + transmissionCount;
-    const surfaceCount = opaqueCount + transmissionCount + this.#blendedSurfaces.length;
+    const transmissionEnd = opaqueCount + this.#transmissionSurfaces.length;
+    const surfaceCount = transmissionEnd + this.#blendedSurfaces.length;
     const firstIndex = pass === "remaining" ? opaqueCount : 0;
     const endIndex = pass === "opaque" ? opaqueCount : surfaceCount;
     for (let index = firstIndex; index < endIndex; index += 1) {
-      const resource = index < opaqueCount
-        ? this.#opaqueSurfaces[index]!
-        : index < transmissionEnd
-          ? this.#transmissionSurfaces[index - opaqueCount]!
-          : this.#blendedSurfaces[index - transmissionEnd]!;
+      const opaqueBucket = index < opaqueCount;
+      const transmissionBucket = !opaqueBucket && index < transmissionEnd;
+      const bucket = opaqueBucket
+        ? this.#opaqueSurfaces
+        : transmissionBucket ? this.#transmissionSurfaces : this.#blendedSurfaces;
+      const bucketOffset = opaqueBucket
+        ? 0
+        : transmissionBucket ? opaqueCount : transmissionEnd;
+      const bucketIndex = index - bucketOffset;
+      const resource = bucket[bucketIndex]!;
       const surface = resource.surface;
       if (!lodMembershipsSelected(surface.lods, this.#lodSelection.selections)) continue;
-      if (index >= opaqueCount && index < transmissionEnd) {
+      if (transmissionBucket) {
         if (
           this.#transmissionVisibility[
             viewIndex * visibilityStride + resource.slot
@@ -1052,21 +1056,33 @@ export class SurfaceGpuOwner {
       transformProgram = program.program;
       if (
         this.#multiDraw !== null
-        && index < opaqueCount
         && resource.instanceCount === 0
         && resource.geometry.indexOffset <= 0x7fff_ffff
       ) {
         this.#multiDrawCounts[0] = resource.geometry.indexCount;
         this.#multiDrawOffsets[0] = resource.geometry.indexOffset;
         let drawCount = 1;
-        const runEnd = this.#opaqueMultiDrawRunEnds[index] ?? index + 1;
+        let runEnd = this.#opaqueMultiDrawRunEnds[index] ?? index + 1;
+        if (index >= opaqueCount) {
+          while (
+            runEnd - bucketOffset < bucket.length
+            && surfacesShareMultiDrawState(
+              bucket[runEnd - bucketOffset - 1]!,
+              bucket[runEnd - bucketOffset]!,
+            )
+          ) runEnd += 1;
+        }
         let nextIndex = index + 1;
         for (; nextIndex < runEnd; nextIndex += 1) {
-          const next = this.#opaqueSurfaces[nextIndex]!;
+          const next = bucket[nextIndex - bucketOffset]!;
           if (next.geometry.indexOffset > 0x7fff_ffff) break;
           if (
             lodMembershipsSelected(next.surface.lods, this.#lodSelection.selections)
-            && worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes)
+            && (transmissionBucket
+              ? this.#transmissionVisibility[
+                  viewIndex * visibilityStride + next.slot
+                ] === 1
+              : worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes))
           ) {
             this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
             this.#multiDrawOffsets[drawCount] = next.geometry.indexOffset;

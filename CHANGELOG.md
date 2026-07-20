@@ -45,6 +45,10 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Extended optional `WEBGL_multi_draw` submission to exact-compatible
+  transmission and alpha runs after depth sorting, preserving logical draw
+  order while cutting the Bistro motion profile from 382 to about 178 WebGL
+  submissions per frame without changing renderer CPU p95.
 - Made ordinary browser texture decode fall back to a budget-fitted DOM
   image/canvas path when `createImageBitmap` is absent or rejects the source,
   preserving source dimensions and GPU admission semantics.

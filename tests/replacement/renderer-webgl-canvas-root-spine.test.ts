@@ -654,6 +654,42 @@ describe("clear-only canvas root", () => {
     expect([...call[4].slice(0, call[6])]).toEqual([0, 3]);
   });
 
+  it("coalesces ordered transmission ranges without changing their draw order", async () => {
+    const multiDrawElementsWEBGL = vi.fn();
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_transmission"];
+    document.extensionsUsed = ["KHR_materials_transmission"];
+    document.materials = [{
+      extensions: { KHR_materials_transmission: { transmissionFactor: 1 } },
+    }];
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives[0]!.material = 0;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0] });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, root } = harness({ readGltf }, {
+      getExtension: vi.fn((name: string) => name === "WEBGL_multi_draw"
+        ? { multiDrawElementsWEBGL }
+        : null) as WebGL2RenderingContext["getExtension"],
+    });
+    const node = gltf("/multi-draw-transmission.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    for (let attempt = 0; attempt < 4 && multiDrawElementsWEBGL.mock.calls.length === 0; attempt += 1) {
+      await waitFor(() => expect(callbacks.length).toBeGreaterThan(0));
+      callbacks.shift()!();
+    }
+
+    expect(multiDrawElementsWEBGL).toHaveBeenCalled();
+    const call = multiDrawElementsWEBGL.mock.calls.at(-1)!;
+    expect([...call[1].slice(0, call[6])]).toEqual([3, 3]);
+    expect([...call[4].slice(0, call[6])]).toEqual([0, 3]);
+  });
+
   it("never coalesces color draws across distinct material identities", async () => {
     const multiDrawElementsWEBGL = vi.fn();
     const document = staticTriangleDocument();
