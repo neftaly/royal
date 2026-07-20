@@ -628,6 +628,63 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves authored texture identity across staggered publications", async () => {
+    const multiDrawElementsWEBGL = vi.fn();
+    const textureHandles = [{ label: "first" }, { label: "second" }] as unknown as WebGLTexture[];
+    let nextTextureHandle = 0;
+    const resolvers = new Map<string, (source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void>();
+    const decodeTexture = vi.fn<NonNullable<CanvasRootPlatform["decodeTexture"]>>(
+      (asset) => new Promise((resolve) => {
+        if (asset.kind !== "asset") throw new Error("expected direct test texture");
+        resolvers.set(asset.src, resolve);
+      }),
+    );
+    let activeTextureUnit = 0;
+    const boundTextures: Array<WebGLTexture | null> = [];
+    const drawnBaseColors: Array<WebGLTexture | null> = [];
+    const { callbacks, canvas, root } = harness({ decodeTexture }, {
+      activeTexture: vi.fn((unit: number) => { activeTextureUnit = unit - 0x84c0; }),
+      bindTexture: vi.fn((_target: number, texture: WebGLTexture | null) => {
+        boundTextures[activeTextureUnit] = texture;
+      }),
+      createTexture: vi.fn(() => textureHandles[nextTextureHandle++]!),
+      drawElements: vi.fn(() => { drawnBaseColors.push(boundTextures[0] ?? null); }),
+      getExtension: vi.fn((name: string) => name === "WEBGL_multi_draw"
+        ? { multiDrawElementsWEBGL }
+        : null) as WebGL2RenderingContext["getExtension"],
+    });
+    const textures = [imageTexture("/first.png"), imageTexture("/second.png")];
+    const geometry = planeGeometry([2, 1]);
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: textures.map((texture) => mesh({
+        geometry,
+        material: unlitMaterial({ texture }),
+      })),
+    }));
+    callbacks.shift()!();
+
+    const firstSource = {} as ImageBitmap;
+    resolvers.get("/first.png")!({ height: 8, source: firstSource, width: 8 });
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[0]!).state).toBe("ready"));
+    callbacks.shift()!();
+
+    const secondSource = {} as ImageBitmap;
+    resolvers.get("/second.png")!({ height: 8, source: secondSource, width: 8 });
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[1]!).state).toBe("ready"));
+    callbacks.shift()!();
+
+    const created = vi.mocked(canvas.gl.createTexture).mock.results.map((result) => result.value);
+    expect(created).toHaveLength(2);
+    expect(drawnBaseColors.slice(-2)).toEqual(created);
+    expect(multiDrawElementsWEBGL).not.toHaveBeenCalled();
+  });
+
   it("uses one canonical transform and identity for visible and exact picking work", () => {
     const { callbacks, canvas, root } = harness();
     const node = mesh({
