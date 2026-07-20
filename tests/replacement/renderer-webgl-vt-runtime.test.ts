@@ -62,6 +62,62 @@ describe("browser virtual texture runtime", () => {
     runtime.dispose();
   });
 
+  it("cancels page work immediately when camera demand moves away", async () => {
+    const manifest = {
+      borderTexels: 1,
+      contractVersion: 2,
+      pageSize: 128,
+      pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" },
+      physicalSlots: 8,
+      virtualSize: [512, 512],
+    };
+    const pageSignals: AbortSignal[] = [];
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("fetch", vi.fn((input: URL | RequestInfo, init?: RequestInit) => {
+      if (String(input).endsWith("vt.json")) {
+        return Promise.resolve(new Response(JSON.stringify(manifest), {
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      const signal = init?.signal;
+      if (signal === undefined || signal === null) throw new Error("page read requires a signal");
+      pageSignals.push(signal);
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }));
+    const texture = virtualTexture("https://example.test/vt.json");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: planeGeometry(2),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn());
+    const identity = identityMat4();
+    const viewport = { height: 1024, width: 1024, x: 0, y: 0 };
+
+    runtime.setScene(prepared);
+    await vi.waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    runtime.update([{ view: identity, viewProjection: identity, viewport }]);
+    await vi.waitFor(() => expect(pageSignals.length).toBeGreaterThan(0));
+
+    const offscreen = identityMat4();
+    offscreen[12] = 100;
+    runtime.update([{ view: offscreen, viewProjection: offscreen, viewport }]);
+
+    expect(pageSignals.every((signal) => signal.aborted)).toBe(true);
+    expect(runtime.snapshot(texture).pendingPages).toBe(0);
+
+    runtime.update([{ view: identity, viewProjection: identity, viewport }]);
+    await vi.waitFor(() => expect(pageSignals).toHaveLength(2));
+    await Promise.resolve();
+    expect(pageSignals[1]!.aborted).toBe(false);
+    expect(runtime.snapshot(texture).pendingPages).toBe(1);
+    runtime.dispose();
+  });
+
   it("publishes one page-table revision for a frame's admitted page batch", async () => {
     const manifest = {
       borderTexels: 1,
