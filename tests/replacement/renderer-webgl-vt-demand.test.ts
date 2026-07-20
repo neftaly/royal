@@ -183,4 +183,23 @@ describe("VT2 clipped projected demand", () => {
     );
     expect([...mixed.keys.keys()]).toEqual([...inside.keys.keys()]);
   });
+
+  it("keeps instanced demand identical when the extra instances are offscreen", () => {
+    const visibleOnly = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(visibleOnly, manifest, [surface], [view()], sampler);
+    const localModels = new Float32Array(32);
+    localModels.set(identityMat4(), 0);
+    const offscreen = identityMat4();
+    offscreen[12] = 100;
+    localModels.set(offscreen, 16);
+    const instanced = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(
+      instanced,
+      manifest,
+      [{ ...surface, instances: { count: 2, localModels } }],
+      [view()],
+      sampler,
+    );
+    expect([...instanced.keys.keys()]).toEqual([...visibleOnly.keys.keys()]);
+  });
 });

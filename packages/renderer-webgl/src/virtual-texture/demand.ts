@@ -10,7 +10,10 @@ import {
 import type { FrameViewport } from "../frame/clear-frame";
 import {
   frustumPlanesInto,
+  emptyWorldBounds,
+  includeTransformedBounds,
   worldBoundsVisible,
+  type MutableWorldBounds,
   type WorldBounds,
 } from "../surface/surface-visibility";
 import {
@@ -35,6 +38,7 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   clipA: Float64Array;
   clipB: Float64Array;
   frustumPlanes: Float32Array;
+  instanceBounds: MutableWorldBounds;
   keys: Map<number | string, number>;
   mips: Uint16Array;
   model: MutableMat4;
@@ -59,6 +63,7 @@ export const createVirtualTextureDemandWorkspace = (
     clipB: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     count: 0,
     frustumPlanes: new Float32Array(24),
+    instanceBounds: emptyWorldBounds(),
     keys: new Map(),
     mips: new Uint16Array(maxPages),
     model: identityMat4(),
@@ -591,6 +596,15 @@ const collectVirtualTextureSurfaceViewDemand = (
   }
   for (let instance = 0; instance < instances.count; instance += 1) {
     copyInstanceModel(workspace.model, surface.model, instances.localModels, instance * 16);
+    const bounds = workspace.instanceBounds;
+    bounds.min[0] = Infinity;
+    bounds.min[1] = Infinity;
+    bounds.min[2] = Infinity;
+    bounds.max[0] = -Infinity;
+    bounds.max[1] = -Infinity;
+    bounds.max[2] = -Infinity;
+    includeTransformedBounds(bounds, surface.geometry.bounds, workspace.model);
+    if (!worldBoundsVisible(bounds, workspace.frustumPlanes)) continue;
     collectModelDemand(workspace, manifest, surface, workspace.model, view, sampler);
   }
 };
