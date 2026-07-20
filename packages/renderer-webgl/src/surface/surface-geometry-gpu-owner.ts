@@ -115,6 +115,7 @@ type PendingGeometry = Readonly<{
 }>;
 
 type PlannedGeometry = PendingGeometry & Readonly<{
+  planIndex: number;
   range: GeometryBatchRange;
 }>;
 
@@ -155,7 +156,11 @@ const indexUploadWorkspace = (
 
 const planGeometryArenas = (
   surfaces: readonly CanonicalDrawSurface[],
-): Readonly<{ key: string; plans: readonly PlannedGeometryArena[] }> => {
+): Readonly<{
+  key: string;
+  plans: readonly PlannedGeometryArena[];
+  uploads: ReadonlyMap<string, PlannedGeometry>;
+}> => {
   const byLayout = new Map<number, PendingGeometry[]>();
   const keys = new Set<string>();
   for (const surface of surfaces) {
@@ -181,10 +186,12 @@ const planGeometryArenas = (
     )) {
       const chunkEntries = entries.slice(chunk.start, chunk.end);
       const batch = planGeometryBatchLayout(inputs.slice(chunk.start, chunk.end));
+      const planIndex = plans.length;
       plans.push({
         batch,
         entries: chunkEntries.map((entry, index) => ({
           ...entry,
+          planIndex,
           range: batch.ranges[index]!,
         })),
         layout,
@@ -196,7 +203,11 @@ const planGeometryArenas = (
       surface.geometry.indices.length,
     ]));
   }
-  return { key: JSON.stringify(identity), plans };
+  const uploads = new Map<string, PlannedGeometry>();
+  for (const plan of plans) {
+    for (const entry of plan.entries) uploads.set(entry.key, entry);
+  }
+  return { key: JSON.stringify(identity), plans, uploads };
 };
 
 /** Owns geometry buffers and vertex arrays for one context generation. */
@@ -689,11 +700,6 @@ export class SurfaceGeometryGpuOwner {
     const nextInstanceVertexArrays: GpuInstanceVertexArray[] = [];
     const nextSurfaces: GpuGeometrySurface[] = [];
     const geometryByKey = new Map<string, GpuGeometry>();
-    const uploadByKey = new Map<string, Readonly<{
-      entry: PlannedGeometry;
-      plan: PlannedGeometryArena;
-      planIndex: number;
-    }>>();
     const createdArenas: GpuGeometryArena[] = [];
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
@@ -706,21 +712,16 @@ export class SurfaceGeometryGpuOwner {
         !geometryPlanChanged
         && nextGeometryArenas.length !== planned.plans.length
       ) throw new Error("Royal retained an inconsistent geometry arena plan");
-      for (let planIndex = 0; planIndex < planned.plans.length; planIndex += 1) {
-        const plan = planned.plans[planIndex]!;
-        for (const entry of plan.entries) {
-          uploadByKey.set(entry.key, { entry, plan, planIndex });
-        }
-      }
       for (const geometry of nextGeometryResources) geometryByKey.set(geometry.key, geometry);
       for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
         const surface = surfaces[surfaceIndex]!;
         const key = surfaceGeometryResourceKey(surface);
         let geometry = geometryByKey.get(key);
-        const geometryUpload = uploadByKey.get(key);
+        const geometryUpload = planned.uploads.get(key);
         if (geometryUpload === undefined) {
           throw new Error("Royal geometry arena omitted an upload range");
         }
+        const geometryArenaPlan = planned.plans[geometryUpload.planIndex]!;
         const instances = surface.instances;
         let instanceData = instances === undefined
           ? undefined
@@ -744,11 +745,11 @@ export class SurfaceGeometryGpuOwner {
         }
         const uploadByteLength = (nextUploadedGeometryKeys.has(key)
           ? 0
-          : surfaceGeometryUploadByteLength(surface, geometryUpload.plan.batch.indexBytes))
+          : surfaceGeometryUploadByteLength(surface, geometryArenaPlan.batch.indexBytes))
           + (instanceUploadRequired ? surfaceInstanceUploadByteLength(surface) : 0);
         if (!this.#uploadBudget.tryAdmit(uploadByteLength)) break;
         if (geometry === undefined) {
-          const created = this.#createGeometryArena(geometryUpload.plan);
+          const created = this.#createGeometryArena(geometryArenaPlan);
           createdArenas.push(created.arena);
           nextGeometryArenas[geometryUpload.planIndex] = created.arena;
           nextGeometryResources.push(...created.geometries);
@@ -759,8 +760,8 @@ export class SurfaceGeometryGpuOwner {
         if (!nextUploadedGeometryKeys.has(key)) {
           this.#uploadGeometry(
             geometry.arena,
-            geometryUpload.plan,
-            geometryUpload.entry,
+            geometryArenaPlan,
+            geometryUpload,
             this.#indexUploadWorkspace,
           );
           nextUploadedGeometryKeys.add(key);
