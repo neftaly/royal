@@ -123,6 +123,33 @@ describe("static glTF preparation core", () => {
     )).rejects.toThrow("Draco decode failed");
   });
 
+  it("rejects the static profile before starting declared codec work", async () => {
+    const document = staticTriangleDocument();
+    document.asset = { version: "1.0" };
+    document.extensionsRequired = ["KHR_draco_mesh_compression"];
+    document.extensionsUsed = ["KHR_draco_mesh_compression"];
+    const meshes = document.meshes as Array<{
+      primitives: Array<Record<string, unknown>>;
+    }>;
+    meshes[0]!.primitives[0]!.extensions = {
+      KHR_draco_mesh_compression: {
+        attributes: { POSITION: 0 },
+        bufferView: 0,
+      },
+    };
+    const executeDracoTasks = vi.fn(async () => []);
+
+    await expect(prepareStaticGltfSource(
+      staticTriangleGlb(document),
+      "preflight-before-codecs",
+      "invalid-version.glb",
+      "/models/invalid-version.glb",
+      async () => new Uint8Array(),
+      executeDracoTasks,
+    )).rejects.toThrow("asset.version: must be 2.0");
+    expect(executeDracoTasks).not.toHaveBeenCalled();
+  });
+
   it("lowers one unlit GLB triangle into the canonical surface ABI", () => {
     const bytes = staticTriangleGlb();
     const prepared = prepareStaticGlb(bytes, "asset:v1", "triangle.glb");

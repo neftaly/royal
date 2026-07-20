@@ -95,6 +95,11 @@ type StaticDracoDecoder = (
   path: string,
 ) => DecodedDracoPrimitive;
 
+type StaticDocumentPreflight = Readonly<{
+  bufferByteLength: number;
+  usesDraco: boolean;
+}>;
+
 type PreparedMeshPrimitive = Readonly<{
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
@@ -180,15 +185,15 @@ export const batchRepeatedStaticPrimitives = (
   return result;
 };
 
-const prepareStaticDocument = (
+/** Rejects invalid static-profile input before any codec or semantic work starts. */
+const preflightStaticDocument = (
   document: JsonObject,
   binary: Uint8Array,
   container: "glb" | "gltf",
   contentKey: string,
   label: string,
-  sourceUri: string,
-  decodeDraco?: StaticDracoDecoder,
-): PreparedStaticGltf => {
+  dracoAvailable: boolean,
+): StaticDocumentPreflight => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
   const asset = object(document.asset, label, "asset");
   if (asset.version !== "2.0") fail(label, "asset.version", "must be 2.0");
@@ -202,7 +207,8 @@ const prepareStaticDocument = (
   const requiredExtensions = optionalArray(
     document.extensionsRequired, label, "extensionsRequired",
   );
-  validateRequiredExtensionProfile(document, requiredExtensions, label, decodeDraco !== undefined);
+  validateRequiredExtensionProfile(document, requiredExtensions, label, dracoAvailable);
+  const usedExtensions = optionalArray(document.extensionsUsed, label, "extensionsUsed");
 
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");
@@ -222,6 +228,23 @@ const prepareStaticDocument = (
       container === "glb" ? "does not match the padded GLB BIN chunk" : "does not match the external buffer",
     );
   }
+  return {
+    bufferByteLength,
+    usesDraco: usedExtensions.includes("KHR_draco_mesh_compression")
+      || requiredExtensions.includes("KHR_draco_mesh_compression"),
+  };
+};
+
+const prepareStaticDocument = (
+  document: JsonObject,
+  binary: Uint8Array,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  preflight: StaticDocumentPreflight,
+  decodeDraco?: StaticDracoDecoder,
+): PreparedStaticGltf => {
+  const { bufferByteLength } = preflight;
   const accessors = array(document.accessors, label, "accessors");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
@@ -874,7 +897,22 @@ export const prepareStaticGlb = (
   const document = object(parsed.document, label, "document");
   const binary = parsed.binaryChunk
     ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
-  return prepareStaticDocument(document, binary, "glb", contentKey, label, sourceUri);
+  const preflight = preflightStaticDocument(
+    document,
+    binary,
+    "glb",
+    contentKey,
+    label,
+    false,
+  );
+  return prepareStaticDocument(
+    document,
+    binary,
+    contentKey,
+    label,
+    sourceUri,
+    preflight,
+  );
 };
 
 const prepareDocumentWithCodecs = async (
@@ -886,25 +924,25 @@ const prepareDocumentWithCodecs = async (
   sourceUri: string,
   executeDracoTasks?: StaticDracoTaskExecutor,
 ): Promise<PreparedStaticGltf> => {
-  const extensionsUsed = optionalArray(document.extensionsUsed, label, "extensionsUsed");
-  const extensionsRequired = optionalArray(
-    document.extensionsRequired,
+  const preflight = preflightStaticDocument(
+    document,
+    binary,
+    container,
+    contentKey,
     label,
-    "extensionsRequired",
+    true,
   );
-  const usesDraco = extensionsUsed.includes("KHR_draco_mesh_compression")
-    || extensionsRequired.includes("KHR_draco_mesh_compression");
-  const decodeDraco = usesDraco
+  const decodeDraco = preflight.usesDraco
     ? await import("./draco").then((module) =>
       module.prepareSelectedStaticDracoDecoder(document, binary, label, executeDracoTasks))
     : undefined;
   return prepareStaticDocument(
     document,
     binary,
-    container,
     contentKey,
     label,
     sourceUri,
+    preflight,
     decodeDraco,
   );
 };
