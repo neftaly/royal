@@ -84,6 +84,7 @@ export class PrefilteredEnvironmentGpuOwner {
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
       gl.texStorage2D(
         gl.TEXTURE_CUBE_MAP,

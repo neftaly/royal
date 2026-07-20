@@ -377,7 +377,7 @@ export class SurfaceCompositeOwner {
       resources.height,
     );
     if (this.#mipmapsRequired) gl.generateMipmap(gl.TEXTURE_2D);
-    state.invalidateTextureBindings();
+    state.invalidateTextureUnit(10);
   }
 
   present(

@@ -155,6 +155,8 @@ Texture-unit validity is tracked per unit. A draw that samples no textures—or
 only a subset of the available units—MUST NOT validate other units after an
 upload or pass has borrowed texture state. A later sampler therefore rebinds
 its exact image even when an intervening untextured draw used no texture calls.
+An owned upload or copy invalidates only the units it actually borrowed;
+unknown external work invalidates the complete shadow.
 
 State-transition meaning SHOULD have a pure, allocation-free decision layer or
 reference model that can be differentially tested. The imperative layer alone

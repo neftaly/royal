@@ -47,9 +47,9 @@ export class WebGlStateOwner {
     this.#state.vertexArray = null;
   }
 
-  /** Resource preparation may bind texture unit zero without owning draw state. */
-  invalidateTextureBindings(): void {
-    this.#state.textureBindings.length = 0;
+  /** Resource preparation borrowed one texture unit without owning draw state. */
+  invalidateTextureUnit(unit: number): void {
+    this.#state.textureBindings[unit] = undefined;
   }
 
   /** Detaches a private sampled texture before its storage becomes a render target. */

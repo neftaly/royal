@@ -169,6 +169,22 @@ describe("surface draw state transition core", () => {
     expect(transition.textureUnits).toBe(1);
   });
 
+  it("keeps untouched texture units valid when one upload unit becomes unknown", () => {
+    const previous = state();
+    const first = intent();
+    const bindings = [
+      { sampler: handle<WebGLSampler>(), target: "2d" as const, texture: handle<WebGLTexture>() },
+      { sampler: handle<WebGLSampler>(), target: "2d" as const, texture: handle<WebGLTexture>() },
+    ];
+    const textured = { ...first, textureBindings: bindings, textureUnits: 3 };
+    commitAppliedSurfaceDrawState(previous, textured);
+    previous.textureBindings[0] = undefined;
+
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, textured, transition);
+    expect(transition.textureUnits).toBe(1);
+  });
+
   it("changes only blend/depth pipeline state when crossing the transparent boundary", () => {
     const previous = state();
     const opaque = intent();

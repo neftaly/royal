@@ -8,7 +8,10 @@ import {
 } from "../math/mat4";
 import type { FrameViewport } from "../frame/clear-frame";
 import type { WebGlStateOwner } from "../webgl/state-owner";
-import type { SurfaceDrawStateIntent } from "../webgl/draw-state-transition";
+import type {
+  MutableSurfaceDrawStateIntent,
+  SurfaceDrawStateIntent,
+} from "../webgl/draw-state-transition";
 import {
   TextureGpuOwner,
   type GpuTextureBinding,
@@ -122,20 +125,6 @@ type WebGlMultiDraw = Readonly<{
   ) => void;
 }>;
 
-type MutableSurfaceDrawIntent = {
-  alphaBlend: boolean;
-  cullBackFaces: boolean;
-  depthTest: boolean;
-  depthWrite: boolean;
-  framebuffer: WebGLFramebuffer | null;
-  frontFace: number;
-  program: WebGLProgram;
-  textureBindings: readonly GpuTextureBinding[];
-  textureUnits: number;
-  vertexArray: WebGLVertexArrayObject;
-  viewport: { height: number; width: number; x: number; y: number };
-};
-
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_041, 1]);
 const DEFAULT_ATTENUATION_COLOR = new Float32Array([1, 1, 1]);
@@ -201,7 +190,7 @@ export class SurfaceGpuOwner {
   readonly #directionalLightDirections = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
   #directionalLightCount = 0;
   #dirty = false;
-  #drawIntent: MutableSurfaceDrawIntent | null = null;
+  #drawIntent: MutableSurfaceDrawStateIntent | null = null;
   #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
   #environmentGpu: PrefilteredEnvironmentGpuOwner | null = null;
@@ -466,7 +455,7 @@ export class SurfaceGpuOwner {
     try {
       this.#reconcileTexturePublications();
     } finally {
-      state.invalidateTextureBindings();
+      state.invalidateTextureUnit(0);
     }
     return true;
   }
@@ -543,7 +532,10 @@ export class SurfaceGpuOwner {
     if (this.#virtualTexture !== null) {
       const update = this.#virtualTexture.update(views);
       virtualTexturePending = update.pending;
-      if (update.webGlStateChanged) state.invalidateTextureBindings();
+      if (update.webGlStateChanged) {
+        state.invalidateTextureUnit(0);
+        state.invalidateTextureUnit(5);
+      }
       if (this.#virtualTextureBindingRevision !== this.#virtualTexture.bindingRevision) {
         this.#virtualTextureBindingRevision = this.#virtualTexture.bindingRevision;
         this.#dirty = true;
@@ -556,7 +548,7 @@ export class SurfaceGpuOwner {
           this.#reconcile();
         } finally {
           state.invalidateVertexArray();
-          state.invalidateTextureBindings();
+          state.invalidateTextureUnit(0);
         }
       }
     }

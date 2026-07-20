@@ -872,7 +872,7 @@ export class CanvasRoot {
       textureStateChanged = true;
       throw error;
     } finally {
-      if (textureStateChanged) this.#state.invalidateTextureBindings();
+      if (textureStateChanged) this.#state.invalidateTextureUnit(0);
     }
   }
 
