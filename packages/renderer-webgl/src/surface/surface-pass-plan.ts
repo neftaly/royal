@@ -5,6 +5,7 @@ import {
 } from "./canonical-material";
 
 export type SurfacePassKind = "opaque" | "transmission" | "transparent";
+export type SurfaceDrawPass = "all" | "opaque" | "remaining";
 
 export type SurfacePassPlan<Surface> = Readonly<{
   opaque: Surface[];
@@ -28,6 +29,11 @@ export const canonicalTransmissionNeedsMipmaps = (
   material: CanonicalSurfaceMaterial,
 ): boolean => canonicalMaterialHasTransmission(material)
   && (material.roughnessFactor >= 0.1 || material.metallicRoughnessAsset !== undefined);
+
+/** Whether this draw pass reaches work whose ordering depends on the current view. */
+export const surfaceDrawPassNeedsDepthOrder = (
+  pass: SurfaceDrawPass,
+): boolean => pass !== "opaque";
 
 /** glTF ignores authored double-sided state once nonzero thickness defines a volume boundary. */
 export const canonicalSurfaceIsDoubleSided = (

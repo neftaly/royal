@@ -6,6 +6,7 @@ import {
   canonicalTransmissionNeedsMipmaps,
   planGroupedSurfacePasses,
   planSurfacePasses,
+  surfaceDrawPassNeedsDepthOrder,
 } from "../../packages/renderer-webgl/src/surface/surface-pass-plan";
 import {
   linearCompositeColorBytesPerPixel,
@@ -28,6 +29,12 @@ const standard = (
 });
 
 describe("fixed surface pass planning", () => {
+  it("sorts view-dependent work only in passes that can draw it", () => {
+    expect(surfaceDrawPassNeedsDepthOrder("opaque")).toBe(false);
+    expect(surfaceDrawPassNeedsDepthOrder("all")).toBe(true);
+    expect(surfaceDrawPassNeedsDepthOrder("remaining")).toBe(true);
+  });
+
   it("accounts for target color, depth-stencil, and the complete source mip chain", () => {
     expect(compositeTargetByteLength(2, 2, 4)).toBe(52);
     expect(compositeTargetByteLength(2, 2, 4, { mipmappedSceneColor: false })).toBe(48);

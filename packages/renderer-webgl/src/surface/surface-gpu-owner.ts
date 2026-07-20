@@ -87,6 +87,8 @@ import {
   canonicalSurfaceIsDoubleSided,
   canonicalTransmissionNeedsMipmaps,
   planGroupedSurfacePasses,
+  surfaceDrawPassNeedsDepthOrder,
+  type SurfaceDrawPass,
 } from "./surface-pass-plan";
 import {
   terminalPresentationRequested,
@@ -601,11 +603,15 @@ export class SurfaceGpuOwner {
     ) return presentationWorkPending;
     this.#selectLods(views, scene);
     if (!this.#compositeActive) {
-      for (const view of views) this.#drawView(view, framebuffer, state, scene, "all");
+      for (const view of views) {
+        this.#prepareView(view);
+        this.#drawView(view, framebuffer, state, scene, "all");
+      }
     } else {
       const composite = this.#compositeGpu;
       if (composite === null) throw new Error("Royal transmission composite owner is missing");
       for (const view of views) {
+        this.#prepareView(view);
         this.#compositeViewport.width = view.viewport.width;
         this.#compositeViewport.height = view.viewport.height;
         this.#compositeView.view = view.view;
@@ -637,6 +643,12 @@ export class SurfaceGpuOwner {
       this.#gl.flush();
     }
     return presentationWorkPending;
+  }
+
+  #prepareView(frameView: SurfaceFrameView): void {
+    cameraWorldPositionFromViewInto(this.#cameraPosition, frameView.view);
+    this.#cameraPosition[3] = 1;
+    frustumPlanesInto(this.#frustumPlanes, frameView.viewProjection);
   }
 
   #requestCompositeOwner(): void {
@@ -710,14 +722,12 @@ export class SurfaceGpuOwner {
     framebuffer: WebGLFramebuffer | null,
     state: WebGlStateOwner,
     scene: CanonicalSurfaceScene,
-    pass: "all" | "opaque" | "remaining",
+    pass: SurfaceDrawPass,
   ): void {
     this.#drawFrame.framebuffer = framebuffer;
     this.#drawFrame.viewport = frameView.viewport;
     const view = frameView.view;
     const viewProjection = frameView.viewProjection;
-    cameraWorldPositionFromViewInto(this.#cameraPosition, view);
-    this.#cameraPosition[3] = 1;
     let initializedProgram: WebGLProgram | null = null;
     let baseColorCoordinates: CanonicalTextureCoordinates | undefined;
     let emissiveCoordinates: CanonicalTextureCoordinates | undefined;
@@ -734,9 +744,10 @@ export class SurfaceGpuOwner {
     let transformModel: Mat4 | null = null;
     let transformProgram: WebGLProgram | null = null;
     const gl = this.#gl;
-    frustumPlanesInto(this.#frustumPlanes, viewProjection);
-    this.#sortBackToFrontSurfaces(this.#transmissionSurfaces, view);
-    this.#sortBackToFrontSurfaces(this.#blendedSurfaces, view);
+    if (surfaceDrawPassNeedsDepthOrder(pass)) {
+      this.#sortBackToFrontSurfaces(this.#transmissionSurfaces, view);
+      this.#sortBackToFrontSurfaces(this.#blendedSurfaces, view);
+    }
     const opaqueCount = this.#opaqueSurfaces.length;
     const transmissionCount = this.#transmissionSurfaces.length;
     const surfaceCount = opaqueCount + transmissionCount + this.#blendedSurfaces.length;
