@@ -282,6 +282,13 @@ submit scene draws, or increment the public presented-frame counter. Camera,
 scene, size, context, VT, or application invalidation always overrides this
 cadence and presents the latest committed resources.
 
+Committing one map in a visually coherent material group MUST NOT rebuild its
+retained draw packet while the sampled texture-unit mask is unchanged. The GPU
+storage commit still proceeds immediately; packet/program publication occurs
+once the coherent group becomes drawable. Context restoration and source
+identity replacement remain full resource transitions rather than this
+incremental path.
+
 Canonical scene lowering deduplicates ordinary image claims by GPU storage
 identity. It orders every selected surface's base-color claim before emissive,
 metallic-roughness, normal, and occlusion claims, preserving stable authored

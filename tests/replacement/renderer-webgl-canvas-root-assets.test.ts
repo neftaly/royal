@@ -16,6 +16,8 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
 import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
+import type { TextureSourceRef } from "../../packages/renderer-webgl/src/texture/asset-owner";
+import { SurfaceProgramOwner } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
 import {
@@ -644,6 +646,69 @@ describe("canvas root asset publication", () => {
       return values[0] === 0.25 && values[1] === 0.5 && values[2] === 1
         && Math.abs(values[3]! - 0.04) < 0.000_001;
     })).toBe(true);
+  });
+
+  it("uploads coherent detail maps without rebuilding an unchanged draw packet", async () => {
+    const decodes = new Map<string, (source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void>();
+    const decodeTexture = vi.fn((asset: TextureSourceRef) => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => {
+      if (asset.kind === "asset") decodes.set(asset.src, resolve);
+    }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      undefined,
+      "unused.png",
+      (document) => {
+        delete document.extensionsRequired;
+        delete document.extensionsUsed;
+        document.images = [{ uri: "metal.png" }, { uri: "normal.png" }];
+        document.textures = [{ source: 0 }, { source: 1 }];
+        document.materials = [{
+          normalTexture: { index: 1 },
+          pbrMetallicRoughness: { metallicRoughnessTexture: { index: 0 } },
+        }];
+      },
+    ));
+    const getProgram = vi.spyOn(SurfaceProgramOwner.prototype, "get");
+    const { callbacks, root } = harness({ decodeTexture, readGltf });
+    const node = gltf("/models/coherent-details.glb");
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+      callbacks.shift()!();
+      await vi.waitFor(() => expect(decodes.size).toBe(2));
+      callbacks.shift()!();
+      const initialProgramLookups = getProgram.mock.calls.length;
+
+      decodes.get("/models/metal.png")?.({
+        height: 8,
+        source: {} as ImageBitmap,
+        width: 8,
+      });
+      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+        textures: { loading: 1, ready: 1 },
+      }));
+      callbacks.shift()!();
+      expect(getProgram).toHaveBeenCalledTimes(initialProgramLookups);
+
+      decodes.get("/models/normal.png")?.({
+        height: 8,
+        source: {} as ImageBitmap,
+        width: 8,
+      });
+      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+      callbacks.shift()!();
+      expect(getProgram.mock.calls.length).toBeGreaterThan(initialProgramLookups);
+    } finally {
+      root.dispose();
+      getProgram.mockRestore();
+    }
   });
 
   it("streams embedded GLB images through that same texture owner and GPU path", async () => {

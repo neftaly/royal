@@ -1346,6 +1346,9 @@ export class SurfaceGpuOwner {
           presentableOrdinaryTextureMask(material, ordinaryBindings, 0),
           this.#compositeActive,
         );
+        const textureUnits = surfaceTextureUnitMask(features);
+        resource.surface = surface;
+        if (textureUnits === resource.drawPacket.textureUnits) continue;
         const program = this.#programs.get(
           material.kind,
           features,
@@ -1370,11 +1373,10 @@ export class SurfaceGpuOwner {
           surface,
           program.program,
           bindings,
-          surfaceTextureUnitMask(features),
+          textureUnits,
           resource.vertexArray,
         );
         resource.program = program;
-        resource.surface = surface;
       }
       if (!deferred) this.#texturePublicationKeys.delete(key);
     }

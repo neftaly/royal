@@ -266,7 +266,7 @@ ownership, and clarity—not assignment tokens.
 | `KHR_node_visibility` | deferred | Ratified but intentionally not in the allowlist. Static lowering is the only strong new extension candidate, below animation priority. |
 | Basic glTF transform animation | deferred | No runtime/public API. The spec reserves pure sampling, explicit controller and canonical transform revisions; skins/morphs remain separate. |
 | GS SVG extension | proposal | Behavior/security/fallback spec exists; prefix/schema/sample/implementation work is absent by design. Plain Royal SVG ingestion remains the current path. |
-| Progressive glTF image lifecycle | conforms | Loading/streaming/ready/degraded states and per-image demand/publication are implemented and tested. |
+| Progressive glTF image lifecycle | conforms | Loading/streaming/ready/degraded states and per-image demand/publication are implemented and tested. Resource-only commits release decoded handoff storage without presenting, and maps hidden behind a coherent group upload without rebuilding the unchanged retained draw packet. |
 | Neutral texture fallbacks | partial | Stable neutral/error texture contracts exist; ongoing visual oracles must ensure every material slot and VT transition avoids white/debug flashes. |
 | VT demand/publication lifecycle | conforms | Pure demand/model/orchestration, transactional GPU arena, scheduling/admission/property tests and close-view stress cases provide broad evidence. Physical Safari/Quest quality remains ongoing. |
 | Exact picking geometry path | conforms | Mesh/glTF/instance proxies enter the same CPU geometry/query and do not allocate GPU resources. Actual glTF geometry now carries LOD, alpha-mask and double-sided raster intent into that query. |
