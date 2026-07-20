@@ -64,6 +64,8 @@ semantics.
 forms and lowers once to canonical linear RGBA floats. RGB supplies alpha one.
 The shader multiplies it with the material and texture base color before alpha
 mode evaluation; exact alpha-mask picking uses the same interpolated alpha.
+`TEXCOORD_0` and `TEXCOORD_1` likewise accept float or normalized unsigned
+byte/short VEC2 and lower once to canonical float UVs.
 
 Triangles, triangle strips, and triangle fans lower once to canonical triangle
 indices. Conversion preserves winding and MUST NOT silently change authored

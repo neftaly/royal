@@ -7,19 +7,21 @@ import type { CanonicalUnlitMaterial } from "../../packages/renderer-webgl/src/s
 const context = (
   binary: Uint8Array,
   accessor: Record<string, unknown>,
+  byteStride?: number,
 ): AccessorContext => ({
   accessors: [{ bufferView: 0, count: 2, type: "VEC3", ...accessor }],
   binary,
   bufferByteLength: binary.byteLength,
-  bufferViews: [{ buffer: 0, byteLength: binary.byteLength }],
+  bufferViews: [{ buffer: 0, byteLength: binary.byteLength, ...(byteStride === undefined ? {} : { byteStride }) }],
   label: "colors.gltf",
 });
 
 describe("canonical glTF vertex colors", () => {
   it("normalizes unsigned byte RGB and supplies opaque alpha", () => {
     expect(readVertexColors(context(
-      new Uint8Array([0, 127, 255, 255, 64, 0]),
+      new Uint8Array([0, 127, 255, 0, 255, 64, 0, 0]),
       { componentType: 5121, normalized: true },
+      4,
     ), 0)).toEqual(new Float32Array([
       0, 127 / 255, 1, 1,
       1, 64 / 255, 0, 1,

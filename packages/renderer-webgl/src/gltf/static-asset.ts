@@ -33,6 +33,7 @@ import {
   readIndices,
   readInstanceVectors,
   readPositions,
+  readTextureCoordinates,
   readVertexColors,
   validateDecodedVectors,
   type AccessorContext,
@@ -442,11 +443,9 @@ const prepareStaticDocument = (
       const textureCoordinates0 = attributes.TEXCOORD_0 === undefined
         ? undefined
         : decodedTextureCoordinates === undefined
-          ? readFloatVectors(
+          ? readTextureCoordinates(
             context,
             index(attributes.TEXCOORD_0, accessors, label, `${path}.attributes.TEXCOORD_0`),
-            "VEC2",
-            2,
             "TEXCOORD_0",
           )
           : validateDecodedVectors(
@@ -528,11 +527,9 @@ const prepareStaticDocument = (
       const textureCoordinates1 = !usesTextureCoordinates1 || attributes.TEXCOORD_1 === undefined
         ? undefined
         : decodedTextureCoordinates1 === undefined
-          ? readFloatVectors(
+          ? readTextureCoordinates(
             context,
             index(attributes.TEXCOORD_1, accessors, label, `${path}.attributes.TEXCOORD_1`),
-            "VEC2",
-            2,
             "TEXCOORD_1",
           )
           : validateDecodedVectors(

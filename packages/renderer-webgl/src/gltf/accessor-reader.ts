@@ -108,6 +108,16 @@ const accessorLayout = (
   };
 };
 
+const validateVertexAlignment = (
+  layout: AccessorLayout,
+  label: string,
+  path: string,
+): void => {
+  if (layout.hasBase && (layout.absoluteOffset % 4 !== 0 || layout.stride % 4 !== 0)) {
+    fail(label, path, "vertex attribute elements must be 4-byte aligned");
+  }
+};
+
 const sparseRange = (
   context: AccessorContext,
   bufferViewIndex: unknown,
@@ -246,6 +256,7 @@ export const readInstanceVectors = (
     componentCount,
     true,
   );
+  validateVertexAlignment(layout, context.label, path);
   if (layout.count === 0) fail(context.label, `${path}.count`, "must be positive");
   const values = new Float32Array(layout.count * componentCount);
   const divisor = componentType === 5120 ? 127 : componentType === 5122 ? 32_767 : 1;
@@ -292,6 +303,7 @@ export const readPositions = (
   accessorIndex: number,
 ): Pick<CanonicalTriangleGeometry, "bounds" | "positions"> => {
   const layout = accessorLayout(context, accessorIndex, "VEC3", 4, 3);
+  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
   if (layout.componentType !== 5126) {
     fail(context.label, `accessors[${accessorIndex}].componentType`, "must be FLOAT");
   }
@@ -383,6 +395,7 @@ export const readFloatVectors = (
   semantic: string,
 ): Float32Array => {
   const layout = accessorLayout(context, accessorIndex, expectedType, 4, componentCount);
+  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
   if (layout.componentType !== 5126) {
     fail(context.label, `accessors[${accessorIndex}].componentType`, `${semantic} must use FLOAT`);
   }
@@ -421,6 +434,57 @@ export const readFloatVectors = (
       }
     }
   }
+  return values;
+};
+
+/** Normalizes the three legal core TEXCOORD_n representations to float UVs. */
+export const readTextureCoordinates = (
+  context: AccessorContext,
+  accessorIndex: number,
+  semantic: "TEXCOORD_0" | "TEXCOORD_1",
+): Float32Array => {
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  const componentType = integer(accessor.componentType, context.label, `${path}.componentType`);
+  if (componentType === 5126) {
+    if (accessor.normalized === true) {
+      fail(context.label, `${path}.normalized`, "must be omitted for FLOAT texture coordinates");
+    }
+    return readFloatVectors(context, accessorIndex, "VEC2", 2, semantic);
+  }
+  if ((componentType !== 5121 && componentType !== 5123) || accessor.normalized !== true) {
+    fail(
+      context.label,
+      path,
+      `${semantic} must use FLOAT or normalized UNSIGNED_BYTE/UNSIGNED_SHORT`,
+    );
+  }
+  const componentBytes = componentType === 5121 ? 1 : 2;
+  const layout = accessorLayout(context, accessorIndex, "VEC2", componentBytes, 2, true);
+  validateVertexAlignment(layout, context.label, path);
+  if (layout.count === 0) fail(context.label, `${path}.count`, "must be positive");
+  const values = new Float32Array(layout.count * 2);
+  const divisor = componentType === 5121 ? 255 : 65_535;
+  const readComponent = (dataView: DataView, source: number): number => (
+    componentType === 5121
+      ? dataView.getUint8(source) / divisor
+      : dataView.getUint16(source, true) / divisor
+  );
+  if (layout.hasBase) {
+    for (let item = 0; item < layout.count; item += 1) {
+      const source = layout.absoluteOffset + item * layout.stride;
+      values[item * 2] = readComponent(layout.dataView, source);
+      values[item * 2 + 1] = readComponent(layout.dataView, source + componentBytes);
+    }
+  }
+  visitSparseComponents(context, accessorIndex, componentBytes, 2, (
+    item,
+    component,
+    source,
+    dataView,
+  ) => {
+    values[item * 2 + component] = readComponent(dataView, source);
+  });
   return values;
 };
 
@@ -489,6 +553,7 @@ export const readVertexColors = (
     componentCount,
     true,
   );
+  validateVertexAlignment(layout, context.label, path);
   const values = new Float32Array(layout.count * componentCount);
   const divisor = componentType === 5121 ? 255 : componentType === 5123 ? 65_535 : 1;
   const readComponent = (dataView: DataView, offset: number): number => (
