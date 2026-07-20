@@ -8,6 +8,7 @@ import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type { GltfAssetBounds } from "@royal/renderer-core";
 import type { TextureSourceRef } from "../texture/asset-owner";
 import type { DecodedDracoPrimitive } from "./draco";
+import { canonicalizeGltfBuffers } from "./canonical-buffers";
 import { parseGlb } from "./glb";
 import {
   prepareStaticMatrixBatches,
@@ -1002,11 +1003,36 @@ export const prepareStaticGltfSource = async (
   ) {
     const parsed = parseGlb(bytes, label);
     const document = object(parsed.document, label, "document");
-    const binary = parsed.binaryChunk
+    const binaryChunk = parsed.binaryChunk
       ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
-    return prepareDocumentWithCodecs(
+    const buffers = array(document.buffers, label, "buffers");
+    if (buffers.length === 0) fail(label, "buffers", "must not be empty");
+    const firstBuffer = object(buffers[0], label, "buffers[0]");
+    if (firstBuffer.uri !== undefined) {
+      fail(label, "buffers[0].uri", "must be omitted for a GLB BIN chunk");
+    }
+    const firstLength = nonNegativeInteger(firstBuffer.byteLength, label, "buffers[0].byteLength");
+    const padding = binaryChunk.byteLength - firstLength;
+    if (padding < 0 || padding > 3) {
+      fail(label, "buffers[0].byteLength", "does not match the padded GLB BIN chunk");
+    }
+    const external = await Promise.all(buffers.slice(1).map(async (value, offset) => {
+      const bufferIndex = offset + 1;
+      const path = `buffers[${bufferIndex}]`;
+      const buffer = object(value, label, path);
+      if (typeof buffer.uri !== "string" || buffer.uri.length === 0) {
+        return fail(label, `${path}.uri`, "must be a non-empty external or data URI");
+      }
+      return read(resolveAssetUri(sourceUri, buffer.uri as string));
+    }));
+    const canonical = canonicalizeGltfBuffers(
       document,
-      binary,
+      [binaryChunk.subarray(0, firstLength), ...external],
+      label,
+    );
+    return prepareDocumentWithCodecs(
+      canonical.document,
+      canonical.binary,
       "glb",
       contentKey,
       label,
@@ -1015,15 +1041,19 @@ export const prepareStaticGltfSource = async (
   }
   const document = parseJsonDocument(bytes, label);
   const buffers = array(document.buffers, label, "buffers");
-  if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");
-  const buffer = object(buffers[0], label, "buffers[0]");
-  if (typeof buffer.uri !== "string" || buffer.uri.length === 0) {
-    fail(label, "buffers[0].uri", "must be a non-empty external or data URI");
-  }
-  const binary = await read(resolveAssetUri(sourceUri, buffer.uri as string));
+  if (buffers.length === 0) fail(label, "buffers", "must not be empty");
+  const sources = await Promise.all(buffers.map(async (value, bufferIndex) => {
+    const path = `buffers[${bufferIndex}]`;
+    const buffer = object(value, label, path);
+    if (typeof buffer.uri !== "string" || buffer.uri.length === 0) {
+      return fail(label, `${path}.uri`, "must be a non-empty external or data URI");
+    }
+    return read(resolveAssetUri(sourceUri, buffer.uri as string));
+  }));
+  const canonical = canonicalizeGltfBuffers(document, sources, label);
   return prepareDocumentWithCodecs(
-    document,
-    binary,
+    canonical.document,
+    canonical.binary,
     "gltf",
     contentKey,
     label,

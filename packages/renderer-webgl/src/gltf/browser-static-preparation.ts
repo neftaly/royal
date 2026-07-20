@@ -2,7 +2,7 @@ import type { PreparedStaticGltf } from "./static-asset";
 
 type PreparationResultMessage =
   | Readonly<{ error: string; kind: "error" }>
-  | Readonly<{ kind: "read-resource"; uri: string }>
+  | Readonly<{ id: number; kind: "read-resource"; uri: string }>
   | Readonly<{ kind: "ready"; prepared: PreparedStaticGltf }>;
 
 const WORKER_GLTF_BYTE_THRESHOLD = 256 * 1024;
@@ -89,7 +89,7 @@ export const prepareStaticGltfInBrowser = async (
           if (settled) return;
           try {
             worker.postMessage(
-              { bytes, kind: "read-resource-ready" },
+              { bytes, id: message.id, kind: "read-resource-ready" },
               [bytes.buffer],
             );
           } catch (error) {
@@ -100,6 +100,7 @@ export const prepareStaticGltfInBrowser = async (
           try {
             worker.postMessage({
               error: formatFailure(error),
+              id: message.id,
               kind: "read-resource-error",
             });
           } catch (postError) {

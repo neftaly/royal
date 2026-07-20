@@ -9,8 +9,8 @@ type PreparationRequest = Readonly<{
 }>;
 
 type ResourceResult =
-  | Readonly<{ bytes: Uint8Array; kind: "read-resource-ready" }>
-  | Readonly<{ error: string; kind: "read-resource-error" }>;
+  | Readonly<{ bytes: Uint8Array; id: number; kind: "read-resource-ready" }>
+  | Readonly<{ error: string; id: number; kind: "read-resource-error" }>;
 
 type WorkerMessage = PreparationRequest | ResourceResult;
 
@@ -34,17 +34,16 @@ type ResourceRead = Readonly<{
   resolve(bytes: Uint8Array): void;
 }>;
 
-let resourceRead: ResourceRead | undefined;
+const resourceReads = new Map<number, ResourceRead>();
+let nextResourceReadId = 1;
 let preparing = false;
 
 const readResource = (uri: string): Promise<Uint8Array> =>
   new Promise((resolve, reject) => {
-    if (resourceRead !== undefined) {
-      reject(new Error("Royal glTF preparation supports one external buffer read"));
-      return;
-    }
-    resourceRead = { reject, resolve };
-    workerScope.postMessage({ kind: "read-resource", uri });
+    const id = nextResourceReadId;
+    nextResourceReadId += 1;
+    resourceReads.set(id, { reject, resolve });
+    workerScope.postMessage({ id, kind: "read-resource", uri });
   });
 
 const transferBuffers = (prepared: PreparedStaticGltf): ArrayBuffer[] => {
@@ -74,16 +73,16 @@ const transferBuffers = (prepared: PreparedStaticGltf): ArrayBuffer[] => {
 workerScope.addEventListener("message", (event) => {
   const request = event.data;
   if (request.kind === "read-resource-ready") {
-    const read = resourceRead;
+    const read = resourceReads.get(request.id);
     if (read === undefined) return;
-    resourceRead = undefined;
+    resourceReads.delete(request.id);
     read.resolve(request.bytes);
     return;
   }
   if (request.kind === "read-resource-error") {
-    const read = resourceRead;
+    const read = resourceReads.get(request.id);
     if (read === undefined) return;
-    resourceRead = undefined;
+    resourceReads.delete(request.id);
     read.reject(new Error(request.error));
     return;
   }
@@ -108,5 +107,8 @@ workerScope.addEventListener("message", (event) => {
     );
   }).catch((error: unknown) => {
     workerScope.postMessage({ error: formatFailure(error), kind: "error" });
+  }).finally(() => {
+    resourceReads.clear();
+    preparing = false;
   });
 });

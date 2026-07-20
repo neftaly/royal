@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseGlb } from "../../packages/renderer-webgl/src/gltf/glb";
 import {
   prepareStaticGlb,
@@ -31,6 +31,73 @@ describe("static glTF preparation core", () => {
     expect(prepared.primitives[0]!.geometry.positions).toEqual(new Float32Array([
       -1, -1, 0, 1, -1, 0, 0, 1, 0,
     ]));
+  });
+
+  it("packs multiple external buffers into the canonical binary boundary", async () => {
+    const document = staticTriangleDocument();
+    document.buffers = [
+      { byteLength: 36, uri: "positions.bin" },
+      { byteLength: 6, uri: "indices.bin" },
+    ];
+    document.bufferViews = [
+      { buffer: 0, byteLength: 36 },
+      { buffer: 1, byteLength: 6 },
+    ];
+    const positionBytes = new Uint8Array(36);
+    new Float32Array(positionBytes.buffer).set([
+      -1, -1, 0,
+      1, -1, 0,
+      0, 1, 0,
+    ]);
+    const indexBytes = new Uint8Array(6);
+    new Uint16Array(indexBytes.buffer).set([0, 1, 2]);
+    const read = vi.fn(async (uri: string) => uri.endsWith("positions.bin")
+      ? positionBytes
+      : indexBytes);
+    const prepared = await prepareStaticGltfSource(
+      new TextEncoder().encode(JSON.stringify(document)),
+      "multi-buffer",
+      "multi-buffer.gltf",
+      "/models/multi-buffer.gltf",
+      read,
+    );
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(prepared.primitives[0]!.geometry.positions).toEqual(new Float32Array([
+      -1, -1, 0, 1, -1, 0, 0, 1, 0,
+    ]));
+    expect(prepared.primitives[0]!.geometry.indices).toEqual(new Uint16Array([0, 1, 2]));
+  });
+
+  it("combines a GLB BIN chunk with declared external buffers", async () => {
+    const document = staticTriangleDocument();
+    document.buffers = [
+      { byteLength: 36 },
+      { byteLength: 6, uri: "indices.bin" },
+    ];
+    document.bufferViews = [
+      { buffer: 0, byteLength: 36 },
+      { buffer: 1, byteLength: 6 },
+    ];
+    const positions = new Uint8Array(36);
+    new Float32Array(positions.buffer).set([
+      -1, -1, 0,
+      1, -1, 0,
+      0, 1, 0,
+    ]);
+    const indices = new Uint8Array(6);
+    new Uint16Array(indices.buffer).set([0, 1, 2]);
+    const prepared = await prepareStaticGltfSource(
+      glbFromDocument(document, positions),
+      "hybrid-buffer",
+      "hybrid-buffer.glb",
+      "/models/hybrid-buffer.glb",
+      async (uri) => {
+        expect(uri).toBe("/models/indices.bin");
+        return indices;
+      },
+    );
+    expect(prepared.primitives[0]!.geometry.indices).toEqual(new Uint16Array([0, 1, 2]));
   });
 
   it("loads the Draco codec only for a document that declares compressed geometry", async () => {

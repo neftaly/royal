@@ -66,11 +66,11 @@ describe("browser static glTF preparation", () => {
     );
 
     worker.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "read-resource", uri: "/asset.bin" },
+      data: { id: 7, kind: "read-resource", uri: "/asset.bin" },
     }));
     await vi.waitFor(() => expect(readResource).toHaveBeenCalledWith("/asset.bin"));
     expect(worker.postMessage).toHaveBeenLastCalledWith(
-      { bytes: external, kind: "read-resource-ready" },
+      { bytes: external, id: 7, kind: "read-resource-ready" },
       [external.buffer],
     );
 
