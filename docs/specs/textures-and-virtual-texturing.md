@@ -67,9 +67,11 @@ belong in explicit diagnostics, not ordinary presentation.
 Decoded sources MAY be retained for context restoration only within CPU budget.
 Eviction MUST leave a reconstruction recipe or legal refetch path.
 
-When the persistent budget requires a smaller ordinary PNG/JPEG/WebP, Royal reads a
-bounded encoded-header prefix through a pure, non-authoritative dimension
-parser and asks the browser to decode directly to the selected fitted size.
+When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
+Royal reads a bounded encoded-header prefix through a pure, non-authoritative
+dimension parser and asks the browser to decode directly to the selected fitted
+size. AVIF dimensions are accepted only from the primary item's associated
+BMFF spatial property; Royal does not scan for plausible width/height bytes.
 Malformed, truncated, unsupported, or unusually deep headers fall back to the
 browser-authoritative decode-then-fit path. The hint cannot expand an image,
 change aspect ratio, accept a format, or bypass browser validation; it avoids a

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readEncodedImageDimensions } from "../../packages/renderer-webgl/src/texture/encoded-image-dimensions";
+import { createAvifHeader } from "./support/avif-header";
 
 const pngHeader = (width: number, height: number): Uint8Array => {
   const bytes = new Uint8Array([
@@ -53,6 +54,33 @@ describe("encoded image dimension hints", () => {
     lossyView.setUint16(26, 640, true);
     lossyView.setUint16(28, 360, true);
     expect(readEncodedImageDimensions(lossy)).toEqual({ height: 360, width: 640 });
+  });
+
+  it("resolves AVIF dimensions through primary-item property associations", () => {
+    expect(readEncodedImageDimensions(createAvifHeader(2048, 1024))).toEqual({
+      height: 1024,
+      width: 2048,
+    });
+    expect(readEncodedImageDimensions(createAvifHeader(512, 2048, {
+      itemId: 0x1_0001,
+      wide: true,
+    }))).toEqual({ height: 2048, width: 512 });
+  });
+
+  it("does not accept an unassociated AVIF spatial property", () => {
+    const bytes = createAvifHeader(1280, 720);
+    const association = bytes.lastIndexOf(0x81);
+    bytes[association] = 0x82;
+    expect(readEncodedImageDimensions(bytes)).toBeUndefined();
+  });
+
+  it("rejects truncated AVIF metadata and a non-AVIF minor-version lookalike", () => {
+    const truncated = createAvifHeader(1280, 720);
+    expect(readEncodedImageDimensions(truncated.subarray(0, truncated.length - 1))).toBeUndefined();
+
+    const lookalike = createAvifHeader(1280, 720);
+    lookalike.set(new TextEncoder().encode("mif1avifmif1"), 8);
+    expect(readEncodedImageDimensions(lookalike)).toBeUndefined();
   });
 
   it("returns no hint for truncated, zero-sized, or unknown input", () => {

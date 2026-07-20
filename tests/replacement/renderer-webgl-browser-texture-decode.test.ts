@@ -4,6 +4,7 @@ import {
   decodeTextureWithBrowser,
 } from "../../packages/renderer-webgl/src/texture/browser-decode";
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
+import { createAvifHeader } from "./support/avif-header";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 
 afterEach(() => {
@@ -219,6 +220,42 @@ describe("browser texture decode shell", () => {
       kind: "embedded-asset",
       label: "large WebP",
       mimeType: "image/webp",
+    }, new AbortController().signal, 340);
+
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(createImageBitmap.mock.calls[0]![1]).toMatchObject({
+      resizeHeight: fitted.height,
+      resizeQuality: "high",
+      resizeWidth: fitted.width,
+    });
+    expect(result).toMatchObject({
+      height: fitted.height,
+      sourceHeight: 1024,
+      sourceWidth: 2048,
+      width: fitted.width,
+    });
+  });
+
+  it("decodes AVIF directly to its fitted budget dimensions from BMFF properties", async () => {
+    const bytes = createAvifHeader(2048, 1024);
+    const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
+    const bitmap = {
+      close: vi.fn(),
+      height: fitted.height,
+      width: fitted.width,
+    } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async (
+      _blob: Blob,
+      _options?: ImageBitmapOptions,
+    ) => bitmap);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+
+    const result = await decodeTextureWithBrowser({
+      bytes,
+      contentKey: "large-avif",
+      kind: "embedded-asset",
+      label: "large AVIF",
+      mimeType: "image/avif",
     }, new AbortController().signal, 340);
 
     expect(createImageBitmap).toHaveBeenCalledOnce();
