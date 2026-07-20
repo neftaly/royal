@@ -77,6 +77,57 @@ describe("glTF asset lifecycle owner", () => {
     }
   });
 
+  it("reports concurrent external reads as one disjoint wall-clock span", async () => {
+    let now = 0;
+    let resolveFirst: ((bytes: Uint8Array) => void) | undefined;
+    let resolveSecond: ((bytes: Uint8Array) => void) | undefined;
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      primitives: [],
+      textureAssets: [],
+    } as const;
+    const owner = new GltfAssetOwner({
+      now: () => now,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare: async (_bytes, _key, _label, _uri, _signal, readResource) => {
+        now = 10;
+        const first = readResource("/first.bin");
+        now = 12;
+        const second = readResource("/second.bin");
+        now = 30;
+        resolveFirst?.(new Uint8Array([1]));
+        await first;
+        now = 32;
+        resolveSecond?.(new Uint8Array([2]));
+        await second;
+        now = 40;
+        return prepared;
+      },
+      read: vi.fn(async () => {
+        now = 5;
+        return new Uint8Array([1]);
+      }),
+      readResource: vi.fn((uri) => new Promise<Uint8Array>((resolve) => {
+        if (uri === "/first.bin") resolveFirst = resolve;
+        else resolveSecond = resolve;
+      })),
+    });
+    const node = gltf("/parallel.gltf");
+    owner.reconcile([node]);
+    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    const snapshot = owner.getSnapshot(node.asset);
+    expect(snapshot).toMatchObject({
+      state: "ready",
+      timings: {
+        externalResourceReadDurationMs: 22,
+        preparationDurationMs: 13,
+        sourceReadDurationMs: 5,
+      },
+    });
+  });
+
   it("deduplicates exact identities and publishes loading then ready once", async () => {
     const changes = vi.fn();
     const listener = vi.fn();

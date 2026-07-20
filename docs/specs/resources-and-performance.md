@@ -255,8 +255,10 @@ decoding, copying, and GPU uploads.
 
 Focused glTF status exposes monotonic timings for root-source reading,
 referenced-resource reading, canonical preparation, derived first usable data,
-and terminal image completion. Root read, referenced-resource read, and
-preparation are disjoint durations whose sum is the first usable milestone;
+and terminal image completion. Concurrent referenced reads report one wall span
+from the first read start through the final completion, rather than a sum of
+overlapping requests. Root read, referenced-resource span, and preparation are
+disjoint durations whose sum is the first usable milestone;
 image completion is elapsed from the exact source/version claim. The values are
 diagnostics, not scheduling inputs, and observing them does not poll or wake the
 frame loop.
