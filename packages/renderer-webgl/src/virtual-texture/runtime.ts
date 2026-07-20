@@ -703,66 +703,22 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let webGlStateChanged = false;
     let uploadsRemaining = MAX_UPLOADS_PER_FRAME;
     if (this.#demandViewsChanged(views)) this.#viewRevision += 1;
+
+    // Resolve every resource's current demand before consulting the shared
+    // atlas protection set. Admission must never depend on Map insertion order
+    // or another resource's previous-frame visibility.
+    for (const resource of this.#resources.values()) {
+      if (this.#prepareFrameDemand(resource, views)) webGlStateChanged = true;
+    }
     for (const resource of this.#resources.values()) {
       const manifest = resource.manifest;
-      if (manifest === undefined || resource.manifestFailure !== undefined) continue;
-      const demandChanged = resource.demandRevision !== this.#viewRevision;
-      if (demandChanged) {
-        resetVirtualTextureDemand(resource.workspace);
-        collectVirtualTextureDemand(
-          resource.workspace,
-          manifest,
-          resource.surfaces,
-          views,
-          resource.sampler,
-        );
-        resource.demandRevision = this.#viewRevision;
-        this.#cancelStalePageReads(resource);
-      }
-      // Do not reserve one atlas per declared asset before it contributes to a view.
-      if (resource.workspace.count === 0) {
-        if (demandChanged) {
-          this.#clearReadyPages(resource);
-        }
-        continue;
-      }
-      if (resource.gpu === undefined) {
-        try {
-          resource.gpu = this.#createGpuResource(resource, manifest);
-          webGlStateChanged = true;
-        } catch (error) {
-          resource.manifestFailure = error instanceof Error ? error.message : String(error);
-          resource.manifestFailureState = "unsupported";
-          this.#changed(resource);
-          continue;
-        }
-      }
+      if (
+        manifest === undefined
+        || resource.manifestFailure !== undefined
+        || resource.workspace.count === 0
+        || resource.gpu === undefined
+      ) continue;
       const gpu = resource.gpu;
-      if (demandChanged) {
-        truncateVirtualTextureDemand(resource.workspace, gpu.maxResidentPages);
-        this.#cancelStalePageReads(resource);
-        let retainedReadyPages = 0;
-        for (let index = 0; index < resource.readyPages.length; index += 1) {
-          const ready = resource.readyPages[index]!;
-          if (!resource.workspace.keys.has(ready.pageKey)) {
-            ready.decoded.close();
-            resource.readyPageKeys.delete(ready.pageKey);
-            this.#readyPages -= 1;
-            continue;
-          }
-          resource.readyPages[retainedReadyPages] = ready;
-          retainedReadyPages += 1;
-        }
-        resource.readyPages.length = retainedReadyPages;
-      }
-      for (let index = 0; index < resource.workspace.count; index += 1) {
-        const mip = resource.workspace.mips[index]!;
-        const x = resource.workspace.xs[index]!;
-        const y = resource.workspace.ys[index]!;
-        const key = virtualTexturePageKeyParts(mip, x, y);
-        const slot = gpu.residentSlots.get(key);
-        if (slot !== undefined) gpu.atlas.lastUsedFrames[slot] = this.#frame;
-      }
       let settledPages = 0;
       while (uploadsRemaining > 0 && resource.readyPages.length > 0) {
         const ready = resource.readyPages[0]!;
@@ -817,6 +773,73 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     if (this.#publishDirtyPageTables()) webGlStateChanged = true;
     this.#schedulePageReads();
     return FRAME_RESULTS[(pending ? 1 : 0) | (webGlStateChanged ? 2 : 0)]!;
+  }
+
+  #prepareFrameDemand(
+    resource: RuntimeResource,
+    views: readonly SurfaceFrameView[],
+  ): boolean {
+    const manifest = resource.manifest;
+    if (manifest === undefined || resource.manifestFailure !== undefined) return false;
+    const demandChanged = resource.demandRevision !== this.#viewRevision;
+    if (demandChanged) {
+      resetVirtualTextureDemand(resource.workspace);
+      collectVirtualTextureDemand(
+        resource.workspace,
+        manifest,
+        resource.surfaces,
+        views,
+        resource.sampler,
+      );
+      resource.demandRevision = this.#viewRevision;
+      this.#cancelStalePageReads(resource);
+    }
+    // Do not reserve an atlas before the asset contributes to a view.
+    if (resource.workspace.count === 0) {
+      if (demandChanged) this.#clearReadyPages(resource);
+      return false;
+    }
+    let gpuCreated = false;
+    if (resource.gpu === undefined) {
+      try {
+        resource.gpu = this.#createGpuResource(resource, manifest);
+        gpuCreated = true;
+      } catch (error) {
+        resource.manifestFailure = error instanceof Error ? error.message : String(error);
+        resource.manifestFailureState = "unsupported";
+        this.#changed(resource);
+        // Allocation may have borrowed texture units before rolling back.
+        return true;
+      }
+    }
+    const gpu = resource.gpu;
+    if (demandChanged) {
+      truncateVirtualTextureDemand(resource.workspace, gpu.maxResidentPages);
+      this.#cancelStalePageReads(resource);
+      let retainedReadyPages = 0;
+      for (let index = 0; index < resource.readyPages.length; index += 1) {
+        const ready = resource.readyPages[index]!;
+        if (!resource.workspace.keys.has(ready.pageKey)) {
+          ready.decoded.close();
+          resource.readyPageKeys.delete(ready.pageKey);
+          this.#readyPages -= 1;
+          continue;
+        }
+        resource.readyPages[retainedReadyPages] = ready;
+        retainedReadyPages += 1;
+      }
+      resource.readyPages.length = retainedReadyPages;
+    }
+    for (let index = 0; index < resource.workspace.count; index += 1) {
+      const key = virtualTexturePageKeyParts(
+        resource.workspace.mips[index]!,
+        resource.workspace.xs[index]!,
+        resource.workspace.ys[index]!,
+      );
+      const slot = gpu.residentSlots.get(key);
+      if (slot !== undefined) gpu.atlas.lastUsedFrames[slot] = this.#frame;
+    }
+    return gpuCreated;
   }
 
   #destroyResource(resource: RuntimeResource, deleteGpu: boolean): void {

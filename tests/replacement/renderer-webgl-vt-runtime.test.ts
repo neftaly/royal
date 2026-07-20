@@ -193,6 +193,83 @@ describe("browser virtual texture runtime", () => {
     expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
   });
 
+  it("resolves every current demand before replacing a shared-atlas slot", async () => {
+    const manifest = {
+      borderTexels: 1,
+      contractVersion: 2,
+      pageSize: 1,
+      pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" },
+      physicalSlots: 1,
+      virtualSize: [2, 2],
+    };
+    const pageReads: Array<{
+      resolve(response: Response): void;
+      url: string;
+    }> = [];
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("fetch", vi.fn((input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url.endsWith("vt.json")) {
+        return Promise.resolve(new Response(JSON.stringify(manifest), {
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      return new Promise<Response>((resolve) => { pageReads.push({ resolve, url }); });
+    }));
+    const createImageBitmap = vi.fn(async () => ({
+      close: vi.fn(),
+      height: 3,
+      width: 3,
+    }));
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    const first = virtualTexture("https://example.test/first/vt.json");
+    const second = virtualTexture("https://example.test/second/vt.json");
+    const preparedScene = (secondPosition: readonly [number, number, number]) =>
+      prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}),
+        nodes: [
+          mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
+          mesh({
+            geometry: planeGeometry(1),
+            material: unlitMaterial({ texture: second }),
+            transform: { position: secondPosition },
+          }),
+        ],
+      }));
+    const gl = fakeGl();
+    Object.assign(gl, { getParameter: vi.fn(() => 3) });
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn());
+    const matrix = identityMat4();
+    const view: SurfaceFrameView = {
+      view: matrix,
+      viewProjection: matrix,
+      viewport: { height: 1024, width: 1024, x: 0, y: 0 },
+    };
+
+    runtime.setScene(preparedScene([0, 0, 0]));
+    await waitFor(() => {
+      expect(runtime.snapshot(first).state).toBe("ready");
+      expect(runtime.snapshot(second).state).toBe("ready");
+    });
+    runtime.update([view]);
+    await waitFor(() => expect(pageReads).toHaveLength(2));
+    const firstRead = pageReads.find(({ url }) => url.includes("/first/"))!;
+    const secondRead = pageReads.find(({ url }) => url.includes("/second/"))!;
+    secondRead.resolve(new Response(new Blob([new Uint8Array([2])])));
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(1));
+    runtime.update([view]);
+    expect(runtime.binding(second)).toBeDefined();
+
+    firstRead.resolve(new Response(new Blob([new Uint8Array([1])])));
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
+    runtime.setScene(preparedScene([100, 0, 0]));
+    runtime.update([view]);
+
+    expect(runtime.binding(first)).toBeDefined();
+    expect(runtime.binding(second)).toBeUndefined();
+    runtime.dispose();
+  });
+
   it("publishes one page-table revision for a frame's admitted page batch", async () => {
     const manifest = {
       borderTexels: 1,
