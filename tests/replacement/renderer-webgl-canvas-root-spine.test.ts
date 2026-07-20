@@ -474,6 +474,28 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.depthMask).toHaveBeenLastCalledWith(false);
   });
 
+  it("restores depth writes before clearing after a transparent frame", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ color: [1, 0, 0, 0.5] }),
+      })],
+    }));
+    callbacks.shift()!();
+    root.invalidate();
+    callbacks.shift()!();
+
+    expect(vi.mocked(canvas.gl.depthMask).mock.calls).toEqual([
+      [true],
+      [false],
+      [true],
+      [false],
+    ]);
+  });
+
   it("keeps off-frustum surfaces out of the draw shell", () => {
     const { callbacks, canvas, root } = harness();
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
@@ -574,6 +596,36 @@ describe("clear-only canvas root", () => {
     const call = multiDrawElementsWEBGL.mock.calls[0]!;
     expect([...call[1].slice(0, call[6])]).toEqual([3, 3]);
     expect([...call[4].slice(0, call[6])]).toEqual([0, 3]);
+  });
+
+  it("never coalesces color draws across distinct material identities", async () => {
+    const multiDrawElementsWEBGL = vi.fn();
+    const document = staticTriangleDocument();
+    document.materials = [
+      { pbrMetallicRoughness: { baseColorFactor: [1, 0, 0, 1] } },
+      { pbrMetallicRoughness: { baseColorFactor: [0, 1, 0, 1] } },
+    ];
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives[0]!.material = 0;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0], material: 1 });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root } = harness({ readGltf }, {
+      getExtension: vi.fn((name: string) => name === "WEBGL_multi_draw"
+        ? { multiDrawElementsWEBGL }
+        : null) as WebGL2RenderingContext["getExtension"],
+    });
+    const node = gltf("/distinct-materials.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(multiDrawElementsWEBGL).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
   it("uses one canonical transform and identity for visible and exact picking work", () => {

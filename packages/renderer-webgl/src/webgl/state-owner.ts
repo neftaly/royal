@@ -87,13 +87,14 @@ export class WebGlStateOwner {
       if (transition.clearColor) gl.clearColor(...intent.clearColor);
       if (transition.clearDepth) gl.clearDepth(intent.clearDepth);
       if (transition.clearStencil) gl.clearStencil(intent.clearStencil);
-      if (transition.writeMasks) {
+      if (transition.writeMasks || this.#state.depthWrite !== true) {
         gl.colorMask(true, true, true, true);
         gl.depthMask(true);
         gl.stencilMask(0xff_ff_ff_ff);
       }
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
       commitAppliedClearState(this.#state, intent);
+      this.#state.depthWrite = true;
     } catch (error) {
       this.invalidate();
       throw error;
