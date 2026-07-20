@@ -1,5 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
+import { lodMembershipsSelected } from "./lod-selection";
 import type { CanonicalPickSurface } from "./scene-lowering";
 
 export type CanonicalPickRay = Readonly<{
@@ -197,16 +198,7 @@ export const pickCanonicalSurfaceInto = (
   let surfaceIndex = -1;
   for (let index = 0; index < surfaces.length; index += 1) {
     const surface = surfaces[index]!;
-    if (surface.lods !== undefined) {
-      let selected = true;
-      for (const lod of surface.lods) {
-        if ((selectedLodLevels?.get(lod.group) ?? 0) !== lod.level) {
-          selected = false;
-          break;
-        }
-      }
-      if (!selected) continue;
-    }
+    if (!lodMembershipsSelected(surface.lods, selectedLodLevels)) continue;
     if (surface.inverseModel === undefined) continue;
     transformRayInto(scratch.localRay, ray, surface.inverseModel);
     if (!rayIntersectsBounds(scratch.localRay, surface, ray.minDistance, nearest)) continue;

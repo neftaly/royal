@@ -10,6 +10,18 @@ export type LodMembership = Readonly<{
   thresholds: readonly number[];
 }>;
 
+/** Shared visual/picking membership rule; an unselected cold group starts at level zero. */
+export const lodMembershipsSelected = (
+  lods: readonly Pick<LodMembership, "group" | "level">[] | undefined,
+  selections: ReadonlyMap<string, number> | undefined,
+): boolean => {
+  if (lods === undefined) return true;
+  for (const lod of lods) {
+    if ((selections?.get(lod.group) ?? 0) !== lod.level) return false;
+  }
+  return true;
+};
+
 export type ProjectedBoundsWorkspace = Readonly<{
   clipCorners: Float64Array;
   screenExtents: Float64Array;

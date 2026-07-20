@@ -5,6 +5,7 @@ import {
   closestDrawableLodLevel,
   createProjectedBoundsWorkspace,
   hystereticLodLevel,
+  lodMembershipsSelected,
   maximumProjectedBoundsScreenCoverage,
   normalizeLodThresholds,
   projectedBoundsScreenCoverage,
@@ -57,5 +58,16 @@ describe("canonical LOD selection", () => {
     expect(closestDrawableLodLevel(CULLED_LOD_LEVEL, 0, new Uint8Array([1]))).toBe(
       CULLED_LOD_LEVEL,
     );
+  });
+
+  it("shares one cold-start and selected-level rule across visual and picking paths", () => {
+    const level0 = [{ group: "detail", level: 0 }];
+    const level1 = [{ group: "detail", level: 1 }];
+    expect(lodMembershipsSelected(undefined, undefined)).toBe(true);
+    expect(lodMembershipsSelected(level0, undefined)).toBe(true);
+    expect(lodMembershipsSelected(level1, undefined)).toBe(false);
+    const selected = new Map([["detail", 1]]);
+    expect(lodMembershipsSelected(level0, selected)).toBe(false);
+    expect(lodMembershipsSelected(level1, selected)).toBe(true);
   });
 });

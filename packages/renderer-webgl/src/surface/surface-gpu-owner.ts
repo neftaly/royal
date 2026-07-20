@@ -56,6 +56,7 @@ import {
   closestDrawableLodLevel,
   createProjectedBoundsWorkspace,
   hystereticLodLevel,
+  lodMembershipsSelected,
   maximumProjectedBoundsScreenCoverage,
 } from "./lod-selection";
 import type { LinearRgba } from "@royal/renderer-core";
@@ -175,18 +176,6 @@ const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]) =>
     (resource) => resource.surface.materialSource,
     (resource) => resource.program.program,
   );
-
-const surfaceMatchesLodSelections = (
-  surface: CanonicalDrawSurface,
-  selections: ReadonlyMap<string, number>,
-): boolean => {
-  const lods = surface.lods;
-  if (lods === undefined) return true;
-  for (const lod of lods) {
-    if (selections.get(lod.group) !== lod.level) return false;
-  }
-  return true;
-};
 
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
@@ -742,7 +731,7 @@ export class SurfaceGpuOwner {
           ? this.#transmissionSurfaces[index - opaqueCount]!
           : this.#blendedSurfaces[index - opaqueCount - transmissionCount]!;
       const surface = resource.surface;
-      if (!surfaceMatchesLodSelections(surface, this.#lodSelections)) continue;
+      if (!lodMembershipsSelected(surface.lods, this.#lodSelections)) continue;
       if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
       drawIntent.alphaBlend = surface.material.alphaBlend === true;
@@ -972,7 +961,7 @@ export class SurfaceGpuOwner {
           const next = this.#opaqueSurfaces[nextIndex]!;
           if (next.geometry.indexOffset > 0x7fff_ffff) break;
           if (
-            surfaceMatchesLodSelections(next.surface, this.#lodSelections)
+            lodMembershipsSelected(next.surface.lods, this.#lodSelections)
             && worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes)
           ) {
             this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
@@ -1107,7 +1096,7 @@ export class SurfaceGpuOwner {
         const candidate = this.#gpuSurfacesBySceneIndex[surfaceIndex];
         if (candidate === undefined) continue;
         fallback ??= candidate.surface;
-        if (surfaceMatchesLodSelections(candidate.surface, this.#lodSelections)) {
+        if (lodMembershipsSelected(candidate.surface.lods, this.#lodSelections)) {
           matched = true;
           break;
         }
