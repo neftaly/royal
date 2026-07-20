@@ -48,6 +48,11 @@ export type GltfInstanceTransformsListener = (
   version: number,
 ) => void;
 
+type GltfInstanceTransformsListenerSlot = {
+  active: boolean;
+  readonly listener: GltfInstanceTransformsListener;
+};
+
 export interface CreateGltfInstanceTransformsOptions {
   readonly count: number;
   readonly logicalIds?: readonly PickingId[];
@@ -182,7 +187,9 @@ export const createGltfInstanceTransforms = (
     'glTF instance transforms',
   );
   const count = positiveCount(options.count);
-  const listeners = new Map<object, GltfInstanceTransformsListener>();
+  const listeners: GltfInstanceTransformsListenerSlot[] = [];
+  const notificationCohort: GltfInstanceTransformsListenerSlot[] = [];
+  let listenerTombstones = 0;
   let poseVersion = 1;
   let scaleVersion = 1;
   const positions = copyChannel(options.positions, count, 0, 'positions');
@@ -199,14 +206,16 @@ export const createGltfInstanceTransforms = (
     rangeCount: number,
     version: number,
   ): void => {
-    const cohort = [...listeners.values()];
+    for (const slot of listeners) {
+      if (slot.active) notificationCohort.push(slot);
+    }
     let failed = false;
     let firstFailure: unknown;
     notifying = true;
     try {
-      for (const listener of cohort) {
+      for (const slot of notificationCohort) {
         try {
-          listener(channel, start, rangeCount, version);
+          slot.listener(channel, start, rangeCount, version);
         } catch (value) {
           if (!failed) {
             failed = true;
@@ -216,6 +225,7 @@ export const createGltfInstanceTransforms = (
       }
     } finally {
       notifying = false;
+      notificationCohort.length = 0;
     }
     if (failed) throw firstFailure;
   };
@@ -276,13 +286,27 @@ export const createGltfInstanceTransforms = (
       if (typeof listener !== 'function') {
         throw new TypeError('glTF instance transform listener must be a function');
       }
-      const token = {};
-      listeners.set(token, listener);
+      if (listenerTombstones > 16 && listenerTombstones * 2 > listeners.length) {
+        let write = 0;
+        for (const slot of listeners) {
+          if (!slot.active) continue;
+          listeners[write] = slot;
+          write += 1;
+        }
+        listeners.length = write;
+        listenerTombstones = 0;
+      }
+      const slot: GltfInstanceTransformsListenerSlot = {
+        active: true,
+        listener,
+      };
+      listeners.push(slot);
       let subscribed = true;
       return () => {
         if (!subscribed) return;
         subscribed = false;
-        listeners.delete(token);
+        slot.active = false;
+        listenerTombstones += 1;
       };
     },
   };

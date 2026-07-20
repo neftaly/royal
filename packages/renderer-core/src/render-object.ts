@@ -342,11 +342,19 @@ export const createRenderObjectHandle = (
 
 type RenderObjectRefListener = () => void;
 
+type RenderObjectRefListenerSlot = {
+  active: boolean;
+  readonly listener: RenderObjectRefListener;
+};
+
 interface SharedRenderObjectRef {
   attachmentCount: number;
   readonly handle: RenderObjectHandle;
-  readonly listeners: Map<object, RenderObjectRefListener>;
-  mutationSource: object | undefined;
+  listenerTombstones: number;
+  readonly listeners: RenderObjectRefListenerSlot[];
+  readonly notificationCohorts: RenderObjectRefListenerSlot[][];
+  notificationDepth: number;
+  mutationSource: RenderObjectRefListenerSlot | undefined;
 }
 
 const sharedRenderObjectRefs = new WeakMap<RenderObjectRef, SharedRenderObjectRef>();
@@ -357,21 +365,44 @@ const assignRenderObjectRef = (ref: RenderObjectRef, handle: RenderObjectHandle 
 };
 
 const notifyRenderObjectRefListeners = (shared: SharedRenderObjectRef): void => {
-  const cohort = [...shared.listeners.entries()];
+  const depth = shared.notificationDepth;
+  const cohort = shared.notificationCohorts[depth] ?? [];
+  if (depth === shared.notificationCohorts.length) shared.notificationCohorts.push(cohort);
+  for (const slot of shared.listeners) {
+    if (slot.active) cohort.push(slot);
+  }
   let failed = false;
   let firstFailure: unknown;
-  for (const [token, listener] of cohort) {
-    if (token === shared.mutationSource) continue;
-    try {
-      listener();
-    } catch (value) {
-      if (!failed) {
-        failed = true;
-        firstFailure = value;
+  shared.notificationDepth += 1;
+  try {
+    for (const slot of cohort) {
+      if (slot === shared.mutationSource) continue;
+      try {
+        slot.listener();
+      } catch (value) {
+        if (!failed) {
+          failed = true;
+          firstFailure = value;
+        }
       }
     }
+  } finally {
+    shared.notificationDepth -= 1;
+    cohort.length = 0;
   }
   if (failed) throw firstFailure;
+};
+
+const compactRenderObjectRefListeners = (shared: SharedRenderObjectRef): void => {
+  if (shared.listenerTombstones <= 16 || shared.listenerTombstones * 2 <= shared.listeners.length) return;
+  let write = 0;
+  for (const slot of shared.listeners) {
+    if (!slot.active) continue;
+    shared.listeners[write] = slot;
+    write += 1;
+  }
+  shared.listeners.length = write;
+  shared.listenerTombstones = 0;
 };
 
 /**
@@ -385,10 +416,17 @@ export const attachRenderObjectRef = (
 ): RenderObjectRefAttachment => {
   let shared = sharedRenderObjectRefs.get(ref);
   if (shared === undefined) {
-    const listeners = new Map<object, RenderObjectRefListener>();
     let createdShared: SharedRenderObjectRef;
     const handle = createRenderObjectHandle(transform, () => notifyRenderObjectRefListeners(createdShared));
-    createdShared = { attachmentCount: 0, handle, listeners, mutationSource: undefined };
+    createdShared = {
+      attachmentCount: 0,
+      handle,
+      listenerTombstones: 0,
+      listeners: [],
+      notificationCohorts: [],
+      notificationDepth: 0,
+      mutationSource: undefined,
+    };
     shared = createdShared;
     sharedRenderObjectRefs.set(ref, shared);
     try {
@@ -405,8 +443,9 @@ export const attachRenderObjectRef = (
   }
 
   const attached = shared;
-  const token = {};
-  attached.listeners.set(token, onChange);
+  compactRenderObjectRefListeners(attached);
+  const listenerSlot: RenderObjectRefListenerSlot = { active: true, listener: onChange };
+  attached.listeners.push(listenerSlot);
   attached.attachmentCount += 1;
   let active = true;
   let listenerAttached = true;
@@ -414,7 +453,8 @@ export const attachRenderObjectRef = (
     detach: () => {
       if (!active) return;
       if (listenerAttached) {
-        attached.listeners.delete(token);
+        listenerSlot.active = false;
+        attached.listenerTombstones += 1;
         listenerAttached = false;
       }
       if (attached.attachmentCount > 1 || sharedRenderObjectRefs.get(ref) !== attached) {
@@ -444,7 +484,7 @@ export const attachRenderObjectRef = (
     syncTransform: (nextTransform) => {
       if (!active) return;
       const previousSource = attached.mutationSource;
-      attached.mutationSource = token;
+      attached.mutationSource = listenerSlot;
       try {
         attached.handle.setTransform(nextTransform);
       } finally {

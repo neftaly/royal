@@ -45,6 +45,48 @@ describe('render-object ref attachments', () => {
     expect(second.handle.position.x).toBe(2);
   });
 
+  it('notifies a stable attachment cohort when listeners detach or attach during notification', () => {
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const calls: string[] = [];
+    let second: ReturnType<typeof attachRenderObjectRef>;
+    let late: ReturnType<typeof attachRenderObjectRef> | undefined;
+    const first = attachRenderObjectRef(ref, identityTransform, () => {
+      calls.push('first');
+      second.detach();
+      late ??= attachRenderObjectRef(ref, identityTransform, () => calls.push('late'));
+    });
+    second = attachRenderObjectRef(ref, identityTransform, () => calls.push('second'));
+
+    first.handle.position.x = 1;
+    expect(calls).toEqual(['first', 'second']);
+
+    calls.length = 0;
+    first.handle.position.x = 2;
+    expect(calls).toEqual(['first', 'late']);
+
+    first.detach();
+    late?.detach();
+  });
+
+  it('retains independent cohorts for reentrant handle mutations', () => {
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const calls: string[] = [];
+    let nested = false;
+    const first = attachRenderObjectRef(ref, identityTransform, () => {
+      calls.push('first');
+      if (nested) return;
+      nested = true;
+      first.handle.position.y = 1;
+    });
+    const second = attachRenderObjectRef(ref, identityTransform, () => calls.push('second'));
+
+    first.handle.position.x = 1;
+    expect(calls).toEqual(['first', 'first', 'second', 'second']);
+
+    first.detach();
+    second.detach();
+  });
+
   it('retries a final callback-ref clear without retaining its invalidation listener', () => {
     const firstRoot = vi.fn();
     const secondRoot = vi.fn();
