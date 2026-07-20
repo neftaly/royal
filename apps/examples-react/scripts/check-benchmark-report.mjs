@@ -73,19 +73,18 @@ const requiredGltfInstancingCounters = [
   'modelUploadCalls',
 ];
 
-const requiredPlanningCounters = ['compileNodeVisits', 'planCompiles', 'planRevision', 'sceneCommits'];
-const requiredResourceLifetimeCounters = [
-  'assetPlanCompiles',
-  'preparedAssetAcquires',
-  'preparedAssetEvents',
-  'preparedAssetReleases',
-  'preparedAssetUpdates',
-  'sceneLeaseAcquires',
-  'sceneLeaseReleases',
-  'gltfPreparationQueueHighWater',
-  'imageQueueHighWater',
-  'iblImageQueueHighWater',
+const requiredResourcePressureCounters = [
+  'activePreparationJobs',
+  'admittedOrdinaryTextureUploadBytes',
+  'deferredOrdinaryTextureUploads',
+  'ordinaryTextureUploadBudgetBytes',
+  'preparationJobLimit',
+  'queuedPreparationJobs',
+  'persistentGpuBudgetBytes',
+  'persistentGpuDeniedClaims',
+  'persistentGpuRetainedBytes',
 ];
+const requiredTextureResidencyCounters = ['fitted', 'resources'];
 
 const errors = [];
 const warnings = [];
@@ -369,37 +368,38 @@ const checkGltfSetupEvidence = (gltfInstancing, label) => {
   requireNumber(gltfInstancing.rendererFrame, `${label}.rendererFrame`);
 };
 
-const checkRendererCounters = (value, label, keys, field) => {
+const checkRendererSnapshot = (value, label) => {
   if (!requireObject(value, label)) return;
-  requireBoolean(value.available, `${label}.available`);
-  if (value.available !== true) errors.push(`${label}.available must be true`);
-  const counters = value[field];
-  if (!requireObject(counters, `${label}.${field}`)) return;
-  for (const key of keys) requireNumber(counters[key], `${label}.${field}.${key}`);
+  requireNonNegativeNumber(value.frame, `${label}.frame`);
+  if (requireObject(value.lifecycle, `${label}.lifecycle`)) {
+    requireNonNegativeNumber(value.lifecycle.generation, `${label}.lifecycle.generation`);
+    requireNonNegativeNumber(value.lifecycle.interruptions, `${label}.lifecycle.interruptions`);
+    requireNonNegativeNumber(value.lifecycle.recoveries, `${label}.lifecycle.recoveries`);
+    if (!['available', 'disposed', 'unavailable'].includes(value.lifecycle.state)) {
+      errors.push(`${label}.lifecycle.state must be available, disposed, or unavailable`);
+    }
+  }
+  if (requireObject(value.resourcePressure, `${label}.resourcePressure`)) {
+    for (const key of requiredResourcePressureCounters) {
+      requireNonNegativeNumber(value.resourcePressure[key], `${label}.resourcePressure.${key}`);
+    }
+  }
+  if (requireObject(value.textureResidency, `${label}.textureResidency`)) {
+    for (const key of requiredTextureResidencyCounters) {
+      requireNonNegativeNumber(value.textureResidency[key], `${label}.textureResidency.${key}`);
+    }
+  }
 };
 
-const checkRendererCounterBridge = (route, routeLabel) => {
+const checkRendererObservation = (route, routeLabel) => {
   if (!requireObject(route.renderer, `${routeLabel}.renderer`)) return;
-  checkRendererCounters(route.renderer.planning, `${routeLabel}.renderer.planning`, requiredPlanningCounters, 'delta');
-  checkRendererCounters(
-    route.renderer.resourceLifetime,
-    `${routeLabel}.renderer.resourceLifetime`,
-    requiredResourceLifetimeCounters,
-    'delta',
-  );
-  if (!requireObject(route.renderer.setup, `${routeLabel}.renderer.setup`)) return;
-  checkRendererCounters(
-    route.renderer.setup.planning,
-    `${routeLabel}.renderer.setup.planning`,
-    requiredPlanningCounters,
-    'counters',
-  );
-  checkRendererCounters(
-    route.renderer.setup.resourceLifetime,
-    `${routeLabel}.renderer.setup.resourceLifetime`,
-    requiredResourceLifetimeCounters,
-    'counters',
-  );
+  if (!requireObject(route.renderer.snapshots, `${routeLabel}.renderer.snapshots`)) return;
+  for (const field of ['setup', 'beforeFrames', 'afterFrames']) {
+    checkRendererSnapshot(
+      route.renderer.snapshots[field],
+      `${routeLabel}.renderer.snapshots.${field}`,
+    );
+  }
 };
 
 const checkInstancingRoute = (route, routeLabel) => {
@@ -846,7 +846,7 @@ if (requireObject(report, 'report')) {
         if (!requireObject(route, routeLabel)) return;
         checkRouteDisplay(route.display, `${routeLabel}.display`);
         checkRouteFrameEvidence(route, routeLabel);
-        checkRendererCounterBridge(route, routeLabel);
+        checkRendererObservation(route, routeLabel);
         if (!requireGlCounters(route.gl, `${routeLabel}.gl`)) return;
         if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);

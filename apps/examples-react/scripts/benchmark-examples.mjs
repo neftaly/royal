@@ -561,39 +561,6 @@ const gltfInstancingSetupMetrics = (snapshot) => ({
   rendererFrame: rendererFrame(snapshot) ?? 0,
 });
 
-const planningCounterKeys = ['compileNodeVisits', 'planCompiles', 'planRevision', 'sceneCommits'];
-const resourceLifetimeCounterKeys = [
-  'assetPlanCompiles',
-  'preparedAssetAcquires',
-  'preparedAssetEvents',
-  'preparedAssetReleases',
-  'preparedAssetUpdates',
-  'sceneLeaseAcquires',
-  'sceneLeaseReleases',
-  'gltfPreparationQueueHighWater',
-  'imageQueueHighWater',
-  'iblImageQueueHighWater',
-];
-
-const rendererCounters = (snapshot, field, keys) => Object.fromEntries(keys.map((key) => {
-  const value = snapshot?.[field]?.[key];
-  return [key, typeof value === 'number' && Number.isFinite(value) ? value : 0];
-}));
-
-const rendererCounterMetrics = (after, before, field, keys) => {
-  const afterCounters = rendererCounters(after, field, keys);
-  const beforeCounters = rendererCounters(before, field, keys);
-  return {
-    available: after?.[field] != null || before?.[field] != null,
-    delta: Object.fromEntries(keys.map((key) => [key, afterCounters[key] - beforeCounters[key]])),
-  };
-};
-
-const rendererCounterSetup = (snapshot, field, keys) => ({
-  available: snapshot?.[field] !== undefined && snapshot?.[field] !== null,
-  counters: rendererCounters(snapshot, field, keys),
-});
-
 const finiteNumberRecord = (value) => value === null || typeof value !== 'object'
   ? {}
   : Object.fromEntries(Object.entries(value).filter(([, counter]) =>
@@ -2083,18 +2050,6 @@ const collectPageMetrics = async (session, frames, options = {}) => {
         rendererBeforeFrames,
         frameStats.sampleCount ?? frames,
       ),
-      planning: rendererCounterMetrics(
-        rendererAfterFrames,
-        rendererBeforeFrames,
-        'planning',
-        planningCounterKeys,
-      ),
-      resourceLifetime: rendererCounterMetrics(
-        rendererAfterFrames,
-        rendererBeforeFrames,
-        'resourceLifetime',
-        resourceLifetimeCounterKeys,
-      ),
       snapshots: {
         afterFrames: rendererAfterFrames,
         beforeFrames: rendererBeforeFrames,
@@ -2102,8 +2057,6 @@ const collectPageMetrics = async (session, frames, options = {}) => {
       },
       setup: {
         gltfInstancing: gltfInstancingSetupMetrics(setupRenderer),
-        planning: rendererCounterSetup(setupRenderer, 'planning', planningCounterKeys),
-        resourceLifetime: rendererCounterSetup(setupRenderer, 'resourceLifetime', resourceLifetimeCounterKeys),
       },
       virtualTexturing: rendererRecordMetrics(
         rendererAfterFrames,

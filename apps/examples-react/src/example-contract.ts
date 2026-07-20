@@ -44,9 +44,7 @@ export type RendererBenchmarkSnapshot = {
   readonly gltfInstancing: GltfInstancingCounters | null;
   readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
   readonly lifecycle: RendererLifecycleSnapshot | null;
-  readonly planning: Record<string, number> | null;
   readonly resourcePressure: Record<string, number> | null;
-  readonly resourceLifetime: Record<string, number> | null;
   readonly textureResidency: Record<string, number> | null;
   readonly virtualTexturing: Record<string, number> | null;
 };

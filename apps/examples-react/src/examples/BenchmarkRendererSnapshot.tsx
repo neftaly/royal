@@ -112,7 +112,6 @@ export const BenchmarkRendererSnapshot = ({
             ? 'available'
             : current.context.phase === 'disposed' ? 'disposed' : 'unavailable',
         },
-        planning: null,
         resourcePressure: {
           activePreparationJobs: current.resources.asyncPreparation.activeJobs,
           admittedOrdinaryTextureUploadBytes:
@@ -127,7 +126,6 @@ export const BenchmarkRendererSnapshot = ({
           persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,
           persistentGpuRetainedBytes: current.resources.persistentGpu.retainedBytes,
         },
-        resourceLifetime: null,
         textureResidency: {
           fitted: current.resources.ordinaryTextures.fittedTextures,
           resources: current.resources.ordinaryTextures.residentTextures,

@@ -59,8 +59,6 @@ describe('examples contract', () => {
         }],
       },
       lifecycle: null,
-      planning: null,
-      resourceLifetime: null,
       resourcePressure: null,
       textureResidency: null,
       virtualTexturing: null,
