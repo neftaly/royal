@@ -105,6 +105,12 @@ export type CanvasRootSnapshot = Readonly<{
   size: ResolvedCanvasSize | null;
 }>;
 
+/** Complete cold diagnostic snapshot returned by a Royal renderer root. */
+export type RendererRootSnapshot = CanvasRootSnapshot;
+
+/** Immutable creation options for one Royal renderer root. */
+export type RendererRootOptions = CanvasRootOptions;
+
 export type CanvasRootPlatform = Readonly<{
   cancelDelay?(handle: unknown): void;
   now?(): number;
@@ -1070,7 +1076,11 @@ export class CanvasRoot {
   }
 }
 
+/** Renderer lifetime owned by one canvas and one WebGL2 context. */
+export type RoyalRendererRoot = CanvasRoot;
+
+/** Creates one imperative Royal renderer root for an existing canvas. */
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
-  options: CanvasRootOptions = {},
-): CanvasRoot => new CanvasRoot(canvas, options);
+  options: RendererRootOptions = {},
+): RoyalRendererRoot => new CanvasRoot(canvas, options);

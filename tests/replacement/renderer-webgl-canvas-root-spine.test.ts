@@ -676,7 +676,9 @@ describe("clear-only canvas root", () => {
     expect(() => root.render({
       ...emptyScene(),
       nodes: [{ kind: "not-implemented" }],
-    } as unknown as RenderRoot)).toThrow("does not yet support not-implemented nodes");
+    } as unknown as RenderRoot)).toThrow(
+      'Royal scenes do not support nodes with kind "not-implemented"',
+    );
   });
 
   it("does not allocate a new public snapshot until observable state changes", () => {

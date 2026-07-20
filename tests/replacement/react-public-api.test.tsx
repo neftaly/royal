@@ -59,6 +59,7 @@ describe("replacement React public API", () => {
     } satisfies CanvasProps;
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
+    expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RoyalRendererRoot>();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();

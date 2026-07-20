@@ -262,7 +262,10 @@ const staticCamera = (scene: RenderRoot): CanonicalCamera => {
   if (scene.camera.kind === "perspective-camera" || scene.camera.kind === "orthographic-camera") {
     return scene.camera;
   }
-  throw new Error("Royal direct-surface slice does not yet support camera view resources");
+  throw new Error(
+    "Royal cannot snapshot a mutable camera resource without a renderer root; "
+      + "render the scene through Canvas or createRendererRoot",
+  );
 };
 
 const sceneExposure = (scene: RenderRoot): number => scene.exposureEv100 === undefined
@@ -411,14 +414,14 @@ export const prepareCanonicalSurfaceScene = (
           if (light.kind === "directional") {
             if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
               throw new Error(
-                `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+                `Royal scenes support at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
               );
             }
             directionalLights.push({ color, direction });
           } else {
             if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
               throw new Error(
-                `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
+                `Royal scenes support at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} point and spot lights`,
               );
             }
             punctualLights.push({
@@ -592,7 +595,7 @@ export const prepareCanonicalSurfaceScene = (
         if (!requiresLighting) continue;
         if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
           throw new Error(
-            `Royal canonical surface slice supports at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+            `Royal scenes support at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
           );
         }
         directionalLights.push({
@@ -610,7 +613,7 @@ export const prepareCanonicalSurfaceScene = (
         if (!requiresLighting) continue;
         if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
           throw new Error(
-            `Royal canonical surface slice supports at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} punctual lights`,
+            `Royal scenes support at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} point and spot lights`,
           );
         }
         const spot = node.kind === "spot-light";
@@ -631,7 +634,7 @@ export const prepareCanonicalSurfaceScene = (
         continue;
       }
       const unsupportedKind = (node as { readonly kind?: unknown }).kind;
-      throw new Error(`Royal direct-surface slice does not yet support ${String(unsupportedKind)} nodes`);
+      throw new Error(`Royal scenes do not support nodes with kind ${JSON.stringify(unsupportedKind)}`);
     }
     let materialSource = directMaterials.get(node.material);
     if (materialSource === undefined) {
