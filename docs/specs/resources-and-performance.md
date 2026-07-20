@@ -135,8 +135,9 @@ selection, resource admission, exact interaction queries, and compact packet
 construction. The GPU owns vertex transforms, rasterization, material shading,
 depth, texture sampling, clustered-light lookup, and presentation passes.
 
-A retained terminal-presentation target is justified only when it removes
-repeated fragment work measured on the device floor. Royal accounts its color
+A retained terminal-presentation target is justified only by semantics that
+need a shared linear image, currently transmission or supported linear alpha
+blending. Measured opaque scenes present directly. Royal accounts target color
 and depth bytes before allocation, omits the separate scene-color snapshot when
 transmission is inactive, and falls back to direct presentation on admission
 denial. It MUST NOT silently lower canvas resolution or skip authored work to

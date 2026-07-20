@@ -97,30 +97,31 @@ describe("terminal presentation planning", () => {
     hasFloatColorTarget: true,
   };
 
-  it("does not require float blending for an opaque HDR scene", () => {
-    expect(terminalPresentationRequested("pbr-neutral", true, false, supported)).toBe(true);
+  it("presents opaque scenes directly without retaining a full-screen target", () => {
+    expect(terminalPresentationRequested(true, false, supported)).toBe(false);
     expect(linearCompositeColorBytesPerPixel(supported, false)).toBe(8);
   });
 
-  it("requires float blending only when an alpha-blended draw exists", () => {
-    expect(terminalPresentationRequested("pbr-neutral", true, true, supported)).toBe(false);
+  it("retains a terminal target only for supported linear alpha blending", () => {
+    expect(terminalPresentationRequested(true, true, supported)).toBe(false);
     expect(linearCompositeColorBytesPerPixel(supported, true)).toBe(4);
     const blended = {
       hasFloatBlendTarget: true,
       hasFloatColorTarget: true,
     };
-    expect(terminalPresentationRequested("pbr-neutral", true, true, blended)).toBe(true);
+    expect(terminalPresentationRequested(true, true, blended)).toBe(true);
     expect(linearCompositeColorBytesPerPixel(blended, true)).toBe(8);
   });
 
   it("preserves direct presentation for unsupported or mixed material output", () => {
     expect(terminalPresentationRequested(
-      "pbr-neutral",
       true,
-      false,
-      { ...supported, hasFloatColorTarget: false },
+      true,
+      { hasFloatBlendTarget: true, hasFloatColorTarget: false },
     )).toBe(false);
-    expect(terminalPresentationRequested("pbr-neutral", false, false, supported)).toBe(false);
-    expect(terminalPresentationRequested("linear-clamp", true, false, supported)).toBe(false);
+    expect(terminalPresentationRequested(false, true, {
+      hasFloatBlendTarget: true,
+      hasFloatColorTarget: true,
+    })).toBe(false);
   });
 });

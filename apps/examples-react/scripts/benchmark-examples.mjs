@@ -796,7 +796,9 @@ const installBenchmarkHooks = async (session) => {
     const defines = (name) => sources.includes('#define ' + name + '\\n');
     const kind = sources.includes('uniform vec4 cameraWorldPosition')
       ? 'surface'
-      : sources.includes('uniform vec4 linearColor') ? 'unlit' : 'unknown';
+      : sources.includes('uniform vec4 linearColor')
+        ? 'unlit'
+        : sources.includes('uniform sampler2D sceneColor') ? 'presentation' : 'unknown';
     const instanced = defines('INSTANCED') ? '-instanced' : '';
     const features = [
       ['BASE_COLOR_TEXTURED', 'baseColor'],
@@ -1152,6 +1154,15 @@ const installBenchmarkHooks = async (session) => {
     timer.drawRecord = record;
     return () => endGpuTimer(timer, false);
   };
+  const multiDrawElementCount = (counts, offset, drawCount) => {
+    let total = 0;
+    const start = Math.max(0, Math.floor(Number(offset) || 0));
+    const end = start + Math.max(0, Math.floor(Number(drawCount) || 0));
+    for (let index = start; index < end; index += 1) {
+      total += Math.max(0, Number(counts?.[index]) || 0);
+    }
+    return total;
+  };
   const patchDrawCalls = (prototype) => {
     const patchDirect = (name, create) => {
       const original = prototype?.[name];
@@ -1230,16 +1241,26 @@ const installBenchmarkHooks = async (session) => {
               counters.multiDrawElements += Math.max(0, Number(drawCount) || 0);
             }
             recordDraw(gl);
-            return originalMultiDrawElements.call(
-              this,
-              mode,
-              counts,
-              countsOffset,
-              type,
-              offsets,
-              offsetsOffset,
-              drawCount,
+            const after = profileDraw(
+              'multiDrawElementsWEBGL',
+              multiDrawElementCount(counts, countsOffset, drawCount),
+              1,
+              gl,
             );
+            try {
+              return originalMultiDrawElements.call(
+                this,
+                mode,
+                counts,
+                countsOffset,
+                type,
+                offsets,
+                offsetsOffset,
+                drawCount,
+              );
+            } finally {
+              after?.();
+            }
           };
           Object.defineProperty(
             wrappedMultiDrawElements,

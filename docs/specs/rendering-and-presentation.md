@@ -33,8 +33,9 @@ extension MUST take a documented fallback path, not a browser-name branch.
 The working lighting domain is scene-linear HDR where the active material/pass
 requires it. Texture decode converts color sources from sRGB exactly once. Data
 textures are not converted. Lighting and blending operate in their specified
-linear domains. Tone mapping and output encoding occur once at the terminal
-presentation edge.
+linear domains. A direct opaque/masked draw applies tone mapping and output
+encoding immediately before its destination write; a retained linear pass
+applies them once at its terminal presentation edge.
 
 Scene `clearColor` is linear RGBA and defaults to transparent black. Canvas
 alpha is a root creation option and does not silently rewrite scene alpha.
@@ -45,22 +46,21 @@ The default tone map is PBR Neutral; linear clamp is an explicit diagnostic or
 display-referred choice. Exposure is EV100, where a higher value produces a
 darker image.
 
-For an all-standard PBR scene using PBR Neutral, Royal MAY retain one
-view-sized renderable half-float color/depth target and move the shared
-tone-map/output transform to a full-screen terminal draw. This is the preferred
-path when `EXT_color_buffer_float` is available: the transform runs once per
-presented pixel instead of once per covered material fragment. The direct
-material-shader transform remains the semantic fallback for a denied target,
-an incomplete framebuffer, missing float-color support, or a material family
-whose output contract is not yet scene-linear. Both paths consume the same
-shared transform source and MUST agree for opaque standard surfaces.
+Opaque and alpha-mask scenes present directly. Profiling on the representative
+Sponza path showed that avoiding a view-sized half-float color/depth target and
+full-screen sample was cheaper than moving the compact output transform out of
+material shaders. This also avoids persistent target bytes and tile-memory
+traffic on the device floor.
 
-`EXT_float_blend` is required for that half-float path only when an admitted
-draw actually enables alpha blending. Its absence MUST NOT disable terminal
-presentation for an opaque/alpha-mask scene. Capability selection and material
-eligibility are retained lifecycle decisions, not browser-name tests or
-per-draw extension queries. The terminal target is charged to the root
-persistent GPU budget and is released when the path deactivates.
+An all-standard scene with alpha-blended draws MAY retain one view-sized
+half-float color/depth target so blending occurs before the shared output
+transform. That path requires both `EXT_color_buffer_float` and
+`EXT_float_blend`; otherwise direct presentation is the stable fallback.
+Capability selection and material eligibility are retained lifecycle
+decisions, not browser-name tests or per-draw extension queries. The target is
+charged to the root persistent GPU budget and released when the need
+deactivates. Direct and retained paths consume the same shared transform source
+and MUST agree for opaque standard surfaces.
 
 ## Geometry and materials
 

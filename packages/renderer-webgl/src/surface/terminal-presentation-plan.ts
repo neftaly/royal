@@ -13,18 +13,16 @@ export const linearCompositeColorBytesPerPixel = (
   : 4;
 
 /**
- * Selects the optional one-shot terminal presentation path.
+ * Selects the retained linear target needed for correct standard-material blending.
  *
- * PBR-neutral is safe to move out of material shaders only when every material
- * produces linear scene color. Float blending is needed only when the scene
- * actually contains an alpha-blended draw.
+ * Opaque/masked scenes present directly: measured full-screen bandwidth costs
+ * more than repeating the compact output transform on their visible fragments.
  */
 export const terminalPresentationRequested = (
-  toneMapping: "linear-clamp" | "pbr-neutral",
   allMaterialsStandard: boolean,
   hasAlphaBlend: boolean,
   capabilities: LinearCompositeCapabilities,
-): boolean => toneMapping === "pbr-neutral"
-  && allMaterialsStandard
+): boolean => allMaterialsStandard
+  && hasAlphaBlend
   && capabilities.hasFloatColorTarget
-  && (!hasAlphaBlend || capabilities.hasFloatBlendTarget);
+  && capabilities.hasFloatBlendTarget;

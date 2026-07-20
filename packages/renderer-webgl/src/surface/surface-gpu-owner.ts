@@ -678,7 +678,6 @@ export class SurfaceGpuOwner {
       if (transmissionRequested && roughSceneColorRequired) break;
     }
     const terminalPresentation = scene !== null && terminalPresentationRequested(
-      scene.toneMapping,
       this.#terminalPresentationEligible,
       this.#terminalPresentationHasAlphaBlend,
       this.#linearCompositeCapabilities,
@@ -807,7 +806,6 @@ export class SurfaceGpuOwner {
         || (
           this.#transmissionCandidates.length === 0
           && !terminalPresentationRequested(
-            this.#scene.toneMapping,
             this.#terminalPresentationEligible,
             this.#terminalPresentationHasAlphaBlend,
             this.#linearCompositeCapabilities,
