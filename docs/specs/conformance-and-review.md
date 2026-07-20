@@ -248,7 +248,7 @@ ownership, and clarity—not assignment tokens.
 | Area | Status | Evidence and next architectural action |
 | --- | --- | --- |
 | Readonly validated descriptors | conforms | Renderer-core constructors copy normalized tuple/array inputs, expose TypeScript `readonly` contracts, reject unknown fields, and avoid runtime freezing. |
-| React ordinary-tree ownership | conforms | `Canvas` owns one root and controls/hooks remain normal React children; cleanup and public API tests exist. |
+| React ordinary-tree ownership | conforms | `Canvas` owns one root and controls/hooks remain normal React children; cleanup and public API tests exist. React and imperative hosts share the self-documenting `pixelRatio` policy, invalid explicit ratios fail at the React boundary, and capability clamping remains distinct as `renderScale`. |
 | Demand rendering and clock ownership | conforms | Root invalidation, frame loop, external-clock and XR runtime owners have focused tests. |
 | Context generation/lifecycle | conforms | Lifecycle owners, restoration integration, captured failures, and resource lifetime tests exercise loss/restore/disposal. |
 | Retained scene/packet path | partial | Canonical retained tables/workspaces exist. Stable fixed state, program, bindings and VAO now compile into one draw packet shared by ordinary and multi-draw submission; framebuffer/viewport remain a per-view frame packet. Some commit/topology construction still allocates arrays/maps and string identities. Profile before changing readable cold work. |

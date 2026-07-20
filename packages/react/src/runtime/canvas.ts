@@ -109,8 +109,20 @@ const publishCanvasSize = (
   root.setSize({
     cssHeight,
     cssWidth,
-    devicePixelRatio: pixelRatio ?? (globalThis.devicePixelRatio || 1),
+    pixelRatio: pixelRatio ?? (globalThis.devicePixelRatio || 1),
   });
+};
+
+/** @internal Validates explicit React resolution policy before any browser observer owns it. */
+export const resolveCanvasPixelRatio = (pixelRatio: number | undefined): number | undefined => {
+  if (pixelRatio === undefined) return undefined;
+  if (!Number.isFinite(pixelRatio)) {
+    throw new TypeError("Canvas pixelRatio must be finite");
+  }
+  if (pixelRatio <= 0) {
+    throw new RangeError("Canvas pixelRatio must be greater than 0");
+  }
+  return pixelRatio;
 };
 
 /** @internal Browser shell for CSS-size and DPR observation. */
@@ -180,6 +192,7 @@ export const Canvas = ({
   scenePointerEvents,
   ...canvasProps
 }: CanvasProps): ReactNode => {
+  const resolvedPixelRatio = resolveCanvasPixelRatio(pixelRatio);
   const resolvedOptions = resolveRendererRootOptions(rendererOptions);
   const optionsKey = rendererRootOptionsKey(resolvedOptions);
   const scenePickingIndex = useMemo(() => createScenePickingIndex(scene), [scene]);
@@ -248,8 +261,8 @@ export const Canvas = ({
   useLayoutEffect(() => {
     const root = activeRoot;
     if (root === null) return undefined;
-    return observeCanvasSize(root.canvas, root, pixelRatio);
-  }, [activeRoot, pixelRatio]);
+    return observeCanvasSize(root.canvas, root, resolvedPixelRatio);
+  }, [activeRoot, resolvedPixelRatio]);
 
   useLayoutEffect(() => {
     if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.setScene(scene);

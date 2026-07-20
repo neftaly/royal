@@ -34,7 +34,7 @@ import {
 describe("canvas size selection", () => {
   it("preserves aspect while fitting the capability ceiling", () => {
     expect(resolveCanvasSize(
-      { cssHeight: 1000, cssWidth: 2000, devicePixelRatio: 2 },
+      { cssHeight: 1000, cssWidth: 2000, pixelRatio: 2 },
       { maxHeight: 1000, maxWidth: 1000 },
     )).toMatchObject({
       backingHeight: 500,
@@ -45,7 +45,7 @@ describe("canvas size selection", () => {
 
   it("represents a hidden canvas without inventing a drawable pixel", () => {
     expect(resolveCanvasSize(
-      { cssHeight: 0, cssWidth: 300, devicePixelRatio: 2 },
+      { cssHeight: 0, cssWidth: 300, pixelRatio: 2 },
       { maxHeight: 4096, maxWidth: 4096 },
     )).toMatchObject({ backingHeight: 0, backingWidth: 0, renderScale: 0 });
   });
@@ -86,7 +86,7 @@ describe("clear-only canvas root", () => {
 
   it("coalesces commits and applies only changed clear state", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 360, cssWidth: 640, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 360, cssWidth: 640, pixelRatio: 1 });
     root.setScene(emptyScene([0.25, 0.5, 1.5, 1]));
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
@@ -112,11 +112,11 @@ describe("clear-only canvas root", () => {
     const { callbacks, canvas, root } = harness();
     const sizeListener = vi.fn();
     root.subscribeSize(sizeListener);
-    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 10, cssWidth: 20, pixelRatio: 1 });
     callbacks.shift()!();
     expect(canvas.gl.viewport).toHaveBeenCalledTimes(1);
 
-    root.setSize({ cssHeight: 5, cssWidth: 10, devicePixelRatio: 2 });
+    root.setSize({ cssHeight: 5, cssWidth: 10, pixelRatio: 2 });
     expect(sizeListener).toHaveBeenCalledTimes(2);
     expect(callbacks).toHaveLength(0);
     root.invalidate();
@@ -126,7 +126,7 @@ describe("clear-only canvas root", () => {
 
   it("renders the first size even when the canvas already has that backing size", () => {
     const { callbacks, root } = harness();
-    root.setSize({ cssHeight: 150, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 150, cssWidth: 300, pixelRatio: 1 });
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
     expect(root.getSnapshot()).toMatchObject({
@@ -137,7 +137,7 @@ describe("clear-only canvas root", () => {
 
   it("uploads one canonical surface once and reuses it across frames", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -171,7 +171,7 @@ describe("clear-only canvas root", () => {
 
   it("draws public wireframes through native line topology", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -192,7 +192,7 @@ describe("clear-only canvas root", () => {
   it("admits large surface sets across follow-up frames without duplicating geometry", () => {
     const { callbacks, canvas, root } = harness();
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: Array.from({ length: 20 }, (_, index) => mesh({
@@ -225,7 +225,7 @@ describe("clear-only canvas root", () => {
     }>((resolve) => { resolveDecode = resolve; }));
     const { callbacks, canvas, root } = harness({ decodeTexture });
     const texture = imageTexture("/checker.png");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -271,7 +271,7 @@ describe("clear-only canvas root", () => {
     }));
     const { callbacks, canvas, root } = harness({ decodeTexture });
     const texture = imageTexture("/checker.ktx2");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -316,7 +316,7 @@ describe("clear-only canvas root", () => {
     });
     const textures = ["/one.png", "/two.png", "/three.png"].map((src) => imageTexture(src));
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: textures.map((texture, index) => mesh({
@@ -361,7 +361,7 @@ describe("clear-only canvas root", () => {
     const { callbacks, canvas, root } = harness({ decodeTexture });
     const texture = imageTexture("/shared.png");
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -383,7 +383,7 @@ describe("clear-only canvas root", () => {
   it("renders committed camera-resource changes without rebuilding scene resources", () => {
     const { callbacks, canvas, root } = harness();
     const camera = createCameraViewResource(perspectiveCamera({ position: [0, 0, 3] }));
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera,
       nodes: [mesh({
@@ -414,7 +414,7 @@ describe("clear-only canvas root", () => {
 
   it("executes solid standard material lighting and mirrored winding through complete state", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment: studioEnvironment({ radianceScaleNits: 20, rotation: [0, 0.25, 0] }),
@@ -472,7 +472,7 @@ describe("clear-only canvas root", () => {
   it("groups opaque draw work by shader variant without changing surface count", () => {
     const { callbacks, canvas, root } = harness();
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -499,7 +499,7 @@ describe("clear-only canvas root", () => {
   it("draws opaque surfaces before retained transparent work with straight-alpha state", () => {
     const { callbacks, canvas, root } = harness();
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -527,7 +527,7 @@ describe("clear-only canvas root", () => {
 
   it("restores depth writes before clearing after a transparent frame", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -549,7 +549,7 @@ describe("clear-only canvas root", () => {
 
   it("keeps off-frustum surfaces out of the draw shell", () => {
     const { callbacks, canvas, root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -574,7 +574,7 @@ describe("clear-only canvas root", () => {
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf("/shared-material.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -611,7 +611,7 @@ describe("clear-only canvas root", () => {
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf("/specular.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -638,7 +638,7 @@ describe("clear-only canvas root", () => {
         : null) as WebGL2RenderingContext["getExtension"],
     });
     const node = gltf("/multi-draw.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -671,7 +671,7 @@ describe("clear-only canvas root", () => {
         : null) as WebGL2RenderingContext["getExtension"],
     });
     const node = gltf("/distinct-materials.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -715,7 +715,7 @@ describe("clear-only canvas root", () => {
     });
     const textures = [imageTexture("/first.png"), imageTexture("/second.png")];
     const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: textures.map((texture) => mesh({
@@ -749,7 +749,7 @@ describe("clear-only canvas root", () => {
       pickingGeometry: planeGeometry([4, 1]),
       pickingId: "wide-hit-area",
     });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -767,7 +767,7 @@ describe("clear-only canvas root", () => {
 
   it("matches visible backface culling during picking", () => {
     const { root } = harness();
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
@@ -781,7 +781,7 @@ describe("clear-only canvas root", () => {
 
   it("lowers a semantic scene and rejects unsupported node kinds explicitly", () => {
     const { callbacks, root } = harness();
-    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 10, cssWidth: 20, pixelRatio: 1 });
     root.setScene(emptyScene([0.2, 0.3, 0.4, 1]));
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
@@ -800,7 +800,7 @@ describe("clear-only canvas root", () => {
     expect(root.getSnapshot()).toBe(initial);
     root.invalidate();
     expect(root.getSnapshot()).toBe(initial);
-    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 10, cssWidth: 20, pixelRatio: 1 });
     const sized = root.getSnapshot();
     expect(sized).not.toBe(initial);
     expect(root.getSnapshot()).toBe(sized);
@@ -814,7 +814,7 @@ describe("clear-only canvas root", () => {
     const sizeListener = vi.fn();
     root.subscribeLifecycle(lifecycleListener);
     root.subscribeSize(sizeListener);
-    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 10, cssWidth: 20, pixelRatio: 1 });
     expect(sizeListener).toHaveBeenCalledTimes(1);
     callbacks.shift()!();
     expect(sizeListener).toHaveBeenCalledTimes(1);
@@ -828,7 +828,7 @@ describe("clear-only canvas root", () => {
     const { callbacks, canvas, root } = harness();
     const phases: string[] = [];
     root.subscribe(() => phases.push(root.getSnapshot().context.phase));
-    root.setSize({ cssHeight: 20, cssWidth: 30, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 20, cssWidth: 30, pixelRatio: 1 });
     const lost = new Event("webglcontextlost", { cancelable: true });
     canvas.dispatchEvent(lost);
     expect(lost.defaultPrevented).toBe(true);
@@ -852,7 +852,7 @@ describe("clear-only canvas root", () => {
     canvas.gl.clear.mockImplementationOnce(() => {
       throw new Error("context command failed");
     });
-    root.setSize({ cssHeight: 20, cssWidth: 30, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 20, cssWidth: 30, pixelRatio: 1 });
     callbacks.shift()!();
     expect(scheduledFailures).toHaveLength(1);
     expect(root.getSnapshot()).toMatchObject({
@@ -869,7 +869,7 @@ describe("clear-only canvas root", () => {
     root.dispose();
     expect(phases).toEqual(["disposed"]);
     expect(() => root.invalidate()).toThrow("disposed Royal renderer root");
-    expect(() => root.setSize({ cssHeight: 1, cssWidth: 1, devicePixelRatio: 1 }))
+    expect(() => root.setSize({ cssHeight: 1, cssWidth: 1, pixelRatio: 1 }))
       .toThrow("disposed Royal renderer root");
   });
 });

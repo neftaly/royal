@@ -21,7 +21,7 @@ const root = createRendererRoot(document.querySelector("canvas")!, {
 root.setSize({
   cssWidth: 800,
   cssHeight: 450,
-  devicePixelRatio: window.devicePixelRatio,
+  pixelRatio: window.devicePixelRatio,
 });
 root.setScene(scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),

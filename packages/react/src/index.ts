@@ -65,12 +65,10 @@ export type {
 } from "./orbit/controls";
 export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
 export type {
-  PickInput,
-  PickResult,
   GltfTextureProgress,
   RendererRootOptions,
   RendererRootSnapshot,
   ResolvedRendererRootOptions,
   RendererRoot,
-  VirtualTextureAssetSnapshot,
 } from "@royal/renderer-webgl";
+export type { PickInput, PickResult } from "@royal/renderer-core";

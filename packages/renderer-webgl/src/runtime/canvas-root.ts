@@ -166,7 +166,7 @@ export interface RendererRoot {
   pick(input: PickInput): PickResult | undefined;
   /** Installs complete scene intent and requests one coalesced presentation frame. */
   setScene(scene: Scene): void;
-  /** Sets CSS size and pixel density; Royal derives bounded backing dimensions. */
+  /** Sets CSS size and requested backing pixels per CSS pixel. */
   setSize(input: CanvasSizeInput): void;
   /** Stable subscription function for broad operational snapshot changes. */
   readonly subscribe: (listener: () => void) => () => void;
@@ -731,7 +731,7 @@ export class CanvasRoot implements RendererRoot {
     if (this.#canvas.height !== resolved.backingHeight) this.#canvas.height = resolved.backingHeight;
     const semanticChanged = previous?.cssWidth !== resolved.cssWidth
       || previous?.cssHeight !== resolved.cssHeight
-      || previous?.devicePixelRatio !== resolved.devicePixelRatio
+      || previous?.pixelRatio !== resolved.pixelRatio
       || previous?.backingWidth !== resolved.backingWidth
       || previous?.backingHeight !== resolved.backingHeight;
     if (!semanticChanged) return;
@@ -1158,7 +1158,7 @@ export class CanvasRoot implements RendererRoot {
         if (
           previousSize?.cssWidth !== this.#size.cssWidth
           || previousSize?.cssHeight !== this.#size.cssHeight
-          || previousSize?.devicePixelRatio !== this.#size.devicePixelRatio
+          || previousSize?.pixelRatio !== this.#size.pixelRatio
           || previousSize?.backingWidth !== this.#size.backingWidth
           || previousSize?.backingHeight !== this.#size.backingHeight
         ) this.#publishSize();

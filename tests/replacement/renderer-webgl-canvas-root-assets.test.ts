@@ -38,7 +38,7 @@ describe("canvas root asset publication", () => {
       preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
       readPrefilteredEnvironment,
     });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment,
@@ -161,7 +161,7 @@ describe("canvas root asset publication", () => {
     }));
     const { callbacks, root } = harness({ decodeTexture });
     try {
-      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
       root.setScene(scene({
         camera: perspectiveCamera({ position: [0, 0, 30] }),
         nodes,
@@ -205,7 +205,7 @@ describe("canvas root asset publication", () => {
         return handle;
       },
     }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -265,7 +265,7 @@ describe("canvas root asset publication", () => {
         width: 2,
       }),
     }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: textures.map((texture, index) => mesh({
@@ -328,7 +328,7 @@ describe("canvas root asset publication", () => {
       }),
       useProgram: vi.fn((next: WebGLProgram | null) => { program = next; }),
     }, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -385,7 +385,7 @@ describe("canvas root asset publication", () => {
       src: "/triangle.glb",
       version: "v1",
     });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
@@ -435,7 +435,7 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticInstancedTriangleGlb());
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/instances.glb", version: "v1" });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -473,7 +473,7 @@ describe("canvas root asset publication", () => {
     });
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
@@ -532,7 +532,7 @@ describe("canvas root asset publication", () => {
       readGltf: async () => staticTriangleGlb(document),
     });
     try {
-      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
       root.setScene(scene({
         camera: perspectiveCamera({ position: [0, 0, 3] }),
         nodes: [node],
@@ -574,7 +574,7 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/lod.glb", version: "v1" });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 5] }),
       nodes: [node],
@@ -600,7 +600,7 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/material-lod.glb", version: "v1" });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 5] }),
       nodes: [node],
@@ -626,7 +626,7 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticTexturedTriangleGlb());
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf({ src: "/models/textured.glb", version: "v2" });
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 3] }),
       nodes: [node],
@@ -686,7 +686,7 @@ describe("canvas root asset publication", () => {
     ));
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/emissive.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
@@ -739,7 +739,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/coherent-details.glb");
     try {
-      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
       root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
       callbacks.shift()!();
       await waitFor(() => expect(decodes.size).toBe(2));
@@ -787,7 +787,7 @@ describe("canvas root asset publication", () => {
     ));
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/embedded.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [1, 2, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await waitFor(() => expect(decodeTexture).toHaveBeenCalled());
@@ -831,7 +831,7 @@ describe("canvas root asset publication", () => {
     ));
     const { callbacks, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/cutout.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
@@ -861,7 +861,7 @@ describe("canvas root asset publication", () => {
       readGltf: vi.fn(async () => staticTexturedTriangleGlb()),
     });
     const node = gltf("/models/degraded.glb");
-    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 3] }),
       nodes: [node],

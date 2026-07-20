@@ -248,6 +248,11 @@ orientation and color/alpha contract.
 pick, focused asset/texture observation, lifecycle/frame observation, bounded
 diagnostics, snapshot, and idempotent dispose operations.
 
+`root.setSize({ cssWidth, cssHeight, pixelRatio })` uses the same backing-pixel
+policy name as React. `pixelRatio` is a requested ratio, not necessarily the
+browser device pixel ratio; the resolved size reports both that request and any
+additional capability-driven `renderScale`.
+
 `resolveRendererRootOptions(options)` validates a creation policy and returns its
 fully explicit immutable values. It is intended for host wrappers that need to
 compare or report effective policy without reconstructing Royal's defaults.

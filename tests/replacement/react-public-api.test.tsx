@@ -27,7 +27,10 @@ import {
   useRendererSnapshot,
 } from "../../packages/react/src/index";
 import { selectObservedRoot } from "../../packages/react/src/observation/select-root";
-import { observeCanvasSize } from "../../packages/react/src/runtime/canvas";
+import {
+  observeCanvasSize,
+  resolveCanvasPixelRatio,
+} from "../../packages/react/src/runtime/canvas";
 
 const emptyScene = {
   camera: {},
@@ -101,6 +104,19 @@ describe("replacement React public API", () => {
       style: { display: "inline-block", width: "40%" },
     }));
     expect(html).toContain('style="display:inline-block;width:40%"');
+  });
+
+  it("rejects invalid explicit pixel ratios at the React boundary", () => {
+    expect(resolveCanvasPixelRatio(undefined)).toBeUndefined();
+    expect(resolveCanvasPixelRatio(1.5)).toBe(1.5);
+    expect(() => renderToStaticMarkup(createElement(Canvas, {
+      pixelRatio: 0,
+      scene: emptyScene,
+    }))).toThrow("Canvas pixelRatio must be greater than 0");
+    expect(() => renderToStaticMarkup(createElement(Canvas, {
+      pixelRatio: Number.NaN,
+      scene: emptyScene,
+    }))).toThrow("Canvas pixelRatio must be finite");
   });
 
   it("server-renders exact glTF status as idle before root mount", () => {
@@ -295,7 +311,7 @@ describe("replacement React public API", () => {
       expect(setSize).toHaveBeenLastCalledWith({
         cssHeight: 200,
         cssWidth: 360,
-        devicePixelRatio: 2,
+        pixelRatio: 2,
       });
 
       vi.stubGlobal("devicePixelRatio", 3);
@@ -304,7 +320,7 @@ describe("replacement React public API", () => {
       expect(setSize).toHaveBeenLastCalledWith({
         cssHeight: 200,
         cssWidth: 360,
-        devicePixelRatio: 3,
+        pixelRatio: 3,
       });
       expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
       release();
@@ -347,7 +363,7 @@ describe("replacement React public API", () => {
       expect(setSize).toHaveBeenCalledWith({
         cssHeight: 180,
         cssWidth: 320,
-        devicePixelRatio: 1,
+        pixelRatio: 1,
       });
       release();
     } finally {
