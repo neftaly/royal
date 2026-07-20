@@ -428,7 +428,7 @@ const createStandardProgram = (
 
 export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
-  #initializedSamplers = new WeakSet<WebGLProgram>();
+  readonly #initializedSamplers = new Set<WebGLProgram>();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
   readonly #vertexShaders = new Map<string, WebGLShader>();
   #transmissionSource = EMPTY_TRANSMISSION_SHADER_SOURCE;
@@ -444,6 +444,7 @@ export class SurfaceProgramOwner {
     }
     this.#programs.clear();
     this.#deleteVertexShaders();
+    this.#initializedSamplers.clear();
   }
 
   get(
@@ -493,24 +494,33 @@ export class SurfaceProgramOwner {
   invalidate(): void {
     this.#programs.clear();
     this.#vertexShaders.clear();
-    this.#initializedSamplers = new WeakSet<WebGLProgram>();
+    this.#initializedSamplers.clear();
   }
 
   setVirtualTextureDeclarations(declarations: string): void {
     if (this.#virtualDeclarations === declarations) return;
-    for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
-    this.#programs.clear();
-    this.#deleteVertexShaders();
-    this.#initializedSamplers = new WeakSet<WebGLProgram>();
+    for (const [key, retained] of this.#programs) {
+      if (retained.virtualPageTable === null) continue;
+      this.#gl.deleteProgram(retained.program);
+      this.#programs.delete(key);
+      this.#initializedSamplers.delete(retained.program);
+    }
     this.#virtualDeclarations = declarations;
   }
 
   setTransmissionShaderSource(source: SurfaceTransmissionShaderSource): void {
     if (this.#transmissionSource === source) return;
-    for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
-    this.#programs.clear();
-    this.#deleteVertexShaders();
-    this.#initializedSamplers = new WeakSet<WebGLProgram>();
+    for (const [key, retained] of this.#programs) {
+      if (retained.kind !== "standard" || retained.sceneColor === null) continue;
+      this.#gl.deleteProgram(retained.program);
+      this.#programs.delete(key);
+      this.#initializedSamplers.delete(retained.program);
+    }
+    for (const [vertexSource, shader] of this.#vertexShaders) {
+      if (!vertexSource.includes("#define TRANSMISSION_MATERIAL\n")) continue;
+      this.#gl.deleteShader(shader);
+      this.#vertexShaders.delete(vertexSource);
+    }
     this.#transmissionSource = source;
   }
 
