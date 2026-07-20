@@ -469,17 +469,19 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     let transmissionRequested = false;
     let roughSceneColorRequired = false;
-    for (const view of views) {
-      frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
-      for (const surface of this.#transmissionCandidates) {
-        if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
-        const material = surface.material;
-        if (material.kind === "standard") {
-          transmissionRequested = true;
-          roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(material);
+    if (this.#transmissionCandidates.length > 0) {
+      for (const view of views) {
+        frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
+        for (const surface of this.#transmissionCandidates) {
+          if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
+          const material = surface.material;
+          if (material.kind === "standard") {
+            transmissionRequested = true;
+            roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(material);
+          }
         }
+        if (transmissionRequested && roughSceneColorRequired) break;
       }
-      if (transmissionRequested && roughSceneColorRequired) break;
     }
     const terminalPresentation = scene !== null && terminalPresentationRequested(
       this.#terminalPresentationEligible,
