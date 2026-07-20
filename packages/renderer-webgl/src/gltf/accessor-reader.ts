@@ -23,8 +23,16 @@ type AccessorLayout = Readonly<{
   componentType: number;
   count: number;
   dataView: DataView;
+  hasBase: boolean;
+  hasSparse: boolean;
   stride: number;
 }>;
+
+const binaryDataView = (context: AccessorContext): DataView => new DataView(
+  context.binary.buffer,
+  context.binary.byteOffset,
+  context.binary.byteLength,
+);
 
 const accessorLayout = (
   context: AccessorContext,
@@ -37,11 +45,27 @@ const accessorLayout = (
   const path = `accessors[${accessorIndex}]`;
   const accessor = object(context.accessors[accessorIndex], context.label, path);
   if (accessor.type !== expectedType) fail(context.label, `${path}.type`, `must be ${expectedType}`);
-  if (accessor.sparse !== undefined) fail(context.label, `${path}.sparse`, "is not in the static profile yet");
   if (accessor.normalized === true && !allowNormalized) {
     fail(context.label, `${path}.normalized`, "is invalid for this accessor");
   }
   const count = nonNegativeInteger(accessor.count, context.label, `${path}.count`);
+  const elementBytes = componentCount * componentBytes;
+  const dataView = binaryDataView(context);
+  if (accessor.bufferView === undefined) {
+    if (accessor.byteOffset !== undefined) {
+      fail(context.label, `${path}.byteOffset`, "requires a bufferView");
+    }
+    return {
+      absoluteOffset: 0,
+      accessor,
+      componentType: integer(accessor.componentType, context.label, `${path}.componentType`),
+      count,
+      dataView,
+      hasBase: false,
+      hasSparse: accessor.sparse !== undefined,
+      stride: elementBytes,
+    };
+  }
   const viewIndex = index(
     accessor.bufferView, context.bufferViews, context.label, `${path}.bufferView`,
   );
@@ -60,7 +84,6 @@ const accessorLayout = (
   const accessorOffset = accessor.byteOffset === undefined
     ? 0
     : nonNegativeInteger(accessor.byteOffset, context.label, `${path}.byteOffset`);
-  const elementBytes = componentCount * componentBytes;
   const stride = bufferView.byteStride === undefined
     ? elementBytes
     : nonNegativeInteger(bufferView.byteStride, context.label, `${bufferViewPath}.byteStride`);
@@ -78,13 +101,110 @@ const accessorLayout = (
     accessor,
     componentType: integer(accessor.componentType, context.label, `${path}.componentType`),
     count,
-    dataView: new DataView(
-      context.binary.buffer,
-      context.binary.byteOffset,
-      context.binary.byteLength,
-    ),
+    dataView,
+    hasBase: true,
+    hasSparse: accessor.sparse !== undefined,
     stride,
   };
+};
+
+const sparseRange = (
+  context: AccessorContext,
+  bufferViewIndex: unknown,
+  byteOffsetValue: unknown,
+  byteLength: number,
+  alignment: number,
+  path: string,
+): number => {
+  const viewIndex = index(bufferViewIndex, context.bufferViews, context.label, `${path}.bufferView`);
+  const viewPath = `bufferViews[${viewIndex}]`;
+  const view = object(context.bufferViews[viewIndex], context.label, viewPath);
+  if (view.buffer !== 0) fail(context.label, `${viewPath}.buffer`, "must reference GLB buffer 0");
+  if (view.target !== undefined) fail(context.label, `${viewPath}.target`, "is invalid for sparse data");
+  if (view.byteStride !== undefined) fail(context.label, `${viewPath}.byteStride`, "is invalid for sparse data");
+  const viewOffset = view.byteOffset === undefined
+    ? 0
+    : nonNegativeInteger(view.byteOffset, context.label, `${viewPath}.byteOffset`);
+  const viewLength = nonNegativeInteger(view.byteLength, context.label, `${viewPath}.byteLength`);
+  if (viewOffset + viewLength > context.bufferByteLength) {
+    fail(context.label, viewPath, "exceeds the declared GLB buffer");
+  }
+  const byteOffset = byteOffsetValue === undefined
+    ? 0
+    : nonNegativeInteger(byteOffsetValue, context.label, `${path}.byteOffset`);
+  if (!Number.isSafeInteger(byteLength) || byteOffset + byteLength > viewLength) {
+    fail(context.label, path, "exceeds its bufferView");
+  }
+  const absoluteOffset = viewOffset + byteOffset;
+  if (absoluteOffset % alignment !== 0) fail(context.label, path, "is misaligned");
+  return absoluteOffset;
+};
+
+const visitSparseComponents = (
+  context: AccessorContext,
+  accessorIndex: number,
+  componentBytes: number,
+  componentCount: number,
+  visit: (item: number, component: number, source: number, dataView: DataView) => void,
+): void => {
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  if (accessor.sparse === undefined) return;
+  const sparsePath = `${path}.sparse`;
+  const sparse = object(accessor.sparse, context.label, sparsePath);
+  const accessorCount = nonNegativeInteger(accessor.count, context.label, `${path}.count`);
+  const count = nonNegativeInteger(sparse.count, context.label, `${sparsePath}.count`);
+  if (count === 0 || count > accessorCount) {
+    fail(context.label, `${sparsePath}.count`, "must be positive and not exceed the accessor count");
+  }
+  const indicesPath = `${sparsePath}.indices`;
+  const indices = object(sparse.indices, context.label, indicesPath);
+  const indexComponentType = integer(
+    indices.componentType,
+    context.label,
+    `${indicesPath}.componentType`,
+  );
+  const indexBytes = indexComponentType === 5121 ? 1 : indexComponentType === 5123 ? 2 : 4;
+  if (indexComponentType !== 5121 && indexComponentType !== 5123 && indexComponentType !== 5125) {
+    fail(context.label, `${indicesPath}.componentType`, "must be an unsigned integer");
+  }
+  const indicesOffset = sparseRange(
+    context,
+    indices.bufferView,
+    indices.byteOffset,
+    count * indexBytes,
+    indexBytes,
+    indicesPath,
+  );
+  const valuesPath = `${sparsePath}.values`;
+  const values = object(sparse.values, context.label, valuesPath);
+  const elementBytes = componentBytes * componentCount;
+  const valuesOffset = sparseRange(
+    context,
+    values.bufferView,
+    values.byteOffset,
+    count * elementBytes,
+    componentBytes,
+    valuesPath,
+  );
+  const dataView = binaryDataView(context);
+  let previous = -1;
+  for (let sparseItem = 0; sparseItem < count; sparseItem += 1) {
+    const indexOffset = indicesOffset + sparseItem * indexBytes;
+    const item = indexComponentType === 5121
+      ? dataView.getUint8(indexOffset)
+      : indexComponentType === 5123
+        ? dataView.getUint16(indexOffset, true)
+        : dataView.getUint32(indexOffset, true);
+    if (item <= previous || item >= accessorCount) {
+      fail(context.label, `${indicesPath}[${sparseItem}]`, "must be strictly increasing and in range");
+    }
+    previous = item;
+    const elementOffset = valuesOffset + sparseItem * elementBytes;
+    for (let component = 0; component < componentCount; component += 1) {
+      visit(item, component, elementOffset + component * componentBytes, dataView);
+    }
+  }
 };
 
 export type InstanceVectorStream = Readonly<{
@@ -129,21 +249,39 @@ export const readInstanceVectors = (
   if (layout.count === 0) fail(context.label, `${path}.count`, "must be positive");
   const values = new Float32Array(layout.count * componentCount);
   const divisor = componentType === 5120 ? 127 : componentType === 5122 ? 32_767 : 1;
+  const readComponent = (dataView: DataView, offset: number): number => {
+    const raw = componentType === 5120
+      ? dataView.getInt8(offset)
+      : componentType === 5122
+        ? dataView.getInt16(offset, true)
+        : dataView.getFloat32(offset, true);
+    return normalizedInteger ? Math.max(raw / divisor, -1) : raw;
+  };
+  if (layout.hasBase) {
+    for (let item = 0; item < layout.count; item += 1) {
+      const source = layout.absoluteOffset + item * layout.stride;
+      const target = item * componentCount;
+      for (let component = 0; component < componentCount; component += 1) {
+        values[target + component] = readComponent(
+          layout.dataView,
+          source + component * componentBytes,
+        );
+      }
+    }
+  }
+  visitSparseComponents(context, accessorIndex, componentBytes, componentCount, (
+    item,
+    component,
+    source,
+    dataView,
+  ) => {
+    values[item * componentCount + component] = readComponent(dataView, source);
+  });
   for (let item = 0; item < layout.count; item += 1) {
-    const source = layout.absoluteOffset + item * layout.stride;
-    const target = item * componentCount;
     for (let component = 0; component < componentCount; component += 1) {
-      const componentOffset = source + component * componentBytes;
-      const raw = componentType === 5120
-        ? layout.dataView.getInt8(componentOffset)
-        : componentType === 5122
-          ? layout.dataView.getInt16(componentOffset, true)
-          : layout.dataView.getFloat32(componentOffset, true);
-      const value = normalizedInteger ? Math.max(raw / divisor, -1) : raw;
-      if (!Number.isFinite(value)) {
+      if (!Number.isFinite(values[item * componentCount + component])) {
         fail(context.label, path, `${semantic} ${item} is not finite`);
       }
-      values[target + component] = value;
     }
   }
   return { count: layout.count, values };
@@ -157,28 +295,34 @@ export const readPositions = (
   if (layout.componentType !== 5126) {
     fail(context.label, `accessors[${accessorIndex}].componentType`, "must be FLOAT");
   }
-  const positions = layout.stride === 12
+  const positions = layout.hasBase && !layout.hasSparse && layout.stride === 12
     ? new Float32Array(
       context.binary.buffer,
       context.binary.byteOffset + layout.absoluteOffset,
       layout.count * 3,
     )
     : new Float32Array(layout.count * 3);
+  if (layout.hasBase && (layout.hasSparse || layout.stride !== 12)) {
+    for (let vertex = 0; vertex < layout.count; vertex += 1) {
+      const source = layout.absoluteOffset + vertex * layout.stride;
+      const target = vertex * 3;
+      positions[target] = layout.dataView.getFloat32(source, true);
+      positions[target + 1] = layout.dataView.getFloat32(source + 4, true);
+      positions[target + 2] = layout.dataView.getFloat32(source + 8, true);
+    }
+  }
+  visitSparseComponents(context, accessorIndex, 4, 3, (item, component, source, dataView) => {
+    positions[item * 3 + component] = dataView.getFloat32(source, true);
+  });
   let minX = Infinity; let minY = Infinity; let minZ = Infinity;
   let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
   for (let vertex = 0; vertex < layout.count; vertex += 1) {
-    const source = layout.absoluteOffset + vertex * layout.stride;
     const target = vertex * 3;
-    const x = layout.dataView.getFloat32(source, true);
-    const y = layout.dataView.getFloat32(source + 4, true);
-    const z = layout.dataView.getFloat32(source + 8, true);
+    const x = positions[target]!;
+    const y = positions[target + 1]!;
+    const z = positions[target + 2]!;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
       fail(context.label, `accessors[${accessorIndex}]`, `position ${vertex} is not finite`);
-    }
-    if (layout.stride !== 12) {
-      positions[target] = x;
-      positions[target + 1] = y;
-      positions[target + 2] = z;
     }
     minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
     maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
@@ -246,22 +390,35 @@ export const readFloatVectors = (
     fail(context.label, `accessors[${accessorIndex}].count`, "must be positive");
   }
   const elementBytes = componentCount * 4;
-  const values = layout.stride === elementBytes
+  const values = layout.hasBase && !layout.hasSparse && layout.stride === elementBytes
     ? new Float32Array(
       context.binary.buffer,
       context.binary.byteOffset + layout.absoluteOffset,
       layout.count * componentCount,
     )
     : new Float32Array(layout.count * componentCount);
+  if (layout.hasBase && (layout.hasSparse || layout.stride !== elementBytes)) {
+    for (let item = 0; item < layout.count; item += 1) {
+      const source = layout.absoluteOffset + item * layout.stride;
+      const target = item * componentCount;
+      for (let component = 0; component < componentCount; component += 1) {
+        values[target + component] = layout.dataView.getFloat32(source + component * 4, true);
+      }
+    }
+  }
+  visitSparseComponents(context, accessorIndex, 4, componentCount, (
+    item,
+    component,
+    source,
+    dataView,
+  ) => {
+    values[item * componentCount + component] = dataView.getFloat32(source, true);
+  });
   for (let item = 0; item < layout.count; item += 1) {
-    const source = layout.absoluteOffset + item * layout.stride;
-    const target = item * componentCount;
     for (let component = 0; component < componentCount; component += 1) {
-      const value = layout.dataView.getFloat32(source + component * 4, true);
-      if (!Number.isFinite(value)) {
+      if (!Number.isFinite(values[item * componentCount + component])) {
         fail(context.label, `accessors[${accessorIndex}]`, `${semantic} ${item} is not finite`);
       }
-      if (layout.stride !== elementBytes) values[target + component] = value;
     }
   }
   return values;
@@ -334,18 +491,33 @@ export const readVertexColors = (
   );
   const values = new Float32Array(layout.count * componentCount);
   const divisor = componentType === 5121 ? 255 : componentType === 5123 ? 65_535 : 1;
-  for (let item = 0; item < layout.count; item += 1) {
-    const source = layout.absoluteOffset + item * layout.stride;
-    const target = item * componentCount;
-    for (let component = 0; component < componentCount; component += 1) {
-      const offset = source + component * componentBytes;
-      values[target + component] = componentType === 5121
-        ? layout.dataView.getUint8(offset) / divisor
-        : componentType === 5123
-          ? layout.dataView.getUint16(offset, true) / divisor
-          : layout.dataView.getFloat32(offset, true);
+  const readComponent = (dataView: DataView, offset: number): number => (
+    componentType === 5121
+      ? dataView.getUint8(offset) / divisor
+      : componentType === 5123
+        ? dataView.getUint16(offset, true) / divisor
+        : dataView.getFloat32(offset, true)
+  );
+  if (layout.hasBase) {
+    for (let item = 0; item < layout.count; item += 1) {
+      const source = layout.absoluteOffset + item * layout.stride;
+      const target = item * componentCount;
+      for (let component = 0; component < componentCount; component += 1) {
+        values[target + component] = readComponent(
+          layout.dataView,
+          source + component * componentBytes,
+        );
+      }
     }
   }
+  visitSparseComponents(context, accessorIndex, componentBytes, componentCount, (
+    item,
+    component,
+    source,
+    dataView,
+  ) => {
+    values[item * componentCount + component] = readComponent(dataView, source);
+  });
   return canonicalColorValues(values, componentCount, context.label, path);
 };
 
@@ -379,11 +551,43 @@ export const readIndices = (
   }
   const byteOffset = context.binary.byteOffset + layout.absoluteOffset;
   const indices: IndexArray = componentType === 5121
-    ? new Uint8Array(context.binary.buffer, byteOffset, layout.count)
+    ? layout.hasBase && !layout.hasSparse
+      ? new Uint8Array(context.binary.buffer, byteOffset, layout.count)
+      : new Uint8Array(layout.count)
     : componentType === 5123
-      ? new Uint16Array(context.binary.buffer, byteOffset, layout.count)
-      : new Uint32Array(context.binary.buffer, byteOffset, layout.count);
+      ? layout.hasBase && !layout.hasSparse
+        ? new Uint16Array(context.binary.buffer, byteOffset, layout.count)
+        : new Uint16Array(layout.count)
+      : layout.hasBase && !layout.hasSparse
+        ? new Uint32Array(context.binary.buffer, byteOffset, layout.count)
+        : new Uint32Array(layout.count);
+  if (layout.hasBase && layout.hasSparse) {
+    for (let item = 0; item < layout.count; item += 1) {
+      const source = layout.absoluteOffset + item * componentBytes;
+      indices[item] = componentType === 5121
+        ? layout.dataView.getUint8(source)
+        : componentType === 5123
+          ? layout.dataView.getUint16(source, true)
+          : layout.dataView.getUint32(source, true);
+    }
+  }
+  visitSparseComponents(context, accessorIndex, componentBytes, 1, (
+    item,
+    _component,
+    source,
+    dataView,
+  ) => {
+    indices[item] = componentType === 5121
+      ? dataView.getUint8(source)
+      : componentType === 5123
+        ? dataView.getUint16(source, true)
+        : dataView.getUint32(source, true);
+  });
+  const restartSentinel = componentType === 5121 ? 0xff : componentType === 5123 ? 0xffff : 0xffff_ffff;
   for (let item = 0; item < indices.length; item += 1) {
+    if (indices[item] === restartSentinel) {
+      fail(context.label, `accessors[${accessorIndex}][${item}]`, "must not use the primitive-restart sentinel");
+    }
     if (indices[item]! >= vertexCount) {
       fail(context.label, `accessors[${accessorIndex}][${item}]`, "vertex index is out of range");
     }

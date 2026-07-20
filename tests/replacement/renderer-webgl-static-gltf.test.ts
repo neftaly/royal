@@ -77,6 +77,24 @@ describe("static glTF preparation core", () => {
     expect(primitive.localModel.slice(12, 15)).toEqual([1, 2, 0]);
   });
 
+  it("normalizes triangle-family modes and rejects unsupported raster topologies", () => {
+    for (const mode of [5, 6]) {
+      const document = staticTriangleDocument();
+      const primitive = (document.meshes as Array<{
+        primitives: Array<Record<string, unknown>>;
+      }>)[0]!.primitives[0]!;
+      primitive.mode = mode;
+      expect(prepareStaticGlb(staticTriangleGlb(document), `mode-${mode}`)
+        .primitives[0]!.geometry.indices).toEqual(new Uint16Array([0, 1, 2]));
+    }
+
+    const lines = staticTriangleDocument();
+    (lines.meshes as Array<{ primitives: Array<Record<string, unknown>> }>)[0]!
+      .primitives[0]!.mode = 1;
+    expect(() => prepareStaticGlb(staticTriangleGlb(lines), "lines"))
+      .toThrow("must be TRIANGLES, TRIANGLE_STRIP, or TRIANGLE_FAN");
+  });
+
   it("rejects unknown required extensions and out-of-range triangle indices", () => {
     const extensionDocument = staticTriangleDocument();
     extensionDocument.extensionsRequired = ["KHR_future_geometry"];

@@ -65,10 +65,11 @@ forms and lowers once to canonical linear RGBA floats. RGB supplies alpha one.
 The shader multiplies it with the material and texture base color before alpha
 mode evaluation; exact alpha-mask picking uses the same interpolated alpha.
 
-Triangles, triangle strips/fans, lines, line strips/loops, and points are
-accepted. Picking is exact only where the canonical geometry supplies
-triangles. Primitive conversion MUST preserve winding and MUST NOT silently
-change authored front faces.
+Triangles, triangle strips, and triangle fans lower once to canonical triangle
+indices. Conversion preserves winding and MUST NOT silently change authored
+front faces. Points and line-family modes are explicitly deferred: adding them
+would introduce a second rasterization and picking topology for little current
+product value.
 
 ## Materials
 
@@ -76,11 +77,12 @@ Core metallic-roughness, base color, metallic/roughness, normal, occlusion,
 emissive, alpha modes, double-sided state, texture transforms, UV-set selection,
 samplers, and unlit are required fidelity.
 
-The following implemented material extensions are supported ingestion
-semantics: clearcoat, sheen, specular, IOR, transmission, volume/attenuation,
-iridescence, anisotropy, emissive strength, dispersion, and diffuse
-transmission. Each MUST lower to canonical material data. Expensive passes or
-shader work MUST be activated only when a visible material demands them.
+Implemented material extensions are specular, IOR, transmission,
+volume/attenuation, emissive strength, and unlit. Each lowers to canonical
+material data. Expensive passes or shader work activate only when a visible
+material demands them. Clearcoat, sheen, iridescence, anisotropy, dispersion,
+and diffuse transmission remain deferred and MUST NOT be accepted when they
+are required.
 
 A required supported extension with malformed data fails the asset. An optional
 extension with malformed or unusable data MAY fall back only when the glTF core

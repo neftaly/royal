@@ -20,6 +20,7 @@ import {
   fail,
   finiteTuple,
   index,
+  integer,
   nodeLocalMatrix,
   nonNegativeInteger,
   object,
@@ -36,6 +37,7 @@ import {
   validateDecodedVectors,
   type AccessorContext,
 } from "./accessor-reader";
+import { canonicalTriangleIndices } from "./triangle-topology";
 import {
   createTextureAssetReader,
   prepareMaterial,
@@ -382,9 +384,12 @@ const prepareStaticDocument = (
     const prepared = primitives.map((primitiveValue, primitiveIndex): PreparedMeshPrimitive => {
       const path = `${meshPath}.primitives[${primitiveIndex}]`;
       const primitive = object(primitiveValue, label, path);
-      if (primitive.mode !== undefined && primitive.mode !== 4) {
-        fail(label, `${path}.mode`, "must be TRIANGLES in the static profile");
-      }
+      const primitiveMode = primitive.mode === undefined
+        ? 4
+        : integer(primitive.mode, label, `${path}.mode`);
+      const mode: 4 | 5 | 6 = primitiveMode === 4 || primitiveMode === 5 || primitiveMode === 6
+        ? primitiveMode
+        : fail(label, `${path}.mode`, "must be TRIANGLES, TRIANGLE_STRIP, or TRIANGLE_FAN");
       if (primitive.targets !== undefined) fail(label, `${path}.targets`, "are not supported yet");
       const attributes = object(primitive.attributes, label, `${path}.attributes`);
       const extensions = primitive.extensions === undefined
@@ -562,7 +567,13 @@ const prepareStaticDocument = (
       const indexAccessor = primitive.indices === undefined
         ? undefined
         : index(primitive.indices, accessors, label, `${path}.indices`);
-      const indices = decoded?.indices ?? readIndices(context, indexAccessor, vertexCount);
+      if (decoded !== undefined && mode !== 4) {
+        fail(label, `${path}.mode`, "Draco geometry must use TRIANGLES");
+      }
+      const indices = canonicalTriangleIndices(
+        decoded?.indices ?? readIndices(context, indexAccessor, vertexCount),
+        mode,
+      );
       if (indices.length < 3 || indices.length % 3 !== 0) {
         fail(label, path, "triangle index count must be a positive multiple of 3");
       }
