@@ -13,57 +13,51 @@ type StaticPrimitiveMaterials = Readonly<{
   materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
 }>;
 
-type TextureClaim = {
-  readonly asset: TextureSourceRef;
-  readonly priority: number;
-};
-
-const TEXTURE_PRIORITY_COUNT = 9;
-
-/** Collects each prepared texture once, ordered by its earliest visible contribution. */
+/**
+ * Collects each prepared texture once. Immediately visible color maps lead;
+ * maps which publish atomically are kept adjacent by material so decoded work
+ * spends as little time as possible waiting on the rest of its coherent set.
+ */
 export const collectStaticTextureAssets = (
   primitives: readonly StaticPrimitiveMaterials[],
 ): readonly TextureSourceRef[] => {
-  const claims = new Map<string, TextureClaim>();
-  const materials = new Set<CanonicalSurfaceMaterial>();
-  const claim = (asset: TextureSourceRef | undefined, priority: number): void => {
+  const claims = new Map<string, TextureSourceRef>();
+  const materialSet = new Set<CanonicalSurfaceMaterial>();
+  const materials: CanonicalSurfaceMaterial[] = [];
+  const claim = (asset: TextureSourceRef | undefined): void => {
     if (asset === undefined) return;
     const key = textureStorageKey(asset);
-    const previous = claims.get(key);
-    if (previous === undefined) {
-      claims.set(key, { asset, priority });
-    } else if (priority < previous.priority) {
-      claims.delete(key);
-      claims.set(key, { asset, priority });
-    }
+    if (!claims.has(key)) claims.set(key, asset);
   };
-  const collectMaterial = (material: CanonicalSurfaceMaterial): void => {
-    if (materials.has(material)) return;
-    materials.add(material);
-    claim(material.baseColorAsset, 0);
-    if (material.kind === "unlit") return;
-    claim(material.emissiveAsset, 1);
-    claim(material.metallicRoughnessAsset, 2);
-    claim(material.normalAsset, 3);
-    claim(material.occlusionAsset, 4);
-    claim(material.specularColorAsset, 5);
-    claim(material.specularTextureAsset, 6);
-    claim(material.thicknessAsset, 7);
-    claim(material.transmissionAsset, 8);
+  const retainMaterial = (material: CanonicalSurfaceMaterial): void => {
+    if (materialSet.has(material)) return;
+    materialSet.add(material);
+    materials.push(material);
   };
   for (const primitive of primitives) {
-    collectMaterial(primitive.material);
-    for (const level of primitive.materialLod?.levels ?? []) collectMaterial(level);
-    for (const material of primitive.materialVariants?.values() ?? []) collectMaterial(material);
+    retainMaterial(primitive.material);
+    for (const level of primitive.materialLod?.levels ?? []) retainMaterial(level);
+    for (const material of primitive.materialVariants?.values() ?? []) retainMaterial(material);
     for (const lod of primitive.materialVariantLods?.values() ?? []) {
-      for (const level of lod.levels) collectMaterial(level);
+      for (const level of lod.levels) retainMaterial(level);
     }
   }
-  const assets: TextureSourceRef[] = [];
-  for (let priority = 0; priority < TEXTURE_PRIORITY_COUNT; priority += 1) {
-    for (const entry of claims.values()) {
-      if (entry.priority === priority) assets.push(entry.asset);
-    }
+  for (const material of materials) claim(material.baseColorAsset);
+  for (const material of materials) {
+    if (material.kind === "standard") claim(material.emissiveAsset);
   }
-  return assets;
+  for (const material of materials) {
+    if (material.kind !== "standard") continue;
+    claim(material.metallicRoughnessAsset);
+    claim(material.normalAsset);
+    claim(material.occlusionAsset);
+    claim(material.specularColorAsset);
+    claim(material.specularTextureAsset);
+  }
+  for (const material of materials) {
+    if (material.kind !== "standard") continue;
+    claim(material.thicknessAsset);
+    claim(material.transmissionAsset);
+  }
+  return [...claims.values()];
 };

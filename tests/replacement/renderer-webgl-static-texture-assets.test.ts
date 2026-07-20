@@ -55,4 +55,40 @@ describe("static texture asset collection", () => {
 
     expect(collectStaticTextureAssets(primitives)).toEqual([srgb, linear]);
   });
+
+  it("keeps atomically published detail maps adjacent by material", () => {
+    const baseA = asset("base-a");
+    const baseB = asset("base-b");
+    const emissiveB = asset("emissive-b");
+    const metallicRoughnessA = asset("metallic-roughness-a", "linear");
+    const normalA = asset("normal-a", "linear");
+    const occlusionA = asset("occlusion-a", "linear");
+    const metallicRoughnessB = asset("metallic-roughness-b", "linear");
+    const normalB = asset("normal-b", "linear");
+    const primitives = [
+      { material: material({
+        baseColorAsset: baseA,
+        metallicRoughnessAsset: metallicRoughnessA,
+        normalAsset: normalA,
+        occlusionAsset: occlusionA,
+      }) },
+      { material: material({
+        baseColorAsset: baseB,
+        emissiveAsset: emissiveB,
+        metallicRoughnessAsset: metallicRoughnessB,
+        normalAsset: normalB,
+      }) },
+    ];
+
+    expect(collectStaticTextureAssets(primitives)).toEqual([
+      baseA,
+      baseB,
+      emissiveB,
+      metallicRoughnessA,
+      normalA,
+      occlusionA,
+      metallicRoughnessB,
+      normalB,
+    ]);
+  });
 });

@@ -52,6 +52,34 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(changed).toHaveBeenCalledWith(decodedTextureKey(first));
   });
 
+  it("keeps concurrent out-of-order decode results attached to their content identities", async () => {
+    const completions = new Map<string, (source: DecodedTextureSource) => void>();
+    const owner = new TextureAssetOwner({
+      decode: vi.fn((asset) => new Promise<DecodedTextureSource>((resolve) => {
+        if (asset.kind !== "asset") throw new Error("expected an external texture asset");
+        completions.set(asset.src, resolve);
+      })),
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const first = imageTexture("/first.png");
+    const second = imageTexture("/second.png");
+    const firstDecoded = decoded();
+    const secondDecoded = decoded();
+    owner.reconcile([first, second]);
+
+    completions.get(second.src)!(secondDecoded);
+    await vi.waitFor(() => expect(owner.getSnapshot(second).state).toBe("ready"));
+    expect(owner.decoded(first)).toBeUndefined();
+    expect(owner.decoded(second)).toBe(secondDecoded);
+
+    completions.get(first.src)!(firstDecoded);
+    await vi.waitFor(() => expect(owner.getSnapshot(first).state).toBe("ready"));
+    expect(owner.decoded(first)).toBe(firstDecoded);
+    expect(owner.decoded(second)).toBe(secondDecoded);
+  });
+
   it("releases decoded pixels after upload while retaining the resident binding identity", async () => {
     const close = vi.fn();
     const source = decoded(close);
