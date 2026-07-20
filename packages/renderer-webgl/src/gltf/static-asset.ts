@@ -48,6 +48,7 @@ import { normalizeLodThresholds } from "../surface/lod-selection";
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
 import { collectStaticTextureAssets } from "./static-texture-assets";
 import { readCanonicalStaticGltfSource } from "./static-source";
+import { staticNodeLodIds } from "./static-node-selection";
 
 export type PreparedStaticLodMembership = Readonly<{
   group: string;
@@ -678,21 +679,8 @@ const prepareStaticDocument = (
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
   const claimed = new Set<number>();
-  const nodeLodIds = (node: JsonObject, path: string): readonly number[] => {
-    if (node.extensions === undefined) return [];
-    const extensions = object(node.extensions, label, `${path}.extensions`);
-    if (extensions.MSFT_lod === undefined) return [];
-    const extensionPath = `${path}.extensions.MSFT_lod`;
-    const extension = object(extensions.MSFT_lod, label, extensionPath);
-    const ids = array(extension.ids, label, `${extensionPath}.ids`);
-    if (ids.length === 0) fail(label, `${extensionPath}.ids`, "must not be empty");
-    return ids.map((id, lodIndex) => index(
-      id,
-      nodes,
-      label,
-      `${extensionPath}.ids[${lodIndex}]`,
-    ));
-  };
+  const nodeLodIds = (node: JsonObject, path: string): readonly number[] =>
+    staticNodeLodIds(node, nodes, label, path);
   const referencedLodNodes = new Set<number>();
   for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
     const path = `nodes[${nodeIndex}]`;
