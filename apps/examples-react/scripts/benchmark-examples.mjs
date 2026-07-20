@@ -1141,7 +1141,7 @@ const installBenchmarkHooks = async (session) => {
       prototype[name] = wrapped;
     };
     patchDirect('drawArrays', (original) => function (mode, first, count) {
-      if (config.glCountersEnabled) counters.drawArrays += 1;
+      counters.drawArrays += 1;
       recordDraw(this);
       const after = profileDraw('drawArrays', count, 1, this);
       try {
@@ -1151,7 +1151,7 @@ const installBenchmarkHooks = async (session) => {
       }
     });
     patchDirect('drawElements', (original) => function (mode, count, type, offset) {
-      if (config.glCountersEnabled) counters.drawElements += 1;
+      counters.drawElements += 1;
       recordDraw(this);
       const after = profileDraw('drawElements', count, 1, this);
       try {
@@ -1161,7 +1161,7 @@ const installBenchmarkHooks = async (session) => {
       }
     });
     patchDirect('drawArraysInstanced', (original) => function (mode, first, count, instances) {
-      if (config.glCountersEnabled) counters.drawArraysInstanced += 1;
+      counters.drawArraysInstanced += 1;
       recordDraw(this);
       const after = profileDraw('drawArraysInstanced', count, instances, this);
       try {
@@ -1171,7 +1171,7 @@ const installBenchmarkHooks = async (session) => {
       }
     });
     patchDirect('drawElementsInstanced', (original) => function (mode, count, type, offset, instances) {
-      if (config.glCountersEnabled) counters.drawElementsInstanced += 1;
+      counters.drawElementsInstanced += 1;
       recordDraw(this);
       const after = profileDraw('drawElementsInstanced', count, instances, this);
       try {
@@ -1205,10 +1205,8 @@ const installBenchmarkHooks = async (session) => {
             offsetsOffset,
             drawCount,
           ) {
-            if (config.glCountersEnabled) {
-              counters.multiDrawCalls += 1;
-              counters.multiDrawElements += Math.max(0, Number(drawCount) || 0);
-            }
+            counters.multiDrawCalls += 1;
+            counters.multiDrawElements += Math.max(0, Number(drawCount) || 0);
             recordDraw(gl);
             const after = profileDraw(
               'multiDrawElementsWEBGL',

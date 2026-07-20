@@ -163,11 +163,12 @@ diagnostic artifacts; summarize durable findings beside the accepted report.
 For V8/JavaScript-engine self-time, set `EXAMPLES_BENCH_CPU_PROFILE=1` or pass
 an explicit `.cpuprofile` path. CPU-profile runs default
 `EXAMPLES_BENCH_GL_COUNTERS=0`: the harness still observes draw completion and
-camera latency, but does not wrap every uniform, binding, and upload merely to
-count it. This avoids attributing profiler allocation and self-time to the
-instrumentation itself. Run a normal benchmark beside the profile for complete
-GL counters, or explicitly set `EXAMPLES_BENCH_GL_COUNTERS=1` when that
-measurement overhead is intentional. CPU-profile runs also omit forced heap
+camera latency and retains lightweight draw/submission counts, but does not
+wrap every uniform, binding, and upload merely to count it. This avoids
+attributing profiler allocation and self-time to the instrumentation itself.
+Run a normal benchmark beside the profile for complete GL counters, or
+explicitly set `EXAMPLES_BENCH_GL_COUNTERS=1` when that measurement overhead is
+intentional. CPU-profile runs also omit forced heap
 collections, which otherwise appear as renderer GC in the raw profile; their
 heap block reports observed window growth instead of retained-after-GC growth.
 
