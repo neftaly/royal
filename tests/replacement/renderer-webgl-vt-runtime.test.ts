@@ -152,6 +152,7 @@ describe("browser virtual texture runtime", () => {
     });
     const settled = runtime.update([view]);
     expect(runtime.update([view])).toBe(settled);
+    expect(runtime.runtimeSnapshot().pageRequests).toBeLessThanOrEqual(5);
 
     runtime.dispose();
   });

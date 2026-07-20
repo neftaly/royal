@@ -118,6 +118,7 @@ type RuntimeResource = {
   manifestFailure?: string;
   manifestFailureState?: "error" | "unsupported";
   manifestPending: boolean;
+  readonly readyPageKeys: Set<VirtualTexturePageKey>;
   readonly readyPages: ReadyPage[];
   readonly sampler: CanonicalTextureSampler;
   snapshot: VirtualTextureAssetSnapshot | undefined;
@@ -312,6 +313,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #disposed = false;
   #frame = 0;
   #pageRequests = 0;
+  #readyPages = 0;
   #uploadedPages = 0;
   readonly #gl: WebGL2RenderingContext;
   readonly #budget: PersistentGpuBudgetOwner;
@@ -373,8 +375,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         resource.gpu = undefined;
         this.#bindingRevision += 1;
       }
-      for (const ready of resource.readyPages) ready.decoded.close();
-      resource.readyPages.length = 0;
+      this.#clearReadyPages(resource);
     }
   }
 
@@ -467,6 +468,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         key,
         loadingPages: new Set(),
         manifestPending: true,
+        readyPageKeys: new Set(),
         readyPages: [],
         sampler: canonicalTextureSampler(asset),
         snapshot: undefined,
@@ -563,6 +565,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           loadingPages: new Set(),
           manifest: source.manifest,
           manifestPending: false,
+          readyPageKeys: new Set(),
           readyPages: [],
           sampler,
           snapshot: undefined,
@@ -626,8 +629,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       // Do not reserve one atlas per declared asset before it contributes to a view.
       if (resource.workspace.count === 0) {
         if (demandChanged) {
-          for (const ready of resource.readyPages) ready.decoded.close();
-          resource.readyPages.length = 0;
+          this.#clearReadyPages(resource);
         }
         continue;
       }
@@ -655,6 +657,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           const ready = resource.readyPages[index]!;
           if (!resource.workspace.keys.has(ready.pageKey)) {
             ready.decoded.close();
+            resource.readyPageKeys.delete(ready.pageKey);
+            this.#readyPages -= 1;
             continue;
           }
           resource.readyPages[retainedReadyPages] = ready;
@@ -675,7 +679,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       while (uploadsRemaining > 0 && resource.readyPages.length > 0) {
         const ready = resource.readyPages[0]!;
         if (gpu.residentSlots.has(ready.pageKey)) {
-          resource.readyPages.shift();
+          this.#settleReadyPage(resource);
           ready.decoded.close();
           settledPages += 1;
           continue;
@@ -701,11 +705,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         try {
           this.#uploadReadyPage(resource, ready, plan);
         } catch (error) {
-          resource.readyPages.shift();
+          this.#settleReadyPage(resource);
           ready.decoded.close();
           throw error;
         }
-        resource.readyPages.shift();
+        this.#settleReadyPage(resource);
         ready.decoded.close();
         uploadsRemaining -= 1;
         uploadedPages += 1;
@@ -716,7 +720,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (settledPages > 0) this.#changed(resource);
       for (
         let index = 0;
-        index < resource.workspace.count && this.#activeJobs < MAX_DECODE_JOBS;
+        index < resource.workspace.count
+          && this.#activeJobs + this.#readyPages < MAX_DECODE_JOBS;
         index += 1
       ) {
         const mip = resource.workspace.mips[index]!;
@@ -726,6 +731,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         if (
           gpu.residentSlots.has(key)
           || resource.loadingPages.has(key)
+          || resource.readyPageKeys.has(key)
           || resource.failedPages.has(key)
           || !this.#publicationAncestorReady(resource, mip, x, y)
         ) continue;
@@ -738,8 +744,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   #destroyResource(resource: RuntimeResource, deleteGpu: boolean): void {
     resource.abort.abort();
-    for (const ready of resource.readyPages) ready.decoded.close();
-    resource.readyPages.length = 0;
+    this.#clearReadyPages(resource);
     if (deleteGpu && resource.gpu !== undefined) {
       destroyGpuVirtualTexture(this.#gl, resource.gpu, this.#budget);
     }
@@ -857,7 +862,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         || this.#disposed
         || !resource.workspace.keys.has(pageKey)
       ) decoded.close();
-      else resource.readyPages.push({ decoded, page, pageKey });
+      else {
+        resource.readyPageKeys.add(pageKey);
+        resource.readyPages.push({ decoded, page, pageKey });
+        this.#readyPages += 1;
+      }
     }).catch(() => {
       if (!resource.abort.signal.aborted) resource.failedPages.add(pageKey);
     }).finally(() => {
@@ -918,6 +927,19 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gpu.residentSlots.set(plan.pageKey, plan.slot);
     this.#uploadedPages += 1;
     if (firstResident) this.#bindingRevision += 1;
+  }
+
+  #clearReadyPages(resource: RuntimeResource): void {
+    for (const ready of resource.readyPages) ready.decoded.close();
+    this.#readyPages -= resource.readyPages.length;
+    resource.readyPageKeys.clear();
+    resource.readyPages.length = 0;
+  }
+
+  #settleReadyPage(resource: RuntimeResource): void {
+    const ready = resource.readyPages.shift()!;
+    resource.readyPageKeys.delete(ready.pageKey);
+    this.#readyPages -= 1;
   }
 
   #publishPageTable(resource: RuntimeResource): void {
