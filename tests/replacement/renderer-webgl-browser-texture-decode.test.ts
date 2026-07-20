@@ -12,13 +12,24 @@ afterEach(() => {
 
 describe("browser texture decode shell", () => {
   it("decodes embedded bytes without inventing a URL or network request", async () => {
+    const NativeBlob = Blob;
+    let blobPart: BlobPart | undefined;
+    class TrackingBlob extends NativeBlob {
+      constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+        blobPart = parts?.[0];
+        super(parts, options);
+      }
+    }
     const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async (_blob: Blob, _options?: ImageBitmapOptions) => bitmap);
     const fetch = vi.fn();
+    vi.stubGlobal("Blob", TrackingBlob);
     vi.stubGlobal("createImageBitmap", createImageBitmap);
     vi.stubGlobal("fetch", fetch);
+    const bytes = new Uint8Array(new ArrayBuffer(8), 2, 4);
+    bytes.set([137, 80, 78, 71]);
     const decoded = await decodeTextureWithBrowser({
-      bytes: new Uint8Array([137, 80, 78, 71]),
+      bytes,
       contentKey: "embedded-v1:image:0",
       kind: "embedded-asset",
       label: "model.glb images[0]",
@@ -28,6 +39,7 @@ describe("browser texture decode shell", () => {
     const blob = createImageBitmap.mock.calls[0]![0];
     expect(blob).toBeInstanceOf(Blob);
     expect(blob).toMatchObject({ size: 4, type: "image/png" });
+    expect(blobPart).toBe(bytes);
     expect(decoded).toMatchObject({ height: 8, source: bitmap, width: 16 });
     decoded.close?.();
     expect(bitmap.close).toHaveBeenCalledTimes(1);

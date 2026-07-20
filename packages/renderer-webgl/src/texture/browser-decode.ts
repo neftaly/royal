@@ -89,7 +89,7 @@ const readTextureBlob = async (
   signal: AbortSignal,
 ): Promise<TextureBlob> => asset.kind === "embedded-asset"
     ? {
-      blob: new Blob([asset.bytes.slice().buffer as ArrayBuffer], { type: asset.mimeType }),
+      blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       ktx2: false,
     }
     : await (async () => {
