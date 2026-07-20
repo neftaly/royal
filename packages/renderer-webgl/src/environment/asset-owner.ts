@@ -3,12 +3,16 @@ import type { PreparedRoyalEnvironment } from "./royal-environment-ktx1";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
+/** Focused transport and preparation lifecycle for one offline environment identity. */
 export type PrefilteredEnvironmentAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
   | Readonly<{
+    /** Number of authored roughness mip levels. */
     mipCount: number;
+    /** Artifact-provided source/build identity for diagnostics. */
     provenance: string;
+    /** Width and height of one square cubemap face in texels. */
     size: number;
     state: "ready";
   }>

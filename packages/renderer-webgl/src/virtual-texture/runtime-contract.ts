@@ -59,9 +59,13 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   uploadBudgetBytes: number;
 }>;
 
+/** Focused manifest lifecycle plus current bounded page residency. */
 export type VirtualTextureAssetSnapshot = Readonly<{
+  /** Page requests that ended in failure for the retained asset generation. */
   failedPages: number;
+  /** Requested pages without usable coverage yet. */
   pendingPages: number;
+  /** Currently resident physical atlas pages. */
   residentPages: number;
 }> & (
   | Readonly<{

@@ -44,7 +44,7 @@ Royal currently exposes a synchronous WebGL2 root:
 
 ```ts
 const root = createRendererRoot(canvas, options);
-root.render(scene);
+root.setScene(scene);
 ```
 
 `RoyalRootOptions` group WebGL2 context attributes (`alpha`, `antialias`,

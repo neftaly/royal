@@ -29,7 +29,9 @@ type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
 export type GpuTextureBinding = TextureUnitBinding;
 export type OrdinaryTextureGpuSnapshot = Readonly<{
+  /** Resident textures decoded below their encoded source dimensions. */
   fittedTextures: number;
+  /** Unique ordinary texture storage objects resident in the current context. */
   residentTextures: number;
 }>;
 

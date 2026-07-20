@@ -37,7 +37,7 @@ describe("canvas root asset publication", () => {
       readPrefilteredEnvironment,
     });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment,
       nodes: [mesh({
@@ -80,7 +80,7 @@ describe("canvas root asset publication", () => {
       readPrefilteredEnvironment: async () => environmentKtx1Fixture(2).source,
     });
     canvas.gl.createTexture.mockReturnValueOnce(null);
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment,
       nodes: [mesh({
@@ -112,7 +112,7 @@ describe("canvas root asset publication", () => {
       preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
       readPrefilteredEnvironment: async () => environmentRead,
     }, {}, { maxConcurrentPreparationJobs: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment,
       nodes: [mesh({
@@ -160,7 +160,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, root } = harness({ decodeTexture });
     try {
       root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-      root.render(scene({
+      root.setScene(scene({
         camera: perspectiveCamera({ position: [0, 0, 30] }),
         nodes,
       }));
@@ -204,7 +204,7 @@ describe("canvas root asset publication", () => {
       },
     }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
         mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
@@ -264,7 +264,7 @@ describe("canvas root asset publication", () => {
       }),
     }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: textures.map((texture, index) => mesh({
         geometry,
@@ -327,7 +327,7 @@ describe("canvas root asset publication", () => {
       useProgram: vi.fn((next: WebGLProgram | null) => { program = next; }),
     }, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
         mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
@@ -384,7 +384,7 @@ describe("canvas root asset publication", () => {
       version: "v1",
     });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [
         directionalLight({ direction: [0, 0, -1], illuminanceLux: 8 }),
@@ -434,7 +434,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/instances.glb", version: "v1" });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
     }));
@@ -472,7 +472,7 @@ describe("canvas root asset publication", () => {
     const readGltf = vi.fn(async () => staticTriangleGlb(document));
     const { callbacks, canvas, root } = harness({ readGltf });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [node],
     }));
@@ -519,7 +519,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/lod.glb", version: "v1" });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 5] }),
       nodes: [node],
     }));
@@ -544,7 +544,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ readGltf });
     const node = gltf({ src: "/material-lod.glb", version: "v1" });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 5] }),
       nodes: [node],
     }));
@@ -570,7 +570,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf({ src: "/models/textured.glb", version: "v2" });
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 3] }),
       nodes: [node],
     }));
@@ -630,7 +630,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/emissive.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
     callbacks.shift()!();
@@ -683,7 +683,7 @@ describe("canvas root asset publication", () => {
     const node = gltf("/models/coherent-details.glb");
     try {
       root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-      root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+      root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
       callbacks.shift()!();
       await vi.waitFor(() => expect(decodes.size).toBe(2));
       callbacks.shift()!();
@@ -731,7 +731,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/embedded.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({ camera: perspectiveCamera({ position: [1, 2, 3] }), nodes: [node] }));
+    root.setScene(scene({ camera: perspectiveCamera({ position: [1, 2, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await vi.waitFor(() => expect(decodeTexture).toHaveBeenCalled());
     expect(decodeTexture).toHaveBeenCalledWith(
@@ -775,7 +775,7 @@ describe("canvas root asset publication", () => {
     const { callbacks, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/cutout.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
     await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
 
@@ -805,7 +805,7 @@ describe("canvas root asset publication", () => {
     });
     const node = gltf("/models/degraded.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [1, 2, 3] }),
       nodes: [node],
     }));

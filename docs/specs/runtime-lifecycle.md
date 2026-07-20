@@ -39,7 +39,8 @@ synchronously and consistently.
 
 ## Scene commits
 
-`render(scene)` commits a complete latest scene; it is not an append operation.
+`setScene(scene)` commits a complete latest scene and schedules presentation; it
+is neither an append operation nor a synchronous draw.
 The root MUST retain enough normalized state to draw that scene again after
 resize, resource completion, or context restoration without requiring another
 React commit.

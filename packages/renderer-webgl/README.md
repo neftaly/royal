@@ -23,7 +23,7 @@ root.setSize({
   cssHeight: 450,
   devicePixelRatio: window.devicePixelRatio,
 });
-root.render(scene({
+root.setScene(scene({
   camera: perspectiveCamera({ position: [0, 0, 3] }),
   clearColor: [0.03, 0.06, 0.12, 1],
   nodes: [mesh({
@@ -65,7 +65,10 @@ rasterized from vector source on demand up to a 16,384-texel logical long edge;
 the renderer does not retain a bitmap of that size. The option is immutable and
 keeps VT/SVG implementation code behind the renderer's lazy VT boundary.
 
-`invalidate()` requests one coalesced frame. `flushInvalidated()` is available
+`setScene()` installs the complete scene intent and requests one coalesced
+presentation frame; it does not synchronously draw. The scene owns clear color
+so there is no competing root-level color override. `invalidate()` requests one
+coalesced frame without replacing scene intent. `flushInvalidated()` is available
 to deliberate imperative hosts, while `acquireExternalClock()` transfers frame
 authority to an external clock until its idempotent `release()`.
 `createCameraViewResource(...)` may be used as the scene camera; committed

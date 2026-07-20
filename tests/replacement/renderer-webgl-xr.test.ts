@@ -54,7 +54,7 @@ describe("WebXR session renderer", () => {
     const { callbacks, canvas, root } = canvasRootHarness();
     const makeXRCompatible = vi.fn(async () => undefined);
     Object.assign(canvas.gl, { makeXRCompatible });
-    root.render(scene({
+    root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [mesh({
         geometry: planeGeometry([2, 1]),

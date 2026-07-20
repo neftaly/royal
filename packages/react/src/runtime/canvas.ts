@@ -239,7 +239,7 @@ export const Canvas = ({
   }, [activeRoot, pixelRatio]);
 
   useLayoutEffect(() => {
-    if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.render(scene);
+    if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.setScene(scene);
   }, [activeRoot, scene]);
 
   useLayoutEffect(() => {

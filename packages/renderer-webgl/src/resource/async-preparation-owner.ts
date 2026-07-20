@@ -3,8 +3,11 @@ import { RetainedFifo } from "./retained-fifo";
 export const DEFAULT_ASYNC_PREPARATION_JOB_LIMIT = 8;
 
 export type AsyncPreparationSnapshot = Readonly<{
+  /** Jobs currently executing asynchronous preparation work. */
   activeJobs: number;
+  /** Immutable root-wide concurrency ceiling. */
   jobLimit: number;
+  /** Retained FIFO jobs waiting for an execution slot. */
   queuedJobs: number;
 }>;
 

@@ -13,9 +13,13 @@ import type { AsyncPreparationScheduler } from "../resource/async-preparation-ow
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
 export type GltfTextureProgress = Readonly<{
+  /** Images whose transport or decode ended in failure. */
   failed: number;
+  /** Images still awaiting transport or decode. */
   loading: number;
+  /** Images decoded and available for progressive material publication. */
   ready: number;
+  /** Unique image identities referenced by this prepared asset. */
   total: number;
 }>;
 
@@ -31,17 +35,28 @@ export type GltfAssetTimings = Readonly<{
   imagesCompleteAfterMs?: number;
 }>;
 
+/**
+ * Focused lifecycle for one exact glTF source/version identity.
+ * `streaming`, `ready`, and `degraded` all have drawable geometry. `streaming`
+ * still has pending images; `degraded` finished with one or more image failures.
+ */
 export type GltfAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
   | Readonly<{
+    /** Prepared bounds in Royal world-axis convention, before node transform. */
     bounds: GltfAssetBounds;
+    /** Number of prepared draw primitives, including authored LOD levels. */
     primitiveCount: number;
     state: "degraded" | "ready" | "streaming";
     timings: GltfAssetTimings;
     textures: GltfTextureProgress;
   }>
-  | Readonly<{ error: string; state: "error" }>;
+  | Readonly<{
+    /** Bounded diagnostic message. */
+    error: string;
+    state: "error";
+  }>;
 
 export type GltfAssetNode = GltfNode | GltfInstancesNode;
 

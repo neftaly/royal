@@ -106,9 +106,13 @@ import {
 export type { CanvasRootOptions } from "./root-options";
 
 export type CanvasRootSnapshot = Readonly<{
+  /** WebGL context lifecycle, including loss/restoration generations. */
   context: ContextLifecycleSnapshot;
+  /** Successfully submitted canvas or external frames since root creation. */
   frame: number;
+  /** Bounded message from the latest scheduled frame failure, if any. */
   lastFrameFailure?: string;
+  /** Cold operational diagnostics; use focused asset hooks for product UI. */
   resources: Readonly<{
     asyncPreparation: AsyncPreparationSnapshot;
     geometryUploads: SurfaceGeometryUploadSnapshot;
@@ -118,6 +122,7 @@ export type CanvasRootSnapshot = Readonly<{
     persistentGpu: PersistentGpuBudgetSnapshot;
     virtualTextures: VirtualTextureRuntimeSnapshot;
   }>;
+  /** Current CSS/backing size, or `null` before the host supplies a size. */
   size: ResolvedCanvasSize | null;
 }>;
 
@@ -602,8 +607,9 @@ export class CanvasRoot {
     );
   }
 
-  render(scene: Scene): void {
-    this.#assertLive("render");
+  /** Installs complete scene intent and requests a coalesced presentation frame. */
+  setScene(scene: Scene): void {
+    this.#assertLive("set a scene");
     if (
       typeof scene !== "object"
       || scene === null
@@ -635,11 +641,6 @@ export class CanvasRoot {
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
     this.#invalidatePresentation();
-  }
-
-  setClearColor(color: LinearRgba): void {
-    this.#assertLive("set clear color");
-    if (this.#updateClearColor(color)) this.#invalidatePresentation();
   }
 
   setSize(input: CanvasSizeInput): void {

@@ -1,8 +1,11 @@
 export const DEFAULT_PERSISTENT_GPU_BYTE_BUDGET = 256 * 1024 * 1024;
 
 export type PersistentGpuBudgetSnapshot = Readonly<{
+  /** Immutable persistent allocation ceiling in bytes. */
   budgetBytes: number;
+  /** Claims denied during the current WebGL context generation. */
   deniedClaims: number;
+  /** Current admitted persistent allocation estimate in bytes. */
   retainedBytes: number;
 }>;
 

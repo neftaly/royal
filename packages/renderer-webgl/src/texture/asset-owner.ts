@@ -61,10 +61,21 @@ export type EmbeddedTextureAssetRef = Readonly<{
 /** Cold source recipe shared by direct assets and container-embedded images. */
 export type TextureSourceRef = TextureAssetRef | EmbeddedTextureAssetRef;
 
+/**
+ * Focused decode lifecycle for one exact texture identity. `ready` means a
+ * fitted CPU upload source exists; GPU admission and residency remain
+ * renderer-wide diagnostics because they depend on visible material claims.
+ */
 export type TextureAssetSnapshot =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "loading" }>
-  | Readonly<{ height: number; state: "ready"; width: number }>
+  | Readonly<{
+    /** Fitted upload height in texels. */
+    height: number;
+    state: "ready";
+    /** Fitted upload width in texels. */
+    width: number;
+  }>
   | Readonly<{ error: string; state: "error" }>;
 
 export type TexturePreparationSnapshot = Readonly<{
