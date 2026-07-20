@@ -365,6 +365,7 @@ export class CanvasRoot implements RoyalRendererRoot {
   };
   #lastFrameFailure: string | undefined;
   readonly #listeners = new RetainedListeners();
+  #instanceSceneDirty = false;
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
@@ -527,6 +528,7 @@ export class CanvasRoot implements RoyalRendererRoot {
   [rendererSubmitExternalFrame](frame: ExternalSurfaceFrame): boolean {
     this.#assertLive("submit an external frame");
     if (this.#context.getSnapshot().phase !== "active" || frame.views.length === 0) return false;
+    this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
     const intent = this.#externalClearIntent;
     intent.clearColor = this.#clearColor;
@@ -646,6 +648,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#assertLive("pick");
     validatePickInput(input);
     if (this.#context.getSnapshot().phase !== "active") return undefined;
+    this.#flushInstanceScene();
     const scene = this.#surfaceScene;
     const size = this.#size;
     if (scene === null || size === null || size.backingWidth === 0 || size.backingHeight === 0) {
@@ -686,6 +689,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
+    this.#instanceSceneDirty = false;
     this.#progressiveTexturePresentation.reset();
     this.#textureResourcesPending = false;
     this.#surfaceGpu.setScene(prepared);
@@ -827,11 +831,8 @@ export class CanvasRoot implements RoyalRendererRoot {
       if (this.#instanceSubscriptions.has(source)) continue;
       const unsubscribe = source.subscribe(() => {
         if (this.#disposed) return;
-        try {
-          this.#refreshPreparedScene();
-        } catch (error) {
-          this.#captureScheduledFailure(error);
-        }
+        this.#instanceSceneDirty = true;
+        this.#invalidatePresentation();
       });
       this.#instanceSubscriptions.set(source, unsubscribe);
     }
@@ -842,7 +843,12 @@ export class CanvasRoot implements RoyalRendererRoot {
     }
   }
 
-  #refreshPreparedScene(): void {
+  #flushInstanceScene(): void {
+    if (!this.#instanceSceneDirty) return;
+    this.#refreshPreparedScene(true);
+  }
+
+  #refreshPreparedScene(instanceOnly = false): void {
     if (this.#disposed || this.#surfaceSceneInput === null) return;
     const camera = this.#cameraSource.prepare(this.#surfaceSceneInput.camera);
     const prepared = prepareCanonicalSurfaceScene(
@@ -853,15 +859,18 @@ export class CanvasRoot implements RoyalRendererRoot {
       this.#isTexturePending,
     );
     this.#surfaceScene = prepared;
-    this.#progressiveTexturePresentation.reset();
-    this.#textureResourcesPending = false;
+    if (!instanceOnly) {
+      this.#progressiveTexturePresentation.reset();
+      this.#textureResourcesPending = false;
+    }
     this.#surfaceGpu.setScene(prepared);
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
-    this.#invalidatePresentation();
+    this.#instanceSceneDirty = false;
+    if (!instanceOnly) this.#invalidatePresentation();
   }
 
   #refreshPreparedTexture(key: string): void {
@@ -986,6 +995,7 @@ export class CanvasRoot implements RoyalRendererRoot {
   #renderFrame(): void {
     const intent = this.#frameIntent;
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+    this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
     if (this.#textureResourcesPending) {
       let texturesUploaded: boolean;

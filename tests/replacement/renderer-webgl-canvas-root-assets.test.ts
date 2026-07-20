@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
 import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { TextureSourceRef } from "../../packages/renderer-webgl/src/texture/asset-owner";
+import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { SurfaceProgramOwner } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
@@ -506,6 +507,54 @@ describe("canvas root asset publication", () => {
     transforms.commitScale(0, 1);
     callbacks.shift()!();
     expect(canvas.gl.bufferData.mock.calls.length).toBeGreaterThan(allocations);
+  });
+
+  it("coalesces same-frame instance commits while keeping imperative picking current", async () => {
+    const document = staticTriangleDocument();
+    document.nodes = [{ mesh: 0 }];
+    document.scenes = [{ nodes: [0] }];
+    const transforms = createGltfInstanceTransforms({
+      count: 2,
+      logicalIds: ["left", "right"],
+      positions: [-1, 0, 0, 1, 0, 0],
+    });
+    const node = gltfInstances({
+      instances: transforms,
+      pickingGeometry: planeGeometry(0.8),
+      pickingId: "fleet",
+      src: "/coalesced-instances.glb",
+    });
+    const setGpuScene = vi.spyOn(SurfaceGpuOwner.prototype, "setScene");
+    const { callbacks, root } = harness({ readGltf: async () => staticTriangleGlb(document) });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [node],
+      }));
+      callbacks.shift()!();
+      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+      callbacks.shift()!();
+      setGpuScene.mockClear();
+
+      transforms.positions[0] = -0.75;
+      transforms.commitPosition(0, 1);
+      transforms.positions[3] = 0.75;
+      transforms.commitPosition(1, 1);
+
+      expect(setGpuScene).not.toHaveBeenCalled();
+      expect(root.pick({ clientX: 94, clientY: 100 })?.target).toMatchObject({
+        instanceId: "left",
+        instanceIndex: 0,
+      });
+      expect(setGpuScene).toHaveBeenCalledOnce();
+
+      callbacks.shift()!();
+      expect(setGpuScene).toHaveBeenCalledOnce();
+    } finally {
+      root.dispose();
+      setGpuScene.mockRestore();
+    }
   });
 
   it("submits exactly one retained node LOD level", async () => {
