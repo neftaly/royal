@@ -4,7 +4,7 @@ import {
   useGltfAssetStatus,
   type GltfAssetStatus,
   type RendererRootSnapshot,
-  type VirtualTextureStatus,
+  type VirtualTextureAssetStatus,
 } from '@royal/react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import {
@@ -16,7 +16,7 @@ import {
 export type BenchmarkRendererSnapshotProps = Readonly<{
   asset?: GltfAssetRef;
   status?: GltfAssetStatus;
-  virtualTextureStatus?: VirtualTextureStatus;
+  virtualTextureStatus?: VirtualTextureAssetStatus;
 }>;
 
 /** Observes one glTF asset for examples that do not otherwise render its status. */
@@ -29,7 +29,7 @@ export const BenchmarkGltfRendererSnapshot = ({
 
 /** @internal Focused VT adapter; it does not poll the root frame snapshot. */
 export const benchmarkVirtualTextureDiagnostics = (
-  status: VirtualTextureStatus | undefined,
+  status: VirtualTextureAssetStatus | undefined,
 ): Record<string, number> | null => status === undefined ? null : {
   failedPages: status.failedPages,
   manifestFailures: status.state === 'error' || status.state === 'unsupported' ? 1 : 0,

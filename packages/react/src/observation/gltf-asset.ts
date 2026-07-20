@@ -7,7 +7,9 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Source string or exact source/version identity observed by `useGltfAssetStatus`. */
 export type GltfAssetStatusInput = string | GltfAssetRef;
+/** Focused lifecycle for one glTF asset; drawable states include bounds and texture progress. */
 export type GltfAssetStatus = GltfAssetSnapshot;
 
 const IDLE: GltfAssetSnapshot = { state: "idle" };

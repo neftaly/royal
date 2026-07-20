@@ -22,10 +22,11 @@ export interface GltfAssetBounds {
 }
 
 export interface GltfAssetRef {
+  /** Optional declared asset-space bounds available before source preparation completes. */
   readonly bounds?: GltfAssetBounds;
   /** URI of the glTF asset, using the same field name as `gltf(...)`. */
   readonly src: string;
-  /** Non-empty string or finite number identifying one revision of source bytes. */
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: number | string;
 }
 
@@ -46,6 +47,7 @@ export interface GltfNode {
 }
 
 export interface GltfOptions {
+  /** Optional declared asset-space bounds available before source preparation completes. */
   readonly bounds?: GltfAssetBounds;
   /** Exact triangle proxy in this node's local space, available before the asset loads. */
   readonly pickingGeometry?: Geometry;
@@ -58,7 +60,7 @@ export interface GltfOptions {
   readonly transform?: TransformOptions;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
-  /** Preferred asset version override for cache keys. */
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: GltfAssetRef['version'];
 }
 

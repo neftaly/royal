@@ -90,7 +90,9 @@ avoid conflicting authorities.
 Backing resolution follows the browser device pixel ratio by default.
 `pixelRatio={1}` (or another positive finite ratio) is the explicit React
 policy override; changing it resizes the retained root without recreating the
-canvas or WebGL context. This is display policy, not a renderer creation option.
+canvas or WebGL context. `useCanvasSize().pixelRatio` reports the applied
+request under either policy. This is display policy, not a renderer creation
+option.
 
 Native canvas props, `aria-*`, `role`, class/style, event handlers, refs, and
 application `data-*` metadata pass through where they do not conflict with
@@ -173,7 +175,8 @@ polling. Product decisions use focused status:
 - glTF: `idle`, `loading`, `streaming`, `ready`, `degraded`, `error`;
 - ordinary texture: `idle`, `loading`, `ready`, `error`;
 - prefiltered environment: `idle`, `loading`, `ready`, `error`;
-- authored VT additionally exposes `unsupported` and `pendingPages`;
+- authored VT through `useVirtualTextureAssetStatus` additionally exposes
+  `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
 `error` exists only in the corresponding failure state. Readiness definitions

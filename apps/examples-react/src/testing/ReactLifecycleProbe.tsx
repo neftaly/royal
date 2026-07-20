@@ -3,7 +3,7 @@ import {
   useGltfAssetStatus,
   useInvalidate,
   useRendererLifecycle,
-  useVirtualTextureStatus,
+  useVirtualTextureAssetStatus,
 } from '@royal/react';
 import {
   boxGeometry,
@@ -55,7 +55,9 @@ const ActiveFrameProbe = (): ReactNode => {
 };
 
 const RendererBenchmarkProbe = (): ReactNode => (
-  <BenchmarkRendererSnapshot virtualTextureStatus={useVirtualTextureStatus(probeVirtualTexture)} />
+  <BenchmarkRendererSnapshot
+    virtualTextureStatus={useVirtualTextureAssetStatus(probeVirtualTexture)}
+  />
 );
 
 const FailingFrameProbe = (): ReactNode => {

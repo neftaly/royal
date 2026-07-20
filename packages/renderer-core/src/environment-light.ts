@@ -23,7 +23,7 @@ export interface PrefilteredEnvironmentLight extends EnvironmentLightBase {
   readonly source: 'royal-prefiltered-v1';
   /** URL of a Royal prefiltered KTX 1 environment artifact. */
   readonly src: string;
-  /** Non-empty string or finite number identifying one revision of source bytes. */
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: number | string;
 }
 
@@ -57,7 +57,7 @@ export const studioEnvironment = (options: StudioEnvironmentOptions = {}): Studi
 export interface PrefilteredEnvironmentOptions extends StudioEnvironmentOptions {
   /** URL of a Royal prefiltered KTX 1 environment artifact. */
   readonly src: string;
-  /** Preferred source-version override for cache identity. */
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: number | string;
 }
 

@@ -10,7 +10,10 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Focused transport/preparation lifecycle for one offline environment artifact. */
 export type PrefilteredEnvironmentStatus = PrefilteredEnvironmentAssetSnapshot;
+/** Source string or exact environment descriptor observed by `usePrefilteredEnvironmentStatus`. */
+export type PrefilteredEnvironmentStatusInput = string | PrefilteredEnvironmentLight;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
@@ -18,7 +21,7 @@ const getIdle = (): PrefilteredEnvironmentAssetSnapshot => IDLE;
 
 /** Observes one offline environment source/version without frame-wide subscriptions. */
 export const usePrefilteredEnvironmentStatus = (
-  input: PrefilteredEnvironmentLight,
+  input: PrefilteredEnvironmentStatusInput,
   options?: RendererObservationOptions,
 ): PrefilteredEnvironmentStatus => {
   const root = selectObservedRoot(
@@ -26,8 +29,8 @@ export const usePrefilteredEnvironmentStatus = (
     options,
     "usePrefilteredEnvironmentStatus",
   );
-  const src = input.src;
-  const version = input.version;
+  const src = typeof input === "string" ? input : input.src;
+  const version = typeof input === "string" ? undefined : input.version;
   const environment = useMemo(() => prefilteredEnvironment({
     src,
     ...(version === undefined ? {} : { version }),

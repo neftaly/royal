@@ -4,11 +4,13 @@ import { solidTexture, type TextureRef } from './texture';
 
 export type MaterialSurfaceOptions =
   | {
+    /** Scene-linear RGBA base color. Use `linearRgbaFromSrgb` for authored sRGB values. */
     readonly color: LinearRgba;
     readonly texture?: never;
   }
   | {
     readonly color?: never;
+    /** Base-color texture using Royal's upper-left source orientation. */
     readonly texture: TextureRef;
   };
 
@@ -44,6 +46,7 @@ export type StandardMaterialOptions = MaterialSurfaceOptions & {
 export type UnlitMaterialOptions = MaterialSurfaceOptions;
 
 export interface WireframeMaterialOptions {
+  /** Scene-linear RGBA line color. Use `linearRgbaFromSrgb` for authored sRGB values. */
   readonly color: LinearRgba;
 }
 

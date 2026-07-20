@@ -65,6 +65,8 @@ Backing resolution defaults to the browser device pixel ratio. Set
 `pixelRatio={1}` (or another positive finite value) to choose backing pixels per
 CSS pixel explicitly. Updating `pixelRatio` resizes the retained renderer; it
 does not recreate the canvas, root, or WebGL context.
+`useCanvasSize().pixelRatio` reports the browser default or explicit override;
+it is not mislabeled as the device's physical DPR when an override is active.
 
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
 both defaulting to `false`, plus immutable resource policy. Opt into alpha for
@@ -102,6 +104,10 @@ environment `src` and typed `version`. It reports `idle`, `loading`, `ready`, or
 `error`; ready state includes the cubemap face size, mip count, and recorded
 provenance. The scene remains drawable with Royal's studio environment while
 the artifact loads or cannot be admitted to the GPU budget.
+`useVirtualTextureAssetStatus(manifestUriOrAsset)` observes one exact authored
+virtual-texture identity and its bounded page residency. The `Asset` name is
+deliberate: automatic VT policy remains root diagnostics rather than a second
+asset descriptor.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
 `useOrbitCamera({ initial })` packages that resource as `orbit.camera` with a

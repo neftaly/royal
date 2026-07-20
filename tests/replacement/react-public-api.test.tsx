@@ -18,8 +18,8 @@ import {
   useCanvasSize,
   useGltfAssetStatus,
   useTextureAssetStatus,
-  type VirtualTextureStatus,
-  useVirtualTextureStatus,
+  type VirtualTextureAssetStatus,
+  useVirtualTextureAssetStatus,
   useOrbitCamera,
   useOrbitCameraView,
   usePrefilteredEnvironmentStatus,
@@ -66,7 +66,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();
-    expectTypeOf(useVirtualTextureStatus).toBeFunction();
+    expectTypeOf(useVirtualTextureAssetStatus).toBeFunction();
     expectTypeOf(usePrefilteredEnvironmentStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitCameraController({ initial: { distance: 3 } }).camera)
@@ -117,7 +117,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      useVirtualTextureStatus("/map.vt.json").state,
+      useVirtualTextureAssetStatus("/map.vt.json").state,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -142,6 +142,20 @@ describe("replacement React public API", () => {
     expect(html).toContain("<output>idle</output>");
   });
 
+  it("accepts the same short source form for offline environment observation", () => {
+    const Status = () => createElement(
+      "output",
+      null,
+      usePrefilteredEnvironmentStatus("/studio.ktx").state,
+    );
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle</output>");
+  });
+
   it("rejects invalid observed texture identity before a renderer mounts", () => {
     const Status = () => createElement("output", null, useTextureAssetStatus({
       contentKey: "",
@@ -156,7 +170,7 @@ describe("replacement React public API", () => {
   });
 
   it("exposes one predictable error field for failed and unsupported VT", () => {
-    const message = (status: VirtualTextureStatus): string | undefined =>
+    const message = (status: VirtualTextureAssetStatus): string | undefined =>
       status.state === "error" || status.state === "unsupported"
         ? status.error
         : undefined;

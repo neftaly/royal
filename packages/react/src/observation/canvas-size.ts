@@ -15,8 +15,8 @@ export type CanvasSize = Readonly<{
   backingHeight: number;
   /** Backing-store width after DPR and capability limits. */
   backingWidth: number;
-  /** Device pixel ratio used for this measurement. */
-  devicePixelRatio: number;
+  /** Backing pixels requested per CSS pixel; matches `Canvas.pixelRatio` when supplied. */
+  pixelRatio: number;
   /** Applied backing scale relative to the requested CSS-pixel resolution. */
   renderScale: number;
   /** CSS layout width in pixels. */
@@ -37,8 +37,8 @@ export const useCanvasSize = (
       aspectRatio: size.cssWidth / size.cssHeight,
       backingHeight: size.backingHeight,
       backingWidth: size.backingWidth,
-      devicePixelRatio: size.devicePixelRatio,
       height: size.cssHeight,
+      pixelRatio: size.devicePixelRatio,
       renderScale: size.renderScale,
       width: size.cssWidth,
     };

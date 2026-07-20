@@ -3,7 +3,7 @@ import {
   OrbitControls,
   useOrbitCamera,
   useOrbitCameraView,
-  useVirtualTextureStatus,
+  useVirtualTextureAssetStatus,
 } from '@royal/react';
 import {
   imageTexture,
@@ -45,7 +45,7 @@ const views = {
 type ViewName = keyof typeof views;
 
 const VirtualTextureStatusLabel = (): ReactNode => {
-  const status = useVirtualTextureStatus(mapTexture);
+  const status = useVirtualTextureAssetStatus(mapTexture);
   return (
     <>
       <BenchmarkRendererSnapshot virtualTextureStatus={status} />

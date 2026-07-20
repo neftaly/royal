@@ -7,7 +7,6 @@ export type {
   RendererRoot,
 } from "./runtime/canvas-root";
 export type { CanvasSizeInput, ResolvedCanvasSize } from "./frame/canvas-size";
-export type { ExternalFrameClock } from "./frame/frame-clock-owner";
 export type {
   GltfAssetSnapshot,
   GltfAssetTimings,

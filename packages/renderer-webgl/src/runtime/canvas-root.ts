@@ -28,6 +28,7 @@ import {
 import { FrameClockOwner, type ExternalFrameClock } from "../frame/frame-clock-owner";
 import { ProgressivePresentationOwner } from "../frame/progressive-presentation-owner";
 import {
+  rendererAcquireExternalClock,
   rendererOwnedWebGl2Context,
   rendererSubmitExternalFrame,
   type ExternalSurfaceFrame,
@@ -137,8 +138,6 @@ export type RendererRootSnapshot = CanvasRootSnapshot;
 export interface RendererRoot {
   /** Canvas whose context and backing dimensions are owned by this root. */
   readonly canvas: HTMLCanvasElement;
-  /** Temporarily transfers frame authority to an external host such as WebXR. */
-  acquireExternalClock(): ExternalFrameClock;
   /** Idempotently releases all subscriptions, asynchronous work, and GPU resources. */
   dispose(): void;
   /** Immediately presents already-invalidated work from an imperative host. */
@@ -536,7 +535,8 @@ export class CanvasRoot implements RendererRoot {
     canvas.addEventListener("webglcontextrestored", this.#onContextRestored);
   }
 
-  acquireExternalClock(): ExternalFrameClock {
+  /** @internal Dedicated optional renderers temporarily borrow frame authority. */
+  [rendererAcquireExternalClock](): ExternalFrameClock {
     this.#assertLive("acquire an external clock");
     return this.#clock.acquireExternalClock();
   }

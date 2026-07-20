@@ -30,11 +30,14 @@ export type {
   TextureAssetStatusInput,
 } from "./observation/texture-asset";
 export { usePrefilteredEnvironmentStatus } from "./observation/prefiltered-environment";
-export type { PrefilteredEnvironmentStatus } from "./observation/prefiltered-environment";
-export { useVirtualTextureStatus } from "./observation/virtual-texture-asset";
 export type {
-  VirtualTextureStatus,
-  VirtualTextureStatusInput,
+  PrefilteredEnvironmentStatus,
+  PrefilteredEnvironmentStatusInput,
+} from "./observation/prefiltered-environment";
+export { useVirtualTextureAssetStatus } from "./observation/virtual-texture-asset";
+export type {
+  VirtualTextureAssetStatus,
+  VirtualTextureAssetStatusInput,
 } from "./observation/virtual-texture-asset";
 export {
   createOrbitCameraController,

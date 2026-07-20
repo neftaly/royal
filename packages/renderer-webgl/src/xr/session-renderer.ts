@@ -1,4 +1,5 @@
 import {
+  rendererAcquireExternalClock,
   rendererOwnedWebGl2Context,
   rendererSubmitExternalFrame,
   type ExternalFrameCapableRoot,
@@ -287,7 +288,7 @@ export const createWebXrSessionRendererWithPlatform = async (
       options.referenceSpacePreference ?? DEFAULT_REFERENCE_SPACES,
     );
     assertSetupActive();
-    const clock = root.acquireExternalClock();
+    const clock = root[rendererAcquireExternalClock]();
     const slots: MutableXrFrameSlot[] = [];
     const frameViews: SurfaceFrameView[] = [];
     const externalSize = { height: layer.framebufferHeight, width: layer.framebufferWidth };

@@ -17,7 +17,7 @@ export interface BoxGeometryOptions {
   readonly size: BoxGeometrySizeInput;
 }
 
-/** XY plane geometry sized in metres with UVs mapped from bottom-left to top-right. */
+/** XY plane geometry sized in metres with upper-left-origin UVs covering the full surface. */
 export interface PlaneGeometry extends GeometryDescriptor<'plane'> {
   readonly size: readonly [width: Metres, height: Metres];
 }
@@ -38,7 +38,7 @@ export interface TriangleGeometry extends GeometryDescriptor<'triangles'> {
   readonly normals?: Float32Array;
   /** Packed XYZ positions in metres (`vertexCount * 3`). */
   readonly positions: Float32Array;
-  /** Optional packed UV coordinates (`vertexCount * 2`). */
+  /** Optional packed UV coordinates (`vertexCount * 2`); V=0 is the texture's upper edge. */
   readonly textureCoordinates?: Float32Array;
 }
 
@@ -49,7 +49,7 @@ export interface TriangleGeometryOptions {
   readonly normals?: ArrayLike<number>;
   /** Packed XYZ positions in metres (`vertexCount * 3`). */
   readonly positions: ArrayLike<number>;
-  /** Optional packed UV coordinates (`vertexCount * 2`). */
+  /** Optional packed UV coordinates (`vertexCount * 2`); V=0 is the texture's upper edge. */
   readonly textureCoordinates?: ArrayLike<number>;
 }
 

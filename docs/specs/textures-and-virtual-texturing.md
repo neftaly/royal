@@ -271,7 +271,7 @@ root. Automatic VT falls back to ordinary rendering. An explicitly authored VT
 without a legal ordinary fallback reports the unsupported state and renders a
 neutral fallback rather than hanging.
 
-The React observation is `useVirtualTextureStatus(manifestUriOrRef)`. Its
+The React observation is `useVirtualTextureAssetStatus(manifestUriOrRef)`. Its
 snapshot reports lifecycle state plus `residentPages`, `pendingPages`, and
 `failedPages`; observation is identity-focused and does not subscribe the
 component to every renderer frame.

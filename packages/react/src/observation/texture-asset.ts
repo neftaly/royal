@@ -7,7 +7,9 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Source string or exact decoded-content/version identity observed by `useTextureAssetStatus`. */
 export type TextureAssetStatusInput = string | TextureAssetRef;
+/** Focused decode lifecycle for one ordinary texture asset. */
 export type TextureAssetStatus = TextureAssetSnapshot;
 
 const IDLE: TextureAssetSnapshot = { state: "idle" };

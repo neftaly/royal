@@ -7,8 +7,10 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
-export type VirtualTextureStatusInput = string | VirtualTextureAssetRef;
-export type VirtualTextureStatus = VirtualTextureAssetSnapshot;
+/** Manifest URI or exact authored VT identity observed by `useVirtualTextureAssetStatus`. */
+export type VirtualTextureAssetStatusInput = string | VirtualTextureAssetRef;
+/** Focused manifest lifecycle and current bounded page residency for one authored VT asset. */
+export type VirtualTextureAssetStatus = VirtualTextureAssetSnapshot;
 
 const IDLE: VirtualTextureAssetSnapshot = {
   failedPages: 0,
@@ -20,7 +22,7 @@ const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): VirtualTextureAssetSnapshot => IDLE;
 
 const inputDescriptor = (
-  input: VirtualTextureStatusInput,
+  input: VirtualTextureAssetStatusInput,
 ): VirtualTextureAssetRef | undefined => {
   if (typeof input === "string") return undefined;
   if (
@@ -30,18 +32,22 @@ const inputDescriptor = (
     || input.kind !== "virtual-asset"
   ) {
     throw new TypeError(
-      "useVirtualTextureStatus input must be a manifest URI or virtual texture identity",
+      "useVirtualTextureAssetStatus input must be a manifest URI or virtual texture identity",
     );
   }
   return input;
 };
 
 /** Observes manifest readiness and bounded page residency without frame-wide polling. */
-export const useVirtualTextureStatus = (
-  input: VirtualTextureStatusInput,
+export const useVirtualTextureAssetStatus = (
+  input: VirtualTextureAssetStatusInput,
   options?: RendererObservationOptions,
-): VirtualTextureStatus => {
-  const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useVirtualTextureStatus");
+): VirtualTextureAssetStatus => {
+  const root = selectObservedRoot(
+    useOptionalCanvasRoot(),
+    options,
+    "useVirtualTextureAssetStatus",
+  );
   const descriptor = inputDescriptor(input);
   const manifestUri = descriptor === undefined ? input as string : descriptor.manifestUri;
   const colorSpace = descriptor?.colorSpace;

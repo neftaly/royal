@@ -43,36 +43,39 @@ export interface SolidTextureRef {
 export interface TextureAssetRef {
   readonly kind: 'asset';
   readonly colorSpace?: TextureColorSpace;
-  /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
+  /** Caller-asserted identity for equal decoded content across source URIs. */
   readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
   /** URI of the image asset, using the same field name as `imageTexture(...)`. */
   readonly src: string;
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: TextureVersion;
 }
 
 export interface VirtualTextureAssetRef {
   readonly kind: 'virtual-asset';
   readonly colorSpace?: TextureColorSpace;
-  /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
+  /** Caller-asserted identity for equal decoded content across manifest URIs. */
   readonly contentKey?: TextureContentKey;
   readonly manifestUri: string;
   readonly sampler?: TextureSampler;
+  /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
   readonly version?: TextureVersion;
 }
 
 export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAssetRef;
 
 export interface SolidTextureOptions {
+  /** Scene-linear RGBA texel value. Use `linearRgbaFromSrgb` for authored sRGB values. */
   readonly color: LinearRgba;
 }
 
 interface TextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
-  /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
+  /** Caller-asserted identity for equal decoded content across source URIs. */
   readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
-  /** Preferred asset version override for cache keys. */
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: TextureVersion;
 }
 
@@ -87,10 +90,10 @@ export type ImageTextureOptions = Omit<TextureAssetOptions, 'contentKey'>;
 interface VirtualTextureAssetBaseOptions {
   /** Color-space override. Otherwise the manifest declaration is used when available. */
   readonly colorSpace?: TextureColorSpace;
-  /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
+  /** Caller-asserted identity for equal decoded content across manifest URIs. */
   readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
-  /** Preferred asset version override for cache keys. */
+  /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
   readonly version?: TextureVersion;
 }
 

@@ -68,9 +68,10 @@ keeps VT/SVG implementation code behind the renderer's lazy VT boundary.
 `setScene()` installs the complete scene intent and requests one coalesced
 presentation frame; it does not synchronously draw. The scene owns clear color
 so there is no competing root-level color override. `invalidate()` requests one
-coalesced frame without replacing scene intent. `flushInvalidated()` is available
-to deliberate imperative hosts, while `acquireExternalClock()` transfers frame
-authority to an external clock until its idempotent `release()`.
+coalesced frame without replacing scene intent. `flushInvalidated()` is
+available to deliberate imperative hosts. External frame-clock authority is
+owned by dedicated integrations such as `@royal/renderer-webgl/xr`; it is not
+part of the ordinary root API.
 `createCameraViewResource(...)` may be used as the scene camera; committed
 changes invalidate one frame and update retained camera storage without
 re-lowering the scene or rebuilding GPU resources.
