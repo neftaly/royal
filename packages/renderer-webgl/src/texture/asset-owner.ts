@@ -6,6 +6,7 @@ import type {
 } from "@royal/renderer-core";
 import type { Ktx2Etc2Level } from "./etc2-storage";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+import { RetainedFifo } from "../resource/retained-fifo";
 
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
@@ -162,7 +163,7 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 export class TextureAssetOwner {
   #activeDecodeReservations = 0;
   #disposed = false;
-  readonly #decodeQueue: AssetEntry[] = [];
+  readonly #decodeQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -187,7 +188,7 @@ export class TextureAssetOwner {
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
     }
-    this.#decodeQueue.length = 0;
+    this.#decodeQueue.clear();
     this.#entries.clear();
     this.#listeners.clear();
     this.#storageEntries.clear();
@@ -466,7 +467,7 @@ export class TextureAssetOwner {
     }
     if (entry.queued) return;
     entry.queued = true;
-    this.#decodeQueue.push(entry);
+    this.#decodeQueue.enqueue(entry);
     this.#drainDecodeQueue();
   }
 
@@ -475,7 +476,7 @@ export class TextureAssetOwner {
       !this.#disposed
       && this.#activeDecodeReservations < DEFAULT_DECODED_TEXTURE_RESERVATIONS
     ) {
-      const entry = this.#decodeQueue.shift();
+      const entry = this.#decodeQueue.dequeue();
       if (entry === undefined) return;
       if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;

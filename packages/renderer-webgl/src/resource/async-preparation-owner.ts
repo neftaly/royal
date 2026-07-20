@@ -1,3 +1,5 @@
+import { RetainedFifo } from "./retained-fifo";
+
 export const DEFAULT_ASYNC_PREPARATION_JOB_LIMIT = 8;
 
 export type AsyncPreparationSnapshot = Readonly<{
@@ -33,7 +35,7 @@ export class AsyncPreparationOwner {
   #disposed = false;
   readonly #jobLimit: number;
   readonly #onChanged: () => void;
-  readonly #pending: PendingPreparation[] = [];
+  readonly #pending = new RetainedFifo<PendingPreparation>();
   #queuedJobs = 0;
 
   constructor(jobLimit: number, onChanged: () => void = () => undefined) {
@@ -47,13 +49,14 @@ export class AsyncPreparationOwner {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    for (const pending of this.#pending) {
+    for (;;) {
+      const pending = this.#pending.dequeue();
+      if (pending === undefined) break;
       if (pending.started || pending.cancelled) continue;
       pending.cancelled = true;
       pending.signal.removeEventListener("abort", pending.cancel);
       pending.reject(aborted());
     }
-    this.#pending.length = 0;
     this.#queuedJobs = 0;
     this.#onChanged();
   }
@@ -83,7 +86,7 @@ export class AsyncPreparationOwner {
       };
       pending.cancel = cancel;
       signal.addEventListener("abort", cancel, { once: true });
-      this.#pending.push(pending);
+      this.#pending.enqueue(pending);
       this.#queuedJobs += 1;
       this.#drain();
       this.#onChanged();
@@ -100,7 +103,7 @@ export class AsyncPreparationOwner {
 
   #drain(): void {
     while (!this.#disposed && this.#activeJobs < this.#jobLimit) {
-      const pending = this.#pending.shift();
+      const pending = this.#pending.dequeue();
       if (pending === undefined) return;
       if (pending.cancelled) continue;
       if (pending.signal.aborted) {

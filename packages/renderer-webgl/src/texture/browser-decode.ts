@@ -6,6 +6,7 @@ import type {
 import { decodeBrowserImageElement } from "./browser-image-element";
 import { readEncodedImageDimensions } from "./encoded-image-dimensions";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
+import { RetainedFifo } from "../resource/retained-fifo";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
@@ -33,7 +34,7 @@ const mayContainDimensionHint = (blob: Blob): boolean => {
 class BrowserWorkQueue {
   #active = 0;
   readonly #limit: number;
-  readonly #pending: PendingWork[] = [];
+  readonly #pending = new RetainedFifo<PendingWork>();
 
   constructor(limit: number) {
     if (!Number.isSafeInteger(limit) || limit < 1) {
@@ -48,14 +49,14 @@ class BrowserWorkQueue {
   ): Promise<DecodedTextureSource> {
     if (signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
-      this.#pending.push({ reject, resolve, run: decode, signal });
+      this.#pending.enqueue({ reject, resolve, run: decode, signal });
       this.#drain();
     });
   }
 
   #drain(): void {
     while (this.#active < this.#limit) {
-      const pending = this.#pending.shift();
+      const pending = this.#pending.dequeue();
       if (pending === undefined) return;
       if (pending.signal.aborted) {
         pending.reject(aborted());
