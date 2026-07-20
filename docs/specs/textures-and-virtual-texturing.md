@@ -67,7 +67,7 @@ belong in explicit diagnostics, not ordinary presentation.
 Decoded sources MAY be retained for context restoration only within CPU budget.
 Eviction MUST leave a reconstruction recipe or legal refetch path.
 
-When the persistent budget requires a smaller ordinary PNG/JPEG, Royal reads a
+When the persistent budget requires a smaller ordinary PNG/JPEG/WebP, Royal reads a
 bounded encoded-header prefix through a pure, non-authoritative dimension
 parser and asks the browser to decode directly to the selected fitted size.
 Malformed, truncated, unsupported, or unusually deep headers fall back to the

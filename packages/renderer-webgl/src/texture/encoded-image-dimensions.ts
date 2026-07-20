@@ -58,7 +58,53 @@ const readJpegDimensions = (bytes: Uint8Array): EncodedImageDimensions | undefin
   return undefined;
 };
 
-/** Reads only a PNG/JPEG size hint; browser decoding remains the format authority. */
+const matchesAscii = (bytes: Uint8Array, offset: number, text: string): boolean => {
+  if (offset + text.length > bytes.byteLength) return false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (bytes[offset + index] !== text.charCodeAt(index)) return false;
+  }
+  return true;
+};
+
+const uint24LittleEndian = (bytes: Uint8Array, offset: number): number =>
+  bytes[offset]! | bytes[offset + 1]! << 8 | bytes[offset + 2]! << 16;
+
+const readWebpDimensions = (bytes: Uint8Array): EncodedImageDimensions | undefined => {
+  if (
+    bytes.byteLength < 20
+    || !matchesAscii(bytes, 0, "RIFF")
+    || !matchesAscii(bytes, 8, "WEBP")
+  ) return undefined;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const chunkBytes = view.getUint32(16, true);
+  if (matchesAscii(bytes, 12, "VP8X")) {
+    if (chunkBytes < 10 || bytes.byteLength < 30) return undefined;
+    return validDimensions(
+      uint24LittleEndian(bytes, 24) + 1,
+      uint24LittleEndian(bytes, 27) + 1,
+    );
+  }
+  if (matchesAscii(bytes, 12, "VP8L")) {
+    if (chunkBytes < 5 || bytes.byteLength < 25 || bytes[20] !== 0x2f) return undefined;
+    const bits = view.getUint32(21, true);
+    return validDimensions((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
+  }
+  if (
+    matchesAscii(bytes, 12, "VP8 ")
+    && chunkBytes >= 10
+    && bytes.byteLength >= 30
+    && bytes[23] === 0x9d
+    && bytes[24] === 0x01
+    && bytes[25] === 0x2a
+  ) {
+    return validDimensions(view.getUint16(26, true) & 0x3fff, view.getUint16(28, true) & 0x3fff);
+  }
+  return undefined;
+};
+
+/** Reads only a PNG/JPEG/WebP size hint; browser decoding remains the format authority. */
 export const readEncodedImageDimensions = (
   bytes: Uint8Array,
-): EncodedImageDimensions | undefined => readPngDimensions(bytes) ?? readJpegDimensions(bytes);
+): EncodedImageDimensions | undefined => readPngDimensions(bytes)
+  ?? readJpegDimensions(bytes)
+  ?? readWebpDimensions(bytes);

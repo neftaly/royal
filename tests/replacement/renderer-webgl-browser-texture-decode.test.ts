@@ -195,6 +195,46 @@ describe("browser texture decode shell", () => {
     });
   });
 
+  it("decodes WebP directly to its fitted budget dimensions from its container header", async () => {
+    const bytes = new Uint8Array(30);
+    bytes.set([82, 73, 70, 70, 22, 0, 0, 0, 87, 69, 66, 80], 0);
+    bytes.set([86, 80, 56, 88, 10, 0, 0, 0], 12);
+    bytes.set([0xff, 0x07, 0], 24);
+    bytes.set([0xff, 0x03, 0], 27);
+    const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
+    const bitmap = {
+      close: vi.fn(),
+      height: fitted.height,
+      width: fitted.width,
+    } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async (
+      _blob: Blob,
+      _options?: ImageBitmapOptions,
+    ) => bitmap);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+
+    const result = await decodeTextureWithBrowser({
+      bytes,
+      contentKey: "large-webp",
+      kind: "embedded-asset",
+      label: "large WebP",
+      mimeType: "image/webp",
+    }, new AbortController().signal, 340);
+
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(createImageBitmap.mock.calls[0]![1]).toMatchObject({
+      resizeHeight: fitted.height,
+      resizeQuality: "high",
+      resizeWidth: fitted.width,
+    });
+    expect(result).toMatchObject({
+      height: fitted.height,
+      sourceHeight: 1024,
+      sourceWidth: 2048,
+      width: fitted.width,
+    });
+  });
+
   it("falls back to decode-then-fit when direct Blob resizing is unavailable", async () => {
     const bytes = new Uint8Array([
       137, 80, 78, 71, 13, 10, 26, 10,

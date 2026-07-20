@@ -27,7 +27,10 @@ const IMAGE_HEADER_PREFIX_BYTES = 128 * 1024;
 
 const mayContainDimensionHint = (blob: Blob): boolean => {
   const type = blob.type.split(";", 1)[0]!.trim().toLowerCase();
-  return type.length === 0 || type === "image/jpeg" || type === "image/png";
+  return type.length === 0
+    || type === "image/jpeg"
+    || type === "image/png"
+    || type === "image/webp";
 };
 
 /** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */

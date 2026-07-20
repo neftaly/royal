@@ -32,9 +32,34 @@ describe("encoded image dimension hints", () => {
     expect(readEncodedImageDimensions(bytes)).toEqual({ height: 800, width: 1280 });
   });
 
+  it("reads extended, lossless, and lossy WebP dimensions", () => {
+    const extended = new Uint8Array(30);
+    extended.set([82, 73, 70, 70, 22, 0, 0, 0, 87, 69, 66, 80], 0);
+    extended.set([86, 80, 56, 88, 10, 0, 0, 0], 12);
+    extended.set([0xff, 0x07, 0], 24);
+    extended.set([0xff, 0x03, 0], 27);
+    expect(readEncodedImageDimensions(extended)).toEqual({ height: 1024, width: 2048 });
+
+    const lossless = new Uint8Array(25);
+    lossless.set([82, 73, 70, 70, 17, 0, 0, 0, 87, 69, 66, 80], 0);
+    lossless.set([86, 80, 56, 76, 5, 0, 0, 0, 0x2f], 12);
+    new DataView(lossless.buffer).setUint32(21, (799 << 14) | 1279, true);
+    expect(readEncodedImageDimensions(lossless)).toEqual({ height: 800, width: 1280 });
+
+    const lossy = new Uint8Array(30);
+    lossy.set([82, 73, 70, 70, 22, 0, 0, 0, 87, 69, 66, 80], 0);
+    lossy.set([86, 80, 56, 32, 10, 0, 0, 0, 0, 0, 0, 0x9d, 0x01, 0x2a], 12);
+    const lossyView = new DataView(lossy.buffer);
+    lossyView.setUint16(26, 640, true);
+    lossyView.setUint16(28, 360, true);
+    expect(readEncodedImageDimensions(lossy)).toEqual({ height: 360, width: 640 });
+  });
+
   it("returns no hint for truncated, zero-sized, or unknown input", () => {
     expect(readEncodedImageDimensions(pngHeader(0, 1))).toBeUndefined();
     expect(readEncodedImageDimensions(new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0, 20])))
+      .toBeUndefined();
+    expect(readEncodedImageDimensions(new TextEncoder().encode("RIFF\0\0\0\0WEBPVP8X")))
       .toBeUndefined();
     expect(readEncodedImageDimensions(new Uint8Array([1, 2, 3, 4]))).toBeUndefined();
   });
