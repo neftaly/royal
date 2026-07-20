@@ -211,7 +211,25 @@ export const canvasRootHarness = (
     ...platformOverrides,
   };
   const root = new CanvasRoot(canvas as unknown as HTMLCanvasElement, options, platform);
-  return { callbacks, canvas, listenerErrors, root, scheduledFailures };
+  const flushScheduledFrames = (): number => {
+    let frameCount = 0;
+    while (callbacks.length > 0) {
+      if (frameCount === 1_000) {
+        throw new Error("Royal canvas test scheduled more than 1,000 consecutive frames");
+      }
+      callbacks.shift()!();
+      frameCount += 1;
+    }
+    return frameCount;
+  };
+  return {
+    callbacks,
+    canvas,
+    flushScheduledFrames,
+    listenerErrors,
+    root,
+    scheduledFailures,
+  };
 };
 
 export const emptyScene = (

@@ -32,7 +32,7 @@ describe("canvas root asset publication", () => {
     const environment = prefilteredEnvironment({ src: "/environment.ktx", version: 2 });
     const source = environmentKtx1Fixture(2).source;
     const readPrefilteredEnvironment = vi.fn(async () => source);
-    const { callbacks, canvas, root } = harness({
+    const { canvas, flushScheduledFrames, root } = harness({
       preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
       readPrefilteredEnvironment,
     });
@@ -45,7 +45,7 @@ describe("canvas root asset publication", () => {
         material: standardMaterial({ color: [0.8, 0.6, 0.2, 1] }),
       })],
     }));
-    callbacks.shift()!();
+    flushScheduledFrames();
     expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
       String(shader).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
 
@@ -55,8 +55,10 @@ describe("canvas root asset publication", () => {
       size: 2,
       state: "ready",
     }));
-    callbacks.shift()!();
-    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(12);
+    await vi.waitFor(() => {
+      flushScheduledFrames();
+      expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(12);
+    });
     expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
       String(shader).includes("#define PREFILTERED_ENVIRONMENT"))).toBe(true);
     expect(vi.mocked(canvas.gl.bindTexture).mock.calls.some(([target]) =>
@@ -65,6 +67,7 @@ describe("canvas root asset publication", () => {
 
     canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     canvas.dispatchEvent(new Event("webglcontextrestored"));
+    flushScheduledFrames();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(24);
     expect(readPrefilteredEnvironment).toHaveBeenCalledOnce();
     expect(root.getPrefilteredEnvironmentSnapshot(environment).state).toBe("ready");
