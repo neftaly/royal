@@ -70,14 +70,14 @@ Keep the three layers separate:
 
 | Layer | Owns | Does not own |
 | --- | --- | --- |
-| `@royal/renderer-core` | Author-facing render descriptors: `RenderRoot`, cameras, lights, meshes, PBR materials, textures, glTF asset references, and explicit picking ids. | Tarstate schemas, query evaluation, WebGL caches, GPU handles, backend diagnostics policy. |
+| `@royal/renderer-core` | Author-facing render descriptors: `Scene`, cameras, lights, meshes, PBR materials, textures, glTF asset references, and explicit picking ids. | Tarstate schemas, query evaluation, WebGL caches, GPU handles, backend diagnostics policy. |
 | `@royal/renderer-webgl` | Runtime backend state: WebGL context, programs, GPU buffers, textures, geometry/glTF caches, visibility packet buffers, culling loops, draw submission. | Required Tarstate dependency, full app scene graph source of truth, query execution inside draw loops. |
 | `@royal/tarstate-lens` | Control-plane schema, snapshots, queries, command rows, diagnostics, relation views over renderer/app events. | GPU resources, mandatory rendering model, private caches, hot per-frame typed-array ownership. |
 
 The lens observes and controls through a narrow adapter contract:
 
 1. App or React adapter creates a Tarstate control store.
-2. Royal renderer receives normal `RenderRoot` descriptors.
+2. Royal renderer receives normal `Scene` descriptors.
 3. Renderer adapter emits sampled snapshots/events after lifecycle points:
    root created, scene accepted, pass rendered, asset status changed,
    pointer/pick changed, benchmark probe completed.
@@ -106,7 +106,7 @@ rows and short event rings over unbounded logs.
 
 `renderNodes` is not a mandatory complete scene graph. It is the public/control
 projection of render descriptors that need identity for tools, diagnostics, and
-selection. The authoritative descriptor remains the `RenderRoot` passed to the
+selection. The authoritative descriptor remains the `Scene` passed to the
 renderer.
 
 ### Capabilities And Diagnostics

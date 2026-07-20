@@ -1,5 +1,4 @@
 import {
-  defaultImageTextureSampler,
   type LinearRgba,
   type Material,
   type TextureAssetRef,
@@ -159,12 +158,10 @@ const NEUTRAL_PERCEPTUAL_GREY: LinearRgba = [0.214_041, 0.214_041, 0.214_041, 1]
 export const canonicalTextureSampler = (
   asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "sampler">,
 ): CanonicalTextureSampler => ({
-  magFilter: asset.sampler?.magFilter ?? defaultImageTextureSampler.magFilter ?? "linear",
-  minFilter: asset.sampler?.minFilter
-    ?? defaultImageTextureSampler.minFilter
-    ?? "linear-mipmap-linear",
-  wrapS: asset.sampler?.wrapS ?? defaultImageTextureSampler.wrapS ?? "clamp-to-edge",
-  wrapT: asset.sampler?.wrapT ?? defaultImageTextureSampler.wrapT ?? "clamp-to-edge",
+  magFilter: asset.sampler?.magFilter ?? "linear",
+  minFilter: asset.sampler?.minFilter ?? "linear-mipmap-linear",
+  wrapS: asset.sampler?.wrapS ?? "clamp-to-edge",
+  wrapT: asset.sampler?.wrapT ?? "clamp-to-edge",
 });
 
 const textureBinding = (

@@ -50,7 +50,7 @@ export const StandardLighting = (): ReactNode => {
     initial: { distance: 6.2, pitch: -0.08, target: [0, 0.05, 0] },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: prefiltered ? browserProofPrefilteredEnvironment : showcaseEnvironment,
     ...showcasePass,
     nodes: [
@@ -83,7 +83,7 @@ export const StandardLighting = (): ReactNode => {
         transform: { position: [1.55, 0.05, 0], rotation: [0.12, -0.82, -0.08] },
       }),
     ],
-  }), [orbit.cameraResource, pointLights, prefiltered]);
+  }), [orbit.camera, pointLights, prefiltered]);
 
   return (
     <Canvas

@@ -5,4 +5,4 @@ import type { GltfNode } from './gltf';
 import type { GltfInstancesNode } from './gltf-instances';
 import type { MeshNode } from './mesh';
 
-export type RenderNode = MeshNode | GltfNode | GltfInstancesNode | DirectionalLightNode | PointLightNode | SpotLightNode;
+export type SceneNode = MeshNode | GltfNode | GltfInstancesNode | DirectionalLightNode | PointLightNode | SpotLightNode;

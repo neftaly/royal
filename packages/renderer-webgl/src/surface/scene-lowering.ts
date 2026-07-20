@@ -6,7 +6,7 @@ import type {
   LinearRgba,
   Material,
   MeshNode,
-  RenderRoot,
+  Scene,
   VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
@@ -258,7 +258,7 @@ const mat4At = (values: Float32Array, offset: number): Mat4 => [
   values[offset + 12]!, values[offset + 13]!, values[offset + 14]!, values[offset + 15]!,
 ];
 
-const staticCamera = (scene: RenderRoot): CanonicalCamera => {
+const staticCamera = (scene: Scene): CanonicalCamera => {
   if (scene.camera.kind === "perspective-camera" || scene.camera.kind === "orthographic-camera") {
     return scene.camera;
   }
@@ -268,7 +268,7 @@ const staticCamera = (scene: RenderRoot): CanonicalCamera => {
   );
 };
 
-const sceneExposure = (scene: RenderRoot): number => scene.exposureEv100 === undefined
+const sceneExposure = (scene: Scene): number => scene.exposureEv100 === undefined
   ? 1 / 1.2
   : 1 / (1.2 * 2 ** scene.exposureEv100);
 
@@ -282,7 +282,7 @@ const normalizedDirection = (direction: Direction3): Direction3 => {
 };
 
 const prepareEnvironment = (
-  scene: RenderRoot,
+  scene: Scene,
   required: boolean,
 ): CanonicalEnvironment | undefined => {
   const environment = scene.environment;
@@ -306,7 +306,7 @@ const prepareEnvironment = (
 
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
-  scene: RenderRoot,
+  scene: Scene,
   preparedGltf: (
     node: GltfNode | GltfInstancesNode,
   ) => PreparedStaticGltf | undefined = () => undefined,

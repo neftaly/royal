@@ -60,7 +60,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     },
   }), [entry.presentation.scale, src]);
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: showcaseEnvironment,
     ...showcasePass,
     nodes: [
@@ -68,7 +68,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
       directionalLight(showcaseFillLight),
       model,
     ],
-  }), [model, orbit.cameraResource]);
+  }), [model, orbit.camera]);
 
   return (
     <Canvas

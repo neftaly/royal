@@ -16,7 +16,7 @@ export const HelloCube = (): ReactNode => {
     initial: { distance: 5, pitch: 0.04 },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: showcaseEnvironment,
     ...showcasePass,
     nodes: [
@@ -28,7 +28,7 @@ export const HelloCube = (): ReactNode => {
         transform: { position: [0, 0, 0], rotation: [0.45, 0.7, 0.05] },
       }),
     ],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <Canvas aria-label="Lit cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>

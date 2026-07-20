@@ -7,16 +7,13 @@ canvas rendering.
 
 Royal is a source-level prerelease at `0.0.1`. Its accepted behavior and clean
 replacement architecture are defined in [docs/specs](docs/specs/README.md).
-The implementation is landing as independently verified vertical slices; the
-current executable slice owns a CSS-sized canvas, WebGL2 context lifecycle,
-coalesced frame clock, complete opaque state, direct unlit and solid standard
-surfaces, authored directional lighting, exact CPU picking, focused React
-observation, retained camera resources with React orbit controls, and
-demand-loaded static GLB geometry using core opaque
-metallic-roughness or `KHR_materials_unlit`. Optional glTF picking proxies work before
-asset readiness without entering the GPU path. Unsupported glTF features, nodes, and
-materials fail explicitly. The old renderer is evidence and oracle material,
-not a fallback path.
+The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
+glTF and texture publication, PBR presentation, exact CPU picking, retained
+camera/instance resources, LOD and variants, WebXR, and optional virtual
+texturing through shared canonical scene paths. Unsupported required glTF
+semantics fail explicitly. The detailed status and remaining gaps live in the
+[conformance ledger](docs/specs/conformance-and-review.md); old renderer code is
+evidence and oracle material, never a runtime fallback.
 
 ## Current React API
 

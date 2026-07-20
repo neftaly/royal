@@ -1,4 +1,4 @@
-import { prefilteredEnvironment, type RenderRoot } from "@royal/renderer-core";
+import { prefilteredEnvironment, type Scene } from "@royal/renderer-core";
 import {
   rendererRootOptionsSemanticKey,
   type RoyalRendererRoot,
@@ -33,7 +33,7 @@ const emptyScene = {
   clearColor: [0, 0, 0, 0],
   kind: "scene",
   nodes: [],
-} as unknown as RenderRoot;
+} as unknown as Scene;
 
 describe("replacement React public API", () => {
   it("server-renders an ordinary canvas with stable pre-mount observation", () => {
@@ -61,12 +61,15 @@ describe("replacement React public API", () => {
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RoyalRendererRoot>();
+    expectTypeOf<CanvasProps["scene"]>().toEqualTypeOf<Scene>();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();
     expectTypeOf(useVirtualTextureStatus).toBeFunction();
     expectTypeOf(usePrefilteredEnvironmentStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
+    expectTypeOf(createOrbitCameraController({ initial: { distance: 3 } }).camera)
+      .toMatchTypeOf<Scene["camera"]>();
     expectTypeOf(createOrbitControls).toBeFunction();
     expectTypeOf(GltfOrbitCameraFit).toBeFunction();
     expectTypeOf(OrbitControls).toBeFunction();

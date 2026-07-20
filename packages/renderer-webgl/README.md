@@ -93,18 +93,16 @@ environment source/version. Ready describes validated retained bytes; GPU
 admission remains part of the root resource snapshot, and denial uses the
 studio fallback instead of a partial cubemap.
 
-The current vertical slice renders opaque solid unlit and standard planes and
-boxes through one canonical indexed-triangle path. Standard materials support
-authored directional lights, metallic/roughness factors, exposure, and the
-selected terminal tone map. Exact picking consumes those same retained
-transforms and triangles; optional `pickingGeometry` replaces only CPU exact
-intersection and never allocates a GPU buffer. A glTF picking proxy is available
-while its asset is still loading and remains authoritative after visual geometry
-arrives. Static `.glb` assets containing triangle geometry and either core
-opaque solid metallic-roughness or `KHR_materials_unlit` factors demand-load
-into that same path. Their float `NORMAL` and `TEXCOORD_0` streams lower into
-optional canonical attributes for later material slices; preparation code loads
-concurrently with the asset request.
+Direct geometry and the accepted static glTF profile lower into the same
+canonical indexed-triangle, material, texture, LOD, and picking paths. glTF
+geometry becomes drawable before optional images finish; materials retain
+neutral slot-specific fallbacks until their exact authored textures publish.
+Exact picking consumes the retained scene geometry, while optional
+`pickingGeometry` replaces only CPU intersection and never allocates a GPU
+buffer. Unknown required glTF semantics fail instead of silently approximating
+support. The repository's
+[conformance ledger](../../docs/specs/conformance-and-review.md) is the
+authoritative feature and limitation inventory.
 The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
 `createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It
 borrows the root's existing context, acquires exclusive external-clock

@@ -154,16 +154,20 @@ import {
   useRendererLifecycle,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { mesh, scene, triangleGeometry, unlitMaterial } from '@royal/react/scene';
+import { mesh, scene, triangleGeometry, unlitMaterial, type Scene } from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
 import type { ReactNode } from 'react';
 
-const orbit = createOrbitCameraController(
-  { distance: 3 },
-  { far: 100, fovY: Math.PI / 4, near: 0.1 },
-);
-const renderScene = scene({
-  camera: orbit.cameraResource,
+const orbit = createOrbitCameraController({
+  far: 100,
+  fovY: Math.PI / 4,
+  initial: { distance: 3 },
+  near: 0.1,
+});
+// @ts-expect-error Orbit camera mutation belongs to the controller.
+orbit.camera.commit();
+const renderScene: Scene = scene({
+  camera: orbit.camera,
   clearColor: [0.1, 0.15, 0.2, 1],
   nodes: [mesh({
     geometry: triangleGeometry({

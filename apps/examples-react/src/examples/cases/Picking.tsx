@@ -47,7 +47,7 @@ const PickingBenchmarkSnapshot = (): ReactNode => {
 };
 
 const createPickingScene = (
-  camera: ReturnType<typeof useOrbitCamera>['cameraResource'],
+  camera: ReturnType<typeof useOrbitCamera>['camera'],
 ) => scene({
   camera,
   environment: showcaseEnvironment,
@@ -83,8 +83,8 @@ export const Picking = (): ReactNode => {
     initial: { distance: 3.5, pitch: 0.04, target: [0, -0.08, 0] },
   });
   const renderScene = useMemo(
-    () => createPickingScene(orbit.cameraResource),
-    [orbit.cameraResource],
+    () => createPickingScene(orbit.camera),
+    [orbit.camera],
   );
   const interactions = useMemo(() => ({
     helmet: {

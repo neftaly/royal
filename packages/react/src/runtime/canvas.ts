@@ -1,4 +1,4 @@
-import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
+import type { PickInput, PickResult, Scene } from "@royal/renderer-core";
 import {
   createRendererRoot,
   rendererRootOptionsSemanticKey,
@@ -51,7 +51,7 @@ export interface CanvasProps
   /** React handlers keyed by one stable `pickingId` declared in the scene. */
   readonly scenePointerEvents?: ScenePointerEvents;
   /** Complete readonly renderer intent. */
-  readonly scene: RenderRoot;
+  readonly scene: Scene;
 }
 
 type CanvasRuntime = Readonly<{

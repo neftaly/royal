@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
   createGltfInstanceTransforms,
-  defaultImageTextureSampler,
   directionalLight,
   gltf,
   gltfInstances,
@@ -469,13 +468,23 @@ describe("renderer-core descriptor contract", () => {
     expect(textureAsset({
       colorSpace: "srgb",
       contentKey: "sha256:albedo",
-      sampler: defaultImageTextureSampler,
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
       src: "/textures/albedo-a.png",
     })).toEqual({
       colorSpace: "srgb",
       contentKey: "sha256:albedo",
       kind: "asset",
-      sampler: defaultImageTextureSampler,
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
       src: "/textures/albedo-a.png",
     });
     expect(imageTexture({ src: "/textures/albedo-a.png" })).not.toHaveProperty("contentKey");

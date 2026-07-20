@@ -25,7 +25,7 @@ export const GltfHelmet = (): ReactNode => {
     initial: { distance: 3.4, pitch: 0.05, target: [0, -0.08, 0] },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: materialEnvironment,
     ...materialPass,
     nodes: [
@@ -33,7 +33,7 @@ export const GltfHelmet = (): ReactNode => {
       directionalLight(materialFillLight),
       helmetNode,
     ],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <Canvas

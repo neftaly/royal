@@ -48,7 +48,7 @@ export const WireframeCube = (): ReactNode => {
     initial: { distance: 6, pitch: 0.02 },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     toneMapping: 'linear-clamp',
     nodes: [mesh({
       ref: meshRef,
@@ -56,7 +56,7 @@ export const WireframeCube = (): ReactNode => {
       material: cubeMaterial,
       transform: { position: [0, 0, 0], rotation: [0.42, 0.7, 0.12] },
     })],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <Canvas aria-label="Wireframe cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>

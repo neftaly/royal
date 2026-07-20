@@ -9,12 +9,13 @@ import {
   type OrbitCameraView,
   type OrbitCameraViewOptions,
   type PerspectiveCameraViewResource,
+  type CameraViewSource,
   type Rads,
 } from "@royal/renderer-core";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { recordWithAllowedFields } from "../validation";
 
-const USE_ORBIT_CAMERA_OPTION_FIELDS = ["far", "fovY", "initial", "near"] as const;
+const ORBIT_CAMERA_OPTION_FIELDS = ["far", "fovY", "initial", "near"] as const;
 const ORBIT_CAMERA_PROJECTION_FIELDS = ["far", "fovY", "near"] as const;
 
 /** Perspective projection owned by an orbit camera controller. */
@@ -27,10 +28,10 @@ export interface OrbitCameraProjection {
   readonly near: Metres;
 }
 
-/** Stable camera resource and view authority shared by controls and scene composition. */
+/** Stable orbit camera and view authority shared by controls and scene composition. */
 export interface OrbitCameraController {
-  /** Stable scene camera resource; include it in `scene({ camera })`. */
-  readonly cameraResource: PerspectiveCameraViewResource;
+  /** Stable scene camera; include it in `scene({ camera })`. */
+  readonly camera: CameraViewSource;
   /**
    * Fits the complete view to bounds, using the current field of view unless
    * `fovY` is passed. Expands the far plane when the fitted bounds require it.
@@ -40,16 +41,16 @@ export interface OrbitCameraController {
   readonly getProjection: () => OrbitCameraProjection;
   /** Reads the latest committed orbit view without subscribing React. */
   readonly getView: () => OrbitCameraView;
-  /** Updates clipping and field-of-view values on the stable camera resource. */
+  /** Updates clipping and field-of-view values on the stable scene camera. */
   readonly setProjection: (projection: OrbitCameraProjection) => void;
-  /** Commits a complete orbit view to every renderer using `cameraResource`. */
+  /** Commits a complete orbit view to every renderer using `camera`. */
   readonly setView: (view: OrbitCameraViewOptions) => void;
   /** Subscribes to committed view changes. */
   readonly subscribeView: (listener: () => void) => () => void;
 }
 
-/** Options for one stable orbit camera controller created by `useOrbitCamera`. */
-export interface UseOrbitCameraOptions {
+/** Options for one stable orbit camera controller. */
+export interface OrbitCameraOptions {
   /** Initial-only target and distance in metres; angles are radians. */
   readonly initial: OrbitCameraViewOptions;
   /** Far clipping distance in metres. */
@@ -63,12 +64,12 @@ export interface UseOrbitCameraOptions {
   readonly near?: Metres;
 }
 
-/** @internal Validates hook-only option shape before React state is retained. */
-export const validateUseOrbitCameraOptions = (options: UseOrbitCameraOptions): void => {
+/** @internal Validates shared imperative/hook options before state is retained. */
+export const validateOrbitCameraOptions = (options: OrbitCameraOptions): void => {
   recordWithAllowedFields(
     options,
-    USE_ORBIT_CAMERA_OPTION_FIELDS,
-    "useOrbitCamera options",
+    ORBIT_CAMERA_OPTION_FIELDS,
+    "Orbit camera options",
     "option",
   );
   if (
@@ -76,7 +77,7 @@ export const validateUseOrbitCameraOptions = (options: UseOrbitCameraOptions): v
     || options.initial === null
     || Array.isArray(options.initial)
   ) {
-    throw new TypeError("useOrbitCamera initial must be an OrbitCameraViewOptions object");
+    throw new TypeError("Orbit camera initial must be an OrbitCameraViewOptions object");
   }
 };
 
@@ -142,11 +143,17 @@ const fittedOrbitFar = (
 };
 
 export const createOrbitCameraController = (
-  initial: OrbitCameraViewOptions,
-  projection: OrbitCameraProjection,
+  options: OrbitCameraOptions,
 ): OrbitCameraController => {
+  validateOrbitCameraOptions(options);
+  const {
+    initial,
+    far = 100,
+    fovY = Math.PI / 4,
+    near = 0.1,
+  } = options;
   let view = stableOrbitView(initial);
-  let currentProjection = validOrbitCameraProjection(projection);
+  let currentProjection = validOrbitCameraProjection({ far, fovY, near });
   const cameraResource = createCameraViewResource(orbitPerspectiveCamera({
     ...currentProjection,
     view,
@@ -159,7 +166,7 @@ export const createOrbitCameraController = (
     cameraResource.commit();
   };
   return {
-    cameraResource,
+    camera: cameraResource,
     fit: (bounds, options) => {
       const fittedView = fitOrbitCameraView(bounds, {
         ...options,
@@ -210,8 +217,8 @@ export const useOrbitCameraView = (orbit: OrbitCameraController): OrbitCameraVie
   useSyncExternalStore(orbit.subscribeView, orbit.getView, orbit.getView);
 
 /** Creates one stable orbit camera controller for the lifetime of the component. */
-export const useOrbitCamera = (options: UseOrbitCameraOptions): OrbitCameraController => {
-  validateUseOrbitCameraOptions(options);
+export const useOrbitCamera = (options: OrbitCameraOptions): OrbitCameraController => {
+  validateOrbitCameraOptions(options);
   const {
     initial,
     far = 100,
@@ -220,7 +227,7 @@ export const useOrbitCamera = (options: UseOrbitCameraOptions): OrbitCameraContr
   } = options;
   const controllerRef = useRef<OrbitCameraController | undefined>(undefined);
   if (controllerRef.current === undefined) {
-    controllerRef.current = createOrbitCameraController(initial, { far, fovY, near });
+    controllerRef.current = createOrbitCameraController({ far, fovY, initial, near });
   }
   useLayoutEffect(() => {
     controllerRef.current?.setProjection({ far, fovY, near });

@@ -20,7 +20,7 @@ export const GltfVariants = (): ReactNode => {
     initial: { distance: 3.8, pitch: 0.04, target: [0, 0, 0] },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     ...colorAccuratePass,
     environment: studioEnvironment({ radianceScaleNits: 80 }),
     nodes: [
@@ -28,7 +28,7 @@ export const GltfVariants = (): ReactNode => {
       gltf({ src: variantSrc, materialVariant: variant, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [0.76, 0.76, 0.76] } }),
       gltf({ src: variantSrc, materialVariant: 'mint', transform: { position: [1.05, 0, 0], rotation: [0, 0.16, 0], scale: [0.76, 0.76, 0.76] } }),
     ],
-  }), [orbit.cameraResource, variant]);
+  }), [orbit.camera, variant]);
 
   return (
     <div className="gltf-variants" data-selected-variant={variant}>

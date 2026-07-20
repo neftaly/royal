@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import {
   planeGeometry,
-  type RenderRoot,
+  type Scene,
 } from '@royal/react/scene';
 import { Canvas } from '@royal/react';
 import {
@@ -210,7 +210,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
             />
           </pass>
         </scene>
-      ) as RenderRoot}
+      ) as Scene}
     </Canvas>
   ) as ReactNode;
 };

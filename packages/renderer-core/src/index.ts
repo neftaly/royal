@@ -11,6 +11,7 @@ export type {
   CameraViewReadTarget,
   CameraViewResource,
   CameraViewResourceListener,
+  CameraViewSource,
   OrthographicCameraViewResource,
   PerspectiveCameraViewResource
 } from './camera-resource';
@@ -69,7 +70,7 @@ export type {
   GltfInstancesNode,
   GltfInstancesOptions,
 } from './gltf-instances';
-export type { CameraKind, GeometryKind, MaterialKind, RenderNodeKind } from './kind';
+export type { CameraKind, GeometryKind, MaterialKind, SceneNodeKind } from './kind';
 export type {
   Material,
   MaterialSurfaceOptions,
@@ -99,7 +100,6 @@ export type {
   VirtualTextureInput
 } from './texture';
 export {
-  defaultImageTextureSampler,
   imageTexture,
   solidTexture,
   textureAsset,
@@ -140,8 +140,8 @@ export type {
   RenderObjectVector3
 } from './render-object';
 export type {
-  RenderRoot,
-  RenderToneMapping,
+  Scene,
+  SceneToneMapping,
   SceneOptions
 } from './render-graph';
 export { scene } from './render-graph';
@@ -167,4 +167,4 @@ export {
   metresPerWorldUnit,
   royalCoordinateConvention
 } from './primitives';
-export type { RenderNode } from './render-node';
+export type { SceneNode } from './scene-node';

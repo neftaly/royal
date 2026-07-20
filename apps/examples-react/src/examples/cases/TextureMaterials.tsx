@@ -20,7 +20,7 @@ export const TextureMaterials = (): ReactNode => {
     initial: { distance: 5.2, pitch: 0.03, target: [0, 0.02, 0] },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: showcaseEnvironment,
     ...showcasePass,
     nodes: [
@@ -32,7 +32,7 @@ export const TextureMaterials = (): ReactNode => {
         transform: { position: [0, 0.02, 0], rotation: [0.24, 0.26, -0.04] },
       }),
     ],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <Canvas

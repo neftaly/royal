@@ -100,8 +100,9 @@ provenance. The scene remains drawable with Royal's studio environment while
 the artifact loads or cannot be admitted to the GPU budget.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
-`useOrbitCamera({ initial })` packages that resource with a stable controller;
-place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,
+`useOrbitCamera({ initial })` packages that resource as `orbit.camera` with a
+stable controller; pass it directly to `scene({ camera: orbit.camera })`.
+Place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,
 pan, wheel, and pinch gestures. `useOrbitCameraView(orbit)` is opt-in UI
 observation; rendering itself does not subscribe React to camera motion.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`

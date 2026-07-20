@@ -1,4 +1,4 @@
-import type { RenderRoot } from "@royal/renderer-core";
+import type { Scene } from "@royal/renderer-core";
 import { perspectiveCamera } from "@royal/renderer-core";
 import { vi } from "vitest";
 import {
@@ -210,8 +210,8 @@ export const canvasRootHarness = (
 };
 
 export const emptyScene = (
-  clearColor: RenderRoot["clearColor"] = [0, 0, 0, 0],
-): RenderRoot => ({
+  clearColor: Scene["clearColor"] = [0, 0, 0, 0],
+): Scene => ({
   camera: perspectiveCamera({}),
   clearColor,
   kind: "scene",

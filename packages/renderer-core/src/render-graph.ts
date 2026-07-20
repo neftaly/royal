@@ -2,7 +2,7 @@ import type { CameraSource } from './camera-resource';
 import { resolveRgba, objectWithAllowedFields, stringChoice } from './descriptor-values';
 import type { EnvironmentLight } from './environment-light';
 import type { LinearRgba } from './primitives';
-import type { RenderNode } from './render-node';
+import type { SceneNode } from './scene-node';
 
 const TRANSPARENT_BLACK = resolveRgba([0, 0, 0, 0], 'scene clearColor');
 const RENDER_TONE_MAPPINGS = ['linear-clamp', 'pbr-neutral'] as const;
@@ -12,29 +12,29 @@ const SCENE_OPTION_FIELDS = [
   'camera', 'clearColor', 'environment', 'exposureEv100', 'nodes', 'toneMapping',
 ] as const;
 
-export type RenderToneMapping = 'linear-clamp' | 'pbr-neutral';
+export type SceneToneMapping = 'linear-clamp' | 'pbr-neutral';
 
 /** Public normalized scene description accepted by renderer roots. */
-export interface RenderRoot {
+export interface Scene {
   readonly kind: 'scene';
   readonly camera: CameraSource;
-  readonly nodes: readonly RenderNode[];
+  readonly nodes: readonly SceneNode[];
   readonly clearColor: LinearRgba;
   readonly environment?: EnvironmentLight;
   readonly exposureEv100?: number;
-  readonly toneMapping?: RenderToneMapping;
+  readonly toneMapping?: SceneToneMapping;
 }
 
 export interface SceneOptions {
   readonly camera: CameraSource;
-  readonly nodes: readonly RenderNode[];
+  readonly nodes: readonly SceneNode[];
   /** @defaultValue `[0, 0, 0, 0]` */
   readonly clearColor?: LinearRgba;
   readonly environment?: EnvironmentLight;
   /** Camera exposure value at ISO 100 in `[-128, 149]`. Higher values produce a darker image. */
   readonly exposureEv100?: number;
   /** Display transform applied to scene-linear output. @defaultValue `"pbr-neutral"` */
-  readonly toneMapping?: RenderToneMapping;
+  readonly toneMapping?: SceneToneMapping;
 }
 
 const finiteExposureEv100 = (value: number | undefined): number | undefined => {
@@ -49,7 +49,7 @@ const finiteExposureEv100 = (value: number | undefined): number | undefined => {
 };
 
 /** Creates one public scene. Multipass planning remains renderer-private. */
-export const scene = (options: SceneOptions): RenderRoot => {
+export const scene = (options: SceneOptions): Scene => {
   objectWithAllowedFields(options, SCENE_OPTION_FIELDS, 'scene');
   const exposureEv100 = finiteExposureEv100(options.exposureEv100);
   const toneMapping = options.toneMapping === undefined

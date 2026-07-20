@@ -1,4 +1,4 @@
-import type { PickingId, RenderRoot } from "@royal/renderer-core";
+import type { PickingId, Scene } from "@royal/renderer-core";
 import {
   validateRoyalPointerEventHandlers,
   type RoyalPointerEventHandlers,
@@ -18,7 +18,7 @@ export interface RoyalScenePickingIndex {
   count(pickingId: string): number;
 }
 
-export const createRoyalScenePickingIndex = (scene: RenderRoot): RoyalScenePickingIndex => {
+export const createRoyalScenePickingIndex = (scene: Scene): RoyalScenePickingIndex => {
   const counts = new Map<string, number>();
   for (const node of scene.nodes) {
     if (node.kind !== "mesh" && node.kind !== "gltf" && node.kind !== "gltf-instances") continue;

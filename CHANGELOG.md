@@ -7,6 +7,13 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Public API
 
+- Renamed the authored descriptor types to `Scene`, `SceneNode`, and
+  `SceneToneMapping`, avoiding confusion with the imperative renderer root.
+- Changed `createOrbitCameraController` to one options object and exposed its
+  composition-only camera as `orbit.camera`; camera mutation remains owned by
+  the controller.
+- Removed unused render-object identity/version counters and the mutable
+  `defaultImageTextureSampler` constant from the public surface.
 - Normalized glTF and ordinary-image descriptor references on `src`, matching
   their constructors, while retaining explicit `manifestUri` for authored
   virtual textures.

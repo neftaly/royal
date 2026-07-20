@@ -47,6 +47,7 @@ export { GltfOrbitCameraFit } from "./orbit/gltf-camera-fit";
 export type { GltfOrbitCameraFitProps } from "./orbit/gltf-camera-fit";
 export type {
   OrbitCameraController,
+  OrbitCameraOptions,
   OrbitCameraProjection,
   OrbitCameraTransform,
   OrbitCameraView,
@@ -57,7 +58,6 @@ export type {
   OrbitControlsOptions,
   OrbitControlsProps,
   OrbitControlsSetViewOptions,
-  UseOrbitCameraOptions,
   WorldPosition3,
 } from "./orbit/controls";
 export { createRendererRoot } from "@royal/renderer-webgl";

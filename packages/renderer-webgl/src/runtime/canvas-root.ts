@@ -7,7 +7,7 @@ import {
   type PickInput,
   type PickResult,
   type PrefilteredEnvironmentLight,
-  type RenderRoot,
+  type Scene,
   type TextureAssetRef,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
@@ -338,7 +338,7 @@ export class CanvasRoot {
     viewport: { height: 1, width: 1, x: 0, y: 0 },
   };
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
-  #surfaceSceneInput: RenderRoot | null = null;
+  #surfaceSceneInput: Scene | null = null;
   readonly #automaticVirtualTexturing: boolean;
   #virtualTextureActive = false;
   #virtualTextureLoadGeneration = 0;
@@ -598,7 +598,7 @@ export class CanvasRoot {
     );
   }
 
-  render(scene: RenderRoot): void {
+  render(scene: Scene): void {
     this.#assertLive("render");
     if (
       typeof scene !== "object"
@@ -808,7 +808,7 @@ export class CanvasRoot {
     this.#frameIntent = intent;
   }
 
-  #reconcileInstanceSources(scene: RenderRoot): void {
+  #reconcileInstanceSources(scene: Scene): void {
     const claimed = new Set<GltfInstanceTransforms>();
     for (const node of scene.nodes) {
       if (node.kind !== "gltf-instances") continue;

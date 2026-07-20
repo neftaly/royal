@@ -25,18 +25,22 @@ export interface CameraViewReadTarget {
 
 export type CameraViewResourceListener = (version: number) => void;
 
-interface CameraViewResourceBase {
+/** Read-only dynamic camera source accepted by `scene({ camera })`. */
+export interface CameraViewSource {
   readonly kind: 'camera-view-resource';
+  readonly version: number;
+  /** Copies committed values into caller-owned storage without allocating. */
+  read(out: CameraViewReadTarget): void;
+  subscribe(listener: CameraViewResourceListener): () => void;
+}
+
+interface CameraViewResourceBase extends CameraViewSource {
   /** Staged XYZ position in metres. */
   readonly position: Float64Array;
   /** Staged XYZ Euler angles in radians. */
   readonly rotation: Float64Array;
-  readonly version: number;
   /** Publishes staged fields. Equal commits are silent. */
   commit(): void;
-  /** Copies committed values into caller-owned storage without allocating. */
-  read(out: CameraViewReadTarget): void;
-  subscribe(listener: CameraViewResourceListener): () => void;
 }
 
 export interface PerspectiveCameraViewResource extends CameraViewResourceBase {
@@ -62,7 +66,7 @@ export interface OrthographicCameraViewResource extends CameraViewResourceBase {
 }
 
 export type CameraViewResource = PerspectiveCameraViewResource | OrthographicCameraViewResource;
-export type CameraSource = Camera | CameraViewResource;
+export type CameraSource = Camera | CameraViewSource;
 
 type ListenerSlot = { active: boolean; readonly listener: CameraViewResourceListener };
 

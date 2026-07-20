@@ -7,7 +7,7 @@ import {
   scene,
   standardMaterial,
   type Material,
-  type RenderRoot,
+  type Scene,
   unlitMaterial,
   wireframeMaterial,
 } from '@royal/react/scene';
@@ -115,7 +115,7 @@ const rapierPhysicsRenderRoot = ({
 }: {
   readonly camera: OrbitCameraTransform;
   readonly sceneState: RapierSceneState;
-}): RenderRoot => scene({
+}): Scene => scene({
   children: [
     pass({
       camera: perspectiveCamera({

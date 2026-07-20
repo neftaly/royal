@@ -70,9 +70,9 @@ The canonical composition remains:
 const asset = gltf({ src: '/scene.glb' });
 const orbit = useOrbitCamera({ initial: { distance: 4 } });
 const renderScene = useMemo(() => scene({
-  camera: orbit.cameraResource,
+  camera: orbit.camera,
   nodes: [asset],
-}), [orbit.cameraResource]);
+}), [orbit.camera]);
 
 return (
   <Canvas scene={renderScene}>
@@ -138,9 +138,10 @@ second geometry API.
 
 React owns coarse intent: which scene, asset source/version, variant, quality
 policy, or controller exists. Versioned imperative resources own frequent
-camera, render-object transform, and bulk-instance changes. `useFrame` supplies
-time but redraw occurs only through an invalidating mutation or explicit
-`invalidate` call.
+camera, render-object transform, and bulk-instance changes. Royal deliberately
+does not own an application update loop; application scheduling supplies time,
+while redraw occurs through an invalidating mutation or explicit `invalidate`
+call.
 
 Imperative resources have explicit staging/commit semantics, stable identity,
 bounded subscriptions, and idempotent release where release is consumer-owned.

@@ -55,17 +55,12 @@ export type RenderObjectTransformAction =
   };
 
 export interface RenderObjectHandle {
-  readonly renderObjectId: number;
   /** Mutable world-space translation in metres. */
   readonly position: RenderObjectVector3;
   /** Mutable XYZ Euler angles in radians. */
   readonly rotation: RenderObjectVector3;
   /** Mutable dimensionless XYZ multiplier. */
   readonly scale: RenderObjectVector3;
-  readonly transformVersion: number;
-  readonly positionVersion: number;
-  readonly rotationVersion: number;
-  readonly scaleVersion: number;
   getTransform(): Transform;
   setTransform(transform: RenderObjectTransformUpdate): void;
 }
@@ -101,8 +96,6 @@ const componentIndex = {
   y: 1,
   z: 2
 } satisfies Record<RenderObjectTransformComponent, 0 | 1 | 2>;
-
-let nextRenderObjectId = 1;
 
 const createMutableRenderObjectTransformState = (
   transform: Transform,
@@ -283,19 +276,13 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
 }
 
 class MutableRenderObjectHandle implements RenderObjectHandle {
-  readonly renderObjectId: number;
   readonly position: MutableRenderObjectVector3;
   readonly rotation: MutableRenderObjectVector3;
   readonly scale: MutableRenderObjectVector3;
   readonly #onChange: () => void;
   #state: MutableRenderObjectTransformState;
-  #transformVersion = 0;
-  #positionVersion = 0;
-  #rotationVersion = 0;
-  #scaleVersion = 0;
 
   constructor(transform: Transform, onChange: () => void) {
-    this.renderObjectId = nextRenderObjectId++;
     this.#onChange = onChange;
     this.#state = createMutableRenderObjectTransformState(transform);
     this.position = new MutableRenderObjectVector3(
@@ -313,22 +300,6 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
       () => this.#state,
       (action) => this.#dispatch(action)
     );
-  }
-
-  get transformVersion(): number {
-    return this.#transformVersion;
-  }
-
-  get positionVersion(): number {
-    return this.#positionVersion;
-  }
-
-  get rotationVersion(): number {
-    return this.#rotationVersion;
-  }
-
-  get scaleVersion(): number {
-    return this.#scaleVersion;
   }
 
   getTransform(): Transform {
@@ -351,18 +322,14 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
     const next = reduceRenderObjectTransform(previous, action);
     if (next === previous) return;
 
-    this.#transformVersion += 1;
     if (next.position !== previous.position) {
       copyVec3Into(previous.position, next.position);
-      this.#positionVersion += 1;
     }
     if (next.rotation !== previous.rotation) {
       copyVec3Into(previous.rotation, next.rotation);
-      this.#rotationVersion += 1;
     }
     if (next.scale !== previous.scale) {
       copyVec3Into(previous.scale, next.scale);
-      this.#scaleVersion += 1;
     }
     this.#onChange();
   }

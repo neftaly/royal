@@ -166,7 +166,7 @@ export const GltfScenes = (): ReactNode => {
     ...(entry.transform === undefined ? {} : { transform: entry.transform }),
   }), [entry.src, entry.transform]);
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: materialEnvironment,
     ...materialPass,
     nodes: [
@@ -174,7 +174,7 @@ export const GltfScenes = (): ReactNode => {
       directionalLight(materialFillLight),
       model,
     ],
-  }), [model, orbit.cameraResource]);
+  }), [model, orbit.camera]);
 
   return (
     <div className="gltf-scenes" data-scene-id={entry.id}>

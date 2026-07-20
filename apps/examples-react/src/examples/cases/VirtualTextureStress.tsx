@@ -60,7 +60,7 @@ export const VirtualTextureStress = (): ReactNode => {
   const orbit = useOrbitCamera({ initial: views.Both, far: 80, near: 0.01 });
   const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     clearColor: [0.018, 0.024, 0.036, 1],
     nodes: [
       mesh({ geometry: mapGeometry, material: mapMaterial }),
@@ -70,7 +70,7 @@ export const VirtualTextureStress = (): ReactNode => {
         transform: { position: [0, 0, 0.01] },
       }),
     ],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
   const activeView = (name: ViewName): boolean => {
     const view = views[name];
     return Math.abs(orbitView.target[0] - view.target[0]) < 0.01

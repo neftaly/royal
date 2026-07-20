@@ -37,10 +37,10 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   });
   const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     toneMapping: 'linear-clamp',
     nodes: [tigerCard],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
   return (
     <div
       className="svg-texture-example"

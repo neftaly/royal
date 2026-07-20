@@ -83,7 +83,7 @@ server-side asset tooling, not in renderer-core.
 
 Current Royal facts:
 
-- `@royal/renderer-core` has `Scene`, `RenderPass`, `RenderNode`, `mesh`, `boxGeometry`, materials, glTF, lights, text, transforms, and explicit coordinate-system helpers.
+- `@royal/renderer-core` has `Scene`, `SceneNode`, `mesh`, `boxGeometry`, materials, glTF, lights, transforms, and explicit coordinate-system helpers.
 - `MeshNode.geometry` is the closed union of renderer-supported box and plane
   geometry; it does not advertise custom geometry that WebGL cannot draw.
 - Custom terrain geometry cannot draw today without the planned typed

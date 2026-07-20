@@ -13,7 +13,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   wireframeMaterial,
-  type RenderRoot,
+  type Scene,
 } from "@royal/renderer-core";
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
 import {
@@ -765,7 +765,7 @@ describe("clear-only canvas root", () => {
     expect(() => root.render({
       ...emptyScene(),
       nodes: [{ kind: "not-implemented" }],
-    } as unknown as RenderRoot)).toThrow(
+    } as unknown as Scene)).toThrow(
       'Royal scenes do not support nodes with kind "not-implemented"',
     );
   });

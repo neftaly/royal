@@ -191,7 +191,7 @@ export const GltfInstancing = (): ReactNode => {
     initial: { distance: 11, pitch: -0.32, target: [0, 0, 0], yaw: 0.42 },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: productEnvironment,
     ...productPass,
     nodes: [
@@ -202,7 +202,7 @@ export const GltfInstancing = (): ReactNode => {
         src: group.src,
       })),
     ],
-  }), [groups, orbit.cameraResource]);
+  }), [groups, orbit.camera]);
 
   return (
     <Canvas

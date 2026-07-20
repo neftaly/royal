@@ -102,7 +102,7 @@ export interface VirtualTextureAssetOptions extends VirtualTextureAssetBaseOptio
 /** A manifest URI string or the equivalent authored-manifest options object. */
 export type VirtualTextureInput = string | VirtualTextureAssetOptions;
 
-export const defaultImageTextureSampler: TextureSampler = {
+const DEFAULT_IMAGE_TEXTURE_SAMPLER: TextureSampler = {
   magFilter: 'linear',
   minFilter: 'linear-mipmap-linear',
   wrapS: 'clamp-to-edge',
@@ -189,7 +189,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
   return textureAsset({
     colorSpace: options.colorSpace ?? 'srgb',
     sampler: {
-      ...defaultImageTextureSampler,
+      ...DEFAULT_IMAGE_TEXTURE_SAMPLER,
       ...options.sampler
     },
     src: uri,

@@ -24,7 +24,7 @@ export const GltfLod = (): ReactNode => {
     initial: { distance: 4.6, pitch: 0.02 },
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: showcaseEnvironment,
     ...showcasePass,
     nodes: [
@@ -32,7 +32,7 @@ export const GltfLod = (): ReactNode => {
       directionalLight(showcaseFillLight),
       lodNode,
     ],
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <Canvas

@@ -2,14 +2,14 @@ import type {
   Camera,
   CameraSource,
   CameraViewReadTarget,
-  CameraViewResource,
+  CameraViewSource,
 } from "@royal/renderer-core";
 
 export type CanonicalCamera = Camera | CameraViewReadTarget;
 
 export type PreparedCameraSource =
   | Readonly<{ camera: Camera; resource: null }>
-  | Readonly<{ camera: CameraViewReadTarget; resource: CameraViewResource }>;
+  | Readonly<{ camera: CameraViewReadTarget; resource: CameraViewSource }>;
 
 export type CameraSourceOwnerPlatform = Readonly<{
   onCameraChanged(): void;

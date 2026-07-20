@@ -59,10 +59,12 @@ In ordinary canvas mode:
 
 - multiple demands before submission MUST coalesce into at most one scheduled
   frame;
-- a settled scene with no active frame subscriber MUST own no RAF or timer;
-- `useFrame` MAY keep the frame clock active, but the callback alone does not
-  imply a redraw unless it invalidates or mutates an invalidating controller;
-- removing the last continuous subscriber MUST allow the root to settle after
+- a settled scene with no pending resource work or external clock MUST own no
+  RAF or timer;
+- Royal does not own an application update loop; an application scheduler may
+  mutate an invalidating controller or call `invalidate()` when it needs a
+  presentation;
+- ending application animation MUST allow the root to settle after
   already-demanded work.
 
 `flushInvalidated()` renders already-queued demand on the caller's current

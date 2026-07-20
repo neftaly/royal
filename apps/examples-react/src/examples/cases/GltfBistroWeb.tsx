@@ -66,13 +66,13 @@ export const GltfBistroWeb = (): ReactNode => {
     near: 0.025,
   });
   const renderScene = useMemo(() => scene({
-    camera: orbit.cameraResource,
+    camera: orbit.camera,
     environment: materialEnvironment,
     clearColor: [0.018, 0.022, 0.029, 1],
     exposureEv100: materialPass.exposureEv100,
     nodes: bistroNodes,
     toneMapping: materialPass.toneMapping,
-  }), [orbit.cameraResource]);
+  }), [orbit.camera]);
 
   return (
     <main>

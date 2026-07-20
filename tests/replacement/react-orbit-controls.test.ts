@@ -6,7 +6,7 @@ import {
   createOrbitCameraController,
   createOrbitControls,
 } from "../../packages/react/src/orbit/controls";
-import { validateUseOrbitCameraOptions } from "../../packages/react/src/orbit/camera-controller";
+import { validateOrbitCameraOptions } from "../../packages/react/src/orbit/camera-controller";
 import { createOrbitGestureController } from "../../packages/react/src/orbit/controls-core";
 
 type FakeEvent = Event & {
@@ -126,17 +126,17 @@ describe("OrbitControls", () => {
   });
 
   it("rejects malformed useOrbitCamera options before retaining hook state", () => {
-    expect(() => validateUseOrbitCameraOptions(
-      null as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0],
-    )).toThrow("useOrbitCamera options must be an object");
-    expect(() => validateUseOrbitCameraOptions({
+    expect(() => validateOrbitCameraOptions(
+      null as unknown as Parameters<typeof validateOrbitCameraOptions>[0],
+    )).toThrow("Orbit camera options must be an object");
+    expect(() => validateOrbitCameraOptions({
       initialView: defaultView,
-    } as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0]))
+    } as unknown as Parameters<typeof validateOrbitCameraOptions>[0]))
       .toThrow(/unsupported option.*initialView/i);
-    expect(() => validateUseOrbitCameraOptions({
+    expect(() => validateOrbitCameraOptions({
       initial: null,
-    } as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0]))
-      .toThrow("useOrbitCamera initial must be an OrbitCameraViewOptions object");
+    } as unknown as Parameters<typeof validateOrbitCameraOptions>[0]))
+      .toThrow("Orbit camera initial must be an OrbitCameraViewOptions object");
   });
 
   it("rejects malformed behavior options before attaching interactions", () => {
@@ -199,19 +199,24 @@ describe("OrbitControls", () => {
   });
 
   it("publishes explicit camera resource commits without a reactive view getter", () => {
-    const orbit = createOrbitCameraController({ distance: 5 }, { far: 100, fovY: 1, near: 0.1 });
+    const orbit = createOrbitCameraController({
+      far: 100,
+      fovY: 1,
+      initial: { distance: 5 },
+      near: 0.1,
+    });
     const listener = vi.fn();
     orbit.subscribeView(listener);
-    const version = orbit.cameraResource.version;
+    const version = orbit.camera.version;
 
     orbit.setView({ distance: 6, pitch: 0.2, target: [1, 2, 3], yaw: 0.3 });
-    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.camera.version).toBe(version + 1);
     expect(orbit.getView()).toEqual({ distance: 6, pitch: 0.2, target: [1, 2, 3], yaw: 0.3 });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(orbit).not.toHaveProperty("view");
 
     orbit.setView(orbit.getView());
-    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.camera.version).toBe(version + 1);
     expect(listener).toHaveBeenCalledTimes(1);
 
     expect(() => orbit.subscribeView(
@@ -229,14 +234,14 @@ describe("OrbitControls", () => {
       near: 0.1,
     } as unknown as Parameters<typeof orbit.setProjection>[0]))
       .toThrow(/unsupported field.*fieldOfView/i);
-    expect(orbit.cameraResource).toMatchObject({ far: 100, fovY: 1, near: 0.1 });
+    expect(orbit.camera).toMatchObject({ far: 100, fovY: 1, near: 0.1 });
     expect(orbit.getProjection()).toEqual({ far: 100, fovY: 1, near: 0.1 });
 
     orbit.setProjection(orbit.getProjection());
-    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.camera.version).toBe(version + 1);
 
     orbit.setProjection({ far: 200, fovY: 0.8, near: 0.01 });
-    expect(orbit.cameraResource).toMatchObject({ far: 200, fovY: 0.8, near: 0.01 });
+    expect(orbit.camera).toMatchObject({ far: 200, fovY: 0.8, near: 0.01 });
     expect(orbit.getProjection()).toEqual({ far: 200, fovY: 0.8, near: 0.01 });
 
     orbit.fit({ min: [-2, -1, -4], max: [2, 3, 4] }, {
@@ -254,13 +259,15 @@ describe("OrbitControls", () => {
   });
 
   it("expands fitted clipping once without sacrificing the authored near plane", () => {
-    const orbit = createOrbitCameraController(
-      { distance: 1 },
-      { far: 2_000, fovY: Math.PI / 4, near: 0.02 },
-    );
+    const orbit = createOrbitCameraController({
+      far: 2_000,
+      fovY: Math.PI / 4,
+      initial: { distance: 1 },
+      near: 0.02,
+    });
     const listener = vi.fn();
     orbit.subscribeView(listener);
-    const version = orbit.cameraResource.version;
+    const version = orbit.camera.version;
 
     orbit.fit({
       max: [6_956, 2_721, 6_030],
@@ -274,11 +281,11 @@ describe("OrbitControls", () => {
 
     expect(orbit.getProjection().far).toBeGreaterThan(20_000);
     expect(orbit.getProjection().near).toBe(0.02);
-    expect(orbit.cameraResource).toMatchObject({
+    expect(orbit.camera).toMatchObject({
       far: orbit.getProjection().far,
       near: 0.02,
     });
-    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.camera.version).toBe(version + 1);
     expect(listener).toHaveBeenCalledTimes(1);
 
     orbit.fit({
@@ -290,7 +297,7 @@ describe("OrbitControls", () => {
       pitch: 0.28,
       yaw: 0.7,
     });
-    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.camera.version).toBe(version + 1);
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
