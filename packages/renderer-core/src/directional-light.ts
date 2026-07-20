@@ -16,7 +16,7 @@ export interface DirectionalLightNode {
 }
 
 export interface DirectionalLightOptions {
-  /** World-space light direction. */
+  /** Normalized world-space direction in which light rays travel. */
   readonly direction: Direction3;
   /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. @defaultValue `[1, 1, 1, 1]` */
   readonly color?: LinearRgba;

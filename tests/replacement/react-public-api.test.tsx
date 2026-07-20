@@ -22,6 +22,7 @@ import {
   type TextureAssetStatusIdentity,
   useTextureAssetStatus,
   type VirtualTextureAssetStatus,
+  type VirtualTextureAssetStatusIdentity,
   useVirtualTextureAssetStatus,
   useOrbitCamera,
   useOrbitCameraView,
@@ -87,10 +88,12 @@ describe("replacement React public API", () => {
     expectTypeOf(useRendererSnapshot).toBeFunction();
     expectTypeOf({ src: "/model.glb", version: 2 })
       .toMatchTypeOf<GltfAssetStatusIdentity>();
-    expectTypeOf({ kind: "asset" as const, src: "/texture.png", version: "v2" })
+    expectTypeOf({ src: "/texture.png", version: "v2" })
       .toMatchTypeOf<TextureAssetStatusIdentity>();
     expectTypeOf({ src: "/studio.ktx", version: "v2" })
       .toMatchTypeOf<PrefilteredEnvironmentStatusIdentity>();
+    expectTypeOf({ manifestUri: "/map.vt.json", version: "v2" })
+      .toMatchTypeOf<VirtualTextureAssetStatusIdentity>();
   });
 
   it("server-renders broad renderer diagnostics as unavailable before mount", () => {
@@ -152,6 +155,34 @@ describe("replacement React public API", () => {
     expect(html).toContain("<output>idle</output>");
   });
 
+  it("accepts plain texture and virtual-texture status identities", () => {
+    const Status = () => createElement("output", null,
+      useTextureAssetStatus({ src: "/texture.png", version: 2 }).state,
+      ":",
+      useVirtualTextureAssetStatus({ manifestUri: "/map.vt.json", version: 2 }).state,
+    );
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle:idle</output>");
+  });
+
+  it("rejects misspelled focused-status identity fields", () => {
+    const invalid = { src: "/model.glb", verison: 2 };
+    const Status = () => createElement(
+      "output",
+      null,
+      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).state,
+    );
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ))).toThrow('useGltfAssetStatus input contains unsupported field "verison"');
+  });
+
   it("server-renders an offline environment as idle before root mount", () => {
     const environment = prefilteredEnvironment({ src: "/studio.ktx" });
     const Status = () => createElement(
@@ -184,7 +215,6 @@ describe("replacement React public API", () => {
   it("rejects invalid observed texture identity before a renderer mounts", () => {
     const Status = () => createElement("output", null, useTextureAssetStatus({
       contentKey: "",
-      kind: "asset",
       src: "/texture.png",
     }).state);
     expect(() => renderToStaticMarkup(createElement(

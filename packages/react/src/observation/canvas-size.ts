@@ -7,20 +7,20 @@ import {
 } from "./select-root";
 
 export type CanvasSize = Readonly<{
-  /** CSS layout height in pixels. */
-  height: number;
   /** Width divided by height. */
   aspectRatio: number;
   /** Backing-store height after the requested ratio and capability limits. */
   backingHeight: number;
   /** Backing-store width after the requested ratio and capability limits. */
   backingWidth: number;
+  /** CSS layout height in pixels. */
+  cssHeight: number;
+  /** CSS layout width in pixels. */
+  cssWidth: number;
   /** Backing pixels requested per CSS pixel; matches `Canvas.pixelRatio` when supplied. */
   pixelRatio: number;
   /** Applied backing scale relative to the requested CSS-pixel resolution. */
   renderScale: number;
-  /** CSS layout width in pixels. */
-  width: number;
 }>;
 
 /** Observes the current CSS and backing dimensions; zero-area/pre-mount returns undefined. */
@@ -37,10 +37,10 @@ export const useCanvasSize = (
       aspectRatio: size.cssWidth / size.cssHeight,
       backingHeight: size.backingHeight,
       backingWidth: size.backingWidth,
-      height: size.cssHeight,
+      cssHeight: size.cssHeight,
+      cssWidth: size.cssWidth,
       pixelRatio: size.pixelRatio,
       renderScale: size.renderScale,
-      width: size.cssWidth,
     };
   }, [size]);
 };

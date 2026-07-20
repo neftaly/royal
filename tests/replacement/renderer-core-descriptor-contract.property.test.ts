@@ -80,8 +80,8 @@ describe("renderer-core descriptor properties", () => {
         version: seed,
       });
 
-      expect(material.metallicFactor, `${label} metallic factor`).toBe(metallic);
-      expect(material.roughnessFactor, `${label} roughness factor`).toBe(roughness);
+      expect(material.metallic, `${label} metallic`).toBe(metallic);
+      expect(material.roughness, `${label} roughness`).toBe(roughness);
       expect(material.baseColor, `${label} solid base color`).toEqual({
         color,
         kind: "solid",

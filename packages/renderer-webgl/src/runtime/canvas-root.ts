@@ -162,7 +162,7 @@ export interface RendererRoot {
   ) => VirtualTextureAssetSnapshot;
   /** Requests one coalesced presentation frame without replacing scene intent. */
   invalidate(): void;
-  /** Returns the nearest visible hit at one canvas-relative pointer position. */
+  /** Returns the nearest visible hit at one browser-viewport CSS-pixel position. */
   pick(input: PickInput): PickResult | undefined;
   /** Installs complete scene intent and requests one coalesced presentation frame. */
   setScene(scene: Scene): void;

@@ -40,6 +40,7 @@ export type {
 export { useVirtualTextureAssetStatus } from "./observation/virtual-texture-asset";
 export type {
   VirtualTextureAssetStatus,
+  VirtualTextureAssetStatusIdentity,
   VirtualTextureAssetStatusInput,
 } from "./observation/virtual-texture-asset";
 export {

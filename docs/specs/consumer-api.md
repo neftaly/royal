@@ -179,6 +179,11 @@ polling. Product decisions use focused status:
   `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
+Focused status identity objects do not require scene-descriptor discriminator
+fields. For example, `{ src, version }` and `{ manifestUri, version }` are
+enough for ordinary-texture and authored-VT observation respectively. Passing
+a complete valid descriptor variable remains supported.
+
 Status-hook object inputs expose only fields that participate in their retained
 identity. glTF and prefiltered-environment status use `src`/`version`; ordinary
 decoded-texture status uses `src`/`contentKey`/`version`. Passing a complete

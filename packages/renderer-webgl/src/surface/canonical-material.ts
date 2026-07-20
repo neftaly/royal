@@ -270,10 +270,10 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
       ...common,
       emissiveFactor: [0, 0, 0],
       kind: "standard",
-      metallicFactor: material.metallicFactor,
+      metallicFactor: material.metallic,
       normalScale: 1,
       occlusionStrength: 1,
-      roughnessFactor: material.roughnessFactor,
+      roughnessFactor: material.roughness,
     };
 };
 

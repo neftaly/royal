@@ -25,6 +25,7 @@ export interface SpotLightNode {
 export interface SpotLightOptions {
   /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. @defaultValue `[1, 1, 1, 1]` */
   readonly color?: LinearRgba;
+  /** Normalized world-space direction from the light toward the cone. */
   readonly direction: Direction3;
   /** Inner cone angle in radians. @defaultValue `0` */
   readonly innerConeAngle?: Rads;

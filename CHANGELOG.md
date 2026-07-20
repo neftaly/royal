@@ -21,6 +21,12 @@ versions identify source-level prerelease checkpoints in this repository.
   `id` at the result boundary.
 - Folded material `variantNames` into `useGltfAssetStatus()` and removed the
   duplicate `useGltfAssetVariants()` subscription API.
+- Renamed `useCanvasSize()` layout dimensions to `cssWidth` and `cssHeight`,
+  keeping them distinct from `backingWidth` and `backingHeight`.
+- Removed required internal `kind` discriminators from texture-status identity
+  objects and made every focused status hook reject misspelled input fields.
+- Kept authored `standardMaterial` values named `metallic` and `roughness` in
+  both constructor input and normalized public output.
 
 ### Examples
 

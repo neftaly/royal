@@ -36,7 +36,7 @@ const pointerEvents: ScenePointerEvents = {
 function Status() {
   const lifecycle = useRendererLifecycle();
   const size = useCanvasSize();
-  return <output>{lifecycle.state}: {size?.backingWidth ?? 0}px</output>;
+  return <output>{lifecycle.state}: {size?.cssWidth ?? 0} CSS px</output>;
 }
 
 export function App() {

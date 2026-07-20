@@ -2,6 +2,7 @@ import type { GltfAssetRef } from "@royal/renderer-core";
 import type { GltfAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
+import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
   type RendererObservationOptions,
@@ -17,6 +18,12 @@ export type GltfAssetStatus = GltfAssetSnapshot;
 const IDLE: GltfAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): GltfAssetSnapshot => IDLE;
+const GLTF_STATUS_INPUT_FIELDS = ["bounds", "src", "version"] as const;
+
+const validateInputShape = (input: GltfAssetStatusInput): void => {
+  if (typeof input === "string") return;
+  recordWithAllowedFields(input, GLTF_STATUS_INPUT_FIELDS, "useGltfAssetStatus input");
+};
 
 const resolveInput = (input: GltfAssetStatusInput): GltfAssetRef => {
   if (typeof input === "string") {
@@ -44,6 +51,7 @@ export const useGltfAssetStatus = (
   options?: RendererObservationOptions,
 ): GltfAssetStatus => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useGltfAssetStatus");
+  validateInputShape(input);
   const source = typeof input === "string" ? input : input.src;
   const version = typeof input === "string" ? undefined : input.version;
   const asset = useMemo(() => resolveInput(

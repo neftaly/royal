@@ -196,7 +196,7 @@ const Status = (): ReactNode => {
   const rendererSnapshot = useRendererSnapshot();
   const model = useGltfAssetStatus('/model.glb');
   const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.width ?? 0} by {size?.height ?? 0}; model {model.state}</output>;
+  return <output>{renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.cssWidth ?? 0} by {size?.cssHeight ?? 0}; model {model.state}</output>;
 };
 
 const XrControl = (): ReactNode => {

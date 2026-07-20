@@ -5,6 +5,7 @@ import {
 import type { PrefilteredEnvironmentAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
+import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
   type RendererObservationOptions,
@@ -23,6 +24,26 @@ export type PrefilteredEnvironmentStatusInput = string | PrefilteredEnvironmentS
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): PrefilteredEnvironmentAssetSnapshot => IDLE;
+const PREFILTERED_ENVIRONMENT_STATUS_INPUT_FIELDS = [
+  "kind", "radianceScaleNits", "rotation", "source", "src", "version",
+] as const;
+
+const validateInput = (input: PrefilteredEnvironmentStatusInput): void => {
+  if (typeof input === "string") return;
+  recordWithAllowedFields(
+    input,
+    PREFILTERED_ENVIRONMENT_STATUS_INPUT_FIELDS,
+    "usePrefilteredEnvironmentStatus input",
+  );
+  if ("kind" in input && input.kind !== "environment-light") {
+    throw new TypeError("usePrefilteredEnvironmentStatus input kind must be environment-light");
+  }
+  if ("source" in input && input.source !== "royal-prefiltered-v1") {
+    throw new TypeError(
+      "usePrefilteredEnvironmentStatus input source must be royal-prefiltered-v1",
+    );
+  }
+};
 
 /** Observes one offline environment source/version without frame-wide subscriptions. */
 export const usePrefilteredEnvironmentStatus = (
@@ -34,6 +55,7 @@ export const usePrefilteredEnvironmentStatus = (
     options,
     "usePrefilteredEnvironmentStatus",
   );
+  validateInput(input);
   const src = typeof input === "string" ? input : input.src;
   const version = typeof input === "string" ? undefined : input.version;
   const environment = useMemo(() => prefilteredEnvironment({

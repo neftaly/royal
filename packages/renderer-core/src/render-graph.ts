@@ -39,7 +39,7 @@ export interface SceneOptions {
 
 const finiteExposureEv100 = (value: number | undefined): number | undefined => {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value)) throw new Error('scene exposureEv100 must be finite');
+  if (!Number.isFinite(value)) throw new TypeError('scene exposureEv100 must be finite');
   if (value < MIN_EXPOSURE_EV100 || value > MAX_EXPOSURE_EV100) {
     throw new RangeError(
       `scene exposureEv100 must be within ${MIN_EXPOSURE_EV100}..${MAX_EXPOSURE_EV100}`

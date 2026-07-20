@@ -18,8 +18,10 @@ export type MaterialSurfaceOptions =
 export interface StandardMaterial {
   readonly kind: 'standard';
   readonly baseColor: TextureRef;
-  readonly metallicFactor: number;
-  readonly roughnessFactor: number;
+  /** Metallic weight within 0..1. */
+  readonly metallic: number;
+  /** Perceptual roughness within 0..1. */
+  readonly roughness: number;
 }
 
 /** Normalized unlit material descriptor. Create with `unlitMaterial({ color })` or `unlitMaterial({ texture })`. */
@@ -65,7 +67,7 @@ const WIREFRAME_MATERIAL_FIELDS = ['color'] as const;
 const factor01 = (value: number | undefined, fallback: number, label: string): number => {
   if (value === undefined) return fallback;
   finiteNumber(value, label);
-  if (value < 0 || value > 1) throw new Error(`${label} must be within 0..1`);
+  if (value < 0 || value > 1) throw new RangeError(`${label} must be within 0..1`);
   return value;
 };
 
@@ -74,8 +76,8 @@ export const standardMaterial = (options: StandardMaterialOptions): StandardMate
   return {
     kind: 'standard',
     baseColor: toBaseColorTexture(options, 'standard material'),
-    metallicFactor: factor01(options.metallic, 0, 'standard material metallic'),
-    roughnessFactor: factor01(options.roughness, 1, 'standard material roughness')
+    metallic: factor01(options.metallic, 0, 'standard material metallic'),
+    roughness: factor01(options.roughness, 1, 'standard material roughness')
   };
 };
 

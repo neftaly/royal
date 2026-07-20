@@ -2,6 +2,7 @@ import { textureAsset, type TextureAssetRef } from "@royal/renderer-core";
 import type { TextureAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
+import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
   type RendererObservationOptions,
@@ -10,7 +11,7 @@ import {
 /** Only descriptor fields that participate in decoded ordinary-texture identity. */
 export type TextureAssetStatusIdentity = Readonly<Pick<
   TextureAssetRef,
-  "contentKey" | "kind" | "src" | "version"
+  "contentKey" | "src" | "version"
 >>;
 /** Source string or exact decoded-content/version identity observed by `useTextureAssetStatus`. */
 export type TextureAssetStatusInput = string | TextureAssetStatusIdentity;
@@ -20,19 +21,25 @@ export type TextureAssetStatus = TextureAssetSnapshot;
 const IDLE: TextureAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): TextureAssetSnapshot => IDLE;
+const TEXTURE_STATUS_INPUT_FIELDS = [
+  "colorSpace", "contentKey", "kind", "sampler", "src", "version",
+] as const;
 
-const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {
-  if (typeof input === "string") {
-    return textureAsset({ src: input });
-  }
+const validateInput = (input: TextureAssetStatusInput): void => {
+  if (typeof input === "string") return;
   if (
     typeof input !== "object"
     || input === null
     || Array.isArray(input)
-    || input.kind !== "asset"
+    || ("kind" in input && input.kind !== "asset")
   ) {
     throw new TypeError("useTextureAssetStatus input must be a source string or texture asset identity");
   }
+  recordWithAllowedFields(input, TEXTURE_STATUS_INPUT_FIELDS, "useTextureAssetStatus input");
+};
+
+const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {
+  if (typeof input === "string") return textureAsset({ src: input });
   return textureAsset({
     src: input.src,
     ...(input.contentKey === undefined ? {} : { contentKey: input.contentKey }),
@@ -46,13 +53,13 @@ export const useTextureAssetStatus = (
   options?: RendererObservationOptions,
 ): TextureAssetStatus => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useTextureAssetStatus");
+  validateInput(input);
   const source = typeof input === "string" ? input : input.src;
   const contentKey = typeof input === "string" ? undefined : input.contentKey;
   const version = typeof input === "string" ? undefined : input.version;
   const asset = useMemo(() => resolveInput(typeof input === "string"
     ? source
     : {
-      kind: "asset",
       src: source,
       ...(contentKey === undefined ? {} : { contentKey }),
       ...(version === undefined ? {} : { version }),

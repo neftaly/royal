@@ -2,13 +2,19 @@ import { virtualTexture, type VirtualTextureAssetRef } from "@royal/renderer-cor
 import type { VirtualTextureAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
+import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Only descriptor fields that participate in authored VT identity and representation. */
+export type VirtualTextureAssetStatusIdentity = Readonly<Pick<
+  VirtualTextureAssetRef,
+  "colorSpace" | "contentKey" | "manifestUri" | "sampler" | "version"
+>>;
 /** Manifest URI or exact authored VT identity observed by `useVirtualTextureAssetStatus`. */
-export type VirtualTextureAssetStatusInput = string | VirtualTextureAssetRef;
+export type VirtualTextureAssetStatusInput = string | VirtualTextureAssetStatusIdentity;
 /** Focused manifest lifecycle and current bounded page residency for one authored VT asset. */
 export type VirtualTextureAssetStatus = VirtualTextureAssetSnapshot;
 
@@ -20,21 +26,29 @@ const IDLE: VirtualTextureAssetSnapshot = {
 };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): VirtualTextureAssetSnapshot => IDLE;
+const VIRTUAL_TEXTURE_STATUS_INPUT_FIELDS = [
+  "colorSpace", "contentKey", "kind", "manifestUri", "sampler", "version",
+] as const;
 
 const inputDescriptor = (
   input: VirtualTextureAssetStatusInput,
-): VirtualTextureAssetRef | undefined => {
+): VirtualTextureAssetStatusIdentity | undefined => {
   if (typeof input === "string") return undefined;
   if (
     typeof input !== "object"
     || input === null
     || Array.isArray(input)
-    || input.kind !== "virtual-asset"
+    || ("kind" in input && input.kind !== "virtual-asset")
   ) {
     throw new TypeError(
       "useVirtualTextureAssetStatus input must be a manifest URI or virtual texture identity",
     );
   }
+  recordWithAllowedFields(
+    input,
+    VIRTUAL_TEXTURE_STATUS_INPUT_FIELDS,
+    "useVirtualTextureAssetStatus input",
+  );
   return input;
 };
 
