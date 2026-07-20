@@ -2717,8 +2717,11 @@ const routeSummary = (route) => {
         virtualTextureCloseDurationMs: round(route.virtualTextureClose.durationMs),
         virtualTextureCloseFinalDistance: route.virtualTextureClose.finalDistance,
         virtualTextureCloseP95Ms: round(route.virtualTextureClose.frameStats?.p95Ms),
-        virtualTextureCloseUploadedPages:
-          route.virtualTextureClose.renderer?.virtualTexturing?.delta?.uploadedPages ?? 0,
+        virtualTextureClosePageUploadCalls:
+          (route.virtualTextureClose.gl?.texSubImage2D ?? 0)
+          + (route.virtualTextureClose.gl?.compressedTexSubImage2D ?? 0),
+        virtualTextureCloseResidentPageDelta:
+          route.virtualTextureClose.renderer?.virtualTexturing?.delta?.residentPages ?? 0,
       }),
     setupDrawCalls: route.gl.setup?.drawCalls ?? 0,
     setupInstancedDrawCalls,

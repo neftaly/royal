@@ -612,21 +612,24 @@ const checkVirtualTextureClose = (route, routeLabel, enabled) => {
     errors.push(`${routeLabel}.virtualTextureClose.renderer.virtualTexturing.available must be true`);
   }
   if (!requireObject(virtualTexturing.after, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after`)) return;
-  for (const counter of [
-    'demandRetentionOverflows',
-    'gpuAdmissionFailures',
-    'manifestFailures',
-    'outstandingPageRequests',
-    'pageLoadFailures',
-    'pendingPages',
-    'physicalQuarantinedBytes',
-    'unsupportedDraws',
-  ]) {
+  for (const counter of ['failedPages', 'manifestFailures', 'pendingPages']) {
     requireZero(
       virtualTexturing.after[counter],
       `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.${counter}`,
     );
   }
+  requirePositiveNumber(
+    virtualTexturing.after.manifestRequests,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.manifestRequests`,
+  );
+  requirePositiveNumber(
+    virtualTexturing.after.manifestsReady,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.manifestsReady`,
+  );
+  requirePositiveNumber(
+    virtualTexturing.after.residentPages,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.residentPages`,
+  );
 };
 
 const isGltfLoadReport = (value) =>
