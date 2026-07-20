@@ -605,6 +605,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
   }
 
+  /** Re-evaluates demand after retained instance matrices move in the same scene. */
+  invalidateSceneGeometry(): void {
+    for (const resource of this.#resources.values()) resource.demandRevision = -1;
+  }
+
   update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate {
     if (this.#disposed) return FRAME_RESULTS[0]!;
     this.#uploadBudget.beginFrame();

@@ -64,7 +64,7 @@ type GpuInstanceData = {
   buffer: WebGLBuffer;
   count: number;
   key: string;
-  revision?: string;
+  revision?: number | string;
 };
 
 type GpuInstanceVertexArray = Readonly<{
@@ -709,7 +709,7 @@ export class SurfaceGeometryGpuOwner {
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     const pendingInstanceUpdates = new Map<GpuInstanceData, Readonly<{
-      revision: string;
+      revision: number | string;
       values: Float32Array;
     }>>();
     try {

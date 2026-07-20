@@ -525,7 +525,9 @@ describe("canvas root asset publication", () => {
       src: "/coalesced-instances.glb",
     });
     const setGpuScene = vi.spyOn(SurfaceGpuOwner.prototype, "setScene");
-    const { callbacks, root } = harness({ readGltf: async () => staticTriangleGlb(document) });
+    const { callbacks, canvas, root } = harness({
+      readGltf: async () => staticTriangleGlb(document),
+    });
     try {
       root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
       root.setScene(scene({
@@ -536,6 +538,7 @@ describe("canvas root asset publication", () => {
       await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
       callbacks.shift()!();
       setGpuScene.mockClear();
+      const patches = canvas.gl.bufferSubData.mock.calls.length;
 
       transforms.positions[0] = -0.75;
       transforms.commitPosition(0, 1);
@@ -543,13 +546,13 @@ describe("canvas root asset publication", () => {
       transforms.commitPosition(1, 1);
 
       expect(setGpuScene).not.toHaveBeenCalled();
+      callbacks.shift()!();
+      expect(setGpuScene).not.toHaveBeenCalled();
+      expect(canvas.gl.bufferSubData.mock.calls.length).toBeGreaterThan(patches);
       expect(root.pick({ clientX: 94, clientY: 100 })?.target).toMatchObject({
         instanceId: "left",
         instanceIndex: 0,
       });
-      expect(setGpuScene).toHaveBeenCalledOnce();
-
-      callbacks.shift()!();
       expect(setGpuScene).toHaveBeenCalledOnce();
     } finally {
       root.dispose();

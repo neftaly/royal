@@ -85,6 +85,7 @@ export interface VirtualTextureRuntime {
   binding(asset: VirtualTextureAssetRef): VirtualTextureGpuBinding | undefined;
   dispose(): void;
   invalidate(): void;
+  invalidateSceneGeometry(): void;
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
   snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;

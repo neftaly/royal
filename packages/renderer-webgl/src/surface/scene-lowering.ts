@@ -1,6 +1,7 @@
 import type {
   Direction3,
   Geometry,
+  GltfInstanceTransforms,
   GltfInstancesNode,
   GltfNode,
   LinearRgba,
@@ -20,7 +21,10 @@ import {
   type Mat4,
 } from "../math/mat4";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
-import { prepareGltfInstanceBatches } from "../gltf/instance-transforms";
+import {
+  prepareGltfInstanceBatches,
+  type IndexedStaticInstanceBatch,
+} from "../gltf/instance-transforms";
 import {
   canonicalMaterialHasTransmission,
   canonicalMaterialHasVolume,
@@ -53,13 +57,18 @@ import type { LodMembership } from "./lod-selection";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
-  instances?: Readonly<{
+  instances?: {
     count: number;
+    innerCount?: number;
+    innerIndices?: Uint32Array;
+    innerModels?: ArrayLike<number>;
     key: string;
     localModels: Float32Array;
-    revision?: string;
+    revision?: number | string;
+    source?: GltfInstanceTransforms;
     sourceIndices?: Uint32Array;
-  }>;
+    sourceOrdered?: boolean;
+  };
   lods?: readonly LodMembership[];
   material: CanonicalSurfaceMaterial;
   materialSource: CanonicalSurfaceMaterial;
@@ -70,6 +79,14 @@ export type CanonicalDrawSurface = Readonly<{
   textureKeys: readonly string[];
   topology?: "lines";
   worldBounds: WorldBounds;
+}>;
+
+type PreparedExplicitInstanceBatch = IndexedStaticInstanceBatch & Readonly<{
+  innerCount: number;
+  innerModels: ArrayLike<number>;
+  key: string;
+  revision: number;
+  source: GltfInstanceTransforms;
 }>;
 
 export type CanonicalPickSurface = Readonly<{
@@ -452,17 +469,22 @@ export const prepareCanonicalSurfaceScene = (
         }
       }
       for (const primitive of prepared.primitives) {
+        const explicitInnerModels = primitive.instanceBatch?.localModels ?? primitive.localModel;
+        const explicitInnerCount = primitive.instanceBatch?.localModels.length === undefined
+          ? 1
+          : primitive.instanceBatch.localModels.length / 16;
         const preparedInstanceBatches = node.kind === "gltf-instances"
           ? prepareGltfInstanceBatches(
             node.instances,
-            primitive.instanceBatch?.localModels ?? primitive.localModel,
-            primitive.instanceBatch?.localModels.length === undefined
-              ? 1
-              : primitive.instanceBatch.localModels.length / 16,
+            explicitInnerModels,
+            explicitInnerCount,
           ).map((batch, batchIndex) => ({
             ...batch,
+            innerCount: explicitInnerCount,
+            innerModels: explicitInnerModels,
             key: `${primitive.geometry.key}:mount:${mountIndex}:explicit:scale:${node.instances.scaleVersion}:hand:${batch.handedness}:${batchIndex}`,
-            revision: String(node.instances.poseVersion),
+            revision: node.instances.poseVersion,
+            source: node.instances,
           }))
           : [primitive.instanceBatch];
         for (const instanceBatch of preparedInstanceBatches) {
@@ -473,8 +495,12 @@ export const prepareCanonicalSurfaceScene = (
           : undefined;
         const instanceRevision = instanceBatch !== undefined
           && "revision" in instanceBatch
-          && typeof instanceBatch.revision === "string"
+          && (typeof instanceBatch.revision === "number"
+            || typeof instanceBatch.revision === "string")
           ? instanceBatch.revision
+          : undefined;
+        const explicitBatch = node.kind === "gltf-instances"
+          ? instanceBatch as PreparedExplicitInstanceBatch
           : undefined;
         const materialSource = node.materialVariant === undefined
           ? primitive.material
@@ -545,6 +571,15 @@ export const prepareCanonicalSurfaceScene = (
               ...(instanceRevision === undefined
                 ? {}
                 : { revision: instanceRevision }),
+              ...(explicitBatch === undefined ? {} : {
+                innerCount: explicitBatch.innerCount,
+                ...(explicitBatch.innerIndices === undefined
+                  ? {}
+                  : { innerIndices: explicitBatch.innerIndices }),
+                innerModels: explicitBatch.innerModels,
+                source: explicitBatch.source,
+                sourceOrdered: explicitBatch.sourceOrdered,
+              }),
               ...(sourceIndices === undefined ? {} : { sourceIndices }),
               },
             }),

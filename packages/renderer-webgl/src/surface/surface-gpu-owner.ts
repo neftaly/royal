@@ -482,6 +482,13 @@ export class SurfaceGpuOwner {
     this.#dirty = true;
   }
 
+  /** Publishes retained instance matrices without replacing static scene identity. */
+  publishInstanceTransforms(): void {
+    if (this.#scene === null) return;
+    this.#dirty = true;
+    this.#fullReconcileRequired = true;
+  }
+
   /** Commits pending texture representations without requiring a scene presentation. */
   flushTexturePublications(state: WebGlStateOwner): boolean {
     if (

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createGltfInstanceTransforms } from "@royal/renderer-core";
 import {
+  createGltfInstanceUpdateWorkspace,
   prepareGltfInstanceBatches,
   prepareStaticInstanceBatches,
+  updateGltfInstanceBatchRangeInto,
 } from "../../packages/renderer-webgl/src/gltf/instance-transforms";
 import { translationMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 
@@ -66,5 +68,44 @@ describe("static glTF instance transform core", () => {
     expect(batches[0]!.localModels.slice(12, 15)).toEqual(new Float32Array([11, 2, 3]));
     expect(batches[1]!.localModels[12]).toBeCloseTo(-4);
     expect(batches[1]!.localModels.slice(13, 15)).toEqual(new Float32Array([-15, -6]));
+  });
+
+  it("updates one retained mixed-handedness range without rebuilding its cohorts", () => {
+    const source = createGltfInstanceTransforms({
+      count: 2,
+      positions: [1, 0, 0, 2, 0, 0],
+      scales: [1, 1, 1, -1, 1, 1],
+    });
+    const innerModels = new Float32Array([
+      ...translationMat4([10, 0, 0]),
+      ...translationMat4([20, 0, 0]),
+    ]);
+    const batches = prepareGltfInstanceBatches(source, innerModels, 2);
+    const positiveBefore = batches[0]!.localModels.slice();
+    source.positions[3] = 5;
+    source.commitPosition(1, 1);
+    const workspace = createGltfInstanceUpdateWorkspace();
+
+    for (const batch of batches) {
+      updateGltfInstanceBatchRangeInto(
+        {
+          innerCount: 2,
+          ...(batch.innerIndices === undefined ? {} : { innerIndices: batch.innerIndices }),
+          innerModels,
+          localModels: batch.localModels,
+          sourceIndices: batch.sourceIndices,
+          sourceOrdered: batch.sourceOrdered,
+        },
+        source,
+        1,
+        1,
+        workspace,
+      );
+    }
+
+    expect(batches[0]!.localModels).toEqual(positiveBefore);
+    expect(batches[1]!.innerIndices).toEqual(new Uint32Array([0, 1]));
+    expect([batches[1]!.localModels[12], batches[1]!.localModels[28]])
+      .toEqual([5 - 10, 5 - 20]);
   });
 });

@@ -20,8 +20,31 @@ export type StaticInstanceBatch = Readonly<{
 }>;
 
 export type IndexedStaticInstanceBatch = StaticInstanceBatch & Readonly<{
+  innerIndices?: Uint32Array;
+  sourceOrdered: boolean;
   sourceIndices: Uint32Array;
 }>;
+
+export type GltfInstanceRangeBatch = Readonly<{
+  innerCount: number;
+  innerIndices?: Uint32Array;
+  innerModels: ArrayLike<number>;
+  localModels: Float32Array;
+  sourceIndices: Uint32Array;
+  sourceOrdered: boolean;
+}>;
+
+export type GltfInstanceUpdateWorkspace = Readonly<{
+  composed: MutableMat4;
+  innerModel: MutableMat4;
+  instanceModel: MutableMat4;
+}>;
+
+export const createGltfInstanceUpdateWorkspace = (): GltfInstanceUpdateWorkspace => ({
+  composed: identityMat4(),
+  innerModel: identityMat4(),
+  instanceModel: identityMat4(),
+});
 
 const composeInstanceMatrixInto = (
   out: MutableMat4,
@@ -113,6 +136,85 @@ const matrixHandedness = (matrix: ArrayLike<number>, offset: number): 1 | -1 =>
     matrix[offset + 1]! * matrix[offset + 6]!
     - matrix[offset + 2]! * matrix[offset + 5]!
   ) < 0 ? -1 : 1;
+
+const composeGltfInstanceMatrixInto = (
+  output: MutableMat4,
+  source: GltfInstanceTransforms,
+  instance: number,
+): void => {
+  const offset = instance * 3;
+  const rotationX = source.rotations[offset]!;
+  const rotationY = source.rotations[offset + 1]!;
+  const rotationZ = source.rotations[offset + 2]!;
+  composeEulerMat4Into(
+    output,
+    source.positions,
+    source.scales,
+    offset,
+    Math.cos(rotationX),
+    Math.sin(rotationX),
+    Math.cos(rotationY),
+    Math.sin(rotationY),
+    Math.cos(rotationZ),
+    Math.sin(rotationZ),
+  );
+};
+
+const composeGltfInnerModelInto = (
+  batch: GltfInstanceRangeBatch,
+  source: GltfInstanceTransforms,
+  sourceIndex: number,
+  innerIndex: number,
+  outputIndex: number,
+  workspace: GltfInstanceUpdateWorkspace,
+): void => {
+  composeGltfInstanceMatrixInto(workspace.instanceModel, source, sourceIndex);
+  const innerOffset = innerIndex * 16;
+  for (let component = 0; component < 16; component += 1) {
+    workspace.innerModel[component] = batch.innerModels[innerOffset + component]!;
+  }
+  multiplyMat4Into(workspace.composed, workspace.instanceModel, workspace.innerModel);
+  copyMatrix(batch.localModels, outputIndex * 16, workspace.composed);
+};
+
+/** Rewrites one validated source range without reallocating its retained matrix batch. */
+export const updateGltfInstanceBatchRangeInto = (
+  batch: GltfInstanceRangeBatch,
+  source: GltfInstanceTransforms,
+  startIndex: number,
+  count: number,
+  workspace: GltfInstanceUpdateWorkspace,
+): void => {
+  const endIndex = startIndex + count;
+  if (batch.sourceOrdered) {
+    for (let sourceIndex = startIndex; sourceIndex < endIndex; sourceIndex += 1) {
+      for (let innerIndex = 0; innerIndex < batch.innerCount; innerIndex += 1) {
+        const outputIndex = sourceIndex * batch.innerCount + innerIndex;
+        composeGltfInnerModelInto(
+          batch,
+          source,
+          sourceIndex,
+          innerIndex,
+          outputIndex,
+          workspace,
+        );
+      }
+    }
+    return;
+  }
+  for (let outputIndex = 0; outputIndex < batch.sourceIndices.length; outputIndex += 1) {
+    const sourceIndex = batch.sourceIndices[outputIndex]!;
+    if (sourceIndex < startIndex || sourceIndex >= endIndex) continue;
+    composeGltfInnerModelInto(
+      batch,
+      source,
+      sourceIndex,
+      batch.innerIndices?.[outputIndex] ?? 0,
+      outputIndex,
+      workspace,
+    );
+  }
+};
 
 const splitStaticInstanceMatrices = (
   all: Float32Array,
@@ -208,22 +310,7 @@ export const prepareGltfInstanceBatches = (
   let negativeCount = 0;
   let outputIndex = 0;
   for (let instance = 0; instance < source.count; instance += 1) {
-    const offset = instance * 3;
-    const rotationX = source.rotations[offset]!;
-    const rotationY = source.rotations[offset + 1]!;
-    const rotationZ = source.rotations[offset + 2]!;
-    composeEulerMat4Into(
-      instanceModel,
-      source.positions,
-      source.scales,
-      offset,
-      Math.cos(rotationX),
-      Math.sin(rotationX),
-      Math.cos(rotationY),
-      Math.sin(rotationY),
-      Math.cos(rotationZ),
-      Math.sin(rotationZ),
-    );
+    composeGltfInstanceMatrixInto(instanceModel, source, instance);
     for (let inner = 0; inner < innerCount; inner += 1) {
       const innerOffset = inner * 16;
       for (let component = 0; component < 16; component += 1) {
@@ -236,28 +323,48 @@ export const prepareGltfInstanceBatches = (
       outputIndex += 1;
     }
   }
-  if (negativeCount === 0) return [{ handedness: 1, localModels: all, sourceIndices }];
-  if (negativeCount === total) return [{ handedness: -1, localModels: all, sourceIndices }];
+  if (negativeCount === 0) {
+    return [{ handedness: 1, localModels: all, sourceIndices, sourceOrdered: true }];
+  }
+  if (negativeCount === total) {
+    return [{ handedness: -1, localModels: all, sourceIndices, sourceOrdered: true }];
+  }
   const positiveCount = total - negativeCount;
   const positiveModels = new Float32Array(positiveCount * 16);
   const positiveIndices = new Uint32Array(positiveCount);
   const negativeModels = new Float32Array(negativeCount * 16);
   const negativeIndices = new Uint32Array(negativeCount);
+  const positiveInnerIndices = innerCount === 1 ? undefined : new Uint32Array(positiveCount);
+  const negativeInnerIndices = innerCount === 1 ? undefined : new Uint32Array(negativeCount);
   let positive = 0;
   let negative = 0;
   for (let item = 0; item < total; item += 1) {
     if (matrixHandedness(all, item * 16) < 0) {
       copyFlatMatrix(negativeModels, negative * 16, all, item * 16);
       negativeIndices[negative] = sourceIndices[item]!;
+      if (negativeInnerIndices !== undefined) negativeInnerIndices[negative] = item % innerCount;
       negative += 1;
     } else {
       copyFlatMatrix(positiveModels, positive * 16, all, item * 16);
       positiveIndices[positive] = sourceIndices[item]!;
+      if (positiveInnerIndices !== undefined) positiveInnerIndices[positive] = item % innerCount;
       positive += 1;
     }
   }
   return [
-    { handedness: 1, localModels: positiveModels, sourceIndices: positiveIndices },
-    { handedness: -1, localModels: negativeModels, sourceIndices: negativeIndices },
+    {
+      handedness: 1,
+      ...(positiveInnerIndices === undefined ? {} : { innerIndices: positiveInnerIndices }),
+      localModels: positiveModels,
+      sourceIndices: positiveIndices,
+      sourceOrdered: false,
+    },
+    {
+      handedness: -1,
+      ...(negativeInnerIndices === undefined ? {} : { innerIndices: negativeInnerIndices }),
+      localModels: negativeModels,
+      sourceIndices: negativeIndices,
+      sourceOrdered: false,
+    },
   ];
 };

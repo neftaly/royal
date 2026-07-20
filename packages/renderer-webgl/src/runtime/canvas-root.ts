@@ -59,6 +59,11 @@ import {
 } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
+  createCanonicalInstanceSceneUpdateWorkspace,
+  refreshCanonicalInstanceLodBounds,
+  updateCanonicalGltfInstanceSource,
+} from "../surface/instance-scene-update";
+import {
   TextureAssetOwner,
   type DecodedTextureAlpha,
   type DecodedTextureSource,
@@ -336,6 +341,14 @@ const createContext = (
   return gl;
 };
 
+type InstanceSubscription = {
+  dirty: boolean;
+  end: number;
+  start: number;
+  structural: boolean;
+  unsubscribe: () => void;
+};
+
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot implements RoyalRendererRoot {
   readonly #asyncPreparation: AsyncPreparationOwner;
@@ -365,8 +378,10 @@ export class CanvasRoot implements RoyalRendererRoot {
   };
   #lastFrameFailure: string | undefined;
   readonly #listeners = new RetainedListeners();
+  #instancePickingDirty = false;
   #instanceSceneDirty = false;
-  readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
+  readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
+  readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
   readonly #platform: CanvasRootPlatform;
@@ -571,7 +586,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#surfaceGpu.dispose();
     this.#textureAssets.dispose();
     this.#asyncPreparation.dispose();
-    for (const unsubscribe of this.#instanceSubscriptions.values()) unsubscribe();
+    for (const state of this.#instanceSubscriptions.values()) state.unsubscribe();
     this.#instanceSubscriptions.clear();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
@@ -648,7 +663,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#assertLive("pick");
     validatePickInput(input);
     if (this.#context.getSnapshot().phase !== "active") return undefined;
-    this.#flushInstanceScene();
+    this.#flushInstanceScene(true);
     const scene = this.#surfaceScene;
     const size = this.#size;
     if (scene === null || size === null || size.backingWidth === 0 || size.backingHeight === 0) {
@@ -689,7 +704,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
-    this.#instanceSceneDirty = false;
+    this.#instancePickingDirty = false;
     this.#progressiveTexturePresentation.reset();
     this.#textureResourcesPending = false;
     this.#surfaceGpu.setScene(prepared);
@@ -698,6 +713,7 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#cameraSource.commit(camera);
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
+    this.#resetInstanceUpdates();
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
     this.#invalidatePresentation();
@@ -829,23 +845,93 @@ export class CanvasRoot implements RoyalRendererRoot {
       const source = node.instances;
       claimed.add(source);
       if (this.#instanceSubscriptions.has(source)) continue;
-      const unsubscribe = source.subscribe(() => {
+      const state: InstanceSubscription = {
+        dirty: false,
+        end: 0,
+        start: 0,
+        structural: false,
+        unsubscribe: () => {},
+      };
+      state.unsubscribe = source.subscribe((channel, start, count) => {
         if (this.#disposed) return;
+        if (!state.dirty) {
+          state.dirty = true;
+          state.start = start;
+          state.end = start + count;
+        } else {
+          state.start = Math.min(state.start, start);
+          state.end = Math.max(state.end, start + count);
+        }
+        if (channel === "scale") state.structural = true;
         this.#instanceSceneDirty = true;
         this.#invalidatePresentation();
       });
-      this.#instanceSubscriptions.set(source, unsubscribe);
+      this.#instanceSubscriptions.set(source, state);
     }
-    for (const [source, unsubscribe] of this.#instanceSubscriptions) {
+    for (const [source, state] of this.#instanceSubscriptions) {
       if (claimed.has(source)) continue;
-      unsubscribe();
+      state.unsubscribe();
       this.#instanceSubscriptions.delete(source);
     }
   }
 
-  #flushInstanceScene(): void {
-    if (!this.#instanceSceneDirty) return;
-    this.#refreshPreparedScene(true);
+  #resetInstanceUpdates(): void {
+    for (const state of this.#instanceSubscriptions.values()) {
+      state.dirty = false;
+      state.structural = false;
+    }
+    this.#instanceSceneDirty = false;
+  }
+
+  #flushInstanceScene(forPicking = false): void {
+    if (!this.#instanceSceneDirty) {
+      if (forPicking && this.#instancePickingDirty) this.#refreshPreparedScene(true);
+      return;
+    }
+    let requiresStructuralRefresh = forPicking;
+    if (!requiresStructuralRefresh) {
+      for (const [source, state] of this.#instanceSubscriptions) {
+        if (!state.dirty) continue;
+        if (state.structural) {
+          requiresStructuralRefresh = true;
+          break;
+        }
+        for (const node of this.#surfaceSceneInput?.nodes ?? []) {
+          if (
+            node.kind === "gltf-instances"
+            && node.instances === source
+            && (this.#getGltfAsset(node)?.lights.length ?? 0) > 0
+          ) {
+            requiresStructuralRefresh = true;
+            break;
+          }
+        }
+        if (requiresStructuralRefresh) break;
+      }
+    }
+    if (requiresStructuralRefresh) {
+      this.#refreshPreparedScene(true);
+      return;
+    }
+    const scene = this.#surfaceScene;
+    if (scene === null) return;
+    let updated = false;
+    for (const [source, state] of this.#instanceSubscriptions) {
+      if (!state.dirty) continue;
+      updated = updateCanonicalGltfInstanceSource(
+        scene,
+        source,
+        state.start,
+        state.end - state.start,
+        this.#instanceUpdateWorkspace,
+      ) || updated;
+    }
+    this.#resetInstanceUpdates();
+    if (!updated) return;
+    refreshCanonicalInstanceLodBounds(scene);
+    this.#instancePickingDirty = true;
+    this.#surfaceGpu.publishInstanceTransforms();
+    this.#virtualTextureRuntime?.invalidateSceneGeometry();
   }
 
   #refreshPreparedScene(instanceOnly = false): void {
@@ -869,7 +955,8 @@ export class CanvasRoot implements RoyalRendererRoot {
     this.#cameraSource.commit(camera);
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
-    this.#instanceSceneDirty = false;
+    this.#resetInstanceUpdates();
+    this.#instancePickingDirty = false;
     if (!instanceOnly) this.#invalidatePresentation();
   }
 
