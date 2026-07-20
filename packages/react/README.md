@@ -69,7 +69,7 @@ and prefiltered-environment preparation; it is not a worker count. A semantic
 option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount/replacement
 lifecycle; a disposed root is never published for a newer canvas generation.
-`ordinaryTextureUploadByteBudgetPerFrame` defaults to 16 MiB and paces new ordinary-texture
+`ordinaryTextureUploadByteBudgetPerFrame` defaults to 4 MiB and paces new ordinary-texture
 transfer across real canvas/XR frames without changing focused asset readiness.
 One individually larger texture is admitted alone rather than starving.
 `automaticVirtualTexturing` defaults to `false`; opt in through

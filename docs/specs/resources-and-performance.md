@@ -24,7 +24,7 @@ Each root admits work against five public ceilings:
 - retained decoded CPU bytes (default 512 MiB);
 - retained persistent GPU bytes (default 256 MiB);
 - concurrent transient/scratch peak bytes (default 192 MiB);
-- GPU upload traffic per rendered frame (default 16 MiB);
+- GPU upload traffic per rendered frame (default 4 MiB);
 - concurrent asynchronous preparation jobs (default 8).
 
 These are ceilings, not preallocations, promises that memory exists, or targets

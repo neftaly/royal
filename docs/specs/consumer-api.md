@@ -178,7 +178,7 @@ does not request workers. Broad renderer diagnostics expose
 operational inspection. Focused asset status remains the product lifecycle.
 
 `rendererOptions.ordinaryTextureUploadByteBudgetPerFrame` is an immutable positive byte
-ceiling with default 16 MiB. Broad diagnostics expose
+ceiling with default 4 MiB. Broad diagnostics expose
 `resources.ordinaryTextureUploads: { admittedBytes, budgetBytes, deferredUploads }` for
 the latest submitted frame. Deferral is renderer scheduling, not an asset
 failure or a separate consumer lifecycle.

@@ -1,4 +1,4 @@
-export const DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME = 16 * 1024 * 1024;
+export const DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME = 4 * 1024 * 1024;
 
 export type FrameUploadBudgetSnapshot = Readonly<{
   admittedBytes: number;

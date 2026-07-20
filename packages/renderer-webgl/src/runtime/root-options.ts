@@ -13,7 +13,7 @@ export type CanvasRootOptions = Readonly<{
   persistentGpuByteBudget?: number;
   /** Root-wide concurrent asynchronous asset-preparation ceiling. @defaultValue `8` */
   maxConcurrentPreparationJobs?: number;
-  /** Ordinary-texture upload traffic admitted per rendered frame. @defaultValue 16 MiB */
+  /** Ordinary-texture upload traffic admitted per rendered frame. @defaultValue 4 MiB */
   ordinaryTextureUploadByteBudgetPerFrame?: number;
 }>;
 

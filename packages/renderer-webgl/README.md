@@ -50,7 +50,7 @@ transport/decode, and prefiltered-environment preparation. It is neither a
 worker count nor a preallocation. Queued claims are cancellable, and
 `getSnapshot().resources.asyncPreparation` reports the immutable limit plus
 active and queued job counts.
-`ordinaryTextureUploadByteBudgetPerFrame` defaults to 16 MiB. It bounds newly transferred
+`ordinaryTextureUploadByteBudgetPerFrame` defaults to 4 MiB. It bounds newly transferred
 ordinary-texture bytes per submitted canvas or XR frame; a larger individual
 texture is admitted alone so it cannot starve. Deferred storage remains a ready
 asset with its neutral/current representation and retries on the next frame.
