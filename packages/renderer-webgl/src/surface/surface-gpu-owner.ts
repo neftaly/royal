@@ -100,7 +100,7 @@ import type {
   PrefilteredEnvironmentGpuBinding,
 } from "../environment/gpu-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
-import { sortSurfacesBackToFrontInto } from "./surface-depth-order";
+import { sortSurfacesBackToFront } from "./surface-depth-order";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -113,6 +113,7 @@ export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly
 }>;
 
 type GpuSurface = {
+  depthOrder: number;
   drawPacket: SurfaceDrawPacket;
   readonly geometry: GpuGeometry;
   readonly instanceCount: number;
@@ -238,9 +239,6 @@ export class SurfaceGpuOwner {
   #opaqueSurfaces: readonly GpuSurface[] = [];
   #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
-  #depthOrderDepths = new Float64Array(0);
-  #depthOrderScratchDepths = new Float64Array(0);
-  #depthOrderScratchSurfaces: GpuSurface[] = [];
   #transmissionSurfaces: GpuSurface[] = [];
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
@@ -326,9 +324,6 @@ export class SurfaceGpuOwner {
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
-    this.#depthOrderDepths = new Float64Array(0);
-    this.#depthOrderScratchDepths = new Float64Array(0);
-    this.#depthOrderScratchSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
     this.#scene = null;
@@ -1061,24 +1056,7 @@ export class SurfaceGpuOwner {
   }
 
   #sortBackToFrontSurfaces(surfaces: GpuSurface[], view: Mat4): void {
-    sortSurfacesBackToFrontInto(
-      surfaces,
-      view,
-      this.#depthOrderDepths,
-      this.#depthOrderScratchSurfaces,
-      this.#depthOrderScratchDepths,
-    );
-  }
-
-  #retainDepthOrderCapacity(): void {
-    const count = Math.max(
-      this.#transmissionSurfaces.length,
-      this.#blendedSurfaces.length,
-    );
-    if (this.#depthOrderDepths.length >= count) return;
-    this.#depthOrderDepths = new Float64Array(count);
-    this.#depthOrderScratchDepths = new Float64Array(count);
-    this.#depthOrderScratchSurfaces.length = count;
+    sortSurfacesBackToFront(surfaces, view);
   }
 
   #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
@@ -1189,6 +1167,7 @@ export class SurfaceGpuOwner {
       canonicalSurfaceIsDoubleSided(material),
     );
     return {
+      depthOrder: 0,
       drawPacket: surfaceDrawPacket(
         this.#gl,
         geometrySurface.surface,
@@ -1277,7 +1256,6 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
       this.#transmissionSurfaces = grouped.transmission;
-      this.#retainDepthOrderCapacity();
       this.#planOpaqueMultiDrawRuns();
     } catch (error) {
       geometryPlan.rollback();
@@ -1385,7 +1363,6 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
       this.#transmissionSurfaces = grouped.transmission;
-      this.#retainDepthOrderCapacity();
     }
     this.#planOpaqueMultiDrawRuns();
     this.#gpuScene = scene;

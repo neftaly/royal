@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
-import { sortSurfacesBackToFrontInto } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
+import { sortSurfacesBackToFront } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
 
-type Surface = Readonly<{
+type Surface = {
+  depthOrder: number;
   id: number;
   surface: Readonly<{
     worldBounds: Readonly<{
@@ -10,9 +11,10 @@ type Surface = Readonly<{
       min: readonly [number, number, number];
     }>;
   }>;
-}>;
+};
 
 const item = (id: number, depth: number): Surface => ({
+  depthOrder: 0,
   id,
   surface: {
     worldBounds: {
@@ -40,31 +42,17 @@ describe("surface depth ordering core", () => {
         .sort((left, right) => left.depth - right.depth || left.index - right.index)
         .map(({ surface }) => surface.id);
 
-      sortSurfacesBackToFrontInto(
-        surfaces,
-        view,
-        new Float64Array(count),
-        Array<Surface>(count),
-        new Float64Array(count),
-      );
+      sortSurfacesBackToFront(surfaces, view);
 
       expect(surfaces.map((surface) => surface.id)).toEqual(expected);
     }
   });
 
-  it("leaves an already ordered run in place without touching item scratch", () => {
+  it("leaves an already ordered run stable", () => {
     const surfaces = [item(0, -2), item(1, -2), item(2, 1)];
-    const scratch = Array<Surface>(surfaces.length);
 
-    sortSurfacesBackToFrontInto(
-      surfaces,
-      identityMat4(),
-      new Float64Array(surfaces.length),
-      scratch,
-      new Float64Array(surfaces.length),
-    );
+    sortSurfacesBackToFront(surfaces, identityMat4());
 
     expect(surfaces.map((surface) => surface.id)).toEqual([0, 1, 2]);
-    expect(scratch.every((surface) => surface === undefined)).toBe(true);
   });
 });
