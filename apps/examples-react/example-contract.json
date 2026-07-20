@@ -129,6 +129,8 @@
       "drawArraysInstanced",
       "drawElements",
       "drawElementsInstanced",
+      "multiDrawCalls",
+      "multiDrawDraws",
       "texImage2D",
       "texSubImage2D",
       "uniformCalls",

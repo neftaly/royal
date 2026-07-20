@@ -75,5 +75,13 @@ describe('examples contract', () => {
     expect(rendererBenchmarkSnapshotReady(snapshot({ imageFailures: 1 }))).toBe(true);
     expect(rendererBenchmarkSnapshotReady(snapshot({ status: 'loading' }))).toBe(false);
     expect(rendererBenchmarkSnapshotReady(snapshot({ error: 'bad asset', status: 'error' }))).toBe(true);
+    expect(rendererBenchmarkSnapshotReady({
+      ...snapshot({ imageRequests: 2 }),
+      resourcePressure: { pendingOrdinaryTextureStorageRepresentations: 1 },
+    })).toBe(false);
+    expect(rendererBenchmarkSnapshotReady({
+      ...snapshot({ imageRequests: 2 }),
+      resourcePressure: { pendingOrdinaryTextureStorageRepresentations: 0 },
+    })).toBe(true);
   });
 });

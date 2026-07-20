@@ -66,6 +66,15 @@ export type TextureAssetSnapshot =
   | Readonly<{ height: number; state: "ready"; width: number }>
   | Readonly<{ error: string; state: "error" }>;
 
+export type TexturePreparationSnapshot = Readonly<{
+  activeDecodes: number;
+  decodeReservationLimit: number;
+  decodeReservations: number;
+  decodedHandoffBytes: number;
+  decodedHandoffThresholdBytes: number;
+  pendingStorageRepresentations: number;
+}>;
+
 export type TextureAssetOwnerPlatform = Readonly<{
   decode(
     asset: TextureSourceRef,
@@ -270,6 +279,23 @@ export class TextureAssetOwner {
 
   getSourceSnapshot(asset: TextureSourceRef): TextureAssetSnapshot {
     return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
+  }
+
+  snapshot(): TexturePreparationSnapshot {
+    let pendingStorageRepresentations = 0;
+    for (const entry of this.#entries.values()) {
+      for (const storageKey of entry.claimedStorageKeys) {
+        if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
+      }
+    }
+    return {
+      activeDecodes: this.#activeDecodes,
+      decodeReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
+      decodeReservations: this.#decodeReservations,
+      decodedHandoffBytes: this.#decodedHandoffBytes,
+      decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
+      pendingStorageRepresentations,
+    };
   }
 
   reconcile(

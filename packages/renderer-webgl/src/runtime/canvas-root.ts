@@ -52,13 +52,18 @@ import {
   refreshCanonicalSurfaceTexture,
   type CanonicalSurfaceScene,
 } from "../surface/scene-lowering";
-import { SurfaceGpuOwner, type SurfaceFrameView } from "../surface/surface-gpu-owner";
+import {
+  SurfaceGpuOwner,
+  type SurfaceFrameView,
+  type SurfaceGeometryUploadSnapshot,
+} from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   TextureAssetOwner,
   type DecodedTextureAlpha,
   type DecodedTextureSource,
   type TextureAssetSnapshot,
+  type TexturePreparationSnapshot,
   type TextureSourceRef,
 } from "../texture/asset-owner";
 import { WebGlStateOwner } from "../webgl/state-owner";
@@ -102,7 +107,8 @@ export type CanvasRootSnapshot = Readonly<{
   lastFrameFailure?: string;
   resources: Readonly<{
     asyncPreparation: AsyncPreparationSnapshot;
-    geometryUploads: FrameUploadBudgetSnapshot;
+    geometryUploads: SurfaceGeometryUploadSnapshot;
+    ordinaryTexturePreparation: TexturePreparationSnapshot;
     ordinaryTextureUploads: FrameUploadBudgetSnapshot;
     ordinaryTextures: OrdinaryTextureGpuSnapshot;
     persistentGpu: PersistentGpuBudgetSnapshot;
@@ -523,6 +529,7 @@ export class CanvasRoot {
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
           geometryUploads: this.#surfaceGpu.geometryUploadSnapshot(),
+          ordinaryTexturePreparation: this.#textureAssets.snapshot(),
           ordinaryTextureUploads: this.#frameUploadBudget.snapshot(),
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
@@ -1023,6 +1030,8 @@ export class CanvasRoot {
         }
       } finally {
         this.#releaseUploadedTextures();
+        this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
+        if (this.#textureResourcesPending) this.#clock.invalidate();
       }
     }
     this.#frame += 1;

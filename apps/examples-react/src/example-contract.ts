@@ -87,7 +87,18 @@ export const rendererBenchmarkSnapshotReady = (
   if (snapshot === null) return false;
   const assets = snapshot.gltfLoadDiagnostics?.assets ?? [];
   if (options.requireGltfAsset === true && assets.length === 0) return false;
-  return assets.every((asset) => asset.status !== 'loading' && (
+  const pressure = snapshot.resourcePressure;
+  const unsettled = pressure !== null && [
+    'activePreparationJobs',
+    'activeTextureDecodes',
+    'decodeReservations',
+    'deferredGeometryUploads',
+    'deferredOrdinaryTextureUploads',
+    'pendingOrdinaryTextureStorageRepresentations',
+    'pendingSurfaceUploads',
+    'queuedPreparationJobs',
+  ].some((field) => (pressure[field] ?? 0) > 0);
+  return !unsettled && assets.every((asset) => asset.status !== 'loading' && (
     asset.status === 'error'
     || asset.imagesLoaded + asset.imageFailures >= asset.imageRequests
   ));

@@ -104,6 +104,10 @@ export type SurfaceFrameView = Readonly<{
   viewport: FrameViewport;
 }>;
 
+export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
+  pendingSurfaces: number;
+}>;
+
 type GpuSurface = {
   bindings: readonly GpuTextureBinding[];
   readonly geometry: GpuGeometry;
@@ -375,8 +379,11 @@ export class SurfaceGpuOwner {
     return this.#textureGpu.snapshot();
   }
 
-  geometryUploadSnapshot(): FrameUploadBudgetSnapshot {
-    return this.#geometryGpu.snapshot();
+  geometryUploadSnapshot(): SurfaceGeometryUploadSnapshot {
+    return {
+      ...this.#geometryGpu.snapshot(),
+      pendingSurfaces: Math.max(0, (this.#scene?.surfaces.length ?? 0) - this.#admittedSurfaceCount),
+    };
   }
 
   texturePublicationsPending(): boolean {

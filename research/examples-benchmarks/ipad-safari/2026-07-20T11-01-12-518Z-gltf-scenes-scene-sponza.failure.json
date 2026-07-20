@@ -1,0 +1,456 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": [
+      {
+        "kind": "console",
+        "level": "error",
+        "text": "WebSocket connection to 'ws://192.168.1.97:4742/?token=Y7GL3lKk17E1' failed: WebSocket is closed due to suspension.",
+        "timestamp": 1784545178.260034,
+        "url": "",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      {
+        "kind": "console",
+        "level": "debug",
+        "text": "[vite] connecting...",
+        "timestamp": 1784545178.427274,
+        "url": "http://192.168.1.97:4742/@vite/client",
+        "lineNumber": 851,
+        "columnNumber": 14
+      },
+      {
+        "kind": "console",
+        "level": "debug",
+        "text": "[vite] connected.",
+        "timestamp": 1784545178.451535,
+        "url": "http://192.168.1.97:4742/@vite/client",
+        "lineNumber": 955,
+        "columnNumber": 17
+      }
+    ]
+  },
+  "cameraDrag": true,
+  "coldCache": false,
+  "error": "Error: iPad benchmark evidence incomplete: route readiness did not complete; page={\"benchmarkError\":null,\"bodyText\":\"Royal 👑 examples\\nCube\\nWireframe\\nPicking\\nVirtual Texture Stress\\nStandard Lighting\\nglTF Material Showcase\\nglTF Bistro Web Tier\\nglTF Scenes\\nglTF Auto Instancing\\nKhronos Compatibility Lab\\nglTF Ghostscript Tiger SVG\\nglTF MSFT_lod\\nglTF Material Variants\\nWebXR VR\\nglTF Scenes\\nSceneReset view\\nSponzaArchitectural core-glTF scene with 103 primitives, 25 materials, and 69 textures.\\n50.2 MiBCrytek · Frank MeinlKhronos source\\nRenderer: available; asset: ready · drag to orbit · wheel/pinch to zoom\\nSource\\n\\nexamples/cases/GltfScenes.tsx\\nimport {\\n  Canvas,\\n  OrbitControls,\\n  useGltfAssetStatus,\\n  useOrbitCamera,\\n  useRendererLifecycle,\\n  type OrbitCameraViewOptions,\\n} from '@royal/react';\\nimport {\\n  directionalLight,\\n  gltf,\\n  scene,\\n  type GltfAssetRef,\\n  type Transform,\\n} from '@royal/react/scene';\\nimport { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';\\nimport { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';\\nimport { exampleCanvasRendererOptions } from '../example-renderer-options';\\nimport {\\n  interactiveCanvasStyle,\\n  materialEnvironment,\\n  materialFillLight,\\n  materialKeyLight,\\n  materialPass,\\n} from '../presentation';\\n\\ntype SceneSho\",\"loadError\":null}\n    at run (file:///tmp/royal-renderer-next/apps/examples-react/scripts/ipad-safari-benchmark.mjs:619:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)",
+  "generatedAt": "2026-07-20T11:01:12.518Z",
+  "page": {
+    "benchmarkError": null,
+    "bodyText": "Royal 👑 examples\nCube\nWireframe\nPicking\nVirtual Texture Stress\nStandard Lighting\nglTF Material Showcase\nglTF Bistro Web Tier\nglTF Scenes\nglTF Auto Instancing\nKhronos Compatibility Lab\nglTF Ghostscript Tiger SVG\nglTF MSFT_lod\nglTF Material Variants\nWebXR VR\nglTF Scenes\nSceneReset view\nSponzaArchitectural core-glTF scene with 103 primitives, 25 materials, and 69 textures.\n50.2 MiBCrytek · Frank MeinlKhronos source\nRenderer: available; asset: ready · drag to orbit · wheel/pinch to zoom\nSource\n\nexamples/cases/GltfScenes.tsx\nimport {\n  Canvas,\n  OrbitControls,\n  useGltfAssetStatus,\n  useOrbitCamera,\n  useRendererLifecycle,\n  type OrbitCameraViewOptions,\n} from '@royal/react';\nimport {\n  directionalLight,\n  gltf,\n  scene,\n  type GltfAssetRef,\n  type Transform,\n} from '@royal/react/scene';\nimport { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';\nimport { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';\nimport { exampleCanvasRendererOptions } from '../example-renderer-options';\nimport {\n  interactiveCanvasStyle,\n  materialEnvironment,\n  materialFillLight,\n  materialKeyLight,\n  materialPass,\n} from '../presentation';\n\ntype SceneShowcaseEntry = {\n  readonly bytes: number;\n  readonly camera: OrbitCameraViewOptions;\n  readonly credit: string;\n  readonly description: string;\n  readonly far: number;\n  readonly id: string;\n  readonly maxDistance: number;\n  readonly minDistance: number;\n  readonly near: number;\n  readonly sourceUrl: string;\n  readonly src: string;\n  readonly title: string;\n  readonly transform?: Transform;\n};\n\nconst fixtureRoot = import.meta.env.BASE_URL + 'fixtures/scenes/';\nconst helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';\nconst upstreamRoot = 'https://github.com/KhronosGroup/glTF-Sample-Assets/tree/2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf/Models/';\n\nconst sceneEntries = [\n  {\n    bytes: 52_686_624,\n    camera: { distance: 9.5, pitch: 0.28, target: [-0.48, 3.2, -0.31], yaw: -1.57 },\n    credit: 'Crytek · Frank Meinl',\n    description: 'Architectural core-glTF scene with 103 primitives, 25 materials, and 69 textures.',\n    far: 160,\n    id: 'sponza',\n    maxDistance: 80,\n    minDistance: 0.25,\n    near: 0.025,\n    sourceUrl: upstreamRoot + 'Sponza',\n    src: fixtureRoot + 'Sponza/glTF/Sponza.gltf',\n    title: 'Sponza',\n  },\n  {\n    bytes: 42_977_928,\n    camera: { distance: 1.12, pitch: 0.52, target: [0, 0.055, 0], yaw: 0.68 },\n    credit: 'MaterialX Project · Ed Mackey',\n    description: 'Authored chess composition using transmission, volume, and a dense PBR texture set.',\n    far: 20,\n    id: 'a-beautiful-game',\n    maxDistance: 4,\n    minDistance: 0.08,\n    near: 0.005,\n    sourceUrl: upstreamRoot + 'ABeautifulGame',\n    src: fixtureRoot + 'ABeautifulGame/glTF-Binary/ABeautifulGame.glb',\n    title: 'A Beautiful Game',\n  },\n  {\n    bytes: 3_085_416,\n    camera: { distance: 30, pitch: 0.58, target: [0, 18, 1.43], yaw: 0.66 },\n    credit: '3DRT',\n    description: 'Compact city scene with 234 nodes and 167 materials; its authored animation is shown paused.',\n    far: 1_200,\n    id: 'virtual-city',\n    maxDistance: 600,\n    minDistance: 8,\n    near: 0.2,\n    sourceUrl: upstreamRoot + 'VirtualCity',\n    src: fixtureRoot + 'VirtualCity/glTF-Binary/VirtualCity.glb',\n    title: 'Virtual City',\n  },\n  {\n    bytes: 3_776_595,\n    camera: { distance: 3.4, pitch: 0.05, target: [0, -0.08, 0], yaw: 0 },\n    credit: 'theblueturtle_ · ctxwing',\n    description: 'The compact PBR baseline used by Royal for ordinary glTF loading and material fidelity.',\n    far: 100,\n    id: 'damaged-helmet',\n    maxDistance: 12,\n    minDistance: 0.1,\n    near: 0.01,\n    sourceUrl: upstreamRoot + 'DamagedHelmet',\n    src: helmetSrc,\n    title: 'Damaged Helmet',\n    transform: {\n      position: [0, -0.08, 0],\n      rotation: [0, 0.34, 0],\n      scale: [1.1, 1.1, 1.1],\n    },\n  },\n] as const satisfies readonly SceneShowcaseEntry[];\n\ntype SceneId = typeof sceneEntries[num",
+    "loadError": null,
+    "url": "http://192.168.1.97:4742/gltf-scenes?scene=sponza&bench=auto&cameraDrag=1&frames=60&warmup=12&timeoutMs=90000&run=1784545178270"
+  },
+  "progress": {
+    "elapsedMs": 93562,
+    "readyState": "complete",
+    "renderer": {
+      "frame": 113,
+      "gltfInstancing": null,
+      "gltfLoadDiagnostics": {
+        "assets": [
+          {
+            "imageCandidates": 69,
+            "imageFailures": 0,
+            "imagesLoaded": 69,
+            "imageRequests": 69,
+            "lightCount": 0,
+            "nodeCount": 0,
+            "phaseMs": {
+              "firstUsable": 993.9999999999999,
+              "imagesComplete": 5613,
+              "preparation": 502,
+              "externalResourceRead": 199,
+              "sourceRead": 292.9999999999999
+            },
+            "primitiveCount": 103,
+            "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+            "status": "ready",
+            "variantNames": []
+          }
+        ]
+      },
+      "lifecycle": {
+        "generation": 1,
+        "interruptions": 0,
+        "recoveries": 0,
+        "state": "available"
+      },
+      "resourcePressure": {
+        "activePreparationJobs": 0,
+        "activeTextureDecodes": 0,
+        "admittedGeometryUploadBytes": 0,
+        "admittedOrdinaryTextureUploadBytes": 0,
+        "decodeReservationLimit": 32,
+        "decodeReservations": 0,
+        "decodedTextureHandoffBytes": 0,
+        "decodedTextureHandoffThresholdBytes": 67108864,
+        "deferredGeometryUploads": 0,
+        "deferredOrdinaryTextureUploads": 0,
+        "ordinaryTextureUploadBudgetBytes": 4194304,
+        "preparationJobLimit": 8,
+        "queuedPreparationJobs": 0,
+        "persistentGpuBudgetBytes": 268435456,
+        "persistentGpuDeniedClaims": 0,
+        "persistentGpuRetainedBytes": 209048832,
+        "pendingOrdinaryTextureStorageRepresentations": 0,
+        "pendingSurfaceUploads": 0
+      },
+      "textureResidency": {
+        "fitted": 68,
+        "resources": 69
+      },
+      "virtualTexturing": null
+    },
+    "resourceCount": 150,
+    "url": "http://192.168.1.97:4742/gltf-scenes?scene=sponza&bench=auto&cameraDrag=1&frames=60&warmup=12&timeoutMs=90000&run=1784545178270"
+  },
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 368,
+        "cssWidth": 736,
+        "height": 736,
+        "width": 1472
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-scenes",
+      "path": "/gltf-scenes",
+      "sourceFile": "examples/cases/GltfScenes.tsx",
+      "title": "glTF Scenes"
+    },
+    "frameStats": {
+      "averageMs": 40.633333333331876,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 15,
+      "maxMs": 347,
+      "minMs": 8,
+      "p50Ms": 35,
+      "p95Ms": 50,
+      "p99Ms": 54,
+      "requestedSampleCount": 60,
+      "sampleCount": 60,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 90000
+    },
+    "frameTiming": {
+      "callbackCalls": 120,
+      "callbackMaxMs": 81,
+      "callbackTotalMs": 329.00000000001455,
+      "supported": true
+    },
+    "generatedAt": "2026-07-20T11:01:12.113Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 3956,
+        "bindVertexArray": 1024,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 1920,
+        "drawElements": 846,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 1074,
+        "multiDrawDraws": 3560,
+        "nonInstancedDrawCalls": 1920,
+        "stateChanges": 5162,
+        "texImage2D": 0,
+        "texSubImage2D": 8,
+        "uniformCalls": 5604,
+        "uniformMatrixCalls": 546,
+        "useProgram": 182
+      },
+      "setup": {
+        "bindBuffer": 533,
+        "bindTexture": 1889,
+        "bindVertexArray": 758,
+        "bufferDataBytes": 11196492,
+        "bufferDataCalls": 19,
+        "bufferSubDataBytes": 11196492,
+        "bufferSubDataCalls": 514,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 1580,
+        "drawElements": 817,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 763,
+        "multiDrawDraws": 2545,
+        "nonInstancedDrawCalls": 1580,
+        "stateChanges": 3413,
+        "texImage2D": 0,
+        "texSubImage2D": 61,
+        "uniformCalls": 5354,
+        "uniformMatrixCalls": 705,
+        "useProgram": 233
+      }
+    },
+    "options": {
+      "autorun": true,
+      "cameraDrag": true,
+      "frames": 60,
+      "timeoutMs": 90000,
+      "warmupFrames": 12
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 286.00000000000006,
+        "duration": 286.00000000000006,
+        "loadEventEnd": 286.00000000000006,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 150,
+        "totalDecodedBodySize": 539455,
+        "totalEncodedBodySize": 539455,
+        "totalTransferSize": 582955
+      }
+    },
+    "ready": false,
+    "renderer": {
+      "after": {
+        "frame": 126,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 993.9999999999999,
+                "imagesComplete": 5613,
+                "preparation": 502,
+                "externalResourceRead": 199,
+                "sourceRead": 292.9999999999999
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 0,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 209048832,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 68,
+          "resources": 69
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 66,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 993.9999999999999,
+                "imagesComplete": 5613,
+                "preparation": 502,
+                "externalResourceRead": 199,
+                "sourceRead": 292.9999999999999
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 1329828,
+          "admittedOrdinaryTextureUploadBytes": 2184484,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 8,
+          "decodedTextureHandoffBytes": 17475872,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 8,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 185772096,
+          "pendingOrdinaryTextureStorageRepresentations": 8,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 60,
+          "resources": 61
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 60,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 66,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 69,
+              "imageFailures": 0,
+              "imagesLoaded": 69,
+              "imageRequests": 69,
+              "lightCount": 0,
+              "nodeCount": 0,
+              "phaseMs": {
+                "firstUsable": 993.9999999999999,
+                "imagesComplete": 5613,
+                "preparation": 502,
+                "externalResourceRead": 199,
+                "sourceRead": 292.9999999999999
+              },
+              "primitiveCount": 103,
+              "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 1329828,
+          "admittedOrdinaryTextureUploadBytes": 2184484,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 8,
+          "decodedTextureHandoffBytes": 17475872,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 8,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 185772096,
+          "pendingOrdinaryTextureStorageRepresentations": 8,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 60,
+          "resources": 61
+        },
+        "virtualTexturing": null
+      }
+    },
+    "url": "http://192.168.1.97:4742/gltf-scenes?scene=sponza&bench=auto&cameraDrag=1&frames=60&warmup=12&timeoutMs=90000&run=1784545178270",
+    "warmupComplete": true,
+    "warnings": [
+      "Document/canvas readiness timed out before sampling"
+    ],
+    "wallMs": 93119
+  },
+  "route": "/gltf-scenes?scene=sponza"
+}

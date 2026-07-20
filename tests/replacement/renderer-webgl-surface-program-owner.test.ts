@@ -4,6 +4,7 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
+  SURFACE_FEATURE_TANGENT,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
   SURFACE_FEATURE_VERTEX_COLOR,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
@@ -48,6 +49,26 @@ describe("surface program ownership", () => {
     const vertexSources = gl.shaderSource.mock.calls.filter(([, source]) =>
       String(source).includes("layout(location = 0) in vec3 position"));
     expect(vertexSources).toHaveLength(1);
+  });
+
+  it("builds authored tangent bases per vertex and only normalizes mapped normals per fragment", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get(
+      "standard",
+      SURFACE_FEATURE_NORMAL_TEXTURE | SURFACE_FEATURE_TANGENT,
+      false,
+      false,
+      false,
+    );
+
+    const sources = gl.shaderSource.mock.calls.map(([, source]) => String(source));
+    const vertex = sources.find((source) => source.includes("layout(location = 10) in vec4 tangent"));
+    const fragment = sources.find((source) => source.includes("uniform sampler2D normalTexture"));
+    expect(vertex).toContain("out vec3 worldBitangent");
+    expect(vertex).toContain("transformedTangent - unitNormal * dot(unitNormal, transformedTangent)");
+    expect(fragment).toContain("worldBitangent * mappedNormal.y");
+    expect(fragment).not.toContain("normalize(worldTangent.xyz");
   });
 
   it("invalidates only programs that depend on lazy transmission source", () => {

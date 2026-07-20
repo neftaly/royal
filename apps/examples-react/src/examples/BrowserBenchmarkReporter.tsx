@@ -23,6 +23,8 @@ type BrowserBenchmarkCounters = {
   readonly drawArraysInstanced: number;
   readonly drawElements: number;
   readonly drawElementsInstanced: number;
+  readonly multiDrawCalls: number;
+  readonly multiDrawDraws: number;
   readonly texImage2D: number;
   readonly texSubImage2D: number;
   readonly uniformCalls: number;
@@ -156,6 +158,8 @@ const createCounters = (): Record<keyof BrowserBenchmarkCounters, number> => ({
   drawArraysInstanced: 0,
   drawElements: 0,
   drawElementsInstanced: 0,
+  multiDrawCalls: 0,
+  multiDrawDraws: 0,
   texImage2D: 0,
   texSubImage2D: 0,
   uniformCalls: 0,
@@ -237,11 +241,14 @@ const browserBenchSnapshot = (
   copyTexSubImage2D: counters.copyTexSubImage2D,
   drawArrays: counters.drawArrays,
   drawArraysInstanced: counters.drawArraysInstanced,
-  drawCalls: counters.drawArrays + counters.drawElements + counters.drawArraysInstanced + counters.drawElementsInstanced,
+  drawCalls: counters.drawArrays + counters.drawElements + counters.drawArraysInstanced
+    + counters.drawElementsInstanced + counters.multiDrawCalls,
   drawElements: counters.drawElements,
   drawElementsInstanced: counters.drawElementsInstanced,
   instancedDrawCalls: counters.drawArraysInstanced + counters.drawElementsInstanced,
-  nonInstancedDrawCalls: counters.drawArrays + counters.drawElements,
+  multiDrawCalls: counters.multiDrawCalls,
+  multiDrawDraws: counters.multiDrawDraws,
+  nonInstancedDrawCalls: counters.drawArrays + counters.drawElements + counters.multiDrawCalls,
   stateChanges: counters.bindBuffer + counters.bindTexture + counters.bindVertexArray + counters.useProgram,
   texImage2D: counters.texImage2D,
   texSubImage2D: counters.texSubImage2D,
@@ -294,6 +301,53 @@ const patchPrototype = (prototype: unknown, counters: Record<keyof BrowserBenchm
   }
 };
 
+const patchMultiDrawExtension = (
+  extension: unknown,
+  counters: Record<keyof BrowserBenchmarkCounters, number>,
+): void => {
+  if (typeof extension !== 'object' || extension === null) return;
+  const target = extension as Record<string, unknown>;
+  const original = target.multiDrawElementsWEBGL;
+  if (
+    typeof original !== 'function'
+    || (original as { __royalBrowserBenchPatched?: boolean }).__royalBrowserBenchPatched === true
+  ) return;
+  const wrapped = function browserBenchmarkMultiDraw(this: unknown, ...args: unknown[]) {
+    counters.multiDrawCalls += 1;
+    const drawCount = args[6];
+    if (typeof drawCount === 'number' && Number.isFinite(drawCount)) {
+      counters.multiDrawDraws += Math.max(0, drawCount);
+    }
+    return Reflect.apply(original, this, args);
+  };
+  Object.defineProperty(wrapped, '__royalBrowserBenchPatched', { value: true });
+  try {
+    target.multiDrawElementsWEBGL = wrapped;
+  } catch {
+    return;
+  }
+};
+
+const patchMultiDrawDiscovery = (
+  prototype: unknown,
+  counters: Record<keyof BrowserBenchmarkCounters, number>,
+): void => {
+  if (typeof prototype !== 'object' || prototype === null) return;
+  const target = prototype as Record<string, unknown>;
+  const original = target.getExtension;
+  if (
+    typeof original !== 'function'
+    || (original as { __royalBrowserBenchPatched?: boolean }).__royalBrowserBenchPatched === true
+  ) return;
+  const wrapped = function browserBenchmarkGetExtension(this: unknown, ...args: unknown[]) {
+    const extension = Reflect.apply(original, this, args) as unknown;
+    if (args[0] === 'WEBGL_multi_draw') patchMultiDrawExtension(extension, counters);
+    return extension;
+  };
+  Object.defineProperty(wrapped, '__royalBrowserBenchPatched', { value: true });
+  target.getExtension = wrapped;
+};
+
 export const installBrowserBenchmarkHooks = (): void => {
   const bridge = globalThis as BrowserBenchmarkGlobal;
   if (bridge.__royalBrowserBench !== undefined) return;
@@ -305,6 +359,11 @@ export const installBrowserBenchmarkHooks = (): void => {
   let timingSupported = false;
   patchPrototype(globalThis.WebGLRenderingContext?.prototype, counters);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype, counters);
+  patchMultiDrawDiscovery(globalThis.WebGLRenderingContext?.prototype, counters);
+  patchMultiDrawDiscovery(globalThis.WebGL2RenderingContext?.prototype, counters);
+  for (const canvas of document.querySelectorAll('canvas')) {
+    patchMultiDrawExtension(canvas.getContext('webgl2')?.getExtension('WEBGL_multi_draw'), counters);
+  }
   const originalRequestFrame = globalThis.requestAnimationFrame;
   if (
     typeof originalRequestFrame === 'function'

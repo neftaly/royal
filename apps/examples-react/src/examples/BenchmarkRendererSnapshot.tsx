@@ -114,8 +114,20 @@ export const BenchmarkRendererSnapshot = ({
         },
         resourcePressure: {
           activePreparationJobs: current.resources.asyncPreparation.activeJobs,
+          activeTextureDecodes:
+            current.resources.ordinaryTexturePreparation.activeDecodes,
+          admittedGeometryUploadBytes: current.resources.geometryUploads.admittedBytes,
           admittedOrdinaryTextureUploadBytes:
             current.resources.ordinaryTextureUploads.admittedBytes,
+          decodeReservationLimit:
+            current.resources.ordinaryTexturePreparation.decodeReservationLimit,
+          decodeReservations:
+            current.resources.ordinaryTexturePreparation.decodeReservations,
+          decodedTextureHandoffBytes:
+            current.resources.ordinaryTexturePreparation.decodedHandoffBytes,
+          decodedTextureHandoffThresholdBytes:
+            current.resources.ordinaryTexturePreparation.decodedHandoffThresholdBytes,
+          deferredGeometryUploads: current.resources.geometryUploads.deferredUploads,
           deferredOrdinaryTextureUploads:
             current.resources.ordinaryTextureUploads.deferredUploads,
           ordinaryTextureUploadBudgetBytes:
@@ -125,6 +137,9 @@ export const BenchmarkRendererSnapshot = ({
           persistentGpuBudgetBytes: current.resources.persistentGpu.budgetBytes,
           persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,
           persistentGpuRetainedBytes: current.resources.persistentGpu.retainedBytes,
+          pendingOrdinaryTextureStorageRepresentations:
+            current.resources.ordinaryTexturePreparation.pendingStorageRepresentations,
+          pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
         },
         textureResidency: {
           fitted: current.resources.ordinaryTextures.fittedTextures,

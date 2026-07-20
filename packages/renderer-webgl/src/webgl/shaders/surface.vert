@@ -7,7 +7,8 @@ out vec4 surfaceVertexColor;
 #endif
 #ifdef TANGENT
 layout(location = 10) in vec4 tangent;
-out vec4 worldTangent;
+out vec3 worldBitangent;
+out vec3 worldTangent;
 #endif
 #ifdef INSTANCED
 layout(location = 3) in mat4 instanceModel;
@@ -133,10 +134,13 @@ __TRANSMISSION_VERTEX_BODY__
   localTangent = mat3(instanceModel) * localTangent;
   tangentHandedness *= instanceNormal2.w;
 #endif
-  worldTangent = vec4(
-    normalize(mat3(model) * localTangent),
-    tangentHandedness * normalTransform[3][3]
+  vec3 unitNormal = normalize(worldNormal);
+  vec3 transformedTangent = mat3(model) * localTangent;
+  worldTangent = normalize(
+    transformedTangent - unitNormal * dot(unitNormal, transformedTangent)
   );
+  worldBitangent = cross(unitNormal, worldTangent)
+    * tangentHandedness * normalTransform[3][3];
 #endif
   gl_Position = viewProjection * world;
 }

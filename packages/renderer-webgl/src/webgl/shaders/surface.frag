@@ -22,7 +22,8 @@ uniform sampler2D metallicRoughnessTexture;
 in vec2 surfaceNormalTextureCoordinate;
 uniform sampler2D normalTexture;
 #ifdef TANGENT
-in vec4 worldTangent;
+in vec3 worldBitangent;
+in vec3 worldTangent;
 #endif
 #endif
 #ifdef EMISSIVE_TEXTURED
@@ -139,8 +140,11 @@ void main() {
   vec3 mappedNormal = texture(normalTexture, surfaceNormalTextureCoordinate).xyz * 2.0 - 1.0;
   mappedNormal.xy *= materialFactors.w;
 #ifdef TANGENT
-  vec3 tangent = normalize(worldTangent.xyz - normal * dot(normal, worldTangent.xyz));
-  vec3 bitangent = cross(normal, tangent) * worldTangent.w;
+  normal = normalize(
+    worldTangent * mappedNormal.x
+    + worldBitangent * mappedNormal.y
+    + normal * mappedNormal.z
+  );
 #else
   vec3 positionDx = dFdx(worldPosition);
   vec3 positionDy = dFdy(worldPosition);
@@ -159,8 +163,8 @@ void main() {
     : 0.0;
   tangent *= tangentScale;
   bitangent *= tangentScale;
-#endif
   normal = normalize(mat3(tangent, bitangent, normal) * mappedNormal);
+#endif
 #endif
 #ifdef DOUBLE_SIDED
   if (!gl_FrontFacing) normal = -normal;

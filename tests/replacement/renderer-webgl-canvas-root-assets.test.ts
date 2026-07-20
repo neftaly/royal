@@ -245,6 +245,50 @@ describe("canvas root asset publication", () => {
     root.dispose();
   });
 
+  it("finishes deferred textures after final geometry admission without camera input", async () => {
+    const textures = Array.from(
+      { length: 20 },
+      (_value, index) => imageTexture(`/overlapped-${index}.png`),
+    );
+    const geometry = planeGeometry(1);
+    const { callbacks, canvas, root } = harness({
+      decodeTexture: async () => ({
+        height: 2,
+        source: {} as ImageBitmap,
+        width: 2,
+      }),
+    }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: textures.map((texture, index) => mesh({
+        geometry,
+        material: unlitMaterial({ texture }),
+        transform: { position: [index * 0.01, 0, 0] },
+      })),
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(textures.every(
+      (texture) => root.getTextureAssetSnapshot(texture).state === "ready",
+    )).toBe(true));
+
+    for (let frame = 0; frame < 40 && callbacks.length > 0; frame += 1) {
+      callbacks.shift()!();
+      await Promise.resolve();
+    }
+
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(20);
+    expect(root.getSnapshot().resources.geometryUploads.pendingSurfaces).toBe(0);
+    expect(root.getSnapshot().resources.ordinaryTexturePreparation).toMatchObject({
+      activeDecodes: 0,
+      decodeReservations: 0,
+      decodedHandoffBytes: 0,
+      pendingStorageRepresentations: 0,
+    });
+    expect(callbacks).toHaveLength(0);
+    root.dispose();
+  });
+
   it("keeps each deferred upload attached to its authored draw", async () => {
     let activeUnit = 0;
     const bound: Array<WebGLTexture | null | undefined> = [];
