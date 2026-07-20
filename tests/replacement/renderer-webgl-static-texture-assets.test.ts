@@ -35,7 +35,8 @@ describe("static texture asset collection", () => {
     const base = asset("base");
     const detail = asset("detail", "linear");
     const primitives = [
-      { material: material({ baseColorAsset: base, emissiveAsset: shared }) },
+      { material: material({ emissiveAsset: shared }) },
+      { material: material({ baseColorAsset: base }) },
       { material: material({ baseColorAsset: shared, normalAsset: detail }) },
     ];
 

@@ -13,26 +13,29 @@ type StaticPrimitiveMaterials = Readonly<{
   materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
 }>;
 
+type TextureClaim = {
+  readonly asset: TextureSourceRef;
+  readonly priority: number;
+};
+
 const TEXTURE_PRIORITY_COUNT = 9;
 
 /** Collects each prepared texture once, ordered by its earliest visible contribution. */
 export const collectStaticTextureAssets = (
   primitives: readonly StaticPrimitiveMaterials[],
 ): readonly TextureSourceRef[] => {
-  const buckets = Array.from(
-    { length: TEXTURE_PRIORITY_COUNT },
-    () => new Map<string, TextureSourceRef>(),
-  );
-  const priorities = new Map<string, number>();
+  const claims = new Map<string, TextureClaim>();
   const materials = new Set<CanonicalSurfaceMaterial>();
   const claim = (asset: TextureSourceRef | undefined, priority: number): void => {
     if (asset === undefined) return;
     const key = textureStorageKey(asset);
-    const previous = priorities.get(key);
-    if (previous !== undefined && previous <= priority) return;
-    if (previous !== undefined) buckets[previous]!.delete(key);
-    priorities.set(key, priority);
-    buckets[priority]!.set(key, asset);
+    const previous = claims.get(key);
+    if (previous === undefined) {
+      claims.set(key, { asset, priority });
+    } else if (priority < previous.priority) {
+      claims.delete(key);
+      claims.set(key, { asset, priority });
+    }
   };
   const collectMaterial = (material: CanonicalSurfaceMaterial): void => {
     if (materials.has(material)) return;
@@ -57,8 +60,10 @@ export const collectStaticTextureAssets = (
     }
   }
   const assets: TextureSourceRef[] = [];
-  for (const bucket of buckets) {
-    for (const asset of bucket.values()) assets.push(asset);
+  for (let priority = 0; priority < TEXTURE_PRIORITY_COUNT; priority += 1) {
+    for (const entry of claims.values()) {
+      if (entry.priority === priority) assets.push(entry.asset);
+    }
   }
   return assets;
 };
