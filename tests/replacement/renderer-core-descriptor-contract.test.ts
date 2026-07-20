@@ -19,6 +19,7 @@ import {
   standardMaterial,
   studioEnvironment,
   textureAsset,
+  triangleGeometry,
   transformGltfAssetBounds,
   type TextureRef,
   unlitMaterial,
@@ -37,6 +38,48 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
+  it("copies and validates caller-authored triangle channels once", () => {
+    const positions = [
+      -1, -1, 0,
+      1, -1, 0,
+      1, 1, 0,
+      -1, 1, 0,
+    ];
+    const geometry = triangleGeometry({
+      indices: [0, 1, 2, 0, 2, 3],
+      positions,
+      textureCoordinates: [0, 1, 1, 1, 1, 0, 0, 0],
+    });
+    positions[0] = 99;
+
+    expect(geometry).toMatchObject({
+      indices: new Uint8Array([0, 1, 2, 0, 2, 3]),
+      kind: "triangles",
+      positions: new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]),
+      textureCoordinates: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
+    });
+    expect(triangleGeometry({
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    }).indices).toEqual(new Uint8Array([0, 1, 2]));
+
+    expect(() => triangleGeometry({ positions: [0, 0, 0] })).toThrow(/at least three/);
+    expect(() => triangleGeometry({
+      indices: [0, 1, 3],
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    })).toThrow(/indices\[2\].*reference a vertex/);
+    expect(() => triangleGeometry({
+      normals: [0, 0, 1],
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    })).toThrow(/one packed XYZ normal per vertex/);
+    expect(() => triangleGeometry({
+      normals: [0, 0, 1, 0, 0, 0, 0, 0, 1],
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    })).toThrow(/normals\[1\].*non-zero/);
+    expect(() => triangleGeometry({
+      positions: [0, 0, 0, 1, Number.NaN, 0, 0, 1, 0],
+    })).toThrow(/positions\[4\].*finite/);
+  });
+
   it("transforms glTF bounds with the same affine convention as scene nodes", () => {
     expect(transformGltfAssetBounds({
       max: [1, 2, 3],
@@ -186,14 +229,21 @@ describe("renderer-core descriptor contract", () => {
     expect(() => mesh({
       geometry: null as unknown as ReturnType<typeof boxGeometry>,
       material: unlitMaterial({ color: [1, 1, 1, 1] }),
-    })).toThrow(/mesh geometry must be a boxGeometry or planeGeometry descriptor/);
+    })).toThrow(/mesh geometry must be a Royal geometry descriptor/);
     expect(() => gltf({
       pickingGeometry: {
         kind: "sphere",
         size: [1, 1, 1],
       } as unknown as ReturnType<typeof boxGeometry>,
       src: "/models/helmet.gltf",
-    })).toThrow(/glTF pickingGeometry must be a boxGeometry or planeGeometry descriptor/);
+    })).toThrow(/glTF pickingGeometry must be a boxGeometry, planeGeometry, or triangleGeometry descriptor/);
+    expect(() => mesh({
+      geometry: {
+        ...triangleGeometry({ positions: [0, 0, 0, 1, 0, 0, 0, 1, 0] }),
+        positions: new Float32Array([0, 0, 0, 1, Number.NaN, 0, 0, 1, 0]),
+      },
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+    })).toThrow(/mesh geometry\.positions\[4\].*finite/);
     expect(() => gltfInstances({
       instances,
       pickingGeometry: {

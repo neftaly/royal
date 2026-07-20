@@ -100,16 +100,48 @@ const boxGeometry = (
   };
 };
 
+const authoredTriangleGeometry = (
+  geometry: Extract<Geometry, { readonly kind: "triangles" }>,
+  key: string,
+  textureCoordinates: boolean,
+): CanonicalTriangleGeometry => {
+  if (textureCoordinates && geometry.textureCoordinates === undefined) {
+    throw new Error("Royal textured triangleGeometry requires textureCoordinates");
+  }
+  let minX = Infinity; let minY = Infinity; let minZ = Infinity;
+  let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
+  for (let offset = 0; offset < geometry.positions.length; offset += 3) {
+    const x = geometry.positions[offset]!;
+    const y = geometry.positions[offset + 1]!;
+    const z = geometry.positions[offset + 2]!;
+    minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+  }
+  return {
+    bounds: { max: [maxX, maxY, maxZ], min: [minX, minY, minZ] },
+    indices: geometry.indices,
+    key,
+    ...(geometry.normals === undefined ? {} : { normals: geometry.normals }),
+    positions: geometry.positions,
+    ...(geometry.textureCoordinates === undefined
+      ? {}
+      : { textureCoordinates0: geometry.textureCoordinates }),
+  };
+};
+
 /** Lowers one validated direct descriptor to the shared triangle ABI. */
 export const prepareCanonicalGeometry = (
   geometry: Geometry,
   textureCoordinates = false,
+  authoredKey = "authored-triangles",
 ): CanonicalTriangleGeometry => {
   switch (geometry.kind) {
     case "plane":
       return planeGeometry(geometry.size[0], geometry.size[1], textureCoordinates);
     case "box":
       return boxGeometry(geometry.size[0], geometry.size[1], geometry.size[2], textureCoordinates);
+    case "triangles":
+      return authoredTriangleGeometry(geometry, authoredKey, textureCoordinates);
   }
 };
 

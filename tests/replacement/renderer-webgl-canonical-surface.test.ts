@@ -12,6 +12,7 @@ import {
   standardMaterial,
   spotLight,
   studioEnvironment,
+  triangleGeometry,
   unlitMaterial,
   virtualTexture,
   wireframeMaterial,
@@ -131,6 +132,25 @@ describe("canonical direct surface lowering", () => {
 
     expect(prepared.surfaces[1]!.geometry).toBe(prepared.surfaces[0]!.geometry);
     expect(prepared.surfaces[1]!.materialSource).toBe(prepared.surfaces[0]!.materialSource);
+  });
+
+  it("retains one authored triangle record across visual and picking uses", () => {
+    const geometry = triangleGeometry({
+      positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
+      textureCoordinates: [0, 1, 1, 1, 0.5, 0],
+    });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 5] }),
+      nodes: [
+        mesh({
+          geometry,
+          material: unlitMaterial({ texture: imageTexture("/triangle.png") }),
+          pickingGeometry: geometry,
+        }),
+      ],
+    }));
+
+    expect(prepared.pickSurfaces[0]!.pickingGeometry).toBe(prepared.surfaces[0]!.geometry);
   });
 
   it("lowers wireframes to shared unlit lines while retaining triangle picking", () => {
@@ -296,10 +316,14 @@ describe("canonical direct surface lowering", () => {
   });
 
   it("keeps one node transform and identity while replacing only exact pick triangles", () => {
+    const pickingGeometry = triangleGeometry({
+      indices: [0, 1, 2, 0, 2, 3],
+      positions: [-2, -0.5, 0, 2, -0.5, 0, 1, 0.5, 0, -1, 0.5, 0],
+    });
     const node = mesh({
       geometry: boxGeometry(2),
       material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
-      pickingGeometry: planeGeometry([4, 1]),
+      pickingGeometry,
       pickingId: "hero",
       transform: { position: [1, 2, -3], rotation: [0.1, 0.2, 0.3] },
     });
@@ -312,13 +336,21 @@ describe("canonical direct surface lowering", () => {
     expect(surface.node.pickingId).toBe("hero");
     expect(surface.geometry.indices).toHaveLength(36);
     expect(surface.model.slice(12, 15)).toEqual([1, 2, -3]);
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toBe(pickingGeometry.indices);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toBe(pickingGeometry.positions);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.bounds).toEqual({
+      max: [2, 0.5, 0],
+      min: [-2, -0.5, 0],
+    });
     expect(prepared.pickSurfaces[0]!.node).toBe(surface.node);
   });
 
   it("prepares a glTF picking proxy without waiting for visible asset geometry", () => {
+    const pickingGeometry = triangleGeometry({
+      positions: [-2, -0.5, 0, 2, -0.5, 0, 0, 0.5, 0],
+    });
     const node = gltf({
-      pickingGeometry: planeGeometry([4, 1]),
+      pickingGeometry,
       pickingId: "loading-asset",
       src: "/model.glb",
       transform: { position: [1, 2, -3] },
@@ -333,7 +365,8 @@ describe("canonical direct surface lowering", () => {
       modelHandedness: 1,
       node,
     });
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toHaveLength(6);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toBe(pickingGeometry.indices);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toBe(pickingGeometry.positions);
   });
 
   it("selects an exact glTF material variant and falls back to the base material", () => {

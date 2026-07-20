@@ -333,14 +333,25 @@ export const prepareCanonicalSurfaceScene = (
   const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directWireframeGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
+  let authoredGeometryIndex = 0;
   const directGeometry = (
     geometry: Geometry,
     textureCoordinates = false,
   ): CanonicalTriangleGeometry => {
-    const retained = textureCoordinates ? directTexturedGeometry : directPlainGeometry;
+    const retained = !textureCoordinates
+      || (geometry.kind === "triangles" && geometry.textureCoordinates !== undefined)
+      ? directPlainGeometry
+      : directTexturedGeometry;
     let canonical = retained.get(geometry);
     if (canonical === undefined) {
-      canonical = prepareCanonicalGeometry(geometry, textureCoordinates);
+      const authoredKey = geometry.kind === "triangles"
+        ? `triangles:${authoredGeometryIndex++}`
+        : "";
+      canonical = prepareCanonicalGeometry(
+        geometry,
+        textureCoordinates,
+        authoredKey,
+      );
       retained.set(geometry, canonical);
     }
     return canonical;

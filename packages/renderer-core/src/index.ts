@@ -42,9 +42,12 @@ export type {
   Geometry,
   PlaneGeometry,
   PlaneGeometryInput,
-  PlaneGeometryOptions
+  PlaneGeometryOptions,
+  TriangleGeometry,
+  TriangleGeometryIndices,
+  TriangleGeometryOptions
 } from './geometry';
-export { boxGeometry, planeGeometry } from './geometry';
+export { boxGeometry, planeGeometry, triangleGeometry } from './geometry';
 export type {
   GltfAssetBounds,
   GltfAssetRef,

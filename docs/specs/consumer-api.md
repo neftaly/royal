@@ -121,6 +121,14 @@ runtime TypeScript enums, backend handles, or callbacks inside scene data.
 Public types and editor documentation state units, color domain, default,
 lifetime, identity, readiness, and invalidation behavior where relevant.
 
+`triangleGeometry({ positions, indices?, normals?, textureCoordinates? })`
+copies and validates caller-owned packed channels into one indexed triangle-list
+descriptor. Positions are local-space XYZ metres. Indices default to sequential
+triangle-soup order; normals and upper-left-origin UVs are optional unless the
+chosen material needs them. The same descriptor is legal as visible mesh
+geometry or `pickingGeometry`, so custom exact silhouettes do not create a
+second geometry API.
+
 ## React versus imperative state
 
 React owns coarse intent: which scene, asset source/version, variant, quality

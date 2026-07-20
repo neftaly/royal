@@ -34,6 +34,13 @@ event or lifecycle path. A proxy is authoritative geometry and does not
 implicitly inherit a visual material's UV mask: no equivalence exists between
 unrelated proxy and render UV topology.
 
+Applications author an exact proxy with the same
+`triangleGeometry({ positions, indices?, normals?, textureCoordinates? })`
+descriptor accepted by a visible mesh. Construction copies and validates the
+packed local-space channels once; scene lowering then retains those canonical
+triangle arrays directly. A picking-only occurrence remains CPU-owned and does
+not cause a GPU upload.
+
 When no proxy exists, pickable rendered triangle geometry defines the visual
 outline. Royal MUST NOT use an asset bounding box as an exact hit merely because
 geometry is still loading. A conservative bounds test is only a broad phase.
