@@ -89,6 +89,7 @@ import {
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import {
+  DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
@@ -205,17 +206,20 @@ const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
   state: "loading",
 };
 const IDLE_VIRTUAL_TEXTURE_RUNTIME: VirtualTextureRuntimeSnapshot = {
+  admittedUploadBytes: 0,
   automaticCandidates: 0,
   automaticDecodedBytes: 0,
   automaticEnabled: 0,
   automaticIneligible: 0,
   automaticResources: 0,
   automaticWaiting: 0,
+  deferredUploads: 0,
   failedPages: 0,
   pageRequests: 0,
   pendingPages: 0,
   residentPages: 0,
   uploadedPages: 0,
+  uploadBudgetBytes: DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
 };
 
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>

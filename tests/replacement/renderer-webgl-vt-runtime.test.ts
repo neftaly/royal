@@ -10,6 +10,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
 import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
@@ -107,6 +108,8 @@ describe("browser virtual texture runtime", () => {
       changed,
       new PersistentGpuBudgetOwner(),
       schedule,
+      undefined,
+      new FrameUploadBudgetOwner(100),
     );
     const matrix = identityMat4();
     const view: SurfaceFrameView = {
@@ -129,8 +132,20 @@ describe("browser virtual texture runtime", () => {
     changed.mockClear();
 
     runtime.update([view]);
-    expect(texSubImage2D).toHaveBeenCalledTimes(5);
-    expect(changed).toHaveBeenCalledTimes(1);
+    expect(texSubImage2D).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalled();
+    expect(runtime.runtimeSnapshot()).toMatchObject({
+      admittedUploadBytes: 96,
+      deferredUploads: 1,
+      uploadBudgetBytes: 100,
+    });
+    texSubImage2D.mockClear();
+    runtime.update([view]);
+    expect(texSubImage2D).toHaveBeenCalledTimes(3);
+    expect(runtime.runtimeSnapshot()).toMatchObject({
+      admittedUploadBytes: 96,
+      deferredUploads: 0,
+    });
     const settled = runtime.update([view]);
     expect(runtime.update([view])).toBe(settled);
 

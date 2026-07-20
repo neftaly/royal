@@ -40,6 +40,7 @@ import {
   virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
   type VirtualTexturePageKey,
+  type VirtualTextureAdmissionPlan,
 } from "./residency";
 import type {
   VirtualTextureGpuBinding,
@@ -60,6 +61,7 @@ import type {
   DecodedTextureLease,
   TextureSourceRef,
 } from "../texture/asset-owner";
+import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
 const MAX_DECODE_JOBS = 4;
@@ -320,6 +322,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions | undefined;
   readonly #onChanged: (asset: VirtualTextureAssetRef) => void;
   readonly #schedule: AsyncPreparationScheduler;
+  readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #resources = new Map<string, RuntimeResource>();
   readonly #assetKeys = new WeakMap<VirtualTextureAssetRef, string>();
   #scene: CanonicalSurfaceScene | null = null;
@@ -331,12 +334,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     budget: PersistentGpuBudgetOwner,
     schedule: AsyncPreparationScheduler,
     automatic: AutomaticVirtualTextureRuntimeOptions | undefined,
+    uploadBudget: FrameUploadBudgetOwner,
   ) {
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#budget = budget;
     this.#schedule = schedule;
     this.#automatic = automatic;
+    this.#uploadBudget = uploadBudget;
   }
 
   get bindingRevision(): number {
@@ -378,6 +383,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot {
+    const uploads = this.#uploadBudget.snapshot();
     let automaticDecodedBytes = 0;
     let automaticResources = 0;
     let failedPages = 0;
@@ -396,17 +402,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       residentPages += resource.gpu?.residentSlots.size ?? 0;
     }
     return {
+      admittedUploadBytes: uploads.admittedBytes,
       automaticCandidates: this.#automaticCandidates,
       automaticDecodedBytes,
       automaticEnabled: this.#automatic === undefined ? 0 : 1,
       automaticIneligible: this.#automaticIneligible,
       automaticResources,
       automaticWaiting: this.#automaticWaiting,
+      deferredUploads: uploads.deferredUploads,
       failedPages,
       pageRequests: this.#pageRequests,
       pendingPages,
       residentPages,
       uploadedPages: this.#uploadedPages,
+      uploadBudgetBytes: uploads.budgetBytes,
     };
   }
 
@@ -599,6 +608,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate {
     if (this.#disposed) return FRAME_RESULTS[0]!;
+    this.#uploadBudget.beginFrame();
     this.#frame += 1;
     let pending = false;
     let webGlStateChanged = false;
@@ -674,15 +684,31 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           settledPages += 1;
           continue;
         }
-        let uploaded: boolean;
+        const plan = planVirtualTextureAdmission(
+          ready.page,
+          gpu.slotKeys,
+          gpu.lastUsedFrames,
+          resource.workspace.keys,
+        );
+        if (plan === undefined) break;
+        const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
+        const pageByteLength = ready.decoded.kind === "etc2-rgba"
+          ? ready.decoded.blocks.byteLength
+          : storedPageSize * storedPageSize * 4;
+        const uploadByteLength = pageByteLength
+          + (uploadedPages === 0 ? gpu.pageTableBytes.byteLength : 0);
+        if (!this.#uploadBudget.tryAdmit(uploadByteLength)) {
+          uploadsRemaining = 0;
+          pending = true;
+          break;
+        }
         try {
-          uploaded = this.#uploadReadyPage(resource, ready);
+          this.#uploadReadyPage(resource, ready, plan);
         } catch (error) {
           resource.readyPages.shift();
           ready.decoded.close();
           throw error;
         }
-        if (!uploaded) break;
         resource.readyPages.shift();
         ready.decoded.close();
         uploadsRemaining -= 1;
@@ -845,16 +871,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     });
   }
 
-  #uploadReadyPage(resource: RuntimeResource, ready: ReadyPage): boolean {
+  #uploadReadyPage(
+    resource: RuntimeResource,
+    ready: ReadyPage,
+    plan: VirtualTextureAdmissionPlan,
+  ): void {
     const gpu = resource.gpu!;
-    if (gpu.residentSlots.has(ready.pageKey)) return false;
-    const plan = planVirtualTextureAdmission(
-      ready.page,
-      gpu.slotKeys,
-      gpu.lastUsedFrames,
-      resource.workspace.keys,
-    );
-    if (plan === undefined) return false;
     const storedPageSize = resource.manifest!.pageSize + resource.manifest!.borderTexels * 2;
     const slotX = plan.slot % gpu.atlasColumns;
     const slotY = Math.floor(plan.slot / gpu.atlasColumns);
@@ -864,61 +886,34 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    try {
-      if (ready.decoded.kind === "etc2-rgba") {
-        const expectedColorSpace = resource.asset.colorSpace ?? resource.manifest!.colorSpace;
-        if (!gpu.compressed || ready.decoded.colorSpace !== expectedColorSpace) {
-          throw new TypeError("Royal VT KTX2 page storage does not match its manifest color space");
-        }
-        gl.compressedTexSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          slotX * storedPageSize,
-          slotY * storedPageSize,
-          storedPageSize,
-          storedPageSize,
-          expectedColorSpace === "srgb"
-            ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
-            : ETC2_RGBA8_WEBGL_FORMAT,
-          ready.decoded.blocks,
-        );
-      } else {
-        if (gpu.compressed) throw new TypeError("Royal VT compressed atlas received an image page");
-        gl.texSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          slotX * storedPageSize,
-          slotY * storedPageSize,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          ready.decoded.source,
-        );
+    if (ready.decoded.kind === "etc2-rgba") {
+      const expectedColorSpace = resource.asset.colorSpace ?? resource.manifest!.colorSpace;
+      if (!gpu.compressed || ready.decoded.colorSpace !== expectedColorSpace) {
+        throw new TypeError("Royal VT KTX2 page storage does not match its manifest color space");
       }
-    } catch (error) {
-      if (plan.evictedKey !== undefined) {
-        gpu.residentSlots.delete(plan.evictedKey);
-        gpu.slotKeys[plan.slot] = undefined;
-        writeVirtualTexturePageTable(
-          resource.manifest!,
-          gpu.residentSlots,
-          gpu.atlasColumns,
-          gpu.pageTableBytes,
-        );
-        gl.activeTexture(gl.TEXTURE5);
-        gl.bindTexture(gl.TEXTURE_2D, gpu.pageTableTexture);
-        gl.texSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          0,
-          0,
-          resource.manifest!.tableWidth,
-          resource.manifest!.tableHeight,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          gpu.pageTableBytes,
-        );
-      }
-      throw error;
+      gl.compressedTexSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        slotX * storedPageSize,
+        slotY * storedPageSize,
+        storedPageSize,
+        storedPageSize,
+        expectedColorSpace === "srgb"
+          ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
+          : ETC2_RGBA8_WEBGL_FORMAT,
+        ready.decoded.blocks,
+      );
+    } else {
+      if (gpu.compressed) throw new TypeError("Royal VT compressed atlas received an image page");
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        slotX * storedPageSize,
+        slotY * storedPageSize,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        ready.decoded.source,
+      );
     }
     if (plan.evictedKey !== undefined) gpu.residentSlots.delete(plan.evictedKey);
     gpu.slotKeys[plan.slot] = plan.pageKey;
@@ -927,7 +922,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gpu.residentSlots.set(plan.pageKey, plan.slot);
     this.#uploadedPages += 1;
     if (firstResident) this.#bindingRevision += 1;
-    return true;
   }
 
   #publishPageTable(resource: RuntimeResource): void {
@@ -962,10 +956,12 @@ export const createBrowserVirtualTextureRuntime = (
   budget = new PersistentGpuBudgetOwner(),
   schedule: AsyncPreparationScheduler = prepareDirectly,
   automatic?: AutomaticVirtualTextureRuntimeOptions,
+  uploadBudget = new FrameUploadBudgetOwner(),
 ): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(
   gl,
   onChanged,
   budget,
   schedule,
   automatic,
+  uploadBudget,
 );

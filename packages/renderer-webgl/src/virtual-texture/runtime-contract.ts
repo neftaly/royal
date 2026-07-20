@@ -43,17 +43,20 @@ export type VirtualTextureFrameUpdate = Readonly<{
 }>;
 
 export type VirtualTextureRuntimeSnapshot = Readonly<{
+  admittedUploadBytes: number;
   automaticCandidates: number;
   automaticDecodedBytes: number;
   automaticEnabled: number;
   automaticIneligible: number;
   automaticResources: number;
   automaticWaiting: number;
+  deferredUploads: number;
   failedPages: number;
   pageRequests: number;
   pendingPages: number;
   residentPages: number;
   uploadedPages: number;
+  uploadBudgetBytes: number;
 }>;
 
 export type VirtualTextureAssetSnapshot = Readonly<{
