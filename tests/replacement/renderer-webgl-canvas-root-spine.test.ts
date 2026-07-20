@@ -537,6 +537,11 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(7);
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
+
+    vi.mocked(canvas.gl.uniform4fv).mockClear();
+    root.invalidate();
+    callbacks.shift()!();
+    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(1);
   });
 
   it("activates authored glTF specular factors only on their material variant", async () => {

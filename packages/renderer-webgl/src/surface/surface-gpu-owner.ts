@@ -241,6 +241,9 @@ export class SurfaceGpuOwner {
   readonly #resourceBudget: PersistentGpuBudgetOwner;
   #requiresSceneColor = false;
   #scene: CanonicalSurfaceScene | null = null;
+  #sceneGlobalsRevision = 0;
+  #programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
+  #standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
   readonly #textureGpu: TextureGpuOwner;
   readonly #texturePublicationKeys = new Set<string>();
   #terminalPresentationEligible = false;
@@ -331,6 +334,8 @@ export class SurfaceGpuOwner {
     this.#gpuScene = null;
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
+    this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
+    this.#standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
     this.#compositeGpu?.invalidate();
     this.#virtualTexture?.invalidate();
     this.#multiDraw = this.#readMultiDraw();
@@ -383,6 +388,8 @@ export class SurfaceGpuOwner {
 
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
+    this.#sceneGlobalsRevision += 1;
+    this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     this.#admittedSurfaceCount = retainedSurfaceAdmissionCount(
       this.#scene?.surfaces ?? [],
       scene?.surfaces ?? [],
@@ -416,6 +423,7 @@ export class SurfaceGpuOwner {
       return false;
     }
     if (!owner.set(prepared)) return false;
+    this.#sceneGlobalsRevision += 1;
     this.#dirty = true;
     this.#fullReconcileRequired = true;
     return true;
@@ -653,6 +661,7 @@ export class SurfaceGpuOwner {
         return;
       }
       this.#environmentGpu = owner;
+      this.#sceneGlobalsRevision += 1;
       this.#dirty = true;
       this.#fullReconcileRequired = true;
       this.#onChanged();
@@ -755,7 +764,8 @@ export class SurfaceGpuOwner {
           && !mat4ValuesEqual(transformModel, surface.model)
         );
       const materialChanged = programChanged
-        || materialSource !== surface.materialSource;
+        ? this.#programMaterialSources.get(program.program) !== surface.materialSource
+        : materialSource !== surface.materialSource;
       if (programChanged) {
         baseColorCoordinates = undefined;
         emissiveCoordinates = undefined;
@@ -796,45 +806,54 @@ export class SurfaceGpuOwner {
         if (standardGlobalsProgram !== program.program) {
           gl.uniformMatrix4fv(program.viewProjection, false, viewProjection);
           gl.uniform4fv(program.cameraWorldPosition, this.#cameraPosition);
-          gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
-          gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
-          gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
           if (
-            program.punctualLightCount !== null
-            && program.punctualLightColors !== null
-            && program.punctualLightDirections !== null
-            && program.punctualLightPositions !== null
-            && program.punctualLightSpotCones !== null
+            this.#standardProgramSceneGlobals.get(program.program)
+              !== this.#sceneGlobalsRevision
           ) {
-            gl.uniform1i(program.punctualLightCount, scene.punctualLights.length);
-            gl.uniform4fv(program.punctualLightColors, this.#punctualLightColors);
-            gl.uniform4fv(program.punctualLightDirections, this.#punctualLightDirections);
-            gl.uniform4fv(program.punctualLightPositions, this.#punctualLightPositions);
-            gl.uniform4fv(program.punctualLightSpotCones, this.#punctualLightSpotCones);
-          }
-          if (program.environmentRotation !== null && program.environmentSettings !== null) {
-            const environment = scene.environment;
-            if (environment === undefined) {
-              throw new Error("Royal studio-environment program is missing canonical state");
+            gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
+            gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
+            gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
+            if (
+              program.punctualLightCount !== null
+              && program.punctualLightColors !== null
+              && program.punctualLightDirections !== null
+              && program.punctualLightPositions !== null
+              && program.punctualLightSpotCones !== null
+            ) {
+              gl.uniform1i(program.punctualLightCount, scene.punctualLights.length);
+              gl.uniform4fv(program.punctualLightColors, this.#punctualLightColors);
+              gl.uniform4fv(program.punctualLightDirections, this.#punctualLightDirections);
+              gl.uniform4fv(program.punctualLightPositions, this.#punctualLightPositions);
+              gl.uniform4fv(program.punctualLightSpotCones, this.#punctualLightSpotCones);
             }
-            gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
-            this.#environmentSettings[0] = environment.radianceScaleNits;
-            const prefiltered = program.environmentCoefficients === null
-              ? undefined
-              : this.#environmentGpu?.binding;
-            this.#environmentSettings[1] = (prefiltered?.mipCount ?? 1) - 1;
-            gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
-            if (program.environmentCoefficients !== null) {
-              if (prefiltered === undefined) {
-                throw new Error("Royal prefiltered-environment program is missing GPU state");
+            if (program.environmentRotation !== null && program.environmentSettings !== null) {
+              const environment = scene.environment;
+              if (environment === undefined) {
+                throw new Error("Royal studio-environment program is missing canonical state");
               }
-              gl.uniform4fv(program.environmentCoefficients, prefiltered.coefficients);
+              gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
+              this.#environmentSettings[0] = environment.radianceScaleNits;
+              const prefiltered = program.environmentCoefficients === null
+                ? undefined
+                : this.#environmentGpu?.binding;
+              this.#environmentSettings[1] = (prefiltered?.mipCount ?? 1) - 1;
+              gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
+              if (program.environmentCoefficients !== null) {
+                if (prefiltered === undefined) {
+                  throw new Error("Royal prefiltered-environment program is missing GPU state");
+                }
+                gl.uniform4fv(program.environmentCoefficients, prefiltered.coefficients);
+              }
             }
-          }
-          this.#presentation[0] = scene.exposure;
-          this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
-          if (program.presentation !== null) {
-            gl.uniform4fv(program.presentation, this.#presentation);
+            this.#presentation[0] = scene.exposure;
+            this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
+            if (program.presentation !== null) {
+              gl.uniform4fv(program.presentation, this.#presentation);
+            }
+            this.#standardProgramSceneGlobals.set(
+              program.program,
+              this.#sceneGlobalsRevision,
+            );
           }
           standardGlobalsProgram = program.program;
         }
@@ -941,6 +960,9 @@ export class SurfaceGpuOwner {
           }
           this.#applyVirtualTexture(program, resource.virtualTexture);
         }
+      }
+      if (materialChanged) {
+        this.#programMaterialSources.set(program.program, surface.materialSource);
       }
       materialProgram = program.program;
       materialSource = surface.materialSource;
