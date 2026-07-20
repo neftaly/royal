@@ -88,7 +88,8 @@ const startLoadFilmstrip = async (routeStartedAt) => {
 const installBenchmarkHooks = async (session) => {
   const hookConfig = JSON.stringify({
     glCallTimingEnabled: cpuProfilePath !== '',
-    firstUsableMinColorBuckets: 16,
+    firstUsableMinColorBuckets: 2,
+    firstUsableMinNonDominantRatio: 0.001,
     firstUsableMinPaintedRatio: 0.01,
     firstUsableSampleSize: 96,
     glErrorDebugEnabled,
@@ -523,7 +524,8 @@ const installBenchmarkHooks = async (session) => {
     try {
       context.drawImage(canvas, 0, 0, width, height);
       const pixels = context.getImageData(0, 0, width, height).data;
-      const buckets = new Set();
+      const buckets = new Map();
+      let dominantBucketPixels = 0;
       let paintedPixels = 0;
       for (let index = 0; index < pixels.length; index += 4) {
         const alpha = pixels[index + 3];
@@ -532,11 +534,17 @@ const installBenchmarkHooks = async (session) => {
         const green = pixels[index + 1];
         const blue = pixels[index + 2];
         paintedPixels += 1;
-        buckets.add(\`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`);
+        const bucket = \`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`;
+        const bucketPixels = (buckets.get(bucket) ?? 0) + 1;
+        buckets.set(bucket, bucketPixels);
+        dominantBucketPixels = Math.max(dominantBucketPixels, bucketPixels);
       }
       return {
         colorBuckets: buckets.size,
         height,
+        nonDominantRatio: paintedPixels === 0
+          ? 0
+          : 1 - dominantBucketPixels / paintedPixels,
         paintedPixels,
         paintedRatio: paintedPixels / (width * height),
         width,
@@ -553,7 +561,8 @@ const installBenchmarkHooks = async (session) => {
     sample !== null &&
     typeof sample.paintedRatio === 'number' &&
     sample.paintedRatio >= config.firstUsableMinPaintedRatio &&
-    sample.colorBuckets >= config.firstUsableMinColorBuckets;
+    sample.colorBuckets >= config.firstUsableMinColorBuckets &&
+    sample.nonDominantRatio >= config.firstUsableMinNonDominantRatio;
   const usableGltfStatus = (status) =>
     status === 'streaming' || status === 'degraded' || status === 'ready';
   const rendererGltfUsable = (renderer) => {
