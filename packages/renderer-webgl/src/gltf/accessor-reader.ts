@@ -267,6 +267,88 @@ export const readFloatVectors = (
   return values;
 };
 
+const canonicalColorValues = (
+  source: Float32Array,
+  componentCount: 3 | 4,
+  label: string,
+  path: string,
+): Float32Array => {
+  if (source.length === 0 || source.length % componentCount !== 0) {
+    fail(label, path, "COLOR_0 decoded attribute size is invalid");
+  }
+  const colors = new Float32Array(source.length / componentCount * 4);
+  for (let sourceOffset = 0, targetOffset = 0; sourceOffset < source.length;
+    sourceOffset += componentCount, targetOffset += 4) {
+    for (let component = 0; component < componentCount; component += 1) {
+      const value = source[sourceOffset + component]!;
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        fail(label, path, `COLOR_0 component ${sourceOffset + component} must be between 0 and 1`);
+      }
+      colors[targetOffset + component] = value;
+    }
+    if (componentCount === 3) colors[targetOffset + 3] = 1;
+  }
+  return colors;
+};
+
+/** Normalizes every legal glTF COLOR_0 representation to canonical linear RGBA floats. */
+export const readVertexColors = (
+  context: AccessorContext,
+  accessorIndex: number,
+  decoded?: Float32Array,
+): Float32Array => {
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  const componentCount: 3 | 4 = accessor.type === "VEC3"
+    ? 3
+    : accessor.type === "VEC4"
+      ? 4
+      : fail(context.label, `${path}.type`, "must be VEC3 or VEC4 for COLOR_0");
+  const componentType = integer(accessor.componentType, context.label, `${path}.componentType`);
+  const integerColor = componentType === 5121 || componentType === 5123;
+  if (componentType !== 5126 && !integerColor) {
+    fail(context.label, `${path}.componentType`, "must be FLOAT, UNSIGNED_BYTE, or UNSIGNED_SHORT for COLOR_0");
+  }
+  if (integerColor !== (accessor.normalized === true)) {
+    fail(
+      context.label,
+      `${path}.normalized`,
+      integerColor ? "must be true for integer COLOR_0" : "must be omitted for FLOAT COLOR_0",
+    );
+  }
+  const count = nonNegativeInteger(accessor.count, context.label, `${path}.count`);
+  if (decoded !== undefined) {
+    if (decoded.length !== count * componentCount) {
+      fail(context.label, path, "decoded COLOR_0 count does not match its accessor");
+    }
+    return canonicalColorValues(decoded, componentCount, context.label, path);
+  }
+  const componentBytes = componentType === 5121 ? 1 : componentType === 5123 ? 2 : 4;
+  const layout = accessorLayout(
+    context,
+    accessorIndex,
+    accessor.type as "VEC3" | "VEC4",
+    componentBytes,
+    componentCount,
+    true,
+  );
+  const values = new Float32Array(layout.count * componentCount);
+  const divisor = componentType === 5121 ? 255 : componentType === 5123 ? 65_535 : 1;
+  for (let item = 0; item < layout.count; item += 1) {
+    const source = layout.absoluteOffset + item * layout.stride;
+    const target = item * componentCount;
+    for (let component = 0; component < componentCount; component += 1) {
+      const offset = source + component * componentBytes;
+      values[target + component] = componentType === 5121
+        ? layout.dataView.getUint8(offset) / divisor
+        : componentType === 5123
+          ? layout.dataView.getUint16(offset, true) / divisor
+          : layout.dataView.getFloat32(offset, true);
+    }
+  }
+  return canonicalColorValues(values, componentCount, context.label, path);
+};
+
 const sequentialIndices = (count: number): IndexArray => {
   const indices: IndexArray = count <= 0x100
     ? new Uint8Array(count)

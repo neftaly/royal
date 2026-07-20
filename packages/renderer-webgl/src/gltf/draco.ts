@@ -2,6 +2,7 @@ import { decodeDracoMesh } from "minidraco";
 
 type JsonObject = Record<string, unknown>;
 export type DracoAttributeSemantic =
+  | "COLOR_0"
   | "NORMAL"
   | "POSITION"
   | "TANGENT"

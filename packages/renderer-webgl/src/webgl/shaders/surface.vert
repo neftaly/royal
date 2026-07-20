@@ -1,6 +1,10 @@
 #version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
+#ifdef VERTEX_COLOR
+layout(location = 12) in vec4 color;
+out vec4 surfaceVertexColor;
+#endif
 #ifdef TANGENT
 layout(location = 10) in vec4 tangent;
 out vec4 worldTangent;
@@ -62,6 +66,9 @@ uniform mat4 normalTransform;
 out vec3 worldNormal;
 out vec3 worldPosition;
 void main() {
+#ifdef VERTEX_COLOR
+  surfaceVertexColor = color;
+#endif
 #ifdef TEXTURED
 #ifdef BASE_COLOR_TEXTURED
   surfaceBaseColorTextureCoordinate = transformedTextureCoordinate(

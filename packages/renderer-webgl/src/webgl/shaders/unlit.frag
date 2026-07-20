@@ -2,6 +2,9 @@
 precision highp float;
 __VIRTUAL_TEXTURE_DECLARATIONS__
 uniform vec4 linearColor;
+#ifdef VERTEX_COLOR
+in vec4 surfaceVertexColor;
+#endif
 #ifdef ALPHA_MASK
 uniform float alphaCutoff;
 #endif
@@ -24,6 +27,9 @@ void main() {
   color *= texture(baseColorTexture, surfaceBaseColorTextureCoordinate);
 #elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
   color *= sampleVirtualBaseColor(surfaceBaseColorTextureCoordinate);
+#endif
+#ifdef VERTEX_COLOR
+  color *= surfaceVertexColor;
 #endif
 #ifdef ALPHA_MASK
   if (color.a < alphaCutoff) discard;

@@ -851,10 +851,10 @@ describe("static glTF preparation core", () => {
     expect(geometry.textureCoordinates0?.buffer).toBe(bytes.buffer);
   });
 
-  it("ignores unconsumed vertex streams but rejects mismatched consumed streams", () => {
+  it("ignores unconsumed UV1 but rejects mismatched consumed streams", () => {
     const extended = staticTriangleDocument();
     const meshes = extended.meshes as Array<{ primitives: Array<{ attributes: object }> }>;
-    meshes[0]!.primitives[0]!.attributes = { COLOR_0: 0, POSITION: 0, TEXCOORD_1: 0 };
+    meshes[0]!.primitives[0]!.attributes = { POSITION: 0, TEXCOORD_1: 0 };
     expect(prepareStaticGlb(staticTriangleGlb(extended), "extended").primitives)
       .toHaveLength(1);
 

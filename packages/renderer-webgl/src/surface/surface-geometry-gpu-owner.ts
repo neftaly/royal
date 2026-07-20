@@ -19,6 +19,7 @@ import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 
 type GpuGeometryArena = Readonly<{
   budgetIdentity: object;
+  colorBuffer: WebGLBuffer | null;
   indexBuffer: WebGLBuffer;
   normalBuffer: WebGLBuffer | null;
   tangentBuffer: WebGLBuffer | null;
@@ -30,6 +31,7 @@ type GpuGeometryArena = Readonly<{
 
 export type GpuGeometry = Readonly<{
   arena: GpuGeometryArena;
+  colorBuffer: WebGLBuffer | null;
   indexBuffer: WebGLBuffer;
   indexOffset: number;
   indexCount: number;
@@ -87,6 +89,7 @@ const geometryLayout = (surface: CanonicalDrawSurface): number => {
   ) layout |= 2;
   if (surfaceUsesTextureCoordinateSet(surface, 0)) layout |= 4;
   if (surfaceUsesTextureCoordinateSet(surface, 1)) layout |= 8;
+  if (surface.geometry.colors !== undefined) layout |= 16;
   return layout;
 };
 
@@ -213,6 +216,7 @@ export class SurfaceGeometryGpuOwner {
   #deleteGeometryArena(arena: GpuGeometryArena): void {
     this.#gl.deleteBuffer(arena.indexBuffer);
     if (arena.normalBuffer !== null) this.#gl.deleteBuffer(arena.normalBuffer);
+    if (arena.colorBuffer !== null) this.#gl.deleteBuffer(arena.colorBuffer);
     if (arena.tangentBuffer !== null) this.#gl.deleteBuffer(arena.tangentBuffer);
     if (arena.textureCoordinateBuffer !== null) {
       this.#gl.deleteBuffer(arena.textureCoordinateBuffer);
@@ -252,12 +256,14 @@ export class SurfaceGeometryGpuOwner {
     const hasTangents = (layout & 2) !== 0;
     const hasTextureCoordinates = (layout & 4) !== 0;
     const hasTextureCoordinates1 = (layout & 8) !== 0;
+    const hasColors = (layout & 16) !== 0;
     const byteLength = batch.indexCount * batch.indexBytes + batch.vertexCount * (
       3 * 4
       + (hasNormals ? 3 * 4 : 0)
       + (hasTangents ? 4 * 4 : 0)
       + (hasTextureCoordinates ? 2 * 4 : 0)
       + (hasTextureCoordinates1 ? 2 * 4 : 0)
+      + (hasColors ? 4 * 4 : 0)
     );
     const budgetIdentity = {};
     if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
@@ -267,6 +273,7 @@ export class SurfaceGeometryGpuOwner {
     const vertexBuffer = gl.createBuffer();
     const indexBuffer = gl.createBuffer();
     const normalBuffer = hasNormals ? gl.createBuffer() : null;
+    const colorBuffer = hasColors ? gl.createBuffer() : null;
     const tangentBuffer = hasTangents ? gl.createBuffer() : null;
     const textureCoordinateBuffer = hasTextureCoordinates ? gl.createBuffer() : null;
     const textureCoordinate1Buffer = hasTextureCoordinates1 ? gl.createBuffer() : null;
@@ -275,6 +282,7 @@ export class SurfaceGeometryGpuOwner {
       || vertexBuffer === null
       || indexBuffer === null
       || (hasNormals && normalBuffer === null)
+      || (hasColors && colorBuffer === null)
       || (hasTangents && tangentBuffer === null)
       || (hasTextureCoordinates && textureCoordinateBuffer === null)
       || (hasTextureCoordinates1 && textureCoordinate1Buffer === null)
@@ -283,6 +291,7 @@ export class SurfaceGeometryGpuOwner {
       if (vertexBuffer !== null) gl.deleteBuffer(vertexBuffer);
       if (indexBuffer !== null) gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (colorBuffer !== null) gl.deleteBuffer(colorBuffer);
       if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
@@ -303,6 +312,14 @@ export class SurfaceGeometryGpuOwner {
         gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 3 * 4, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+      }
+      if (colorBuffer === null) {
+        gl.disableVertexAttribArray(12);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.vertexCount * 4 * 4, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(12);
+        gl.vertexAttribPointer(12, 4, gl.FLOAT, false, 0, 0);
       }
       if (textureCoordinateBuffer === null) {
         gl.disableVertexAttribArray(2);
@@ -332,6 +349,7 @@ export class SurfaceGeometryGpuOwner {
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, batch.indexCount * batch.indexBytes, gl.STATIC_DRAW);
       const arena = {
         budgetIdentity,
+        colorBuffer,
         indexBuffer,
         normalBuffer,
         tangentBuffer,
@@ -344,6 +362,7 @@ export class SurfaceGeometryGpuOwner {
         arena,
         geometries: entries.map((entry): GpuGeometry => ({
           arena,
+          colorBuffer,
           indexBuffer,
           indexCount: entry.range.indexCount,
           indexOffset: entry.range.indexByteOffset,
@@ -360,6 +379,7 @@ export class SurfaceGeometryGpuOwner {
     } catch (error) {
       gl.deleteBuffer(indexBuffer);
       if (normalBuffer !== null) gl.deleteBuffer(normalBuffer);
+      if (colorBuffer !== null) gl.deleteBuffer(colorBuffer);
       if (tangentBuffer !== null) gl.deleteBuffer(tangentBuffer);
       if (textureCoordinateBuffer !== null) gl.deleteBuffer(textureCoordinateBuffer);
       if (textureCoordinate1Buffer !== null) gl.deleteBuffer(textureCoordinate1Buffer);
@@ -420,6 +440,13 @@ export class SurfaceGeometryGpuOwner {
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, arena.normalBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 3 * 4, geometry.normals);
+    }
+    if (arena.colorBuffer !== null) {
+      if (geometry.colors === undefined) {
+        throw new Error("Royal geometry arena is missing COLOR_0 data");
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, arena.colorBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, vertexOffset * 4 * 4, geometry.colors);
     }
     if (arena.textureCoordinateBuffer !== null) {
       if (geometry.textureCoordinates0 === undefined) {
@@ -536,6 +563,13 @@ export class SurfaceGeometryGpuOwner {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+      }
+      if (geometry.colorBuffer === null) {
+        gl.disableVertexAttribArray(12);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.colorBuffer);
+        gl.enableVertexAttribArray(12);
+        gl.vertexAttribPointer(12, 4, gl.FLOAT, false, 0, 0);
       }
       if (geometry.textureCoordinateBuffer === null) {
         gl.disableVertexAttribArray(2);

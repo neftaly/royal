@@ -110,6 +110,13 @@ export const canonicalAlphaMaskAcceptsTrianglePoint = (
   const cutoff = material.alphaCutoff;
   if (cutoff === undefined) return true;
   let sampled = material.baseColor[3];
+  const colors = geometry.colors;
+  if (colors !== undefined) {
+    const barycentricA = 1 - barycentricB - barycentricC;
+    sampled *= colors[a * 4 + 3]! * barycentricA
+      + colors[b * 4 + 3]! * barycentricB
+      + colors[c * 4 + 3]! * barycentricC;
+  }
   if (
     alpha !== undefined
     && sampler !== undefined

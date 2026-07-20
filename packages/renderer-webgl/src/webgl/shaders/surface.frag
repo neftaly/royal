@@ -5,6 +5,9 @@ __VIRTUAL_TEXTURE_DECLARATIONS__
 #define MAX_PUNCTUAL_LIGHTS __MAX_PUNCTUAL_LIGHTS__
 in vec3 worldNormal;
 in vec3 worldPosition;
+#ifdef VERTEX_COLOR
+in vec4 surfaceVertexColor;
+#endif
 #ifdef BASE_COLOR_TEXTURED
 in vec2 surfaceBaseColorTextureCoordinate;
 uniform sampler2D baseColorTexture;
@@ -120,6 +123,9 @@ void main() {
   surfaceBaseColor *= texture(baseColorTexture, surfaceBaseColorTextureCoordinate);
 #elif defined(VIRTUAL_BASE_COLOR_TEXTURED)
   surfaceBaseColor *= sampleVirtualBaseColor(surfaceBaseColorTextureCoordinate);
+#endif
+#ifdef VERTEX_COLOR
+  surfaceBaseColor *= surfaceVertexColor;
 #endif
 #ifdef ALPHA_MASK
   if (surfaceBaseColor.a < materialFactors.z) discard;

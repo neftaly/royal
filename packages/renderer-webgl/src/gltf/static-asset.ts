@@ -32,6 +32,7 @@ import {
   readIndices,
   readInstanceVectors,
   readPositions,
+  readVertexColors,
   validateDecodedVectors,
   type AccessorContext,
 } from "./accessor-reader";
@@ -402,6 +403,16 @@ const prepareStaticDocument = (
         ? readPositions(context, positionAccessor)
         : decodedPositions(decodedPositionValues, label, `${path}.attributes.POSITION`);
       const vertexCount = positions.length / 3;
+      const colors = attributes.COLOR_0 === undefined
+        ? undefined
+        : readVertexColors(
+          context,
+          index(attributes.COLOR_0, accessors, label, `${path}.attributes.COLOR_0`),
+          decoded?.attribute("COLOR_0"),
+        );
+      if (colors !== undefined && colors.length / 4 !== vertexCount) {
+        fail(label, `${path}.attributes.COLOR_0`, "count must match POSITION");
+      }
       const decodedNormalValues = decoded?.attribute("NORMAL");
       const normals = attributes.NORMAL === undefined
         ? undefined
@@ -569,6 +580,7 @@ const prepareStaticDocument = (
       return {
         geometry: {
           bounds,
+          ...(colors === undefined ? {} : { colors }),
           indices,
           key: `${contentKey}:mesh:${meshIndex}:primitive:${primitiveIndex}`,
           ...(normals === undefined ? {} : { normals }),

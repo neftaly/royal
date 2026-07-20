@@ -1,5 +1,9 @@
 #version 300 es
 layout(location = 0) in vec3 position;
+#ifdef VERTEX_COLOR
+layout(location = 12) in vec4 color;
+out vec4 surfaceVertexColor;
+#endif
 #ifdef INSTANCED
 layout(location = 3) in mat4 instanceModel;
 #endif
@@ -17,6 +21,9 @@ vec2 transformedTextureCoordinate(vec4 row0, vec4 row1) {
 #endif
 uniform mat4 viewProjectionModel;
 void main() {
+#ifdef VERTEX_COLOR
+  surfaceVertexColor = color;
+#endif
 #ifdef TEXTURED
   surfaceBaseColorTextureCoordinate = transformedTextureCoordinate(
     baseColorTextureCoordinates0,

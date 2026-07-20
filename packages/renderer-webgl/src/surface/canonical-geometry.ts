@@ -7,6 +7,7 @@ export type CanonicalTriangleGeometry = Readonly<{
   }>;
   indices: Uint8Array | Uint16Array | Uint32Array;
   key: string;
+  colors?: Float32Array;
   normals?: Float32Array;
   positions: Float32Array;
   tangents?: Float32Array;

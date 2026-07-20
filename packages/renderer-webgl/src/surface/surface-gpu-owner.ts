@@ -41,6 +41,7 @@ import {
   SURFACE_FEATURE_SPECULAR_MATERIAL,
   SURFACE_FEATURE_SPECULAR_TEXTURE,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
+  SURFACE_FEATURE_VERTEX_COLOR,
   SURFACE_FEATURE_TANGENT,
   SURFACE_FEATURE_THICKNESS_TEXTURE,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
@@ -243,6 +244,7 @@ const materialTextureFeatures = (
     (ordinaryTextureMask & 1) !== 0,
     hasVirtualBaseColor,
   );
+  if (geometry.colorBuffer !== null) features |= SURFACE_FEATURE_VERTEX_COLOR;
   if (linearOutput) features |= SURFACE_FEATURE_LINEAR_OUTPUT;
   if (surface.material.kind !== "standard") return features;
   if (ordinaryTextureMask & 2) {

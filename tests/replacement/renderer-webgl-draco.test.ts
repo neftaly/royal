@@ -12,10 +12,12 @@ describe("static Draco adapter", () => {
       faces_: new Int32Array([0, 1, 2]),
       getAttributeByUniqueId: (id: number) => {
         requested.push(id);
-        const components = id === 7 ? 3 : 2;
+        const components = id === 7 || id === 9 ? 3 : 2;
         return {
           extractTo: () => id === 7
             ? new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0])
+            : id === 9
+              ? new Float32Array([255, 0, 0, 0, 255, 0, 0, 0, 255])
             : new Float32Array([0, 0, 1, 0, 0.5, 1]),
           numComponents: components,
         };
@@ -28,14 +30,15 @@ describe("static Draco adapter", () => {
         { componentType: 5126, count: 3, type: "VEC3" },
         { componentType: 5126, count: 3, type: "VEC2" },
         { componentType: 5123, count: 3, type: "SCALAR" },
+        { componentType: 5121, count: 3, normalized: true, type: "VEC3" },
       ],
       bufferViews: [{ buffer: 0, byteLength: 1 }],
     }, new Uint8Array([0]), "demanded.glb", decodeMesh);
     const primitive = {
-      attributes: { POSITION: 0, TEXCOORD_1: 1 },
+      attributes: { COLOR_0: 3, POSITION: 0, TEXCOORD_1: 1 },
       extensions: {
         KHR_draco_mesh_compression: {
-          attributes: { POSITION: 7, TEXCOORD_1: 8 },
+          attributes: { COLOR_0: 9, POSITION: 7, TEXCOORD_1: 8 },
           bufferView: 0,
         },
       },
@@ -53,8 +56,11 @@ describe("static Draco adapter", () => {
     expect(decoded.attribute("TEXCOORD_1")).toEqual(new Float32Array([
       0, 0, 1, 0, 0.5, 1,
     ]));
-    expect(requested).toEqual([7, 8]);
+    expect(decoded.attribute("COLOR_0")).toEqual(new Float32Array([
+      1, 0, 0, 0, 1, 0, 0, 0, 1,
+    ]));
+    expect(requested).toEqual([7, 8, 9]);
     expect(decoded.attribute("TEXCOORD_1")).toBe(decoded.attribute("TEXCOORD_1"));
-    expect(requested).toEqual([7, 8]);
+    expect(requested).toEqual([7, 8, 9]);
   });
 });

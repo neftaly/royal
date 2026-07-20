@@ -60,6 +60,11 @@ Missing NORMAL on triangle geometry uses flat face-normal behavior without
 inventing smooth normals. Attribute normalization and quantization follow glTF
 semantics.
 
+`COLOR_0` accepts the core float and normalized unsigned byte/short VEC3/VEC4
+forms and lowers once to canonical linear RGBA floats. RGB supplies alpha one.
+The shader multiplies it with the material and texture base color before alpha
+mode evaluation; exact alpha-mask picking uses the same interpolated alpha.
+
 Triangles, triangle strips/fans, lines, line strips/loops, and points are
 accepted. Picking is exact only where the canonical geometry supplies
 triangles. Primitive conversion MUST preserve winding and MUST NOT silently
