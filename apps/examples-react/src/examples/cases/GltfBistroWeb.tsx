@@ -9,6 +9,14 @@ import {
 import { directionalLight, gltf, scene } from "@royal/react/scene";
 import { useMemo, type ReactNode } from "react";
 import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
+import { exampleCanvasRendererOptions } from "../example-renderer-options";
+import {
+  interactiveCanvasStyle,
+  materialEnvironment,
+  materialFillLight,
+  materialKeyLight,
+  materialPass,
+} from "../presentation";
 
 const bistro = gltf({
   bounds: {
@@ -20,16 +28,8 @@ const bistro = gltf({
 });
 
 const bistroNodes = [
-  directionalLight({
-    color: [1, 0.96, 0.9, 1],
-    direction: [0.45, -0.78, -0.43],
-    illuminanceLux: 4,
-  }),
-  directionalLight({
-    color: [0.55, 0.7, 1, 1],
-    direction: [-0.66, -0.24, 0.71],
-    illuminanceLux: 1.2,
-  }),
+  directionalLight(materialKeyLight),
+  directionalLight(materialFillLight),
   bistro,
 ] as const;
 
@@ -67,9 +67,11 @@ export const GltfBistroWeb = (): ReactNode => {
   });
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
+    environment: materialEnvironment,
     clearColor: [0.018, 0.022, 0.029, 1],
+    exposureEv100: materialPass.exposureEv100,
     nodes: bistroNodes,
-    toneMapping: "pbr-neutral",
+    toneMapping: materialPass.toneMapping,
   }), [orbit.cameraResource]);
 
   return (
@@ -84,7 +86,12 @@ export const GltfBistroWeb = (): ReactNode => {
         </p>
       </header>
       <section className="viewport bistro-viewport" aria-label="Amazon Lumberyard Bistro web-tier example">
-        <Canvas aria-label="Amazon Lumberyard Bistro" scene={renderScene}>
+        <Canvas
+          aria-label="Amazon Lumberyard Bistro"
+          rendererOptions={exampleCanvasRendererOptions}
+          scene={renderScene}
+          style={interactiveCanvasStyle}
+        >
           <GltfOrbitCameraFit
             node={bistro}
             orbit={orbit}
