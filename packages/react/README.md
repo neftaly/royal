@@ -98,7 +98,10 @@ mount or when no visible triangle is hit.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact asset without polling or
 waking for unrelated frames. Its `streaming`, `ready`, and `degraded` states all
 mean geometry is drawable; `status.textures` reports total, loading, ready, and
-failed images as progressive materials arrive.
+failed images as progressive materials arrive. Those drawable states also
+report selected-scene `nodeCount`, `primitiveCount`, and `lightCount`, plus
+document-declared `variantNames` for building material-variant UI without
+parsing the source twice.
 `usePrefilteredEnvironmentStatus(environment)` observes an exact offline
 environment `src` and typed `version`. It reports `idle`, `loading`, `ready`, or
 `error`; ready state includes the cubemap face size, mip count, and recorded

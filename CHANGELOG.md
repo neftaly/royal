@@ -19,8 +19,9 @@ versions identify source-level prerelease checkpoints in this repository.
   virtual textures.
 - Preserved `pickingId` on pick targets instead of renaming it to a generic
   `id` at the result boundary.
-- Folded material `variantNames` into `useGltfAssetStatus()` and removed the
-  duplicate `useGltfAssetVariants()` subscription API.
+- Folded material `variantNames` and selected-scene node, primitive, and light
+  counts into `useGltfAssetStatus()`, and removed the duplicate
+  `useGltfAssetVariants()` subscription API.
 - Renamed `useCanvasSize()` layout dimensions to `cssWidth` and `cssHeight`,
   keeping them distinct from `backingWidth` and `backingHeight`.
 - Removed required internal `kind` discriminators from texture-status identity

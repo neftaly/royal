@@ -21,8 +21,10 @@ describe("glTF asset lifecycle owner", () => {
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [],
+      variantNames: [],
     } as const;
     const prepare = vi.fn(async () => prepared);
     const readResource = vi.fn();
@@ -85,8 +87,10 @@ describe("glTF asset lifecycle owner", () => {
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [],
+      variantNames: [],
     } as const;
     const owner = new GltfAssetOwner({
       now: () => now,
@@ -149,6 +153,8 @@ describe("glTF asset lifecycle owner", () => {
     await waitFor(() => {
       expect(owner.getSnapshot(first.asset)).toEqual({
         bounds: { max: [2, 3, 0], min: [0, 1, 0] },
+        lightCount: 0,
+        nodeCount: 2,
         primitiveCount: 1,
         state: "ready",
         timings: {
@@ -157,6 +163,7 @@ describe("glTF asset lifecycle owner", () => {
           sourceReadDurationMs: expect.any(Number),
         },
         textures: { failed: 0, loading: 0, ready: 0, total: 0 },
+        variantNames: [],
       });
     });
     expect(read).toHaveBeenCalledTimes(1);
@@ -208,8 +215,10 @@ describe("glTF asset lifecycle owner", () => {
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [texture],
+      variantNames: [],
     } as const;
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),

@@ -35,6 +35,7 @@ describe("prepared static glTF transfer ownership", () => {
         outerConeAngle: Math.PI / 4,
         range: 0,
       }],
+      nodeCount: 1,
       primitives: [{
         geometry: {
           bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
@@ -62,6 +63,7 @@ describe("prepared static glTF transfer ownership", () => {
         label: "embedded image",
         mimeType: "image/png",
       }],
+      variantNames: [],
     };
 
     expect(new Set(preparedStaticGltfTransferBuffers(prepared))).toEqual(new Set([
@@ -75,8 +77,10 @@ describe("prepared static glTF transfer ownership", () => {
     const prepared: PreparedStaticGltf = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [{ kind: "asset", src: "/texture.avif" }],
+      variantNames: [],
     };
     expect(preparedStaticGltfTransferBuffers(prepared)).toEqual([]);
   });

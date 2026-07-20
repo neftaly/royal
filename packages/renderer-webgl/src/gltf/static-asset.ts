@@ -76,8 +76,12 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 export type PreparedStaticGltf = Readonly<{
   bounds: GltfAssetBounds;
   lights: readonly PreparedStaticGltfLight[];
+  /** Authored nodes reachable from the selected scene, including authored LOD members. */
+  nodeCount: number;
   primitives: readonly PreparedStaticGltfPrimitive[];
   textureAssets: readonly TextureSourceRef[];
+  /** Unique document-declared material variant names in authored order. */
+  variantNames: readonly string[];
 }>;
 
 export type PreparedStaticGltfLight = Readonly<{
@@ -887,8 +891,10 @@ const prepareStaticDocument = (
   return {
     bounds: staticGltfBounds(batchedPrimitives),
     lights,
+    nodeCount: claimed.size,
     primitives: batchedPrimitives,
     textureAssets: collectStaticTextureAssets(batchedPrimitives),
+    variantNames,
   };
 };
 

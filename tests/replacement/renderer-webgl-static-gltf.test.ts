@@ -369,10 +369,12 @@ describe("static glTF preparation core", () => {
       },
     };
 
-    const primitive = prepareStaticGlb(
+    const prepared = prepareStaticGlb(
       staticTriangleGlb(document),
       "variants-v1",
-    ).primitives[0]!;
+    );
+    const primitive = prepared.primitives[0]!;
+    expect(prepared.variantNames).toEqual(["Ruby", "Emerald"]);
     expect(primitive.material.baseColor).toEqual([0.2, 0.4, 0.8, 1]);
     expect(primitive.materialVariants?.get("Ruby")?.baseColor)
       .toEqual([0.8, 0.02, 0.04, 1]);
@@ -387,6 +389,7 @@ describe("static glTF preparation core", () => {
     const scenes = document.scenes as Array<{ nodes: number[] }>;
     scenes[0]!.nodes.push(nodes.length - 1);
     const prepared = prepareStaticGlb(staticTriangleGlb(document), "repeated-nodes");
+    expect(prepared.nodeCount).toBe(3);
     expect(prepared.primitives).toHaveLength(1);
     expect(prepared.primitives[0]!.instanceBatch).toMatchObject({ handedness: 1 });
     const models = prepared.primitives[0]!.instanceBatch!.localModels;

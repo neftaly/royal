@@ -41,8 +41,11 @@ describe("browser static glTF preparation", () => {
     );
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [],
+      variantNames: [],
     } as const;
     worker.dispatchEvent(new MessageEvent("message", {
       data: { kind: "ready", prepared },
@@ -77,8 +80,11 @@ describe("browser static glTF preparation", () => {
 
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
       primitives: [],
       textureAssets: [],
+      variantNames: [],
     } as const;
     worker.dispatchEvent(new MessageEvent("message", {
       data: { kind: "ready", prepared },

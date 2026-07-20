@@ -46,11 +46,17 @@ export type GltfAssetSnapshot =
   | Readonly<{
     /** Prepared bounds in Royal world-axis convention, before node transform. */
     bounds: GltfAssetBounds;
+    /** Number of punctual lights reachable from the selected scene. */
+    lightCount: number;
+    /** Number of authored nodes reachable from the selected scene, including LOD members. */
+    nodeCount: number;
     /** Number of prepared draw primitives, including authored LOD levels. */
     primitiveCount: number;
     state: "degraded" | "ready" | "streaming";
     timings: GltfAssetTimings;
     textures: GltfTextureProgress;
+    /** Unique document-declared material variant names in authored order. */
+    variantNames: readonly string[];
   }>
   | Readonly<{
     /** Bounded diagnostic message. */
@@ -318,6 +324,8 @@ export class GltfAssetOwner {
       };
       entry.snapshot = {
         bounds: prepared.bounds,
+        lightCount: prepared.lights.length,
+        nodeCount: prepared.nodeCount,
         primitiveCount: prepared.primitives.length,
         state: usableState(textures),
         timings: {
@@ -329,6 +337,7 @@ export class GltfAssetOwner {
           sourceReadDurationMs: readCompletedAt - startedReadingAt,
         },
         textures,
+        variantNames: prepared.variantNames,
       };
       this.#platform.onAssetChanged();
       this.#publish(key);

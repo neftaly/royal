@@ -437,6 +437,8 @@ describe("canvas root asset publication", () => {
     await waitFor(() => {
       expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
         bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
+        lightCount: 0,
+        nodeCount: 1,
         primitiveCount: 1,
         state: "ready",
         timings: {
@@ -445,6 +447,7 @@ describe("canvas root asset publication", () => {
           sourceReadDurationMs: expect.any(Number),
         },
         textures: { failed: 0, loading: 0, ready: 0, total: 0 },
+        variantNames: [],
       });
     });
     expect(readGltf).toHaveBeenCalledTimes(1);

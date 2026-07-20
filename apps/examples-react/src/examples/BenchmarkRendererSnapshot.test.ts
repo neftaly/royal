@@ -47,6 +47,8 @@ describe('current benchmark glTF adapter', () => {
   it('keeps progressive image counts explicit while geometry is usable', () => {
     expect(benchmarkGltfDiagnostics(asset, {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lightCount: 4,
+      nodeCount: 397,
       primitiveCount: 381,
       state: 'streaming',
       timings: {
@@ -55,6 +57,7 @@ describe('current benchmark glTF adapter', () => {
         sourceReadDurationMs: 40,
       },
       textures: { failed: 0, loading: 30, ready: 80, total: 110 },
+      variantNames: ['Day', 'Night'],
     })).toMatchObject({
       imageFailures: 0,
       imagesLoaded: 80,
@@ -66,7 +69,10 @@ describe('current benchmark glTF adapter', () => {
         sourceRead: 40,
       },
       primitiveCount: 381,
+      lightCount: 4,
+      nodeCount: 397,
       status: 'streaming',
+      variantNames: ['Day', 'Night'],
       version: 'web-v2',
     });
   });
@@ -74,6 +80,8 @@ describe('current benchmark glTF adapter', () => {
   it('reports terminal degradation without hiding drawable geometry', () => {
     expect(benchmarkGltfDiagnostics(asset, {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lightCount: 4,
+      nodeCount: 397,
       primitiveCount: 381,
       state: 'degraded',
       timings: {
@@ -83,6 +91,7 @@ describe('current benchmark glTF adapter', () => {
         sourceReadDurationMs: 40,
       },
       textures: { failed: 2, loading: 0, ready: 108, total: 110 },
+      variantNames: ['Day', 'Night'],
     })).toMatchObject({
       imageFailures: 2,
       imagesLoaded: 108,

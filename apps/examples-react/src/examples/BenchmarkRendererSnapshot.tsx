@@ -71,13 +71,13 @@ export const benchmarkGltfDiagnostics = (
     imageFailures: usable ? status.textures.failed : 0,
     imagesLoaded: usable ? status.textures.ready : 0,
     imageRequests: usable ? status.textures.total : 0,
-    lightCount: 0,
-    nodeCount: 0,
+    lightCount: usable ? status.lightCount : 0,
+    nodeCount: usable ? status.nodeCount : 0,
     phaseMs,
     primitiveCount: usable ? status.primitiveCount : 0,
     src: asset.src,
     status: status.state,
-    variantNames: [],
+    variantNames: usable ? status.variantNames : [],
     ...(asset.version === undefined ? {} : { version: asset.version }),
   };
 };

@@ -61,12 +61,13 @@ Minimum workload set:
 - picking proxy and alpha-mask silhouette cases;
 - instancing, variants, authored LOD and multi-view/XR scenes;
 - Sponza and A Beautiful Game for broad scene/material behavior;
-- the external Bistro workload for large-scene DX, loading, memory, texture
+- the web-tier Bistro workload for large-scene DX, loading, memory, texture
   settlement, responsiveness and camera-dependent frame performance.
 
-Bistro remains external and version-pinned; its large assets are not copied
-into the Royal package or ordinary example bundle. The harness may live beside
-the workload and emit a stable machine-readable report Royal can compare.
+Bistro's version-pinned web tier is an explicit large example workload, not
+package runtime content: it is copied only into the examples deployment and is
+excluded from every published Royal package. The harness emits a stable
+machine-readable report Royal can compare.
 
 The old baseline is not automatically correct. Each comparison classifies a
 difference as intended spec correction, old bug, new bug, acceptable quality
@@ -128,5 +129,5 @@ Execution started after:
 
 The remaining physical-device gap is tracked in the conformance ledger. Current
 reports must carry an exact source/build identity; stale Safari or Quest pages
-are not admissible evidence. The external Bistro workload remains an
-adversarial consumer and is not a prerequisite for continuing implementation.
+are not admissible evidence. The Bistro workload remains an adversarial
+consumer and is not a prerequisite for continuing implementation.

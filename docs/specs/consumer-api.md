@@ -208,6 +208,9 @@ may already have been released. GPU admission denial stays in root resource
 diagnostics and does not rewrite successful decode status into a content error.
 Root-wide diagnostics are cold, bounded operational observation and MUST NOT be
 the only way to drive normal loading, variants, fitting, retries, or lifecycle UI.
+Drawable glTF status includes selected-scene node, primitive, and punctual-light
+counts plus document-declared material-variant names. Consumers do not parse a
+second copy of the glTF merely to populate variant controls or asset summaries.
 
 `rendererOptions.maxConcurrentPreparationJobs` is an immutable positive integer
 with default 8. It bounds admitted asynchronous asset-preparation lifecycles

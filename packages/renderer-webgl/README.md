@@ -84,7 +84,8 @@ unrelated frames.
 `getGltfAssetSnapshot(asset)` and `subscribeGltfAsset(asset, listener)` expose
 focused `idle` / `loading` / `ready` / `error` state for one exact source and
 version. `streaming`, `ready`, and `degraded` all mean geometry is usable and
-include `primitiveCount`, `bounds`, and
+include `nodeCount`, `primitiveCount`, `lightCount`, document-declared
+`variantNames`, `bounds`, and
 `textures: { total, loading, ready, failed }`. `streaming` has outstanding
 images, `ready` has completed without image failures, and `degraded` remains
 drawable after one or more image failures. Texture progress never stalls
