@@ -418,7 +418,7 @@ export class CanvasRoot {
     this.#progressiveTexturePresentation = new ProgressivePresentationOwner({
       cancelDelay: platform.cancelDelay
         ?? ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)),
-      intervalMs: 100,
+      intervalMs: 250,
       now: platform.now ?? (() => performance.now()),
       onFailure: (error) => this.#captureScheduledFailure(error),
       present: () => this.#invalidatePresentation(),

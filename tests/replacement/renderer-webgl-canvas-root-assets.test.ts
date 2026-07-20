@@ -181,6 +181,7 @@ describe("canvas root asset publication", () => {
     const third = imageTexture("/third.png");
     let nextDelay = 1;
     const delays = new Map<number, () => void>();
+    const presentationDelays: number[] = [];
     const { callbacks, canvas, root } = harness({
       cancelDelay: (handle) => delays.delete(handle as number),
       decodeTexture: async () => ({
@@ -189,10 +190,11 @@ describe("canvas root asset publication", () => {
         width: 2,
       }),
       now: () => 0,
-      requestDelay: (callback) => {
+      requestDelay: (callback, delayMs) => {
         const handle = nextDelay;
         nextDelay += 1;
         delays.set(handle, callback);
+        presentationDelays.push(delayMs);
         return handle;
       },
     }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
@@ -239,6 +241,70 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(3);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(9);
     expect(root.getSnapshot().resources.ordinaryTextureUploads.deferredUploads).toBe(0);
+    expect(presentationDelays).toContain(250);
+    root.dispose();
+  });
+
+  it("keeps each deferred upload attached to its authored draw", async () => {
+    let activeUnit = 0;
+    const bound: Array<WebGLTexture | null | undefined> = [];
+    let program: WebGLProgram | null = null;
+    const draws: Array<Readonly<{
+      program: WebGLProgram | null;
+      texture: WebGLTexture | null | undefined;
+    }>> = [];
+    const sources = new Map([
+      ["/first.png", {} as ImageBitmap],
+      ["/second.png", {} as ImageBitmap],
+    ]);
+    const uploaded = new Map<TexImageSource, WebGLTexture | null | undefined>();
+    const first = imageTexture("/first.png");
+    const second = imageTexture("/second.png");
+    const { callbacks, root } = harness({
+      decodeTexture: async (asset) => ({
+        height: 2,
+        source: sources.get(asset.kind === "asset" ? asset.src : "")!,
+        width: 2,
+      }),
+    }, {
+      activeTexture: vi.fn((unit: number) => { activeUnit = unit - 0x84c0; }),
+      bindTexture: vi.fn((target: number, texture: WebGLTexture | null) => {
+        if (target === 0x0de1) bound[activeUnit] = texture;
+      }),
+      drawElements: vi.fn(() => draws.push({ program, texture: bound[0] })),
+      texSubImage2D: vi.fn((...arguments_: unknown[]) => {
+        uploaded.set(arguments_.at(-1) as TexImageSource, bound[activeUnit]);
+      }),
+      useProgram: vi.fn((next: WebGLProgram | null) => { program = next; }),
+    }, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
+    root.render(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
+        mesh({
+          geometry: planeGeometry(1),
+          material: unlitMaterial({ texture: second }),
+          transform: { position: [1, 0, 0] },
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
+    draws.length = 0;
+
+    callbacks.shift()!();
+    expect(draws[0]!.texture).toBe(uploaded.get(sources.get("/first.png")!));
+    expect(draws[1]!.program).not.toBe(draws[0]!.program);
+    draws.length = 0;
+    callbacks.shift()!();
+    expect(draws.map((draw) => draw.texture)).toEqual([
+      uploaded.get(sources.get("/first.png")!),
+      uploaded.get(sources.get("/second.png")!),
+    ]);
+    expect(draws[0]!.texture).not.toBe(draws[1]!.texture);
+    expect(draws[0]!.program).toBe(draws[1]!.program);
     root.dispose();
   });
 

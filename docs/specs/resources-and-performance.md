@@ -238,7 +238,7 @@ GPU resource commitment and scene presentation are separate lifecycle effects.
 The first decoded texture and the terminal settled texture set present
 immediately. Intermediate ordinary-texture improvements commit promptly so
 decode reservations are released, while scene presentation is coalesced to a
-bounded 100 ms cadence. A resource-only commit MUST NOT clear the framebuffer,
+bounded 250 ms cadence. A resource-only commit MUST NOT clear the framebuffer,
 submit scene draws, or increment the public presented-frame counter. Camera,
 scene, size, context, VT, or application invalidation always overrides this
 cadence and presents the latest committed resources.

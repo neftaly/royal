@@ -76,6 +76,15 @@ Lighting includes directional, point, spot, explicit scene environment, and
 asset-scoped fallback environment. Environment precedence is semantic and
 independent of asynchronous completion order.
 
+The current profile does not promise shadow maps, screen-space ambient
+occlusion, or another visibility term for direct lights. Directional and
+punctual lights are unshadowed; material occlusion textures affect environment
+lighting only, as defined by glTF. A lighting-reference image that adds external
+shadowing is therefore not a conformance oracle for an otherwise identical
+asset. A future shadow path requires its own public behavior, resource budget,
+visibility policy, XR cost, and Safari/Quest floor before it can enter this
+profile.
+
 ### Prefiltered environment profile
 
 `prefilteredEnvironment({ src, version })` names one offline Royal environment
