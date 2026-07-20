@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
-import { sortSurfacesBackToFront } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
+import {
+  sortSurfacesBackToFront,
+  sortTransmissionSurfaces,
+} from "../../packages/renderer-webgl/src/surface/surface-depth-order";
 
 type Surface = {
   depthOrder: number;
+  drawPacket: Readonly<{ alphaBlend: boolean }>;
   id: number;
   surface: Readonly<{
     worldBounds: Readonly<{
@@ -13,8 +17,9 @@ type Surface = {
   }>;
 };
 
-const item = (id: number, depth: number): Surface => ({
+const item = (id: number, depth: number, alphaBlend = false): Surface => ({
   depthOrder: 0,
+  drawPacket: { alphaBlend },
   id,
   surface: {
     worldBounds: {
@@ -54,5 +59,19 @@ describe("surface depth ordering core", () => {
     sortSurfacesBackToFront(surfaces, identityMat4());
 
     expect(surfaces.map((surface) => surface.id)).toEqual([0, 1, 2]);
+  });
+
+  it("draws depth-writing transmission front-to-back before blended transmission", () => {
+    const surfaces = [
+      item(0, -4, true),
+      item(1, -2),
+      item(2, -5),
+      item(3, -1, true),
+      item(4, -2),
+    ];
+
+    sortTransmissionSurfaces(surfaces, identityMat4());
+
+    expect(surfaces.map((surface) => surface.id)).toEqual([1, 4, 2, 0, 3]);
   });
 });

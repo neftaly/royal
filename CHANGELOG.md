@@ -48,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Ordered depth-writing transmission front-to-back ahead of alpha-blended
+  transmission, preserving screen-space composition while allowing early depth
+  rejection in overlapping glass and volume scenes.
 - Latched scheduled render failures until an explicit scene, backing-size,
   context, or imperative retry boundary, preventing pending progressive work from
   repeatedly consuming RAF callbacks and flooding the console.

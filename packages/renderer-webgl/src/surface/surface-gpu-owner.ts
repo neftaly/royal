@@ -103,7 +103,10 @@ import type {
   PrefilteredEnvironmentGpuBinding,
 } from "../environment/gpu-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
-import { sortSurfacesBackToFront } from "./surface-depth-order";
+import {
+  sortSurfacesBackToFront,
+  sortTransmissionSurfaces,
+} from "./surface-depth-order";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -792,7 +795,7 @@ export class SurfaceGpuOwner {
     let transformProgram: WebGLProgram | null = null;
     const gl = this.#gl;
     if (surfaceDrawPassNeedsDepthOrder(pass)) {
-      sortSurfacesBackToFront(this.#transmissionSurfaces, view);
+      sortTransmissionSurfaces(this.#transmissionSurfaces, view);
       sortSurfacesBackToFront(this.#blendedSurfaces, view);
     }
     const opaqueCount = this.#opaqueSurfaces.length;

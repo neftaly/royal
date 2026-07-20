@@ -6,6 +6,10 @@ export type DepthOrderedSurface = {
   readonly surface: Readonly<{ worldBounds: WorldBounds }>;
 };
 
+export type TransmissionDepthOrderedSurface = DepthOrderedSurface & Readonly<{
+  drawPacket: Readonly<{ alphaBlend: boolean }>;
+}>;
+
 const viewDepth = (bounds: WorldBounds, view: Mat4): number => {
   const x = (bounds.min[0] + bounds.max[0]) * 0.5;
   const y = (bounds.min[1] + bounds.max[1]) * 0.5;
@@ -17,21 +21,46 @@ const viewDepth = (bounds: WorldBounds, view: Mat4): number => {
 const compareDepthOrder = (left: DepthOrderedSurface, right: DepthOrderedSurface): number =>
   left.depthOrder - right.depthOrder;
 
-/** Uses the engines' stable sort only when the retained run is no longer ordered. */
-export const sortSurfacesBackToFront = <Surface extends DepthOrderedSurface>(
+const compareTransmissionDepthOrder = (
+  left: TransmissionDepthOrderedSurface,
+  right: TransmissionDepthOrderedSurface,
+): number => {
+  const leftBlends = left.drawPacket.alphaBlend;
+  const rightBlends = right.drawPacket.alphaBlend;
+  if (leftBlends !== rightBlends) return leftBlends ? 1 : -1;
+  return leftBlends
+    ? left.depthOrder - right.depthOrder
+    : right.depthOrder - left.depthOrder;
+};
+
+const sortSurfaces = <Surface extends DepthOrderedSurface>(
   surfaces: Surface[],
   view: Mat4,
+  compare: (left: Surface, right: Surface) => number,
 ): void => {
   const count = surfaces.length;
   if (count < 2) return;
   let alreadyOrdered = true;
-  let previousDepth = -Infinity;
+  let previous: Surface | undefined;
   for (let index = 0; index < count; index += 1) {
     const surface = surfaces[index]!;
-    const depth = viewDepth(surface.surface.worldBounds, view);
-    surface.depthOrder = depth;
-    if (depth < previousDepth) alreadyOrdered = false;
-    previousDepth = depth;
+    surface.depthOrder = viewDepth(surface.surface.worldBounds, view);
+    if (previous !== undefined && compare(previous, surface) > 0) alreadyOrdered = false;
+    previous = surface;
   }
-  if (!alreadyOrdered) surfaces.sort(compareDepthOrder);
+  if (!alreadyOrdered) surfaces.sort(compare);
+};
+
+/** Uses the engines' stable sort only when the retained run is no longer ordered. */
+export const sortSurfacesBackToFront = <Surface extends DepthOrderedSurface>(
+  surfaces: Surface[],
+  view: Mat4,
+): void => sortSurfaces(surfaces, view, compareDepthOrder);
+
+/** Depth-writing transmission is front-to-back; alpha-blended transmission follows it back-to-front. */
+export const sortTransmissionSurfaces = <Surface extends TransmissionDepthOrderedSurface>(
+  surfaces: Surface[],
+  view: Mat4,
+): void => {
+  sortSurfaces(surfaces, view, compareTransmissionDepthOrder);
 };
