@@ -34,9 +34,14 @@ void main() {
 #ifdef ALPHA_MASK
   if (color.a < alphaCutoff) discard;
 #endif
-#ifdef LINEAR_OUTPUT
-  outputColor = color;
+#ifdef ALPHA_BLEND
+  float surfaceAlpha = color.a;
 #else
-  outputColor = vec4(linearToSrgb(color.rgb), color.a);
+  float surfaceAlpha = 1.0;
+#endif
+#ifdef LINEAR_OUTPUT
+  outputColor = vec4(color.rgb, surfaceAlpha);
+#else
+  outputColor = vec4(linearToSrgb(color.rgb), surfaceAlpha);
 #endif
 }

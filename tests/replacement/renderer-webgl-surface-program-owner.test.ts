@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
@@ -20,6 +21,29 @@ import { fakeGl } from "./support/canvas-root-harness";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-webgl/src/virtual-texture/shader-source";
 
 describe("surface program ownership", () => {
+  it("preserves framebuffer alpha only for blended material variants", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get("standard", 0, false, false, false);
+    owner.get("standard", SURFACE_FEATURE_ALPHA_BLEND, false, false, false);
+    owner.get("unlit", 0, false, false, false);
+    owner.get("unlit", SURFACE_FEATURE_ALPHA_BLEND, false, false, false);
+
+    const fragments = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .filter((source) => source.includes("out vec4 outputColor"));
+    const standard = fragments.filter((source) => source.includes("ggxDistribution"));
+    const unlit = fragments.filter((source) => !source.includes("ggxDistribution"));
+    expect(standard).toHaveLength(2);
+    expect(unlit).toHaveLength(2);
+    expect(standard[0]).not.toContain("#define ALPHA_BLEND");
+    expect(standard[1]).toContain("#define ALPHA_BLEND");
+    expect(unlit[0]).not.toContain("#define ALPHA_BLEND");
+    expect(unlit[1]).toContain("#define ALPHA_BLEND");
+    for (const source of fragments) {
+      expect(source).toContain("float surfaceAlpha = 1.0");
+    }
+  });
+
   it("projects only stage-relevant material features into vertex variants", () => {
     expect(surfaceVertexFeatures("standard", (
       SURFACE_FEATURE_BASE_COLOR_TEXTURE

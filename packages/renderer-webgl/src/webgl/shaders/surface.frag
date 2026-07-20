@@ -356,11 +356,16 @@ void main() {
 #endif
   vec3 linear = lit + emissive;
 __TRANSMISSION_BODY__
+#ifdef ALPHA_BLEND
+  float surfaceAlpha = surfaceBaseColor.a;
+#else
+  float surfaceAlpha = 1.0;
+#endif
 #ifdef LINEAR_OUTPUT
-  outputColor = vec4(linear, surfaceBaseColor.a);
+  outputColor = vec4(linear, surfaceAlpha);
 #else
   vec3 exposed = linear * max(presentation.x, 0.0);
   vec3 mapped = presentation.y > 0.5 ? pbrNeutral(exposed) : clamp(exposed, 0.0, 1.0);
-  outputColor = vec4(linearToSrgb(mapped), surfaceBaseColor.a);
+  outputColor = vec4(linearToSrgb(mapped), surfaceAlpha);
 #endif
 }

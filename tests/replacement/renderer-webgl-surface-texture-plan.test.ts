@@ -11,6 +11,7 @@ import {
   surfaceTextureUnitMask,
 } from "../../packages/renderer-webgl/src/surface/surface-texture-plan";
 import {
+  SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
@@ -55,6 +56,23 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("selects alpha preservation only for blended surfaces", () => {
+    const opaque = surfaceTextureFeatureBits(standard(), false, false, 0, false, false, false, 0, false);
+    const blended = surfaceTextureFeatureBits(
+      standard({ alphaBlend: true }),
+      false,
+      false,
+      0,
+      false,
+      false,
+      false,
+      0,
+      false,
+    );
+    expect(opaque & SURFACE_FEATURE_ALPHA_BLEND).toBe(0);
+    expect(blended & SURFACE_FEATURE_ALPHA_BLEND).toBe(SURFACE_FEATURE_ALPHA_BLEND);
+  });
+
   it("keeps one neutral fallback for ordinary and virtual base-color representations", () => {
     const output = new Float32Array(4);
     const solid = standard({ baseColor: [0.2, 0.4, 0.8, 0.6] });

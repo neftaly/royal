@@ -131,6 +131,11 @@ Alpha-opaque and alpha-mask draws establish normal depth. Transparent and
 transmission ordering MUST be deterministic, though perfect global order is not
 promised. A material becoming ready MUST NOT leak prior draw state.
 
+Framebuffer alpha follows the authored alpha mode, not merely the sampled base
+color. `OPAQUE` and surviving `MASK` fragments write alpha one; only `BLEND`
+preserves factor/texture/vertex alpha. The choice is a shader feature selected
+before submission, so ordinary opaque fragments pay no dynamic mode branch.
+
 ## Transmission and dispersion
 
 Transmission is a screen-space approximation of already-rendered scene color,

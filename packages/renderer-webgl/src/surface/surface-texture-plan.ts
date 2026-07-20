@@ -7,6 +7,7 @@ import {
   type CanonicalTextureBinding,
 } from "./canonical-material";
 import {
+  SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
@@ -118,7 +119,8 @@ export const surfaceTextureFeatureBits = (
   ordinaryTextureMask: number,
   linearOutput: boolean,
 ): number => {
-  let features = baseColorTextureFeatureBits(
+  let features = material.alphaBlend === true ? SURFACE_FEATURE_ALPHA_BLEND : 0;
+  features |= baseColorTextureFeatureBits(
     (ordinaryTextureMask & 1) !== 0,
     hasVirtualBaseColor,
   );
