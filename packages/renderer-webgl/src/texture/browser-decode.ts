@@ -172,8 +172,18 @@ const decodeTextureBlob = async (
   retainAlpha = false,
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
+  const decodeImageElement = async (): Promise<DecodedImageTextureSource> => {
+    const decoded = await decodeBrowserImageElement(
+      blob,
+      signal,
+      maxStorageBytes === undefined
+        ? undefined
+        : (width, height) => fitOrdinaryTextureStorage(width, height, maxStorageBytes),
+    );
+    return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+  };
   if (typeof globalThis.createImageBitmap !== "function") {
-    throw new Error(`${diagnosticLabel(asset)} requires browser image decoding support`);
+    return decodeImageElement();
   }
   const bitmapOptions = {
     colorSpaceConversion: "none",
@@ -226,8 +236,7 @@ const decodeTextureBlob = async (
         bitmap = await globalThis.createImageBitmap(blob, bitmapOptions);
       } catch (fallbackError) {
         try {
-          const decoded = await decodeBrowserImageElement(blob, signal);
-          return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+          return await decodeImageElement();
         } catch (imageElementError) {
           throw new AggregateError(
             [error, fallbackError, imageElementError],
@@ -237,8 +246,7 @@ const decodeTextureBlob = async (
       }
     } else {
       try {
-        const decoded = await decodeBrowserImageElement(blob, signal);
-        return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+        return await decodeImageElement();
       } catch (fallbackError) {
         throw new AggregateError(
           [error, fallbackError],

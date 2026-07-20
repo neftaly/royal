@@ -2,6 +2,8 @@ export type BrowserImageElementSource = Readonly<{
   close(): void;
   height: number;
   source: HTMLCanvasElement;
+  sourceHeight?: number;
+  sourceWidth?: number;
   width: number;
 }>;
 
@@ -11,6 +13,7 @@ const aborted = (): DOMException => new DOMException("Image decode was aborted",
 export const decodeBrowserImageElement = async (
   blob: Blob,
   signal: AbortSignal,
+  fit?: (width: number, height: number) => Readonly<{ height: number; width: number }>,
 ): Promise<BrowserImageElementSource> => {
   if (signal.aborted) throw aborted();
   if (typeof document === "undefined") {
@@ -40,28 +43,29 @@ export const decodeBrowserImageElement = async (
     if (image.naturalWidth < 1 || image.naturalHeight < 1) {
       throw new Error("Royal browser image element decoded to an empty image");
     }
-    const width = image.naturalWidth;
-    const height = image.naturalHeight;
+    const sourceWidth = image.naturalWidth;
+    const sourceHeight = image.naturalHeight;
+    const fitted = fit?.(sourceWidth, sourceHeight)
+      ?? { height: sourceHeight, width: sourceWidth };
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = fitted.width;
+    canvas.height = fitted.height;
     const context = canvas.getContext("2d", { alpha: true });
     if (context === null) throw new Error("Royal could not allocate an image fallback canvas");
-    context.clearRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
+    context.drawImage(image, 0, 0, fitted.width, fitted.height);
     image.src = "";
     URL.revokeObjectURL(objectUri);
-    let live = true;
     return {
       close: () => {
-        if (!live) return;
-        live = false;
         canvas.width = 1;
         canvas.height = 1;
       },
-      height,
+      height: fitted.height,
       source: canvas,
-      width,
+      ...(fitted.width === sourceWidth && fitted.height === sourceHeight
+        ? {}
+        : { sourceHeight, sourceWidth }),
+      width: fitted.width,
     };
   } catch (error) {
     image.src = "";

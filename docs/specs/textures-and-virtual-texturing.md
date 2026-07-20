@@ -77,6 +77,12 @@ browser-authoritative decode-then-fit path. The hint cannot expand an image,
 change aspect ratio, accept a format, or bypass browser validation; it avoids a
 second full decoded bitmap only when the same budget decision is known early.
 
+Browser decode prefers `createImageBitmap` with a direct fitted resize. When
+that API is absent or rejects an otherwise browser-decodable source, the DOM
+image/canvas path MUST apply the same fitted storage plan and preserve the
+original source dimensions. Capability detection is behavioral; user-agent or
+engine-name branching is not part of the texture contract.
+
 Ordinary images used by pickable `MASK` materials additionally retain one
 8-bit alpha plane at the already fitted upload dimensions. This demand is
 keyed by decoded content, shared across color interpretations and samplers, and

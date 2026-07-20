@@ -45,6 +45,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Made ordinary browser texture decode fall back to a budget-fitted DOM
+  image/canvas path when `createImageBitmap` is absent or rejects the source,
+  preserving source dimensions and GPU admission semantics.
 - Limited rough-transmission scene-color storage to the mip prefix reachable by
   visible authored roughness, preserving the original LOD mapping while
   avoiding unreachable target memory and mip generation.

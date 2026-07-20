@@ -58,6 +58,61 @@ describe("browser texture decode shell", () => {
     expect(createImageBitmap).not.toHaveBeenCalled();
   });
 
+  it("uses a fitted image-element canvas when createImageBitmap is unavailable", async () => {
+    const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
+    const context = { clearRect: vi.fn(), drawImage: vi.fn() };
+    const canvas = {
+      getContext: vi.fn(() => context),
+      height: 0,
+      width: 0,
+    };
+    const image: {
+      naturalHeight: number;
+      naturalWidth: number;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+      src: string;
+    } = {
+      naturalHeight: 1024,
+      naturalWidth: 2048,
+      onerror: null,
+      onload: null,
+      src: "",
+    };
+    Object.defineProperty(image, "src", {
+      get: () => "",
+      set: (value: string) => {
+        if (value !== "") queueMicrotask(() => image.onload?.());
+      },
+    });
+    const createObjectURL = vi.fn(() => "blob:royal-fallback");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("document", {
+      createElement: vi.fn((kind: string) => kind === "img" ? image : canvas),
+    });
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+
+    const result = await decodeTextureWithBrowser({
+      bytes: new Uint8Array([1]),
+      contentKey: "dom-fallback",
+      kind: "embedded-asset",
+      label: "DOM fallback",
+      mimeType: "image/png",
+    }, new AbortController().signal, 340);
+
+    expect(result).toMatchObject({
+      height: fitted.height,
+      source: canvas,
+      sourceHeight: 1024,
+      sourceWidth: 2048,
+      width: fitted.width,
+    });
+    expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, fitted.width, fitted.height);
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-fallback");
+  });
+
   it("keeps direct KTX2 ETC2 levels compressed and extracts alpha only on demand", async () => {
     const bytes = createKtx2Etc2Fixture(152);
     const createImageBitmap = vi.fn();
