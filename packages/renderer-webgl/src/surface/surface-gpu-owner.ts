@@ -80,6 +80,7 @@ import type {
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import { planContiguousRunEnds } from "./contiguous-run-plan";
+import { surfacesShareMultiDrawState } from "./surface-multi-draw";
 import {
   canonicalSurfaceIsDoubleSided,
   canonicalTransmissionNeedsMipmaps,
@@ -146,39 +147,6 @@ const NEUTRAL_PERCEPTUAL_GREY = new Float32Array([0.214_041, 0.214_041, 0.214_04
 const DEFAULT_ATTENUATION_COLOR = new Float32Array([1, 1, 1]);
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
-
-const textureBindingsEqual = (
-  left: readonly GpuTextureBinding[],
-  right: readonly GpuTextureBinding[],
-): boolean => {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    if (
-      left[index]!.sampler !== right[index]!.sampler
-      || left[index]!.target !== right[index]!.target
-      || left[index]!.texture !== right[index]!.texture
-    ) return false;
-  }
-  return true;
-};
-
-const sharesMultiDrawState = (left: GpuSurface, right: GpuSurface): boolean => (
-  left.instanceCount === 0
-  && right.instanceCount === 0
-  && left.program.program === right.program.program
-  && left.mode === right.mode
-  && left.surface.materialSource === right.surface.materialSource
-  && left.surface.material.alphaBlend !== true
-  && right.surface.material.alphaBlend !== true
-  && canonicalSurfaceIsDoubleSided(left.surface.material)
-    === canonicalSurfaceIsDoubleSided(right.surface.material)
-  && left.surface.modelHandedness === right.surface.modelHandedness
-  && mat4ValuesEqual(left.surface.model, right.surface.model)
-  && left.textureUnits === right.textureUnits
-  && left.vertexArray === right.vertexArray
-  && left.geometry.indexType === right.geometry.indexType
-  && textureBindingsEqual(left.bindings, right.bindings)
-);
 
 const composeSurfaceTextureBindings = (
   ordinary: readonly GpuTextureBinding[],
@@ -1556,6 +1524,6 @@ export class SurfaceGpuOwner {
   #planOpaqueMultiDrawRuns(): void {
     this.#opaqueMultiDrawRunEnds = this.#multiDraw === null
       ? EMPTY_RUN_ENDS
-      : planContiguousRunEnds(this.#opaqueSurfaces, sharesMultiDrawState);
+      : planContiguousRunEnds(this.#opaqueSurfaces, surfacesShareMultiDrawState);
   }
 }
