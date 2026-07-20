@@ -26,6 +26,11 @@ export type GeometryBatchLayoutPlan = Readonly<{
   vertexCount: number;
 }>;
 
+export type GeometryBatchChunk = Readonly<{
+  end: number;
+  start: number;
+}>;
+
 const indexArray = (
   length: number,
   indexBytes: 1 | 2 | 4,
@@ -36,6 +41,91 @@ const indexArray = (
 const maximumIndexFor = (indices: GeometryIndexArray): number => indices.BYTES_PER_ELEMENT === 1
   ? 0xff
   : indices.BYTES_PER_ELEMENT === 2 ? 0xffff : 0xffff_ffff;
+
+const indexBytesForVertexCount = (vertexCount: number): 1 | 2 | 4 => {
+  if (!Number.isSafeInteger(vertexCount) || vertexCount < 1) {
+    throw new Error("Royal geometry batch received an invalid vertex count");
+  }
+  if (vertexCount > 0x1_0000_0000) {
+    throw new Error("Royal geometry batch exceeds 32-bit index storage");
+  }
+  const maximumIndex = vertexCount - 1;
+  return maximumIndex <= 0xff ? 1 : maximumIndex <= 0xffff ? 2 : 4;
+};
+
+const geometryBatchByteLength = (
+  indexCount: number,
+  vertexCount: number,
+  vertexStrideBytes: number,
+): number => {
+  const byteLength = indexCount * indexBytesForVertexCount(vertexCount)
+    + vertexCount * vertexStrideBytes;
+  if (!Number.isSafeInteger(byteLength)) {
+    throw new Error("Royal geometry batch byte length exceeds safe integer storage");
+  }
+  return byteLength;
+};
+
+/** Exact storage bytes claimed by one shared geometry layout. */
+export const geometryBatchLayoutByteLength = (
+  plan: GeometryBatchLayoutPlan,
+  vertexStrideBytes: number,
+): number => {
+  if (!Number.isSafeInteger(vertexStrideBytes) || vertexStrideBytes < 1) {
+    throw new Error("Royal geometry batch received an invalid vertex stride");
+  }
+  return geometryBatchByteLength(plan.indexCount, plan.vertexCount, vertexStrideBytes);
+};
+
+/** Greedily partitions compatible geometry without splitting one primitive. */
+export const planGeometryBatchChunks = (
+  geometries: readonly GeometryBatchInput[],
+  vertexStrideBytes: number,
+  maximumByteLength: number,
+): readonly GeometryBatchChunk[] => {
+  if (geometries.length === 0) {
+    throw new Error("Royal geometry batch requires at least one geometry");
+  }
+  if (!Number.isSafeInteger(vertexStrideBytes) || vertexStrideBytes < 1) {
+    throw new Error("Royal geometry batch received an invalid vertex stride");
+  }
+  if (!Number.isSafeInteger(maximumByteLength) || maximumByteLength < 1) {
+    throw new Error("Royal geometry batch received an invalid byte ceiling");
+  }
+  const chunks: GeometryBatchChunk[] = [];
+  let start = 0;
+  let indexCount = 0;
+  let vertexCount = 0;
+  for (let index = 0; index < geometries.length; index += 1) {
+    const geometry = geometries[index]!;
+    if (!Number.isSafeInteger(geometry.vertexCount) || geometry.vertexCount < 1) {
+      throw new Error("Royal geometry batch received an invalid vertex count");
+    }
+    if (geometry.indices.length < 1) {
+      throw new Error("Royal geometry batch received empty indices");
+    }
+    let nextIndexCount = indexCount + geometry.indices.length;
+    let nextVertexCount = vertexCount + geometry.vertexCount;
+    if (!Number.isSafeInteger(nextIndexCount) || !Number.isSafeInteger(nextVertexCount)) {
+      throw new Error("Royal geometry batch size exceeds safe integer storage");
+    }
+    if (
+      index > start
+      && geometryBatchByteLength(nextIndexCount, nextVertexCount, vertexStrideBytes)
+        > maximumByteLength
+    ) {
+      chunks.push({ end: index, start });
+      start = index;
+      nextIndexCount = geometry.indices.length;
+      nextVertexCount = geometry.vertexCount;
+    }
+    geometryBatchByteLength(nextIndexCount, nextVertexCount, vertexStrideBytes);
+    indexCount = nextIndexCount;
+    vertexCount = nextVertexCount;
+  }
+  chunks.push({ end: geometries.length, start });
+  return chunks;
+};
 
 /** Validates that a local index stream addresses only its declared vertices. */
 export const validateGeometryIndices = (
@@ -112,11 +202,7 @@ export const planGeometryBatchLayout = (
     indexCount = nextIndexCount;
     vertexCount = nextVertexCount;
   }
-  if (vertexCount > 0x1_0000_0000) {
-    throw new Error("Royal geometry batch exceeds 32-bit index storage");
-  }
-  const maximumIndex = vertexCount - 1;
-  const indexBytes = maximumIndex <= 0xff ? 1 : maximumIndex <= 0xffff ? 2 : 4;
+  const indexBytes = indexBytesForVertexCount(vertexCount);
   for (let geometryIndex = 0; geometryIndex < ranges.length; geometryIndex += 1) {
     const range = ranges[geometryIndex]!;
     ranges[geometryIndex] = {

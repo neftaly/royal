@@ -51,11 +51,14 @@ into an otherwise empty domain so a valid resource cannot starve forever. The
 diagnostic snapshot reports admitted—not necessarily driver-completed—bytes
 and unique deferrals for each domain in the most recently submitted frame.
 
-Geometry admission governs source transfer into already-accounted arena
-storage. Arena allocation is a distinct persistent-budget transaction and is
-not misreported as uploaded bytes. If traces show allocation itself causing a
-material stall, lazy arena growth requires its own transactional design rather
-than pretending `bufferData(size)` transferred that many source bytes.
+Geometry admission governs source transfer separately from arena storage.
+Compatible geometry is greedily partitioned into at-most-4-MiB arena chunks,
+except that one indivisible primitive may be larger. A chunk claims persistent
+budget and creates its stable buffers/VAO only when its first surface transaction
+is admitted. Later surfaces reuse that storage without buffer growth or copying.
+Arena allocation is not misreported as uploaded bytes, and the chunk boundary
+may end an otherwise legal multi-draw run rather than reserve a whole scene up
+front.
 
 One physical allocation MUST have one accounting owner. Diagnostics may project
 the same allocation in a subsystem view but MUST identify overlap rather than

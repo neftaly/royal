@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  geometryBatchLayoutByteLength,
   planGeometryBatch,
+  planGeometryBatchChunks,
   planGeometryBatchLayout,
   rebaseGeometryIndices,
   validateGeometryIndices,
@@ -66,6 +68,21 @@ describe("geometry batch planning core", () => {
     expect([...admitted]).toEqual([5, 3, 4]);
   });
 
+  it("chunks allocation storage greedily while allowing one oversize primitive", () => {
+    const geometries = [
+      { indices: new Uint8Array(6), vertexCount: 4 },
+      { indices: new Uint8Array(6), vertexCount: 4 },
+      { indices: new Uint8Array(6), vertexCount: 20 },
+    ];
+    expect(planGeometryBatchChunks(geometries, 12, 70)).toEqual([
+      { end: 1, start: 0 },
+      { end: 2, start: 1 },
+      { end: 3, start: 2 },
+    ]);
+    const oversize = planGeometryBatchLayout([geometries[2]!]);
+    expect(geometryBatchLayoutByteLength(oversize, 12)).toBe(246);
+  });
+
   it("writes into larger caller-owned storage without allocating", () => {
     const workspace = new Uint16Array(8);
     writeRebasedGeometryIndices(workspace, new Uint8Array([2, 0, 1]), 300, 3);
@@ -93,6 +110,17 @@ describe("geometry batch planning core", () => {
         return { indices, vertexCount };
       });
       const plan = planGeometryBatch(geometries);
+      const maximumByteLength = random.int(1, 400_001);
+      const chunks = planGeometryBatchChunks(geometries, 12, maximumByteLength);
+      expect(chunks[0]!.start).toBe(0);
+      expect(chunks.at(-1)!.end).toBe(geometries.length);
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+        const chunk = chunks[chunkIndex]!;
+        if (chunkIndex > 0) expect(chunk.start).toBe(chunks[chunkIndex - 1]!.end);
+        const chunkPlan = planGeometryBatchLayout(geometries.slice(chunk.start, chunk.end));
+        const chunkBytes = geometryBatchLayoutByteLength(chunkPlan, 12);
+        if (chunk.end - chunk.start > 1) expect(chunkBytes).toBeLessThanOrEqual(maximumByteLength);
+      }
       const reference: number[] = [];
       let vertexOffset = 0;
       let outputOffset = 0;

@@ -258,4 +258,36 @@ describe("surface geometry GPU owner", () => {
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);
   });
+
+  it("claims bounded arena chunks only when their first surface is admitted", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner();
+    const owner = new SurfaceGeometryGpuOwner(gl, budget);
+    const base = surface(planeGeometry(1))[0]!;
+    const large = (key: string) => ({
+      ...base,
+      geometry: {
+        ...base.geometry,
+        indices: new Uint32Array([0, 1, 2]),
+        key,
+        positions: new Float32Array(600_000),
+      },
+    });
+    const surfaces = [large("large-a"), large("large-b")];
+
+    const firstFrame = owner.prepare(surfaces, 2);
+    expect(firstFrame.surfaces).toHaveLength(1);
+    expect(gl.createBuffer).toHaveBeenCalledTimes(2);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
+    expect(budget.snapshot().retainedBytes).toBe(2_400_012);
+    firstFrame.commit();
+
+    owner.beginFrame();
+    const secondFrame = owner.prepare(surfaces, 2);
+    expect(secondFrame.surfaces).toHaveLength(2);
+    expect(gl.createBuffer).toHaveBeenCalledTimes(4);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(2);
+    expect(budget.snapshot().retainedBytes).toBe(4_800_024);
+    secondFrame.commit();
+  });
 });
