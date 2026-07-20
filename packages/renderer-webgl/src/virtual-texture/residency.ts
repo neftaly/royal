@@ -18,6 +18,60 @@ export interface ProtectedVirtualTexturePages {
   has(key: VirtualTexturePageKey): boolean;
 }
 
+export type VirtualTexturePoolSlot = Readonly<{
+  pageKey: VirtualTexturePageKey;
+  resourceKey: string;
+}>;
+
+export type VirtualTexturePoolAdmissionPlan = Readonly<{
+  evicted?: VirtualTexturePoolSlot;
+  page: VirtualTexturePageId;
+  pageKey: VirtualTexturePageKey;
+  resourceKey: string;
+  slot: number;
+}>;
+
+export interface ProtectedVirtualTexturePoolPages {
+  has(resourceKey: string, pageKey: VirtualTexturePageKey): boolean;
+}
+
+/** Pure shared-atlas admission keyed by both logical texture and page. */
+export const planVirtualTexturePoolAdmission = (
+  resourceKey: string,
+  page: VirtualTexturePageId,
+  slots: readonly (VirtualTexturePoolSlot | undefined)[],
+  lastUsedFrames: ArrayLike<number>,
+  protectedPages: ProtectedVirtualTexturePoolPages,
+): VirtualTexturePoolAdmissionPlan | undefined => {
+  if (slots.length === 0 || slots.length !== lastUsedFrames.length) {
+    throw new Error("Royal VT pool slots and recency storage must have equal non-zero length");
+  }
+  const pageKey = virtualTexturePageKey(page);
+  let candidate = -1;
+  let oldestFrame = Infinity;
+  for (let slot = 0; slot < slots.length; slot += 1) {
+    const resident = slots[slot];
+    if (resident?.resourceKey === resourceKey && resident.pageKey === pageKey) {
+      return { page, pageKey, resourceKey, slot };
+    }
+    if (resident === undefined) return { page, pageKey, resourceKey, slot };
+    if (protectedPages.has(resident.resourceKey, resident.pageKey)) continue;
+    const lastUsed = lastUsedFrames[slot]!;
+    if (lastUsed < oldestFrame) {
+      candidate = slot;
+      oldestFrame = lastUsed;
+    }
+  }
+  if (candidate < 0) return undefined;
+  return {
+    evicted: slots[candidate]!,
+    page,
+    pageKey,
+    resourceKey,
+    slot: candidate,
+  };
+};
+
 /**
  * Pure bounded LRU decision. Existing mappings remain valid until the caller
  * completes its atlas upload and commits this plan.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseVirtualTextureManifest, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
 import {
   planVirtualTextureAdmission,
+  planVirtualTexturePoolAdmission,
   virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
 } from "../../packages/renderer-webgl/src/virtual-texture/residency";
@@ -55,5 +56,37 @@ describe("VT2 residency core", () => {
     const fallbackOffset = mip0.byteOffset + (manifest.tableWidth * 3 + 3) * 4;
     expect(Array.from(bytes.slice(exactOffset, exactOffset + 4))).toEqual([1, 1, 0, 255]);
     expect(Array.from(bytes.slice(fallbackOffset, fallbackOffset + 4))).toEqual([0, 0, 2, 255]);
+  });
+
+  it("keeps equal local page ids distinct across shared-atlas resources", () => {
+    const page = { mip: 2, x: 0, y: 0 };
+    const pageKey = virtualTexturePageKey(page);
+    const slots = [
+      { pageKey, resourceKey: "first" },
+      { pageKey: virtualTexturePageKey({ mip: 1, x: 0, y: 0 }), resourceKey: "second" },
+    ];
+    const protectedPages = {
+      has: (resourceKey: string): boolean => resourceKey === "first",
+    };
+
+    expect(planVirtualTexturePoolAdmission(
+      "second",
+      page,
+      slots,
+      new Uint32Array([1, 2]),
+      protectedPages,
+    )).toMatchObject({
+      evicted: { resourceKey: "second" },
+      pageKey,
+      resourceKey: "second",
+      slot: 1,
+    });
+    expect(planVirtualTexturePoolAdmission(
+      "third",
+      page,
+      slots,
+      new Uint32Array([1, 2]),
+      { has: () => true },
+    )).toBeUndefined();
   });
 });

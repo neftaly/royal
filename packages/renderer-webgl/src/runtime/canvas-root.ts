@@ -284,6 +284,8 @@ const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
 };
 const IDLE_VIRTUAL_TEXTURE_RUNTIME: VirtualTextureRuntimeSnapshot = {
   admittedUploadBytes: 0,
+  atlasBytes: 0,
+  atlasPools: 0,
   automaticCandidates: 0,
   automaticDecodedBytes: 0,
   automaticEnabled: 0,

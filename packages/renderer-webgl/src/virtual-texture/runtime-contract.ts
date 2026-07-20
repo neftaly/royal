@@ -43,6 +43,10 @@ export type VirtualTextureFrameUpdate = Readonly<{
 
 export type VirtualTextureRuntimeSnapshot = Readonly<{
   admittedUploadBytes: number;
+  /** Compatible root-owned physical atlas pools. */
+  atlasPools: number;
+  /** Persistent GPU bytes claimed by physical atlas pools. */
+  atlasBytes: number;
   automaticCandidates: number;
   automaticDecodedBytes: number;
   automaticEnabled: number;

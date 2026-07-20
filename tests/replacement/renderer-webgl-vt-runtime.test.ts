@@ -157,7 +157,11 @@ describe("browser virtual texture runtime", () => {
         material: unlitMaterial({ texture }),
       })),
     }));
-    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn());
+    const gl = fakeGl();
+    const texStorage2D = vi.fn();
+    Object.assign(gl, { texStorage2D });
+    const budget = new PersistentGpuBudgetOwner();
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
     const identity = identityMat4();
     const view: SurfaceFrameView = {
       view: identity,
@@ -170,6 +174,12 @@ describe("browser virtual texture runtime", () => {
       expect(textures.every((texture) => runtime.snapshot(texture).state === "ready")).toBe(true);
     });
     runtime.update([view]);
+    // Five compatible logical textures share one atlas and retain five page tables.
+    expect(texStorage2D).toHaveBeenCalledTimes(6);
+    expect(runtime.runtimeSnapshot()).toMatchObject({
+      atlasBytes: 1_690_000,
+      atlasPools: 1,
+    });
     expect(pageReads.map(({ url }) => new URL(url).pathname.split("/")[1]))
       .toEqual(["0", "1", "2", "3"]);
 
@@ -179,6 +189,8 @@ describe("browser virtual texture runtime", () => {
 
     expect(new URL(pageReads[4]!.url).pathname.split("/")[1]).toBe("4");
     runtime.dispose();
+    expect(budget.snapshot().retainedBytes).toBe(0);
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
   });
 
   it("publishes one page-table revision for a frame's admitted page batch", async () => {

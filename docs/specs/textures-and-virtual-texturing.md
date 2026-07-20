@@ -230,6 +230,22 @@ Declaring or preparing a VT source does not itself allocate an atlas. The first
 non-empty projected demand does, so off-screen automatic and authored assets do
 not each reserve the default physical working set merely by existing in a scene.
 
+Compatible logical textures share one root-owned physical atlas pool. Pool
+compatibility is exact stored-page extent, compression class, and color space;
+samplers and page tables remain per logical texture. Manifest `physicalSlots`
+and `physicalByteBudget` cap that texture's resident working set rather than
+causing another atlas allocation. A pool targets the existing default 24-page
+physical footprint (and never more than 32 MiB), then yields to the stricter
+remaining root GPU budget. This keeps one VT's
+allocation unchanged and reduces memory for each additional compatible VT;
+pool growth requires separate measured justification. Diagnostics report
+`atlasPools` and `atlasBytes` separately from logical `residentPages`.
+
+Shared slots are identified by both resource and page identity. Cross-resource
+eviction invalidates the evicted logical mapping and republishes every dirty
+page table before the next draw, so an overwritten cell cannot appear under a
+different texture's identity.
+
 Protected pages required by the current frame are not eviction candidates.
 Eviction policy MAY approximate recency but MUST terminate under full pressure.
 Backoff and denial state MUST be bounded and wake when capacity or demand
