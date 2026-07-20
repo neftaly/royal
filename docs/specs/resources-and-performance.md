@@ -255,12 +255,17 @@ image completion is elapsed from the exact source/version claim. The values are
 diagnostics, not scheduling inputs, and observing them does not poll or wake the
 frame loop.
 
-An ordinary image decode retains its scheduling reservation until every claimed
-GPU representation consumes it, rejects it, or the claim is cancelled. Bounding
-only active decoder calls is insufficient: fast decoders can otherwise leave an
-unbounded queue of completed RGBA images waiting behind progressive GPU
-admission. The initial implementation permits eight such retained decode
-reservations per root and preserves deterministic source order.
+Ordinary image preparation has two explicit bounds. At most eight unknown-size
+fetch/decode jobs run at once. After decode selects an exact browser-image or
+ETC2 representation, the retained upload source is charged by its actual bytes,
+including retained picking alpha, until every claimed GPU representation
+consumes it, rejects it, or the claim is cancelled. New decodes pause when
+completed handoff storage reaches 64 MiB or the root holds 32 decode
+reservations. Already-active jobs may complete beyond the byte threshold, but
+the eight-job bound makes that overshoot finite. Deterministic source order is
+preserved. Bounding only active decoder calls is insufficient: fast decoders
+can otherwise leave an unbounded queue of completed RGBA images waiting behind
+progressive GPU admission.
 
 GPU resource commitment and scene presentation are separate lifecycle effects.
 The first decoded texture and the terminal settled texture set present

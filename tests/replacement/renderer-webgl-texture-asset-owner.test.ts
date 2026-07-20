@@ -1,6 +1,7 @@
 import { imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import {
+  decodedTextureHandoffBytes,
   decodedTextureKey,
   textureStorageKey,
   TextureAssetOwner,
@@ -242,8 +243,11 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledOnce();
   });
 
-  it("holds a bounded decode reservation until each source is consumed or transferred", async () => {
-    const decode = vi.fn(async () => decoded());
+  it("bounds active unknown-size decodes without waiting for small completed handoffs", async () => {
+    const completions: Array<(source: DecodedTextureSource) => void> = [];
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(() => new Promise((resolve) => {
+      completions.push(resolve);
+    }));
     const owner = new TextureAssetOwner({
       decode,
       onAssetChanged: vi.fn(),
@@ -260,14 +264,67 @@ describe("ordinary texture asset lifecycle owner", () => {
     await Promise.resolve();
     expect(decode).toHaveBeenCalledTimes(8);
 
-    const lease = owner.acquireDecoded(assets[0]!);
+    completions[0]!(decoded());
     await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
-    expect(owner.getSnapshot(assets[8]!).state).toBe("ready");
+    expect(owner.getSnapshot(assets[0]!).state).toBe("ready");
 
-    owner.rejectGpuStorage([textureStorageKey(assets[1]!)]);
+    completions[1]!(decoded());
     await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
-    expect(owner.getSnapshot(assets[9]!).state).toBe("ready");
-    lease?.release();
+    expect(owner.getSnapshot(assets[1]!).state).toBe("ready");
+    owner.dispose();
+  });
+
+  it("stops new decode work at the actual completed-handoff byte threshold", async () => {
+    const completions: Array<(source: DecodedTextureSource) => void> = [];
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(() => new Promise((resolve) => {
+      completions.push(resolve);
+    }));
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const assets = Array.from(
+      { length: 10 },
+      (_value, index) => imageTexture(`/large-handoff-${index}.avif`),
+    );
+    const large = (): DecodedTextureSource => ({
+      height: 2_560,
+      source: {} as ImageBitmap,
+      width: 4_096,
+    });
+
+    owner.reconcile(assets);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    completions[0]!(large());
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    completions[1]!(large());
+    await vi.waitFor(() => expect(owner.getSnapshot(assets[1]!).state).toBe("ready"));
+    expect(decode).toHaveBeenCalledTimes(9);
+
+    owner.releaseUploaded([textureStorageKey(assets[0]!)]);
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    owner.dispose();
+  });
+
+  it("accounts exact image, compressed-level, and retained-alpha handoff bytes", () => {
+    const alpha = { height: 8, values: new Uint8Array(64), width: 8 };
+    expect(decodedTextureHandoffBytes({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }, alpha)).toBe(320);
+    expect(decodedTextureHandoffBytes({
+      colorSpace: "srgb",
+      height: 8,
+      kind: "ktx2-etc2",
+      levels: [
+        { blocks: new Uint8Array(64), height: 8, width: 8 },
+        { blocks: new Uint8Array(16), height: 4, width: 4 },
+      ],
+      width: 8,
+    })).toBe(80);
   });
 
   it("shares the root texture storage allowance across active representations", async () => {
