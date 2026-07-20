@@ -304,6 +304,18 @@ LOD can improve time to useful pixels and steady-state vertex/fragment work.
 Geometry compression alone does not reduce submitted triangles after decode.
 Encoding never excuses an unbounded or serial runtime pipeline.
 
+For selected-scene Draco workloads, container reads and multi-buffer packing
+first converge on one canonical source. Only primitives reachable through the
+selected child/`MSFT_lod` graph become serializable codec tasks. The browser
+preparation worker balances those tasks largest-first across at most two child
+workers, transfers copied compressed slices, and receives canonical typed
+results by transfer. This keeps the main thread free and avoids decoding other
+glTF scenes while bounding decoder heaps and transient compressed storage on
+Quest-class devices. A missing worker capability or spawn failure before task
+submission uses the same serial task executor; codec/content failures remain
+asset failures. The pool reuses Royal's lazy preparation-worker asset rather
+than shipping another decoder implementation.
+
 ## Measurement
 
 Performance work MUST distinguish:

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createStaticDracoDecoder,
   createStaticDracoTaskPlanner,
   decodeStaticDracoTask,
+  prepareSelectedStaticDracoDecoder,
+  type StaticDracoTaskExecutor,
 } from "../../packages/renderer-webgl/src/gltf/draco";
 
 type TestDracoMeshDecoder = NonNullable<
@@ -106,5 +108,41 @@ describe("static Draco adapter", () => {
     }));
     expect(decoded.indices).toEqual(new Uint16Array([0, 1, 2]));
     expect(decoded.attribute("POSITION")).toEqual(new Float32Array(9));
+  });
+
+  it("executes one selected-scene task set behind the unchanged lowering decoder", async () => {
+    const primitive = {
+      attributes: { POSITION: 0 },
+      extensions: {
+        KHR_draco_mesh_compression: {
+          attributes: { POSITION: 2 },
+          bufferView: 0,
+        },
+      },
+      indices: 1,
+    };
+    const execute = vi.fn(async (tasks: Parameters<StaticDracoTaskExecutor>[0]) => tasks.map((task) => ({
+      attributes: [{ semantic: "POSITION" as const, values: new Float32Array(9) }],
+      indices: new Uint16Array([0, 1, 2]),
+      path: task.path,
+    })));
+    const decode = await prepareSelectedStaticDracoDecoder({
+      accessors: [
+        { componentType: 5126, count: 3, type: "VEC3" },
+        { componentType: 5123, count: 3, type: "SCALAR" },
+      ],
+      bufferViews: [{ buffer: 0, byteLength: 1 }],
+      meshes: [{ primitives: [primitive] }, { primitives: [{ ...primitive }] }],
+      nodes: [{ mesh: 0 }, { mesh: 1 }],
+      scene: 0,
+      scenes: [{ nodes: [0] }, { nodes: [1] }],
+    }, new Uint8Array([7]), "selected.gltf", execute);
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![0]).toHaveLength(1);
+    expect(decode(primitive, "meshes[0].primitives[0]").indices)
+      .toEqual(new Uint16Array([0, 1, 2]));
+    expect(() => decode(primitive, "meshes[1].primitives[0]"))
+      .toThrow("has no prepared Draco result");
   });
 });

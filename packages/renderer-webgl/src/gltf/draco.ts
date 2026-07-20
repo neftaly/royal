@@ -1,4 +1,5 @@
 import { decodeDracoMesh } from "minidraco";
+import { selectedStaticMeshIndices } from "./static-node-selection";
 
 type JsonObject = Record<string, unknown>;
 export type DracoAttributeSemantic =
@@ -48,6 +49,17 @@ export type StaticDracoTaskPlanner = (
   primitive: JsonObject,
   path: string,
 ) => StaticDracoDecodeTask;
+export type StaticDracoDecodedTask = Readonly<{
+  attributes: readonly Readonly<{
+    semantic: DracoAttributeSemantic;
+    values: Float32Array;
+  }>[];
+  indices: Uint8Array | Uint16Array | Uint32Array;
+  path: string;
+}>;
+export type StaticDracoTaskExecutor = (
+  tasks: readonly StaticDracoDecodeTask[],
+) => Promise<readonly StaticDracoDecodedTask[]>;
 
 const ATTRIBUTE_SEMANTICS: readonly DracoAttributeSemantic[] = [
   "POSITION",
@@ -275,4 +287,62 @@ export const createStaticDracoDecoder = (
 ): ((primitive: JsonObject, path: string) => DecodedDracoPrimitive) => {
   const plan = createStaticDracoTaskPlanner(document, binary, label);
   return (primitive, path) => decodeStaticDracoTask(plan(primitive, path), decodeMesh);
+};
+
+/** Materializes one task into a structured-cloneable canonical codec result. */
+export const materializeStaticDracoTask = (
+  task: StaticDracoDecodeTask,
+  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+): StaticDracoDecodedTask => {
+  const decoded = decodeStaticDracoTask(task, decodeMesh);
+  return {
+    attributes: task.attributes.map(({ semantic }) => ({
+      semantic,
+      values: decoded.attribute(semantic)!,
+    })),
+    indices: decoded.indices,
+    path: task.path,
+  };
+};
+
+const executeTasksSerially: StaticDracoTaskExecutor = async (tasks) =>
+  tasks.map((task) => materializeStaticDracoTask(task));
+
+/**
+ * Inventories only selected-scene compressed primitives, executes them through
+ * one injected scheduler, and returns the unchanged static-lowering decoder ABI.
+ */
+export const prepareSelectedStaticDracoDecoder = async (
+  document: JsonObject,
+  binary: Uint8Array,
+  label: string,
+  execute: StaticDracoTaskExecutor = executeTasksSerially,
+): Promise<(primitive: JsonObject, path: string) => DecodedDracoPrimitive> => {
+  const meshes = array(document.meshes, `${label} meshes`);
+  const plan = createStaticDracoTaskPlanner(document, binary, label);
+  const tasks: StaticDracoDecodeTask[] = [];
+  for (const meshIndex of selectedStaticMeshIndices(document, label)) {
+    const meshPath = `meshes[${meshIndex}]`;
+    const mesh = object(meshes[meshIndex], `${label} ${meshPath}`);
+    const primitives = array(mesh.primitives, `${label} ${meshPath}.primitives`);
+    for (let primitiveIndex = 0; primitiveIndex < primitives.length; primitiveIndex += 1) {
+      const path = `${meshPath}.primitives[${primitiveIndex}]`;
+      const primitive = object(primitives[primitiveIndex], `${label} ${path}`);
+      if (primitive.extensions === undefined) continue;
+      const extensions = object(primitive.extensions, `${label} ${path}.extensions`);
+      if (extensions.KHR_draco_mesh_compression === undefined) continue;
+      tasks.push(plan(primitive, path));
+    }
+  }
+  const results = await execute(tasks);
+  if (results.length !== tasks.length) {
+    throw new Error(`${label} Draco task executor returned an incomplete result set`);
+  }
+  const byPath = new Map(results.map((result) => [result.path, result]));
+  return (_primitive, path) => {
+    const result = byPath.get(path);
+    if (result === undefined) throw new Error(`${label} ${path} has no prepared Draco result`);
+    const attributes = new Map(result.attributes.map(({ semantic, values }) => [semantic, values]));
+    return { attribute: (semantic) => attributes.get(semantic), indices: result.indices };
+  };
 };

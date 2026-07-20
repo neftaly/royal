@@ -8,6 +8,7 @@ import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type { GltfAssetBounds } from "@royal/renderer-core";
 import type { TextureSourceRef } from "../texture/asset-owner";
 import type { DecodedDracoPrimitive } from "./draco";
+import type { StaticDracoTaskExecutor } from "./draco";
 import { parseGlb } from "./glb";
 import {
   prepareStaticMatrixBatches,
@@ -883,6 +884,7 @@ const prepareDocumentWithCodecs = async (
   contentKey: string,
   label: string,
   sourceUri: string,
+  executeDracoTasks?: StaticDracoTaskExecutor,
 ): Promise<PreparedStaticGltf> => {
   const extensionsUsed = optionalArray(document.extensionsUsed, label, "extensionsUsed");
   const extensionsRequired = optionalArray(
@@ -893,7 +895,8 @@ const prepareDocumentWithCodecs = async (
   const usesDraco = extensionsUsed.includes("KHR_draco_mesh_compression")
     || extensionsRequired.includes("KHR_draco_mesh_compression");
   const decodeDraco = usesDraco
-    ? (await import("./draco")).createStaticDracoDecoder(document, binary, label)
+    ? await import("./draco").then((module) =>
+      module.prepareSelectedStaticDracoDecoder(document, binary, label, executeDracoTasks))
     : undefined;
   return prepareStaticDocument(
     document,
@@ -913,6 +916,7 @@ export const prepareStaticGltfSource = async (
   label: string,
   sourceUri: string,
   read: (uri: string) => Promise<Uint8Array>,
+  executeDracoTasks?: StaticDracoTaskExecutor,
 ): Promise<PreparedStaticGltf> => {
   const canonical = await readCanonicalStaticGltfSource(bytes, label, sourceUri, read);
   return prepareDocumentWithCodecs(
@@ -922,5 +926,6 @@ export const prepareStaticGltfSource = async (
     contentKey,
     label,
     sourceUri,
+    executeDracoTasks,
   );
 };

@@ -1,5 +1,11 @@
 import { prepareStaticGltfSource } from "./static-asset";
 import { preparedStaticGltfTransferBuffers } from "./static-transfer";
+import type { StaticDracoDecodeTask } from "./draco";
+import {
+  decodedDracoTaskTransferBuffers,
+  executeDracoTasksInWorkers,
+  executeDracoTasksSerially,
+} from "./static-draco-executor";
 
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
@@ -13,7 +19,12 @@ type ResourceResult =
   | Readonly<{ bytes: Uint8Array; id: number; kind: "read-resource-ready" }>
   | Readonly<{ error: string; id: number; kind: "read-resource-error" }>;
 
-type WorkerMessage = PreparationRequest | ResourceResult;
+type DracoDecodeRequest = Readonly<{
+  kind: "decode-draco-tasks";
+  tasks: readonly StaticDracoDecodeTask[];
+}>;
+
+type WorkerMessage = DracoDecodeRequest | PreparationRequest | ResourceResult;
 
 type WorkerScope = Readonly<{
   addEventListener(
@@ -49,6 +60,17 @@ const readResource = (uri: string): Promise<Uint8Array> =>
 
 workerScope.addEventListener("message", (event) => {
   const request = event.data;
+  if (request.kind === "decode-draco-tasks") {
+    void executeDracoTasksSerially(request.tasks).then((results) => {
+      workerScope.postMessage(
+        { kind: "decode-draco-ready", results },
+        decodedDracoTaskTransferBuffers(results),
+      );
+    }).catch((error: unknown) => {
+      workerScope.postMessage({ error: formatFailure(error), kind: "decode-draco-error" });
+    });
+    return;
+  }
   if (request.kind === "read-resource-ready") {
     const read = resourceReads.get(request.id);
     if (read === undefined) return;
@@ -77,6 +99,7 @@ workerScope.addEventListener("message", (event) => {
     request.label,
     request.sourceUri,
     readResource,
+    executeDracoTasksInWorkers,
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },
