@@ -100,6 +100,16 @@ type AssetEntry = {
 const IDLE: TextureAssetSnapshot = { state: "idle" };
 const DEFAULT_DECODED_TEXTURE_RESERVATIONS = 8;
 
+const storageIncomplete = (
+  claimed: ReadonlySet<string>,
+  resident: ReadonlySet<string>,
+): boolean => {
+  for (const key of claimed) {
+    if (!resident.has(key)) return true;
+  }
+  return false;
+};
+
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
   return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
@@ -295,7 +305,7 @@ export class TextureAssetOwner {
       if (
         entry.decodedReleased
         && entry.snapshot.state !== "error"
-        && [...claim.storageKeys].some((storageKey) => !entry.residentStorageKeys.has(storageKey))
+        && storageIncomplete(claim.storageKeys, entry.residentStorageKeys)
       ) this.#queueDecode(entry);
     }
     for (const [key, claim] of claimed) {
@@ -498,9 +508,7 @@ export class TextureAssetOwner {
       entry.decodedClaims !== 0
       || entry.decodedReleased
       || entry.decoded === undefined
-      || [...entry.claimedStorageKeys].some(
-        (storageKey) => !entry.residentStorageKeys.has(storageKey),
-      )
+      || storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)
     ) return;
     entry.decoded.close?.();
     entry.decodedReleased = true;
@@ -562,11 +570,7 @@ export class TextureAssetOwner {
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
-      if (
-        [...entry.claimedStorageKeys].every(
-          (storageKey) => entry.residentStorageKeys.has(storageKey),
-        )
-      ) {
+      if (!storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)) {
         decodedSource.close?.();
         entry.decodedReleased = true;
         this.#releaseDecodeReservation(entry);
