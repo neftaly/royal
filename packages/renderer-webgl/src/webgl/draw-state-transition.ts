@@ -6,32 +6,26 @@ export type TextureUnitBinding = Readonly<{
   texture: WebGLTexture | null;
 }>;
 
-export type SurfaceDrawStateIntent = Readonly<{
-  alphaBlend: boolean;
-  cullBackFaces: boolean;
-  depthTest: boolean;
-  depthWrite: boolean;
+export type SurfaceDrawFrame = Readonly<{
   framebuffer: WebGLFramebuffer | null;
-  frontFace: number;
-  program: WebGLProgram;
-  textureBindings: readonly TextureUnitBinding[];
-  textureUnits: number;
-  vertexArray: WebGLVertexArrayObject;
   viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 }>;
 
-export type MutableSurfaceDrawStateIntent = {
+export type SurfaceDrawPacket = Readonly<{
   alphaBlend: boolean;
   cullBackFaces: boolean;
   depthTest: boolean;
   depthWrite: boolean;
-  framebuffer: WebGLFramebuffer | null;
   frontFace: number;
   program: WebGLProgram;
   textureBindings: readonly TextureUnitBinding[];
   textureUnits: number;
   vertexArray: WebGLVertexArrayObject;
-  viewport: { height: number; width: number; x: number; y: number };
+}>;
+
+export type MutableSurfaceDrawFrame = {
+  framebuffer: WebGLFramebuffer | null;
+  viewport: Readonly<{ height: number; width: number; x: number; y: number }>;
 };
 
 export type SurfaceDrawStateTransition = {
@@ -73,64 +67,66 @@ export const createSurfaceDrawStateTransition = (): SurfaceDrawStateTransition =
 /** Plans one complete surface draw-state diff into caller-owned storage. */
 export const planSurfaceDrawStateTransition = (
   previous: AppliedSurfaceDrawState,
-  next: SurfaceDrawStateIntent,
+  frame: SurfaceDrawFrame,
+  packet: SurfaceDrawPacket,
   output: SurfaceDrawStateTransition,
 ): void => {
   const unknown = !previous.known;
-  output.framebuffer = unknown || previous.framebuffer !== next.framebuffer;
+  output.framebuffer = unknown || previous.framebuffer !== frame.framebuffer;
   output.viewport = unknown
-    || previous.viewportX !== next.viewport.x
-    || previous.viewportY !== next.viewport.y
-    || previous.viewportWidth !== next.viewport.width
-    || previous.viewportHeight !== next.viewport.height;
+    || previous.viewportX !== frame.viewport.x
+    || previous.viewportY !== frame.viewport.y
+    || previous.viewportWidth !== frame.viewport.width
+    || previous.viewportHeight !== frame.viewport.height;
   output.fixedPipeline = unknown
     || !previous.fixedPipelineKnown
     || previous.scissorEnabled
-    || previous.alphaBlend !== next.alphaBlend
-    || previous.depthTest !== next.depthTest;
+    || previous.alphaBlend !== packet.alphaBlend
+    || previous.depthTest !== packet.depthTest;
   output.cullMode = unknown
     || !previous.fixedPipelineKnown
-    || previous.cullBackFaces !== next.cullBackFaces;
-  output.frontFace = unknown || previous.frontFace !== next.frontFace;
+    || previous.cullBackFaces !== packet.cullBackFaces;
+  output.frontFace = unknown || previous.frontFace !== packet.frontFace;
   output.writeMasks = unknown
     || !previous.writeMasksKnown
-    || previous.depthWrite !== next.depthWrite;
-  output.program = unknown || previous.program !== next.program;
+    || previous.depthWrite !== packet.depthWrite;
+  output.program = unknown || previous.program !== packet.program;
   output.textureUnits = 0;
-  let remainingUnits = next.textureUnits;
+  let remainingUnits = packet.textureUnits;
   for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
     if ((remainingUnits & 1) === 0) continue;
     if (
       unknown
-      || previous.textureBindings[unit] !== next.textureBindings[unit]
+      || previous.textureBindings[unit] !== packet.textureBindings[unit]
     ) output.textureUnits |= 1 << unit;
   }
-  output.vertexArray = unknown || previous.vertexArray !== next.vertexArray;
+  output.vertexArray = unknown || previous.vertexArray !== packet.vertexArray;
 };
 
 export const commitAppliedSurfaceDrawState = (
   state: AppliedSurfaceDrawState,
-  intent: SurfaceDrawStateIntent,
+  frame: SurfaceDrawFrame,
+  packet: SurfaceDrawPacket,
 ): void => {
-  state.alphaBlend = intent.alphaBlend;
-  state.cullBackFaces = intent.cullBackFaces;
-  state.depthTest = intent.depthTest;
-  state.depthWrite = intent.depthWrite;
+  state.alphaBlend = packet.alphaBlend;
+  state.cullBackFaces = packet.cullBackFaces;
+  state.depthTest = packet.depthTest;
+  state.depthWrite = packet.depthWrite;
   state.fixedPipelineKnown = true;
-  state.framebuffer = intent.framebuffer;
-  state.frontFace = intent.frontFace;
+  state.framebuffer = frame.framebuffer;
+  state.frontFace = packet.frontFace;
   state.known = true;
-  state.program = intent.program;
-  let remainingUnits = intent.textureUnits;
+  state.program = packet.program;
+  let remainingUnits = packet.textureUnits;
   for (let unit = 0; remainingUnits !== 0; unit += 1, remainingUnits >>>= 1) {
     if ((remainingUnits & 1) === 0) continue;
-    state.textureBindings[unit] = intent.textureBindings[unit];
+    state.textureBindings[unit] = packet.textureBindings[unit];
   }
   state.scissorEnabled = false;
-  state.vertexArray = intent.vertexArray;
-  state.viewportHeight = intent.viewport.height;
-  state.viewportWidth = intent.viewport.width;
-  state.viewportX = intent.viewport.x;
-  state.viewportY = intent.viewport.y;
+  state.vertexArray = packet.vertexArray;
+  state.viewportHeight = frame.viewport.height;
+  state.viewportWidth = frame.viewport.width;
+  state.viewportX = frame.viewport.x;
+  state.viewportY = frame.viewport.y;
   state.writeMasksKnown = true;
 };

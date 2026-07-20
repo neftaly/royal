@@ -30,19 +30,24 @@ const candidate = (
 ): SurfaceMultiDrawCandidate => {
   const material = standard();
   return {
-    bindings: [{ sampler: SAMPLER, target: "2d", texture: TEXTURE }],
+    drawPacket: {
+      alphaBlend: false,
+      cullBackFaces: true,
+      depthTest: true,
+      depthWrite: true,
+      frontFace: 0x0901,
+      program: PROGRAM,
+      textureBindings: [{ sampler: SAMPLER, target: "2d", texture: TEXTURE }],
+      textureUnits: 1,
+      vertexArray: VERTEX_ARRAY,
+    },
     geometry: { indexType: 0x1403 },
     instanceCount: 0,
     mode: 0x0004,
-    program: { program: PROGRAM },
     surface: {
-      material,
       materialSource: material,
       model: identityMat4(),
-      modelHandedness: 1,
     },
-    textureUnits: 1,
-    vertexArray: VERTEX_ARRAY,
     ...overrides,
   };
 };
@@ -51,9 +56,11 @@ describe("surface multi-draw compatibility core", () => {
   it("accepts adjacent draws whose complete retained state is interchangeable", () => {
     const left = candidate();
     const right = candidate({
-      bindings: [...left.bindings],
+      drawPacket: {
+        ...left.drawPacket,
+        textureBindings: [...left.drawPacket.textureBindings],
+      },
       geometry: { ...left.geometry },
-      program: { ...left.program },
       surface: {
         ...left.surface,
         model: [...left.surface.model],
@@ -66,10 +73,8 @@ describe("surface multi-draw compatibility core", () => {
   it("rejects semantically equal but distinctly authored materials", () => {
     const left = candidate();
     const right = candidate({
-      bindings: left.bindings,
       surface: {
         ...left.surface,
-        material: standard(),
         materialSource: standard(),
       },
     });
@@ -80,19 +85,38 @@ describe("surface multi-draw compatibility core", () => {
   it("rejects every texture-unit binding difference", () => {
     const left = candidate();
     const otherTexture = candidate({
-      bindings: [{ ...left.bindings[0]!, texture: {} as WebGLTexture }],
+      drawPacket: {
+        ...left.drawPacket,
+        textureBindings: [{
+          ...left.drawPacket.textureBindings[0]!, texture: {} as WebGLTexture,
+        }],
+      },
       surface: left.surface,
     });
     const otherSampler = candidate({
-      bindings: [{ ...left.bindings[0]!, sampler: {} as WebGLSampler }],
+      drawPacket: {
+        ...left.drawPacket,
+        textureBindings: [{
+          ...left.drawPacket.textureBindings[0]!, sampler: {} as WebGLSampler,
+        }],
+      },
       surface: left.surface,
     });
     const otherTarget = candidate({
-      bindings: [{ ...left.bindings[0]!, target: "cube" }],
+      drawPacket: {
+        ...left.drawPacket,
+        textureBindings: [{ ...left.drawPacket.textureBindings[0]!, target: "cube" }],
+      },
       surface: left.surface,
     });
-    const otherCount = candidate({ bindings: [], surface: left.surface });
-    const otherMask = candidate({ textureUnits: 3, surface: left.surface });
+    const otherCount = candidate({
+      drawPacket: { ...left.drawPacket, textureBindings: [] },
+      surface: left.surface,
+    });
+    const otherMask = candidate({
+      drawPacket: { ...left.drawPacket, textureUnits: 3 },
+      surface: left.surface,
+    });
 
     expect(surfacesShareMultiDrawState(left, otherTexture)).toBe(false);
     expect(surfacesShareMultiDrawState(left, otherSampler)).toBe(false);
@@ -104,11 +128,20 @@ describe("surface multi-draw compatibility core", () => {
   it("rejects every fixed draw-state difference", () => {
     const left = candidate();
     const variants = [
-      candidate({ program: { program: {} as WebGLProgram }, surface: left.surface }),
+      candidate({
+        drawPacket: { ...left.drawPacket, program: {} as WebGLProgram },
+        surface: left.surface,
+      }),
       candidate({ mode: 0x0005, surface: left.surface }),
-      candidate({ vertexArray: {} as WebGLVertexArrayObject, surface: left.surface }),
+      candidate({
+        drawPacket: { ...left.drawPacket, vertexArray: {} as WebGLVertexArrayObject },
+        surface: left.surface,
+      }),
       candidate({ geometry: { indexType: 0x1405 }, surface: left.surface }),
-      candidate({ surface: { ...left.surface, modelHandedness: -1 } }),
+      candidate({
+        drawPacket: { ...left.drawPacket, frontFace: 0x0900 },
+        surface: left.surface,
+      }),
       candidate({ surface: {
         ...left.surface,
         model: [
@@ -118,7 +151,10 @@ describe("surface multi-draw compatibility core", () => {
           1, 0, 0, 1,
         ],
       } }),
-      candidate({ surface: { ...left.surface, material: standard({ doubleSided: true }) } }),
+      candidate({
+        drawPacket: { ...left.drawPacket, cullBackFaces: false },
+        surface: left.surface,
+      }),
     ];
 
     for (const right of variants) {
@@ -129,7 +165,8 @@ describe("surface multi-draw compatibility core", () => {
   it("rejects blended or instanced draws", () => {
     const left = candidate();
     expect(surfacesShareMultiDrawState(left, candidate({
-      surface: { ...left.surface, material: standard({ alphaBlend: true }) },
+      drawPacket: { ...left.drawPacket, alphaBlend: true },
+      surface: left.surface,
     }))).toBe(false);
     expect(surfacesShareMultiDrawState(left, candidate({
       instanceCount: 2,

@@ -10,7 +10,8 @@ import {
   createSurfaceDrawStateTransition,
   planSurfaceDrawStateTransition,
   type AppliedSurfaceDrawState,
-  type SurfaceDrawStateIntent,
+  type SurfaceDrawFrame,
+  type SurfaceDrawPacket,
 } from "./draw-state-transition";
 
 /** Sole root-local writer for WebGL pipeline state used by clears and surface draws. */
@@ -92,17 +93,17 @@ export class WebGlStateOwner {
     }
   }
 
-  applySurfaceDraw(intent: SurfaceDrawStateIntent): void {
+  applySurfaceDraw(frame: SurfaceDrawFrame, packet: SurfaceDrawPacket): void {
     const gl = this.#gl;
     const transition = this.#drawTransition;
-    planSurfaceDrawStateTransition(this.#state, intent, transition);
+    planSurfaceDrawStateTransition(this.#state, frame, packet, transition);
     try {
-      if (transition.framebuffer) gl.bindFramebuffer(gl.FRAMEBUFFER, intent.framebuffer);
+      if (transition.framebuffer) gl.bindFramebuffer(gl.FRAMEBUFFER, frame.framebuffer);
       if (transition.viewport) {
-        gl.viewport(intent.viewport.x, intent.viewport.y, intent.viewport.width, intent.viewport.height);
+        gl.viewport(frame.viewport.x, frame.viewport.y, frame.viewport.width, frame.viewport.height);
       }
       if (transition.fixedPipeline) {
-        if (intent.alphaBlend) {
+        if (packet.alphaBlend) {
           gl.enable(gl.BLEND);
           gl.blendFuncSeparate(
             gl.SRC_ALPHA,
@@ -113,30 +114,30 @@ export class WebGlStateOwner {
         } else gl.disable(gl.BLEND);
         gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.STENCIL_TEST);
-        if (intent.depthTest) {
+        if (packet.depthTest) {
           gl.enable(gl.DEPTH_TEST);
           gl.depthFunc(gl.LEQUAL);
         } else gl.disable(gl.DEPTH_TEST);
       }
       if (transition.cullMode) {
-        if (intent.cullBackFaces) {
+        if (packet.cullBackFaces) {
           gl.enable(gl.CULL_FACE);
           gl.cullFace(gl.BACK);
         } else {
           gl.disable(gl.CULL_FACE);
         }
       }
-      if (transition.frontFace) gl.frontFace(intent.frontFace);
+      if (transition.frontFace) gl.frontFace(packet.frontFace);
       if (transition.writeMasks) {
         gl.colorMask(true, true, true, true);
-        gl.depthMask(intent.depthWrite);
+        gl.depthMask(packet.depthWrite);
         gl.stencilMask(0xff_ff_ff_ff);
       }
-      if (transition.program) gl.useProgram(intent.program);
+      if (transition.program) gl.useProgram(packet.program);
       let changedTextureUnits = transition.textureUnits;
       for (let unit = 0; changedTextureUnits !== 0; unit += 1, changedTextureUnits >>>= 1) {
         if ((changedTextureUnits & 1) === 0) continue;
-        const binding = intent.textureBindings[unit];
+        const binding = packet.textureBindings[unit];
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(
           binding?.target === "cube" ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D,
@@ -144,8 +145,8 @@ export class WebGlStateOwner {
         );
         gl.bindSampler(unit, binding?.sampler ?? null);
       }
-      if (transition.vertexArray) gl.bindVertexArray(intent.vertexArray);
-      commitAppliedSurfaceDrawState(this.#state, intent);
+      if (transition.vertexArray) gl.bindVertexArray(packet.vertexArray);
+      commitAppliedSurfaceDrawState(this.#state, frame, packet);
     } catch (error) {
       this.invalidate();
       throw error;

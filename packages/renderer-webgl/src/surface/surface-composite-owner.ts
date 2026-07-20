@@ -3,7 +3,10 @@ import type { FrameViewport, MutableClearFrameIntent } from "../frame/clear-fram
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import type { GpuTextureBinding } from "../texture/gpu-owner";
 import type { WebGlStateOwner } from "../webgl/state-owner";
-import type { MutableSurfaceDrawStateIntent } from "../webgl/draw-state-transition";
+import type {
+  MutableSurfaceDrawFrame,
+  SurfaceDrawPacket,
+} from "../webgl/draw-state-transition";
 import presentationFragmentShader from "../webgl/shaders/presentation.frag";
 import presentationVertexShader from "../webgl/shaders/presentation.vert";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
@@ -221,7 +224,11 @@ export class SurfaceCompositeOwner {
     target: "2d",
     texture: null,
   }];
-  #presentationIntent: MutableSurfaceDrawStateIntent | null = null;
+  readonly #presentationFrame: MutableSurfaceDrawFrame = {
+    framebuffer: null,
+    viewport: { height: 1, width: 1, x: 0, y: 0 },
+  };
+  #presentationPacket: SurfaceDrawPacket | null = null;
   #program: WebGLProgram | null = null;
   #presentationLocation: WebGLUniformLocation | null = null;
   readonly #presentationValues = new Float32Array(4);
@@ -284,7 +291,7 @@ export class SurfaceCompositeOwner {
     if (this.#vertexArray !== null) gl.deleteVertexArray(this.#vertexArray);
     this.#program = null;
     this.#presentationLocation = null;
-    this.#presentationIntent = null;
+    this.#presentationPacket = null;
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };
@@ -418,30 +425,24 @@ export class SurfaceCompositeOwner {
         texture: resources.color,
       };
     }
-    let intent = this.#presentationIntent;
-    if (intent === null) {
-      intent = {
+    let packet = this.#presentationPacket;
+    if (packet === null) {
+      packet = {
         alphaBlend: false,
         cullBackFaces: false,
         depthTest: false,
         depthWrite: false,
-        framebuffer,
         frontFace: this.#gl.CCW,
         program,
         textureBindings: this.#presentationBindings,
         textureUnits: 1,
         vertexArray,
-        viewport: { height: viewport.height, width: viewport.width, x: viewport.x, y: viewport.y },
       };
-      this.#presentationIntent = intent;
-    } else {
-      intent.framebuffer = framebuffer;
-      intent.viewport.height = viewport.height;
-      intent.viewport.width = viewport.width;
-      intent.viewport.x = viewport.x;
-      intent.viewport.y = viewport.y;
+      this.#presentationPacket = packet;
     }
-    state.applySurfaceDraw(intent);
+    this.#presentationFrame.framebuffer = framebuffer;
+    this.#presentationFrame.viewport = viewport;
+    state.applySurfaceDraw(this.#presentationFrame, packet);
     this.#presentationValues[0] = exposure;
     this.#presentationValues[1] = toneMapping === "pbr-neutral" ? 1 : 0;
     this.#presentationValues[2] = viewport.width / resources.width;
@@ -454,7 +455,7 @@ export class SurfaceCompositeOwner {
     this.#resources = null;
     this.#program = null;
     this.#presentationLocation = null;
-    this.#presentationIntent = null;
+    this.#presentationPacket = null;
     this.#presentationSampler = null;
     this.#sceneSampler = null;
     this.#sceneColorBinding = { sampler: null, target: "2d", texture: null };

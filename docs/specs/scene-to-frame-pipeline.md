@@ -127,6 +127,13 @@ variant. Submission SHOULD reuse arenas and perform no per-draw JavaScript
 closure creation, object spreading, string construction, or unbounded array
 growth.
 
+Stable program, fixed-pipeline state, texture bindings, texture-unit mask, and
+vertex array compile into one retained draw packet. The active framebuffer and
+viewport form a separate per-view frame packet. Submission passes those two
+records directly to the state owner; it does not reconstruct retained state by
+assigning fields for every visible draw. Multi-draw compatibility compares the
+same retained packet consumed by ordinary submission.
+
 External GL use, including XR runtime work, crosses one explicit Royal state
 invalidation/restoration boundary so cached assumptions cannot leak between
 owners.

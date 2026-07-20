@@ -9,8 +9,8 @@ import {
 import type { FrameViewport } from "../frame/clear-frame";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type {
-  MutableSurfaceDrawStateIntent,
-  SurfaceDrawStateIntent,
+  MutableSurfaceDrawFrame,
+  SurfaceDrawPacket,
 } from "../webgl/draw-state-transition";
 import {
   TextureGpuOwner,
@@ -109,13 +109,12 @@ export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly
 }>;
 
 type GpuSurface = {
-  bindings: readonly GpuTextureBinding[];
+  drawPacket: SurfaceDrawPacket;
   readonly geometry: GpuGeometry;
   readonly instanceCount: number;
   readonly mode: number;
   program: StandardProgram | UnlitProgram;
   surface: CanonicalDrawSurface;
-  textureUnits: number;
   readonly vertexArray: WebGLVertexArrayObject;
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
@@ -173,6 +172,26 @@ const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]) =>
     (resource) => resource.program.program,
   );
 
+/** Pure retained pipeline packet; frame target and viewport stay separate. */
+const surfaceDrawPacket = (
+  gl: WebGL2RenderingContext,
+  surface: CanonicalDrawSurface,
+  program: WebGLProgram,
+  textureBindings: readonly GpuTextureBinding[],
+  textureUnits: number,
+  vertexArray: WebGLVertexArrayObject,
+): SurfaceDrawPacket => ({
+  alphaBlend: surface.material.alphaBlend === true,
+  cullBackFaces: !canonicalSurfaceIsDoubleSided(surface.material),
+  depthTest: true,
+  depthWrite: surface.material.alphaBlend !== true,
+  frontFace: surface.modelHandedness < 0 ? gl.CW : gl.CCW,
+  program,
+  textureBindings,
+  textureUnits,
+  vertexArray,
+});
+
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
@@ -197,7 +216,10 @@ export class SurfaceGpuOwner {
   readonly #directionalLightDirections = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
   #directionalLightCount = 0;
   #dirty = false;
-  #drawIntent: MutableSurfaceDrawStateIntent | null = null;
+  readonly #drawFrame: MutableSurfaceDrawFrame = {
+    framebuffer: null,
+    viewport: { height: 1, width: 1, x: 0, y: 0 },
+  };
   #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
   #environmentGpu: PrefilteredEnvironmentGpuOwner | null = null;
@@ -293,7 +315,6 @@ export class SurfaceGpuOwner {
     this.#compositeGpu?.dispose();
     this.#compositeGpu = null;
     this.#virtualTexture?.dispose();
-    this.#drawIntent = null;
     this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#opaqueSurfaces = [];
@@ -336,7 +357,6 @@ export class SurfaceGpuOwner {
     this.#compositeGpu?.invalidate();
     this.#virtualTexture?.invalidate();
     this.#multiDraw = this.#readMultiDraw();
-    this.#drawIntent = null;
     this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
@@ -690,32 +710,8 @@ export class SurfaceGpuOwner {
     scene: CanonicalSurfaceScene,
     pass: "all" | "opaque" | "remaining",
   ): void {
-    let drawIntent = this.#drawIntent;
-    if (drawIntent === null) {
-      const firstSurface = this.#opaqueSurfaces[0]
-        ?? this.#transmissionSurfaces[0]
-        ?? this.#blendedSurfaces[0]!;
-      const first = firstSurface.program;
-      drawIntent = {
-        alphaBlend: firstSurface.surface.material.alphaBlend === true,
-        cullBackFaces: !canonicalSurfaceIsDoubleSided(firstSurface.surface.material),
-        depthTest: true,
-        depthWrite: firstSurface.surface.material.alphaBlend !== true,
-        framebuffer,
-        frontFace: this.#gl.CCW,
-        program: first.program,
-        textureBindings: firstSurface.bindings,
-        textureUnits: firstSurface.textureUnits,
-        vertexArray: firstSurface.vertexArray,
-        viewport: { height: 0, width: 0, x: 0, y: 0 },
-      };
-      this.#drawIntent = drawIntent;
-    }
-    drawIntent.framebuffer = framebuffer;
-    drawIntent.viewport.height = frameView.viewport.height;
-    drawIntent.viewport.width = frameView.viewport.width;
-    drawIntent.viewport.x = frameView.viewport.x;
-    drawIntent.viewport.y = frameView.viewport.y;
+    this.#drawFrame.framebuffer = framebuffer;
+    this.#drawFrame.viewport = frameView.viewport;
     const view = frameView.view;
     const viewProjection = frameView.viewProjection;
     cameraWorldPositionFromViewInto(this.#cameraPosition, view);
@@ -754,15 +750,7 @@ export class SurfaceGpuOwner {
       if (!lodMembershipsSelected(surface.lods, this.#lodSelections)) continue;
       if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
-      drawIntent.alphaBlend = surface.material.alphaBlend === true;
-      drawIntent.cullBackFaces = !canonicalSurfaceIsDoubleSided(surface.material);
-      drawIntent.depthWrite = surface.material.alphaBlend !== true;
-      drawIntent.frontFace = surface.modelHandedness < 0 ? gl.CW : gl.CCW;
-      drawIntent.program = program.program;
-      drawIntent.textureBindings = resource.bindings;
-      drawIntent.textureUnits = resource.textureUnits;
-      drawIntent.vertexArray = resource.vertexArray;
-      state.applySurfaceDraw(drawIntent as SurfaceDrawStateIntent);
+      state.applySurfaceDraw(this.#drawFrame, resource.drawPacket);
       if (initializedProgram !== program.program) {
         this.#programs.initializeSamplers(program);
         initializedProgram = program.program;
@@ -934,7 +922,7 @@ export class SurfaceGpuOwner {
           if (program.occlusionStrength !== null) {
             gl.uniform1f(program.occlusionStrength, material.occlusionStrength);
           }
-          if (material.emissiveAsset !== undefined && (resource.textureUnits & 8) === 0) {
+          if (material.emissiveAsset !== undefined && (resource.drawPacket.textureUnits & 8) === 0) {
             this.#emissiveFactor.fill(0);
           } else this.#emissiveFactor.set(material.emissiveFactor);
           this.#emissiveFactor[3] = material.indexOfRefraction === undefined
@@ -1047,7 +1035,10 @@ export class SurfaceGpuOwner {
     if (material.baseColorVirtualAsset !== undefined && resource.virtualTexture === undefined) {
       return NEUTRAL_PERCEPTUAL_GREY;
     }
-    if (material.baseColorTexture === undefined || resource.bindings[0]!.texture !== null) {
+    if (
+      material.baseColorTexture === undefined
+      || resource.drawPacket.textureBindings[0]!.texture !== null
+    ) {
       return material.baseColor as unknown as Float32List;
     }
     const fallback = this.#fallbackBaseColor;
@@ -1175,30 +1166,38 @@ export class SurfaceGpuOwner {
       presentableOrdinaryTextureMask(material, ordinaryBindings, bindingOffset),
       this.#compositeActive,
     );
+    const bindings = composeSurfaceTextureBindings(
+      ordinaryBindings,
+      bindingOffset,
+      virtualTexture,
+      this.#compositeActive
+        && material.kind === "standard"
+        && canonicalMaterialHasTransmission(material)
+        ? this.#compositeGpu?.sceneColorBinding()
+        : undefined,
+      this.#environmentGpu?.binding,
+    );
+    const program = this.#programs.get(
+      material.kind,
+      features,
+      geometrySurface.instanceCount > 0,
+      material.alphaCutoff !== undefined,
+      canonicalSurfaceIsDoubleSided(material),
+    );
     return {
-      bindings: composeSurfaceTextureBindings(
-        ordinaryBindings,
-        bindingOffset,
-        virtualTexture,
-        this.#compositeActive
-          && material.kind === "standard"
-          && canonicalMaterialHasTransmission(material)
-          ? this.#compositeGpu?.sceneColorBinding()
-          : undefined,
-        this.#environmentGpu?.binding,
+      drawPacket: surfaceDrawPacket(
+        this.#gl,
+        geometrySurface.surface,
+        program.program,
+        bindings,
+        surfaceTextureUnitMask(features),
+        geometrySurface.vertexArray,
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
       mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
-      program: this.#programs.get(
-        material.kind,
-        features,
-        geometrySurface.instanceCount > 0,
-        material.alphaCutoff !== undefined,
-        canonicalSurfaceIsDoubleSided(material),
-      ),
+      program,
       surface: geometrySurface.surface,
-      textureUnits: surfaceTextureUnitMask(features),
       vertexArray: geometrySurface.vertexArray,
       ...(virtualTexture === undefined ? {} : { virtualTexture }),
     };
@@ -1313,7 +1312,6 @@ export class SurfaceGpuOwner {
     if (scene !== null) this.#collectDeferredTexturePublications(scene);
     this.#dirty = this.#admittedSurfaceCount < surfaces.length
       || this.#texturePublicationKeys.size > 0;
-    this.#drawIntent = null;
   }
 
   #reconcileTexturePublications(): void {
@@ -1352,7 +1350,7 @@ export class SurfaceGpuOwner {
           canonicalSurfaceIsDoubleSided(material),
         );
         regroup ||= program.program !== resource.program.program;
-        resource.bindings = composeSurfaceTextureBindings(
+        const bindings = composeSurfaceTextureBindings(
           ordinaryBindings,
           0,
           resource.virtualTexture,
@@ -1363,9 +1361,16 @@ export class SurfaceGpuOwner {
             : undefined,
           this.#environmentGpu?.binding,
         );
+        resource.drawPacket = surfaceDrawPacket(
+          this.#gl,
+          surface,
+          program.program,
+          bindings,
+          surfaceTextureUnitMask(features),
+          resource.vertexArray,
+        );
         resource.program = program;
         resource.surface = surface;
-        resource.textureUnits = surfaceTextureUnitMask(features);
       }
       if (!deferred) this.#texturePublicationKeys.delete(key);
     }
@@ -1380,7 +1385,6 @@ export class SurfaceGpuOwner {
     this.#gpuScene = scene;
     this.#dirty = this.#admittedSurfaceCount < scene.surfaces.length
       || this.#texturePublicationKeys.size > 0;
-    this.#drawIntent = null;
   }
 
   #materialUploadDeferred(material: CanonicalSurfaceMaterial): boolean {

@@ -4,7 +4,8 @@ import {
   createSurfaceDrawStateTransition,
   planSurfaceDrawStateTransition,
   type AppliedSurfaceDrawState,
-  type SurfaceDrawStateIntent,
+  type SurfaceDrawFrame,
+  type SurfaceDrawPacket,
 } from "../../packages/renderer-webgl/src/webgl/draw-state-transition";
 import { createUnknownClearState } from "../../packages/renderer-webgl/src/webgl/clear-state-transition";
 
@@ -23,26 +24,30 @@ const state = (): AppliedSurfaceDrawState => ({
   vertexArray: null,
 });
 
-const intent = (): SurfaceDrawStateIntent => ({
-  alphaBlend: false,
-  cullBackFaces: true,
-  depthTest: true,
-  depthWrite: true,
-  framebuffer: null,
-  frontFace: 0x0901,
-  program: handle<WebGLProgram>(),
-  textureBindings: [{ sampler: null, target: "2d", texture: null }],
-  textureUnits: 1,
-  vertexArray: handle<WebGLVertexArrayObject>(),
-  viewport: { height: 360, width: 640, x: 0, y: 0 },
+const draw = (): Readonly<{ frame: SurfaceDrawFrame; packet: SurfaceDrawPacket }> => ({
+  frame: {
+    framebuffer: null,
+    viewport: { height: 360, width: 640, x: 0, y: 0 },
+  },
+  packet: {
+    alphaBlend: false,
+    cullBackFaces: true,
+    depthTest: true,
+    depthWrite: true,
+    frontFace: 0x0901,
+    program: handle<WebGLProgram>(),
+    textureBindings: [{ sampler: null, target: "2d", texture: null }],
+    textureUnits: 1,
+    vertexArray: handle<WebGLVertexArrayObject>(),
+  },
 });
 
 describe("surface draw state transition core", () => {
   it("establishes every required state once, then suppresses an identical draw", () => {
     const previous = state();
-    const next = intent();
+    const { frame, packet } = draw();
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, next, transition);
+    planSurfaceDrawStateTransition(previous, frame, packet, transition);
     expect(transition).toEqual({
       cullMode: true,
       fixedPipeline: true,
@@ -54,18 +59,18 @@ describe("surface draw state transition core", () => {
       viewport: true,
       writeMasks: true,
     });
-    commitAppliedSurfaceDrawState(previous, next);
-    planSurfaceDrawStateTransition(previous, next, transition);
+    commitAppliedSurfaceDrawState(previous, frame, packet);
+    planSurfaceDrawStateTransition(previous, frame, packet, transition);
     expect(Object.values(transition).every((value) => !value)).toBe(true);
   });
 
   it("isolates a VAO change from unrelated WebGL state", () => {
     const previous = state();
-    const first = intent();
-    commitAppliedSurfaceDrawState(previous, first);
-    const next = { ...first, vertexArray: handle<WebGLVertexArrayObject>() };
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
+    const next = { ...packet, vertexArray: handle<WebGLVertexArrayObject>() };
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, next, transition);
+    planSurfaceDrawStateTransition(previous, frame, next, transition);
     expect(transition).toEqual({
       cullMode: false,
       fixedPipeline: false,
@@ -81,10 +86,10 @@ describe("surface draw state transition core", () => {
 
   it("isolates mirrored-front-face changes from the rest of the pipeline", () => {
     const previous = state();
-    const first = intent();
-    commitAppliedSurfaceDrawState(previous, first);
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, { ...first, frontFace: 0x0900 }, transition);
+    planSurfaceDrawStateTransition(previous, frame, { ...packet, frontFace: 0x0900 }, transition);
     expect(transition.frontFace).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "frontFace")
@@ -93,10 +98,10 @@ describe("surface draw state transition core", () => {
 
   it("isolates double-sided culling changes from the rest of the pipeline", () => {
     const previous = state();
-    const first = intent();
-    commitAppliedSurfaceDrawState(previous, first);
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, { ...first, cullBackFaces: false }, transition);
+    planSurfaceDrawStateTransition(previous, frame, { ...packet, cullBackFaces: false }, transition);
     expect(transition.cullMode).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "cullMode")
@@ -105,13 +110,13 @@ describe("surface draw state transition core", () => {
 
   it("isolates texture and sampler binding changes from fixed pipeline state", () => {
     const previous = state();
-    const first = intent();
-    commitAppliedSurfaceDrawState(previous, first);
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, {
-      ...first,
+    planSurfaceDrawStateTransition(previous, frame, {
+      ...packet,
       textureBindings: [
-        first.textureBindings[0]!,
+        packet.textureBindings[0]!,
         { sampler: handle<WebGLSampler>(), target: "2d", texture: handle<WebGLTexture>() },
       ],
       textureUnits: 3,
@@ -124,73 +129,75 @@ describe("surface draw state transition core", () => {
 
   it("retains but does not inspect bindings unused by the next shader", () => {
     const previous = state();
-    const textured: SurfaceDrawStateIntent = {
-      ...intent(),
+    const { frame, packet } = draw();
+    const textured: SurfaceDrawPacket = {
+      ...packet,
       textureBindings: [{
         sampler: handle<WebGLSampler>(),
         target: "2d",
         texture: handle<WebGLTexture>(),
       }],
     };
-    commitAppliedSurfaceDrawState(previous, textured);
-    const untextured: SurfaceDrawStateIntent = {
+    commitAppliedSurfaceDrawState(previous, frame, textured);
+    const untextured: SurfaceDrawPacket = {
       ...textured,
       textureBindings: [{ sampler: null, target: "2d", texture: null }],
       textureUnits: 0,
     };
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, untextured, transition);
+    planSurfaceDrawStateTransition(previous, frame, untextured, transition);
     expect(transition.textureUnits).toBe(0);
-    commitAppliedSurfaceDrawState(previous, untextured);
+    commitAppliedSurfaceDrawState(previous, frame, untextured);
     expect(previous.textureBindings[0]).toBe(textured.textureBindings[0]);
   });
 
   it("does not let an untextured draw validate texture units dirtied by an upload", () => {
     const previous = state();
-    const textured: SurfaceDrawStateIntent = {
-      ...intent(),
+    const { frame, packet } = draw();
+    const textured: SurfaceDrawPacket = {
+      ...packet,
       textureBindings: [{
         sampler: handle<WebGLSampler>(),
         target: "2d",
         texture: handle<WebGLTexture>(),
       }],
     };
-    commitAppliedSurfaceDrawState(previous, textured);
+    commitAppliedSurfaceDrawState(previous, frame, textured);
     previous.textureBindings.length = 0;
 
     const untextured = { ...textured, textureUnits: 0 };
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, untextured, transition);
+    planSurfaceDrawStateTransition(previous, frame, untextured, transition);
     expect(transition.textureUnits).toBe(0);
-    commitAppliedSurfaceDrawState(previous, untextured);
+    commitAppliedSurfaceDrawState(previous, frame, untextured);
     expect(previous.textureBindings).toEqual([]);
 
-    planSurfaceDrawStateTransition(previous, textured, transition);
+    planSurfaceDrawStateTransition(previous, frame, textured, transition);
     expect(transition.textureUnits).toBe(1);
   });
 
   it("keeps untouched texture units valid when one upload unit becomes unknown", () => {
     const previous = state();
-    const first = intent();
+    const { frame, packet } = draw();
     const bindings = [
       { sampler: handle<WebGLSampler>(), target: "2d" as const, texture: handle<WebGLTexture>() },
       { sampler: handle<WebGLSampler>(), target: "2d" as const, texture: handle<WebGLTexture>() },
     ];
-    const textured = { ...first, textureBindings: bindings, textureUnits: 3 };
-    commitAppliedSurfaceDrawState(previous, textured);
+    const textured = { ...packet, textureBindings: bindings, textureUnits: 3 };
+    commitAppliedSurfaceDrawState(previous, frame, textured);
     previous.textureBindings[0] = undefined;
 
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, textured, transition);
+    planSurfaceDrawStateTransition(previous, frame, textured, transition);
     expect(transition.textureUnits).toBe(1);
   });
 
   it("changes only blend/depth pipeline state when crossing the transparent boundary", () => {
     const previous = state();
-    const opaque = intent();
-    commitAppliedSurfaceDrawState(previous, opaque);
+    const { frame, packet: opaque } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, opaque);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, {
+    planSurfaceDrawStateTransition(previous, frame, {
       ...opaque,
       alphaBlend: true,
       depthWrite: false,
@@ -204,10 +211,10 @@ describe("surface draw state transition core", () => {
 
   it("represents a fullscreen pass without coupling depth behavior to blending", () => {
     const previous = state();
-    const opaque = intent();
-    commitAppliedSurfaceDrawState(previous, opaque);
+    const { frame, packet: opaque } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, opaque);
     const transition = createSurfaceDrawStateTransition();
-    planSurfaceDrawStateTransition(previous, {
+    planSurfaceDrawStateTransition(previous, frame, {
       ...opaque,
       depthTest: false,
       depthWrite: false,
