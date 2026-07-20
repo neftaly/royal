@@ -48,6 +48,7 @@ import {
 import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
 import { normalizeLodThresholds } from "../surface/lod-selection";
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
+import { collectStaticTextureAssets } from "./static-texture-assets";
 
 export type PreparedStaticLodMembership = Readonly<{
   group: string;
@@ -866,70 +867,11 @@ const prepareStaticDocument = (
   }
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
   const batchedPrimitives = batchRepeatedStaticPrimitives(primitives);
-  const claimedTextures = new Map<string, TextureSourceRef>();
-  const claimTexture = (asset: TextureSourceRef | undefined): void => {
-    if (asset === undefined) return;
-    claimedTextures.set(`${asset.contentKey as string}:${asset.colorSpace ?? "srgb"}`, asset);
-  };
-  const forEachPrimitiveMaterial = (
-    primitive: PreparedStaticGltfPrimitive,
-    visitMaterial: (material: CanonicalSurfaceMaterial) => void,
-  ): void => {
-    visitMaterial(primitive.material);
-    for (const level of primitive.materialLod?.levels ?? []) visitMaterial(level);
-    for (const material of primitive.materialVariants?.values() ?? []) visitMaterial(material);
-    for (const lod of primitive.materialVariantLods?.values() ?? []) {
-      for (const level of lod.levels) visitMaterial(level);
-    }
-  };
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => claimTexture(material.baseColorAsset));
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.emissiveAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.metallicRoughnessAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.normalAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.occlusionAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.specularColorAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.specularTextureAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.thicknessAsset);
-    });
-  }
-  for (const primitive of batchedPrimitives) {
-    forEachPrimitiveMaterial(primitive, (material) => {
-      if (material.kind === "standard") claimTexture(material.transmissionAsset);
-    });
-  }
   return {
     bounds: staticGltfBounds(batchedPrimitives),
     lights,
     primitives: batchedPrimitives,
-    textureAssets: [...claimedTextures.values()],
+    textureAssets: collectStaticTextureAssets(batchedPrimitives),
   };
 };
 
