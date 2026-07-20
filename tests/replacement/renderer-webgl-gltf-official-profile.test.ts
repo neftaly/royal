@@ -1,13 +1,10 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 
-const fixture = (name: string): Uint8Array => new Uint8Array(readFileSync(resolve(
-  "apps/examples-react/public/fixtures/khronos",
-  name,
-  "glTF-Binary",
-  `${name}.glb`,
+const fixture = (name: string): Uint8Array => new Uint8Array(readFileSync(new URL(
+  `../../apps/examples-react/public/fixtures/khronos/${name}/glTF-Binary/${name}.glb`,
+  import.meta.url,
 )));
 
 describe("official glTF extension-profile oracles", () => {
