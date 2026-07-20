@@ -22,7 +22,7 @@ import {
   createAutomaticSvgPageSource,
 } from "./automatic-page-source";
 import {
-  collectVirtualTextureSurfaceDemand,
+  collectVirtualTextureDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
   truncateVirtualTextureDemand,
@@ -592,6 +592,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         model: surface.model,
         textureCoordinates: surface.material.baseColorTextureCoordinates
           ?? IDENTITY_TEXTURE_COORDINATES,
+        worldBounds: surface.worldBounds,
       });
     }
   }
@@ -608,15 +609,13 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const demandChanged = this.#demandViewsChanged(resource, views);
       if (demandChanged) {
         resetVirtualTextureDemand(resource.workspace);
-        for (let index = 0; index < resource.surfaces.length; index += 1) {
-          collectVirtualTextureSurfaceDemand(
-            resource.workspace,
-            manifest,
-            resource.surfaces[index]!,
-            views,
-            resource.sampler,
-          );
-        }
+        collectVirtualTextureDemand(
+          resource.workspace,
+          manifest,
+          resource.surfaces,
+          views,
+          resource.sampler,
+        );
       }
       // Do not reserve one atlas per declared asset before it contributes to a view.
       if (resource.workspace.count === 0) {

@@ -34,7 +34,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 384 * 1024,
+  '@royal/renderer-webgl': 400 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -154,7 +154,7 @@ import {
   useRendererLifecycle,
   type RoyalRendererRoot,
 } from '@royal/react';
-import { scene } from '@royal/react/scene';
+import { mesh, scene, triangleGeometry, unlitMaterial } from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
 import type { ReactNode } from 'react';
 
@@ -165,7 +165,12 @@ const orbit = createOrbitCameraController(
 const renderScene = scene({
   camera: orbit.cameraResource,
   clearColor: [0.1, 0.15, 0.2, 1],
-  nodes: [],
+  nodes: [mesh({
+    geometry: triangleGeometry({
+      positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
+    }),
+    material: unlitMaterial({ color: [1, 1, 1, 1] }),
+  })],
 });
 
 const Status = (): ReactNode => {

@@ -175,6 +175,10 @@ preferred to a hard moving boundary between sharp and ancestor-resolved areas.
 
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
+Each ordered view computes one retained frustum broad phase for all of those
+surfaces. Canonical world bounds reject off-screen surfaces before triangle
+clipping; surfaces that survive still use exact clipped projected coverage, so
+the broad phase cannot reduce visible demand.
 Atlas uploads admitted in one resource/frame batch normally publish through one
 complete page-table revision and one lifecycle notification after every
 successful atlas write. A failed overwrite may publish an immediate repair

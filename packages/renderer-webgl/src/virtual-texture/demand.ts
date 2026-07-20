@@ -9,6 +9,11 @@ import {
 } from "../math/mat4";
 import type { FrameViewport } from "../frame/clear-frame";
 import {
+  frustumPlanesInto,
+  worldBoundsVisible,
+  type WorldBounds,
+} from "../surface/surface-visibility";
+import {
   virtualTexturePageKeyParts,
   type VirtualTextureManifest,
 } from "./manifest";
@@ -23,11 +28,13 @@ export type VirtualTextureDemandSurface = Readonly<{
   instances?: Readonly<{ count: number; localModels: Float32Array }>;
   model: Mat4;
   textureCoordinates: CanonicalTextureCoordinates;
+  worldBounds: WorldBounds;
 }>;
 
 export type VirtualTextureDemandWorkspace = Readonly<{
   clipA: Float64Array;
   clipB: Float64Array;
+  frustumPlanes: Float32Array;
   keys: Map<number | string, number>;
   mips: Uint16Array;
   model: MutableMat4;
@@ -51,6 +58,7 @@ export const createVirtualTextureDemandWorkspace = (
     clipA: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     clipB: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     count: 0,
+    frustumPlanes: new Float32Array(24),
     keys: new Map(),
     mips: new Uint16Array(maxPages),
     model: identityMat4(),
@@ -537,23 +545,37 @@ const collectModelDemand = (
   }
 };
 
-/** Collects bounded, de-duplicated, ancestor-first demand across all ordered views. */
-export const collectVirtualTextureSurfaceDemand = (
+const collectVirtualTextureSurfaceViewDemand = (
   workspace: VirtualTextureDemandWorkspace,
   manifest: VirtualTextureManifest,
   surface: VirtualTextureDemandSurface,
+  view: VirtualTextureDemandView,
+  sampler: CanonicalTextureSampler,
+): void => {
+  if (!worldBoundsVisible(surface.worldBounds, workspace.frustumPlanes)) return;
+  const instances = surface.instances;
+  if (instances === undefined || instances.count === 0) {
+    collectModelDemand(workspace, manifest, surface, surface.model, view, sampler);
+    return;
+  }
+  for (let instance = 0; instance < instances.count; instance += 1) {
+    copyInstanceModel(workspace.model, surface.model, instances.localModels, instance * 16);
+    collectModelDemand(workspace, manifest, surface, workspace.model, view, sampler);
+  }
+};
+
+/** Collects bounded demand while sharing one broad-phase frustum across an asset's surfaces. */
+export const collectVirtualTextureDemand = (
+  workspace: VirtualTextureDemandWorkspace,
+  manifest: VirtualTextureManifest,
+  surfaces: readonly VirtualTextureDemandSurface[],
   views: readonly VirtualTextureDemandView[],
   sampler: CanonicalTextureSampler,
 ): void => {
   for (const view of views) {
-    const instances = surface.instances;
-    if (instances === undefined || instances.count === 0) {
-      collectModelDemand(workspace, manifest, surface, surface.model, view, sampler);
-      continue;
-    }
-    for (let instance = 0; instance < instances.count; instance += 1) {
-      copyInstanceModel(workspace.model, surface.model, instances.localModels, instance * 16);
-      collectModelDemand(workspace, manifest, surface, workspace.model, view, sampler);
+    frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);
+    for (const surface of surfaces) {
+      collectVirtualTextureSurfaceViewDemand(workspace, manifest, surface, view, sampler);
     }
   }
 };

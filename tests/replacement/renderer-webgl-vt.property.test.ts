@@ -3,8 +3,9 @@ import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
 import {
-  collectVirtualTextureSurfaceDemand,
+  collectVirtualTextureDemand,
   createVirtualTextureDemandWorkspace,
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import {
@@ -46,14 +47,17 @@ describe("VT2 bounded planning properties", () => {
         wrapS: random.pick(["clamp-to-edge", "repeat", "mirrored-repeat"]),
         wrapT: random.pick(["clamp-to-edge", "repeat", "mirrored-repeat"]),
       };
-      collectVirtualTextureSurfaceDemand(
+      const geometry = prepareCanonicalGeometry({ kind: "plane", size: [1, 1] }, true);
+      const model = identityMat4();
+      collectVirtualTextureDemand(
         workspace,
         manifest,
-        {
-          geometry: prepareCanonicalGeometry({ kind: "plane", size: [1, 1] }, true),
-          model: identityMat4(),
+        [{
+          geometry,
+          model,
           textureCoordinates: IDENTITY_TEXTURE_COORDINATES,
-        },
+          worldBounds: transformedWorldBounds(geometry.bounds, model),
+        }],
         [{ viewProjection: projection, viewport: { height: 720, width: 1280, x: 0, y: 0 } }],
         sampler,
       );

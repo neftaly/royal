@@ -3,8 +3,9 @@ import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
 import {
-  collectVirtualTextureSurfaceDemand,
+  collectVirtualTextureDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
   truncateVirtualTextureDemand,
@@ -25,10 +26,13 @@ const sampler: CanonicalTextureSampler = {
   wrapS: "clamp-to-edge",
   wrapT: "clamp-to-edge",
 };
+const surfaceGeometry = prepareCanonicalGeometry({ kind: "plane", size: [1, 1] }, true);
+const surfaceModel = identityMat4();
 const surface = {
-  geometry: prepareCanonicalGeometry({ kind: "plane", size: [1, 1] }, true),
-  model: identityMat4(),
+  geometry: surfaceGeometry,
+  model: surfaceModel,
   textureCoordinates: IDENTITY_TEXTURE_COORDINATES,
+  worldBounds: transformedWorldBounds(surfaceGeometry.bounds, surfaceModel),
 };
 const view = (projection = identityMat4()) => ({
   viewProjection: projection,
@@ -38,13 +42,13 @@ const view = (projection = identityMat4()) => ({
 describe("VT2 clipped projected demand", () => {
   it("requests finer pages as visible texel density increases", () => {
     const workspace = createVirtualTextureDemandWorkspace(64);
-    collectVirtualTextureSurfaceDemand(workspace, manifest, surface, [view()], sampler);
+    collectVirtualTextureDemand(workspace, manifest, [surface], [view()], sampler);
     const ordinaryCount = workspace.count;
     resetVirtualTextureDemand(workspace);
     const close = identityMat4();
     close[0] = 2;
     close[5] = 2;
-    collectVirtualTextureSurfaceDemand(workspace, manifest, surface, [view(close)], sampler);
+    collectVirtualTextureDemand(workspace, manifest, [surface], [view(close)], sampler);
     expect(workspace.count).toBeGreaterThan(ordinaryCount);
     expect(Array.from(workspace.mips.slice(0, workspace.count))).toContain(0);
     expect(workspace.overflow.value).toBe(false);
@@ -54,12 +58,12 @@ describe("VT2 clipped projected demand", () => {
     const mono = createVirtualTextureDemandWorkspace(64);
     const left = identityMat4();
     left[12] = -0.8;
-    collectVirtualTextureSurfaceDemand(mono, manifest, surface, [view(left)], sampler);
+    collectVirtualTextureDemand(mono, manifest, [surface], [view(left)], sampler);
     const monoCount = mono.count;
     const stereo = createVirtualTextureDemandWorkspace(64);
     const right = identityMat4();
     right[12] = 0.8;
-    collectVirtualTextureSurfaceDemand(stereo, manifest, surface, [view(left), view(right)], sampler);
+    collectVirtualTextureDemand(stereo, manifest, [surface], [view(left), view(right)], sampler);
     expect(stereo.count).toBeGreaterThanOrEqual(monoCount);
     expect(stereo.mips[0]).toBe(manifest.mipCount - 1);
   });
@@ -74,10 +78,10 @@ describe("VT2 clipped projected demand", () => {
     const close = identityMat4();
     close[0] = 16;
     close[5] = 16;
-    collectVirtualTextureSurfaceDemand(
+    collectVirtualTextureDemand(
       workspace,
       manifest,
-      { ...surface, textureCoordinates: coordinates },
+      [{ ...surface, textureCoordinates: coordinates }],
       [view(close)],
       repeating,
     );
@@ -91,7 +95,7 @@ describe("VT2 clipped projected demand", () => {
     const close = identityMat4();
     close[0] = 16;
     close[5] = 16;
-    collectVirtualTextureSurfaceDemand(workspace, manifest, surface, [view(close)], sampler);
+    collectVirtualTextureDemand(workspace, manifest, [surface], [view(close)], sampler);
     expect(workspace.count).toBeGreaterThan(4);
 
     truncateVirtualTextureDemand(workspace, 4);
@@ -112,10 +116,26 @@ describe("VT2 clipped projected demand", () => {
         textureCoordinates0: new Float32Array([Number.NaN, 0, 1, 0, 1, 1, 0, 1]),
       },
     };
-    collectVirtualTextureSurfaceDemand(workspace, manifest, malformed, [view()], sampler);
+    collectVirtualTextureDemand(workspace, manifest, [malformed], [view()], sampler);
     expect(workspace.count).toBe(1);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
     expect(workspace.xs[0]).toBe(0);
     expect(workspace.ys[0]).toBe(0);
+  });
+
+  it("rejects offscreen surfaces before visiting malformed triangle channels", () => {
+    const workspace = createVirtualTextureDemandWorkspace(8);
+    const malformed = {
+      ...surface,
+      geometry: {
+        ...surface.geometry,
+        textureCoordinates0: new Float32Array([Number.NaN, 0, 1, 0, 1, 1, 0, 1]),
+      },
+      worldBounds: { max: [11, 1, 0] as const, min: [10, -1, 0] as const },
+    };
+
+    collectVirtualTextureDemand(workspace, manifest, [malformed], [view()], sampler);
+
+    expect(workspace.count).toBe(0);
   });
 });
