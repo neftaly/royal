@@ -591,6 +591,7 @@ describe("canonical direct surface lowering", () => {
         material: standardMaterial({ color: [1, 1, 1, 1] }),
       })],
     }));
+    expect(prepared.environment?.rotated).toBe(true);
     expect(prepared.environment?.radianceScaleNits).toBe(25);
     expect(prepared.environment?.rotation).toHaveLength(16);
   });
@@ -608,6 +609,7 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.environment).toMatchObject({
       source: "royal-prefiltered-v1",
       src: "/studio.ktx",
+      rotated: false,
       version: "v2",
     });
     expect(prepared.environment?.rotation).toHaveLength(16);

@@ -33,6 +33,7 @@ import {
 } from "./canonical-material";
 import {
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+  SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
 } from "./surface-program-features";
 import {
@@ -158,9 +159,10 @@ const sceneEnvironmentFeatures = (
 ): number => {
   const environment = scene?.environment;
   if (environment === undefined) return 0;
-  return environment.source === "royal-prefiltered-v1" && prefiltered !== undefined
+  const source = environment.source === "royal-prefiltered-v1" && prefiltered !== undefined
     ? SURFACE_FEATURE_PREFILTERED_ENVIRONMENT
     : SURFACE_FEATURE_STUDIO_ENVIRONMENT;
+  return environment.rotated ? source | SURFACE_FEATURE_ROTATED_ENVIRONMENT : source;
 };
 
 
@@ -825,12 +827,14 @@ export class SurfaceGpuOwner {
               gl.uniform4fv(program.punctualLightPositions, this.#punctualLightPositions);
               gl.uniform4fv(program.punctualLightSpotCones, this.#punctualLightSpotCones);
             }
-            if (program.environmentRotation !== null && program.environmentSettings !== null) {
+            if (program.environmentSettings !== null) {
               const environment = scene.environment;
               if (environment === undefined) {
                 throw new Error("Royal studio environment state is missing");
               }
-              gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
+              if (program.environmentRotation !== null) {
+                gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
+              }
               this.#environmentSettings[0] = environment.radianceScaleNits;
               const prefiltered = program.environmentCoefficients === null
                 ? undefined

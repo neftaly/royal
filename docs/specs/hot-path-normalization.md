@@ -76,6 +76,12 @@ or alternate-coordinate slot takes the general per-slot path for exact glTF
 semantics. This is a pure plan decision made from the canonical material and
 resident feature mask, not a draw-time heuristic.
 
+An environment whose authored Euler rotation is exactly zero takes the
+canonical identity-rotation program path. That path omits the rotation uniform
+and its normal/reflection matrix multiplies; authored nonzero rotations retain
+the general path. The choice is made while lowering the environment, remains
+exact, and adds no per-frame heuristic or browser-specific behavior.
+
 Feature specialization MUST be reviewed for program explosion. Closely related
 cheap arithmetic may remain in a shared shader when another variant costs more
 compile time/memory than the branch saves. Screen-copy, VT, alpha mode, unlit,

@@ -62,7 +62,9 @@ uniform sampler2D specularColorTexture;
 #endif
 __TRANSMISSION_DECLARATIONS__
 #if defined(STUDIO_ENVIRONMENT) || defined(PREFILTERED_ENVIRONMENT)
+#ifdef ROTATED_ENVIRONMENT
 uniform mat4 environmentRotation;
+#endif
 uniform vec4 environmentSettings;
 #endif
 #ifdef PREFILTERED_ENVIRONMENT
@@ -277,8 +279,12 @@ void main() {
     occlusionStrength
   );
 #endif
-  vec3 environmentNormal = mat3(environmentRotation) * normal;
-  vec3 environmentReflection = mat3(environmentRotation) * reflect(-viewDirection, normal);
+  vec3 environmentNormal = normal;
+  vec3 environmentReflection = reflect(-viewDirection, normal);
+#ifdef ROTATED_ENVIRONMENT
+  environmentNormal = mat3(environmentRotation) * environmentNormal;
+  environmentReflection = mat3(environmentRotation) * environmentReflection;
+#endif
 #ifdef PREFILTERED_ENVIRONMENT
   vec3 diffuseRadiance = environmentCoefficients[0].rgb * 0.282095;
   diffuseRadiance += environmentCoefficients[1].rgb * (0.488603 * environmentNormal.y);

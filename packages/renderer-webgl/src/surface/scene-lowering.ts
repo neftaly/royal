@@ -221,6 +221,7 @@ export type CanonicalDirectionalLight = Readonly<{
 
 export type CanonicalEnvironment = Readonly<{
   radianceScaleNits: number;
+  rotated: boolean;
   rotation: Mat4;
 } & (
   | { source: "studio" }
@@ -289,6 +290,9 @@ const prepareEnvironment = (
   if (!required || environment === undefined) return undefined;
   return {
     radianceScaleNits: environment.radianceScaleNits,
+    rotated: environment.rotation[0] !== 0
+      || environment.rotation[1] !== 0
+      || environment.rotation[2] !== 0,
     rotation: transformMat4({
       position: [0, 0, 0],
       rotation: environment.rotation,

@@ -4,6 +4,7 @@ import {
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PUNCTUAL_LIGHTS,
+  SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
   SURFACE_FEATURE_TANGENT,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
@@ -50,6 +51,38 @@ describe("surface program ownership", () => {
     const vertexSources = gl.shaderSource.mock.calls.filter(([, source]) =>
       String(source).includes("layout(location = 0) in vec3 position"));
     expect(vertexSources).toHaveLength(1);
+  });
+
+  it("only includes environment rotation work for an authored rotation", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get(
+      "standard",
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT,
+      false,
+      false,
+      false,
+    );
+
+    const fragment = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .find((source) => source.includes("ggxDistribution"));
+    expect(fragment).not.toContain("#define ROTATED_ENVIRONMENT");
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "environmentRotation",
+    );
+
+    owner.get(
+      "standard",
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_ROTATED_ENVIRONMENT,
+      false,
+      false,
+      false,
+    );
+    expect(gl.getUniformLocation).toHaveBeenCalledWith(
+      expect.anything(),
+      "environmentRotation",
+    );
   });
 
   it("builds authored tangent bases per vertex and only normalizes mapped normals per fragment", () => {
