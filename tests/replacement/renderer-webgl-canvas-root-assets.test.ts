@@ -502,6 +502,8 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.bufferData.mock.calls.length).toBe(allocations);
     expect(canvas.gl.bufferSubData.mock.calls.length).toBeGreaterThan(patches);
+    expect(canvas.gl.bufferSubData.mock.calls.at(-1)?.[1]).toBe(0);
+    expect(canvas.gl.bufferSubData.mock.calls.at(-1)?.slice(3)).toEqual([0, 28]);
 
     transforms.scales[0] = -1;
     transforms.commitScale(0, 1);

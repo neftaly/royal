@@ -74,6 +74,22 @@ export const updateCanonicalGltfInstanceSource = (
       );
     }
     instances.revision = source.poseVersion;
+    if (instances.sourceOrdered) {
+      instances.updateStart = startIndex * instances.innerCount;
+      instances.updateCount = count * instances.innerCount;
+    } else {
+      let first = -1;
+      let last = -1;
+      const endIndex = startIndex + count;
+      for (let index = 0; index < instances.sourceIndices.length; index += 1) {
+        const sourceIndex = instances.sourceIndices[index]!;
+        if (sourceIndex < startIndex || sourceIndex >= endIndex) continue;
+        if (first < 0) first = index;
+        last = index;
+      }
+      instances.updateStart = Math.max(0, first);
+      instances.updateCount = last < first ? 0 : last - first + 1;
+    }
     if (!bounds.has(surface.worldBounds)) {
       bounds.add(surface.worldBounds);
       const worldBounds = resetBounds(surface.worldBounds);

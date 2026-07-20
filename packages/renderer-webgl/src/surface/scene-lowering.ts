@@ -68,6 +68,8 @@ export type CanonicalDrawSurface = Readonly<{
     source?: GltfInstanceTransforms;
     sourceIndices?: Uint32Array;
     sourceOrdered?: boolean;
+    updateCount?: number;
+    updateStart?: number;
   };
   lods?: readonly LodMembership[];
   material: CanonicalSurfaceMaterial;

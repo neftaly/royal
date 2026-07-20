@@ -244,6 +244,7 @@ export class SurfaceGpuOwner {
   #transmissionSurfaces: GpuSurface[] = [];
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
+  #instanceTransformsPending = false;
   readonly #materialFactors = new Float32Array(4);
   #multiDraw: WebGlMultiDraw | null;
   #multiDrawCounts = new Int32Array(0);
@@ -329,6 +330,7 @@ export class SurfaceGpuOwner {
     this.#blendedSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
+    this.#instanceTransformsPending = false;
     this.#scene = null;
     this.#texturePublicationKeys.clear();
     this.#lodGroups.clear();
@@ -355,6 +357,7 @@ export class SurfaceGpuOwner {
     this.#transmissionSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
+    this.#instanceTransformsPending = false;
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
@@ -419,6 +422,7 @@ export class SurfaceGpuOwner {
       this.#admittedSurfaceCount,
     );
     this.#scene = scene;
+    this.#instanceTransformsPending = false;
     this.#compositeGpu?.resetAdmission();
     this.#terminalPresentationEligible = scene !== null
       && scene.surfaces.every((surface) => surface.material.kind === "standard");
@@ -486,7 +490,11 @@ export class SurfaceGpuOwner {
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
     this.#dirty = true;
-    this.#fullReconcileRequired = true;
+    if (
+      this.#gpuScene !== this.#scene
+      || this.#admittedSurfaceCount < this.#scene.surfaces.length
+    ) this.#fullReconcileRequired = true;
+    else this.#instanceTransformsPending = true;
   }
 
   /** Commits pending texture representations without requiring a scene presentation. */
@@ -598,7 +606,15 @@ export class SurfaceGpuOwner {
       }
     }
     if (this.#dirty) {
-      if (!this.flushTexturePublications(state)) {
+      if (this.#instanceTransformsPending && !this.#fullReconcileRequired) {
+        if (this.#geometryGpu.updateInstanceTransforms(scene?.surfaces ?? [])) {
+          this.#instanceTransformsPending = false;
+          this.#dirty = this.#texturePublicationKeys.size > 0;
+        } else {
+          this.#fullReconcileRequired = true;
+        }
+      }
+      if (this.#dirty && !this.flushTexturePublications(state)) {
         try {
           this.#reconcile();
         } finally {
@@ -1353,6 +1369,7 @@ export class SurfaceGpuOwner {
       this.#directionalLightCount = 0;
     }
     this.#fullReconcileRequired = false;
+    this.#instanceTransformsPending = false;
     if (!appendOnly) this.#texturePublicationKeys.clear();
     if (scene !== null) this.#collectDeferredTexturePublications(
       scene,

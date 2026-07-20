@@ -72,6 +72,19 @@ type GpuInstanceVertexArray = Readonly<{
   vertexArray: WebGLVertexArrayObject;
 }>;
 
+const changedInstanceSurface = (
+  surfaces: readonly CanonicalDrawSurface[],
+  resource: GpuInstanceData,
+): CanonicalDrawSurface | undefined => {
+  for (const surface of surfaces) {
+    if (
+      surface.instances?.key === resource.key
+      && surface.instances.revision !== resource.revision
+    ) return surface;
+  }
+  return undefined;
+};
+
 export type SurfaceGeometryPlan = Readonly<{
   commit: () => void;
   offset: number;
@@ -224,6 +237,7 @@ export class SurfaceGeometryGpuOwner {
   #plannedGeometry: ReturnType<typeof planGeometryArenas> | null = null;
   #plannedSurfaces: readonly CanonicalDrawSurface[] | null = null;
   #instanceResources: readonly GpuInstanceData[] = [];
+  #instanceUploadWorkspace = new Float32Array(0);
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
 
   constructor(
@@ -249,6 +263,7 @@ export class SurfaceGeometryGpuOwner {
     this.#indexUploadWorkspace = {};
     this.#plannedGeometry = null;
     this.#plannedSurfaces = null;
+    this.#instanceUploadWorkspace = new Float32Array(0);
   }
 
   invalidate(): void {
@@ -524,7 +539,12 @@ export class SurfaceGeometryGpuOwner {
     }
   }
 
-  #prepareInstanceValues(surface: CanonicalDrawSurface): Float32Array {
+  #writeInstanceValues(
+    surface: CanonicalDrawSurface,
+    values: Float32Array,
+    start = 0,
+    count = surface.instances?.count ?? 0,
+  ): number {
     const instances = surface.instances;
     if (
       instances === undefined
@@ -532,11 +552,17 @@ export class SurfaceGeometryGpuOwner {
       || instances.count < 1
       || instances.localModels.length !== instances.count * 16
     ) throw new Error("Royal instanced surface has invalid matrix storage");
-    const values = new Float32Array(instances.count * 28);
+    if (start < 0 || count < 0 || start + count > instances.count) {
+      throw new Error("Royal instance upload range is invalid");
+    }
+    const valueCount = count * 28;
+    if (values.length < valueCount) {
+      throw new Error("Royal instance upload workspace is too small");
+    }
     const model = identityMat4();
     const normal = identityMat4();
-    for (let instance = 0; instance < instances.count; instance += 1) {
-      const sourceOffset = instance * 16;
+    for (let instance = 0; instance < count; instance += 1) {
+      const sourceOffset = (start + instance) * 16;
       const targetOffset = instance * 28;
       for (let component = 0; component < 16; component += 1) {
         const value = instances.localModels[sourceOffset + component];
@@ -556,6 +582,12 @@ export class SurfaceGeometryGpuOwner {
         values[normalTarget + 3] = column === 2 ? normal[15] : 0;
       }
     }
+    return valueCount;
+  }
+
+  #prepareInstanceValues(surface: CanonicalDrawSurface): Float32Array {
+    const values = new Float32Array((surface.instances?.count ?? 0) * 28);
+    this.#writeInstanceValues(surface, values);
     return values;
   }
 
@@ -664,6 +696,57 @@ export class SurfaceGeometryGpuOwner {
       gl.deleteVertexArray(vertexArray);
       throw error;
     }
+  }
+
+  /** Uploads changed retained cohorts without rebuilding geometry or VAO plans. */
+  updateInstanceTransforms(surfaces: readonly CanonicalDrawSurface[]): boolean {
+    let uploadBytes = 0;
+    let maximumValueCount = 0;
+    for (const resource of this.#instanceResources) {
+      const surface = changedInstanceSurface(surfaces, resource);
+      if (surface === undefined) continue;
+      if (
+        surface.instances!.count !== resource.count
+        || surface.instances!.revision === undefined
+      ) return false;
+      const start = surface.instances!.updateStart ?? 0;
+      const count = surface.instances!.updateCount ?? resource.count;
+      if (start < 0 || count < 0 || start + count > resource.count) return false;
+      const valueCount = count * 28;
+      maximumValueCount = Math.max(maximumValueCount, valueCount);
+      uploadBytes += valueCount * Float32Array.BYTES_PER_ELEMENT;
+    }
+    if (uploadBytes === 0) return true;
+    if (!this.#uploadBudget.tryAdmit(uploadBytes)) return false;
+    if (this.#instanceUploadWorkspace.length < maximumValueCount) {
+      this.#instanceUploadWorkspace = new Float32Array(maximumValueCount);
+    }
+    for (const resource of this.#instanceResources) {
+      const surface = changedInstanceSurface(surfaces, resource);
+      if (surface === undefined) continue;
+      const start = surface.instances!.updateStart ?? 0;
+      const count = surface.instances!.updateCount ?? resource.count;
+      if (count === 0) {
+        resource.revision = surface.instances!.revision!;
+        continue;
+      }
+      const valueCount = this.#writeInstanceValues(
+        surface,
+        this.#instanceUploadWorkspace,
+        start,
+        count,
+      );
+      this.#gl.bindBuffer(this.#gl.ARRAY_BUFFER, resource.buffer);
+      this.#gl.bufferSubData(
+        this.#gl.ARRAY_BUFFER,
+        start * 28 * Float32Array.BYTES_PER_ELEMENT,
+        this.#instanceUploadWorkspace,
+        0,
+        valueCount,
+      );
+      resource.revision = surface.instances!.revision!;
+    }
+    return true;
   }
 
   prepare(
