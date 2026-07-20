@@ -63,7 +63,7 @@ export const materialFillLight = {
 
 export const materialPass = {
   clearColor: [0, 0, 0, 0],
-  exposureEv100: 5.75,
+  exposureEv100: 7.5,
   toneMapping: 'pbr-neutral',
 } as const;
 
