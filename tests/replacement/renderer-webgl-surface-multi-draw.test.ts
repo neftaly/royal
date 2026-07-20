@@ -125,6 +125,34 @@ describe("surface multi-draw compatibility core", () => {
     expect(surfacesShareMultiDrawState(left, otherMask)).toBe(false);
   });
 
+  it("ignores bindings that neither packet samples", () => {
+    const base = candidate();
+    const left = candidate({
+      drawPacket: {
+        ...base.drawPacket,
+        textureBindings: [base.drawPacket.textureBindings[0]!, {
+          sampler: null,
+          target: "2d",
+          texture: null,
+        }],
+      },
+      surface: base.surface,
+    });
+    const right = candidate({
+      drawPacket: {
+        ...left.drawPacket,
+        textureBindings: [left.drawPacket.textureBindings[0]!, {
+          sampler: {} as WebGLSampler,
+          target: "2d",
+          texture: {} as WebGLTexture,
+        }],
+      },
+      surface: left.surface,
+    });
+
+    expect(surfacesShareMultiDrawState(left, right)).toBe(true);
+  });
+
   it("rejects every fixed draw-state difference", () => {
     const left = candidate();
     const variants = [

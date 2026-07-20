@@ -18,12 +18,14 @@ export type SurfaceMultiDrawCandidate = Readonly<{
   }>;
 }>;
 
-const textureBindingsEqual = (
+export const activeTextureBindingsEqual = (
   left: readonly TextureUnitBinding[],
   right: readonly TextureUnitBinding[],
+  textureUnits: number,
 ): boolean => {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) {
+    if ((textureUnits & (1 << index)) === 0) continue;
     if (
       left[index]!.sampler !== right[index]!.sampler
       || left[index]!.target !== right[index]!.target
@@ -56,5 +58,9 @@ export const surfacesShareMultiDrawState = (
   && left.drawPacket.textureUnits === right.drawPacket.textureUnits
   && left.drawPacket.vertexArray === right.drawPacket.vertexArray
   && left.geometry.indexType === right.geometry.indexType
-  && textureBindingsEqual(left.drawPacket.textureBindings, right.drawPacket.textureBindings)
+  && activeTextureBindingsEqual(
+    left.drawPacket.textureBindings,
+    right.drawPacket.textureBindings,
+    left.drawPacket.textureUnits,
+  )
 );

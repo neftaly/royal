@@ -45,6 +45,9 @@ versions identify source-level prerelease checkpoints in this repository.
 - Limited rough-transmission scene-color storage to the mip prefix reachable by
   visible authored roughness, preserving the original LOD mapping while
   avoiding unreachable target memory and mip generation.
+- Made incremental texture publication compare retained GPU bindings as well as
+  shader features, so replacing a resident image cannot leave an old texture
+  handle in an otherwise compatible draw packet.
 
 ## 0.0.1 - 2026-07-14
 

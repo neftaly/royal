@@ -72,7 +72,10 @@ import {
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
 import { planContiguousRunEnds } from "./contiguous-run-plan";
-import { surfacesShareMultiDrawState } from "./surface-multi-draw";
+import {
+  activeTextureBindingsEqual,
+  surfacesShareMultiDrawState,
+} from "./surface-multi-draw";
 import {
   composeSurfaceTextureBindings,
   MATERIAL_TEXTURE_UNITS,
@@ -1349,15 +1352,6 @@ export class SurfaceGpuOwner {
         );
         const textureUnits = surfaceTextureUnitMask(features);
         resource.surface = surface;
-        if (textureUnits === resource.drawPacket.textureUnits) continue;
-        const program = this.#programs.get(
-          material.kind,
-          features,
-          resource.instanceCount > 0,
-          material.alphaCutoff !== undefined,
-          canonicalSurfaceIsDoubleSided(material),
-        );
-        regroup ||= program.program !== resource.program.program;
         const bindings = composeSurfaceTextureBindings(
           ordinaryBindings,
           0,
@@ -1369,6 +1363,22 @@ export class SurfaceGpuOwner {
             : undefined,
           this.#environmentGpu?.binding,
         );
+        if (
+          textureUnits === resource.drawPacket.textureUnits
+          && activeTextureBindingsEqual(
+            resource.drawPacket.textureBindings,
+            bindings,
+            textureUnits,
+          )
+        ) continue;
+        const program = this.#programs.get(
+          material.kind,
+          features,
+          resource.instanceCount > 0,
+          material.alphaCutoff !== undefined,
+          canonicalSurfaceIsDoubleSided(material),
+        );
+        regroup ||= program.program !== resource.program.program;
         resource.drawPacket = surfaceDrawPacket(
           this.#gl,
           surface,
