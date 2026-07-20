@@ -3,6 +3,7 @@ import {
   OrbitControls,
   useGltfAssetStatus,
   useOrbitCamera,
+  useOrbitCameraView,
 } from '@royal/react';
 import { gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
@@ -10,6 +11,10 @@ import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
+const svgRendererOptions = {
+  ...exampleCanvasRendererOptions,
+  automaticVirtualTexturing: true,
+} as const;
 const tigerCard = gltf({
   src: tigerCardSrc,
   transform: {
@@ -30,6 +35,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
     far: 10,
     near: 0.001,
   });
+  const orbitView = useOrbitCameraView(orbit);
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     toneMapping: 'linear-clamp',
@@ -38,11 +44,12 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   return (
     <div
       className="svg-texture-example"
-      data-svg-texture-mode="ordinary"
+      data-svg-texture-mode="automatic-vt"
     >
       <Canvas
         aria-label="glTF core SVG Ghostscript tiger card fixture"
-        rendererOptions={exampleCanvasRendererOptions}
+        data-vt-distance={orbitView.distance.toFixed(3)}
+        rendererOptions={svgRendererOptions}
         style={{ cursor: 'grab', touchAction: 'none' }}
         scene={renderScene}
       >

@@ -111,9 +111,12 @@ runtime transcoder.
 
 Authored `virtualTexture(...)` always requests the authored VT path. Automatic
 VT is a root creation policy and is disabled by default. When enabled, the
-current raster policy considers base-color triangle textures with `TEXCOORD_0`
-whose decoded longest edge is at least 257 texels; SVG uses the same logical
-page-source boundary.
+current raster policy considers base-color triangle textures whose decoded
+RGBA texel count exceeds the default 24-slot atlas payload and whose longest
+edge spans more than two 128-texel pages. This prevents the representation from
+costing more GPU storage than the ordinary image it replaces. SVG uses the same
+logical page-source boundary but is selected for scalable detail rather than
+that raster-memory threshold.
 
 Representation choice is sticky for one capability/content generation. Royal
 MUST NOT oscillate ordinary/virtual strategies frame by frame. Context
@@ -165,6 +168,11 @@ pages sample the closest resident ancestor. Sparse-addressing holes use the
 nearest authored ancestor when one exists and otherwise use the ordinary or
 neutral fallback—never stale atlas contents.
 
+When current demand exceeds physical capacity, Royal drops complete fine mip
+levels until the retained working set fits. It does not keep an arbitrary
+spatial prefix at fine detail, because a stable uniformly coarser image is
+preferred to a hard moving boundary between sharp and ancestor-resolved areas.
+
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
 Atlas uploads admitted in one resource/frame batch normally publish through one
@@ -182,7 +190,9 @@ distance. Near-plane clipping is camera geometry, not a VT quality policy.
 Raster automatic VT may decode one source image and crop/downsample requested
 pages. It MUST account for the retained decoded source against ordinary texture
 CPU ownership as well as report it in VT diagnostics; the same bytes are not
-two independent allocations.
+two independent allocations. The current root retains at most 64 MiB of such
+decoded raster sources for automatic VT; candidates beyond that ceiling remain
+on the ordinary texture path instead of stalling the shared decode queue.
 
 SVG automatic VT rasterizes requested pages from the vector source without
 retaining a full-resolution bitmap. Its current maximum raster long edge is
@@ -199,6 +209,10 @@ Atlas allocation is transactional. A slot selected for reuse cannot become
 visible for the new page until upload completes, and the old mapping cannot be
 invalidated in a way that samples new/partial bytes under the old identity.
 Failed, cancelled, or generation-stale uploads abort publication.
+
+Declaring or preparing a VT source does not itself allocate an atlas. The first
+non-empty projected demand does, so off-screen automatic and authored assets do
+not each reserve the default physical working set merely by existing in a scene.
 
 Protected pages required by the current frame are not eviction candidates.
 Eviction policy MAY approximate recency but MUST terminate under full pressure.

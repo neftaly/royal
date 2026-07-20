@@ -3,6 +3,7 @@ import {
   useCanvasRoot,
   useGltfAssetStatus,
   type GltfAssetStatus,
+  type RendererRootSnapshot,
   type VirtualTextureStatus,
 } from '@royal/react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
@@ -37,6 +38,10 @@ export const benchmarkVirtualTextureDiagnostics = (
   pendingPages: status.pendingPages,
   residentPages: status.residentPages,
 };
+
+const benchmarkAutomaticVirtualTextureDiagnostics = (
+  snapshot: RendererRootSnapshot['resources']['virtualTextures'],
+): Record<string, number> | null => snapshot.automaticEnabled === 0 ? null : { ...snapshot };
 
 /** @internal Pure adapter shared with the benchmark contract test. */
 export const benchmarkGltfDiagnostics = (
@@ -127,9 +132,8 @@ export const BenchmarkRendererSnapshot = ({
           fitted: current.resources.ordinaryTextures.fittedTextures,
           resources: current.resources.ordinaryTextures.residentTextures,
         },
-        virtualTexturing: benchmarkVirtualTextureDiagnostics(
-          observed.virtualTextureStatus,
-        ),
+        virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)
+          ?? benchmarkAutomaticVirtualTextureDiagnostics(current.resources.virtualTextures),
       };
     };
     const renderNow = (): void => {

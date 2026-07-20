@@ -72,6 +72,11 @@ lifecycle; a disposed root is never published for a newer canvas generation.
 `ordinaryTextureUploadByteBudgetPerFrame` defaults to 16 MiB and paces new ordinary-texture
 transfer across real canvas/XR frames without changing focused asset readiness.
 One individually larger texture is admitted alone rather than starving.
+`automaticVirtualTexturing` defaults to `false`; opt in through
+`rendererOptions={{ automaticVirtualTexturing: true }}` when large base-color
+raster or SVG textures should use Royal's progressive VT representation. It is
+a root policy rather than a material flag, and SVG remains vector-backed while
+requested pages are rasterized.
 
 Focused hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents

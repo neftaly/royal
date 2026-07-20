@@ -1,4 +1,5 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
+import type { TextureSourceRef } from "../texture/asset-owner";
 import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
@@ -7,6 +8,16 @@ export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string =>
   asset.contentKey ?? asset.manifestUri,
   asset.version ?? 0,
   asset.colorSpace ?? "",
+  asset.sampler?.magFilter ?? "",
+  asset.sampler?.minFilter ?? "",
+  asset.sampler?.wrapS ?? "",
+  asset.sampler?.wrapT ?? "",
+]);
+
+export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
+  asset.kind === "embedded-asset" ? asset.contentKey : asset.contentKey ?? asset.src,
+  asset.kind === "embedded-asset" ? 0 : asset.version ?? 0,
+  asset.colorSpace ?? "srgb",
   asset.sampler?.magFilter ?? "",
   asset.sampler?.minFilter ?? "",
   asset.sampler?.wrapS ?? "",
@@ -31,6 +42,20 @@ export type VirtualTextureFrameUpdate = Readonly<{
   webGlStateChanged: boolean;
 }>;
 
+export type VirtualTextureRuntimeSnapshot = Readonly<{
+  automaticCandidates: number;
+  automaticDecodedBytes: number;
+  automaticEnabled: number;
+  automaticIneligible: number;
+  automaticResources: number;
+  automaticWaiting: number;
+  failedPages: number;
+  pageRequests: number;
+  pendingPages: number;
+  residentPages: number;
+  uploadedPages: number;
+}>;
+
 export type VirtualTextureAssetSnapshot = Readonly<{
   failedPages: number;
   pendingPages: number;
@@ -50,9 +75,11 @@ export type VirtualTextureAssetSnapshot = Readonly<{
 export interface VirtualTextureRuntime {
   readonly bindingRevision: number;
   readonly shaderSource: VirtualTextureShaderSource;
+  automaticBinding(asset: TextureSourceRef): VirtualTextureGpuBinding | undefined;
   binding(asset: VirtualTextureAssetRef): VirtualTextureGpuBinding | undefined;
   dispose(): void;
   invalidate(): void;
+  runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
   snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;
   update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate;

@@ -107,6 +107,7 @@ export const VirtualTextureStress = (): ReactNode => {
           data-map-distance={orbitView.distance.toFixed(3)}
           data-map-target-x={orbitView.target[0].toFixed(3)}
           data-map-target-y={orbitView.target[1].toFixed(3)}
+          data-vt-distance={orbitView.distance.toFixed(3)}
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >

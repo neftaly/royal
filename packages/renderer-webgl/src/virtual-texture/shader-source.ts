@@ -39,11 +39,14 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
   vec3 decoded = floor(entry.rgb * 255.0 + 0.5);
   float residentScale = exp2(decoded.z);
   vec2 residentTexel = uv * virtualSize / residentScale;
-  vec2 localTexel = mod(residentTexel, pageSize);
+  float ancestorSpan = exp2(decoded.z - float(desiredMip));
+  vec2 residentPage = floor(desiredPage / ancestorSpan);
+  vec2 localTexel = residentTexel - residentPage * pageSize;
   float storedPageSize = virtualSettings2.w;
   vec2 atlasTexel = decoded.xy * storedPageSize
     + vec2(virtualSettings0.w)
-    + localTexel;
+    + localTexel
+    + vec2(0.5);
   return texture(baseColorTexture, atlasTexel / virtualSettings1.xy);
 }
 `;

@@ -2262,14 +2262,31 @@ const prepareRouteForBenchmark = async (session, route) => {
 };
 
 const prepareVirtualTextureCloseView = async (session, route) => {
-  if (!virtualTextureCloseEnabled || route.id !== 'virtual-texture-stress') return undefined;
-  const initial = await evaluate(session, `
+  if (
+    !virtualTextureCloseEnabled
+    || !new Set(['gltf-ghostscript-tiger-svg', 'virtual-texture-stress']).has(route.id)
+  ) return undefined;
+  if (route.id === 'virtual-texture-stress') {
+    await evaluate(session, `
 (() => {
-  const canvas = document.querySelector('canvas[data-map-distance]');
+  const button = [...document.querySelectorAll('button')]
+    .find((candidate) => candidate.textContent?.trim() === 'NW');
+  button?.click();
+})()
+`);
+    await sleep(100);
+  }
+  const initial = await evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas[data-vt-distance]');
   if (canvas === null) return null;
+  canvas.scrollIntoView({ block: 'center', inline: 'center' });
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   const rect = canvas.getBoundingClientRect();
   return {
-    distance: Number(canvas.getAttribute('data-map-distance')),
+    clipX: rect.left + scrollX,
+    clipY: rect.top + scrollY,
+    distance: Number(canvas.getAttribute('data-vt-distance')),
     height: rect.height,
     width: rect.width,
     x: rect.left + rect.width / 2,
@@ -2299,9 +2316,11 @@ const prepareVirtualTextureCloseView = async (session, route) => {
   let finalDistance = initial.distance;
   let inputMode = 'trusted-cdp';
   let wheelEvents = 0;
+  const wheelDelta = route.id === 'gltf-ghostscript-tiger-svg' ? -100 : -1_000;
+  const maximumWheelEvents = route.id === 'gltf-ghostscript-tiger-svg' ? 24 : 12;
   let frameStats;
   try {
-    while (finalDistance > virtualTextureCloseTarget && wheelEvents < 12) {
+    while (finalDistance > virtualTextureCloseTarget && wheelEvents < maximumWheelEvents) {
       const distanceBeforeEvent = finalDistance;
       if (inputMode === 'trusted-cdp') {
         await session.call('Input.dispatchMouseEvent', {
@@ -2309,36 +2328,36 @@ const prepareVirtualTextureCloseView = async (session, route) => {
           x: initial.x,
           y: initial.y,
           deltaX: 0,
-          deltaY: -1_000,
+          deltaY: wheelDelta,
         });
       } else {
         await evaluate(session, `
-document.querySelector('canvas[data-map-distance]')?.dispatchEvent(new WheelEvent('wheel', {
+document.querySelector('canvas[data-vt-distance]')?.dispatchEvent(new WheelEvent('wheel', {
   bubbles: true,
   cancelable: true,
   deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-  deltaY: -1_000,
+  deltaY: ${wheelDelta},
 }))
 `);
       }
       wheelEvents += 1;
       await sleep(50);
       finalDistance = await evaluate(session, `
-Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-map-distance'))
+Number(document.querySelector('canvas[data-vt-distance]')?.getAttribute('data-vt-distance'))
 `);
       if (inputMode === 'trusted-cdp' && !(finalDistance < distanceBeforeEvent)) {
         inputMode = 'dom-fallback';
         await evaluate(session, `
-document.querySelector('canvas[data-map-distance]')?.dispatchEvent(new WheelEvent('wheel', {
+document.querySelector('canvas[data-vt-distance]')?.dispatchEvent(new WheelEvent('wheel', {
   bubbles: true,
   cancelable: true,
   deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-  deltaY: -1_000,
+  deltaY: ${wheelDelta},
 }))
 `);
         await sleep(50);
         finalDistance = await evaluate(session, `
-Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-map-distance'))
+Number(document.querySelector('canvas[data-vt-distance]')?.getAttribute('data-vt-distance'))
 `);
       }
     }
@@ -2384,11 +2403,11 @@ Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-m
       height: initial.height,
       scale: 1,
       width: initial.width,
-      x: initial.x - initial.width / 2,
-      y: initial.y - initial.height / 2,
+      x: initial.clipX,
+      y: initial.clipY,
     },
     format: 'png',
-    fromSurface: false,
+    fromSurface: true,
   });
   await mkdir(path.dirname(virtualTextureCloseScreenshotPath), { recursive: true });
   await writeFile(virtualTextureCloseScreenshotPath, Buffer.from(screenshot.data, 'base64'));

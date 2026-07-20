@@ -66,6 +66,7 @@ import {
   virtualTextureAssetKey,
   type VirtualTextureAssetSnapshot,
   type VirtualTextureRuntime,
+  type VirtualTextureRuntimeSnapshot,
 } from "../virtual-texture/runtime-contract";
 import {
   DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
@@ -99,6 +100,7 @@ export type CanvasRootSnapshot = Readonly<{
     ordinaryTextureUploads: FrameUploadBudgetSnapshot;
     ordinaryTextures: OrdinaryTextureGpuSnapshot;
     persistentGpu: PersistentGpuBudgetSnapshot;
+    virtualTextures: VirtualTextureRuntimeSnapshot;
   }>;
   size: ResolvedCanvasSize | null;
 }>;
@@ -190,6 +192,19 @@ const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
   pendingPages: 0,
   residentPages: 0,
   state: "loading",
+};
+const IDLE_VIRTUAL_TEXTURE_RUNTIME: VirtualTextureRuntimeSnapshot = {
+  automaticCandidates: 0,
+  automaticDecodedBytes: 0,
+  automaticEnabled: 0,
+  automaticIneligible: 0,
+  automaticResources: 0,
+  automaticWaiting: 0,
+  failedPages: 0,
+  pageRequests: 0,
+  pendingPages: 0,
+  residentPages: 0,
+  uploadedPages: 0,
 };
 
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
@@ -307,6 +322,7 @@ export class CanvasRoot {
   };
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: RenderRoot | null = null;
+  readonly #automaticVirtualTexturing: boolean;
   #virtualTextureActive = false;
   #virtualTextureLoadGeneration = 0;
   #virtualTextureRequested = false;
@@ -331,6 +347,7 @@ export class CanvasRoot {
     rendererRootOptionsSemanticKey(options);
     this.#canvas = canvas;
     this.#platform = platform;
+    this.#automaticVirtualTexturing = options.automaticVirtualTexturing === true;
     this.#gl = createContext(canvas, options);
     this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
       options.persistentGpuByteBudget ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET,
@@ -467,9 +484,9 @@ export class CanvasRoot {
     this.#cameraSource.dispose();
     this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
+    this.#surfaceGpu.dispose();
     this.#textureAssets.dispose();
     this.#asyncPreparation.dispose();
-    this.#surfaceGpu.dispose();
     for (const unsubscribe of this.#instanceSubscriptions.values()) unsubscribe();
     this.#instanceSubscriptions.clear();
     this.#context.transition({ kind: "dispose" });
@@ -497,6 +514,8 @@ export class CanvasRoot {
           ordinaryTextureUploads: this.#frameUploadBudget.snapshot(),
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
+          virtualTextures: this.#virtualTextureRuntime?.runtimeSnapshot()
+            ?? IDLE_VIRTUAL_TEXTURE_RUNTIME,
         },
         size: this.#size,
       };
@@ -822,6 +841,7 @@ export class CanvasRoot {
       if (prepared !== this.#surfaceScene) {
         this.#surfaceScene = prepared;
         this.#surfaceGpu.publishTextureScene(prepared, key);
+        this.#virtualTextureRuntime?.setScene(prepared);
         this.#textureResourcesPending = true;
         this.#progressiveTexturePresentation.changed();
         this.#clock.invalidate();
@@ -867,7 +887,7 @@ export class CanvasRoot {
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
-    const required = scene.virtualTextureAssets.length > 0;
+    const required = this.#virtualTextureRequired(scene);
     if (!required) {
       this.#virtualTextureLoadGeneration += 1;
       this.#virtualTextureRequested = false;
@@ -878,14 +898,19 @@ export class CanvasRoot {
       }
       return;
     }
-    if (this.#virtualTextureActive || this.#virtualTextureRequested) return;
+    if (this.#virtualTextureActive) {
+      this.#virtualTextureRuntime?.setScene(scene);
+      return;
+    }
+    if (this.#virtualTextureRequested) return;
     this.#virtualTextureRequested = true;
     const generation = ++this.#virtualTextureLoadGeneration;
     void import("../virtual-texture/runtime").then((module) => {
       if (
         this.#disposed
         || generation !== this.#virtualTextureLoadGeneration
-        || (this.#surfaceScene?.virtualTextureAssets.length ?? 0) === 0
+        || this.#surfaceScene === null
+        || !this.#virtualTextureRequired(this.#surfaceScene)
       ) return;
       const runtime = module.createBrowserVirtualTextureRuntime(
         this.#gl,
@@ -896,6 +921,13 @@ export class CanvasRoot {
         },
         this.#persistentGpuBudget,
         this.#asyncPreparation.run,
+        this.#automaticVirtualTexturing ? {
+          acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
+          decoded: (asset) => this.#textureAssets.decoded(asset),
+          onChanged: () => {
+            if (!this.#disposed) this.#invalidatePresentation();
+          },
+        } : undefined,
       );
       this.#virtualTextureRuntime = runtime;
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
@@ -905,8 +937,16 @@ export class CanvasRoot {
     }).catch((error: unknown) => {
       if (this.#disposed || generation !== this.#virtualTextureLoadGeneration) return;
       this.#virtualTextureRequested = false;
+      this.#releaseUploadedTextures();
       this.#captureScheduledFailure(error);
     });
+  }
+
+  #virtualTextureRequired(scene: CanonicalSurfaceScene): boolean {
+    return scene.virtualTextureAssets.length > 0 || (
+      this.#automaticVirtualTexturing
+      && scene.surfaces.some((surface) => surface.material.baseColorAsset !== undefined)
+    );
   }
 
   #publishVirtualTexture(asset: VirtualTextureAssetRef): void {
@@ -1011,6 +1051,12 @@ export class CanvasRoot {
   }
 
   #releaseUploadedTextures(): void {
+    // Keep the bounded decode handoff alive until the lazy automatic-VT owner can claim it.
+    if (
+      this.#automaticVirtualTexturing
+      && this.#virtualTextureRequested
+      && !this.#virtualTextureActive
+    ) return;
     this.#textureAssets.releaseUploaded(this.#surfaceGpu.takeUploadedTextureStorageKeys());
     this.#textureAssets.rejectGpuStorage(this.#surfaceGpu.takeDeniedTextureStorageKeys());
   }

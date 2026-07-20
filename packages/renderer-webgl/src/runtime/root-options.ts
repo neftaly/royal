@@ -7,6 +7,8 @@ export type CanvasRootOptions = Readonly<{
   alpha?: boolean;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `true` */
   antialias?: boolean;
+  /** Generates VT pages for eligible base-color raster/SVG assets. @defaultValue `false` */
+  automaticVirtualTexturing?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
   /** Root-wide concurrent asynchronous asset-preparation ceiling. @defaultValue `8` */
@@ -24,6 +26,7 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
     if (
       key !== "alpha"
       && key !== "antialias"
+      && key !== "automaticVirtualTexturing"
       && key !== "persistentGpuByteBudget"
       && key !== "maxConcurrentPreparationJobs"
       && key !== "ordinaryTextureUploadByteBudgetPerFrame"
@@ -36,6 +39,12 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
   }
   if (options.antialias !== undefined && typeof options.antialias !== "boolean") {
     throw new TypeError("Royal renderer option antialias must be a boolean");
+  }
+  if (
+    options.automaticVirtualTexturing !== undefined
+    && typeof options.automaticVirtualTexturing !== "boolean"
+  ) {
+    throw new TypeError("Royal renderer option automaticVirtualTexturing must be a boolean");
   }
   const persistentGpuByteBudget = options.persistentGpuByteBudget
     ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET;
@@ -59,5 +68,5 @@ export const rendererRootOptionsSemanticKey = (options: CanvasRootOptions = {}):
       "Royal renderer option ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
     );
   }
-  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
+  return `${options.alpha === false ? 0 : 1}${options.antialias === false ? 0 : 1}${options.automaticVirtualTexturing === true ? 1 : 0}:${persistentGpuByteBudget}:${maxConcurrentPreparationJobs}:${ordinaryTextureUploadByteBudgetPerFrame}`;
 };

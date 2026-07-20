@@ -74,6 +74,78 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
   });
 
+  it("transfers decoded pixel lifetime through explicit representation leases", async () => {
+    const close = vi.fn();
+    const source = decoded(close);
+    const owner = new TextureAssetOwner({
+      decode: vi.fn(async () => source),
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/automatic-vt.png");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+
+    const lease = owner.acquireDecoded(asset);
+    expect(lease?.source).toBe(source);
+    owner.releaseUploaded([textureStorageKey(asset)]);
+    expect(close).not.toHaveBeenCalled();
+
+    lease?.release();
+    lease?.release();
+    expect(close).toHaveBeenCalledOnce();
+    expect(owner.acquireDecoded(asset)).toBeUndefined();
+  });
+
+  it("closes an active representation lease exactly once during owner disposal", async () => {
+    const close = vi.fn();
+    const owner = new TextureAssetOwner({
+      decode: vi.fn(async () => decoded(close)),
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/disposed-automatic-vt.png");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    const lease = owner.acquireDecoded(asset);
+
+    owner.dispose();
+    lease?.release();
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("defers alpha upgrades until an active representation lease releases", async () => {
+    const firstClose = vi.fn();
+    const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+      .mockResolvedValueOnce(decoded(firstClose))
+      .mockResolvedValueOnce({ ...decoded(), alpha });
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/leased-cutout.png");
+    owner.reconcile([asset]);
+    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    const lease = owner.acquireDecoded(asset);
+    owner.releaseUploaded([textureStorageKey(asset)]);
+
+    owner.reconcile([asset], [asset]);
+    await Promise.resolve();
+    expect(decode).toHaveBeenCalledOnce();
+    expect(firstClose).not.toHaveBeenCalled();
+
+    lease?.release();
+    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(firstClose).toHaveBeenCalledOnce();
+  });
+
   it("retains one compact alpha plane only while an alpha-mask pick claim exists", async () => {
     const close = vi.fn();
     const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
@@ -142,7 +214,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledOnce();
   });
 
-  it("holds a bounded decode reservation until each source is consumed", async () => {
+  it("holds a bounded decode reservation until each source is consumed or transferred", async () => {
     const decode = vi.fn(async () => decoded());
     const owner = new TextureAssetOwner({
       decode,
@@ -160,13 +232,14 @@ describe("ordinary texture asset lifecycle owner", () => {
     await Promise.resolve();
     expect(decode).toHaveBeenCalledTimes(8);
 
-    owner.releaseUploaded([textureStorageKey(assets[0]!)]);
+    const lease = owner.acquireDecoded(assets[0]!);
     await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
     expect(owner.getSnapshot(assets[8]!).state).toBe("ready");
 
     owner.rejectGpuStorage([textureStorageKey(assets[1]!)]);
     await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
     expect(owner.getSnapshot(assets[9]!).state).toBe("ready");
+    lease?.release();
   });
 
   it("shares the root texture storage allowance across active representations", async () => {

@@ -1,5 +1,9 @@
-import type { VirtualTextureManifest, VirtualTexturePageId } from "./manifest";
-import { virtualTexturePageUri } from "./manifest";
+import {
+  parseVirtualTextureManifest,
+  virtualTexturePageUri,
+  type VirtualTextureManifest,
+  type VirtualTexturePageId,
+} from "./manifest";
 import { parseKtx2Etc2Page } from "./ktx2-etc2";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 
@@ -13,6 +17,21 @@ export type DecodedVirtualTexturePage = Readonly<{
   colorSpace: "linear" | "srgb";
   kind: "etc2-rgba";
 }>;
+
+/** Cold page production only; residency, publication, and scheduling stay runtime-owned. */
+export type VirtualTexturePageSource = Readonly<{
+  close?(): void;
+  manifest: VirtualTextureManifest;
+  read(
+    page: VirtualTexturePageId,
+    signal: AbortSignal,
+  ): Promise<DecodedVirtualTexturePage | undefined>;
+}>;
+
+const absoluteUri = (uri: string): string => new URL(
+  uri,
+  typeof document === "undefined" ? "http://localhost/" : document.baseURI,
+).href;
 
 const decodeWithImageElement = async (
   blob: Blob,
@@ -113,4 +132,21 @@ export const readVirtualTexturePage = async (
     };
   }
   return decodeImagePage(await response.blob(), storedPageSize, signal);
+};
+
+/** Opens an authored manifest as the same page-source contract used by generated VT. */
+export const openAuthoredVirtualTexturePageSource = async (
+  manifestUri: string,
+  signal: AbortSignal,
+): Promise<VirtualTexturePageSource> => {
+  const uri = absoluteUri(manifestUri);
+  const response = await fetch(uri, { signal });
+  if (!response.ok) {
+    throw new Error(`Royal VT manifest request failed with HTTP ${response.status}`);
+  }
+  const manifest = parseVirtualTextureManifest(await response.json());
+  return {
+    manifest,
+    read: (page, pageSignal) => readVirtualTexturePage(uri, manifest, page, pageSignal),
+  };
 };

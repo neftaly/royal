@@ -86,7 +86,7 @@ describe("VT2 clipped projected demand", () => {
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
   });
 
-  it("truncates protection to one drawable physical-capacity prefix", () => {
+  it("fits protection by dropping complete fine levels", () => {
     const workspace = createVirtualTextureDemandWorkspace(64);
     const close = identityMat4();
     close[0] = 16;
@@ -95,10 +95,11 @@ describe("VT2 clipped projected demand", () => {
     expect(workspace.count).toBeGreaterThan(4);
 
     truncateVirtualTextureDemand(workspace, 4);
-    expect(workspace.count).toBe(4);
-    expect(workspace.keys.size).toBe(4);
-    expect([...workspace.keys.values()].every((index) => index < 4)).toBe(true);
+    expect(workspace.count).toBeLessThanOrEqual(4);
+    expect(workspace.keys.size).toBe(workspace.count);
+    expect([...workspace.keys.values()].every((index) => index < workspace.count)).toBe(true);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+    expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([2]));
     expect(workspace.overflow.value).toBe(true);
   });
 

@@ -222,6 +222,14 @@ export const applyTextureCoordinates = (
   return resolved;
 };
 
+/** Pure representation choice: one base-color sampler contract owns texture unit zero. */
+export const baseColorTextureFeatureBits = (
+  ordinaryResident: boolean,
+  virtualResident: boolean,
+): number => virtualResident
+  ? SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+  : ordinaryResident ? SURFACE_FEATURE_BASE_COLOR_TEXTURE : 0;
+
 const materialTextureFeatures = (
   surface: CanonicalDrawSurface,
   geometry: GpuGeometry,
@@ -231,9 +239,11 @@ const materialTextureFeatures = (
   ordinaryTextureMask: number,
   linearOutput: boolean,
 ): number => {
-  let features = ordinaryTextureMask & 1 ? SURFACE_FEATURE_BASE_COLOR_TEXTURE : 0;
+  let features = baseColorTextureFeatureBits(
+    (ordinaryTextureMask & 1) !== 0,
+    hasVirtualBaseColor,
+  );
   if (linearOutput) features |= SURFACE_FEATURE_LINEAR_OUTPUT;
-  if (hasVirtualBaseColor) features |= SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
   if (surface.material.kind !== "standard") return features;
   if (ordinaryTextureMask & 2) {
     features |= SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE;
@@ -1284,9 +1294,11 @@ export class SurfaceGpuOwner {
     scene: CanonicalSurfaceScene | null,
   ): GpuSurface {
     const material = geometrySurface.surface.material;
-    const virtualTexture = material.baseColorVirtualAsset === undefined
-      ? undefined
-      : this.#virtualTexture?.binding(material.baseColorVirtualAsset);
+    const virtualTexture = material.baseColorVirtualAsset !== undefined
+      ? this.#virtualTexture?.binding(material.baseColorVirtualAsset)
+      : material.baseColorAsset === undefined
+        ? undefined
+        : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
     const features = materialTextureFeatures(
       geometrySurface.surface,
       geometrySurface.geometry,

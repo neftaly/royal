@@ -68,7 +68,10 @@ export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspa
   workspace.overflow.value = false;
 };
 
-/** Retains one ancestor-first capacity prefix and removes its discarded protection keys. */
+/**
+ * Fits demand by dropping complete fine levels. Spatially partial refinement is
+ * more distracting than one uniformly coarser fallback and exposes page seams.
+ */
 export const truncateVirtualTextureDemand = (
   workspace: VirtualTextureDemandWorkspace,
   capacity: number,
@@ -77,10 +80,33 @@ export const truncateVirtualTextureDemand = (
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
   }
   if (workspace.count <= capacity) return;
-  for (const [key, index] of workspace.keys) {
-    if (index >= capacity) workspace.keys.delete(key);
+  let minimumMip = 0;
+  let maximumMip = 0;
+  for (let index = 0; index < workspace.count; index += 1) {
+    maximumMip = Math.max(maximumMip, workspace.mips[index]!);
   }
-  workspace.count = capacity;
+  let retainedCount = workspace.count;
+  while (retainedCount > capacity && minimumMip < maximumMip) {
+    minimumMip += 1;
+    retainedCount = 0;
+    for (let index = 0; index < workspace.count; index += 1) {
+      if (workspace.mips[index]! >= minimumMip) retainedCount += 1;
+    }
+  }
+  workspace.keys.clear();
+  let target = 0;
+  for (let source = 0; source < workspace.count; source += 1) {
+    const mip = workspace.mips[source]!;
+    if (mip < minimumMip || target >= capacity) continue;
+    const x = workspace.xs[source]!;
+    const y = workspace.ys[source]!;
+    workspace.mips[target] = mip;
+    workspace.xs[target] = x;
+    workspace.ys[target] = y;
+    workspace.keys.set(virtualTexturePageKeyParts(mip, x, y), target);
+    target += 1;
+  }
+  workspace.count = target;
   workspace.overflow.value = true;
 };
 

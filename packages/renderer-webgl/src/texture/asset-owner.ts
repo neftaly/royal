@@ -33,6 +33,12 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
 /** Canonical CPU upload source: a browser image or already-GPU-native ETC2 levels. */
 export type DecodedTextureSource = DecodedImageTextureSource | DecodedKtx2Etc2TextureSource;
 
+/** Explicit CPU-source claim used by optional representations such as automatic VT. */
+export type DecodedTextureLease = Readonly<{
+  release(): void;
+  source: DecodedTextureSource;
+}>;
+
 /** Compact CPU representation retained only while an alpha-mask pick claim exists. */
 export type DecodedTextureAlpha = Readonly<{
   height: number;
@@ -77,9 +83,11 @@ type AssetEntry = {
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
   controller: AbortController | undefined;
+  decodeDeferred: boolean;
   decodeReservation: boolean;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
+  decodedClaims: number;
   decodedReleased: boolean;
   decodeRetainsAlpha: boolean;
   queued: boolean;
@@ -177,6 +185,7 @@ export class TextureAssetOwner {
     for (const entry of this.#entries.values()) {
       entry.controller?.abort();
       if (!entry.decodedReleased) entry.decoded?.close?.();
+      entry.decodedReleased = true;
     }
     this.#decodeQueue.length = 0;
     this.#entries.clear();
@@ -190,6 +199,33 @@ export class TextureAssetOwner {
     return !entry.decodedReleased || entry.residentStorageKeys.has(textureStorageKey(asset))
       ? entry.decoded
       : undefined;
+  }
+
+  /** Retains live decoded pixels until the returned idempotent lease is released. */
+  acquireDecoded(asset: TextureSourceRef): DecodedTextureLease | undefined {
+    if (this.#disposed) return undefined;
+    const entry = this.#entries.get(this.#key(asset));
+    if (entry?.decoded === undefined || entry.decodedReleased) return undefined;
+    entry.decodedClaims += 1;
+    // The optional representation now charges the retained source; this slot
+    // only bounds decode handoff and must not starve unrelated asset decoding.
+    this.#releaseDecodeReservation(entry);
+    let active = true;
+    return {
+      release: () => {
+        if (!active) return;
+        active = false;
+        if (this.#disposed) return;
+        entry.decodedClaims -= 1;
+        if (entry.decodedClaims === 0 && entry.decodeDeferred) {
+          entry.decodeDeferred = false;
+          this.#queueDecode(entry);
+          return;
+        }
+        this.#releaseDecodedIfUnused(entry);
+      },
+      source: entry.decoded,
+    };
   }
 
   alpha(asset: TextureSourceRef): DecodedTextureAlpha | undefined {
@@ -289,16 +325,7 @@ export class TextureAssetOwner {
       touched.add(entry);
     }
     for (const entry of touched) {
-      if (
-        entry.decodedReleased
-        || entry.decoded === undefined
-        || [...entry.claimedStorageKeys].some(
-          (storageKey) => !entry.residentStorageKeys.has(storageKey),
-        )
-      ) continue;
-      entry.decoded.close?.();
-      entry.decodedReleased = true;
-      this.#releaseDecodeReservation(entry);
+      this.#releaseDecodedIfUnused(entry);
       if (
         entry.retainAlpha
         && entry.alpha === undefined
@@ -317,9 +344,11 @@ export class TextureAssetOwner {
     }
     for (const entry of rejected) {
       entry.alpha = undefined;
-      if (!entry.decodedReleased) entry.decoded?.close?.();
-      entry.decodedReleased = true;
-      this.#releaseDecodeReservation(entry);
+      entry.claimedStorageKeys.clear();
+      entry.decodeDeferred = false;
+      if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
+      entry.decodedReleased = entry.decodedClaims === 0;
+      if (entry.decodedClaims === 0) this.#releaseDecodeReservation(entry);
       entry.snapshot = {
         error: "Royal persistent GPU budget denied texture storage",
         state: "error",
@@ -338,12 +367,15 @@ export class TextureAssetOwner {
       entry.residentStorageKeys.clear();
       entry.controller?.abort();
       entry.controller = undefined;
-      if (!entry.decodedReleased) entry.decoded?.close?.();
-      entry.decodedReleased = true;
+      if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
+      entry.decodedReleased = entry.decodedClaims === 0;
       entry.queued = false;
-      this.#releaseDecodeReservation(entry);
-      entry.snapshot = { state: "loading" };
-      this.#queueDecode(entry);
+      entry.decodeDeferred = false;
+      if (entry.decodedClaims === 0) {
+        this.#releaseDecodeReservation(entry);
+        entry.snapshot = { state: "loading" };
+        this.#queueDecode(entry);
+      }
       this.#platform.onAssetChanged(entry.key);
       this.#platform.onSnapshotChanged(entry.key);
       this.#publish(entry.key);
@@ -409,8 +441,10 @@ export class TextureAssetOwner {
       asset,
       claimedStorageKeys: new Set(storageKeys),
       controller: undefined,
+      decodeDeferred: false,
       decodeReservation: false,
       decoded: undefined,
+      decodedClaims: 0,
       decodedReleased: false,
       decodeRetainsAlpha: false,
       key,
@@ -426,6 +460,10 @@ export class TextureAssetOwner {
 
   #queueDecode(entry: AssetEntry): void {
     if (entry.controller !== undefined || entry.decodeReservation) return;
+    if (entry.decodedClaims > 0) {
+      entry.decodeDeferred = true;
+      return;
+    }
     if (entry.queued) return;
     entry.queued = true;
     this.#decodeQueue.push(entry);
@@ -452,6 +490,20 @@ export class TextureAssetOwner {
     entry.decodeReservation = false;
     this.#activeDecodeReservations -= 1;
     this.#drainDecodeQueue();
+  }
+
+  #releaseDecodedIfUnused(entry: AssetEntry): void {
+    if (
+      entry.decodedClaims !== 0
+      || entry.decodedReleased
+      || entry.decoded === undefined
+      || [...entry.claimedStorageKeys].some(
+        (storageKey) => !entry.residentStorageKeys.has(storageKey),
+      )
+    ) return;
+    entry.decoded.close?.();
+    entry.decodedReleased = true;
+    this.#releaseDecodeReservation(entry);
   }
 
   #decode(entry: AssetEntry): void {

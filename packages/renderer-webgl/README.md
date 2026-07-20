@@ -57,6 +57,13 @@ asset with its neutral/current representation and retries on the next frame.
 `getSnapshot().resources.ordinaryTextureUploads` reports admitted bytes, the immutable
 limit, and unique deferrals for the most recently submitted frame.
 
+`automaticVirtualTexturing` defaults to `false`. Enabling it lets eligible
+base-color raster images and SVG images move onto Royal's shared VT demand,
+residency, and shader path after usable ancestor coverage exists. SVG pages are
+rasterized from vector source on demand up to a 16,384-texel logical long edge;
+the renderer does not retain a bitmap of that size. The option is immutable and
+keeps VT/SVG implementation code behind the renderer's lazy VT boundary.
+
 `invalidate()` requests one coalesced frame. `flushInvalidated()` is available
 to deliberate imperative hosts, while `acquireExternalClock()` transfers frame
 authority to an external clock until its idempotent `release()`.

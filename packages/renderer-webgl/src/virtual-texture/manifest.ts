@@ -1,5 +1,7 @@
 import type { TextureColorSpace } from "@royal/renderer-core";
 
+export const DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS = 24;
+
 export type VirtualTexturePageId = Readonly<{ mip: number; x: number; y: number }>;
 export type VirtualTexturePageEntry = VirtualTexturePageId & Readonly<{ uri: string }>;
 export type VirtualTextureMipLayout = Readonly<{
@@ -227,6 +229,48 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     tableHeight,
     tableWidth,
     ...(uriTemplate === undefined ? {} : { uriTemplate }),
+    width,
+  };
+};
+
+/** Builds the retained layout for a complete runtime-generated raster source. */
+export const createGeneratedVirtualTextureManifest = (options: Readonly<{
+  borderTexels: number;
+  colorSpace: TextureColorSpace;
+  height: number;
+  pageSize: number;
+  width: number;
+}>): VirtualTextureManifest => {
+  const width = positiveInteger(options.width, "Royal generated VT width");
+  const height = positiveInteger(options.height, "Royal generated VT height");
+  const pageSize = positiveInteger(options.pageSize, "Royal generated VT pageSize");
+  const borderTexels = positiveInteger(
+    options.borderTexels,
+    "Royal generated VT borderTexels",
+  );
+  const storedPageSize = pageSize + borderTexels * 2;
+  if (!Number.isSafeInteger(storedPageSize)) {
+    throw new RangeError("Royal generated VT stored page dimensions exceed safe integer capacity");
+  }
+  const mipCount = derivedVirtualTextureMipCount(width, height, pageSize);
+  const { layouts, tableHeight, tableWidth } = buildMipLayouts(
+    width,
+    height,
+    pageSize,
+    mipCount,
+  );
+  return {
+    borderTexels,
+    colorSpace: options.colorSpace,
+    entries: new Map(),
+    height,
+    mipCount,
+    mipLayouts: layouts,
+    pageAddressing: "complete",
+    pageEncoding: "image",
+    pageSize,
+    tableHeight,
+    tableWidth,
     width,
   };
 };

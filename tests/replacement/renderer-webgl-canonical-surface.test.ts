@@ -25,6 +25,11 @@ import {
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { dielectricF0FromIndexOfRefraction } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import { baseColorTextureFeatureBits } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import {
+  SURFACE_FEATURE_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
+} from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import {
@@ -34,6 +39,13 @@ import {
 } from "./support/static-glb";
 
 describe("canonical direct surface lowering", () => {
+  it("selects exactly one resident base-color representation", () => {
+    expect(baseColorTextureFeatureBits(false, false)).toBe(0);
+    expect(baseColorTextureFeatureBits(true, false)).toBe(SURFACE_FEATURE_BASE_COLOR_TEXTURE);
+    expect(baseColorTextureFeatureBits(false, true)).toBe(SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE);
+    expect(baseColorTextureFeatureBits(true, true)).toBe(SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE);
+  });
+
   it("computes authored dielectric F0 in the functional material core", () => {
     expect(dielectricF0FromIndexOfRefraction(1.5)).toBeCloseTo(0.04);
     expect(dielectricF0FromIndexOfRefraction(1.33)).toBeCloseTo(0.020_059, 5);

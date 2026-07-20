@@ -155,18 +155,20 @@ describe("replacement React public API", () => {
   });
 
   it("gives semantically equal creation options the same canvas lifetime", () => {
-    expect(rendererRootOptionsSemanticKey(undefined)).toBe("11:268435456:8:16777216");
-    expect(rendererRootOptionsSemanticKey({})).toBe("11:268435456:8:16777216");
+    expect(rendererRootOptionsSemanticKey(undefined)).toBe("110:268435456:8:16777216");
+    expect(rendererRootOptionsSemanticKey({})).toBe("110:268435456:8:16777216");
     expect(rendererRootOptionsSemanticKey({ alpha: true, antialias: true }))
-      .toBe("11:268435456:8:16777216");
-    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("01:268435456:8:16777216");
-    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("10:268435456:8:16777216");
+      .toBe("110:268435456:8:16777216");
+    expect(rendererRootOptionsSemanticKey({ alpha: false })).toBe("010:268435456:8:16777216");
+    expect(rendererRootOptionsSemanticKey({ antialias: false })).toBe("100:268435456:8:16777216");
+    expect(rendererRootOptionsSemanticKey({ automaticVirtualTexturing: true }))
+      .toBe("111:268435456:8:16777216");
     expect(rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 1024 }))
-      .toBe("11:1024:8:16777216");
+      .toBe("110:1024:8:16777216");
     expect(rendererRootOptionsSemanticKey({ maxConcurrentPreparationJobs: 2 }))
-      .toBe("11:268435456:2:16777216");
+      .toBe("110:268435456:2:16777216");
     expect(rendererRootOptionsSemanticKey({ ordinaryTextureUploadByteBudgetPerFrame: 1024 }))
-      .toBe("11:268435456:8:1024");
+      .toBe("110:268435456:8:1024");
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {
@@ -179,6 +181,11 @@ describe("replacement React public API", () => {
       alpha: 1,
     } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
       "option alpha must be a boolean",
+    );
+    expect(() => rendererRootOptionsSemanticKey({
+      automaticVirtualTexturing: 1,
+    } as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0])).toThrow(
+      "option automaticVirtualTexturing must be a boolean",
     );
     expect(() => rendererRootOptionsSemanticKey({ persistentGpuByteBudget: 0 })).toThrow(
       "persistentGpuByteBudget must be a positive safe integer",
