@@ -45,6 +45,8 @@
     "src/surface/scene-lowering.ts",
     "src/surface/surface-gpu-owner.ts",
     "src/surface/surface-multi-draw.ts",
+    "src/surface/surface-program-features.ts",
+    "src/surface/surface-texture-plan.ts",
     "src/surface/surface-geometry-gpu-owner.ts",
     "src/surface/surface-program-owner.ts",
     "src/surface/surface-picker.ts",

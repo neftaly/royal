@@ -26,11 +26,11 @@ import {
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { dielectricF0FromIndexOfRefraction } from "../../packages/renderer-webgl/src/surface/canonical-material";
-import { baseColorTextureFeatureBits } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import { baseColorTextureFeatureBits } from "../../packages/renderer-webgl/src/surface/surface-texture-plan";
 import {
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
-} from "../../packages/renderer-webgl/src/surface/surface-program-owner";
+} from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import {
