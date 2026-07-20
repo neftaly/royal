@@ -630,7 +630,7 @@ describe("clear-only canvas root", () => {
 
   it("preserves authored texture identity across staggered publications", async () => {
     const multiDrawElementsWEBGL = vi.fn();
-    const textureHandles = [{ label: "first" }, { label: "second" }] as unknown as WebGLTexture[];
+    const textureHandles = [{ label: "upload-0" }, { label: "upload-1" }] as unknown as WebGLTexture[];
     let nextTextureHandle = 0;
     const resolvers = new Map<string, (source: {
       height: number;
@@ -669,19 +669,19 @@ describe("clear-only canvas root", () => {
     }));
     callbacks.shift()!();
 
-    const firstSource = {} as ImageBitmap;
-    resolvers.get("/first.png")!({ height: 8, source: firstSource, width: 8 });
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[0]!).state).toBe("ready"));
-    callbacks.shift()!();
-
     const secondSource = {} as ImageBitmap;
     resolvers.get("/second.png")!({ height: 8, source: secondSource, width: 8 });
     await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[1]!).state).toBe("ready"));
     callbacks.shift()!();
 
+    const firstSource = {} as ImageBitmap;
+    resolvers.get("/first.png")!({ height: 8, source: firstSource, width: 8 });
+    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[0]!).state).toBe("ready"));
+    callbacks.shift()!();
+
     const created = vi.mocked(canvas.gl.createTexture).mock.results.map((result) => result.value);
     expect(created).toHaveLength(2);
-    expect(drawnBaseColors.slice(-2)).toEqual(created);
+    expect(drawnBaseColors.slice(-2)).toEqual([created[1], created[0]]);
     expect(multiDrawElementsWEBGL).not.toHaveBeenCalled();
   });
 
