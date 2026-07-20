@@ -23,6 +23,11 @@ A settled ordinary scene performs no JavaScript frame work and no GL calls.
 Camera-only frames do not reparse assets, rebuild scene topology, recreate
 geometry, re-upload static instances, or resubscribe resources.
 
+Frame submission does not call `flush`, `finish`, insert fences, or perform
+readback. Canvas and WebXR presentation consume the ordered command stream when
+the owning frame callback returns; internal texture copies remain ordered in
+that same stream.
+
 ## Root-wide budgets
 
 Each root admits work against five public ceilings:

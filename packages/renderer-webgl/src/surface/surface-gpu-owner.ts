@@ -631,7 +631,6 @@ export class SurfaceGpuOwner {
           state,
         );
       }
-      this.#gl.flush();
     }
     return presentationWorkPending;
   }
