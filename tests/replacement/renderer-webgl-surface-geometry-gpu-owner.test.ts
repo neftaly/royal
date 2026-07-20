@@ -128,8 +128,9 @@ describe("surface geometry GPU owner", () => {
     firstFrame.commit();
 
     owner.beginFrame();
-    const secondFrame = owner.prepare([first, second], 2);
-    expect(secondFrame.surfaces).toHaveLength(2);
+    const secondFrame = owner.prepare([first, second], 2, 1);
+    expect(secondFrame.offset).toBe(1);
+    expect(secondFrame.surfaces).toHaveLength(1);
     expect(owner.snapshot()).toEqual({
       admittedBytes: 54,
       budgetBytes: 60,
@@ -229,18 +230,20 @@ describe("surface geometry GPU owner", () => {
       ],
     })).surfaces;
     const firstAdmission = owner.prepare(surfaces, 1);
+    const firstGeometry = firstAdmission.surfaces[0]!.geometry;
     expect(firstAdmission.surfaces).toHaveLength(1);
     expect(gl.createBuffer).toHaveBeenCalledTimes(2);
     expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
     expect(gl.bufferSubData).toHaveBeenCalledTimes(2);
     firstAdmission.commit();
 
-    const secondAdmission = owner.prepare(surfaces, 2);
-    expect(secondAdmission.surfaces).toHaveLength(2);
-    expect(secondAdmission.surfaces[0]!.geometry.vertexArray)
-      .toBe(secondAdmission.surfaces[1]!.geometry.vertexArray);
-    expect(secondAdmission.surfaces[0]!.geometry.indexOffset).toBe(0);
-    expect(secondAdmission.surfaces[1]!.geometry.indexOffset).toBeGreaterThan(0);
+    const secondAdmission = owner.prepare(surfaces, 2, 1);
+    expect(secondAdmission.offset).toBe(1);
+    expect(secondAdmission.surfaces).toHaveLength(1);
+    expect(firstGeometry.vertexArray)
+      .toBe(secondAdmission.surfaces[0]!.geometry.vertexArray);
+    expect(firstGeometry.indexOffset).toBe(0);
+    expect(secondAdmission.surfaces[0]!.geometry.indexOffset).toBeGreaterThan(0);
     expect(gl.createBuffer).toHaveBeenCalledTimes(2);
     expect(gl.createVertexArray).toHaveBeenCalledTimes(1);
     expect(gl.bufferSubData).toHaveBeenCalledTimes(4);
@@ -250,10 +253,16 @@ describe("surface geometry GPU owner", () => {
     expect(indexUploads[0]).toHaveLength(5);
     expect(indexUploads[1]).toHaveLength(5);
     expect(indexUploads[0]![2]).toBe(indexUploads[1]![2]);
-    secondAdmission.commit();
+    secondAdmission.rollback();
+
+    owner.beginFrame();
+    const committedSecondAdmission = owner.prepare(surfaces, 2, 1);
+    expect(committedSecondAdmission.surfaces).toHaveLength(1);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(6);
+    committedSecondAdmission.commit();
 
     owner.prepare(surfaces, 2).commit();
-    expect(gl.bufferSubData).toHaveBeenCalledTimes(4);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(6);
     owner.dispose();
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);

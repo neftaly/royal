@@ -74,6 +74,7 @@ type GpuInstanceVertexArray = Readonly<{
 
 export type SurfaceGeometryPlan = Readonly<{
   commit: () => void;
+  offset: number;
   rollback: () => void;
   surfaces: readonly GpuGeometrySurface[];
 }>;
@@ -215,9 +216,9 @@ export class SurfaceGeometryGpuOwner {
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #gl: WebGL2RenderingContext;
   readonly #uploadBudget: FrameUploadBudgetOwner;
-  #geometryArenas: readonly (GpuGeometryArena | undefined)[] = [];
+  #geometryArenas: (GpuGeometryArena | undefined)[] = [];
   #geometryPlanKey = "";
-  #geometryResources: readonly GpuGeometry[] = [];
+  #geometryResourcesByKey = new Map<string, GpuGeometry>();
   #indexUploadWorkspace: GeometryIndexUploadWorkspace = {};
   #uploadedGeometryKeys = new Set<string>();
   #plannedGeometry: ReturnType<typeof planGeometryArenas> | null = null;
@@ -257,7 +258,7 @@ export class SurfaceGeometryGpuOwner {
     }
     this.#geometryArenas = [];
     this.#geometryPlanKey = "";
-    this.#geometryResources = [];
+    this.#geometryResourcesByKey.clear();
     this.#indexUploadWorkspace = {};
     this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
@@ -293,7 +294,7 @@ export class SurfaceGeometryGpuOwner {
     }
     this.#geometryArenas = [];
     this.#geometryPlanKey = "";
-    this.#geometryResources = [];
+    this.#geometryResourcesByKey.clear();
     this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
     this.#instanceVertexArrays = [];
@@ -668,6 +669,7 @@ export class SurfaceGeometryGpuOwner {
   prepare(
     surfaces: readonly CanonicalDrawSurface[],
     admittedCount = surfaces.length,
+    retainedSurfaceCount = 0,
   ): SurfaceGeometryPlan {
     let planned = this.#plannedGeometry;
     if (this.#plannedSurfaces !== surfaces || planned === null) {
@@ -676,6 +678,8 @@ export class SurfaceGeometryGpuOwner {
       this.#plannedSurfaces = surfaces;
     }
     const geometryPlanChanged = planned.key !== this.#geometryPlanKey;
+    const surfaceOffset = geometryPlanChanged ? 0 : retainedSurfaceCount;
+    const retainsPrefix = surfaceOffset > 0;
     if (geometryPlanChanged) this.#indexUploadWorkspace = {};
     const previousInstancesByKey = new Map(
       this.#instanceResources.map((resource) => [resource.key, resource] as const),
@@ -685,22 +689,23 @@ export class SurfaceGeometryGpuOwner {
       : new Map(
         this.#instanceVertexArrays.map((resource) => [resource.key, resource] as const),
       );
-    const nextInstancesByKey = new Map<string, GpuInstanceData>();
-    const nextInstanceVaosByKey = new Map<string, GpuInstanceVertexArray>();
-    const nextGeometryResources: GpuGeometry[] = geometryPlanChanged
-      ? []
-      : [...this.#geometryResources];
-    const nextGeometryArenas: (GpuGeometryArena | undefined)[] = geometryPlanChanged
-      ? Array(planned.plans.length)
-      : [...this.#geometryArenas];
-    const nextUploadedGeometryKeys = new Set(
-      geometryPlanChanged ? [] : this.#uploadedGeometryKeys,
+    const nextInstancesByKey = new Map(
+      retainsPrefix ? previousInstancesByKey : undefined,
     );
-    const nextInstanceResources: GpuInstanceData[] = [];
-    const nextInstanceVertexArrays: GpuInstanceVertexArray[] = [];
+    const nextInstanceVaosByKey = new Map(
+      retainsPrefix ? previousInstanceVaosByKey : undefined,
+    );
+    const nextInstanceResources: GpuInstanceData[] = retainsPrefix
+      ? [...this.#instanceResources]
+      : [];
+    const nextInstanceVertexArrays: GpuInstanceVertexArray[] = retainsPrefix
+      ? [...this.#instanceVertexArrays]
+      : [];
     const nextSurfaces: GpuGeometrySurface[] = [];
-    const geometryByKey = new Map<string, GpuGeometry>();
+    const stagedGeometryByKey = new Map<string, GpuGeometry>();
+    const stagedUploadedGeometryKeys = new Set<string>();
     const createdArenas: GpuGeometryArena[] = [];
+    const createdArenaIndices: number[] = [];
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     const pendingInstanceUpdates = new Map<GpuInstanceData, Readonly<{
@@ -708,19 +713,16 @@ export class SurfaceGeometryGpuOwner {
       values: Float32Array;
     }>>();
     try {
-      if (
-        !geometryPlanChanged
-        && nextGeometryArenas.length !== planned.plans.length
-      ) throw new Error("Royal retained an inconsistent geometry arena plan");
-      for (const geometry of nextGeometryResources) geometryByKey.set(geometry.key, geometry);
-      for (let surfaceIndex = 0; surfaceIndex < admittedCount; surfaceIndex += 1) {
+      for (
+        let surfaceIndex = surfaceOffset;
+        surfaceIndex < admittedCount;
+        surfaceIndex += 1
+      ) {
         const surface = surfaces[surfaceIndex]!;
         const key = surfaceGeometryResourceKey(surface);
-        let geometry = geometryByKey.get(key);
-        const geometryUpload = planned.uploads.get(key);
-        if (geometryUpload === undefined) {
-          throw new Error("Royal geometry arena omitted an upload range");
-        }
+        let geometry = stagedGeometryByKey.get(key)
+          ?? (geometryPlanChanged ? undefined : this.#geometryResourcesByKey.get(key));
+        const geometryUpload = planned.uploads.get(key)!;
         const geometryArenaPlan = planned.plans[geometryUpload.planIndex]!;
         const instances = surface.instances;
         let instanceData = instances === undefined
@@ -741,9 +743,11 @@ export class SurfaceGeometryGpuOwner {
           && instanceUploadRequired
           && instances.count !== instanceData.count
         ) {
-          throw new Error("Royal retained instance count changed without a new resource key");
+          throw new Error("Royal instance count changed for a retained key");
         }
-        const uploadByteLength = (nextUploadedGeometryKeys.has(key)
+        const geometryUploaded = stagedUploadedGeometryKeys.has(key)
+          || (!geometryPlanChanged && this.#uploadedGeometryKeys.has(key));
+        const uploadByteLength = (geometryUploaded
           ? 0
           : surfaceGeometryUploadByteLength(surface, geometryArenaPlan.batch.indexBytes))
           + (instanceUploadRequired ? surfaceInstanceUploadByteLength(surface) : 0);
@@ -751,20 +755,20 @@ export class SurfaceGeometryGpuOwner {
         if (geometry === undefined) {
           const created = this.#createGeometryArena(geometryArenaPlan);
           createdArenas.push(created.arena);
-          nextGeometryArenas[geometryUpload.planIndex] = created.arena;
-          nextGeometryResources.push(...created.geometries);
-          for (const resource of created.geometries) geometryByKey.set(resource.key, resource);
-          geometry = geometryByKey.get(key);
-          if (geometry === undefined) throw new Error("Royal geometry arena omitted a resource");
+          createdArenaIndices.push(geometryUpload.planIndex);
+          for (const resource of created.geometries) {
+            stagedGeometryByKey.set(resource.key, resource);
+          }
+          geometry = stagedGeometryByKey.get(key)!;
         }
-        if (!nextUploadedGeometryKeys.has(key)) {
+        if (!geometryUploaded) {
           this.#uploadGeometry(
             geometry.arena,
             geometryArenaPlan,
             geometryUpload,
             this.#indexUploadWorkspace,
           );
-          nextUploadedGeometryKeys.add(key);
+          stagedUploadedGeometryKeys.add(key);
         }
         let instanceCount = 0;
         let vertexArray = geometry.vertexArray;
@@ -802,7 +806,11 @@ export class SurfaceGeometryGpuOwner {
         }
         nextSurfaces.push({ geometry, instanceCount, surface, vertexArray });
       }
-      if (nextUploadedGeometryKeys.size === nextGeometryResources.length) {
+      const uploadedGeometryCount = stagedUploadedGeometryKeys.size
+        + (geometryPlanChanged ? 0 : this.#uploadedGeometryKeys.size);
+      const geometryResourceCount = stagedGeometryByKey.size
+        + (geometryPlanChanged ? 0 : this.#geometryResourcesByKey.size);
+      if (uploadedGeometryCount === geometryResourceCount) {
         this.#indexUploadWorkspace = {};
       }
     } catch (error) {
@@ -840,11 +848,27 @@ export class SurfaceGeometryGpuOwner {
           for (const arena of this.#geometryArenas) {
             if (arena !== undefined) this.#deleteGeometryArena(arena);
           }
+          const nextGeometryArenas: (GpuGeometryArena | undefined)[] = Array(
+            planned.plans.length,
+          );
+          for (let index = 0; index < createdArenas.length; index += 1) {
+            nextGeometryArenas[createdArenaIndices[index]!] = createdArenas[index]!;
+          }
+          this.#geometryArenas = nextGeometryArenas;
+          this.#geometryResourcesByKey = stagedGeometryByKey;
+          this.#uploadedGeometryKeys = stagedUploadedGeometryKeys;
+        } else {
+          for (let index = 0; index < createdArenas.length; index += 1) {
+            this.#geometryArenas[createdArenaIndices[index]!] = createdArenas[index]!;
+          }
+          for (const [key, resource] of stagedGeometryByKey) {
+            this.#geometryResourcesByKey.set(key, resource);
+          }
+          for (const key of stagedUploadedGeometryKeys) {
+            this.#uploadedGeometryKeys.add(key);
+          }
         }
-        this.#geometryArenas = nextGeometryArenas;
         this.#geometryPlanKey = planned.key;
-        this.#geometryResources = nextGeometryResources;
-        this.#uploadedGeometryKeys = nextUploadedGeometryKeys;
         this.#instanceResources = nextInstanceResources;
         this.#instanceVertexArrays = nextInstanceVertexArrays;
       },
@@ -860,6 +884,7 @@ export class SurfaceGeometryGpuOwner {
         }
         for (const arena of createdArenas) this.#deleteGeometryArena(arena);
       },
+      offset: surfaceOffset,
       surfaces: nextSurfaces,
     };
   }

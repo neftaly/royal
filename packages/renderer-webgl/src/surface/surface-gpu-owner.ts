@@ -1231,20 +1231,25 @@ export class SurfaceGpuOwner {
       surfaces.length,
       SURFACE_UPLOADS_PER_FRAME,
     );
-    const geometryPlan = this.#geometryGpu.prepare(surfaces, requestedSurfaceCount);
-    const admittedSurfaceCount = geometryPlan.surfaces.length;
+    const retainedSurfaceCount = !this.#fullReconcileRequired
+      && this.#gpuScene === scene
+      ? this.#admittedSurfaceCount
+      : 0;
+    const geometryPlan = this.#geometryGpu.prepare(
+      surfaces,
+      requestedSurfaceCount,
+      retainedSurfaceCount,
+    );
+    const admittedSurfaceCount = geometryPlan.offset + geometryPlan.surfaces.length;
     try {
       const previousSurfaceCount = this.#gpuSurfacesBySceneIndex.length;
-      const appendOnly = scene !== null
-        && !this.#fullReconcileRequired
-        && this.#gpuScene === scene
-        && previousSurfaceCount === this.#admittedSurfaceCount
-        && admittedSurfaceCount > previousSurfaceCount;
+      const appendOnly = retainedSurfaceCount > 0
+        && previousSurfaceCount === geometryPlan.offset;
       let nextSurfaces: GpuSurface[];
       if (appendOnly) {
         const appended = Array<GpuSurface>(admittedSurfaceCount - previousSurfaceCount);
         for (let index = previousSurfaceCount; index < admittedSurfaceCount; index += 1) {
-          const geometrySurface = geometryPlan.surfaces[index]!;
+          const geometrySurface = geometryPlan.surfaces[index - previousSurfaceCount]!;
           const ordinaryBindings = this.#retainOrdinaryTextureBindings(
             geometrySurface.surface.material,
           );
@@ -1284,9 +1289,9 @@ export class SurfaceGpuOwner {
         geometryPlan.commit();
         this.#gpuSurfacesBySceneIndex = nextSurfaces;
       }
-      if (this.#multiDrawCounts.length < geometryPlan.surfaces.length) {
-        this.#multiDrawCounts = new Int32Array(geometryPlan.surfaces.length);
-        this.#multiDrawOffsets = new Int32Array(geometryPlan.surfaces.length);
+      if (this.#multiDrawCounts.length < admittedSurfaceCount) {
+        this.#multiDrawCounts = new Int32Array(admittedSurfaceCount);
+        this.#multiDrawOffsets = new Int32Array(admittedSurfaceCount);
       }
       this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuScene = scene;
