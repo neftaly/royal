@@ -100,6 +100,7 @@ import type {
   PrefilteredEnvironmentGpuBinding,
 } from "../environment/gpu-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
+import { sortSurfacesBackToFrontInto } from "./surface-depth-order";
 
 export type SurfaceFrameView = Readonly<{
   view: Mat4;
@@ -237,7 +238,9 @@ export class SurfaceGpuOwner {
   #opaqueSurfaces: readonly GpuSurface[] = [];
   #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
-  #blendedDepths = new Float64Array(0);
+  #depthOrderDepths = new Float64Array(0);
+  #depthOrderScratchDepths = new Float64Array(0);
+  #depthOrderScratchSurfaces: GpuSurface[] = [];
   #transmissionSurfaces: GpuSurface[] = [];
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
@@ -323,7 +326,9 @@ export class SurfaceGpuOwner {
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
-    this.#blendedDepths = new Float64Array(0);
+    this.#depthOrderDepths = new Float64Array(0);
+    this.#depthOrderScratchDepths = new Float64Array(0);
+    this.#depthOrderScratchSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
     this.#scene = null;
@@ -348,7 +353,6 @@ export class SurfaceGpuOwner {
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
-    this.#blendedDepths = new Float64Array(0);
     this.#transmissionSurfaces = [];
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
@@ -1057,31 +1061,24 @@ export class SurfaceGpuOwner {
   }
 
   #sortBackToFrontSurfaces(surfaces: GpuSurface[], view: Mat4): void {
-    if (surfaces.length < 2) return;
-    if (this.#blendedDepths.length < surfaces.length) {
-      this.#blendedDepths = new Float64Array(surfaces.length);
-    }
-    const depths = this.#blendedDepths;
-    for (let index = 0; index < surfaces.length; index += 1) {
-      const bounds = surfaces[index]!.surface.worldBounds;
-      const x = (bounds.min[0] + bounds.max[0]) * 0.5;
-      const y = (bounds.min[1] + bounds.max[1]) * 0.5;
-      const z = (bounds.min[2] + bounds.max[2]) * 0.5;
-      const depth = view[2] * x + view[6] * y + view[10] * z + view[14];
-      depths[index] = Number.isFinite(depth) ? depth : 0;
-    }
-    for (let index = 1; index < surfaces.length; index += 1) {
-      const surface = surfaces[index]!;
-      const depth = depths[index]!;
-      let insertion = index;
-      while (insertion > 0 && depths[insertion - 1]! > depth) {
-        surfaces[insertion] = surfaces[insertion - 1]!;
-        depths[insertion] = depths[insertion - 1]!;
-        insertion -= 1;
-      }
-      surfaces[insertion] = surface;
-      depths[insertion] = depth;
-    }
+    sortSurfacesBackToFrontInto(
+      surfaces,
+      view,
+      this.#depthOrderDepths,
+      this.#depthOrderScratchSurfaces,
+      this.#depthOrderScratchDepths,
+    );
+  }
+
+  #retainDepthOrderCapacity(): void {
+    const count = Math.max(
+      this.#transmissionSurfaces.length,
+      this.#blendedSurfaces.length,
+    );
+    if (this.#depthOrderDepths.length >= count) return;
+    this.#depthOrderDepths = new Float64Array(count);
+    this.#depthOrderScratchDepths = new Float64Array(count);
+    this.#depthOrderScratchSurfaces.length = count;
   }
 
   #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
@@ -1280,6 +1277,7 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
       this.#transmissionSurfaces = grouped.transmission;
+      this.#retainDepthOrderCapacity();
       this.#planOpaqueMultiDrawRuns();
     } catch (error) {
       geometryPlan.rollback();
@@ -1387,6 +1385,7 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
       this.#transmissionSurfaces = grouped.transmission;
+      this.#retainDepthOrderCapacity();
     }
     this.#planOpaqueMultiDrawRuns();
     this.#gpuScene = scene;
