@@ -1630,6 +1630,12 @@ const installBenchmarkHooks = async (session) => {
         this.options = options;
         this.session = session;
       }
+      get framebufferHeight() {
+        return this.context.canvas.height;
+      }
+      get framebufferWidth() {
+        return this.context.canvas.width;
+      }
       getViewport(view) {
         return view.__royalBenchViewport;
       }
@@ -2096,14 +2102,14 @@ const waitForXrActivation = (session, clicked) => evaluate(session, `
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const deadline = performance.now() + ${fakeXrPrepareTimeoutMs};
   while (performance.now() < deadline) {
-    const control = document.querySelector('[data-royal-xr-active]');
+    const control = document.querySelector('[data-royal-xr-status]');
     const button = [...document.querySelectorAll('button')]
       .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
     const instrumented = globalThis.__royalBench?.xrSnapshot?.().active === true;
     const status = control?.getAttribute('data-royal-xr-status');
     if (
       instrumented &&
-      (control?.getAttribute('data-royal-xr-active') === 'true' || button?.textContent?.includes('Exit XR'))
+      (control?.getAttribute('data-royal-xr-status') === 'active' || button?.textContent?.includes('Exit XR'))
     ) {
       return {
         active: true,
@@ -2132,7 +2138,7 @@ const waitForXrActivation = (session, clicked) => evaluate(session, `
     }
     await sleep(25);
   }
-  const control = document.querySelector('[data-royal-xr-active]');
+  const control = document.querySelector('[data-royal-xr-status]');
   return {
     active: false,
     clicked: ${clicked ? 'true' : 'false'},
@@ -2484,9 +2490,9 @@ const benchmarkRoute = async (session, route, { onCpuProfile, onSessionChanged }
   try {
     const prepared = await prepareRouteForBenchmark(session, route);
     const virtualTextureClose = await prepareVirtualTextureCloseView(session, route);
-    if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
+    if ((realXrEnabled || fakeXrEnabled) && route.id === 'webxr-vr' && prepared?.active !== true) {
       throw new Error(
-        `Real XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
+        `${realXrEnabled ? 'Real' : 'Fake'} XR activation failed: ${prepared?.reason ?? prepared?.error ?? 'inactive session'}`,
       );
     }
     const measured = await collectPageMetrics(session, frameSampleCount, {

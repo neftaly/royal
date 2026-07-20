@@ -56,6 +56,10 @@ Run current target paths on Safari 17/A10-class hardware and Quest 2 in addition
 to desktop browsers. Record resolution, DPR/render scale, refresh rate, browser,
 camera, scene revision, thermal/session state, capability selection, console,
 frame timing, and GPU timer data where reliable.
+Synthetic XR is a repeatable lifecycle/stereo oracle only when its layer exposes
+valid framebuffer dimensions and its report contains active session-RAF samples.
+Activation failure or zero XR frames MUST fail the run rather than falling back
+to ordinary window RAF timing. Synthetic results do not replace physical proof.
 The page report and server MUST expose the same unique build identity, full
 revision, and dirty state. A remembered server start, URL, or open tab is not
 evidence for the code under test, and a harness MUST reject a mismatched build

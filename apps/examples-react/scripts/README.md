@@ -171,6 +171,21 @@ measurement overhead is intentional. CPU-profile runs also omit forced heap
 collections, which otherwise appear as renderer GC in the raw profile; their
 heap block reports observed window growth instead of retained-after-GC growth.
 
+Use the synthetic stereo loop as a repeatable host lifecycle oracle before a
+physical headset run:
+
+```sh
+EXAMPLES_BENCH_ROUTE=webxr-vr \
+EXAMPLES_BENCH_FAKE_XR=1 \
+EXAMPLES_BENCH_XR_HZ=90 \
+pnpm --filter @royal/examples-react bench:examples
+```
+
+The fake layer exposes the same framebuffer-size, ordered-view, viewport, and
+session-RAF contracts consumed by Royal. The command and saved-report checker
+both fail if activation does not complete or the requested XR frames are not
+sampled; ordinary window RAF timing is never accepted as substitute evidence.
+
 Quest 2 report through forwarded DevTools:
 
 ```sh

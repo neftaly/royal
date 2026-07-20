@@ -39,6 +39,9 @@ versions identify source-level prerelease checkpoints in this repository.
 - Added a selectable glTF scene gallery for Sponza, A Beautiful Game, Virtual
   City, and Damaged Helmet, with source-pinned Khronos fixtures and browser
   smoke coverage for every entry.
+- Corrected the synthetic WebXR layer's framebuffer contract and made fake-XR
+  reports reject inactive or zero-frame sessions instead of presenting window
+  RAF timing as XR evidence.
 
 ### Renderer
 

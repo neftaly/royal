@@ -549,7 +549,7 @@ const checkFrameWork = (route, routeLabel, gpuTimersEnabled) => {
   );
 };
 
-const checkRealXrRoute = (route, routeLabel) => {
+const checkXrRoute = (route, routeLabel) => {
   if (route.id !== 'webxr-vr') return;
   if (!requireObject(route.prepared, `${routeLabel}.prepared`)) return;
   requireBoolean(route.prepared.active, `${routeLabel}.prepared.active`);
@@ -841,7 +841,8 @@ if (requireObject(report, 'report')) {
     checkTrace(report.trace, 'report.trace');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
     const gpuTimersEnabled = report.options?.gpuTimersEnabled === true;
-    const realXrEnabled = report.options?.realXrEnabled === true;
+    const xrEnabled = report.options?.realXrEnabled === true
+      || report.options?.fakeXrEnabled === true;
     const virtualTextureCloseEnabled = report.options?.virtualTextureCloseEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
       report.routes.forEach((route, index) => {
@@ -858,7 +859,7 @@ if (requireObject(report, 'report')) {
         checkFrameWork(route, routeLabel, gpuTimersEnabled);
         checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
         checkXrGpuTimers(route, routeLabel, gpuTimersEnabled);
-        if (realXrEnabled) checkRealXrRoute(route, routeLabel);
+        if (xrEnabled) checkXrRoute(route, routeLabel);
         if (route.profile?.kind === 'gltf-instancing') {
           checkInstancingRoute(route, routeLabel);
         }
