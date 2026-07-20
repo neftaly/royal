@@ -599,6 +599,7 @@ export class CanvasRoot implements RendererRoot {
 
   flushInvalidated(): void {
     this.#assertLive("flush invalidated work");
+    this.#clock.retry();
     this.#clock.flushInvalidated();
   }
 
@@ -658,6 +659,7 @@ export class CanvasRoot implements RendererRoot {
 
   invalidate(): void {
     this.#assertLive("invalidate");
+    this.#clock.retry();
     this.#invalidatePresentation();
   }
 
@@ -718,6 +720,7 @@ export class CanvasRoot implements RendererRoot {
     this.#resetInstanceUpdates();
     this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
     this.#refreshGltfTextureProgress();
+    this.#clock.retry();
     this.#invalidatePresentation();
   }
 
@@ -745,6 +748,7 @@ export class CanvasRoot implements RendererRoot {
       (!previous || backingChanged)
       && resolved.backingWidth * resolved.backingHeight > 0
     ) {
+      this.#clock.retry();
       this.#invalidatePresentation();
     }
   }
@@ -959,7 +963,10 @@ export class CanvasRoot implements RendererRoot {
     this.#refreshGltfTextureProgress();
     this.#resetInstanceUpdates();
     this.#instancePickingDirty = false;
-    if (!instanceOnly) this.#invalidatePresentation();
+    if (!instanceOnly) {
+      this.#clock.retry();
+      this.#invalidatePresentation();
+    }
   }
 
   #refreshPreparedTexture(key: string): void {

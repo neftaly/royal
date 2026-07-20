@@ -16,7 +16,8 @@ Royal distinguishes:
 - **renderer interruption**: context lost/restoring; expose lifecycle and
   reconstruct;
 - **scheduled-frame failure**: capture and notify observers because there is no
-  synchronous caller;
+  synchronous caller, then latch the ordinary clock until a meaningful
+  external wake condition rearms it;
 - **explicit-call failure**: throw synchronously from the imperative call;
 - **XR acquisition/runtime failure**: update the XR lifecycle owner and release
   only resources actually acquired.
@@ -46,6 +47,12 @@ Failures are terminal until a meaningful wake condition changes: content
 version, resource capacity, capability/context generation, explicit retry
 policy, or renewed demand after backoff. Royal MUST NOT retry permanent parse or
 validation failures every frame.
+
+Internal progressive work is not a wake condition for a failed scheduled
+frame. In particular, pending texture uploads, camera-controller publication,
+and timers cannot repeatedly compile the same invalid shader or flood the
+diagnostic sink. A stale callback already queued by the failed transaction is
+ignored rather than treated as a second failure.
 
 ## Diagnostic audiences
 

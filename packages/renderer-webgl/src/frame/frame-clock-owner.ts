@@ -1,6 +1,18 @@
 import {
   createFrameClockState,
   createFrameClockTransition,
+  FRAME_CLOCK_EVENT_ACQUIRE_EXTERNAL,
+  FRAME_CLOCK_EVENT_CONTEXT_BLOCKED,
+  FRAME_CLOCK_EVENT_CONTEXT_RESUMED,
+  FRAME_CLOCK_EVENT_DISPOSE,
+  FRAME_CLOCK_EVENT_FLUSH_EXTERNAL,
+  FRAME_CLOCK_EVENT_FLUSH_INTERNAL,
+  FRAME_CLOCK_EVENT_INVALIDATE,
+  FRAME_CLOCK_EVENT_RELEASE_EXTERNAL,
+  FRAME_CLOCK_EVENT_RENDER_FAILED,
+  FRAME_CLOCK_EVENT_RETRY,
+  FRAME_CLOCK_EVENT_SCHEDULE_FAILED,
+  FRAME_CLOCK_EVENT_SCHEDULED_FRAME,
   FRAME_CLOCK_EFFECT_RENDER,
   FRAME_CLOCK_EFFECT_SCHEDULE,
   planFrameClockTransition,
@@ -8,12 +20,14 @@ import {
   type FrameClockState,
 } from "./frame-clock";
 
-const INVALIDATE_EVENT = { kind: "invalidate" } as const;
-const FLUSH_INTERNAL_EVENT = { kind: "flush-internal" } as const;
-const ACQUIRE_EXTERNAL_EVENT = { kind: "acquire-external" } as const;
-const CONTEXT_BLOCKED_EVENT = { kind: "context-blocked" } as const;
-const CONTEXT_RESUMED_EVENT = { kind: "context-resumed" } as const;
-const DISPOSE_EVENT = { kind: "dispose" } as const;
+const INVALIDATE_EVENT = { kind: FRAME_CLOCK_EVENT_INVALIDATE } as const;
+const FLUSH_INTERNAL_EVENT = { kind: FRAME_CLOCK_EVENT_FLUSH_INTERNAL } as const;
+const ACQUIRE_EXTERNAL_EVENT = { kind: FRAME_CLOCK_EVENT_ACQUIRE_EXTERNAL } as const;
+const CONTEXT_BLOCKED_EVENT = { kind: FRAME_CLOCK_EVENT_CONTEXT_BLOCKED } as const;
+const CONTEXT_RESUMED_EVENT = { kind: FRAME_CLOCK_EVENT_CONTEXT_RESUMED } as const;
+const DISPOSE_EVENT = { kind: FRAME_CLOCK_EVENT_DISPOSE } as const;
+const RENDER_FAILED_EVENT = { kind: FRAME_CLOCK_EVENT_RENDER_FAILED } as const;
+const RETRY_EVENT = { kind: FRAME_CLOCK_EVENT_RETRY } as const;
 
 export type ExternalFrameClock = Readonly<{
   flushInvalidated(): void;
@@ -42,8 +56,8 @@ export class FrameClockOwner {
       throw new Error("Royal renderer already has an external frame clock or is disposed");
     }
     const token = this.#transition.token;
-    const flushEvent = { kind: "flush-external", token } as const;
-    const releaseEvent = { kind: "release-external", token } as const;
+    const flushEvent = { kind: FRAME_CLOCK_EVENT_FLUSH_EXTERNAL, token } as const;
+    const releaseEvent = { kind: FRAME_CLOCK_EVENT_RELEASE_EXTERNAL, token } as const;
     let released = false;
     return {
       flushInvalidated: () => {
@@ -74,6 +88,11 @@ export class FrameClockOwner {
     this.#apply(INVALIDATE_EVENT);
   }
 
+  /** Rearms scheduled rendering after a previously reported render failure. */
+  retry(): void {
+    this.#apply(RETRY_EVENT);
+  }
+
   resume(): void {
     this.#apply(CONTEXT_RESUMED_EVENT);
   }
@@ -87,17 +106,18 @@ export class FrameClockOwner {
 
     if (this.#transition.effect === FRAME_CLOCK_EFFECT_SCHEDULE) {
       const token = this.#transition.token;
-      const frameEvent = { kind: "scheduled-frame", token } as const;
+      const frameEvent = { kind: FRAME_CLOCK_EVENT_SCHEDULED_FRAME, token } as const;
       try {
         this.#options.requestFrame(() => {
           try {
             this.#apply(frameEvent);
           } catch (error) {
+            this.#apply(RENDER_FAILED_EVENT);
             this.#reportScheduledFailure(error);
           }
         });
       } catch (error) {
-        this.#apply({ kind: "schedule-failed", token });
+        this.#apply({ kind: FRAME_CLOCK_EVENT_SCHEDULE_FAILED, token });
         this.#reportScheduledFailure(error);
       }
     } else if (this.#transition.effect === FRAME_CLOCK_EFFECT_RENDER) {

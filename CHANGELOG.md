@@ -48,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Latched scheduled render failures until an explicit scene, backing-size,
+  context, or imperative retry boundary, preventing pending progressive work from
+  repeatedly consuming RAF callbacks and flooding the console.
 - Split thin transmission from nonzero-thickness volume at shader selection,
   keeping refraction and attenuation work out of thin-walled fragments while
   retaining the same canonical material and composite path.

@@ -68,6 +68,14 @@ In ordinary canvas mode:
 - ending application animation MUST allow the root to settle after
   already-demanded work.
 
+A scheduled render failure latches the ordinary clock: it cancels demand
+raised during the failed transaction and prevents later internal camera,
+resource, or progressive-presentation invalidations from creating a retry
+loop. The root reports that failure once. A distinct scene commit, backing-size
+change, context restoration, or explicit imperative `invalidate()` /
+`flushInvalidated()` rearms rendering. Stale callbacks from before the failure
+remain harmless token mismatches.
+
 `flushInvalidated()` renders already-queued demand on the caller's current
 frame. It MUST NOT invent new demand and MUST obey root lifecycle safety.
 

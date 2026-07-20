@@ -897,6 +897,26 @@ describe("clear-only canvas root", () => {
     });
   });
 
+  it("latches scheduled draw failure until explicit invalidation", () => {
+    const { callbacks, canvas, root, scheduledFailures } = harness();
+    canvas.gl.clear.mockImplementationOnce(() => {
+      root.invalidate();
+      throw new Error("shader compilation failed");
+    });
+    root.setSize({ cssHeight: 20, cssWidth: 30, pixelRatio: 1 });
+    callbacks.shift()!();
+    expect(scheduledFailures).toHaveLength(1);
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(scheduledFailures).toHaveLength(1);
+    expect(callbacks).toHaveLength(0);
+    root.invalidate();
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(root.getSnapshot()).toMatchObject({ frame: 1 });
+    expect(root.getSnapshot().lastFrameFailure).toBeUndefined();
+  });
+
   it("publishes disposal once and rejects later imperative work", () => {
     const { root } = harness();
     const phases: string[] = [];
