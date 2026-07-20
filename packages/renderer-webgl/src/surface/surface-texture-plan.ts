@@ -3,6 +3,7 @@ import type { GpuTextureBinding } from "../texture/gpu-owner";
 import type { VirtualTextureGpuBinding } from "../virtual-texture/runtime-contract";
 import {
   canonicalMaterialHasTransmission,
+  canonicalMaterialHasVolume,
   type CanonicalSurfaceMaterial,
   type CanonicalTextureBinding,
 } from "./canonical-material";
@@ -27,6 +28,7 @@ import {
   SURFACE_FEATURE_TRANSMISSION_TEXTURE,
   SURFACE_FEATURE_VERTEX_COLOR,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_VOLUME_MATERIAL,
   SURFACE_TEXTURE_FEATURES,
 } from "./surface-program-features";
 
@@ -150,6 +152,7 @@ export const surfaceTextureFeatureBits = (
   }
   if (linearOutput && canonicalMaterialHasTransmission(material)) {
     features |= SURFACE_FEATURE_TRANSMISSION_MATERIAL;
+    if (canonicalMaterialHasVolume(material)) features |= SURFACE_FEATURE_VOLUME_MATERIAL;
     if (ordinaryTextureMask & 128) features |= SURFACE_FEATURE_TRANSMISSION_TEXTURE;
     if (ordinaryTextureMask & 256) features |= SURFACE_FEATURE_THICKNESS_TEXTURE;
   }

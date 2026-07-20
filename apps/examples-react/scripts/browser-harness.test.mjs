@@ -240,6 +240,10 @@ describe('browser harness', () => {
     };
     const trace = await startPerformanceTrace(session);
 
+    expect(session.calls[0].params.categories).toContain(
+      'disabled-by-default-devtools.screenshot',
+    );
+
     await expect(trace.stop()).rejects.toThrow('trace transport closed');
     await expect(trace.stop()).rejects.toThrow('trace transport closed');
     expect(session.calls.filter(({ method }) => method === 'Tracing.end')).toHaveLength(1);

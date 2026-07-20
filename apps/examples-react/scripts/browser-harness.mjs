@@ -307,6 +307,7 @@ const defaultTraceCategories = [
   'cc',
   'devtools.timeline',
   'disabled-by-default-devtools.timeline',
+  'disabled-by-default-devtools.screenshot',
   'disabled-by-default-v8.cpu_profiler',
   'gpu',
   'loading',

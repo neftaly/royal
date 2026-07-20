@@ -17,6 +17,8 @@ import {
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+  SURFACE_FEATURE_TRANSMISSION_MATERIAL,
+  SURFACE_FEATURE_VOLUME_MATERIAL,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import type { GpuTextureBinding } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { VirtualTextureGpuBinding } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
@@ -245,6 +247,7 @@ describe("surface texture planning core", () => {
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
     expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
     expect(features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS).not.toBe(0);
+    expect(features & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(SURFACE_FEATURE_VOLUME_MATERIAL);
 
     const virtualFeatures = surfaceTextureFeatureBits(
       material,
@@ -258,6 +261,35 @@ describe("surface texture planning core", () => {
       true,
     );
     expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111);
+  });
+
+  it("specializes thin transmission separately from authored volume", () => {
+    const thin = surfaceTextureFeatureBits(
+      standard({ transmissionFactor: 1 }),
+      false,
+      false,
+      0,
+      false,
+      false,
+      false,
+      0,
+      true,
+    );
+    const volume = surfaceTextureFeatureBits(
+      standard({ thicknessFactor: 0.5, transmissionFactor: 1 }),
+      false,
+      false,
+      0,
+      false,
+      false,
+      false,
+      0,
+      true,
+    );
+
+    expect(thin & SURFACE_FEATURE_TRANSMISSION_MATERIAL).not.toBe(0);
+    expect(thin & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(0);
+    expect(volume & SURFACE_FEATURE_VOLUME_MATERIAL).not.toBe(0);
   });
 
   it("shares only the complete canonical identity coordinate lane", () => {

@@ -12,6 +12,7 @@ import {
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
   SURFACE_FEATURE_VERTEX_COLOR,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
+  SURFACE_FEATURE_VOLUME_MATERIAL,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import {
   SurfaceProgramOwner,
@@ -19,6 +20,7 @@ import {
 } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { fakeGl } from "./support/canvas-root-harness";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-webgl/src/virtual-texture/shader-source";
+import { transmissionShaderSource } from "../../packages/renderer-webgl/src/surface/surface-composite-owner";
 
 describe("surface program ownership", () => {
   it("preserves framebuffer alpha only for blended material variants", () => {
@@ -225,6 +227,46 @@ describe("surface program ownership", () => {
     )).not.toBe(transmission);
     expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
     expect(gl.compileShader).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps volume-only uniforms and shader work out of thin transmission", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.setTransmissionShaderSource(transmissionShaderSource);
+    const thin = owner.get(
+      "standard",
+      SURFACE_FEATURE_TRANSMISSION_MATERIAL,
+      false,
+      false,
+      false,
+    );
+    const thinFragment = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .filter((source) => source.includes("#define TRANSMISSION_MATERIAL"))
+      .at(-1);
+
+    expect(thin.kind).toBe("standard");
+    if (thin.kind !== "standard") throw new Error("expected a standard thin program");
+    expect(thin.attenuationColor).toBeNull();
+    expect(thinFragment).not.toContain("#define VOLUME_MATERIAL");
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "attenuationColor",
+    );
+
+    const volume = owner.get(
+      "standard",
+      SURFACE_FEATURE_TRANSMISSION_MATERIAL | SURFACE_FEATURE_VOLUME_MATERIAL,
+      false,
+      false,
+      false,
+    );
+    const volumeFragment = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .filter((source) => source.includes("#define TRANSMISSION_MATERIAL"))
+      .at(-1);
+    expect(volume.kind).toBe("standard");
+    if (volume.kind !== "standard") throw new Error("expected a standard volume program");
+    expect(volume.attenuationColor).not.toBeNull();
+    expect(volumeFragment).toContain("#define VOLUME_MATERIAL");
   });
 
   it("keeps ordinary programs and vertex stages across lazy VT source changes", () => {

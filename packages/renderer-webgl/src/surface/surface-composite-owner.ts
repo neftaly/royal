@@ -25,9 +25,11 @@ export const transmissionShaderSource: SurfaceTransmissionShaderSource = {
   fragmentDeclarations: `
 #ifdef TRANSMISSION_MATERIAL
 uniform sampler2D sceneColor;
-uniform vec4 attenuationColor;
 uniform vec4 transmissionFactors;
+#ifdef VOLUME_MATERIAL
+uniform vec4 attenuationColor;
 uniform mat4 viewProjection;
+#endif
 #endif
 #ifdef TRANSMISSION_TEXTURED
 #ifndef IDENTITY_TEXTURE_COORDINATES
@@ -48,6 +50,8 @@ uniform sampler2D thicknessTexture;
 #ifdef TRANSMISSION_TEXTURED
   transmission *= texture(transmissionTexture, surfaceTransmissionTextureCoordinate).r;
 #endif
+  vec2 sourceCoordinate = gl_FragCoord.xy / vec2(textureSize(sceneColor, 0));
+#ifdef VOLUME_MATERIAL
   float thickness = transmissionFactors.y;
 #ifdef THICKNESS_TEXTURED
   thickness *= texture(thicknessTexture, surfaceThicknessTextureCoordinate).g;
@@ -59,22 +63,27 @@ uniform sampler2D thicknessTexture;
     worldPosition + refractionDirection * transmissionDistance,
     1.0
   );
-  vec2 sourceCoordinate = gl_FragCoord.xy / vec2(textureSize(sceneColor, 0));
-  vec2 refractedCoordinate = exitClip.xy / max(abs(exitClip.w), 0.000001) * 0.5 + 0.5;
-  vec2 sampleCoordinate = thickness > 0.0 ? refractedCoordinate : sourceCoordinate;
+  vec2 sampleCoordinate = exitClip.xy / max(abs(exitClip.w), 0.000001) * 0.5 + 0.5;
   bool sourceAvailable = exitClip.w > 0.0
     && all(greaterThanEqual(sampleCoordinate, vec2(0.0)))
     && all(lessThanEqual(sampleCoordinate, vec2(1.0)));
+#endif
   float sourceLod = roughness * transmissionFactors.w;
+#ifdef VOLUME_MATERIAL
   vec3 transmitted = sourceAvailable
     ? textureLod(sceneColor, sampleCoordinate, sourceLod).rgb
     : linear;
-  if (attenuationColor.a > 0.0 && thickness > 0.0) {
+#else
+  vec3 transmitted = textureLod(sceneColor, sourceCoordinate, sourceLod).rgb;
+#endif
+#ifdef VOLUME_MATERIAL
+  if (attenuationColor.a > 0.0) {
     transmitted *= pow(
       max(attenuationColor.rgb, vec3(0.000001)),
       vec3(transmissionDistance * attenuationColor.a)
     );
   }
+#endif
   vec3 viewFresnel = mix(f0, f90, fresnelPower(normalView));
   float transmissionWeight = transmission
     * (1.0 - metallic)

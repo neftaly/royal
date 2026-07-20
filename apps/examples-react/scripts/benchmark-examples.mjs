@@ -776,6 +776,18 @@ const installBenchmarkHooks = async (session) => {
       ['NORMAL_TEXTURED', 'normal'],
       ['EMISSIVE_TEXTURED', 'emissive'],
       ['OCCLUSION_TEXTURED', 'occlusion'],
+      ['SPECULAR_TEXTURED', 'specular'],
+      ['SPECULAR_COLOR_TEXTURED', 'specularColor'],
+      ['TRANSMISSION_MATERIAL', 'transmission'],
+      ['VOLUME_MATERIAL', 'volume'],
+      ['TRANSMISSION_TEXTURED', 'transmissionMap'],
+      ['THICKNESS_TEXTURED', 'thickness'],
+      ['STUDIO_ENVIRONMENT', 'studioEnvironment'],
+      ['PREFILTERED_ENVIRONMENT', 'prefilteredEnvironment'],
+      ['DIRECTIONAL_LIGHTS', 'directionalLights'],
+      ['PUNCTUAL_LIGHTS', 'punctualLights'],
+      ['ALPHA_BLEND', 'alphaBlend'],
+      ['ALPHA_MASK', 'alphaMask'],
     ].filter(([define]) => defines(define)).map(([, feature]) => feature).sort();
     glProgramLabels.set(program, kind + instanced + (features.length === 0 ? '' : ':' + features.join(',')));
   };

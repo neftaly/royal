@@ -1029,20 +1029,22 @@ export class SurfaceGpuOwner {
             this.#specularFactors[3] = material.specularFactor ?? 1;
             gl.uniform4fv(program.specularFactors, this.#specularFactors);
           }
-          if (program.transmissionFactors !== null && program.attenuationColor !== null) {
+          if (program.transmissionFactors !== null) {
             this.#transmissionFactors[0] = material.transmissionFactor ?? 0;
             this.#transmissionFactors[1] = material.thicknessFactor ?? 0;
             this.#transmissionFactors[2] = material.indexOfRefraction ?? 1.5;
             this.#transmissionFactors[3] = this.#compositeGpu?.sceneColorMaxLod ?? 0;
             gl.uniform4fv(program.transmissionFactors, this.#transmissionFactors);
-            const attenuation = material.attenuationColor ?? DEFAULT_ATTENUATION_COLOR;
-            this.#attenuation[0] = attenuation[0]!;
-            this.#attenuation[1] = attenuation[1]!;
-            this.#attenuation[2] = attenuation[2]!;
-            this.#attenuation[3] = material.attenuationDistance === undefined
-              ? 0
-              : 1 / material.attenuationDistance;
-            gl.uniform4fv(program.attenuationColor, this.#attenuation);
+            if (program.attenuationColor !== null) {
+              const attenuation = material.attenuationColor ?? DEFAULT_ATTENUATION_COLOR;
+              this.#attenuation[0] = attenuation[0]!;
+              this.#attenuation[1] = attenuation[1]!;
+              this.#attenuation[2] = attenuation[2]!;
+              this.#attenuation[3] = material.attenuationDistance === undefined
+                ? 0
+                : 1 / material.attenuationDistance;
+              gl.uniform4fv(program.attenuationColor, this.#attenuation);
+            }
           }
           this.#applyVirtualTexture(program, resource.virtualTexture);
         }

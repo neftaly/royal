@@ -160,9 +160,12 @@ regenerates only the prefix reachable by the greatest visible authored
 roughness; sharp transmission uses level zero, and a roughness texture cannot
 raise the material's multiplicative roughness-factor ceiling. The shader keeps
 the complete-resolution LOD scale, so truncating unreachable suffix levels does
-not change samples within that ceiling. Refraction projects the IOR-bent volume ray back into the current
-view, and attenuation uses its grazing-angle-adjusted travel distance. Samples
-outside the current view fall back to the material's lit reflection result.
+not change samples within that ceiling. Thin transmission samples scene color
+at the current fragment and does not compile volume-only refraction or
+attenuation work. A nonzero-thickness volume variant projects the IOR-bent ray
+back into the current view, and attenuation uses its grazing-angle-adjusted
+travel distance. Samples outside the current view fall back to the material's
+lit reflection result.
 Royal's static profile requires `KHR_materials_volume` to be paired with
 `KHR_materials_transmission`; inert factor-zero transmission and thickness
 textures do not enter the loading lifecycle. For an active nonzero-thickness

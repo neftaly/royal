@@ -36,6 +36,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Examples
 
+- Added compositor screenshots to opt-in performance traces and expanded GPU
+  draw labels to identify transmission, volume, environment, lighting, alpha,
+  and specular shader variants.
 - Added a selectable glTF scene gallery for Sponza, A Beautiful Game, Virtual
   City, and Damaged Helmet, with source-pinned Khronos fixtures and browser
   smoke coverage for every entry.
@@ -45,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Split thin transmission from nonzero-thickness volume at shader selection,
+  keeping refraction and attenuation work out of thin-walled fragments while
+  retaining the same canonical material and composite path.
 - Extended optional `WEBGL_multi_draw` submission to exact-compatible
   transmission and alpha runs after depth sorting, preserving logical draw
   order while cutting the Bistro motion profile from 382 to about 178 WebGL
