@@ -84,6 +84,33 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.clear).toHaveBeenCalledTimes(2);
   });
 
+  it("publishes metadata-only size changes without invalidating backing state", () => {
+    const { callbacks, canvas, root } = harness();
+    const sizeListener = vi.fn();
+    root.subscribeSize(sizeListener);
+    root.setSize({ cssHeight: 10, cssWidth: 20, devicePixelRatio: 1 });
+    callbacks.shift()!();
+    expect(canvas.gl.viewport).toHaveBeenCalledTimes(1);
+
+    root.setSize({ cssHeight: 5, cssWidth: 10, devicePixelRatio: 2 });
+    expect(sizeListener).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(0);
+    root.invalidate();
+    callbacks.shift()!();
+    expect(canvas.gl.viewport).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the first size even when the canvas already has that backing size", () => {
+    const { callbacks, root } = harness();
+    root.setSize({ cssHeight: 150, cssWidth: 300, devicePixelRatio: 1 });
+    expect(callbacks).toHaveLength(1);
+    callbacks.shift()!();
+    expect(root.getSnapshot()).toMatchObject({
+      frame: 1,
+      size: { backingHeight: 150, backingWidth: 300 },
+    });
+  });
+
   it("uploads one canonical surface once and reuses it across frames", () => {
     const { callbacks, canvas, root } = harness();
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });

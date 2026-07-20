@@ -593,7 +593,7 @@ export class CanvasRoot {
       || scene.kind !== "scene"
       || !Array.isArray(scene.nodes)
     ) {
-      throw new TypeError("Royal renderer render requires a validated scene descriptor");
+      throw new TypeError("Royal render requires a validated scene");
     }
     if (scene === this.#surfaceSceneInput) return;
     const camera = this.#cameraSource.prepare(scene.camera);
@@ -628,7 +628,6 @@ export class CanvasRoot {
   setSize(input: CanvasSizeInput): void {
     this.#assertLive("set size");
     const resolved = resolveCanvasSize(input, this.#sizeLimits);
-    this.#sizeInput = { ...input };
     const previous = this.#size;
     const backingChanged = this.#canvas.width !== resolved.backingWidth
       || this.#canvas.height !== resolved.backingHeight;
@@ -640,12 +639,16 @@ export class CanvasRoot {
       || previous?.backingWidth !== resolved.backingWidth
       || previous?.backingHeight !== resolved.backingHeight;
     if (!semanticChanged) return;
+    this.#sizeInput = { ...input };
     this.#size = resolved;
-    this.#state.invalidate();
-    this.#rebuildFrameIntent();
+    if (!previous || backingChanged) this.#rebuildFrameIntent();
+    if (backingChanged) this.#state.invalidate();
     this.#publishSize();
     this.#publish();
-    if (backingChanged && resolved.backingWidth > 0 && resolved.backingHeight > 0) {
+    if (
+      (!previous || backingChanged)
+      && resolved.backingWidth * resolved.backingHeight > 0
+    ) {
       this.#invalidatePresentation();
     }
   }
