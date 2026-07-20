@@ -87,6 +87,7 @@ import {
   canonicalSurfaceIsDoubleSided,
   canonicalTransmissionNeedsMipmaps,
   planGroupedSurfacePasses,
+  planSurfacePasses,
   surfaceDrawPassNeedsDepthOrder,
   type SurfaceDrawPass,
 } from "./surface-pass-plan";
@@ -237,7 +238,7 @@ export class SurfaceGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #onChanged: () => void;
   readonly #onFailure: (error: unknown) => void;
-  #opaqueSurfaces: readonly GpuSurface[] = [];
+  #opaqueSurfaces: GpuSurface[] = [];
   #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
   #transmissionSurfaces: GpuSurface[] = [];
@@ -1241,10 +1242,11 @@ export class SurfaceGpuOwner {
       retainedSurfaceCount,
     );
     const admittedSurfaceCount = geometryPlan.offset + geometryPlan.surfaces.length;
+    const previousSurfaceCount = this.#gpuSurfacesBySceneIndex.length;
+    const appendOnly = retainedSurfaceCount > 0
+      && previousSurfaceCount === geometryPlan.offset;
+    let appendedSurfaces: GpuSurface[] | null = null;
     try {
-      const previousSurfaceCount = this.#gpuSurfacesBySceneIndex.length;
-      const appendOnly = retainedSurfaceCount > 0
-        && previousSurfaceCount === geometryPlan.offset;
       let nextSurfaces: GpuSurface[];
       if (appendOnly) {
         const appended = Array<GpuSurface>(admittedSurfaceCount - previousSurfaceCount);
@@ -1263,6 +1265,7 @@ export class SurfaceGpuOwner {
         }
         geometryPlan.commit();
         for (const resource of appended) this.#gpuSurfacesBySceneIndex.push(resource);
+        appendedSurfaces = appended;
         nextSurfaces = this.#gpuSurfacesBySceneIndex;
       } else {
         const textureInputs = Array<CanonicalTextureBinding | undefined>(
@@ -1295,10 +1298,20 @@ export class SurfaceGpuOwner {
       }
       this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuScene = scene;
-      const grouped = groupSurfacesForDrawing(nextSurfaces);
-      this.#opaqueSurfaces = grouped.opaque;
-      this.#blendedSurfaces = grouped.transparent;
-      this.#transmissionSurfaces = grouped.transmission;
+      if (appendedSurfaces !== null && admittedSurfaceCount < surfaces.length) {
+        const appended = planSurfacePasses(
+          appendedSurfaces,
+          (resource) => resource.surface.material,
+        );
+        this.#opaqueSurfaces.push(...appended.opaque);
+        this.#blendedSurfaces.push(...appended.transparent);
+        this.#transmissionSurfaces.push(...appended.transmission);
+      } else {
+        const grouped = groupSurfacesForDrawing(nextSurfaces);
+        this.#opaqueSurfaces = grouped.opaque;
+        this.#blendedSurfaces = grouped.transparent;
+        this.#transmissionSurfaces = grouped.transmission;
+      }
       this.#planOpaqueMultiDrawRuns();
     } catch (error) {
       geometryPlan.rollback();
@@ -1333,8 +1346,12 @@ export class SurfaceGpuOwner {
       this.#directionalLightCount = 0;
     }
     this.#fullReconcileRequired = false;
-    this.#texturePublicationKeys.clear();
-    if (scene !== null) this.#collectDeferredTexturePublications(scene);
+    if (!appendOnly) this.#texturePublicationKeys.clear();
+    if (scene !== null) this.#collectDeferredTexturePublications(
+      scene,
+      appendOnly ? previousSurfaceCount : 0,
+      admittedSurfaceCount,
+    );
     this.#dirty = this.#admittedSurfaceCount < surfaces.length
       || this.#texturePublicationKeys.size > 0;
   }
@@ -1424,15 +1441,15 @@ export class SurfaceGpuOwner {
     return false;
   }
 
-  #collectDeferredTexturePublications(scene: CanonicalSurfaceScene): void {
-    for (const [key, indices] of scene.textureSurfaceIndices) {
-      for (const index of indices) {
-        const surface = scene.surfaces[index];
-        if (surface !== undefined && this.#materialUploadDeferred(surface.material)) {
-          this.#texturePublicationKeys.add(key);
-          break;
-        }
-      }
+  #collectDeferredTexturePublications(
+    scene: CanonicalSurfaceScene,
+    start: number,
+    end: number,
+  ): void {
+    for (let index = start; index < end; index += 1) {
+      const surface = scene.surfaces[index]!;
+      if (!this.#materialUploadDeferred(surface.material)) continue;
+      for (const key of surface.textureKeys) this.#texturePublicationKeys.add(key);
     }
   }
 
@@ -1458,4 +1475,5 @@ export class SurfaceGpuOwner {
       ? EMPTY_RUN_ENDS
       : planContiguousRunEnds(this.#opaqueSurfaces, surfacesShareMultiDrawState);
   }
+
 }
