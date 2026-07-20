@@ -119,6 +119,7 @@ type GpuSurface = {
   readonly instanceCount: number;
   readonly mode: number;
   program: StandardProgram | UnlitProgram;
+  readonly sceneIndex: number;
   surface: CanonicalDrawSurface;
   readonly vertexArray: WebGLVertexArrayObject;
   readonly virtualTexture?: VirtualTextureGpuBinding;
@@ -273,7 +274,8 @@ export class SurfaceGpuOwner {
   readonly #linearCompositeCapabilities: LinearCompositeCapabilities;
   readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #transmissionFactors = new Float32Array(4);
-  #transmissionCandidates: readonly CanonicalDrawSurface[] = [];
+  readonly #transmissionCandidateIndices: number[] = [];
+  #transmissionVisibility = new Uint8Array(0);
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
   #virtualTexture: VirtualTextureRuntime | null = null;
   #virtualTextureBindingRevision = -1;
@@ -333,7 +335,8 @@ export class SurfaceGpuOwner {
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
-    this.#transmissionCandidates = [];
+    this.#transmissionCandidateIndices.length = 0;
+    this.#transmissionVisibility = new Uint8Array(0);
     this.#terminalPresentationEligible = false;
     this.#terminalPresentationHasAlphaBlend = false;
   }
@@ -421,9 +424,12 @@ export class SurfaceGpuOwner {
     this.#terminalPresentationHasAlphaBlend = scene?.surfaces.some(
       (surface) => surface.material.alphaBlend === true,
     ) ?? false;
-    this.#transmissionCandidates = scene === null
-      ? []
-      : scene.surfaces.filter((surface) => canonicalMaterialHasTransmission(surface.material));
+    this.#transmissionCandidateIndices.length = 0;
+    for (let index = 0; index < (scene?.surfaces.length ?? 0); index += 1) {
+      if (canonicalMaterialHasTransmission(scene!.surfaces[index]!.material)) {
+        this.#transmissionCandidateIndices.push(index);
+      }
+    }
     this.#dirty = true;
     this.#fullReconcileRequired = true;
     this.#texturePublicationKeys.clear();
@@ -499,18 +505,27 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     let transmissionRequested = false;
     let roughSceneColorRequired = false;
-    if (this.#transmissionCandidates.length > 0) {
-      for (const view of views) {
+    const visibilityStride = scene?.surfaces.length ?? 0;
+    const visibilityLength = visibilityStride * views.length;
+    if (this.#transmissionVisibility.length < visibilityLength) {
+      this.#transmissionVisibility = new Uint8Array(visibilityLength);
+    }
+    if (scene !== null && this.#transmissionCandidateIndices.length > 0) {
+      for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
+        const view = views[viewIndex]!;
         frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
-        for (const surface of this.#transmissionCandidates) {
-          if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
+        const visibilityOffset = viewIndex * visibilityStride;
+        for (const sceneIndex of this.#transmissionCandidateIndices) {
+          const surface = scene.surfaces[sceneIndex]!;
+          const visible = worldBoundsVisible(surface.worldBounds, this.#frustumPlanes);
+          this.#transmissionVisibility[visibilityOffset + sceneIndex] = visible ? 1 : 0;
+          if (!visible) continue;
           const material = surface.material;
           if (material.kind === "standard") {
             transmissionRequested = true;
             roughSceneColorRequired ||= canonicalTransmissionNeedsMipmaps(material);
           }
         }
-        if (transmissionRequested && roughSceneColorRequired) break;
       }
     }
     const terminalPresentation = scene !== null && terminalPresentationRequested(
@@ -594,14 +609,16 @@ export class SurfaceGpuOwner {
     ) return presentationWorkPending;
     this.#selectLods(views, scene);
     if (!this.#compositeActive) {
-      for (const view of views) {
+      for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
+        const view = views[viewIndex]!;
         this.#prepareView(view);
-        this.#drawView(view, framebuffer, state, scene, "all");
+        this.#drawView(view, viewIndex, visibilityStride, framebuffer, state, scene, "all");
       }
     } else {
       const composite = this.#compositeGpu;
       if (composite === null) throw new Error("Royal transmission composite owner is missing");
-      for (const view of views) {
+      for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
+        const view = views[viewIndex]!;
         this.#prepareView(view);
         this.#compositeViewport.width = view.viewport.width;
         this.#compositeViewport.height = view.viewport.height;
@@ -610,6 +627,8 @@ export class SurfaceGpuOwner {
         composite.clear(clearColor, state);
         this.#drawView(
           this.#compositeView,
+          viewIndex,
+          visibilityStride,
           composite.framebuffer(),
           state,
           scene,
@@ -618,6 +637,8 @@ export class SurfaceGpuOwner {
         if (transmissionRequested) composite.snapshot(state);
         this.#drawView(
           this.#compositeView,
+          viewIndex,
+          visibilityStride,
           composite.framebuffer(),
           state,
           scene,
@@ -654,7 +675,7 @@ export class SurfaceGpuOwner {
       if (
         this.#scene === null
         || (
-          this.#transmissionCandidates.length === 0
+          this.#transmissionCandidateIndices.length === 0
           && !terminalPresentationRequested(
             this.#terminalPresentationEligible,
             this.#terminalPresentationHasAlphaBlend,
@@ -709,6 +730,8 @@ export class SurfaceGpuOwner {
 
   #drawView(
     frameView: SurfaceFrameView,
+    viewIndex: number,
+    visibilityStride: number,
     framebuffer: WebGLFramebuffer | null,
     state: WebGlStateOwner,
     scene: CanonicalSurfaceScene,
@@ -740,18 +763,23 @@ export class SurfaceGpuOwner {
     }
     const opaqueCount = this.#opaqueSurfaces.length;
     const transmissionCount = this.#transmissionSurfaces.length;
+    const transmissionEnd = opaqueCount + transmissionCount;
     const surfaceCount = opaqueCount + transmissionCount + this.#blendedSurfaces.length;
     const firstIndex = pass === "remaining" ? opaqueCount : 0;
     const endIndex = pass === "opaque" ? opaqueCount : surfaceCount;
     for (let index = firstIndex; index < endIndex; index += 1) {
       const resource = index < opaqueCount
         ? this.#opaqueSurfaces[index]!
-        : index < opaqueCount + transmissionCount
+        : index < transmissionEnd
           ? this.#transmissionSurfaces[index - opaqueCount]!
-          : this.#blendedSurfaces[index - opaqueCount - transmissionCount]!;
+          : this.#blendedSurfaces[index - transmissionEnd]!;
       const surface = resource.surface;
       if (!lodMembershipsSelected(surface.lods, this.#lodSelections)) continue;
-      if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
+      if (index >= opaqueCount && index < transmissionEnd) {
+        if (
+          this.#transmissionVisibility[viewIndex * visibilityStride + resource.sceneIndex] !== 1
+        ) continue;
+      } else if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
       const program = resource.program;
       state.applySurfaceDraw(this.#drawFrame, resource.drawPacket);
       if (initializedProgram !== program.program) {
@@ -1130,6 +1158,7 @@ export class SurfaceGpuOwner {
     ordinaryBindings: readonly GpuTextureBinding[],
     bindingOffset: number,
     scene: CanonicalSurfaceScene | null,
+    sceneIndex: number,
   ): GpuSurface {
     const material = geometrySurface.surface.material;
     const virtualTexture = material.baseColorVirtualAsset !== undefined
@@ -1179,6 +1208,7 @@ export class SurfaceGpuOwner {
       instanceCount: geometrySurface.instanceCount,
       mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
       program,
+      sceneIndex,
       surface: geometrySurface.surface,
       vertexArray: geometrySurface.vertexArray,
       ...(virtualTexture === undefined ? {} : { virtualTexture }),
@@ -1216,6 +1246,7 @@ export class SurfaceGpuOwner {
             ordinaryBindings,
             0,
             scene,
+            index,
           );
         }
         geometryPlan.commit();
@@ -1240,6 +1271,7 @@ export class SurfaceGpuOwner {
             textureBindings,
             index * MATERIAL_TEXTURE_UNITS,
             scene,
+            index,
           );
         }
         geometryPlan.commit();
