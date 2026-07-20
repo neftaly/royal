@@ -151,29 +151,35 @@ const compileShader = (
   return shader;
 };
 
+const STANDARD_VERTEX_FEATURES = SURFACE_TEXTURE_FEATURES
+  | SURFACE_FEATURE_TANGENT
+  | SURFACE_FEATURE_TRANSMISSION_MATERIAL
+  | SURFACE_FEATURE_VERTEX_COLOR;
+
+const UNLIT_VERTEX_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
+  | SURFACE_FEATURE_VERTEX_COLOR
+  | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
+
+/** Pure projection from material features to the subset that changes vertex code. */
+export const surfaceVertexFeatures = (
+  kind: "standard" | "unlit",
+  features: number,
+): number => features & (kind === "standard" ? STANDARD_VERTEX_FEATURES : UNLIT_VERTEX_FEATURES);
+
 const createProgram = (
   gl: WebGL2RenderingContext,
-  vertexSource: string,
+  vertex: WebGLShader,
   fragmentSource: string,
 ): WebGLProgram => {
-  const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
-  let fragment: WebGLShader;
-  try {
-    fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  } catch (error) {
-    gl.deleteShader(vertex);
-    throw error;
-  }
+  const fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
   const program = gl.createProgram();
   if (program === null) {
-    gl.deleteShader(vertex);
     gl.deleteShader(fragment);
     throw new Error("Royal could not allocate a surface program");
   }
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.linkProgram(program);
-  gl.deleteShader(vertex);
   gl.deleteShader(fragment);
   if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
     const detail = gl.getProgramInfoLog(program) ?? "unknown linker failure";
@@ -239,8 +245,8 @@ const textureCoordinatesProgram = (
 
 const createUnlitProgram = (
   gl: WebGL2RenderingContext,
+  vertex: WebGLShader,
   features: number,
-  instanced: boolean,
   alphaMasked: boolean,
   doubleSided: boolean,
   virtualDeclarations: string,
@@ -248,8 +254,8 @@ const createUnlitProgram = (
 ): UnlitProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(UNLIT_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, "", transmissionSource),
-    shaderVariant(UNLIT_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
+    vertex,
+    shaderVariant(UNLIT_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
@@ -278,8 +284,8 @@ const createUnlitProgram = (
 
 const createStandardProgram = (
   gl: WebGL2RenderingContext,
+  vertex: WebGLShader,
   features: number,
-  instanced: boolean,
   alphaMasked: boolean,
   doubleSided: boolean,
   virtualDeclarations: string,
@@ -287,8 +293,8 @@ const createStandardProgram = (
 ): StandardProgram => {
   const program = createProgram(
     gl,
-    shaderVariant(STANDARD_VERTEX_SHADER, features, instanced, alphaMasked, doubleSided, "", transmissionSource),
-    shaderVariant(STANDARD_FRAGMENT_SHADER, features, instanced, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
+    vertex,
+    shaderVariant(STANDARD_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
   );
   return {
     alphaMasked,
@@ -424,6 +430,7 @@ export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   #initializedSamplers = new WeakSet<WebGLProgram>();
   readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
+  readonly #vertexShaders = new Map<string, WebGLShader>();
   #transmissionSource = EMPTY_TRANSMISSION_SHADER_SOURCE;
   #virtualDeclarations = "";
 
@@ -436,6 +443,7 @@ export class SurfaceProgramOwner {
       this.#gl.deleteProgram(retained.program);
     }
     this.#programs.clear();
+    this.#deleteVertexShaders();
   }
 
   get(
@@ -455,9 +463,10 @@ export class SurfaceProgramOwner {
     );
     const retained = this.#programs.get(key);
     if (retained !== undefined) return retained;
+    const vertex = this.#vertexShader(kind, features, instanced);
     const created = kind === "unlit"
-      ? createUnlitProgram(this.#gl, features, instanced, alphaMasked, false, this.#virtualDeclarations, this.#transmissionSource)
-      : createStandardProgram(this.#gl, features, instanced, alphaMasked, twoSided, this.#virtualDeclarations, this.#transmissionSource);
+      ? createUnlitProgram(this.#gl, vertex, features, alphaMasked, false, this.#virtualDeclarations, this.#transmissionSource)
+      : createStandardProgram(this.#gl, vertex, features, alphaMasked, twoSided, this.#virtualDeclarations, this.#transmissionSource);
     this.#programs.set(key, created);
     return created;
   }
@@ -483,6 +492,7 @@ export class SurfaceProgramOwner {
 
   invalidate(): void {
     this.#programs.clear();
+    this.#vertexShaders.clear();
     this.#initializedSamplers = new WeakSet<WebGLProgram>();
   }
 
@@ -490,6 +500,7 @@ export class SurfaceProgramOwner {
     if (this.#virtualDeclarations === declarations) return;
     for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
     this.#programs.clear();
+    this.#deleteVertexShaders();
     this.#initializedSamplers = new WeakSet<WebGLProgram>();
     this.#virtualDeclarations = declarations;
   }
@@ -498,7 +509,34 @@ export class SurfaceProgramOwner {
     if (this.#transmissionSource === source) return;
     for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
     this.#programs.clear();
+    this.#deleteVertexShaders();
     this.#initializedSamplers = new WeakSet<WebGLProgram>();
     this.#transmissionSource = source;
+  }
+
+  #deleteVertexShaders(): void {
+    for (const shader of this.#vertexShaders.values()) this.#gl.deleteShader(shader);
+    this.#vertexShaders.clear();
+  }
+
+  #vertexShader(
+    kind: "standard" | "unlit",
+    features: number,
+    instanced: boolean,
+  ): WebGLShader {
+    const source = shaderVariant(
+      kind === "standard" ? STANDARD_VERTEX_SHADER : UNLIT_VERTEX_SHADER,
+      surfaceVertexFeatures(kind, features),
+      instanced,
+      false,
+      false,
+      "",
+      this.#transmissionSource,
+    );
+    const retained = this.#vertexShaders.get(source);
+    if (retained !== undefined) return retained;
+    const shader = compileShader(this.#gl, this.#gl.VERTEX_SHADER, source);
+    this.#vertexShaders.set(source, shader);
+    return shader;
   }
 }

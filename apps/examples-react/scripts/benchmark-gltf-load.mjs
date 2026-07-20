@@ -109,6 +109,9 @@ const installBenchmarkHooks = async (session) => {
     compressedTexSubImage2D: 0,
     copyTexImage2D: 0,
     copyTexSubImage2D: 0,
+    compileShader: 0,
+    createProgram: 0,
+    createShader: 0,
     createTexture: 0,
     deleteTexture: 0,
     drawArrays: 0,
@@ -116,6 +119,7 @@ const installBenchmarkHooks = async (session) => {
     drawElements: 0,
     drawElementsInstanced: 0,
     generateMipmap: 0,
+    linkProgram: 0,
     texImage2D: 0,
     texStorage2D: 0,
     texSubImage2D: 0,
@@ -398,6 +402,9 @@ const installBenchmarkHooks = async (session) => {
   };
   const patchPrototype = (prototype) => {
     patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
+    patch(prototype, 'compileShader', () => { counters.compileShader += 1; });
+    patch(prototype, 'createProgram', () => { counters.createProgram += 1; });
+    patch(prototype, 'createShader', () => { counters.createShader += 1; });
     patch(prototype, 'createTexture', () => { counters.createTexture += 1; });
     patch(prototype, 'deleteTexture', () => { counters.deleteTexture += 1; });
     patch(prototype, 'drawArrays', (_args, gl) => { counters.drawArrays += 1; recordDraw(gl); });
@@ -455,6 +462,7 @@ const installBenchmarkHooks = async (session) => {
       recordTextureUpload();
     });
     patch(prototype, 'generateMipmap', () => { counters.generateMipmap += 1; });
+    patch(prototype, 'linkProgram', () => { counters.linkProgram += 1; });
     patch(prototype, 'getProgramParameter', () => {});
   };
   patchPrototype(globalThis.WebGLRenderingContext?.prototype);
@@ -1279,6 +1287,8 @@ const printSummary = (report) => {
       ` generatedVtPages=${metrics.vt.generatedPagePrep?.generatedPageRequests ?? 'n/a'}` +
       ` textures=${metrics.textures.allocations}` +
       ` textureUploads=${metrics.textures.uploadCalls}` +
+      ` programs=${metrics.gl.createProgram ?? 0}` +
+      ` shaderCompiles=${metrics.gl.compileShader ?? 0}` +
       ` loadFrameP95=${metrics.loadHitches?.frameStats?.p95Ms ?? 'n/a'}ms` +
       ` loadFrameMax=${metrics.loadHitches?.frameStats?.maxMs ?? 'n/a'}ms` +
       ` loadLongTasks=${metrics.loadHitches?.longTasks?.count ?? 'n/a'}` +
