@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import {
   createBrowserTextureDecoder,
   decodeTextureWithBrowser,
@@ -372,11 +373,11 @@ describe("browser texture decode shell", () => {
       kind: "asset",
       src,
     }, signal));
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
     releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
-    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(3));
     for (const release of releases) {
       release({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
     }

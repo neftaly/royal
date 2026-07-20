@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import { AsyncPreparationOwner } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 
 describe("asynchronous preparation owner", () => {
@@ -13,10 +14,10 @@ describe("asynchronous preparation owner", () => {
       return new Promise<number>((resolve) => finishes.push(() => resolve(index)));
     }));
 
-    await vi.waitFor(() => expect(starts).toEqual([0, 1]));
+    await waitFor(() => expect(starts).toEqual([0, 1]));
     expect(owner.snapshot()).toEqual({ activeJobs: 2, jobLimit: 2, queuedJobs: 1 });
     finishes[0]!();
-    await vi.waitFor(() => expect(starts).toEqual([0, 1, 2]));
+    await waitFor(() => expect(starts).toEqual([0, 1, 2]));
     finishes[1]!();
     finishes[2]!();
     await expect(Promise.all(jobs)).resolves.toEqual([0, 1, 2]);
@@ -34,7 +35,7 @@ describe("asynchronous preparation owner", () => {
     }));
     const secondWork = vi.fn(async () => undefined);
     const second = owner.run(secondController.signal, secondWork);
-    await vi.waitFor(() => expect(owner.snapshot().activeJobs).toBe(1));
+    await waitFor(() => expect(owner.snapshot().activeJobs).toBe(1));
     secondController.abort();
     await expect(second).rejects.toMatchObject({ name: "AbortError" });
     expect(secondWork).not.toHaveBeenCalled();
@@ -52,7 +53,7 @@ describe("asynchronous preparation owner", () => {
       finishFirst = resolve;
     }));
     const second = owner.run(secondController.signal, async () => undefined);
-    await vi.waitFor(() => expect(owner.snapshot()).toMatchObject({ activeJobs: 1, queuedJobs: 1 }));
+    await waitFor(() => expect(owner.snapshot()).toMatchObject({ activeJobs: 1, queuedJobs: 1 }));
     owner.dispose();
     await expect(second).rejects.toMatchObject({ name: "AbortError" });
     finishFirst?.();

@@ -1,5 +1,6 @@
 import { prefilteredEnvironment } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import {
   PrefilteredEnvironmentAssetOwner,
   prefilteredEnvironmentAssetKey,
@@ -44,7 +45,7 @@ describe("prefiltered environment asset owner", () => {
     expect(owner.getSnapshot(firstEnvironment)).toEqual({ state: "loading" });
     owner.reconcile(secondEnvironment);
     expect(requests[0]!.signal.aborted).toBe(true);
-    await vi.waitFor(() => expect(owner.getSnapshot(secondEnvironment)).toMatchObject({
+    await waitFor(() => expect(owner.getSnapshot(secondEnvironment)).toMatchObject({
       mipCount: 2,
       size: 2,
       state: "ready",
@@ -72,7 +73,7 @@ describe("prefiltered environment asset owner", () => {
     const environment = prefilteredEnvironment({ src: "/broken.ktx" });
     owner.reconcile(environment);
 
-    await vi.waitFor(() => expect(owner.getSnapshot(environment)).toMatchObject({
+    await waitFor(() => expect(owner.getSnapshot(environment)).toMatchObject({
       error: expect.stringMatching(/truncated/u),
       state: "error",
     }));

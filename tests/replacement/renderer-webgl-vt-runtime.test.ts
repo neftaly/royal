@@ -8,6 +8,7 @@ import {
   virtualTexture,
 } from "@royal/renderer-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
@@ -51,7 +52,7 @@ describe("browser virtual texture runtime", () => {
     const viewport = { height: 1024, width: 1024, x: 0, y: 0 };
 
     runtime.setScene(prepared);
-    await vi.waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
     runtime.update([{ view: identity, viewProjection: identity, viewport }]);
     expect(texStorage2D).not.toHaveBeenCalled();
 
@@ -99,9 +100,9 @@ describe("browser virtual texture runtime", () => {
     const viewport = { height: 1024, width: 1024, x: 0, y: 0 };
 
     runtime.setScene(prepared);
-    await vi.waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
     runtime.update([{ view: identity, viewProjection: identity, viewport }]);
-    await vi.waitFor(() => expect(pageSignals.length).toBeGreaterThan(0));
+    await waitFor(() => expect(pageSignals.length).toBeGreaterThan(0));
 
     const offscreen = identityMat4();
     offscreen[12] = 100;
@@ -111,7 +112,7 @@ describe("browser virtual texture runtime", () => {
     expect(runtime.snapshot(texture).pendingPages).toBe(0);
 
     runtime.update([{ view: identity, viewProjection: identity, viewport }]);
-    await vi.waitFor(() => expect(pageSignals).toHaveLength(2));
+    await waitFor(() => expect(pageSignals).toHaveLength(2));
     await Promise.resolve();
     expect(pageSignals[1]!.aborted).toBe(false);
     expect(runtime.snapshot(texture).pendingPages).toBe(1);
@@ -165,7 +166,7 @@ describe("browser virtual texture runtime", () => {
     };
 
     runtime.setScene(prepared);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(textures.every((texture) => runtime.snapshot(texture).state === "ready")).toBe(true);
     });
     runtime.update([view]);
@@ -173,7 +174,7 @@ describe("browser virtual texture runtime", () => {
       .toEqual(["0", "1", "2", "3"]);
 
     pageReads[0]!.resolve(new Response(new Blob([new Uint8Array([1])])));
-    await vi.waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce());
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce());
     runtime.update([view]);
 
     expect(new URL(pageReads[4]!.url).pathname.split("/")[1]).toBe("4");
@@ -237,15 +238,15 @@ describe("browser virtual texture runtime", () => {
     };
 
     runtime.setScene(prepared);
-    await vi.waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
     expect(scheduled).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     runtime.update([view]);
-    await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(3));
     expect(scheduled.mock.calls.length).toBeGreaterThan(1);
 
     runtime.update([view]);
-    await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(12));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(12));
     texSubImage2D.mockClear();
     changed.mockClear();
 
@@ -331,7 +332,7 @@ describe("browser virtual texture runtime", () => {
 
     runtime.setScene(prepared);
     runtime.update([view]);
-    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+    await waitFor(() => expect(changed).toHaveBeenCalled());
     for (let attempt = 0; attempt < 8 && runtime.automaticBinding(asset) === undefined; attempt += 1) {
       runtime.update([view]);
       await Promise.resolve();

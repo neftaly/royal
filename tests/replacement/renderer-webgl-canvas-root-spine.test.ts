@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import {
   mesh,
   imageTexture,
@@ -240,7 +241,7 @@ describe("clear-only canvas root", () => {
 
     const source = {} as ImageBitmap;
     resolveDecode?.({ height: 32, source, width: 64 });
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture)).toEqual({
+    await waitFor(() => expect(root.getTextureAssetSnapshot(texture)).toEqual({
       height: 32,
       state: "ready",
       width: 64,
@@ -279,7 +280,7 @@ describe("clear-only canvas root", () => {
       })],
     }));
 
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
     callbacks.shift()!();
     expect(canvas.gl.compressedTexImage2D).toHaveBeenCalledTimes(4);
     expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
@@ -328,14 +329,14 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
 
     resolvers.get("/one.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
-    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    await waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
 
     now = 10;
     resolvers.get("/two.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
-    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    await waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
@@ -372,7 +373,7 @@ describe("clear-only canvas root", () => {
         }),
       ],
     }));
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
     callbacks.shift()!();
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.uniform1i).toHaveBeenCalledTimes(1);
@@ -579,7 +580,7 @@ describe("clear-only canvas root", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     vi.mocked(canvas.gl.uniform4fv).mockClear();
     vi.mocked(canvas.gl.uniformMatrix4fv).mockClear();
     callbacks.shift()!();
@@ -616,7 +617,7 @@ describe("clear-only canvas root", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
@@ -643,7 +644,7 @@ describe("clear-only canvas root", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
@@ -676,7 +677,7 @@ describe("clear-only canvas root", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(multiDrawElementsWEBGL).not.toHaveBeenCalled();
@@ -726,12 +727,12 @@ describe("clear-only canvas root", () => {
 
     const secondSource = {} as ImageBitmap;
     resolvers.get("/second.png")!({ height: 8, source: secondSource, width: 8 });
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[1]!).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(textures[1]!).state).toBe("ready"));
     callbacks.shift()!();
 
     const firstSource = {} as ImageBitmap;
     resolvers.get("/first.png")!({ height: 8, source: firstSource, width: 8 });
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(textures[0]!).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(textures[0]!).state).toBe("ready"));
     callbacks.shift()!();
 
     const created = vi.mocked(canvas.gl.createTexture).mock.results.map((result) => result.value);

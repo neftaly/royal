@@ -15,6 +15,7 @@ import {
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
+import { waitFor } from "./support/wait-for";
 import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { TextureSourceRef } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
@@ -50,13 +51,13 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.shaderSource.mock.calls.some(([, shader]) =>
       String(shader).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
 
-    await vi.waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment)).toEqual({
+    await waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment)).toEqual({
       mipCount: 2,
       provenance: "fixture-2",
       size: 2,
       state: "ready",
     }));
-    await vi.waitFor(() => {
+    await waitFor(() => {
       flushScheduledFrames();
       expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(12);
     });
@@ -90,7 +91,7 @@ describe("canvas root asset publication", () => {
       })],
     }));
 
-    await vi.waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment).state)
+    await waitFor(() => expect(root.getPrefilteredEnvironmentSnapshot(environment).state)
       .toBe("ready"));
     expect(scheduledFailures).toHaveLength(1);
     expect(root.getSnapshot().lastFrameFailure).toMatch(/prefiltered environment/u);
@@ -129,8 +130,8 @@ describe("canvas root asset publication", () => {
     });
     expect(decodeTexture).not.toHaveBeenCalled();
     finishEnvironment?.(environmentKtx1Fixture(2).source);
-    await vi.waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    await waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
     expect(root.getSnapshot().resources.asyncPreparation).toEqual({
       activeJobs: 0,
       jobLimit: 1,
@@ -169,7 +170,7 @@ describe("canvas root asset publication", () => {
       expect(reconcile).toHaveBeenCalledTimes(1);
 
       resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 32 });
-      await vi.waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
+      await waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
       callbacks.shift()!();
       expect(reconcile).toHaveBeenCalledTimes(1);
       expect(retain).toHaveBeenCalledTimes(20 * 9);
@@ -222,9 +223,9 @@ describe("canvas root asset publication", () => {
       ],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(third).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(third).state).toBe("ready"));
 
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
@@ -274,7 +275,7 @@ describe("canvas root asset publication", () => {
       })),
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(textures.every(
+    await waitFor(() => expect(textures.every(
       (texture) => root.getTextureAssetSnapshot(texture).state === "ready",
     )).toBe(true));
 
@@ -340,8 +341,8 @@ describe("canvas root asset publication", () => {
       ],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
-    await vi.waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(first).state).toBe("ready"));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(second).state).toBe("ready"));
     draws.length = 0;
 
     callbacks.shift()!();
@@ -400,7 +401,7 @@ describe("canvas root asset publication", () => {
     });
     expect(canvas.gl.bufferData).not.toHaveBeenCalled();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
         bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
         primitiveCount: 1,
@@ -440,7 +441,7 @@ describe("canvas root asset publication", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
@@ -485,7 +486,7 @@ describe("canvas root asset publication", () => {
       pickingId: "fleet",
     });
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
     expect(canvas.gl.drawElementsInstanced).toHaveBeenLastCalledWith(
       canvas.gl.TRIANGLES,
@@ -537,7 +538,7 @@ describe("canvas root asset publication", () => {
         nodes: [node],
       }));
       callbacks.shift()!();
-      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+      await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
       callbacks.shift()!();
       setGpuScene.mockClear();
       const patches = canvas.gl.bufferSubData.mock.calls.length;
@@ -578,7 +579,7 @@ describe("canvas root asset publication", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
@@ -603,7 +604,7 @@ describe("canvas root asset publication", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
@@ -631,7 +632,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
 
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
     expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       state: "streaming",
       textures: { failed: 0, loading: 1, ready: 0, total: 1 },
@@ -646,7 +647,7 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
 
     resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 64 });
-    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    await waitFor(() => expect(callbacks).toHaveLength(1));
     expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       state: "ready",
       textures: { failed: 0, loading: 0, ready: 1, total: 1 },
@@ -686,7 +687,7 @@ describe("canvas root asset publication", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
     callbacks.shift()!();
     expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
       const values = Array.from(value);
@@ -696,7 +697,7 @@ describe("canvas root asset publication", () => {
 
     vi.mocked(canvas.gl.uniform4fv).mockClear();
     resolveDecode?.({ height: 8, source: {} as ImageBitmap, width: 8 });
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     callbacks.shift()!();
     expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
       const values = Array.from(value);
@@ -739,7 +740,7 @@ describe("canvas root asset publication", () => {
       root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
       root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
       callbacks.shift()!();
-      await vi.waitFor(() => expect(decodes.size).toBe(2));
+      await waitFor(() => expect(decodes.size).toBe(2));
       callbacks.shift()!();
       const initialProgramLookups = getProgram.mock.calls.length;
 
@@ -748,7 +749,7 @@ describe("canvas root asset publication", () => {
         source: {} as ImageBitmap,
         width: 8,
       });
-      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+      await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
         textures: { loading: 1, ready: 1 },
       }));
       callbacks.shift()!();
@@ -759,7 +760,7 @@ describe("canvas root asset publication", () => {
         source: {} as ImageBitmap,
         width: 8,
       });
-      await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+      await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
       callbacks.shift()!();
       expect(getProgram.mock.calls.length).toBeGreaterThan(initialProgramLookups);
     } finally {
@@ -787,7 +788,7 @@ describe("canvas root asset publication", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [1, 2, 3] }), nodes: [node] }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(decodeTexture).toHaveBeenCalled());
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalled());
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "embedded-asset", mimeType: "image/png" }),
       expect.any(AbortSignal),
@@ -796,7 +797,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     resolveDecode?.({ height: 8, source: {} as ImageBitmap, width: 8 });
-    await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+    await waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
@@ -831,7 +832,7 @@ describe("canvas root asset publication", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, devicePixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("streaming"));
 
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ src: "/models/cutout.png" }),
@@ -847,7 +848,7 @@ describe("canvas root asset publication", () => {
       source: {} as ImageBitmap,
       width: 1,
     });
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).state).toBe("ready"));
     expect(root.pick({ clientX: 150, clientY: 100 })).toBeUndefined();
   });
 
@@ -864,7 +865,7 @@ describe("canvas root asset publication", () => {
       nodes: [node],
     }));
     callbacks.shift()!();
-    await vi.waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       state: "degraded",
       textures: { failed: 1, loading: 0, ready: 0, total: 1 },
     }));

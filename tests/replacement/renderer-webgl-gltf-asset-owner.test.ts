@@ -1,5 +1,6 @@
 import { gltf, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
@@ -40,7 +41,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/models/large.gltf");
     owner.reconcile([node]);
-    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
     expect(prepare).toHaveBeenCalledWith(
       bytes,
       expect.any(String),
@@ -65,7 +66,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/models/triangle.gltf");
     owner.reconcile([node]);
-    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
     expect(readResource).toHaveBeenCalledWith(
       "/models/triangle.bin",
       expect.any(AbortSignal),
@@ -116,7 +117,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/parallel.gltf");
     owner.reconcile([node]);
-    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
     const snapshot = owner.getSnapshot(node.asset);
     expect(snapshot).toMatchObject({
       state: "ready",
@@ -145,7 +146,7 @@ describe("glTF asset lifecycle owner", () => {
     expect(owner.getSnapshot(first.asset)).toEqual({ state: "loading" });
     expect(listener).toHaveBeenCalledTimes(1);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(owner.getSnapshot(first.asset)).toEqual({
         bounds: { max: [2, 3, 0], min: [0, 1, 0] },
         primitiveCount: 1,
@@ -219,7 +220,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/textured.gltf");
     owner.reconcile([node]);
-    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("streaming"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("streaming"));
     owner.refreshTextureProgress(() => ({ error: "decode failed", state: "error" }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       state: "degraded",
@@ -261,7 +262,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/broken.glb");
     owner.reconcile([node]);
-    await vi.waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("error"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("error"));
     const snapshot = owner.getSnapshot(node.asset);
     expect(snapshot).toMatchObject({ state: "error" });
     if (snapshot.state === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);

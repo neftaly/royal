@@ -1,5 +1,6 @@
 import { imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import {
   decodedTextureHandoffBytes,
   decodedTextureKey,
@@ -43,7 +44,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decodedTextureKey(first)).toBe(decodedTextureKey(second));
     owner.reconcile([first, second]);
     expect(owner.getSnapshot(first)).toEqual({ state: "loading" });
-    await vi.waitFor(() => expect(owner.getSnapshot(second)).toEqual({
+    await waitFor(() => expect(owner.getSnapshot(second)).toEqual({
       height: 32,
       state: "ready",
       width: 64,
@@ -71,12 +72,12 @@ describe("ordinary texture asset lifecycle owner", () => {
     owner.reconcile([first, second]);
 
     completions.get(second.src)!(secondDecoded);
-    await vi.waitFor(() => expect(owner.getSnapshot(second).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(second).state).toBe("ready"));
     expect(owner.decoded(first)).toBeUndefined();
     expect(owner.decoded(second)).toBe(secondDecoded);
 
     completions.get(first.src)!(firstDecoded);
-    await vi.waitFor(() => expect(owner.getSnapshot(first).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(first).state).toBe("ready"));
     expect(owner.decoded(first)).toBe(firstDecoded);
     expect(owner.decoded(second)).toBe(secondDecoded);
   });
@@ -93,7 +94,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/large.avif");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
 
     owner.releaseUploaded([textureStorageKey(asset)]);
 
@@ -114,7 +115,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/automatic-vt.png");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
 
     const lease = owner.acquireDecoded(asset);
     expect(lease?.source).toBe(source);
@@ -137,7 +138,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/disposed-automatic-vt.png");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
     const lease = owner.acquireDecoded(asset);
 
     owner.dispose();
@@ -160,7 +161,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/leased-cutout.png");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
     const lease = owner.acquireDecoded(asset);
     owner.releaseUploaded([textureStorageKey(asset)]);
 
@@ -170,7 +171,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(firstClose).not.toHaveBeenCalled();
 
     lease?.release();
-    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    await waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
     expect(decode).toHaveBeenCalledTimes(2);
     expect(firstClose).toHaveBeenCalledOnce();
   });
@@ -191,7 +192,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     const asset = imageTexture("/cutout.png");
 
     owner.reconcile([asset], [asset]);
-    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    await waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
     expect(decode.mock.calls[0]![3]).toBe(true);
     owner.releaseUploaded([textureStorageKey(asset)]);
     expect(close).toHaveBeenCalledOnce();
@@ -215,12 +216,12 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/late-cutout.png");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
     owner.releaseUploaded([textureStorageKey(asset)]);
 
     owner.reconcile([asset], [asset]);
 
-    await vi.waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    await waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
     expect(decode).toHaveBeenCalledTimes(2);
     expect(decode.mock.calls[1]![3]).toBe(true);
   });
@@ -235,7 +236,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/adapter-without-alpha.png");
     owner.reconcile([asset], [asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
     owner.releaseUploaded([textureStorageKey(asset)]);
     await Promise.resolve();
 
@@ -260,16 +261,16 @@ describe("ordinary texture asset lifecycle owner", () => {
     );
 
     owner.reconcile(assets);
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
     await Promise.resolve();
     expect(decode).toHaveBeenCalledTimes(8);
 
     completions[0]!(decoded());
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
     expect(owner.getSnapshot(assets[0]!).state).toBe("ready");
 
     completions[1]!(decoded());
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
     expect(owner.getSnapshot(assets[1]!).state).toBe("ready");
     owner.dispose();
   });
@@ -296,15 +297,15 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
 
     owner.reconcile(assets);
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
     completions[0]!(large());
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
     completions[1]!(large());
-    await vi.waitFor(() => expect(owner.getSnapshot(assets[1]!).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(assets[1]!).state).toBe("ready"));
     expect(decode).toHaveBeenCalledTimes(9);
 
     owner.releaseUploaded([textureStorageKey(assets[0]!)]);
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
     owner.dispose();
   });
 
@@ -338,7 +339,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     const assets = [imageTexture("/a.avif"), imageTexture("/b.avif")];
 
     owner.reconcile(assets);
-    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(2));
 
     expect(decode.mock.calls[0]![2]).toBe(512);
     expect(decode.mock.calls[1]![2]).toBe(512);
@@ -358,14 +359,14 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/restorable.avif");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
     owner.releaseUploaded([textureStorageKey(asset)]);
 
     owner.invalidateResidency();
 
     expect(owner.decoded(asset)).toBeUndefined();
     expect(owner.getSnapshot(asset)).toEqual({ state: "loading" });
-    await vi.waitFor(() => expect(owner.decoded(asset)).toBe(second));
+    await waitFor(() => expect(owner.decoded(asset)).toBe(second));
     expect(decode).toHaveBeenCalledTimes(2);
     expect(firstClose).toHaveBeenCalledTimes(1);
   });
@@ -381,7 +382,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/over-budget.avif");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("ready"));
 
     owner.rejectGpuStorage([textureStorageKey(asset)]);
 
@@ -432,7 +433,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
     const asset = imageTexture("/broken.png");
     owner.reconcile([asset]);
-    await vi.waitFor(() => expect(owner.getSnapshot(asset).state).toBe("error"));
+    await waitFor(() => expect(owner.getSnapshot(asset).state).toBe("error"));
     const snapshot = owner.getSnapshot(asset);
     if (snapshot.state === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);
     owner.reconcile([asset]);

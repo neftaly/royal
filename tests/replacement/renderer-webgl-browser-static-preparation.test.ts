@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import {
   prepareStaticGltfInBrowser,
   shouldPrepareStaticGltfInWorker,
@@ -68,7 +69,7 @@ describe("browser static glTF preparation", () => {
     worker.dispatchEvent(new MessageEvent("message", {
       data: { id: 7, kind: "read-resource", uri: "/asset.bin" },
     }));
-    await vi.waitFor(() => expect(readResource).toHaveBeenCalledWith("/asset.bin"));
+    await waitFor(() => expect(readResource).toHaveBeenCalledWith("/asset.bin"));
     expect(worker.postMessage).toHaveBeenLastCalledWith(
       { bytes: external, id: 7, kind: "read-resource-ready" },
       [external.buffer],
