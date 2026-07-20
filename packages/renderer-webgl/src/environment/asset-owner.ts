@@ -1,6 +1,7 @@
 import type { PrefilteredEnvironmentLight } from "@royal/renderer-core";
 import type { PreparedRoyalEnvironment } from "./royal-environment-ktx1";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
 export type PrefilteredEnvironmentAssetSnapshot =
   | Readonly<{ state: "idle" }>
@@ -63,7 +64,7 @@ const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare
 export class PrefilteredEnvironmentAssetOwner {
   #active: ActiveEnvironment | undefined;
   #disposed = false;
-  readonly #listeners = new Map<string, Set<() => void>>();
+  readonly #listeners = new KeyedRetainedListeners<string>();
   readonly #options: Required<PrefilteredEnvironmentAssetOwnerOptions>;
 
   constructor(options: PrefilteredEnvironmentAssetOwnerOptions) {
@@ -134,36 +135,11 @@ export class PrefilteredEnvironmentAssetOwner {
     }
     if (this.#disposed) return () => undefined;
     const key = prefilteredEnvironmentAssetKey(environment);
-    let listeners = this.#listeners.get(key);
-    if (listeners === undefined) {
-      listeners = new Set();
-      this.#listeners.set(key, listeners);
-    }
-    listeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      listeners?.delete(listener);
-      if (listeners?.size === 0) this.#listeners.delete(key);
-    };
+    return this.#listeners.subscribe(key, listener);
   }
 
   #publish(key: string): void {
-    const listeners = this.#listeners.get(key);
-    if (listeners === undefined) return;
-    for (const listener of Array.from(listeners)) {
-      if (!listeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#options.onListenerError(error);
-        } catch {
-          // Diagnostic sinks cannot interrupt later asset observers.
-        }
-      }
-    }
+    this.#listeners.publish(key, this.#options.onListenerError);
   }
 
   async #load(active: ActiveEnvironment, src: string): Promise<void> {

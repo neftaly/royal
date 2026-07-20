@@ -7,6 +7,7 @@ import type {
 import type { Ktx2Etc2Level } from "./etc2-storage";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { RetainedFifo } from "../resource/retained-fifo";
+import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
@@ -205,7 +206,7 @@ export class TextureAssetOwner {
   readonly #decodeQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
   readonly #keys = new WeakMap<TextureSourceRef, string>();
-  readonly #listeners = new Map<string, Set<() => void>>();
+  readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
   readonly #platform: TextureAssetOwnerPlatform;
   readonly #storageBudgetBytes: number | undefined;
@@ -445,37 +446,11 @@ export class TextureAssetOwner {
     }
     const key = this.#key(asset);
     if (this.#disposed) return () => undefined;
-    let listeners = this.#listeners.get(key);
-    if (listeners === undefined) {
-      listeners = new Set();
-      this.#listeners.set(key, listeners);
-    }
-    listeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      listeners?.delete(listener);
-      if (listeners?.size === 0) this.#listeners.delete(key);
-    };
+    return this.#listeners.subscribe(key, listener);
   }
 
   #publish(key: string): void {
-    const listeners = this.#listeners.get(key);
-    if (listeners === undefined) return;
-    const snapshot = [...listeners];
-    for (const listener of snapshot) {
-      if (!listeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#platform.onListenerError(error);
-        } catch {
-          // Diagnostic sinks cannot interrupt later asset observers.
-        }
-      }
-    }
+    this.#listeners.publish(key, this.#platform.onListenerError);
   }
 
   #key(asset: TextureSourceRef): string {

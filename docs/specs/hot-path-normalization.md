@@ -107,6 +107,12 @@ Owner-held workspaces reuse capacity. Resource recipes name semantic identity,
 representation revision, and requirements; reconciliation resolves them to
 generation-safe numeric handles.
 
+Root/frame and focused resource observation use retained listener entries.
+Publication captures the current retained length, so removals take effect
+immediately and additions wait for the next publication without allocating a
+snapshot array. Listener and diagnostic failures remain isolated by the same
+owner; semantic lifecycle reducers do not invoke observers themselves.
+
 URLs and strings end at content lookup. Diagnostic strings are constructed on
 first failure or cold snapshot reads, not for successful draws.
 

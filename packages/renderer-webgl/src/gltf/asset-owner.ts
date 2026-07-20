@@ -10,6 +10,7 @@ import type {
   TextureSourceRef,
 } from "../texture/asset-owner";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
 export type GltfTextureProgress = Readonly<{
   failed: number;
@@ -161,7 +162,7 @@ export const readGltfResourceWithFetch = async (
 export class GltfAssetOwner {
   #disposed = false;
   readonly #entries = new Map<string, AssetEntry>();
-  readonly #listeners = new Map<string, Set<() => void>>();
+  readonly #listeners = new KeyedRetainedListeners<string>();
   readonly #platform: GltfAssetOwnerPlatform;
 
   constructor(platform: GltfAssetOwnerPlatform) {
@@ -233,37 +234,11 @@ export class GltfAssetOwner {
     }
     const key = gltfAssetKey(asset);
     if (this.#disposed) return () => undefined;
-    let listeners = this.#listeners.get(key);
-    if (listeners === undefined) {
-      listeners = new Set();
-      this.#listeners.set(key, listeners);
-    }
-    listeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      listeners?.delete(listener);
-      if (listeners?.size === 0) this.#listeners.delete(key);
-    };
+    return this.#listeners.subscribe(key, listener);
   }
 
   #publish(key: string): void {
-    const listeners = this.#listeners.get(key);
-    if (listeners === undefined) return;
-    const snapshot = Array.from(listeners);
-    for (const listener of snapshot) {
-      if (!listeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#platform.onListenerError(error);
-        } catch {
-          // Diagnostic sinks cannot interrupt later asset observers.
-        }
-      }
-    }
+    this.#listeners.publish(key, this.#platform.onListenerError);
   }
 
   #start(asset: GltfAssetRef, key: string): void {

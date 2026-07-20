@@ -98,6 +98,10 @@ import {
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
+import {
+  KeyedRetainedListeners,
+  RetainedListeners,
+} from "../resource/retained-listeners";
 
 export type { CanvasRootOptions } from "./root-options";
 
@@ -298,7 +302,7 @@ export class CanvasRoot {
     return state === "idle" || state === "loading";
   };
   #lastFrameFailure: string | undefined;
-  readonly #listeners = new Set<() => void>();
+  readonly #listeners = new RetainedListeners();
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, () => void>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
@@ -310,7 +314,7 @@ export class CanvasRoot {
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
   #sizeLimits: CanvasSizeLimits;
-  readonly #sizeListeners = new Set<() => void>();
+  readonly #sizeListeners = new RetainedListeners();
   #snapshot: CanvasRootSnapshot | undefined;
   #snapshotRevision = -1;
   readonly #state: WebGlStateOwner;
@@ -344,7 +348,7 @@ export class CanvasRoot {
   #virtualTextureLoadGeneration = 0;
   #virtualTextureRequested = false;
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
-  readonly #virtualTextureListeners = new Map<string, Set<() => void>>();
+  readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
 
   /** Canvas whose context and backing dimensions are owned by this root. */
   get canvas(): HTMLCanvasElement {
@@ -668,13 +672,7 @@ export class CanvasRoot {
 
   subscribe = (listener: () => void): (() => void) => {
     if (this.#disposed) return () => undefined;
-    this.#listeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      this.#listeners.delete(listener);
-    };
+    return this.#listeners.subscribe(listener);
   };
 
   /** Subscribes only to context lifecycle changes. */
@@ -684,13 +682,7 @@ export class CanvasRoot {
   /** Subscribes only to semantic canvas-size changes. */
   subscribeSize = (listener: () => void): (() => void) => {
     if (this.#disposed) return () => undefined;
-    this.#sizeListeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      this.#sizeListeners.delete(listener);
-    };
+    return this.#sizeListeners.subscribe(listener);
   };
 
   /** Subscribes only to one exact glTF source/version identity. */
@@ -714,19 +706,7 @@ export class CanvasRoot {
   ): (() => void) => {
     if (this.#disposed) return () => undefined;
     const key = virtualTextureAssetKey(asset);
-    let listeners = this.#virtualTextureListeners.get(key);
-    if (listeners === undefined) {
-      listeners = new Set();
-      this.#virtualTextureListeners.set(key, listeners);
-    }
-    listeners.add(listener);
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      listeners!.delete(listener);
-      if (listeners!.size === 0) this.#virtualTextureListeners.delete(key);
-    };
+    return this.#virtualTextureListeners.subscribe(key, listener);
   };
 
   #assertLive(operation: string): void {
@@ -764,37 +744,11 @@ export class CanvasRoot {
 
   #publish(): void {
     this.#revision += 1;
-    if (this.#listeners.size === 0) return;
-    const listeners = [...this.#listeners];
-    for (const listener of listeners) {
-      if (!this.#listeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#platform.onListenerError(error);
-        } catch {
-          // A failing diagnostic sink must not interrupt later listeners.
-        }
-      }
-    }
+    this.#listeners.publish(this.#platform.onListenerError);
   }
 
   #publishSize(): void {
-    if (this.#sizeListeners.size === 0) return;
-    const listeners = [...this.#sizeListeners];
-    for (const listener of listeners) {
-      if (!this.#sizeListeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#platform.onListenerError(error);
-        } catch {
-          // A failing diagnostic sink must not interrupt later listeners.
-        }
-      }
-    }
+    this.#sizeListeners.publish(this.#platform.onListenerError);
   }
 
   #rebuildFrameIntent(): void {
@@ -967,20 +921,10 @@ export class CanvasRoot {
   }
 
   #publishVirtualTexture(asset: VirtualTextureAssetRef): void {
-    const listeners = this.#virtualTextureListeners.get(virtualTextureAssetKey(asset));
-    if (listeners === undefined) return;
-    for (const listener of listeners) {
-      if (!listeners.has(listener)) continue;
-      try {
-        listener();
-      } catch (error) {
-        try {
-          this.#platform.onListenerError(error);
-        } catch {
-          // A failing diagnostic sink must not interrupt later listeners.
-        }
-      }
-    }
+    this.#virtualTextureListeners.publish(
+      virtualTextureAssetKey(asset),
+      this.#platform.onListenerError,
+    );
   }
 
   #renderFrame(): void {
