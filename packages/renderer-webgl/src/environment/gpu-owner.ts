@@ -1,6 +1,9 @@
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
-import type { PreparedRoyalEnvironment } from "./royal-environment-ktx1";
+import {
+  royalEnvironmentGpuByteLength,
+  type PreparedRoyalEnvironment,
+} from "./royal-environment-ktx1";
 
 export type PrefilteredEnvironmentGpuBinding = Readonly<{
   coefficients: Float32Array;
@@ -14,14 +17,6 @@ type EnvironmentGpuResource = Readonly<{
   sampler: WebGLSampler;
   texture: WebGLTexture;
 }>;
-
-const gpuBytes = (prepared: PreparedRoyalEnvironment): number => prepared.levels.reduce(
-  (total, level) => total + level.faces.reduce(
-    (levelTotal, face) => levelTotal + face.byteLength,
-    0,
-  ),
-  0,
-);
 
 const coefficients = (prepared: PreparedRoyalEnvironment): Float32Array => {
   const values = new Float32Array(9 * 4);
@@ -71,7 +66,10 @@ export class PrefilteredEnvironmentGpuOwner {
     this.#prepared = prepared;
     if (prepared === undefined) return true;
     const budgetIdentity = {};
-    if (!this.#budget.tryClaim(budgetIdentity, gpuBytes(prepared))) return true;
+    if (!this.#budget.tryClaim(
+      budgetIdentity,
+      royalEnvironmentGpuByteLength(prepared),
+    )) return true;
     let texture: WebGLTexture | null = null;
     let sampler: WebGLSampler | null = null;
     try {
@@ -93,6 +91,7 @@ export class PrefilteredEnvironmentGpuOwner {
         prepared.size,
         prepared.size,
       );
+      const sourceWords = new Uint32Array(prepared.source);
       for (const level of prepared.levels) {
         for (const face of level.faces) {
           gl.texSubImage2D(
@@ -104,7 +103,8 @@ export class PrefilteredEnvironmentGpuOwner {
             level.size,
             gl.RGB,
             gl.UNSIGNED_INT_10F_11F_11F_REV,
-            new Uint32Array(prepared.source, face.byteOffset, face.byteLength / 4),
+            sourceWords,
+            face.byteOffset / Uint32Array.BYTES_PER_ELEMENT,
           );
         }
       }

@@ -58,7 +58,7 @@ describe("browser virtual texture runtime", () => {
     const visible = identityMat4();
     visible[12] = -100;
     runtime.update([{ view: visible, viewProjection: visible, viewport }]);
-    expect(texStorage2D).toHaveBeenCalledOnce();
+    expect(texStorage2D).toHaveBeenCalledTimes(2);
     runtime.dispose();
   });
 

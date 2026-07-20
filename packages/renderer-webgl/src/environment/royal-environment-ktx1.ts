@@ -13,7 +13,9 @@ const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_METADATA_ENTRIES = 32;
 const MAX_KEY_BYTES = 256;
 const MAX_PROVENANCE_BYTES = 2048;
-const MAX_ARTIFACT_BYTES = HEADER_BYTES + MAX_METADATA_BYTES + 9 * 4 + 6 * 4 * 87_381;
+export const MAX_ROYAL_ENVIRONMENT_GPU_BYTES = 6 * 4 * 87_381;
+const MAX_ARTIFACT_BYTES = HEADER_BYTES + MAX_METADATA_BYTES + 9 * 4
+  + MAX_ROYAL_ENVIRONMENT_GPU_BYTES;
 
 export type RoyalEnvironmentArtifactErrorCode =
   | "endianness"
@@ -80,6 +82,22 @@ export type PreparedRoyalEnvironment = Readonly<{
   /** Retained source storage borrowed by every face byte range. */
   source: ArrayBuffer;
 }>;
+
+/** Exact packed cubemap bytes, bounded by Royal's accepted offline profile. */
+export const royalEnvironmentGpuByteLength = (
+  prepared: PreparedRoyalEnvironment,
+): number => {
+  let byteLength = 0;
+  for (const level of prepared.levels) {
+    for (const face of level.faces) byteLength += face.byteLength;
+  }
+  if (
+    !Number.isSafeInteger(byteLength)
+    || byteLength < 1
+    || byteLength > MAX_ROYAL_ENVIRONMENT_GPU_BYTES
+  ) throw new RangeError("Royal environment GPU bytes exceed the accepted profile");
+  return byteLength;
+};
 
 const fail = (code: RoyalEnvironmentArtifactErrorCode, message: string): never => {
   throw new RoyalEnvironmentArtifactError(code, message);

@@ -229,16 +229,12 @@ const createGpuVirtualTexture = (
     const pageTableBytes = new Uint8Array(virtualTexturePageTableByteLength(manifest));
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
-    gl.texImage2D(
+    gl.texStorage2D(
       gl.TEXTURE_2D,
-      0,
+      1,
       gl.RGBA8,
       manifest.tableWidth,
       manifest.tableHeight,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      pageTableBytes,
     );
     gl.samplerParameteri(pageTableSampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.samplerParameteri(pageTableSampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);

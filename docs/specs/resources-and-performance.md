@@ -69,6 +69,14 @@ pure plan and does not remove the old mapping unless the atlas upload succeeds.
 Render-target `texStorage`/allocation is persistent or transient capacity, not
 source upload traffic, and MUST NOT be added to these transfer counters.
 
+The pinned prefiltered-environment profile is a separately bounded atomic
+domain: 256×256 maximum faces, six packed four-byte faces, and a complete mip
+pyramid cap source transfer at 2,097,144 bytes. The whole cubemap becomes
+bindable only after all faces succeed. Its uploader borrows one source word view
+with per-face offsets rather than allocating up to 54 temporary views. This
+static format ceiling is the admission justification; accepting a larger
+environment profile requires a progressive byte-governed transaction first.
+
 One physical allocation MUST have one accounting owner. Diagnostics may project
 the same allocation in a subsystem view but MUST identify overlap rather than
 sum it as independent memory. Persistent, transient, upload-traffic, and decoded

@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PrefilteredEnvironmentGpuOwner } from "../../packages/renderer-webgl/src/environment/gpu-owner";
-import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
+import {
+  MAX_ROYAL_ENVIRONMENT_GPU_BYTES,
+  parseRoyalEnvironmentKtx1,
+  royalEnvironmentGpuByteLength,
+} from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
@@ -38,6 +42,13 @@ describe("prefiltered environment GPU owner", () => {
       2,
     );
     expect(gl.texSubImage2D).toHaveBeenCalledTimes(12);
+    const uploads = vi.mocked(gl.texSubImage2D).mock.calls;
+    expect(new Set(uploads.map((upload) => upload[8]))).toHaveLength(1);
+    expect(uploads.map((upload) => upload[9])).toEqual(
+      prepared.levels.flatMap((level) => level.faces.map((face) => face.byteOffset / 4)),
+    );
+    expect(royalEnvironmentGpuByteLength(prepared)).toBe(120);
+    expect(MAX_ROYAL_ENVIRONMENT_GPU_BYTES).toBe(2_097_144);
     expect(budget.snapshot().retainedBytes).toBe(120);
 
     expect(owner.set(prepared)).toBe(false);
