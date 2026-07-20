@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readEncodedImageDimensions } from "../../packages/renderer-webgl/src/texture/encoded-image-dimensions";
+import { forEachFuzzCase } from "../fuzz";
 import { createAvifHeader } from "./support/avif-header";
 
 const pngHeader = (width: number, height: number): Uint8Array => {
@@ -93,15 +94,16 @@ describe("encoded image dimension hints", () => {
   });
 
   it("never throws while scanning bounded adversarial prefixes", () => {
-    let state = 0x51f15e;
-    for (let row = 0; row < 2_000; row += 1) {
-      state = Math.imul(state ^ (state >>> 15), 0x2c1b3c6d);
-      const bytes = new Uint8Array(state & 255);
+    forEachFuzzCase({
+      cases: 2_000,
+      envName: "ROYAL_IMAGE_HEADER_FUZZ_CASES",
+      seed: 0x51_f1_5e,
+    }, ({ random }) => {
+      const bytes = new Uint8Array(random.int(0, 256));
       for (let index = 0; index < bytes.length; index += 1) {
-        state = Math.imul(state ^ (state >>> 12), 0x297a2d39);
-        bytes[index] = state;
+        bytes[index] = random.int(0, 256);
       }
       readEncodedImageDimensions(bytes);
-    }
+    });
   });
 });

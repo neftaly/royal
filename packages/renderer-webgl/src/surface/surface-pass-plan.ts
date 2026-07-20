@@ -9,7 +9,6 @@ export type SurfaceDrawPass = "all" | "opaque" | "remaining";
 
 export type SurfacePassPlan<Surface> = Readonly<{
   opaque: Surface[];
-  requiresSceneColor: boolean;
   transmission: Surface[];
   transparent: Surface[];
 }>;
@@ -57,7 +56,6 @@ export const planSurfacePasses = <Surface>(
   }
   return {
     opaque,
-    requiresSceneColor: transmission.length > 0,
     transmission,
     transparent,
   };

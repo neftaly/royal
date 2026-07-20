@@ -261,7 +261,6 @@ export class SurfaceGpuOwner {
   readonly #punctualLightSpotCones = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
-  #requiresSceneColor = false;
   #scene: CanonicalSurfaceScene | null = null;
   #sceneGlobalsRevision = 0;
   #programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
@@ -331,7 +330,6 @@ export class SurfaceGpuOwner {
     this.#texturePublicationKeys.clear();
     this.#lodGroups.clear();
     this.#lodSelections.clear();
-    this.#requiresSceneColor = false;
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
@@ -364,7 +362,6 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
-    this.#requiresSceneColor = false;
     this.#compositeActive = false;
     this.#compositeBindingRevision = this.#compositeGpu?.bindingRevision ?? 0;
     this.#texturePublicationKeys.clear();
@@ -384,11 +381,6 @@ export class SurfaceGpuOwner {
   /** Current canonical LOD choices shared by visual submission and exact picking. */
   lodSelections(): ReadonlyMap<string, number> {
     return this.#lodSelections;
-  }
-
-  /** Whether admitted material intent activates the private scene-color path. */
-  requiresSceneColor(): boolean {
-    return this.#requiresSceneColor;
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {
@@ -1287,7 +1279,6 @@ export class SurfaceGpuOwner {
       const grouped = groupSurfacesForDrawing(nextSurfaces);
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
-      this.#requiresSceneColor = grouped.requiresSceneColor;
       this.#transmissionSurfaces = grouped.transmission;
       this.#planOpaqueMultiDrawRuns();
     } catch (error) {
@@ -1395,7 +1386,6 @@ export class SurfaceGpuOwner {
       const grouped = groupSurfacesForDrawing(surfaces);
       this.#opaqueSurfaces = grouped.opaque;
       this.#blendedSurfaces = grouped.transparent;
-      this.#requiresSceneColor = grouped.requiresSceneColor;
       this.#transmissionSurfaces = grouped.transmission;
     }
     this.#planOpaqueMultiDrawRuns();

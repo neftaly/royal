@@ -48,7 +48,6 @@ describe("fixed surface pass planning", () => {
     const plan = planSurfacePasses([transparent, opaque], (surface) => surface.material);
     expect(plan).toEqual({
       opaque: [opaque],
-      requiresSceneColor: false,
       transmission: [],
       transparent: [transparent],
     });
@@ -94,7 +93,6 @@ describe("fixed surface pass planning", () => {
     ]);
     expect(plan.transmission.map((surface) => surface.id)).toEqual(["transmission"]);
     expect(plan.transparent.map((surface) => surface.id)).toEqual(["transparent"]);
-    expect(plan.requiresSceneColor).toBe(true);
   });
 
   it("gives requested transmission its fixed pass even when alpha blend is authored", () => {
@@ -105,7 +103,6 @@ describe("fixed surface pass planning", () => {
     const surface = { material: active };
     expect(planSurfacePasses([surface], (entry) => entry.material)).toEqual({
       opaque: [],
-      requiresSceneColor: true,
       transmission: [surface],
       transparent: [],
     });
