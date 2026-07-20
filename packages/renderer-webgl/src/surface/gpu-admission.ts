@@ -25,6 +25,47 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
   return `${geometryBaseKey}:${uvKey}:${tangentKey}`;
 };
 
+/** Exact source bytes transferred while publishing one canonical geometry. */
+export const surfaceGeometryUploadByteLength = (
+  surface: CanonicalDrawSurface,
+  indexBytes: 1 | 2 | 4,
+): number => {
+  const { geometry, material } = surface;
+  let byteLength = geometry.indices.length * indexBytes + geometry.positions.byteLength;
+  if (material.kind === "standard" && geometry.normals !== undefined) {
+    byteLength += geometry.normals.byteLength;
+  }
+  if (geometry.colors !== undefined) byteLength += geometry.colors.byteLength;
+  if (surfaceUsesTextureCoordinateSet(surface, 0)) {
+    byteLength += geometry.textureCoordinates0?.byteLength ?? 0;
+  }
+  if (surfaceUsesTextureCoordinateSet(surface, 1)) {
+    byteLength += geometry.textureCoordinates1?.byteLength ?? 0;
+  }
+  if (
+    material.kind === "standard"
+    && material.normalAsset !== undefined
+    && material.normalTextureCoordinates === undefined
+    && geometry.tangents !== undefined
+  ) byteLength += geometry.tangents.byteLength;
+  if (!Number.isSafeInteger(byteLength)) {
+    throw new RangeError("Royal surface geometry upload exceeds safe integer range");
+  }
+  return byteLength;
+};
+
+/** Exact packed model and normal-transform bytes transferred for one instance set. */
+export const surfaceInstanceUploadByteLength = (
+  surface: CanonicalDrawSurface,
+): number => {
+  const count = surface.instances?.count ?? 0;
+  const byteLength = count * 28 * Float32Array.BYTES_PER_ELEMENT;
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+    throw new RangeError("Royal surface instance upload exceeds safe integer range");
+  }
+  return byteLength;
+};
+
 /** Preserves only the admitted prefix whose GPU resource identities remain reusable. */
 export const retainedSurfaceAdmissionCount = (
   previous: readonly CanonicalDrawSurface[],

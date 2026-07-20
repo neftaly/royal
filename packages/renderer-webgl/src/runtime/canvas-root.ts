@@ -101,6 +101,7 @@ export type CanvasRootSnapshot = Readonly<{
   lastFrameFailure?: string;
   resources: Readonly<{
     asyncPreparation: AsyncPreparationSnapshot;
+    geometryUploads: FrameUploadBudgetSnapshot;
     ordinaryTextureUploads: FrameUploadBudgetSnapshot;
     ordinaryTextures: OrdinaryTextureGpuSnapshot;
     persistentGpu: PersistentGpuBudgetSnapshot;
@@ -517,6 +518,7 @@ export class CanvasRoot {
           : { lastFrameFailure: this.#lastFrameFailure }),
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
+          geometryUploads: this.#surfaceGpu.geometryUploadSnapshot(),
           ordinaryTextureUploads: this.#frameUploadBudget.snapshot(),
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),

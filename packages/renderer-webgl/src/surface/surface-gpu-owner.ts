@@ -68,7 +68,10 @@ import type {
   VirtualTextureRuntime,
 } from "../virtual-texture/runtime-contract";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
-import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
+import {
+  FrameUploadBudgetOwner,
+  type FrameUploadBudgetSnapshot,
+} from "../resource/frame-upload-budget";
 import { planContiguousRunEnds } from "./contiguous-run-plan";
 import { surfacesShareMultiDrawState } from "./surface-multi-draw";
 import {
@@ -268,6 +271,7 @@ export class SurfaceGpuOwner {
   }
 
   beginFrame(): void {
+    this.#geometryGpu.beginFrame();
     this.#uploadBudget.beginFrame();
     this.#textureGpu.beginFrame();
   }
@@ -369,6 +373,10 @@ export class SurfaceGpuOwner {
 
   ordinaryTextureSnapshot(): OrdinaryTextureGpuSnapshot {
     return this.#textureGpu.snapshot();
+  }
+
+  geometryUploadSnapshot(): FrameUploadBudgetSnapshot {
+    return this.#geometryGpu.snapshot();
   }
 
   texturePublicationsPending(): boolean {
@@ -1193,12 +1201,13 @@ export class SurfaceGpuOwner {
     this.#dirty = false;
     const scene = this.#scene;
     const surfaces = scene?.surfaces ?? [];
-    const admittedSurfaceCount = nextSurfaceAdmissionCount(
+    const requestedSurfaceCount = nextSurfaceAdmissionCount(
       this.#admittedSurfaceCount,
       surfaces.length,
       SURFACE_UPLOADS_PER_FRAME,
     );
-    const geometryPlan = this.#geometryGpu.prepare(surfaces, admittedSurfaceCount);
+    const geometryPlan = this.#geometryGpu.prepare(surfaces, requestedSurfaceCount);
+    const admittedSurfaceCount = geometryPlan.surfaces.length;
     try {
       const previousSurfaceCount = this.#gpuSurfacesBySceneIndex.length;
       const appendOnly = scene !== null

@@ -9,11 +9,13 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import {
   nextSurfaceAdmissionCount,
   retainedSurfaceAdmissionCount,
   surfaceGeometryResourceKey,
+  surfaceGeometryUploadByteLength,
 } from "../../packages/renderer-webgl/src/surface/gpu-admission";
 
 const fakeGl = (): WebGL2RenderingContext => ({
@@ -99,6 +101,51 @@ describe("surface geometry GPU owner", () => {
     expect(retainedSurfaceAdmissionCount(first, changedGeometry, 1)).toBe(0);
     expect(retainedSurfaceAdmissionCount(withInstances, withInstances, 1)).toBe(1);
     expect(retainedSurfaceAdmissionCount(withInstances, withDifferentInstances, 1)).toBe(0);
+  });
+
+  it("admits exact geometry bytes as a progressive prefix without starving an oversize primitive", () => {
+    const gl = fakeGl();
+    const uploadBudget = new FrameUploadBudgetOwner(60);
+    const owner = new SurfaceGeometryGpuOwner(
+      gl,
+      new PersistentGpuBudgetOwner(),
+      uploadBudget,
+    );
+    const first = surface(planeGeometry(1))[0]!;
+    const second = {
+      ...first,
+      geometry: { ...first.geometry, key: `${first.geometry.key}:second` },
+    };
+    expect(surfaceGeometryUploadByteLength(first, 1)).toBe(54);
+
+    const firstFrame = owner.prepare([first, second], 2);
+    expect(firstFrame.surfaces).toHaveLength(1);
+    expect(owner.snapshot()).toEqual({
+      admittedBytes: 54,
+      budgetBytes: 60,
+      deferredUploads: 1,
+    });
+    firstFrame.commit();
+
+    owner.beginFrame();
+    const secondFrame = owner.prepare([first, second], 2);
+    expect(secondFrame.surfaces).toHaveLength(2);
+    expect(owner.snapshot()).toEqual({
+      admittedBytes: 54,
+      budgetBytes: 60,
+      deferredUploads: 0,
+    });
+    secondFrame.commit();
+
+    const oversize = new SurfaceGeometryGpuOwner(
+      fakeGl(),
+      new PersistentGpuBudgetOwner(),
+      new FrameUploadBudgetOwner(1),
+    );
+    const oversizeFrame = oversize.prepare([first]);
+    expect(oversizeFrame.surfaces).toHaveLength(1);
+    expect(oversize.snapshot().admittedBytes).toBe(54);
+    oversizeFrame.rollback();
   });
 
   it("does not collapse UV1-only and UV0-plus-UV1 geometry layouts", () => {

@@ -5,6 +5,8 @@ import {
 import type { CanonicalDrawSurface } from "./scene-lowering";
 import {
   surfaceGeometryResourceKey,
+  surfaceGeometryUploadByteLength,
+  surfaceInstanceUploadByteLength,
   surfaceUsesTextureCoordinateSet,
 } from "./gpu-admission";
 import {
@@ -16,6 +18,10 @@ import {
   type GeometryBatchRange,
 } from "./geometry-batch-plan";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import {
+  FrameUploadBudgetOwner,
+  type FrameUploadBudgetSnapshot,
+} from "../resource/frame-upload-budget";
 
 type GpuGeometryArena = Readonly<{
   budgetIdentity: object;
@@ -179,6 +185,7 @@ const planGeometryArenas = (
 export class SurfaceGeometryGpuOwner {
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #gl: WebGL2RenderingContext;
+  readonly #uploadBudget: FrameUploadBudgetOwner;
   #geometryArenas: readonly GpuGeometryArena[] = [];
   #geometryPlanKey = "";
   #geometryResources: readonly GpuGeometry[] = [];
@@ -189,9 +196,22 @@ export class SurfaceGeometryGpuOwner {
   #instanceResources: readonly GpuInstanceData[] = [];
   #instanceVertexArrays: readonly GpuInstanceVertexArray[] = [];
 
-  constructor(gl: WebGL2RenderingContext, budget = new PersistentGpuBudgetOwner()) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    budget = new PersistentGpuBudgetOwner(),
+    uploadBudget = new FrameUploadBudgetOwner(),
+  ) {
     this.#gl = gl;
     this.#budget = budget;
+    this.#uploadBudget = uploadBudget;
+  }
+
+  beginFrame(): void {
+    this.#uploadBudget.beginFrame();
+  }
+
+  snapshot(): FrameUploadBudgetSnapshot {
+    return this.#uploadBudget.snapshot();
   }
 
   dispose(): void {
@@ -693,23 +713,50 @@ export class SurfaceGeometryGpuOwner {
         const key = surfaceGeometryResourceKey(surface);
         const geometry = geometryByKey.get(key);
         if (geometry === undefined) throw new Error("Royal geometry arena omitted a resource");
-        if (!nextUploadedGeometryKeys.has(key)) {
-          const upload = uploadByKey.get(key);
-          if (upload === undefined) throw new Error("Royal geometry arena omitted an upload range");
+        const geometryUpload = nextUploadedGeometryKeys.has(key)
+          ? undefined
+          : uploadByKey.get(key);
+        if (!nextUploadedGeometryKeys.has(key) && geometryUpload === undefined) {
+          throw new Error("Royal geometry arena omitted an upload range");
+        }
+        const instances = surface.instances;
+        let instanceData = instances === undefined
+          ? undefined
+          : nextInstancesByKey.get(instances.key)
+            ?? previousInstancesByKey.get(instances.key);
+        const instanceUploadRequired = instances !== undefined && (
+          instanceData === undefined
+          || (
+            instances.revision !== undefined
+            && instances.revision !== instanceData.revision
+            && !pendingInstanceUpdates.has(instanceData)
+          )
+        );
+        if (
+          instances !== undefined
+          && instanceData !== undefined
+          && instanceUploadRequired
+          && instances.count !== instanceData.count
+        ) {
+          throw new Error("Royal retained instance count changed without a new resource key");
+        }
+        const uploadByteLength = (geometryUpload === undefined
+          ? 0
+          : surfaceGeometryUploadByteLength(surface, geometryUpload.plan.batch.indexBytes))
+          + (instanceUploadRequired ? surfaceInstanceUploadByteLength(surface) : 0);
+        if (!this.#uploadBudget.tryAdmit(uploadByteLength)) break;
+        if (geometryUpload !== undefined) {
           this.#uploadGeometry(
-            upload.arena,
-            upload.plan,
-            upload.entry,
+            geometryUpload.arena,
+            geometryUpload.plan,
+            geometryUpload.entry,
             this.#indexUploadWorkspace,
           );
           nextUploadedGeometryKeys.add(key);
         }
         let instanceCount = 0;
         let vertexArray = geometry.vertexArray;
-        const instances = surface.instances;
         if (instances !== undefined) {
-          let instanceData = nextInstancesByKey.get(instances.key)
-            ?? previousInstancesByKey.get(instances.key);
           if (instanceData === undefined) {
             instanceData = this.#createInstanceData(surface);
             createdInstances.push(instanceData);
@@ -718,9 +765,6 @@ export class SurfaceGeometryGpuOwner {
             && instances.revision !== instanceData.revision
             && !pendingInstanceUpdates.has(instanceData)
           ) {
-            if (instances.count !== instanceData.count) {
-              throw new Error("Royal retained instance count changed without a new resource key");
-            }
             pendingInstanceUpdates.set(instanceData, {
               revision: instances.revision,
               values: this.#prepareInstanceValues(surface),
