@@ -98,6 +98,7 @@ type BrowserBenchmarkReport = {
     readonly delta: RendererBenchmarkDeltaSnapshot | null;
     readonly setup: RendererBenchmarkSnapshot | null;
   };
+  readonly source: typeof __ROYAL_EXAMPLES_SOURCE__;
   readonly url: string;
   readonly warmupComplete: boolean;
   readonly warnings: readonly string[];
@@ -684,6 +685,7 @@ const runBrowserBenchmark = async (
       delta: deltaRendererSnapshot(afterFrames, beforeFrames),
       setup: setupRenderer,
     },
+    source: __ROYAL_EXAMPLES_SOURCE__,
     url: globalThis.location.href,
     warmupComplete,
     warnings,

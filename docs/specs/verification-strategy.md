@@ -56,6 +56,10 @@ Run current target paths on Safari 17/A10-class hardware and Quest 2 in addition
 to desktop browsers. Record resolution, DPR/render scale, refresh rate, browser,
 camera, scene revision, thermal/session state, capability selection, console,
 frame timing, and GPU timer data where reliable.
+The page report and server MUST expose the same unique build identity, full
+revision, and dirty state. A remembered server start, URL, or open tab is not
+evidence for the code under test, and a harness MUST reject a mismatched build
+before accepting device results.
 
 ### Performance and resource review
 

@@ -202,7 +202,7 @@ const websocketConnect = (wsUrl) => {
   };
 
   return {
-    close: () => socket.end(),
+    close: () => socket.destroy(),
     onMessage: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -290,6 +290,28 @@ const findPage = async () => {
     throw new Error('No inspectable iPad Safari page found. Open Safari with Web Inspector enabled.');
   }
   return page;
+};
+
+const expectedBenchmarkSource = async () => {
+  if (host === undefined || host.trim() === '') {
+    throw new Error('Set IPAD_BENCH_HOST=<laptop-lan-ip> or pass --host=<laptop-lan-ip>.');
+  }
+  const source = await jsonGet(
+    `http://${host}:${appPort}/__royal-source.json?requestedAt=${Date.now()}`,
+  );
+  if (
+    source === null
+    || typeof source !== 'object'
+    || typeof source.buildId !== 'string'
+    || source.buildId.length === 0
+    || typeof source.builtAt !== 'string'
+    || typeof source.dirty !== 'boolean'
+    || typeof source.revision !== 'string'
+    || source.revision.length === 0
+  ) {
+    throw new Error('Royal examples server returned an invalid source identity');
+  }
+  return source;
 };
 
 const sendToTarget = async (client, targetId, message, waitMs = timeoutMs) => {
@@ -568,6 +590,7 @@ const isExpectedDevTransportDiagnostic = (entry, entries) => {
 };
 
 const run = async () => {
+  const expectedSource = await expectedBenchmarkSource();
   const page = await findPage();
   const client = websocketConnect(page.webSocketDebuggerUrl);
   await client.opened;
@@ -604,6 +627,11 @@ const run = async () => {
     await targetCommand(client, targetId, 'Page.navigate', { url });
     await waitForNavigationCommit(client, targetId);
     report = await waitForReport(client, targetId);
+    if (report.source?.buildId !== expectedSource.buildId) {
+      throw new Error(
+        `iPad loaded Royal build ${String(report.source?.buildId)}, expected ${expectedSource.buildId}`,
+      );
+    }
     const evidenceFailures = incompleteRendererEvidence(report);
     if (evidenceFailures.length > 0) {
       const pageState = await evaluate(
@@ -681,6 +709,7 @@ const run = async () => {
       cameraDrag,
       coldCache,
       error: error instanceof Error ? error.stack ?? error.message : String(error),
+      expectedSource,
       generatedAt,
       page: parsedPage,
       progress: lastBenchmarkProgress,
@@ -697,5 +726,5 @@ const run = async () => {
 
 run().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  process.exit(1);
 });

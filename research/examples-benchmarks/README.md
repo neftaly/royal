@@ -3,6 +3,13 @@
 Saved reports for renderer performance work. These are inputs for deciding what to
 delete, keep, or change; they are not pass/fail CI fixtures.
 
+Every current examples server publishes `/__royal-source.json`, and the same
+`buildId`, full Git revision, dirty flag, and build timestamp are embedded in
+each in-page benchmark report. The iPad Safari harness fetches that endpoint
+before attaching and rejects a report whose embedded `buildId` differs. This is
+the authority for the code under test; a URL, open tab, or remembered dev-server
+start time is not sufficient evidence.
+
 Current baselines:
 
 - `host-gltf-kitchen-sink.json`
