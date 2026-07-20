@@ -1,12 +1,12 @@
-# Replacement execution readiness
+# Replacement execution record
 
-Status: preflight contract
+Status: execution active; release proof incomplete
 
-Implementation begins only after the four gates below are accepted or their
-remaining work is explicitly assigned to slice 0. This prevents a clean rewrite
-from becoming an open-ended design exercise.
+Implementation began after the four gates below were accepted. This document
+now records the start criteria and the evidence still required before the
+replacement can be called release-ready; it is not a second current backlog.
 
-## Gate 1: consumer contract
+## Gate 1: consumer contract — accepted
 
 The [consumer API contract](consumer-api.md) defines the primary React tasks,
 entrypoints, descriptor vocabulary, observation placement, picking/events, and
@@ -17,7 +17,7 @@ Ready when packed compile-only examples cover every primary task, editor-visible
 declarations state units/defaults/lifecycle, and remaining API questions are
 recorded rather than silently delegated to implementation.
 
-## Gate 2: replacement completeness
+## Gate 2: replacement completeness — in conformance review
 
 The replacement is eligible to supersede the current renderer when these
 first-class behaviors conform:
@@ -38,7 +38,7 @@ first-class behaviors conform:
 The conformance ledger, not raw legacy test count, determines completion.
 Deferred and out-of-scope rows remain explicit unsupported behavior.
 
-## Gate 3: reproducible baselines
+## Gate 3: reproducible baselines — harness accepted, physical reruns pending
 
 Before the implementation branches diverge, capture the current renderer as a
 difference baseline. Each workload records:
@@ -72,7 +72,7 @@ The old baseline is not automatically correct. Each comparison classifies a
 difference as intended spec correction, old bug, new bug, acceptable quality
 change, or unresolved oracle conflict.
 
-## Gate 4: first-slice contract
+## Gate 4: first-slice contract — accepted
 
 The first implementation slice is deliberately smaller than feature rendering.
 It establishes:
@@ -114,9 +114,9 @@ Improvements must generalize to the canonical paths and be verified on at least
 one smaller analytic workload. Bistro does not replace target-device tests and
 does not justify widening Royal into an asset pipeline or game engine.
 
-## Start decision
+## Start decision — satisfied
 
-Execution is ready when:
+Execution started after:
 
 1. the current specification set and rewrite strategy are committed;
 2. the consumer contract has no blocking open choice;
@@ -126,6 +126,7 @@ Execution is ready when:
 5. any simultaneous work is limited to spec-stable fixtures, evidence, or leaf
    modules with explicit ownership.
 
-Do not wait for the external Bistro workload to be aesthetically final. Begin
-once its asset version, startup command, camera path, and report output are
-stable enough for repeatable comparison.
+The remaining physical-device gap is tracked in the conformance ledger. Current
+reports must carry an exact source/build identity; stale Safari or Quest pages
+are not admissible evidence. The external Bistro workload remains an
+adversarial consumer and is not a prerequisite for continuing implementation.
