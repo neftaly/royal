@@ -146,8 +146,19 @@ void main() {
   vec3 positionDy = dFdy(worldPosition);
   vec2 uvDx = dFdx(surfaceNormalTextureCoordinate);
   vec2 uvDy = dFdy(surfaceNormalTextureCoordinate);
-  vec3 tangent = normalize(positionDx * uvDy.y - positionDy * uvDx.y);
-  vec3 bitangent = normalize(-positionDx * uvDy.x + positionDy * uvDx.x);
+  vec3 positionDyPerpendicular = cross(positionDy, normal);
+  vec3 positionDxPerpendicular = cross(normal, positionDx);
+  vec3 tangent = positionDyPerpendicular * uvDx.x
+    + positionDxPerpendicular * uvDy.x;
+  // glTF images grow downward in V while OpenGL normal maps encode +Y upward.
+  vec3 bitangent = -(positionDyPerpendicular * uvDx.y
+    + positionDxPerpendicular * uvDy.y);
+  float tangentLengthSquared = max(dot(tangent, tangent), dot(bitangent, bitangent));
+  float tangentScale = tangentLengthSquared > 0.0
+    ? inversesqrt(tangentLengthSquared)
+    : 0.0;
+  tangent *= tangentScale;
+  bitangent *= tangentScale;
 #endif
   normal = normalize(mat3(tangent, bitangent, normal) * mappedNormal);
 #endif

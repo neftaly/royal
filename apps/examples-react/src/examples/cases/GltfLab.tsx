@@ -47,7 +47,7 @@ const writeSelectedCase = (name: string): void => {
 
 const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode => {
   const orbit = useOrbitCamera({
-    initial: { distance: 5.5, pitch: 0.02, target: [0, 0, 0], yaw: 0.12 },
+    initial: { distance: 1.4, pitch: 0, target: [0, 0, 0], yaw: 0 },
     far: 120,
   });
   const src = import.meta.env.BASE_URL + entry.path;
@@ -55,7 +55,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     src,
     transform: {
       position: [0, 0, 0],
-      rotation: [0, 0.2, 0],
+      rotation: [0, 0, 0],
       scale: [entry.presentation.scale, entry.presentation.scale, entry.presentation.scale],
     },
   }), [entry.presentation.scale, src]);
