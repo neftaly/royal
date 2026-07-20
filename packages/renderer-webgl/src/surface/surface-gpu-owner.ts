@@ -57,11 +57,9 @@ import {
 } from "./gpu-admission";
 import { frustumPlanesInto, worldBoundsVisible } from "./surface-visibility";
 import {
-  closestDrawableLodLevel,
-  createProjectedBoundsWorkspace,
-  hystereticLodLevel,
+  createDrawableLodSelectionWorkspace,
   lodMembershipsSelected,
-  maximumProjectedBoundsScreenCoverage,
+  selectDrawableLodsInto,
 } from "./lod-selection";
 import type { LinearRgba } from "@royal/renderer-core";
 import type {
@@ -250,10 +248,7 @@ export class SurfaceGpuOwner {
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
-  readonly #lodGroups = new Set<string>();
-  #lodDrawableLevels = new Uint8Array(1);
-  readonly #lodProjection = createProjectedBoundsWorkspace();
-  readonly #lodSelections = new Map<string, number>();
+  readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #emissiveFactor = new Float32Array(4);
   readonly #environmentSettings = new Float32Array(4);
   readonly #fallbackBaseColor = new Float32Array(4);
@@ -333,8 +328,8 @@ export class SurfaceGpuOwner {
     this.#instanceTransformsPending = false;
     this.#scene = null;
     this.#texturePublicationKeys.clear();
-    this.#lodGroups.clear();
-    this.#lodSelections.clear();
+    this.#lodSelection.activeGroups.clear();
+    this.#lodSelection.selections.clear();
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
@@ -386,7 +381,7 @@ export class SurfaceGpuOwner {
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */
   lodSelections(): ReadonlyMap<string, number> {
-    return this.#lodSelections;
+    return this.#lodSelection.selections;
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {
@@ -798,7 +793,7 @@ export class SurfaceGpuOwner {
           ? this.#transmissionSurfaces[index - opaqueCount]!
           : this.#blendedSurfaces[index - transmissionEnd]!;
       const surface = resource.surface;
-      if (!lodMembershipsSelected(surface.lods, this.#lodSelections)) continue;
+      if (!lodMembershipsSelected(surface.lods, this.#lodSelection.selections)) continue;
       if (index >= opaqueCount && index < transmissionEnd) {
         if (
           this.#transmissionVisibility[viewIndex * visibilityStride + resource.sceneIndex] !== 1
@@ -1045,7 +1040,7 @@ export class SurfaceGpuOwner {
           const next = this.#opaqueSurfaces[nextIndex]!;
           if (next.geometry.indexOffset > 0x7fff_ffff) break;
           if (
-            lodMembershipsSelected(next.surface.lods, this.#lodSelections)
+            lodMembershipsSelected(next.surface.lods, this.#lodSelection.selections)
             && worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes)
           ) {
             this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
@@ -1107,59 +1102,12 @@ export class SurfaceGpuOwner {
   }
 
   #selectLods(views: readonly SurfaceFrameView[], scene: CanonicalSurfaceScene): void {
-    this.#lodGroups.clear();
-    if (scene.lodGroups.length === 0) {
-      this.#lodSelections.clear();
-      return;
-    }
-    for (const group of scene.lodGroups) {
-      if (this.#lodDrawableLevels.length < group.thresholds.length) {
-        this.#lodDrawableLevels = new Uint8Array(group.thresholds.length);
-      } else this.#lodDrawableLevels.fill(0, 0, group.thresholds.length);
-      let drawable = false;
-      for (let index = 0; index < group.surfaceIndices.length; index += 1) {
-        if (group.surfaceIndices[index]! >= this.#gpuSurfacesBySceneIndex.length) continue;
-        this.#lodDrawableLevels[group.levels[index]!] = 1;
-        drawable = true;
-      }
-      if (!drawable) continue;
-      this.#lodGroups.add(group.group);
-      const coverage = maximumProjectedBoundsScreenCoverage(
-        group.selectionBounds,
-        views,
-        this.#lodProjection,
-      );
-      const previous = this.#lodSelections.get(group.group);
-      const target = hystereticLodLevel(coverage, group.thresholds, previous);
-      this.#lodSelections.set(group.group, closestDrawableLodLevel(
-        target,
-        previous,
-        this.#lodDrawableLevels,
-        group.thresholds.length,
-      ));
-    }
-    // Admission is prefix-bounded. Independent selectors may temporarily pick
-    // a node/material combination whose complete packet is not uploaded yet;
-    // retain one admitted combination for every affected set instead of a hole.
-    for (const group of scene.lodGroups) {
-      if (!this.#lodGroups.has(group.group)) continue;
-      let matched = false;
-      let fallback: CanonicalDrawSurface | undefined;
-      for (const surfaceIndex of group.surfaceIndices) {
-        const candidate = this.#gpuSurfacesBySceneIndex[surfaceIndex];
-        if (candidate === undefined) continue;
-        fallback ??= candidate.surface;
-        if (lodMembershipsSelected(candidate.surface.lods, this.#lodSelections)) {
-          matched = true;
-          break;
-        }
-      }
-      if (matched || fallback?.lods === undefined) continue;
-      for (const lod of fallback.lods) this.#lodSelections.set(lod.group, lod.level);
-    }
-    for (const group of this.#lodSelections.keys()) {
-      if (!this.#lodGroups.has(group)) this.#lodSelections.delete(group);
-    }
+    selectDrawableLodsInto(
+      scene.lodGroups,
+      views,
+      this.#gpuSurfacesBySceneIndex,
+      this.#lodSelection,
+    );
   }
 
   #retainOrdinaryTextureBindings(

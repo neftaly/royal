@@ -222,3 +222,99 @@ export const maximumProjectedBoundsScreenCoverage = (
   }
   return maximum;
 };
+
+export type DrawableLodGroup = Readonly<{
+  group: string;
+  levels: readonly number[];
+  selectionBounds: WorldBounds;
+  surfaceIndices: readonly number[];
+  thresholds: readonly number[];
+}>;
+
+export type DrawableLodResource = Readonly<{
+  surface: Readonly<{
+    lods?: readonly Pick<LodMembership, "group" | "level">[];
+  }>;
+}>;
+
+export type DrawableLodSelectionWorkspace = {
+  readonly activeGroups: Set<string>;
+  drawableLevels: Uint8Array;
+  readonly projection: ProjectedBoundsWorkspace;
+  readonly selections: Map<string, number>;
+};
+
+export const createDrawableLodSelectionWorkspace = (): DrawableLodSelectionWorkspace => ({
+  activeGroups: new Set(),
+  drawableLevels: new Uint8Array(1),
+  projection: createProjectedBoundsWorkspace(),
+  selections: new Map(),
+});
+
+/**
+ * Resolves view coverage, admitted-level fallback and compatible compound LOD
+ * memberships into retained caller-owned state. The core has no GL authority
+ * and allocates only when a newly observed group exceeds its workspace high-water mark.
+ */
+export const selectDrawableLodsInto = (
+  groups: readonly DrawableLodGroup[],
+  views: readonly Readonly<{ viewProjection: Mat4 }>[],
+  resources: readonly (DrawableLodResource | undefined)[],
+  workspace: DrawableLodSelectionWorkspace,
+): ReadonlyMap<string, number> => {
+  const { activeGroups, selections } = workspace;
+  activeGroups.clear();
+  if (groups.length === 0) {
+    selections.clear();
+    return selections;
+  }
+  for (const group of groups) {
+    if (workspace.drawableLevels.length < group.thresholds.length) {
+      workspace.drawableLevels = new Uint8Array(group.thresholds.length);
+    } else workspace.drawableLevels.fill(0, 0, group.thresholds.length);
+    let drawable = false;
+    for (let index = 0; index < group.surfaceIndices.length; index += 1) {
+      if (resources[group.surfaceIndices[index]!] === undefined) continue;
+      workspace.drawableLevels[group.levels[index]!] = 1;
+      drawable = true;
+    }
+    if (!drawable) continue;
+    activeGroups.add(group.group);
+    const coverage = maximumProjectedBoundsScreenCoverage(
+      group.selectionBounds,
+      views,
+      workspace.projection,
+    );
+    const previous = selections.get(group.group);
+    const target = hystereticLodLevel(coverage, group.thresholds, previous);
+    selections.set(group.group, closestDrawableLodLevel(
+      target,
+      previous,
+      workspace.drawableLevels,
+      group.thresholds.length,
+    ));
+  }
+  // Admission is prefix-bounded. Independent selectors may temporarily pick
+  // a node/material combination whose complete packet is not uploaded yet;
+  // retain one admitted combination for every affected set instead of a hole.
+  for (const group of groups) {
+    if (!activeGroups.has(group.group)) continue;
+    let matched = false;
+    let fallback: DrawableLodResource["surface"] | undefined;
+    for (const surfaceIndex of group.surfaceIndices) {
+      const surface = resources[surfaceIndex]?.surface;
+      if (surface === undefined) continue;
+      fallback ??= surface;
+      if (lodMembershipsSelected(surface.lods, selections)) {
+        matched = true;
+        break;
+      }
+    }
+    if (matched || fallback?.lods === undefined) continue;
+    for (const lod of fallback.lods) selections.set(lod.group, lod.level);
+  }
+  for (const group of selections.keys()) {
+    if (!activeGroups.has(group)) selections.delete(group);
+  }
+  return selections;
+};

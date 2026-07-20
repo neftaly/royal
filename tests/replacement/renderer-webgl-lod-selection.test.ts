@@ -3,12 +3,14 @@ import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   CULLED_LOD_LEVEL,
   closestDrawableLodLevel,
+  createDrawableLodSelectionWorkspace,
   createProjectedBoundsWorkspace,
   hystereticLodLevel,
   lodMembershipsSelected,
   maximumProjectedBoundsScreenCoverage,
   normalizeLodThresholds,
   projectedBoundsScreenCoverage,
+  selectDrawableLodsInto,
 } from "../../packages/renderer-webgl/src/surface/lod-selection";
 
 describe("canonical LOD selection", () => {
@@ -69,5 +71,54 @@ describe("canonical LOD selection", () => {
     const selected = new Map([["detail", 1]]);
     expect(lodMembershipsSelected(level0, selected)).toBe(false);
     expect(lodMembershipsSelected(level1, selected)).toBe(true);
+  });
+
+  it("retains one admitted compound LOD combination without frame allocations", () => {
+    const workspace = createDrawableLodSelectionWorkspace();
+    const groups = [{
+      group: "node",
+      levels: [0, 1],
+      selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
+      surfaceIndices: [0, 1],
+      thresholds: [0.5, 0],
+    }, {
+      group: "material",
+      levels: [0, 1],
+      selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
+      surfaceIndices: [0, 2],
+      thresholds: [0.5, 0],
+    }] as const;
+    const resources = [{
+      surface: { lods: [{ group: "node", level: 0 }, { group: "material", level: 0 }] },
+    }, {
+      surface: { lods: [{ group: "node", level: 1 }, { group: "material", level: 0 }] },
+    }, {
+      surface: { lods: [{ group: "node", level: 0 }, { group: "material", level: 1 }] },
+    }];
+    const views = [{ viewProjection: identityMat4() }];
+
+    const selections = selectDrawableLodsInto(groups, views, resources, workspace);
+    expect([...selections]).toEqual([["node", 0], ["material", 0]]);
+    const drawableLevels = workspace.drawableLevels;
+    expect(selectDrawableLodsInto(groups, views, resources, workspace)).toBe(selections);
+    expect(workspace.drawableLevels).toBe(drawableLevels);
+  });
+
+  it("cleans unavailable and stale LOD selections in the deterministic core", () => {
+    const workspace = createDrawableLodSelectionWorkspace();
+    const group = {
+      group: "detail",
+      levels: [0, 1],
+      selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
+      surfaceIndices: [0, 1],
+      thresholds: [0.5, 0],
+    } as const;
+    const resources = [{ surface: { lods: [{ group: "detail", level: 0 }] } }];
+    const views = [{ viewProjection: identityMat4() }];
+
+    expect([...selectDrawableLodsInto([group], views, resources, workspace)])
+      .toEqual([["detail", 0]]);
+    expect(selectDrawableLodsInto([], views, resources, workspace).size).toBe(0);
+    expect(workspace.activeGroups.size).toBe(0);
   });
 });
