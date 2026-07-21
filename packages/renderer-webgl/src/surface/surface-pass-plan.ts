@@ -72,32 +72,48 @@ export const planGroupedSurfacePasses = <Surface>(
   programIdentityOf: (surface: Surface) => object,
 ): SurfacePassPlan<Surface> => {
   const passes = planSurfacePasses(surfaces, materialOf);
-  const groups = new Map<object, Map<object, Surface[]>>();
-  let materialGroupCount = 0;
-  for (const surface of passes.opaque) {
-    const programIdentity = programIdentityOf(surface);
-    let materialGroups = groups.get(programIdentity);
-    if (materialGroups === undefined) {
-      materialGroups = new Map<object, Surface[]>();
-      groups.set(programIdentity, materialGroups);
+  const groupReorderable = (values: readonly Surface[]): Surface[] => {
+    const groups = new Map<object, Map<object, Surface[]>>();
+    let materialGroupCount = 0;
+    for (const surface of values) {
+      const programIdentity = programIdentityOf(surface);
+      let materialGroups = groups.get(programIdentity);
+      if (materialGroups === undefined) {
+        materialGroups = new Map<object, Surface[]>();
+        groups.set(programIdentity, materialGroups);
+      }
+      const materialIdentity = materialIdentityOf(surface);
+      const group = materialGroups.get(materialIdentity);
+      if (group === undefined) {
+        materialGroups.set(materialIdentity, [surface]);
+        materialGroupCount += 1;
+      } else group.push(surface);
     }
-    const materialIdentity = materialIdentityOf(surface);
-    const group = materialGroups.get(materialIdentity);
-    if (group === undefined) {
-      materialGroups.set(materialIdentity, [surface]);
-      materialGroupCount += 1;
-    } else group.push(surface);
-  }
-  if (materialGroupCount < 2) return passes;
-  const opaque = Array<Surface>(passes.opaque.length);
-  let index = 0;
-  for (const materialGroups of groups.values()) {
-    for (const group of materialGroups.values()) {
-      for (const surface of group) {
-        opaque[index] = surface;
-        index += 1;
+    if (materialGroupCount < 2) return [...values];
+    const grouped = Array<Surface>(values.length);
+    let index = 0;
+    for (const materialGroups of groups.values()) {
+      for (const group of materialGroups.values()) {
+        for (const surface of group) {
+          grouped[index] = surface;
+          index += 1;
+        }
       }
     }
+    return grouped;
+  };
+  const depthWritingTransmission: Surface[] = [];
+  const blendedTransmission: Surface[] = [];
+  for (const surface of passes.transmission) {
+    if (materialOf(surface).alphaBlend === true) blendedTransmission.push(surface);
+    else depthWritingTransmission.push(surface);
   }
-  return { ...passes, opaque };
+  return {
+    ...passes,
+    opaque: groupReorderable(passes.opaque),
+    transmission: [
+      ...groupReorderable(depthWritingTransmission),
+      ...blendedTransmission,
+    ],
+  };
 };

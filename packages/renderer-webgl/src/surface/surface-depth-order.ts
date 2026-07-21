@@ -7,6 +7,8 @@ export type DepthOrderedSurface = {
 };
 
 export type TransmissionDepthOrderedSurface = DepthOrderedSurface & Readonly<{
+  /** Cold retained state-run order; equal values may be depth-sorted together. */
+  depthOrderGroup?: number;
   drawPacket: Readonly<{ alphaBlend: boolean }>;
 }>;
 
@@ -33,6 +35,10 @@ const compareTransmissionDepthOrder = (
   const leftBlends = left.drawPacket.alphaBlend;
   const rightBlends = right.drawPacket.alphaBlend;
   if (leftBlends !== rightBlends) return leftBlends ? 1 : -1;
+  if (!leftBlends) {
+    const groupOrder = (left.depthOrderGroup ?? 0) - (right.depthOrderGroup ?? 0);
+    if (groupOrder !== 0) return groupOrder;
+  }
   return leftBlends
     ? left.depthOrder - right.depthOrder
     : right.depthOrder - left.depthOrder;
@@ -101,7 +107,11 @@ export const sortSurfaceRunsFrontToBack = <Surface extends DepthOrderedSurface>(
   }
 };
 
-/** Depth-writing transmission is front-to-back; alpha-blended transmission follows it back-to-front. */
+/**
+ * Depth-writing transmission stays within cold state-equivalent runs and sorts
+ * front-to-back inside each run. Alpha-blended transmission follows it in one
+ * global back-to-front order.
+ */
 export const sortTransmissionSurfaces = <Surface extends TransmissionDepthOrderedSurface>(
   surfaces: Surface[],
   view: Mat4,

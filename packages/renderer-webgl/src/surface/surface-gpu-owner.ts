@@ -155,6 +155,7 @@ export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly
 
 type GpuSurface = {
   depthOrder: number;
+  depthOrderGroup: number;
   depthPacket: SurfaceDrawPacket | null;
   depthProgram: SurfaceDepthProgram | null;
   drawPacket: SurfaceDrawPacket;
@@ -276,6 +277,7 @@ export class SurfaceGpuOwner {
   #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
   #transmissionSurfaces: GpuSurface[] = [];
+  #transmissionMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
   #instanceTransformsPending = false;
@@ -366,6 +368,7 @@ export class SurfaceGpuOwner {
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
+    this.#transmissionMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#transmissionCandidateIndices.length = 0;
     this.#compositeFramePlan.visibility = new Uint8Array(0);
     this.#terminalPresentationEligible = false;
@@ -387,6 +390,7 @@ export class SurfaceGpuOwner {
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#blendedSurfaces = [];
     this.#transmissionSurfaces = [];
+    this.#transmissionMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#gpuSurfacesBySceneIndex = [];
     this.#gpuScene = null;
     this.#instanceTransformsPending = false;
@@ -1201,8 +1205,14 @@ export class SurfaceGpuOwner {
         this.#multiDrawCounts[0] = resource.geometry.indexCount;
         this.#multiDrawOffsets[0] = resource.geometry.indexOffset;
         let drawCount = 1;
-        let runEnd = this.#opaqueMultiDrawRunEnds[index] ?? index + 1;
-        if (index >= opaqueCount) {
+        let runEnd = index + 1;
+        if (opaqueBucket) {
+          runEnd = bucketOffset
+            + (this.#opaqueMultiDrawRunEnds[bucketIndex] ?? bucketIndex + 1);
+        } else if (transmissionBucket && !resource.drawPacket.alphaBlend) {
+          runEnd = bucketOffset
+            + (this.#transmissionMultiDrawRunEnds[bucketIndex] ?? bucketIndex + 1);
+        } else {
           while (
             runEnd - bucketOffset < bucket.length
             && surfacesShareMultiDrawState(
@@ -1334,6 +1344,7 @@ export class SurfaceGpuOwner {
       : null;
     return {
       depthOrder: 0,
+      depthOrderGroup: 0,
       depthPacket: depthProgram === null ? null : {
         alphaBlend: false,
         colorWrite: false,
@@ -1614,6 +1625,17 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces,
       surfacesShareDepthPrepassState,
     );
+    this.#transmissionMultiDrawRunEnds = planContiguousRunEnds(
+      this.#transmissionSurfaces,
+      surfacesShareMultiDrawState,
+    );
+    for (let start = 0; start < this.#transmissionSurfaces.length;) {
+      const end = this.#transmissionMultiDrawRunEnds[start] ?? start + 1;
+      for (let index = start; index < end; index += 1) {
+        this.#transmissionSurfaces[index]!.depthOrderGroup = start;
+      }
+      start = end;
+    }
   }
 
   /** Candidate indices retain scene order, so cold preparation needs no lookup table. */

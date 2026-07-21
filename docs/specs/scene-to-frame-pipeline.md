@@ -183,8 +183,9 @@ issues WebGL calls and updates the shadow only after each successful call.
 
 Within ordering constraints, frame selection MAY group compatible draws to
 reduce program, VAO, material, texture, blend, and target transitions. Opaque
-reordering MUST preserve depth correctness and stable picking identity;
-transparent/transmission ordering wins over state minimization.
+and depth-writing transmission reordering MUST preserve depth correctness and
+stable picking identity. Transparent and alpha-blended transmission ordering
+wins over state minimization.
 
 ## No parallel semantic paths
 

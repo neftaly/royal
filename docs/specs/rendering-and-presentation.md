@@ -173,11 +173,13 @@ Alpha-opaque and alpha-mask draws establish normal depth. Transparent and
 transmission ordering MUST be deterministic, though perfect global order is not
 promised. A material becoming ready MUST NOT leak prior draw state.
 
-Depth-writing transmission is submitted front-to-back before alpha-blended
-transmission, which remains back-to-front. Because Royal's screen-space source
+Depth-writing transmission is grouped into deterministic exact-state runs and
+submitted front-to-back within each run before alpha-blended transmission,
+which remains globally back-to-front. Because Royal's screen-space source
 contains opaque scene color rather than previously drawn transmission, hidden
 opaque transmission cannot contribute to a later surface and SHOULD be rejected
-by depth before fragment work.
+by depth before fragment work. Grouping MUST NOT cross an authored material,
+program, binding, transform, geometry, or fixed-state difference.
 
 Framebuffer alpha follows the authored alpha mode, not merely the sampled base
 color. `OPAQUE` and surviving `MASK` fragments write alpha one; only `BLEND`

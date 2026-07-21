@@ -61,12 +61,14 @@ describe("fixed surface pass planning", () => {
     });
   });
 
-  it("groups opaque work by program and authored material without crossing pass order", () => {
+  it("groups depth-writing work without reordering blended passes", () => {
     const programA = {};
     const programB = {};
     const materialA = standard();
     const materialB = standard();
-    const transmissionMaterial = standard({ transmissionFactor: 1 });
+    const transmissionMaterialA = standard({ transmissionFactor: 1 });
+    const transmissionMaterialB = standard({ transmissionFactor: 0.5 });
+    const blendedTransmissionMaterial = standard({ alphaBlend: true, transmissionFactor: 1 });
     const transparentMaterial = standard({ alphaBlend: true });
     const surfaces = [
       { id: "a1", material: materialA, materialIdentity: materialA, program: programA },
@@ -74,10 +76,28 @@ describe("fixed surface pass planning", () => {
       { id: "a2", material: materialA, materialIdentity: materialA, program: programA },
       { id: "a-program-b", material: materialA, materialIdentity: materialA, program: programB },
       {
-        id: "transmission",
-        material: transmissionMaterial,
-        materialIdentity: transmissionMaterial,
+        id: "transmission-a1",
+        material: transmissionMaterialA,
+        materialIdentity: transmissionMaterialA,
         program: programB,
+      },
+      {
+        id: "transmission-b",
+        material: transmissionMaterialB,
+        materialIdentity: transmissionMaterialB,
+        program: programB,
+      },
+      {
+        id: "transmission-a2",
+        material: transmissionMaterialA,
+        materialIdentity: transmissionMaterialA,
+        program: programB,
+      },
+      {
+        id: "transmission-blended",
+        material: blendedTransmissionMaterial,
+        materialIdentity: blendedTransmissionMaterial,
+        program: programA,
       },
       {
         id: "transparent",
@@ -99,7 +119,12 @@ describe("fixed surface pass planning", () => {
       "b1",
       "a-program-b",
     ]);
-    expect(plan.transmission.map((surface) => surface.id)).toEqual(["transmission"]);
+    expect(plan.transmission.map((surface) => surface.id)).toEqual([
+      "transmission-a1",
+      "transmission-a2",
+      "transmission-b",
+      "transmission-blended",
+    ]);
     expect(plan.transparent.map((surface) => surface.id)).toEqual(["transparent"]);
   });
 

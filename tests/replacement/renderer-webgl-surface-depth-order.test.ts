@@ -8,6 +8,7 @@ import {
 
 type Surface = {
   depthOrder: number;
+  depthOrderGroup?: number;
   drawPacket: Readonly<{ alphaBlend: boolean }>;
   id: number;
   surface: Readonly<{
@@ -74,6 +75,21 @@ describe("surface depth ordering core", () => {
     sortTransmissionSurfaces(surfaces, identityMat4());
 
     expect(surfaces.map((surface) => surface.id)).toEqual([1, 4, 2, 0, 3]);
+  });
+
+  it("keeps depth-writing transmission inside retained state groups", () => {
+    const surfaces = [
+      { ...item(0, -8), depthOrderGroup: 0 },
+      { ...item(1, -2), depthOrderGroup: 0 },
+      { ...item(2, -1), depthOrderGroup: 2 },
+      { ...item(3, -9), depthOrderGroup: 2 },
+      item(4, -3, true),
+      item(5, -7, true),
+    ];
+
+    sortTransmissionSurfaces(surfaces, identityMat4());
+
+    expect(surfaces.map((surface) => surface.id)).toEqual([1, 0, 2, 3, 5, 4]);
   });
 
   it("orders only within retained state-equivalent runs from front to back", () => {
