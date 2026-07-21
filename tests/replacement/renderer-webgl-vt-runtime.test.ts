@@ -17,6 +17,11 @@ import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/frame/surface-frame";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
 import { virtualTextureRuntimeRequired } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
+import {
+  initialVirtualTextureActivationState,
+  reconcileVirtualTextureActivation,
+  settleVirtualTextureActivation,
+} from "../../packages/renderer-webgl/src/runtime/virtual-texture-activation";
 import { fakeGl } from "./support/canvas-root-harness";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -37,6 +42,43 @@ describe("VT runtime activation core", () => {
     expect(virtualTextureRuntimeRequired(ordinaryScene, false)).toBe(false);
     expect(virtualTextureRuntimeRequired(ordinaryScene, true)).toBe(true);
     expect(virtualTextureRuntimeRequired(authoredScene, false)).toBe(true);
+  });
+
+  it("loads once, activates the current generation and detaches on lost demand", () => {
+    const requested = reconcileVirtualTextureActivation(
+      initialVirtualTextureActivationState,
+      true,
+    );
+    expect(requested).toEqual({ generation: 1, phase: "loading" });
+    expect(reconcileVirtualTextureActivation(requested, true)).toBe(requested);
+
+    const active = settleVirtualTextureActivation(requested, 1, true);
+    expect(active).toEqual({ generation: 1, phase: "active" });
+    if (active === undefined) throw new Error("expected current VT load to activate");
+    expect(reconcileVirtualTextureActivation(active, false)).toEqual({
+      generation: 1,
+      phase: "inactive",
+    });
+  });
+
+  it("invalidates stale loads and allows a current failure to retry", () => {
+    const loading = reconcileVirtualTextureActivation(
+      initialVirtualTextureActivationState,
+      true,
+    );
+    const cancelled = reconcileVirtualTextureActivation(loading, false);
+    expect(cancelled).toEqual({ generation: 2, phase: "inactive" });
+    expect(settleVirtualTextureActivation(cancelled, 1, true)).toBeUndefined();
+
+    const retrying = reconcileVirtualTextureActivation(cancelled, true);
+    expect(retrying).toEqual({ generation: 3, phase: "loading" });
+    const failed = settleVirtualTextureActivation(retrying, 3, false);
+    expect(failed).toEqual({ generation: 3, phase: "inactive" });
+    if (failed === undefined) throw new Error("expected current VT failure to settle");
+    expect(reconcileVirtualTextureActivation(failed, true)).toEqual({
+      generation: 4,
+      phase: "loading",
+    });
   });
 });
 

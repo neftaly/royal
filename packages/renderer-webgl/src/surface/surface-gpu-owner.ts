@@ -348,6 +348,7 @@ export class SurfaceGpuOwner {
     this.#compositeGpu?.dispose();
     this.#compositeGpu = null;
     this.#virtualTexture?.dispose();
+    this.#virtualTexture = null;
     this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#opaqueSurfaces = [];

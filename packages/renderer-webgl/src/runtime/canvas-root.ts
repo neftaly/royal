@@ -87,6 +87,12 @@ import {
   type VirtualTextureRuntimeSnapshot,
 } from "../virtual-texture/runtime-contract";
 import {
+  initialVirtualTextureActivationState,
+  reconcileVirtualTextureActivation,
+  settleVirtualTextureActivation,
+  type VirtualTextureActivationState,
+} from "./virtual-texture-activation";
+import {
   PersistentGpuBudgetOwner,
   type PersistentGpuBudgetSnapshot,
 } from "../resource/persistent-gpu-budget";
@@ -429,9 +435,7 @@ export class CanvasRoot implements RendererRoot {
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: Scene | null = null;
   readonly #automaticVirtualTexturing: boolean;
-  #virtualTextureActive = false;
-  #virtualTextureLoadGeneration = 0;
-  #virtualTextureRequested = false;
+  #virtualTextureActivation: VirtualTextureActivationState = initialVirtualTextureActivationState;
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
   readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
 
@@ -1071,30 +1075,37 @@ export class CanvasRoot implements RendererRoot {
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
     const required = virtualTextureRuntimeRequired(scene, this.#automaticVirtualTexturing);
-    if (!required) {
-      this.#virtualTextureLoadGeneration += 1;
-      this.#virtualTextureRequested = false;
-      if (this.#virtualTextureActive) {
-        this.#surfaceGpu.setVirtualTextureRuntime(null);
-        this.#virtualTextureActive = false;
-        this.#virtualTextureRuntime = null;
-      }
+    const previousActivation = this.#virtualTextureActivation;
+    const activation = reconcileVirtualTextureActivation(
+      this.#virtualTextureActivation,
+      required,
+    );
+    this.#virtualTextureActivation = activation;
+    if (
+      previousActivation.phase === "active"
+      && activation.phase === "inactive"
+    ) {
+      this.#surfaceGpu.setVirtualTextureRuntime(null);
+      this.#virtualTextureRuntime = null;
       return;
     }
-    if (this.#virtualTextureActive) {
+    if (activation.phase === "active") {
       this.#virtualTextureRuntime?.setScene(scene);
       return;
     }
-    if (this.#virtualTextureRequested) return;
-    this.#virtualTextureRequested = true;
-    const generation = ++this.#virtualTextureLoadGeneration;
+    if (
+      previousActivation.phase !== "inactive"
+      || activation.phase !== "loading"
+    ) return;
+    const generation = activation.generation;
     void import("../virtual-texture/runtime").then((module) => {
-      if (
-        this.#disposed
-        || generation !== this.#virtualTextureLoadGeneration
-        || this.#surfaceScene === null
-        || !virtualTextureRuntimeRequired(this.#surfaceScene, this.#automaticVirtualTexturing)
-      ) return;
+      if (this.#disposed) return;
+      const activation = settleVirtualTextureActivation(
+        this.#virtualTextureActivation,
+        generation,
+        true,
+      );
+      if (activation === undefined) return;
       const runtime = module.createBrowserVirtualTextureRuntime(
         this.#gl,
         (asset) => {
@@ -1114,14 +1125,19 @@ export class CanvasRoot implements RendererRoot {
         this.#frameUploadBudget,
         this.#etc2Available,
       );
-      this.#virtualTextureRuntime = runtime;
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
-      this.#virtualTextureActive = true;
-      this.#virtualTextureRequested = false;
+      this.#virtualTextureRuntime = runtime;
+      this.#virtualTextureActivation = activation;
       this.#invalidatePresentation();
     }).catch((error: unknown) => {
-      if (this.#disposed || generation !== this.#virtualTextureLoadGeneration) return;
-      this.#virtualTextureRequested = false;
+      if (this.#disposed) return;
+      const activation = settleVirtualTextureActivation(
+        this.#virtualTextureActivation,
+        generation,
+        false,
+      );
+      if (activation === undefined) return;
+      this.#virtualTextureActivation = activation;
       this.#releaseUploadedTextures();
       this.#captureScheduledFailure(error);
     });
@@ -1250,8 +1266,7 @@ export class CanvasRoot implements RendererRoot {
     // Keep the bounded decode handoff alive until the lazy automatic-VT owner can claim it.
     if (
       this.#automaticVirtualTexturing
-      && this.#virtualTextureRequested
-      && !this.#virtualTextureActive
+      && this.#virtualTextureActivation.phase === "loading"
     ) return false;
     const uploaded = this.#surfaceGpu.takeUploadedTextureStorageKeys();
     const denied = this.#surfaceGpu.takeDeniedTextureStorageKeys();
