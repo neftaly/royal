@@ -88,6 +88,7 @@ export const planCompositeFrameInto = (
     allMaterialsStandard,
     hasAlphaBlend,
     capabilities,
+    surfaces.length,
   );
   output.compositeRequested = output.transmissionRequested || output.terminalPresentation;
   output.width = 1;

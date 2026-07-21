@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
+  sortSurfaceRunsFrontToBack,
   sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
@@ -73,5 +74,37 @@ describe("surface depth ordering core", () => {
     sortTransmissionSurfaces(surfaces, identityMat4());
 
     expect(surfaces.map((surface) => surface.id)).toEqual([1, 4, 2, 0, 3]);
+  });
+
+  it("orders only within retained state-equivalent runs from front to back", () => {
+    const surfaces = [
+      item(0, -8),
+      item(1, -2),
+      item(2, -5),
+      item(3, -9),
+      item(4, -3),
+    ];
+
+    sortSurfaceRunsFrontToBack(
+      surfaces,
+      new Uint32Array([3, 3, 3, 5, 5]),
+      identityMat4(),
+    );
+
+    expect(surfaces.map((surface) => surface.id)).toEqual([1, 2, 0, 4, 3]);
+  });
+
+  it("keeps equal-depth members stable without replacing the caller's array", () => {
+    const surfaces = [item(0, -2), item(1, -2), item(2, -1)];
+    const identity = surfaces;
+
+    sortSurfaceRunsFrontToBack(
+      surfaces,
+      new Uint32Array([3, 3, 3]),
+      identityMat4(),
+    );
+
+    expect(surfaces).toBe(identity);
+    expect(surfaces.map((surface) => surface.id)).toEqual([2, 0, 1]);
   });
 });

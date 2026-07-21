@@ -46,11 +46,15 @@ The default tone map is PBR Neutral; linear clamp is an explicit diagnostic or
 display-referred choice. Exposure is EV100, where a higher value produces a
 darker image.
 
-Opaque and alpha-mask scenes present directly. Profiling on the representative
-Sponza path showed that avoiding a view-sized half-float color/depth target and
-full-screen sample was cheaper than moving the compact output transform out of
-material shaders. This also avoids persistent target bytes and tile-memory
-traffic on the device floor.
+Small opaque and alpha-mask scenes present directly, avoiding persistent target
+bytes, an extra full-screen sample, and tile-memory traffic. A complex
+all-standard scene MAY instead retain one view-sized half-float color/depth
+target and move terminal presentation out of every material fragment. The
+selection is a stable, GL-free scene classifier with a conservative 32-surface
+crossover; it never branches on an asset, route, camera, browser name, or frame
+timing. Physical Safari measurement on Sponza reduced the camera-drag average
+from 33.3 ms to 22.0 ms (p95 43 ms to 27 ms) while preserving the exact shared
+tone map and output encoding. The additional target remains budget-governed.
 
 An all-standard scene with alpha-blended draws MAY retain one view-sized
 half-float color/depth target so blending occurs before the shared output

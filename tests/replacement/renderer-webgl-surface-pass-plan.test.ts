@@ -155,7 +155,18 @@ describe("terminal presentation planning", () => {
 
   it("presents opaque scenes directly without retaining a full-screen target", () => {
     expect(terminalPresentationRequested(true, false, supported)).toBe(false);
+    expect(terminalPresentationRequested(true, false, supported, 31)).toBe(false);
     expect(linearCompositeColorBytesPerPixel(supported, false)).toBe(8);
+  });
+
+  it("amortizes terminal presentation for a complex opaque standard scene", () => {
+    expect(terminalPresentationRequested(true, false, supported, 32)).toBe(true);
+    expect(terminalPresentationRequested(
+      true,
+      false,
+      { hasFloatBlendTarget: false, hasFloatColorTarget: false },
+      1_000,
+    )).toBe(false);
   });
 
   it("retains a terminal target only for supported linear alpha blending", () => {

@@ -119,6 +119,7 @@ import type {
 } from "../environment/gpu-owner";
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 import {
+  sortSurfaceRunsFrontToBack,
   sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "./surface-depth-order";
@@ -715,6 +716,7 @@ export class SurfaceGpuOwner {
             this.#terminalPresentationEligible,
             this.#terminalPresentationHasAlphaBlend,
             this.#linearCompositeCapabilities,
+            this.#scene.surfaces.length,
           )
         )
       ) return;
@@ -795,6 +797,13 @@ export class SurfaceGpuOwner {
     if (surfaceDrawPassNeedsDepthOrder(pass)) {
       sortTransmissionSurfaces(this.#transmissionSurfaces, view);
       sortSurfacesBackToFront(this.#blendedSurfaces, view);
+    }
+    if (pass !== "remaining") {
+      sortSurfaceRunsFrontToBack(
+        this.#opaqueSurfaces,
+        this.#opaqueMultiDrawRunEnds,
+        view,
+      );
     }
     const opaqueCount = this.#opaqueSurfaces.length;
     const transmissionEnd = opaqueCount + this.#transmissionSurfaces.length;
@@ -1457,9 +1466,10 @@ export class SurfaceGpuOwner {
   }
 
   #planOpaqueMultiDrawRuns(): void {
-    this.#opaqueMultiDrawRunEnds = this.#multiDraw === null
-      ? EMPTY_RUN_ENDS
-      : planContiguousRunEnds(this.#opaqueSurfaces, surfacesShareMultiDrawState);
+    this.#opaqueMultiDrawRunEnds = planContiguousRunEnds(
+      this.#opaqueSurfaces,
+      surfacesShareMultiDrawState,
+    );
   }
 
   /** Candidate indices retain scene order, so cold preparation needs no lookup table. */

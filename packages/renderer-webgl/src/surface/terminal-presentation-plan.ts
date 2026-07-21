@@ -3,6 +3,9 @@ export type LinearCompositeCapabilities = Readonly<{
   hasFloatColorTarget: boolean;
 }>;
 
+/** Physical-device crossover guard for amortizing one retained terminal pass. */
+export const OPAQUE_TERMINAL_PRESENTATION_SURFACE_THRESHOLD = 32;
+
 /** Chooses the retained linear attachment format before resource admission. */
 export const linearCompositeColorBytesPerPixel = (
   capabilities: LinearCompositeCapabilities,
@@ -13,16 +16,17 @@ export const linearCompositeColorBytesPerPixel = (
   : 4;
 
 /**
- * Selects the retained linear target needed for correct standard-material blending.
- *
- * Opaque/masked scenes present directly: measured full-screen bandwidth costs
- * more than repeating the compact output transform on their visible fragments.
+ * Selects the retained linear target needed for correct standard-material
+ * blending or for amortized complex-scene output conversion. Small opaque
+ * scenes stay direct; the decision is cold scene data, never frame timing.
  */
 export const terminalPresentationRequested = (
   allMaterialsStandard: boolean,
   hasAlphaBlend: boolean,
   capabilities: LinearCompositeCapabilities,
+  surfaceCount = 0,
 ): boolean => allMaterialsStandard
-  && hasAlphaBlend
   && capabilities.hasFloatColorTarget
-  && capabilities.hasFloatBlendTarget;
+  && (hasAlphaBlend
+    ? capabilities.hasFloatBlendTarget
+    : surfaceCount >= OPAQUE_TERMINAL_PRESENTATION_SURFACE_THRESHOLD);

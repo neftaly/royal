@@ -21,6 +21,11 @@ const viewDepth = (bounds: WorldBounds, view: Mat4): number => {
 const compareDepthOrder = (left: DepthOrderedSurface, right: DepthOrderedSurface): number =>
   left.depthOrder - right.depthOrder;
 
+const compareFrontToBackDepthOrder = (
+  left: DepthOrderedSurface,
+  right: DepthOrderedSurface,
+): number => right.depthOrder - left.depthOrder;
+
 const compareTransmissionDepthOrder = (
   left: TransmissionDepthOrderedSurface,
   right: TransmissionDepthOrderedSurface,
@@ -56,6 +61,45 @@ export const sortSurfacesBackToFront = <Surface extends DepthOrderedSurface>(
   surfaces: Surface[],
   view: Mat4,
 ): void => sortSurfaces(surfaces, view, compareDepthOrder);
+
+/**
+ * Stably orders each retained state-equivalent run for early depth rejection.
+ * Insertion sort avoids a per-frame slice allocation and is bounded by the
+ * already-small runs accepted by one draw or multi-draw state packet.
+ */
+export const sortSurfaceRunsFrontToBack = <Surface extends DepthOrderedSurface>(
+  surfaces: Surface[],
+  runEnds: Uint32Array,
+  view: Mat4,
+): void => {
+  for (let runStart = 0; runStart < surfaces.length;) {
+    const runEnd = runEnds[runStart] ?? runStart + 1;
+    let alreadyOrdered = true;
+    for (let index = runStart; index < runEnd; index += 1) {
+      const surface = surfaces[index]!;
+      surface.depthOrder = viewDepth(surface.surface.worldBounds, view);
+      if (
+        index > runStart
+        && compareFrontToBackDepthOrder(surfaces[index - 1]!, surface) > 0
+      ) alreadyOrdered = false;
+    }
+    if (!alreadyOrdered) {
+      for (let index = runStart + 1; index < runEnd; index += 1) {
+        const surface = surfaces[index]!;
+        let destination = index;
+        while (
+          destination > runStart
+          && compareFrontToBackDepthOrder(surfaces[destination - 1]!, surface) > 0
+        ) {
+          surfaces[destination] = surfaces[destination - 1]!;
+          destination -= 1;
+        }
+        surfaces[destination] = surface;
+      }
+    }
+    runStart = runEnd;
+  }
+};
 
 /** Depth-writing transmission is front-to-back; alpha-blended transmission follows it back-to-front. */
 export const sortTransmissionSurfaces = <Surface extends TransmissionDepthOrderedSurface>(
