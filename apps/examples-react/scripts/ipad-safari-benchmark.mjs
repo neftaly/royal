@@ -294,7 +294,7 @@ const captureWebKitNetwork = (client, targetId) => {
       && event.method !== 'Target.receivedMessageFromTarget'
     ) return;
     if (event.params?.targetId !== targetId || typeof event.params?.message !== 'string') return;
-    recorder.handle(JSON.parse(event.params.message));
+    recorder.handle(JSON.parse(event.params.message), performance.now());
   });
   return { close: unsubscribe, reset: recorder.reset, snapshot: recorder.snapshot };
 };

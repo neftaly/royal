@@ -11,18 +11,23 @@ export const createWebKitNetworkRecorder = () => {
   const complete = [];
   const pending = new Map();
 
-  const finish = (requestId, timestamp, terminal = {}) => {
+  const finish = (requestId, timestamp, receivedAtMs, terminal = {}) => {
     const row = pending.get(requestId);
     if (row === undefined) return;
     pending.delete(requestId);
     const metrics = terminal.metrics ?? {};
+    const { metrics: _metrics, ...terminalFields } = terminal;
     const decodedBodySize = finite(metrics.responseBodyDecodedSize) || row.dataLength;
     const encodedBodySize = finite(metrics.responseBodyBytesReceived) || row.encodedDataLength;
+    const protocolDurationMs = (finite(timestamp) - row.protocolStartTime) * 1_000;
     complete.push({
       ...row,
-      ...terminal,
+      ...terminalFields,
       decodedBodySize,
-      duration: Math.max(0, (finite(timestamp) - row.protocolStartTime) * 1_000),
+      duration: protocolDurationMs > 0
+        ? protocolDurationMs
+        : Math.max(0, receivedAtMs - row.observerStartTime),
+      durationSource: protocolDurationMs > 0 ? 'protocol' : 'host-observer',
       encodedBodySize,
       transferSize:
         finite(metrics.requestHeaderBytesSent)
@@ -32,11 +37,11 @@ export const createWebKitNetworkRecorder = () => {
     });
   };
 
-  const handle = (message) => {
+  const handle = (message, receivedAtMs = performance.now()) => {
     const params = message.params ?? {};
     if (message.method === 'Network.requestWillBeSent') {
       if (pending.has(params.requestId)) {
-        finish(params.requestId, params.timestamp, {
+        finish(params.requestId, params.timestamp, receivedAtMs, {
           redirected: true,
           ...responseFields(params.redirectResponse),
         });
@@ -48,6 +53,7 @@ export const createWebKitNetworkRecorder = () => {
         initiatorType: params.initiator?.type ?? 'unknown',
         method: params.request?.method,
         name: params.request?.url,
+        observerStartTime: receivedAtMs,
         protocolStartTime: finite(params.timestamp),
         requestId: params.requestId,
         resourceType: params.type,
@@ -59,6 +65,7 @@ export const createWebKitNetworkRecorder = () => {
     if (message.method === 'Network.responseReceived' && row !== undefined) {
       Object.assign(row, responseFields(params.response), {
         responseTime: params.timestamp,
+        observerResponseTime: receivedAtMs,
         resourceType: params.type ?? row.resourceType,
       });
       return;
@@ -69,11 +76,11 @@ export const createWebKitNetworkRecorder = () => {
       return;
     }
     if (message.method === 'Network.loadingFinished') {
-      finish(params.requestId, params.timestamp, { metrics: params.metrics });
+      finish(params.requestId, params.timestamp, receivedAtMs, { metrics: params.metrics });
       return;
     }
     if (message.method === 'Network.loadingFailed') {
-      finish(params.requestId, params.timestamp, {
+      finish(params.requestId, params.timestamp, receivedAtMs, {
         canceled: params.canceled === true,
         errorText: params.errorText,
         failed: true,
@@ -90,11 +97,13 @@ export const createWebKitNetworkRecorder = () => {
         encodedBodySize: finite(resource.bodySize),
         initiatorType: params.initiator?.type ?? 'unknown',
         name: resource.url,
+        observerStartTime: receivedAtMs,
         protocolStartTime: finite(params.timestamp),
         requestId: params.requestId,
         resourceType: resource.type,
         responseSource: 'memory-cache',
         transferSize: 0,
+        durationSource: 'memory-cache',
         ...responseFields(resource.response),
       });
     }

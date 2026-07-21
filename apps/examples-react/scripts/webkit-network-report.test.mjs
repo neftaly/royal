@@ -16,7 +16,7 @@ describe('WebKit network recorder', () => {
         type: 'Fetch',
         walltime: 100,
       },
-    });
+    }, 1_000);
     recorder.handle({
       method: 'Network.responseReceived',
       params: {
@@ -30,11 +30,11 @@ describe('WebKit network recorder', () => {
         timestamp: 10.01,
         type: 'Image',
       },
-    });
+    }, 1_010);
     recorder.handle({
       method: 'Network.dataReceived',
       params: { dataLength: 40, encodedDataLength: 20, requestId: '1' },
-    });
+    }, 1_020);
     recorder.handle({
       method: 'Network.loadingFinished',
       params: {
@@ -45,14 +45,15 @@ describe('WebKit network recorder', () => {
           responseHeaderBytesReceived: 12,
         },
         requestId: '1',
-        timestamp: 10.05,
+        timestamp: 0,
       },
-    });
+    }, 1_050);
 
     expect(recorder.snapshot()).toEqual({
       entries: [expect.objectContaining({
         decodedBodySize: 38,
         duration: expect.closeTo(50),
+        durationSource: 'host-observer',
         encodedBodySize: 18,
         mimeType: 'image/avif',
         name: 'http://example.test/wall.avif',
@@ -63,7 +64,7 @@ describe('WebKit network recorder', () => {
       })],
       failedCount: 0,
       pendingCount: 0,
-    });
+    }, 1_000);
   });
 
   it('records redirects, failures, memory hits, and reset boundaries', () => {
@@ -75,7 +76,7 @@ describe('WebKit network recorder', () => {
         requestId: '1',
         timestamp: 1,
       },
-    });
+    }, 2_000);
     recorder.handle({
       method: 'Network.requestWillBeSent',
       params: {
@@ -84,11 +85,11 @@ describe('WebKit network recorder', () => {
         requestId: '1',
         timestamp: 2,
       },
-    });
+    }, 3_000);
     recorder.handle({
       method: 'Network.loadingFailed',
       params: { canceled: false, errorText: 'boom', requestId: '1', timestamp: 3 },
-    });
+    }, 4_000);
     recorder.handle({
       method: 'Network.requestServedFromMemoryCache',
       params: {
