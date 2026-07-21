@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   prepareCanonicalSurfaceScene,
-  refreshCanonicalSurfaceTexture,
+  refreshCanonicalSurfaceTextures,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import {
@@ -68,7 +68,7 @@ describe("retained surface texture publication", () => {
     owner.drawViews(views, null, state, [0, 0, 0, 1]);
     expect(drawnTextures.at(-1)).toBe(createdTextures[0]);
 
-    owner.publishTextureScene(secondScene, decodedTextureKey(second));
+    owner.publishTextureBatch(secondScene, [decodedTextureKey(second)]);
     owner.beginFrame();
     owner.drawViews(views, null, state, [0, 0, 0, 1]);
     expect(drawnTextures.at(-1)).toBe(createdTextures[1]);
@@ -127,22 +127,22 @@ describe("retained surface texture publication", () => {
     owner.setScene(pending);
     draw();
     decoded.set(first, { height: 2, source: {} as ImageBitmap, width: 2 });
-    const firstReady = refreshCanonicalSurfaceTexture(
+    const firstReady = refreshCanonicalSurfaceTextures(
       pending,
-      decodedTextureKey(first),
+      [decodedTextureKey(first)],
       decodedSource,
     );
-    owner.publishTextureScene(firstReady, decodedTextureKey(first));
+    owner.publishTextureBatch(firstReady, [decodedTextureKey(first)]);
     draw();
     expect(draws.find(([count]) => count === 6)?.[1]).toBe(createdTextures[0]);
 
     decoded.set(second, { height: 2, source: {} as ImageBitmap, width: 2 });
-    const bothReady = refreshCanonicalSurfaceTexture(
+    const bothReady = refreshCanonicalSurfaceTextures(
       firstReady,
-      decodedTextureKey(second),
+      [decodedTextureKey(second)],
       decodedSource,
     );
-    owner.publishTextureScene(bothReady, decodedTextureKey(second));
+    owner.publishTextureBatch(bothReady, [decodedTextureKey(second)]);
     draw();
     expect(draws.find(([count]) => count === 6)?.[1]).toBe(createdTextures[0]);
     expect(draws.find(([count]) => count === 36)?.[1]).toBe(createdTextures[1]);

@@ -22,7 +22,7 @@ import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surf
 import {
   collectCanonicalSurfaceTextureAssets,
   prepareCanonicalSurfaceScene,
-  refreshCanonicalSurfaceTexture,
+  refreshCanonicalSurfaceTextures,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { dielectricF0FromIndexOfRefraction } from "../../packages/renderer-webgl/src/surface/canonical-material";
@@ -105,6 +105,33 @@ describe("canonical direct surface lowering", () => {
       firstOcclusion,
       secondEmissive,
     ]);
+  });
+
+  it("coalesces overlapping texture publications into one surface refresh", () => {
+    const texture = imageTexture("/batched.png");
+    const pending = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+    const key = decodedTextureKey(texture);
+    const decoded = { height: 8, source: {} as ImageBitmap, width: 8 };
+    let resolves = 0;
+    const ready = refreshCanonicalSurfaceTextures({
+      ...pending,
+      textureSurfaceIndices: new Map([
+        [key, [0]],
+        ["alias", [0]],
+      ]),
+    }, [key, "alias"], () => {
+      resolves += 1;
+      return decoded;
+    });
+
+    expect(resolves).toBe(1);
+    expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(decoded);
   });
 
   it("lowers planes and boxes to the same indexed triangle ABI", () => {
@@ -340,9 +367,9 @@ describe("canonical direct surface lowering", () => {
     expect(pending.textureSurfaceIndices.get(decodedTextureKey(firstTexture))).toEqual([0, 2]);
     expect(pending.textureSurfaceIndices.get(decodedTextureKey(secondTexture))).toEqual([1]);
     const decoded = { height: 8, source: {} as ImageBitmap, width: 16 };
-    const ready = refreshCanonicalSurfaceTexture(
+    const ready = refreshCanonicalSurfaceTextures(
       pending,
-      decodedTextureKey(firstTexture),
+      [decodedTextureKey(firstTexture)],
       (asset) => decodedTextureKey(asset) === decodedTextureKey(firstTexture)
         ? decoded
         : undefined,

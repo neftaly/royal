@@ -745,15 +745,20 @@ export const prepareCanonicalSurfaceScene = (
   };
 };
 
-/** Re-resolves only surfaces which claim one newly published decoded texture. */
-export const refreshCanonicalSurfaceTexture = (
+/** Re-resolves each surface affected by a batch of newly published decoded textures once. */
+export const refreshCanonicalSurfaceTextures = (
   scene: CanonicalSurfaceScene,
-  textureKey: string,
+  textureKeys: Iterable<string>,
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
   texturePending: (asset: TextureSourceRef) => boolean = () => true,
 ): CanonicalSurfaceScene => {
-  const affected = scene.textureSurfaceIndices.get(textureKey);
-  if (affected === undefined) return scene;
+  const affected = new Set<number>();
+  for (const textureKey of textureKeys) {
+    const indices = scene.textureSurfaceIndices.get(textureKey);
+    if (indices === undefined) continue;
+    for (const index of indices) affected.add(index);
+  }
+  if (affected.size === 0) return scene;
   const surfaces = scene.surfaces.slice();
   for (const index of affected) {
     const surface = scene.surfaces[index]!;

@@ -323,6 +323,14 @@ scheduling a duplicate presentation. Camera, scene, size, context, VT, or
 application invalidation always overrides the cadence and presents the latest
 committed resources.
 
+Ordinary-texture completions are collected by stable content key until the next
+submitted frame. Canonical lowering then clones the surface list once and
+re-resolves each affected surface once, even when several completed maps belong
+to it. The imperative root publishes that batch to the retained GPU packets in
+one transaction. Focused asset readiness remains immediate and independent;
+coalescing scene work MUST NOT delay a subscriber's ready/error observation or
+turn texture completion into a periodic polling loop.
+
 Committing one map in a visually coherent material group MUST NOT rebuild its
 retained draw packet while the sampled texture-unit mask is unchanged. The GPU
 storage commit still proceeds immediately; packet/program publication occurs

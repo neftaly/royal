@@ -30,6 +30,39 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("publishes texture completions as one frame-coalesced scene batch", async () => {
+    const first = imageTexture("/batched-first.png");
+    const second = imageTexture("/batched-second.png");
+    const publish = vi.spyOn(SurfaceGpuOwner.prototype, "publishTextureBatch");
+    const { flushScheduledFrames, root } = harness({
+      decodeTexture: async () => ({
+        height: 8,
+        source: {} as ImageBitmap,
+        width: 8,
+      }),
+    });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [
+          mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: first }) }),
+          mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture: second }) }),
+        ],
+      }));
+      await waitFor(() => {
+        expect(root.getTextureAssetSnapshot(first).status).toBe("ready");
+        expect(root.getTextureAssetSnapshot(second).status).toBe("ready");
+      });
+      flushScheduledFrames();
+
+      expect(publish).toHaveBeenCalledOnce();
+    } finally {
+      root.dispose();
+      publish.mockRestore();
+    }
+  });
+
   it("keeps decode readiness distinct from terminal GPU texture denial", async () => {
     const texture = imageTexture("/over-budget.png");
     const reconciledTextures = vi.spyOn(TextureGpuOwner.prototype, "reconcile");
@@ -56,7 +89,9 @@ describe("canvas root asset publication", () => {
         status: "ready",
         width: 8,
       });
-      expect(reconciledTextures).toHaveBeenCalledTimes(2);
+      // Initial fallback, denied ready publication, then one terminal fallback
+      // publication which removes the now-unusable sampled-texture feature.
+      expect(reconciledTextures).toHaveBeenCalledTimes(3);
     } finally {
       root.dispose();
       reconciledTextures.mockRestore();

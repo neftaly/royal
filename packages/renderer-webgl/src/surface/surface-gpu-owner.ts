@@ -548,19 +548,15 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
   }
 
-  publishTextureScene(scene: CanonicalSurfaceScene, textureKey: string): void {
+  publishTextureBatch(scene: CanonicalSurfaceScene, textureKeys: Iterable<string>): void {
     if (this.#scene === null || this.#scene.surfaces.length !== scene.surfaces.length) {
       this.setScene(scene);
       return;
     }
     this.#scene = scene;
-    this.#terminalPresentationEligible = scene.surfaces.every(
-      (surface) => surface.material.kind === "standard",
-    );
-    this.#terminalPresentationHasAlphaBlend = scene.surfaces.some(
-      (surface) => surface.material.alphaBlend === true,
-    );
-    this.#texturePublicationKeys.add(textureKey);
+    // Texture resolution cannot change pass membership or presentation policy;
+    // retain the cold setScene plan and publish only the affected draw packets.
+    for (const textureKey of textureKeys) this.#texturePublicationKeys.add(textureKey);
     this.#dirty = true;
   }
 

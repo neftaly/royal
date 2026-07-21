@@ -50,7 +50,7 @@ import {
 import { CameraSourceOwner } from "../surface/camera-source-owner";
 import {
   prepareCanonicalSurfaceScene,
-  refreshCanonicalSurfaceTexture,
+  refreshCanonicalSurfaceTextures,
   type CanonicalSurfaceScene,
 } from "../surface/scene-lowering";
 import {
@@ -388,6 +388,7 @@ export class CanvasRoot implements RendererRoot {
   #instanceSceneDirty = false;
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
   readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
+  readonly #pendingTexturePublicationKeys = new Set<string>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
   readonly #platform: CanvasRootPlatform;
@@ -511,7 +512,7 @@ export class CanvasRoot implements RendererRoot {
         this.#etc2Available,
         this.#automaticVirtualTexturing,
       ),
-      onAssetChanged: (key) => this.#refreshPreparedTexture(key),
+      onAssetChanged: (key) => this.#queuePreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
       schedule: this.#asyncPreparation.run,
@@ -606,6 +607,7 @@ export class CanvasRoot implements RendererRoot {
     this.#asyncPreparation.dispose();
     for (const state of this.#instanceSubscriptions.values()) state.unsubscribe();
     this.#instanceSubscriptions.clear();
+    this.#pendingTexturePublicationKeys.clear();
     this.#context.transition({ kind: "dispose" });
     this.#unsubscribeContext();
     this.#listeners.clear();
@@ -713,6 +715,7 @@ export class CanvasRoot implements RendererRoot {
       throw new TypeError("Royal render requires a validated scene");
     }
     if (scene === this.#surfaceSceneInput) return;
+    this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
       scene,
@@ -962,6 +965,7 @@ export class CanvasRoot implements RendererRoot {
 
   #refreshPreparedScene(instanceOnly = false): void {
     if (this.#disposed || this.#surfaceSceneInput === null) return;
+    this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(this.#surfaceSceneInput.camera);
     const prepared = prepareCanonicalSurfaceScene(
       this.#surfaceSceneInput,
@@ -1004,24 +1008,34 @@ export class CanvasRoot implements RendererRoot {
     );
   }
 
-  #refreshPreparedTexture(key: string): void {
+  #queuePreparedTexture(key: string): void {
     if (this.#disposed) return;
-    if (this.#surfaceScene !== null) {
-      const prepared = refreshCanonicalSurfaceTexture(
-        this.#surfaceScene,
-        key,
-        this.#getDecodedTexture,
-        this.#isTexturePending,
-      );
-      if (prepared !== this.#surfaceScene) {
-        this.#surfaceScene = prepared;
-        this.#surfaceGpu.publishTextureScene(prepared, key);
-        this.#virtualTextureRuntime?.setScene(prepared);
-        this.#textureResourcesPending = true;
-        this.#progressivePresentation.changed();
-        this.#clock.invalidate();
-      }
+    this.#pendingTexturePublicationKeys.add(key);
+    this.#clock.invalidate();
+  }
+
+  #flushPreparedTextures(): void {
+    const keys = this.#pendingTexturePublicationKeys;
+    if (keys.size === 0) return;
+    const scene = this.#surfaceScene;
+    if (scene === null) {
+      keys.clear();
+      return;
     }
+    const prepared = refreshCanonicalSurfaceTextures(
+      scene,
+      keys,
+      this.#getDecodedTexture,
+      this.#isTexturePending,
+    );
+    if (prepared !== scene) {
+      this.#surfaceScene = prepared;
+      this.#surfaceGpu.publishTextureBatch(prepared, keys);
+      this.#virtualTextureRuntime?.setScene(prepared);
+      this.#textureResourcesPending = true;
+      this.#progressivePresentation.changed();
+    }
+    keys.clear();
   }
 
   #reconcilePrefilteredEnvironment(scene: CanonicalSurfaceScene): void {
@@ -1121,6 +1135,7 @@ export class CanvasRoot implements RendererRoot {
   #renderFrame(): void {
     const intent = this.#frameIntent;
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+    this.#flushPreparedTextures();
     this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
     if (this.#surfaceResourcesPending || this.#textureResourcesPending) {
