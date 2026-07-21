@@ -109,6 +109,12 @@ const smokeExpectations = {
     minColorBuckets: 32,
     minPaintedRatio: 0.01,
   },
+  'gltf-bistro-web': {
+    gltfReady: true,
+    minColorBuckets: 8,
+    minPaintedRatio: 0.01,
+    resourceSubstrings: ['/BistroWeb/Bistro.gltf'],
+  },
   'gltf-scenes': {
     gltfReady: true,
     ...(selectedGltfSceneId === 'a-beautiful-game' ? { minImagesLoaded: 15 } : {}),
@@ -150,11 +156,15 @@ const smokeExpectations = {
   },
 };
 
-const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) => ({
-  ...requireExampleRoute(id),
-  ...expectation,
-  ...(id === 'gltf-lab' ? { path: '/gltf-lab?case=Box' } : {}),
-}));
+const smokeRoutes = Object.entries(smokeExpectations)
+  // Bistro is an approximately 100 MB torture workload. Keep it available as
+  // a focused smoke without adding that transfer and decode cost to every run.
+  .filter(([id]) => id !== 'gltf-bistro-web' || routeFilter !== '')
+  .map(([id, expectation]) => ({
+    ...requireExampleRoute(id),
+    ...expectation,
+    ...(id === 'gltf-lab' ? { path: '/gltf-lab?case=Box' } : {}),
+  }));
 
 const helmetTextureProbes = [
   { file: 'Default_normal.jpg', name: 'normal' },
@@ -683,6 +693,33 @@ const assertRoute = (expected, state) => {
       }
       if (interaction.before === interaction.hoveredId) {
         failures.push(`picking hover readout did not change from "${interaction.before}"`);
+      }
+    }
+  }
+
+  if (expected.id === 'gltf-bistro-web') {
+    const interaction = state.bistroSceneInteraction;
+    if (interaction === undefined) {
+      failures.push('Bistro route missed scene-selection interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`Bistro scene-selection smoke failed: ${interaction.error}`);
+    } else {
+      const options = interaction.options
+        ?.map(({ title, value }) => `${value}:${title}`)
+        .join(',');
+      if (options !== 'exterior:Exterior,interior:Interior,interior-wine:Interior Wine') {
+        failures.push(`Bistro scene options were ${options ?? 'missing'}`);
+      }
+      if (interaction.query !== 'exterior' || interaction.scene !== 'exterior') {
+        failures.push(
+          `Bistro scene selection resolved query=${interaction.query} scene=${interaction.scene}`,
+        );
+      }
+      if (interaction.sceneIndex !== 0) {
+        failures.push(`Bistro renderer resolved scene index ${interaction.sceneIndex}, expected 0`);
+      }
+      if (interaction.status !== 'ready' && interaction.status !== 'degraded') {
+        failures.push(`Bistro selected scene settled as ${interaction.status ?? 'missing'}`);
       }
     }
   }
@@ -1414,6 +1451,41 @@ const runGltfVariantsInteractionSmoke = async (session) => evaluate(session, `
     globalThis.removeEventListener('error', recordError);
     globalThis.removeEventListener('unhandledrejection', recordRejection);
   }
+})()
+`);
+
+const runGltfBistroSceneInteractionSmoke = async (session) => evaluate(session, `
+(async () => {
+  const gltfRendererSnapshotSettled = ${gltfRendererSnapshotSettled.toString()};
+  const selector = document.querySelector('.bistro-scene-selector select');
+  if (!(selector instanceof HTMLSelectElement)) return { error: 'missing Bistro scene selector' };
+  const options = [...selector.options].map(({ textContent, value }) => ({
+    title: textContent?.trim() ?? '',
+    value,
+  }));
+  selector.value = 'exterior';
+  selector.dispatchEvent(new Event('change', { bubbles: true }));
+  const deadline = performance.now() + ${routeReadyTimeoutMs};
+  let snapshot = null;
+  while (performance.now() < deadline) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await globalThis.__royalExamplesRenderNow?.();
+    snapshot = ${rendererSnapshotExpression};
+    const asset = snapshot?.gltfLoadDiagnostics?.assets?.[0];
+    if (
+      new URLSearchParams(location.search).get('scene') === 'exterior'
+      && document.querySelector('[data-bistro-scene]')?.getAttribute('data-bistro-scene') === 'exterior'
+      && asset?.sceneIndex === 0
+      && gltfRendererSnapshotSettled(snapshot)
+    ) break;
+  }
+  return {
+    options,
+    query: new URLSearchParams(location.search).get('scene'),
+    scene: document.querySelector('[data-bistro-scene]')?.getAttribute('data-bistro-scene') ?? '',
+    sceneIndex: snapshot?.gltfLoadDiagnostics?.assets?.[0]?.sceneIndex,
+    status: snapshot?.gltfLoadDiagnostics?.assets?.[0]?.status,
+  };
 })()
 `);
 
@@ -2158,6 +2230,12 @@ const main = async () => {
         state = {
           ...state,
           pickingInteraction: await runPickingInteractionSmoke(session),
+        };
+      }
+      if (route.id === 'gltf-bistro-web') {
+        state = {
+          ...state,
+          bistroSceneInteraction: await runGltfBistroSceneInteractionSmoke(session),
         };
       }
       if (route.id === 'gltf-variants') {
