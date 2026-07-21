@@ -54,6 +54,7 @@
     "packages/renderer-core/src",
     "packages/renderer-webgl/src",
     "packages/react/src",
+    "scripts/**/*.ts",
     "tests/replacement",
     "tests/tooling",
     "vite.config.ts",
