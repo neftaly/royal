@@ -253,8 +253,8 @@ export class TextureAssetOwner {
 
   constructor(platform: TextureAssetOwnerPlatform, storageBudgetBytes?: number) {
     if (storageBudgetBytes !== undefined && (
-      !Number.isSafeInteger(storageBudgetBytes) || storageBudgetBytes < 1
-    )) throw new RangeError("Royal texture storage budget must be a positive safe integer");
+      !Number.isSafeInteger(storageBudgetBytes) || storageBudgetBytes < 0
+    )) throw new RangeError("Royal texture storage budget must be a non-negative safe integer");
     this.#platform = platform;
     this.#storageBudgetBytes = storageBudgetBytes;
   }
@@ -346,6 +346,7 @@ export class TextureAssetOwner {
   reconcile(
     assets: readonly TextureSourceRef[],
     alphaMaskAssets: readonly TextureSourceRef[] = [],
+    storageBudgetBytes: number | undefined = this.#storageBudgetBytes,
   ): void {
     if (this.#disposed) return;
     this.#storageEntries.clear();
@@ -361,12 +362,12 @@ export class TextureAssetOwner {
     }
     let storageCount = 0;
     for (const claim of claimed.values()) storageCount += claim.storageKeys.size;
-    const fairStorageBytes = this.#storageBudgetBytes === undefined || storageCount === 0
+    const fairStorageBytes = storageBudgetBytes === undefined || storageCount === 0
       ? undefined
-      : Math.floor(this.#storageBudgetBytes / storageCount);
-    this.#maxStorageBytes = fairStorageBytes !== undefined && fairStorageBytes >= 4
-      ? fairStorageBytes
-      : undefined;
+      : Math.floor(storageBudgetBytes / storageCount);
+    this.#maxStorageBytes = fairStorageBytes === undefined
+      ? undefined
+      : Math.max(4, fairStorageBytes);
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key);
       if (entry === undefined) {

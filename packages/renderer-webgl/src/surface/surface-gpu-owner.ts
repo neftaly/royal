@@ -90,7 +90,10 @@ import type {
   VirtualTextureGpuBinding,
   VirtualTextureRuntime,
 } from "../virtual-texture/runtime-contract";
-import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+import {
+  ordinaryTextureStorageBudget,
+  PersistentGpuBudgetOwner,
+} from "../resource/persistent-gpu-budget";
 import {
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
@@ -119,6 +122,10 @@ import {
   type SurfaceDrawPass,
 } from "./surface-pass-plan";
 import {
+  compositeTargetByteLength,
+} from "./surface-composite-plan";
+import {
+  linearCompositeColorBytesPerPixel,
   terminalPresentationRequested,
   type LinearCompositeCapabilities,
 } from "./terminal-presentation-plan";
@@ -428,6 +435,40 @@ export class SurfaceGpuOwner {
 
   ordinaryTextureSnapshot(): OrdinaryTextureGpuSnapshot {
     return this.#textureGpu.snapshot();
+  }
+
+  /**
+   * Cold admission plan for ordinary texture fitting. Geometry and the
+   * size-dependent composite target keep their exact capacity before decode.
+   */
+  ordinaryTextureStorageBudget(
+    persistentBudgetBytes: number,
+    width: number,
+    height: number,
+  ): number {
+    const scene = this.#scene;
+    if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
+    let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces);
+    const transmissionRequested = this.#transmissionCandidateIndices.length !== 0;
+    const terminalPresentation = terminalPresentationRequested(
+      this.#terminalPresentationEligible,
+      this.#terminalPresentationHasAlphaBlend,
+      this.#linearCompositeCapabilities,
+      scene.surfaces.length,
+    );
+    if (transmissionRequested || terminalPresentation) {
+      const colorBytesPerPixel = linearCompositeColorBytesPerPixel(
+        this.#linearCompositeCapabilities,
+        this.#terminalPresentationHasAlphaBlend,
+      );
+      plannedNonTextureBytes += compositeTargetByteLength(
+        width,
+        height,
+        colorBytesPerPixel,
+        transmissionRequested ? {} : { sceneColor: false },
+      );
+    }
+    return ordinaryTextureStorageBudget(persistentBudgetBytes, plannedNonTextureBytes);
   }
 
   geometryUploadSnapshot(): SurfaceGeometryUploadSnapshot {

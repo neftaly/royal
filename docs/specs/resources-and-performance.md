@@ -121,12 +121,15 @@ Admission denial chooses one of:
 - select a legal lower-cost representation or fallback;
 - settle as a captured resource failure.
 
-Ordinary browser-decoded images share 75% of the persistent ceiling. Royal keeps
-authored dimensions when their complete RGBA mip representations fit; otherwise
-it selects the largest aspect-preserving decoded size that fits each active
-storage share before upload. This bounds ordinary glTF sets without an
-asset-specific branch. Authored close-range detail that must remain independent
-of scene-wide residency belongs in KTX2/VT representations.
+Ordinary browser-decoded images share at most 75% of the persistent ceiling.
+Before decode, Royal subtracts the exact cold-plan storage for retained geometry,
+instances, and the current size-dependent linear composite target; the smaller
+allowance governs the texture set. Royal keeps authored dimensions when their
+complete RGBA mip representations fit; otherwise it selects the largest
+aspect-preserving decoded size that fits each active storage share before upload.
+This bounds ordinary glTF sets without an asset-specific branch. Authored
+close-range detail that must remain independent of scene-wide residency belongs
+in KTX2/VT representations.
 
 The 256 MiB default is a portable safety ceiling, not a recommended texture
 working-set size. It keeps unoptimized ordinary assets viable on the A10/Safari

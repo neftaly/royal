@@ -735,7 +735,7 @@ export class CanvasRoot implements RendererRoot {
     this.#gltfAssets.reconcile(prepared.gltfNodes);
     this.#reconcileInstanceSources(scene);
     this.#resetInstanceUpdates();
-    this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
+    this.#reconcileTextureAssets(prepared);
     this.#refreshGltfTextureProgress();
     this.#clock.retry();
     this.#invalidatePresentation();
@@ -757,6 +757,7 @@ export class CanvasRoot implements RendererRoot {
     if (!semanticChanged) return;
     this.#sizeInput = { ...input };
     this.#size = resolved;
+    if (this.#surfaceScene !== null) this.#reconcileTextureAssets(this.#surfaceScene);
     if (!previous || backingChanged) this.#rebuildFrameIntent();
     if (backingChanged) this.#state.invalidate();
     this.#publishSize();
@@ -979,7 +980,7 @@ export class CanvasRoot implements RendererRoot {
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
-    this.#textureAssets.reconcile(prepared.textureAssets, prepared.alphaMaskTextureAssets);
+    this.#reconcileTextureAssets(prepared);
     this.#refreshGltfTextureProgress();
     this.#resetInstanceUpdates();
     this.#instancePickingDirty = false;
@@ -987,6 +988,20 @@ export class CanvasRoot implements RendererRoot {
       this.#clock.retry();
       this.#invalidatePresentation();
     }
+  }
+
+  #reconcileTextureAssets(scene: CanonicalSurfaceScene): void {
+    const size = this.#size;
+    const storageBudgetBytes = this.#surfaceGpu.ordinaryTextureStorageBudget(
+      this.#persistentGpuBudget.budgetBytes,
+      size?.backingWidth ?? 1,
+      size?.backingHeight ?? 1,
+    );
+    this.#textureAssets.reconcile(
+      scene.textureAssets,
+      scene.alphaMaskTextureAssets,
+      storageBudgetBytes,
+    );
   }
 
   #refreshPreparedTexture(key: string): void {

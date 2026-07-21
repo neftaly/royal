@@ -139,6 +139,7 @@ type PlannedGeometry = PendingGeometry & Readonly<{
 
 type PlannedGeometryArena = Readonly<{
   batch: GeometryBatchLayoutPlan;
+  byteLength: number;
   entries: readonly PlannedGeometry[];
   layout: number;
 }>;
@@ -176,6 +177,7 @@ const planGeometryArenas = (
   surfaces: readonly CanonicalDrawSurface[],
 ): Readonly<{
   plans: readonly PlannedGeometryArena[];
+  retainedBytes: number;
   uploads: ReadonlyMap<string, PlannedGeometry>;
 }> => {
   const byLayout = new Map<number, PendingGeometry[]>();
@@ -221,16 +223,32 @@ const planGeometryArenas = (
       }
       plans.push({
         batch,
+        byteLength: geometryBatchLayoutByteLength(
+          batch,
+          geometryVertexStrideBytes(layout),
+        ),
         entries: plannedEntries,
         layout,
       });
     }
   }
   const uploads = new Map<string, PlannedGeometry>();
+  let retainedBytes = 0;
   for (const plan of plans) {
+    retainedBytes += plan.byteLength;
     for (const entry of plan.entries) uploads.set(entry.key, entry);
   }
-  return { plans, uploads };
+  const instanceKeys = new Set<string>();
+  for (const surface of surfaces) {
+    const instances = surface.instances;
+    if (instances === undefined || instanceKeys.has(instances.key)) continue;
+    instanceKeys.add(instances.key);
+    retainedBytes += surfaceInstanceUploadByteLength(surface);
+  }
+  if (!Number.isSafeInteger(retainedBytes)) {
+    throw new RangeError("Royal planned surface geometry storage exceeds safe integer range");
+  }
+  return { plans, retainedBytes, uploads };
 };
 
 const sameGeometryArenaPlan = (
@@ -283,6 +301,15 @@ export class SurfaceGeometryGpuOwner {
 
   snapshot(): FrameUploadBudgetSnapshot {
     return this.#uploadBudget.snapshot();
+  }
+
+  /** Exact buffers retained by the current cold geometry/instance plan. */
+  plannedRetainedBytes(surfaces: readonly CanonicalDrawSurface[]): number {
+    if (this.#plannedSurfaces !== surfaces || this.#plannedGeometry === null) {
+      this.#plannedGeometry = planGeometryArenas(surfaces);
+      this.#plannedSurfaces = surfaces;
+    }
+    return this.#plannedGeometry.retainedBytes;
   }
 
   dispose(): void {
@@ -353,10 +380,7 @@ export class SurfaceGeometryGpuOwner {
     const hasTextureCoordinates = (layout & 4) !== 0;
     const hasTextureCoordinates1 = (layout & 8) !== 0;
     const hasColors = (layout & 16) !== 0;
-    const byteLength = geometryBatchLayoutByteLength(
-      batch,
-      geometryVertexStrideBytes(layout),
-    );
+    const byteLength = plan.byteLength;
     const budgetIdentity = {};
     if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
       throw new Error("Royal persistent GPU budget denied surface geometry");

@@ -1,5 +1,14 @@
 export const DEFAULT_PERSISTENT_GPU_BYTE_BUDGET = 256 * 1024 * 1024;
 
+/** Pure ordinary-texture share after known retained scene storage is reserved. */
+export const ordinaryTextureStorageBudget = (
+  persistentBudgetBytes: number,
+  plannedNonTextureBytes: number,
+): number => Math.max(0, Math.min(
+  Math.floor(persistentBudgetBytes * 0.75),
+  persistentBudgetBytes - plannedNonTextureBytes,
+));
+
 export type PersistentGpuBudgetSnapshot = Readonly<{
   /** Immutable persistent allocation ceiling in bytes. */
   budgetBytes: number;
@@ -25,6 +34,10 @@ export class PersistentGpuBudgetOwner {
   constructor(budgetBytes = DEFAULT_PERSISTENT_GPU_BYTE_BUDGET) {
     validateBytes(budgetBytes, "persistent GPU byte budget", false);
     this.#budgetBytes = budgetBytes;
+  }
+
+  get budgetBytes(): number {
+    return this.#budgetBytes;
   }
 
   /** Currently unclaimed capacity for resource admission; never negative. */
