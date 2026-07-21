@@ -18,11 +18,13 @@ import {
   type OrdinaryTextureGpuSnapshot,
 } from "../texture/gpu-owner";
 import {
-  MAX_CANONICAL_DIRECTIONAL_LIGHTS,
-  MAX_CANONICAL_PUNCTUAL_LIGHTS,
   type CanonicalDrawSurface,
   type CanonicalSurfaceScene,
 } from "./scene-lowering";
+import {
+  createCanonicalLightUniformStorage,
+  packCanonicalLightUniformsInto,
+} from "./light-uniform-packing";
 import type {
   CanonicalSurfaceMaterial,
   CanonicalTextureBinding,
@@ -226,8 +228,6 @@ export class SurfaceGpuOwner {
     viewProjection: identityMat4(),
     viewport: this.#compositeViewport,
   };
-  readonly #directionalLightColors = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
-  readonly #directionalLightDirections = new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4);
   #directionalLightCount = 0;
   #dirty = false;
   readonly #drawFrame: MutableSurfaceDrawFrame = {
@@ -257,15 +257,12 @@ export class SurfaceGpuOwner {
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
+  readonly #lightUniforms = createCanonicalLightUniformStorage();
   readonly #emissiveFactor = new Float32Array(4);
   readonly #environmentSettings = new Float32Array(4);
   readonly #fallbackBaseColor = new Float32Array(4);
   readonly #presentation = new Float32Array(4);
   readonly #specularFactors = new Float32Array(4);
-  readonly #punctualLightColors = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
-  readonly #punctualLightDirections = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
-  readonly #punctualLightPositions = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
-  readonly #punctualLightSpotCones = new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4);
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
   #scene: CanonicalSurfaceScene | null = null;
@@ -907,8 +904,11 @@ export class SurfaceGpuOwner {
               && program.directionalLightDirections !== null
             ) {
               gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
-              gl.uniform4fv(program.directionalLightColors, this.#directionalLightColors);
-              gl.uniform4fv(program.directionalLightDirections, this.#directionalLightDirections);
+              gl.uniform4fv(program.directionalLightColors, this.#lightUniforms.directionalColors);
+              gl.uniform4fv(
+                program.directionalLightDirections,
+                this.#lightUniforms.directionalDirections,
+              );
             }
             if (
               program.punctualLightCount !== null
@@ -918,10 +918,13 @@ export class SurfaceGpuOwner {
               && program.punctualLightSpotCones !== null
             ) {
               gl.uniform1i(program.punctualLightCount, scene.punctualLights.length);
-              gl.uniform4fv(program.punctualLightColors, this.#punctualLightColors);
-              gl.uniform4fv(program.punctualLightDirections, this.#punctualLightDirections);
-              gl.uniform4fv(program.punctualLightPositions, this.#punctualLightPositions);
-              gl.uniform4fv(program.punctualLightSpotCones, this.#punctualLightSpotCones);
+              gl.uniform4fv(program.punctualLightColors, this.#lightUniforms.punctualColors);
+              gl.uniform4fv(
+                program.punctualLightDirections,
+                this.#lightUniforms.punctualDirections,
+              );
+              gl.uniform4fv(program.punctualLightPositions, this.#lightUniforms.punctualPositions);
+              gl.uniform4fv(program.punctualLightSpotCones, this.#lightUniforms.punctualSpotCones);
             }
             if (program.environmentSettings !== null) {
               const environment = scene.environment;
@@ -1321,30 +1324,12 @@ export class SurfaceGpuOwner {
       throw error;
     }
     if (scene !== null) {
-      this.#directionalLightColors.fill(0);
-      this.#directionalLightDirections.fill(0);
       this.#directionalLightCount = scene.directionalLights.length;
-      for (let index = 0; index < scene.directionalLights.length; index += 1) {
-        const light = scene.directionalLights[index]!;
-        const offset = index * 4;
-        this.#directionalLightColors.set(light.color, offset);
-        this.#directionalLightDirections.set(light.direction, offset);
-      }
-      this.#punctualLightColors.fill(0);
-      this.#punctualLightDirections.fill(0);
-      this.#punctualLightPositions.fill(0);
-      this.#punctualLightSpotCones.fill(0);
-      for (let index = 0; index < scene.punctualLights.length; index += 1) {
-        const light = scene.punctualLights[index]!;
-        const offset = index * 4;
-        this.#punctualLightColors.set(light.color, offset);
-        this.#punctualLightDirections.set(light.direction, offset);
-        this.#punctualLightDirections[offset + 3] = light.kind === "spot" ? 1 : 0;
-        this.#punctualLightPositions.set(light.position, offset);
-        this.#punctualLightPositions[offset + 3] = light.range;
-        this.#punctualLightSpotCones[offset] = light.innerConeCosine;
-        this.#punctualLightSpotCones[offset + 1] = light.outerConeCosine;
-      }
+      packCanonicalLightUniformsInto(
+        scene.directionalLights,
+        scene.punctualLights,
+        this.#lightUniforms,
+      );
     } else {
       this.#directionalLightCount = 0;
     }
