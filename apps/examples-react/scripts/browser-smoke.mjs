@@ -154,7 +154,31 @@ const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) =>
   ...(id === 'gltf-lab' ? { path: '/gltf-lab?case=Box' } : {}),
 }));
 
+const helmetTextureProbes = [
+  { file: 'Default_normal.jpg', name: 'normal' },
+  { file: 'Default_metalRoughness.jpg', name: 'metallic-roughness' },
+  { file: 'Default_AO.jpg', name: 'occlusion' },
+  { file: 'Default_emissive.jpg', name: 'emissive' },
+];
+const textureProbeFilter = process.env.EXAMPLES_SMOKE_TEXTURE_PROBE?.trim() ?? '';
+if (
+  textureProbeFilter !== ''
+  && !helmetTextureProbes.some(({ name }) => name === textureProbeFilter)
+) throw new Error(`Unknown secondary texture probe: ${textureProbeFilter}`);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const continuePausedRequests = async (session, requests) => {
+  const continued = new Set();
+  for (let round = 0; round < 4; round += 1) {
+    const pending = requests.filter(({ requestId }) => !continued.has(requestId));
+    for (const { requestId } of pending) {
+      await session.call('Fetch.continueRequest', { requestId });
+      continued.add(requestId);
+    }
+    await sleep(25);
+  }
+};
 
 const connectPage = () => connectCdpPage({
   closeExtraPages: true,
@@ -271,7 +295,8 @@ const smokeExpression = `
         state.canvas.minColorBuckets === undefined ||
         state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets
       );
-    const gltfDiagnosticsReady = !(state.route.gltfReady || state.route.id.startsWith('gltf-')) ||
+    const gltfDiagnosticsReady = globalThis.__royalSmokeAllowPendingGltf === true ||
+      !(state.route.gltfReady || state.route.id.startsWith('gltf-')) ||
       gltfRendererSnapshotSettled(state.renderer, state.route.minImagesLoaded);
     const prefilteredEnvironmentReady = state.route.prefilteredEnvironmentReady !== true
       || state.prefilteredEnvironmentState === 'ready';
@@ -421,6 +446,20 @@ const compositedCanvasSample = async (session) => {
   `);
 };
 
+const waitForCompositedRouteState = async (session, route, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs;
+  let state;
+  while (Date.now() < deadline) {
+    state = await waitForRouteState(session, route, 500);
+    const sample = await compositedCanvasSample(session);
+    if (sample !== undefined && state.canvas !== undefined) {
+      state = { ...state, canvas: { ...state.canvas, sample } };
+    }
+    if (routeCanvasReady(route, state)) return state;
+  }
+  return state ?? await waitForRouteState(session, route, 1);
+};
+
 const compositedCanvasColorAt = async (session, x = 0.5, y = 0.5) => {
   const capture = await captureCompositedCanvas(session);
   if (capture === undefined) return undefined;
@@ -456,6 +495,56 @@ const compositedCanvasColorAt = async (session, x = 0.5, y = 0.5) => {
   `);
 };
 
+const compareCompositedCanvasCaptures = async (session, before, after) => evaluate(session, `
+  (async () => {
+    const decode = async (base64) => createImageBitmap(
+      await (await fetch('data:image/png;base64,' + base64)).blob()
+    );
+    const [beforeBitmap, afterBitmap] = await Promise.all([
+      decode(${JSON.stringify(before)}),
+      decode(${JSON.stringify(after)}),
+    ]);
+    try {
+      const width = Math.max(1, Math.min(512, beforeBitmap.width, afterBitmap.width));
+      const height = Math.max(1, Math.min(512, beforeBitmap.height, afterBitmap.height));
+      const pixels = (bitmap) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (context === null) throw new Error('secondary texture comparison needs 2D canvas');
+        context.drawImage(bitmap, 0, 0, width, height);
+        return context.getImageData(0, 0, width, height).data;
+      };
+      const beforePixels = pixels(beforeBitmap);
+      const afterPixels = pixels(afterBitmap);
+      let changedPixels = 0;
+      let maximumDelta = 0;
+      let totalDelta = 0;
+      for (let index = 0; index < beforePixels.length; index += 4) {
+        const delta = (
+          Math.abs(beforePixels[index] - afterPixels[index])
+          + Math.abs(beforePixels[index + 1] - afterPixels[index + 1])
+          + Math.abs(beforePixels[index + 2] - afterPixels[index + 2])
+        ) / (3 * 255);
+        totalDelta += delta;
+        maximumDelta = Math.max(maximumDelta, delta);
+        if (delta > 0.5 / 255) changedPixels += 1;
+      }
+      const pixelCount = beforePixels.length / 4;
+      return {
+        changedPixels,
+        changedRatio: changedPixels / pixelCount,
+        maximumDelta,
+        meanDelta: totalDelta / pixelCount,
+      };
+    } finally {
+      beforeBitmap.close();
+      afterBitmap.close();
+    }
+  })()
+`);
+
 const assertNeutralTextureTransition = (fallback, authored) => {
   if (!Array.isArray(fallback) || !Array.isArray(authored)) {
     throw new Error(`texture fallback smoke could not sample both states: ${JSON.stringify({ authored, fallback })}`);
@@ -481,7 +570,7 @@ const assertNeutralTextureTransition = (fallback, authored) => {
   }
 };
 
-const assertSecondaryTextureTransition = (fallback, authored) => {
+const assertSecondaryTextureTransition = (fallback, authored, comparison, repeatComparison) => {
   if (!Array.isArray(fallback) || !Array.isArray(authored)) {
     throw new Error(`secondary texture smoke could not sample both states: ${JSON.stringify({ authored, fallback })}`);
   }
@@ -497,8 +586,13 @@ const assertSecondaryTextureTransition = (fallback, authored) => {
     authored[1] - fallback[1],
     authored[2] - fallback[2],
   );
-  if (distance <= 0.02) {
-    throw new Error(`secondary texture did not visibly refine the material: ${JSON.stringify({ authored, fallback })}`);
+  const repeatMaximum = repeatComparison?.maximumDelta ?? 0;
+  const repeatMean = repeatComparison?.meanDelta ?? 0;
+  const changedAwayFromSample = comparison?.changedPixels > 0
+    && comparison.maximumDelta > repeatMaximum + 1 / 255
+    && comparison.meanDelta > repeatMean + 1e-7;
+  if (distance <= 0.02 && !changedAwayFromSample) {
+    throw new Error(`secondary texture did not visibly refine the material: ${JSON.stringify({ authored, comparison, fallback })}`);
   }
 };
 
@@ -1724,19 +1818,31 @@ const main = async () => {
     }
     console.log(`gpu ${gpu ?? 'renderer unavailable'}`);
 
-    const selectedRoutes = routeFilter === ''
+    const filteredRoutes = routeFilter === ''
       ? smokeRoutes
       : smokeRoutes.filter((route) =>
         route.id === routeFilter ||
         route.path === routeFilter ||
         route.path === `/${routeFilter}`
       );
-    if (selectedRoutes.length === 0) {
+    if (filteredRoutes.length === 0) {
       throw new Error(`Examples smoke route filter did not match a route: ${routeFilter}`);
     }
+    const selectedRoutes = filteredRoutes.flatMap((route) => route.id === 'gltf-helmet'
+      ? helmetTextureProbes
+        .filter(({ name }) => textureProbeFilter === '' || name === textureProbeFilter)
+        .map((textureProbe) => ({
+          ...route,
+          path: `${route.path}?textureProbe=${textureProbe.name}`,
+          textureProbe,
+        }))
+      : [route]);
     let contextLossChecked = false;
 
     for (const route of selectedRoutes) {
+      if (route.textureProbe !== undefined) {
+        console.log(`probe secondary-texture ${route.textureProbe.name}`);
+      }
       const routeExceptionStart = exceptions.length;
       const routeConsoleStart = consoleMessages.length;
       const routeUrl = new URL(baseUrl + route.path);
@@ -1774,6 +1880,8 @@ const main = async () => {
         };
       let textureFallbackPause;
       let textureFallbackKind;
+      let textureFallbackCapture;
+      const pausedTextureRequests = [];
       const pausedVirtualTextureRequests = [];
       if (route.id === 'texture-materials') {
         textureFallbackKind = 'base-color';
@@ -1783,6 +1891,11 @@ const main = async () => {
             urlPattern: '*Default_albedo.jpg*',
           }],
         });
+        session.on('Fetch.requestPaused', (request) => {
+          if (request.request.url.includes('/DamagedHelmet/Default_albedo.jpg')) {
+            pausedTextureRequests.push(request);
+          }
+        });
         textureFallbackPause = session.wait(
           'Fetch.requestPaused',
           ({ request }) => request.url.includes('/DamagedHelmet/Default_albedo.jpg'),
@@ -1790,15 +1903,21 @@ const main = async () => {
         );
       } else if (route.id === 'gltf-helmet') {
         textureFallbackKind = 'secondary';
+        const textureProbe = route.textureProbe ?? helmetTextureProbes[0];
         await session.call('Fetch.enable', {
           patterns: [{
             requestStage: 'Request',
-            urlPattern: '*Default_normal.jpg*',
+            urlPattern: `*${textureProbe.file}*`,
           }],
+        });
+        session.on('Fetch.requestPaused', (request) => {
+          if (request.request.url.includes(`/DamagedHelmet/${textureProbe.file}`)) {
+            pausedTextureRequests.push(request);
+          }
         });
         textureFallbackPause = session.wait(
           'Fetch.requestPaused',
-          ({ request }) => request.url.includes('/DamagedHelmet/Default_normal.jpg'),
+          ({ request }) => request.url.includes(`/DamagedHelmet/${textureProbe.file}`),
           { timeoutMs: 10_000 },
         );
       } else if (route.id === 'virtual-texture-stress') {
@@ -1822,7 +1941,10 @@ const main = async () => {
       }
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });
-      await Promise.race([routeLoaded, sleep(5_000)]);
+      await Promise.race([
+        textureFallbackPause === undefined ? routeLoaded : textureFallbackPause,
+        sleep(5_000),
+      ]);
       let textureFallbackColor;
       if (textureFallbackPause !== undefined) {
         const paused = await textureFallbackPause;
@@ -1842,7 +1964,7 @@ const main = async () => {
           : secondaryTextureFallback
             ? {
                 ...effectiveRoute,
-                absentResourceSubstrings: ['/DamagedHelmet/Default_normal.jpg'],
+                absentResourceSubstrings: [`/DamagedHelmet/${route.textureProbe.file}`],
                 minColorBuckets: 8,
                 resourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
               }
@@ -1851,13 +1973,16 @@ const main = async () => {
               absentResourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
               resourceSubstrings: [],
             };
-        const fallbackState = await waitForRouteState(session, fallbackRoute);
+        if (secondaryTextureFallback) {
+          await evaluate(session, 'globalThis.__royalSmokeAllowPendingGltf = true');
+        }
+        const fallbackState = await waitForCompositedRouteState(session, fallbackRoute);
         if (!routeCanvasReady(fallbackRoute, fallbackState)) {
           for (const request of pausedVirtualTextureRequests) {
             await session.call('Fetch.continueRequest', { requestId: request.requestId });
           }
           if (!virtualTextureFallback) {
-            await session.call('Fetch.continueRequest', { requestId: paused.requestId });
+            await continuePausedRequests(session, pausedTextureRequests);
           }
           await session.call('Fetch.disable');
           throw new Error(`texture fallback did not become presentable: ${JSON.stringify(fallbackState)}`);
@@ -1867,11 +1992,15 @@ const main = async () => {
           virtualTextureFallback ? 0.35 : 0.5,
           0.5,
         );
+        if (secondaryTextureFallback) {
+          textureFallbackCapture = await captureCompositedCanvas(session);
+          await evaluate(session, 'globalThis.__royalSmokeAllowPendingGltf = false');
+        }
         for (const request of pausedVirtualTextureRequests) {
           await session.call('Fetch.continueRequest', { requestId: request.requestId });
         }
         if (!virtualTextureFallback) {
-          await session.call('Fetch.continueRequest', { requestId: paused.requestId });
+          await continuePausedRequests(session, pausedTextureRequests);
         }
         await session.call('Fetch.disable');
       }
@@ -1920,6 +2049,12 @@ const main = async () => {
         };
       }
       if (textureFallbackKind !== undefined) {
+        const authoredCapture = textureFallbackKind === 'secondary'
+          ? await captureCompositedCanvas(session)
+          : undefined;
+        const authoredRepeatCapture = authoredCapture === undefined
+          ? undefined
+          : await captureCompositedCanvas(session);
         state = {
           ...state,
           textureTransition: {
@@ -1928,8 +2063,26 @@ const main = async () => {
               textureFallbackKind === 'virtual' ? 0.35 : 0.5,
               0.5,
             ),
+            ...(
+              authoredCapture === undefined
+              || authoredRepeatCapture === undefined
+              || textureFallbackCapture === undefined
+              ? {}
+              : {
+                  comparison: await compareCompositedCanvasCaptures(
+                    session,
+                    textureFallbackCapture,
+                    authoredCapture,
+                  ),
+                  repeatComparison: await compareCompositedCanvasCaptures(
+                    session,
+                    authoredCapture,
+                    authoredRepeatCapture,
+                  ),
+                }),
             fallback: textureFallbackColor,
             kind: textureFallbackKind,
+            ...(route.textureProbe === undefined ? {} : { probe: route.textureProbe.name }),
           },
         };
       }
@@ -1953,11 +2106,19 @@ const main = async () => {
           const assertTransition = state.textureTransition.kind === 'secondary'
             ? assertSecondaryTextureTransition
             : assertNeutralTextureTransition;
-          assertTransition(state.textureTransition.fallback, state.textureTransition.authored);
+          assertTransition(
+            state.textureTransition.fallback,
+            state.textureTransition.authored,
+            state.textureTransition.comparison,
+            state.textureTransition.repeatComparison,
+          );
           console.log(
             `ok texture-transition kind=${state.textureTransition.kind}`
+            + `${state.textureTransition.probe === undefined ? '' : ` probe=${state.textureTransition.probe}`}`
             + ` fallback=${state.textureTransition.fallback.map((value) => value.toFixed(3)).join(',')}`
             + ` authored=${state.textureTransition.authored.map((value) => value.toFixed(3)).join(',')}`,
+            state.textureTransition.comparison ?? '',
+            state.textureTransition.repeatComparison ?? '',
           );
         }
       } catch (error) {

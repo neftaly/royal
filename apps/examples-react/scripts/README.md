@@ -388,6 +388,12 @@ EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
 pnpm --filter @royal/examples-react test:browser
 ```
 
+The focused Helmet smoke delays normal, metallic-roughness, occlusion, and
+emissive images independently. Each fresh mount must remain presentable with
+authored base color, then produce a composited refinement above a same-state
+repeat-capture noise floor. Narrow one probe while diagnosing with
+`EXAMPLES_SMOKE_TEXTURE_PROBE=normal|metallic-roughness|occlusion|emissive`.
+
 The unfiltered browser smoke also opens the query-only React lifecycle probe.
 It verifies StrictMode cleanup plus semantic renderer-option replacement, an
 active `useFrame` clock stopping on unmount, disposal during a delayed VT
