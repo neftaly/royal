@@ -12,33 +12,5 @@
     },
     "rootDir": "src"
   },
-  "files": [
-    "src/index.ts",
-    "src/xr.ts",
-    "src/xr/session-controller.ts",
-    "src/xr/session-state.ts",
-    "src/xr/use-xr-session.ts",
-    "src/scene.ts",
-    "src/runtime/canvas-context.ts",
-    "src/runtime/canvas.ts",
-    "src/interaction/canvas-pointer-events.ts",
-    "src/interaction/canvas-pointer-interaction.ts",
-    "src/interaction/picking-events.ts",
-    "src/interaction/scene-interactions.ts",
-    "src/interaction/canvas-pointer.ts",
-    "src/observation/canvas-size.ts",
-    "src/observation/gltf-asset.ts",
-    "src/observation/texture-asset.ts",
-    "src/observation/virtual-texture-asset.ts",
-    "src/observation/renderer-lifecycle.ts",
-    "src/observation/root-snapshot.ts",
-    "src/observation/select-root.ts",
-    "src/orbit/camera-controller.ts",
-    "src/orbit/controls-core.ts",
-    "src/orbit/controls-runtime.ts",
-    "src/orbit/controls.ts",
-    "src/orbit/gltf-camera-fit.ts",
-    "src/validation.ts"
-  ],
-  "include": []
+  "include": ["src"]
 }
