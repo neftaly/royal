@@ -35,7 +35,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 442 * 1024,
+  '@royal/renderer-webgl': 454 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -80,9 +80,13 @@ try {
     const unexpectedFile = contents.find((entry) =>
       entry !== 'package/package.json'
       && entry !== 'package/README.md'
+      && entry !== 'package/LICENSE'
       && !entry.startsWith('package/dist/'));
     if (unexpectedFile !== undefined) {
       throw new Error(`${manifest.name} packed unexpected file: ${unexpectedFile}`);
+    }
+    if (!contents.includes('package/LICENSE')) {
+      throw new Error(`${manifest.name} packed license is missing`);
     }
     const missingTarget = exportTargets(manifest.exports)
       .map((target) => `package/${target.slice(2)}`)

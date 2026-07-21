@@ -5,7 +5,7 @@ descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
 hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
 canvas rendering.
 
-Royal is a source-level prerelease at `0.0.1`. Its accepted behavior and clean
+Royal is an open-source prerelease at `0.0.1`. Its accepted behavior and clean
 replacement architecture are defined in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained
@@ -87,5 +87,5 @@ counted as working merely because legacy source still exists.
 - Consumer DX comes before backend vocabulary; focused observation comes before
   broad diagnostics.
 
-Royal remains AGPL-3.0-only. The proposed Royal SVG glTF extension and its
+Royal is distributed under [AGPL-3.0-only](LICENSE). The proposed Royal SVG glTF extension and its
 security/texture behavior are retained in the specification set.

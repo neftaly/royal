@@ -56,5 +56,5 @@ changing that content identity. See the repository rendering specification and
 - `@royal/renderer-core/render-object` — low-level render-object transform
   state and attachment utilities used by renderer adapters.
 
-Royal is currently a private source-level prerelease. See the repository
+Royal is currently an open-source prerelease. See the repository
 [README](../../README.md) and [changelog](../../CHANGELOG.md).
