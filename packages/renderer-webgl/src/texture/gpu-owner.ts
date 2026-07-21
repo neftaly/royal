@@ -121,7 +121,23 @@ export class TextureGpuOwner {
   reconcile(
     bindings: readonly (CanonicalTextureBinding | undefined)[],
   ): readonly GpuTextureBinding[] {
+    // A complete claim reconciliation supersedes storage outside the incoming
+    // set. Release it before admitting replacements so steady-state capacity,
+    // rather than the old and new scenes' transient sum, governs admission.
     const claimedTextures = new Set<string>();
+    for (const binding of bindings) {
+      if (binding !== undefined) claimedTextures.add(binding.storageKey);
+    }
+    for (const [key, resource] of this.#textures) {
+      if (claimedTextures.has(key)) continue;
+      this.#gl.deleteTexture(resource.texture);
+      this.#budget.release(resource.budgetIdentity);
+      this.#textures.delete(key);
+      this.#uploadedStorageKeys.delete(key);
+      this.#deniedStorageKeys.delete(key);
+      this.#deferredStorageKeys.delete(key);
+    }
+    claimedTextures.clear();
     const claimedSamplers = new Set<string>();
     const result: GpuTextureBinding[] = [];
     const createdTextures = new Map<string, GpuTexture>();
@@ -185,6 +201,7 @@ export class TextureGpuOwner {
       this.#gl.deleteTexture(resource.texture);
       this.#budget.release(resource.budgetIdentity);
       this.#textures.delete(key);
+      this.#uploadedStorageKeys.delete(key);
     }
     for (const [key, resource] of createdSamplers) this.#samplers.set(key, resource);
     for (const [key, resource] of createdTextures) {

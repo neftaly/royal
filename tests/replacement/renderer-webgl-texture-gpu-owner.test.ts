@@ -208,6 +208,33 @@ describe("ordinary texture GPU owner", () => {
     expect(gl.deleteSampler).toHaveBeenCalledTimes(2);
   });
 
+  it("releases superseded storage before admitting an exactly full replacement", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(256);
+    const owner = new TextureGpuOwner(gl, budget);
+    const first = binding("first", "nearest", "first-image:srgb");
+    const second = binding("second", "nearest", "second-image:srgb");
+
+    expect(owner.reconcile([first])[0]!.texture).not.toBeNull();
+    expect(budget.snapshot()).toEqual({
+      budgetBytes: 256,
+      deniedClaims: 0,
+      retainedBytes: 256,
+    });
+    const replacement = owner.reconcile([second]);
+
+    expect(replacement[0]!.texture).not.toBeNull();
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    expect(gl.createTexture).toHaveBeenCalledTimes(2);
+    expect(owner.takeUploadedStorageKeys()).toEqual([second.storageKey]);
+    expect(owner.takeDeniedStorageKeys()).toEqual([]);
+    expect(budget.snapshot()).toEqual({
+      budgetBytes: 256,
+      deniedClaims: 0,
+      retainedBytes: 256,
+    });
+  });
+
   it("allocates a known mip chain immutably before uploading its base level", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
