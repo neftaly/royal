@@ -52,9 +52,11 @@ all-standard scene MAY instead retain one view-sized half-float color/depth
 target and move terminal presentation out of every material fragment. The
 selection is a stable, GL-free scene classifier with a conservative 32-surface
 crossover; it never branches on an asset, route, camera, browser name, or frame
-timing. Physical Safari measurement on Sponza reduced the camera-drag average
-from 33.3 ms to 22.0 ms (p95 43 ms to 27 ms) while preserving the exact shared
-tone map and output encoding. The additional target remains budget-governed.
+timing. Clean physical Safari measurements on Sponza reduced the camera-drag
+average from 32.6 ms to 30.3 ms and p95 from 42 ms to 38 ms while preserving
+the exact shared tone map and output encoding; exploratory paired runs showed
+larger but thermally variable gains, so they are not the acceptance claim. The
+additional target remains budget-governed.
 
 An all-standard scene with alpha-blended draws MAY retain one view-sized
 half-float color/depth target so blending occurs before the shared output
