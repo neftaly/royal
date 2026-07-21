@@ -191,6 +191,7 @@ const wheelDeltaPixels = (event: WheelEvent): number => {
   return event.deltaY;
 };
 
+/** Attaches imperative orbit, pan, wheel, and pinch controls to one canvas. */
 export const createOrbitControls = (
   canvas: HTMLCanvasElement,
   options: OrbitControlsOptions,

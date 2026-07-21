@@ -28,13 +28,14 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
     virtualSettings2.x - 1.0
   ));
   float desiredScale = exp2(float(desiredMip));
-  vec2 desiredPage = floor((uv * virtualSize / desiredScale) / pageSize);
+  vec2 virtualTexel = uv * virtualSize;
+  vec2 desiredPage = floor((virtualTexel / desiredScale) / pageSize);
   vec4 entry = texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip);
   if (entry.a < 0.5) return vec4(0.214041, 0.214041, 0.214041, 1.0);
   vec3 decoded = floor(entry.rgb * 255.0 + 0.5);
   float residentScale = exp2(decoded.z);
-  vec2 residentTexel = uv * virtualSize / residentScale;
-  float ancestorSpan = exp2(decoded.z - float(desiredMip));
+  vec2 residentTexel = virtualTexel / residentScale;
+  float ancestorSpan = residentScale / desiredScale;
   vec2 residentPage = floor(desiredPage / ancestorSpan);
   vec2 localTexel = residentTexel - residentPage * pageSize;
   float storedPageSize = virtualSettings2.w;

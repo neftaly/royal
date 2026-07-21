@@ -6,6 +6,7 @@ import {
   type RendererHookOptions,
 } from "./select-root";
 
+/** Current CSS layout and applied WebGL backing-store size for one Canvas. */
 export type CanvasSize = Readonly<{
   /** Width divided by height. */
   aspectRatio: number;

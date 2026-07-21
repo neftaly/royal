@@ -44,6 +44,7 @@ const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const SPOT_LIGHT_FIELDS = [
   'color', 'direction', 'innerConeAngle', 'intensityCandela', 'outerConeAngle', 'position', 'range',
 ] as const;
+/** Creates a directed cone light with radian cone angles. */
 export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   objectWithAllowedFields(options, SPOT_LIGHT_FIELDS, 'spot light');
   const outerConeAngle = options.outerConeAngle ?? Math.PI / 4;

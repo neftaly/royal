@@ -161,6 +161,7 @@ const resolveSampler = (sampler: TextureSampler | undefined): TextureSampler | u
   return { ...sampler };
 };
 
+/** Creates one scene-linear constant texture without an external asset lifecycle. */
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
   objectWithAllowedFields(options, SOLID_TEXTURE_FIELDS, 'solid texture');
   return {
@@ -169,6 +170,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
   };
 };
 
+/** Creates an explicit ordinary texture asset, including optional shared-content identity. */
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
   objectWithAllowedFields(options, TEXTURE_ASSET_FIELDS, 'texture asset');
   const uri = nonEmptyString(options.src, 'texture asset "src"');
@@ -191,6 +193,7 @@ export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
   };
 };
 
+/** Creates a friendly sRGB ordinary-image reference from a URI or image options. */
 export function imageTexture(src: string): TextureAssetRef;
 export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
 export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {

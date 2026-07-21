@@ -107,6 +107,7 @@ import {
   type WebGlMultiDraw,
 } from "./surface-multi-draw";
 import {
+  collectCompleteSurfaceTextureClaimsInto,
   collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
   createTexturePublicationWorkspace,
@@ -293,6 +294,8 @@ export class SurfaceGpuOwner {
   #programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
   #standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
   readonly #textureGpu: TextureGpuOwner;
+  readonly #textureSamplerClaim = new Set<string>();
+  readonly #textureStorageClaim = new Set<string>();
   readonly #texturePublicationKeys = new Set<string>();
   readonly #texturePublicationWorkspace = createTexturePublicationWorkspace();
   #terminalPresentationEligible = false;
@@ -352,25 +355,18 @@ export class SurfaceGpuOwner {
     this.#virtualTexture?.dispose();
     this.#virtualTexture = null;
     this.#fullReconcileRequired = true;
-    this.#admittedSurfaceCount = 0;
-    this.#opaqueSurfaces = [];
-    this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
-    this.#blendedSurfaces = [];
-    this.#gpuSurfacesBySceneIndex = [];
-    this.#gpuScene = null;
-    this.#instanceTransformsPending = false;
+    this.#clearGpuSurfaces();
     this.#scene = null;
+    this.#textureSamplerClaim.clear();
+    this.#textureStorageClaim.clear();
     this.#texturePublicationKeys.clear();
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
-    this.#transmissionSurfaces = [];
-    this.#transmissionMultiDrawRunEnds = EMPTY_RUN_ENDS;
     this.#transmissionCandidateIndices.length = 0;
     this.#compositeFramePlan.visibility = new Uint8Array(0);
     this.#terminalPresentationEligible = false;
     this.#terminalPresentationHasAlphaBlend = false;
     this.#depthPrepassActive = false;
-    this.#depthPrepassRunEnds = EMPTY_RUN_ENDS;
   }
 
   invalidate(): void {
@@ -381,15 +377,7 @@ export class SurfaceGpuOwner {
     this.#environmentGpu?.invalidate();
     this.#geometryGpu.invalidate();
     this.#depthPrepassOwner?.invalidate();
-    this.#opaqueSurfaces = [];
-    this.#depthPrepassRunEnds = EMPTY_RUN_ENDS;
-    this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
-    this.#blendedSurfaces = [];
-    this.#transmissionSurfaces = [];
-    this.#transmissionMultiDrawRunEnds = EMPTY_RUN_ENDS;
-    this.#gpuSurfacesBySceneIndex = [];
-    this.#gpuScene = null;
-    this.#instanceTransformsPending = false;
+    this.#clearGpuSurfaces();
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
@@ -399,7 +387,6 @@ export class SurfaceGpuOwner {
     this.#multiDraw = this.#readMultiDraw();
     this.#setDepthPrepassActive(this.#scene?.camera.position ?? this.#cameraPosition);
     this.#fullReconcileRequired = true;
-    this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
     this.#compositeActive = false;
     this.#compositeBindingRevision = this.#compositeGpu?.bindingRevision ?? 0;
@@ -410,6 +397,19 @@ export class SurfaceGpuOwner {
     return typeof this.#gl.getExtension === "function"
       ? this.#gl.getExtension("WEBGL_multi_draw") as WebGlMultiDraw | null
       : null;
+  }
+
+  #clearGpuSurfaces(): void {
+    this.#admittedSurfaceCount = 0;
+    this.#opaqueSurfaces = [];
+    this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
+    this.#blendedSurfaces = [];
+    this.#transmissionSurfaces = [];
+    this.#transmissionMultiDrawRunEnds = EMPTY_RUN_ENDS;
+    this.#depthPrepassRunEnds = EMPTY_RUN_ENDS;
+    this.#gpuSurfacesBySceneIndex = [];
+    this.#gpuScene = null;
+    this.#instanceTransformsPending = false;
   }
 
   #readExtension(name: string): boolean {
@@ -490,13 +490,25 @@ export class SurfaceGpuOwner {
 
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
+    collectCompleteSurfaceTextureClaimsInto(
+      scene,
+      this.#textureStorageClaim,
+      this.#textureSamplerClaim,
+    );
+    this.#textureGpu.releaseUnclaimed(
+      this.#textureStorageClaim,
+      this.#textureSamplerClaim,
+    );
     this.#sceneGlobalsRevision += 1;
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
-    this.#admittedSurfaceCount = retainedSurfaceAdmissionCount(
+    const retainedSurfaceCount = retainedSurfaceAdmissionCount(
       this.#scene?.surfaces ?? [],
       scene?.surfaces ?? [],
       this.#admittedSurfaceCount,
     );
+    if (this.#geometryGpu.releaseSupersededPlan(scene?.surfaces ?? [])) {
+      this.#clearGpuSurfaces();
+    } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
     this.#depthPrepassPlan = planOpaqueDepthPrepass(scene?.surfaces ?? []);
     this.#setDepthPrepassActive(scene?.camera.position ?? this.#cameraPosition);
@@ -555,7 +567,7 @@ export class SurfaceGpuOwner {
     }
     this.#scene = scene;
     // Texture resolution cannot change pass membership or presentation policy;
-    // retain the cold setScene plan and publish only the affected draw packets.
+    // retain the cold setScene resource claims and publish only affected packets.
     for (const textureKey of textureKeys) this.#texturePublicationKeys.add(textureKey);
     this.#dirty = true;
   }
@@ -1396,7 +1408,6 @@ export class SurfaceGpuOwner {
   }
 
   #reconcile(): void {
-    this.#dirty = false;
     const scene = this.#scene;
     const surfaces = scene?.surfaces ?? [];
     const requestedSurfaceCount = nextSurfaceAdmissionCount(
@@ -1450,7 +1461,11 @@ export class SurfaceGpuOwner {
             textureInputs[offset + unit] = materialTextureBindingAt(material, unit);
           }
         }
-        const textureBindings = this.#textureGpu.reconcile(textureInputs);
+        const textureBindings = this.#textureGpu.reconcileClaimedBatch(
+          textureInputs,
+          this.#textureStorageClaim,
+          this.#textureSamplerClaim,
+        );
         nextSurfaces = Array<GpuSurface>(geometryPlan.surfaces.length);
         for (let index = 0; index < geometryPlan.surfaces.length; index += 1) {
           nextSurfaces[index] = this.#prepareGpuSurface(

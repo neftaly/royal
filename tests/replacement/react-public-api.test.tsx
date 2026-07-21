@@ -68,6 +68,28 @@ const emptyScene = {
   nodes: [],
 } as unknown as Scene;
 
+// Focused hook inputs deliberately advertise retained identity rather than
+// presentation fields that observation ignores. Descriptor variables remain
+// structurally compatible and are exercised below.
+const gltfStatusWithBounds: GltfAssetStatusInput = {
+  // @ts-expect-error Bounds do not participate in glTF status identity.
+  bounds: { max: [1, 1, 1], min: [0, 0, 0] },
+  src: "/scene.glb",
+};
+const textureStatusWithColorSpace: TextureAssetStatusInput = {
+  // @ts-expect-error Color space does not participate in decoded texture status identity.
+  colorSpace: "srgb",
+  src: "/albedo.png",
+};
+const environmentStatusWithRotation: PrefilteredEnvironmentStatusInput = {
+  // @ts-expect-error Rotation does not participate in environment loading status identity.
+  rotation: [0, 0, 0],
+  src: "/studio.ktx",
+};
+void gltfStatusWithBounds;
+void textureStatusWithColorSpace;
+void environmentStatusWithRotation;
+
 describe("replacement React public API", () => {
   it("keeps runtime entrypoints narrow and ownership-oriented", () => {
     expect(Object.keys(reactApi).sort()).toEqual([

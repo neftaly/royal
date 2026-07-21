@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
   resolveCanonicalMaterialTexture,
   type CanonicalSurfaceMaterial,
   type CanonicalTextureBinding,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
+  collectCompleteSurfaceTextureClaimsInto,
   collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
   createTexturePublicationWorkspace,
@@ -42,6 +45,7 @@ import type {
   DecodedTextureSource,
   TextureSourceRef,
 } from "../../packages/renderer-webgl/src/texture/asset-owner";
+import { textureStorageKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 const gpuBinding = (label: string): GpuTextureBinding => ({
   sampler: { label: `${label}-sampler` } as unknown as WebGLSampler,
@@ -77,6 +81,50 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("collects complete storage and sampler claims without conflating their identities", () => {
+    const sharedAsset = {
+      kind: "asset",
+      sampler: { minFilter: "linear" },
+      src: "/shared.png",
+    } as const;
+    const sharedNearestAsset = {
+      kind: "asset",
+      sampler: { minFilter: "nearest" },
+      src: "/shared.png",
+    } as const;
+    const detailAsset = { kind: "asset", sampler: {}, src: "/detail.png" } as const;
+    const sharedStorage = textureStorageKey(sharedAsset);
+    const storageKeys = new Set(["stale-storage"]);
+    const samplerKeys = new Set(["stale-sampler"]);
+
+    collectCompleteSurfaceTextureClaimsInto({
+      textureAssets: [sharedAsset, detailAsset],
+      surfaces: [
+        { materialSource: standard({
+          baseColorAsset: sharedAsset,
+        }) },
+        { materialSource: standard({
+          baseColorAsset: sharedNearestAsset,
+          normalAsset: detailAsset,
+        }) },
+      ],
+    }, storageKeys, samplerKeys);
+
+    expect(storageKeys).toEqual(new Set([
+      sharedStorage,
+      textureStorageKey(detailAsset),
+    ]));
+    expect(samplerKeys).toEqual(new Set([
+      canonicalTextureSamplerKey(canonicalTextureSampler(sharedAsset)),
+      canonicalTextureSamplerKey(canonicalTextureSampler(sharedNearestAsset)),
+      canonicalTextureSamplerKey(canonicalTextureSampler(detailAsset)),
+    ]));
+
+    collectCompleteSurfaceTextureClaimsInto(null, storageKeys, samplerKeys);
+    expect(storageKeys.size).toBe(0);
+    expect(samplerKeys.size).toBe(0);
+  });
+
   it("deduplicates overlapping texture publication surfaces in first-occurrence order", () => {
     const workspace = createTexturePublicationWorkspace();
     const index = new Map<string, readonly number[]>([

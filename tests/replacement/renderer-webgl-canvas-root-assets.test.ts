@@ -65,7 +65,7 @@ describe("canvas root asset publication", () => {
 
   it("keeps decode readiness distinct from terminal GPU texture denial", async () => {
     const texture = imageTexture("/over-budget.png");
-    const reconciledTextures = vi.spyOn(TextureGpuOwner.prototype, "reconcile");
+    const reconciledTextures = vi.spyOn(TextureGpuOwner.prototype, "reconcileClaimedBatch");
     const { flushScheduledFrames, root } = harness({
       decodeTexture: async () => ({
         height: 8,
@@ -223,7 +223,7 @@ describe("canvas root asset publication", () => {
       source: TexImageSource;
       width: number;
     }>((resolve) => { resolveDecode = resolve; }));
-    const reconcile = vi.spyOn(TextureGpuOwner.prototype, "reconcile");
+    const reconcile = vi.spyOn(TextureGpuOwner.prototype, "reconcileClaimedBatch");
     const retain = vi.spyOn(TextureGpuOwner.prototype, "retain");
     const texture = imageTexture("/shared.png");
     const material = unlitMaterial({ texture });

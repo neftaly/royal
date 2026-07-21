@@ -12,6 +12,7 @@ const SCENE_OPTION_FIELDS = [
   'camera', 'clearColor', 'environment', 'exposureEv100', 'nodes', 'toneMapping',
 ] as const;
 
+/** Final display transform: direct clamp for analytic work or neutral PBR presentation. */
 export type SceneToneMapping = 'linear-clamp' | 'pbr-neutral';
 
 /** Public normalized scene description accepted by renderer roots. */

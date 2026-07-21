@@ -40,6 +40,7 @@ import {
   type ScenePointerEvents,
 } from "../interaction/scene-interactions";
 
+/** Props for the React-owned canvas, renderer root, scene, and pointer-event boundary. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children" | "height" | "width"> {
   readonly [dataAttribute: `data-${string}`]: string | number | boolean | null | undefined;

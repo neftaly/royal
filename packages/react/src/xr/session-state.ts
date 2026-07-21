@@ -1,4 +1,6 @@
+/** Browser WebXR session mode requested by a Royal session controller. */
 export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
+/** Browser-reported visibility of a live WebXR session. */
 export type XrVisibilityState = "hidden" | "visible" | "visible-blurred";
 
 /**

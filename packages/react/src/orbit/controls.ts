@@ -31,7 +31,9 @@ export type {
   OrbitControlsSetViewOptions,
 } from "./controls-runtime";
 
+/** Declarative orbit-control behavior for the surrounding Canvas. */
 export type OrbitControlsProps = OrbitControlsBehaviorOptions & {
+  /** Stable controller returned by `useOrbitCamera` or `createOrbitCameraController`. */
   readonly orbit: OrbitCameraController;
 };
 

@@ -18,11 +18,10 @@ export type PrefilteredEnvironmentStatusIdentity = Readonly<Pick<
   PrefilteredEnvironmentLight,
   "src" | "version"
 >>;
-/** Source string, compact identity, or complete environment descriptor observed by the hook. */
+/** Source string or exact offline-environment loading identity observed by the hook. */
 export type PrefilteredEnvironmentStatusInput =
   | string
-  | PrefilteredEnvironmentStatusIdentity
-  | PrefilteredEnvironmentLight;
+  | PrefilteredEnvironmentStatusIdentity;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;

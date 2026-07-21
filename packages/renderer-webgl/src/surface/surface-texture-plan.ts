@@ -1,9 +1,15 @@
 import type { PrefilteredEnvironmentGpuBinding } from "../environment/gpu-owner";
 import type { GpuTextureBinding } from "../texture/gpu-owner";
+import {
+  textureStorageKey,
+  type TextureSourceRef,
+} from "../texture/asset-owner";
 import type { VirtualTextureGpuBinding } from "../virtual-texture/runtime-contract";
 import {
   canonicalMaterialHasTransmission,
   canonicalMaterialHasVolume,
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
   type CanonicalSurfaceMaterial,
   type CanonicalTextureBinding,
 } from "./canonical-material";
@@ -41,6 +47,56 @@ export type TexturePublicationWorkspace = {
   generation: number;
   indices: number[];
   marks: Uint32Array;
+};
+
+type CompleteSurfaceTextureClaimSource = Readonly<{
+  surfaces: readonly Readonly<{ materialSource: CanonicalSurfaceMaterial }>[];
+  textureAssets: readonly TextureSourceRef[];
+}>;
+
+const materialTextureAssetAt = (
+  material: CanonicalSurfaceMaterial,
+  unit: number,
+): TextureSourceRef | undefined => {
+  if (unit === 0) return material.baseColorAsset;
+  if (material.kind !== "standard") return undefined;
+  switch (unit) {
+    case 1: return material.metallicRoughnessAsset;
+    case 2: return material.normalAsset;
+    case 3: return material.emissiveAsset;
+    case 4: return material.occlusionAsset;
+    case 5: return material.specularTextureAsset;
+    case 6: return material.specularColorAsset;
+    case 7: return canonicalMaterialHasTransmission(material)
+      ? material.transmissionAsset
+      : undefined;
+    case 8: return canonicalMaterialHasVolume(material) ? material.thicknessAsset : undefined;
+    default: return undefined;
+  }
+};
+
+/**
+ * Rewrites caller-retained storage with the complete ordinary-texture claim.
+ * Storage identity comes from the deduplicated asset set, while sampler
+ * identity inspects every authored material because one image may use many
+ * samplers. Neither claim depends on asynchronous decoded residency.
+ */
+export const collectCompleteSurfaceTextureClaimsInto = (
+  scene: CompleteSurfaceTextureClaimSource | null,
+  storageKeys: Set<string>,
+  samplerKeys: Set<string>,
+): void => {
+  storageKeys.clear();
+  samplerKeys.clear();
+  for (const asset of scene?.textureAssets ?? []) storageKeys.add(textureStorageKey(asset));
+  for (const surface of scene?.surfaces ?? []) {
+    for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+      const asset = materialTextureAssetAt(surface.materialSource, unit);
+      if (asset !== undefined) {
+        samplerKeys.add(canonicalTextureSamplerKey(canonicalTextureSampler(asset)));
+      }
+    }
+  }
 };
 
 /** Allocates caller-retained storage for deduplicating one texture publication batch. */

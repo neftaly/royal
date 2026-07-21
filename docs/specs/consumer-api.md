@@ -211,11 +211,12 @@ a complete valid descriptor variable remains supported.
 
 Status-hook object inputs expose only fields that participate in their retained
 identity. glTF status uses `src`/`version`/`sceneIndex`, prefiltered-environment
-status uses `src`/`version`; ordinary
-decoded-texture status uses `src`/`contentKey`/`version`. Passing a complete
-scene descriptor remains structurally valid, but ignored presentation fields
-such as bounds, sampler, color space, intensity, and rotation are not falsely
-advertised as status identity.
+status uses `src`/`version`; ordinary decoded-texture status uses
+`src`/`contentKey`/`version`. A complete descriptor stored in a variable remains
+structurally compatible, but the input union does not explicitly advertise its
+ignored presentation fields such as bounds, intensity, and rotation. Authored
+VT is the exception where color space and sampler are representation identity,
+so its focused input names them deliberately.
 
 `error` exists only in the corresponding failure state. Readiness definitions
 match the asset and texture specifications. Ordinary-texture `ready` means

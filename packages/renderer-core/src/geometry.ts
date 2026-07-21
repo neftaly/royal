@@ -261,6 +261,7 @@ const planeSize = (input: PlaneGeometryInput): readonly [width: Metres, height: 
   ];
 };
 
+/** Creates box geometry from one cube size or explicit XYZ dimensions in metres. */
 export function boxGeometry(size: Metres): BoxGeometry;
 export function boxGeometry(size: WorldSize3): BoxGeometry;
 export function boxGeometry(options: BoxGeometryOptions): BoxGeometry;
@@ -271,6 +272,7 @@ export function boxGeometry(input: BoxGeometryInput): BoxGeometry {
   };
 }
 
+/** Creates an XY plane from one square size or explicit width and height in metres. */
 export function planeGeometry(size: Metres): PlaneGeometry;
 export function planeGeometry(size: readonly [width: Metres, height: Metres]): PlaneGeometry;
 export function planeGeometry(options: PlaneGeometryOptions): PlaneGeometry;

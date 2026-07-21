@@ -129,9 +129,11 @@ const resolveOrbitCameraViewWithConstraints = (
   };
 };
 
+/** Resolves an orbit view into explicit target, distance, pitch, and yaw values. */
 export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView =>
   resolveOrbitCameraViewWithConstraints(view);
 
+/** Resolves an orbit view while applying explicit distance and pitch constraints. */
 export const clampOrbitCameraView = (
   view: OrbitCameraViewOptions,
   constraints: OrbitCameraViewConstraints = {}
@@ -187,6 +189,7 @@ export const fitOrbitCameraView = (
   });
 };
 
+/** Returns world-space right and up axes for an orbit view. */
 export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis => {
   const { pitch, yaw } = resolveOrbitCameraView(view);
   const cy = Math.cos(yaw);
@@ -200,6 +203,7 @@ export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis
   };
 };
 
+/** Rotates an orbit view by pointer movement measured in CSS pixels. */
 export const rotateOrbitCameraView = (
   view: OrbitCameraViewOptions,
   /** Pointer movement in CSS pixels. */
@@ -222,6 +226,7 @@ export const rotateOrbitCameraView = (
   };
 };
 
+/** Applies exponential pointer/wheel zoom to an orbit view. */
 export const zoomOrbitCameraView = (
   view: OrbitCameraViewOptions,
   deltaPixels: number,
@@ -243,6 +248,7 @@ export const zoomOrbitCameraView = (
   };
 };
 
+/** Pans an orbit target using pointer movement measured in CSS pixels. */
 export const panOrbitCameraView = (
   view: OrbitCameraViewOptions,
   /** Pointer movement in CSS pixels. */
@@ -274,6 +280,7 @@ export const panOrbitCameraView = (
   };
 };
 
+/** Converts an orbit view to a Royal camera position and Euler rotation. */
 export const orbitCameraTransform = (
   view: OrbitCameraViewOptions
 ): OrbitCameraTransform => {
@@ -290,6 +297,7 @@ export const orbitCameraTransform = (
   };
 };
 
+/** Creates a perspective camera positioned and rotated from an orbit view. */
 export const orbitPerspectiveCamera = (
   input: OrbitPerspectiveCameraOptions,
 ): PerspectiveCamera => {

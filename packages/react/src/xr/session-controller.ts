@@ -466,6 +466,7 @@ export const createXrSessionControllerWithPlatform = (
   };
 };
 
+/** Creates an explicit WebXR session lifecycle controller for one renderer root. */
 export const createXrSessionController = (
   root: RendererRoot,
   options: XrSessionControllerOptions = {},

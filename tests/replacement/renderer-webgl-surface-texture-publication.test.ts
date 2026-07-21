@@ -10,11 +10,13 @@ import {
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import {
   prepareCanonicalSurfaceScene,
   refreshCanonicalSurfaceTextures,
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
 import {
   decodedTextureKey,
   textureStorageKey,
@@ -25,7 +27,150 @@ import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-o
 import { fakeGl } from "./support/canvas-root-harness";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
+const TEST_VIEWS = [{
+  view: identityMat4(),
+  viewProjection: identityMat4(),
+  viewport: { height: 100, width: 100, x: 0, y: 0 },
+}];
+
 describe("retained surface texture publication", () => {
+  it("retires superseded scene storage before admitting replacement geometry", () => {
+    const texture = imageTexture({
+      sampler: { minFilter: "nearest" },
+      src: "/superseded-scene.png",
+    });
+    const first = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ texture }),
+      })],
+    }), undefined, undefined, () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const second = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ color: [0.5, 0.5, 0.5, 1] }),
+      })],
+    }));
+    const planner = new SurfaceGeometryGpuOwner(fakeGl());
+    const firstGeometryBytes = planner.plannedRetainedBytes(first.surfaces);
+    const secondGeometryBytes = planner.plannedRetainedBytes(second.surfaces);
+    const budgetBytes = Math.max(firstGeometryBytes + 256, secondGeometryBytes);
+    planner.dispose();
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(budgetBytes);
+    const owner = new SurfaceGpuOwner(gl, budget);
+    const state = new WebGlStateOwner(gl);
+
+    try {
+      owner.setScene(first);
+      owner.beginFrame();
+      owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
+      expect(budget.snapshot().retainedBytes).toBeGreaterThan(256);
+
+      owner.setScene(second);
+      owner.beginFrame();
+      expect(() => owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1])).not.toThrow();
+      expect(budget.snapshot().deniedClaims).toBe(0);
+      expect(budget.snapshot().retainedBytes).toBe(secondGeometryBytes);
+      expect(gl.deleteTexture).toHaveBeenCalledOnce();
+      expect(gl.deleteBuffer).toHaveBeenCalled();
+    } finally {
+      owner.dispose();
+    }
+  });
+
+  it("preserves complete-scene textures across bounded replacement geometry batches", () => {
+    const assets = Array.from({ length: 20 }, (_value, index) => imageTexture({
+      sampler: { minFilter: "nearest" },
+      src: `/shared-scene-${index}.avif`,
+    }));
+    const decoded = new Map(assets.map((asset, index) => [
+      decodedTextureKey(asset),
+      { height: 2, source: { index } as unknown as ImageBitmap, width: 2 },
+    ]));
+    const prepare = (
+      geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof boxGeometry>,
+    ) => prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: assets.map((texture) => mesh({
+        geometry,
+        material: unlitMaterial({ texture }),
+      })),
+    }), undefined, undefined, (asset) => decoded.get(decodedTextureKey(asset)));
+    const first = prepare(planeGeometry(1));
+    const second = prepare(boxGeometry(1));
+    const gl = fakeGl();
+    const owner = new SurfaceGpuOwner(gl);
+    const state = new WebGlStateOwner(gl);
+    const draw = (): void => {
+      owner.beginFrame();
+      owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
+    };
+
+    try {
+      owner.setScene(first);
+      while (owner.surfacePublicationsPending()) draw();
+      expect(gl.createTexture).toHaveBeenCalledTimes(assets.length);
+      expect(gl.deleteTexture).not.toHaveBeenCalled();
+
+      owner.setScene(second);
+      draw();
+      expect(owner.surfacePublicationsPending()).toBe(true);
+      expect(gl.deleteTexture).not.toHaveBeenCalled();
+      while (owner.surfacePublicationsPending()) draw();
+      expect(gl.createTexture).toHaveBeenCalledTimes(assets.length);
+      expect(gl.deleteTexture).not.toHaveBeenCalled();
+    } finally {
+      owner.dispose();
+    }
+  });
+
+  it("retries replacement publication after a transient geometry allocation failure", () => {
+    const first = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ color: [0.25, 0.25, 0.25, 1] }),
+      })],
+    }));
+    const second = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ color: [0.75, 0.75, 0.75, 1] }),
+      })],
+    }));
+    const gl = fakeGl();
+    const owner = new SurfaceGpuOwner(gl);
+    const state = new WebGlStateOwner(gl);
+
+    try {
+      owner.setScene(first);
+      owner.beginFrame();
+      owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
+      const firstSceneDraws = vi.mocked(gl.drawElements).mock.calls.length;
+
+      owner.setScene(second);
+      vi.mocked(gl.createBuffer).mockReturnValueOnce(null);
+      owner.beginFrame();
+      expect(() => owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]))
+        .toThrow("Royal could not allocate surface geometry");
+      expect(gl.drawElements).toHaveBeenCalledTimes(firstSceneDraws);
+
+      owner.beginFrame();
+      expect(() => owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1])).not.toThrow();
+      expect(gl.drawElements).toHaveBeenCalledTimes(firstSceneDraws + 1);
+    } finally {
+      owner.dispose();
+    }
+  });
+
   it("preserves exact GPU bindings across randomized progressive batches", () => {
     forEachFuzzCase({
       cases: 16,
@@ -85,11 +230,6 @@ describe("retained surface texture publication", () => {
       let prepared = prepareCanonicalSurfaceScene(authored, undefined, undefined, resolve);
       const owner = new SurfaceGpuOwner(gl);
       const state = new WebGlStateOwner(gl);
-      const views = [{
-        view: identityMat4(),
-        viewProjection: identityMat4(),
-        viewport: { height: 100, width: 100, x: 0, y: 0 },
-      }];
       const remaining = assets.map((_asset, index) => index);
       owner.setScene(prepared);
 
@@ -113,7 +253,7 @@ describe("retained surface texture publication", () => {
           owner.publishTextureBatch(prepared, batch);
           draws.length = 0;
           owner.beginFrame();
-          owner.drawViews(views, null, state, [0, 0, 0, 1]);
+          owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
 
           for (const [indexCount, texture] of draws) {
             const assetIndex = indexCount / 3 - 1;
@@ -232,20 +372,15 @@ describe("retained surface texture publication", () => {
     const secondScene = prepare(second);
     const owner = new SurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
-    const views = [{
-      view: identityMat4(),
-      viewProjection: identityMat4(),
-      viewport: { height: 100, width: 100, x: 0, y: 0 },
-    }];
 
     owner.setScene(firstScene);
     owner.beginFrame();
-    owner.drawViews(views, null, state, [0, 0, 0, 1]);
+    owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
     expect(drawnTextures.at(-1)).toBe(createdTextures[0]);
 
     owner.publishTextureBatch(secondScene, [decodedTextureKey(second)]);
     owner.beginFrame();
-    owner.drawViews(views, null, state, [0, 0, 0, 1]);
+    owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
     expect(drawnTextures.at(-1)).toBe(createdTextures[1]);
 
     owner.dispose();
@@ -288,15 +423,10 @@ describe("retained surface texture publication", () => {
     const pending = prepareCanonicalSurfaceScene(authored, undefined, undefined, decodedSource);
     const owner = new SurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
-    const views = [{
-      view: identityMat4(),
-      viewProjection: identityMat4(),
-      viewport: { height: 100, width: 100, x: 0, y: 0 },
-    }];
     const draw = (): void => {
       draws.length = 0;
       owner.beginFrame();
-      owner.drawViews(views, null, state, [0, 0, 0, 1]);
+      owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
     };
 
     owner.setScene(pending);

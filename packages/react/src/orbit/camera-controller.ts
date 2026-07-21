@@ -143,6 +143,7 @@ const fittedOrbitFar = (
   return (fittedView.distance + paddedRadius) * 1.01;
 };
 
+/** Creates a stable imperative orbit camera controller for React or non-React composition. */
 export const createOrbitCameraController = (
   options: OrbitCameraOptions,
 ): OrbitCameraController => {

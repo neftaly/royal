@@ -31,6 +31,7 @@ export interface PointLightOptions {
 
 const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const POINT_LIGHT_FIELDS = ['color', 'intensityCandela', 'position', 'range'] as const;
+/** Creates an omnidirectional point light with physically named intensity units. */
 export const pointLight = (options: PointLightOptions): PointLightNode => {
   objectWithAllowedFields(options, POINT_LIGHT_FIELDS, 'point light');
   const range = options.range === undefined

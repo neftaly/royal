@@ -38,6 +38,7 @@ const MESH_FIELDS = [
   'geometry', 'material', 'pickingGeometry', 'pickingId', 'ref', 'transform',
 ] as const;
 
+/** Creates one directly authored mesh node with optional exact picking geometry. */
 export const mesh = (options: MeshOptions): MeshNode => {
   objectWithAllowedFields(options, MESH_FIELDS, 'mesh');
   validateGeometry(options.geometry, 'mesh geometry');

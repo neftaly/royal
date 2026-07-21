@@ -163,6 +163,10 @@ const listenerList = () => {
   };
 };
 
+/**
+ * Creates a mutable camera channel with explicit `commit()` publication.
+ * Renderer roots observe commits without requiring a new scene or React render.
+ */
 export function createCameraViewResource(camera: PerspectiveCamera): PerspectiveCameraViewResource;
 export function createCameraViewResource(camera: OrthographicCamera): OrthographicCameraViewResource;
 export function createCameraViewResource(camera: Camera): CameraViewResource {

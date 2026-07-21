@@ -118,27 +118,49 @@ export class TextureGpuOwner {
     this.#deferredStorageKeys.clear();
   }
 
-  reconcile(
+  /** Reconciles bindings which are themselves the complete resource claim. */
+  reconcileComplete(
     bindings: readonly (CanonicalTextureBinding | undefined)[],
   ): readonly GpuTextureBinding[] {
-    // A complete claim reconciliation supersedes storage outside the incoming
-    // set. Release it before admitting replacements so steady-state capacity,
-    // rather than the old and new scenes' transient sum, governs admission.
-    const claimedTextures = new Set<string>();
+    const completeStorageClaim = new Set<string>();
+    const completeSamplerClaim = new Set<string>();
     for (const binding of bindings) {
-      if (binding !== undefined) claimedTextures.add(binding.storageKey);
+      if (binding === undefined) continue;
+      completeStorageClaim.add(binding.storageKey);
+      completeSamplerClaim.add(binding.samplerKey);
     }
-    for (const [key, resource] of this.#textures) {
-      if (claimedTextures.has(key)) continue;
-      this.#gl.deleteTexture(resource.texture);
-      this.#budget.release(resource.budgetIdentity);
-      this.#textures.delete(key);
-      this.#uploadedStorageKeys.delete(key);
-      this.#deniedStorageKeys.delete(key);
-      this.#deferredStorageKeys.delete(key);
+    return this.#reconcileClaimed(bindings, completeStorageClaim, completeSamplerClaim);
+  }
+
+  /**
+   * Reconciles one bounded binding batch against an explicitly complete scene
+   * claim. The separate operation prevents a prefix from becoming ownership.
+   */
+  reconcileClaimedBatch(
+    bindings: readonly (CanonicalTextureBinding | undefined)[],
+    completeStorageClaim: ReadonlySet<string>,
+    completeSamplerClaim: ReadonlySet<string>,
+  ): readonly GpuTextureBinding[] {
+    for (const binding of bindings) {
+      if (binding === undefined) continue;
+      if (!completeStorageClaim.has(binding.storageKey)) {
+        throw new Error("Royal texture batch is outside its complete storage claim");
+      }
+      if (!completeSamplerClaim.has(binding.samplerKey)) {
+        throw new Error("Royal texture batch is outside its complete sampler claim");
+      }
     }
-    claimedTextures.clear();
-    const claimedSamplers = new Set<string>();
+    return this.#reconcileClaimed(bindings, completeStorageClaim, completeSamplerClaim);
+  }
+
+  #reconcileClaimed(
+    bindings: readonly (CanonicalTextureBinding | undefined)[],
+    completeStorageClaim: ReadonlySet<string>,
+    completeSamplerClaim: ReadonlySet<string>,
+  ): readonly GpuTextureBinding[] {
+    // Release superseded storage before admitting replacements so steady-state
+    // capacity, rather than old and new scenes' transient sum, governs admission.
+    this.#releaseUnclaimedStorage(completeStorageClaim);
     const result: GpuTextureBinding[] = [];
     const createdTextures = new Map<string, GpuTexture>();
     const createdSamplers = new Map<string, GpuSampler>();
@@ -166,14 +188,12 @@ export class TextureGpuOwner {
           result.push(EMPTY_BINDING);
           continue;
         }
-        claimedTextures.add(binding.storageKey);
         let sampler = createdSamplers.get(binding.samplerKey)
           ?? this.#samplers.get(binding.samplerKey);
         if (sampler === undefined) {
           sampler = this.#createSampler(binding);
           createdSamplers.set(binding.samplerKey, sampler);
         }
-        claimedSamplers.add(binding.samplerKey);
         let resolved = texture.bindings.get(sampler.sampler);
         if (resolved === undefined) {
           resolved = { sampler: sampler.sampler, target: "2d", texture: texture.texture };
@@ -191,24 +211,42 @@ export class TextureGpuOwner {
       }
       throw error;
     }
-    for (const [key, resource] of this.#samplers) {
-      if (claimedSamplers.has(key)) continue;
-      this.#gl.deleteSampler(resource.sampler);
-      this.#samplers.delete(key);
-    }
-    for (const [key, resource] of this.#textures) {
-      if (claimedTextures.has(key)) continue;
-      this.#gl.deleteTexture(resource.texture);
-      this.#budget.release(resource.budgetIdentity);
-      this.#textures.delete(key);
-      this.#uploadedStorageKeys.delete(key);
-    }
+    this.#releaseUnclaimedSamplers(completeSamplerClaim);
     for (const [key, resource] of createdSamplers) this.#samplers.set(key, resource);
     for (const [key, resource] of createdTextures) {
       this.#textures.set(key, resource);
       this.#uploadedStorageKeys.add(key);
     }
     return result;
+  }
+
+  /** Retires resources outside a complete incoming scene claim before other domains admit work. */
+  releaseUnclaimed(
+    storageKeys: ReadonlySet<string>,
+    samplerKeys: ReadonlySet<string>,
+  ): void {
+    this.#releaseUnclaimedStorage(storageKeys);
+    this.#releaseUnclaimedSamplers(samplerKeys);
+  }
+
+  #releaseUnclaimedStorage(storageKeys: ReadonlySet<string>): void {
+    for (const [key, resource] of this.#textures) {
+      if (storageKeys.has(key)) continue;
+      this.#gl.deleteTexture(resource.texture);
+      this.#budget.release(resource.budgetIdentity);
+      this.#textures.delete(key);
+      this.#uploadedStorageKeys.delete(key);
+      this.#deniedStorageKeys.delete(key);
+      this.#deferredStorageKeys.delete(key);
+    }
+  }
+
+  #releaseUnclaimedSamplers(samplerKeys: ReadonlySet<string>): void {
+    for (const [key, resource] of this.#samplers) {
+      if (samplerKeys.has(key)) continue;
+      this.#gl.deleteSampler(resource.sampler);
+      this.#samplers.delete(key);
+    }
   }
 
   /** Retains one newly published binding without releasing unrelated scene claims. */

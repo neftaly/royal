@@ -66,6 +66,7 @@ const ORTHOGRAPHIC_CAMERA_FIELDS = [
   'bottom', 'far', 'left', 'near', 'position', 'right', 'rotation', 'top',
 ] as const;
 
+/** Creates a validated perspective camera looking along local -Z. */
 export const perspectiveCamera = (options: PerspectiveCameraOptions): PerspectiveCamera => {
   objectWithAllowedFields(options, PERSPECTIVE_CAMERA_FIELDS, 'perspective camera');
   const position = resolveVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;
@@ -84,6 +85,7 @@ export const perspectiveCamera = (options: PerspectiveCameraOptions): Perspectiv
   };
 };
 
+/** Creates a validated orthographic camera looking along local -Z. */
 export const orthographicCamera = (options: OrthographicCameraOptions): OrthographicCamera => {
   objectWithAllowedFields(options, ORTHOGRAPHIC_CAMERA_FIELDS, 'orthographic camera');
   const position = resolveVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;

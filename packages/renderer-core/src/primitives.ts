@@ -104,5 +104,6 @@ export interface TransformOptions {
   readonly scale?: Scale3;
 }
 
+/** Resolves an optional transform input into copied explicit position, rotation, and scale. */
 export const resolveTransform = (options: TransformOptions): Transform =>
   resolveTransformDescriptor(options);

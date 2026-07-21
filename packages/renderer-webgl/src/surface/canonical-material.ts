@@ -162,6 +162,14 @@ export const canonicalTextureSampler = (
   wrapT: asset.sampler?.wrapT ?? "clamp-to-edge",
 });
 
+/** Stable GPU sampler identity for one normalized authored sampler recipe. */
+export const canonicalTextureSamplerKey = (sampler: CanonicalTextureSampler): string => JSON.stringify([
+  sampler.magFilter,
+  sampler.minFilter,
+  sampler.wrapS,
+  sampler.wrapT,
+]);
+
 const textureBinding = (
   asset: TextureSourceRef,
   decoded: DecodedTextureSource,
@@ -172,12 +180,7 @@ const textureBinding = (
     colorSpace,
     decoded,
     sampler,
-    samplerKey: JSON.stringify([
-      sampler.magFilter,
-      sampler.minFilter,
-      sampler.wrapS,
-      sampler.wrapT,
-    ]),
+    samplerKey: canonicalTextureSamplerKey(sampler),
     storageKey: textureStorageKey(asset),
   };
 };

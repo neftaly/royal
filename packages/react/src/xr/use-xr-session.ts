@@ -10,11 +10,13 @@ import {
   type XrSessionSnapshot,
 } from "./session-state";
 
+/** Declarative WebXR session policy and optional explicit renderer ownership. */
 export type UseXrSessionOptions = XrSessionControllerOptions & Readonly<{
   /** Explicit root for controls outside Canvas; omit inside Canvas, or pass `null` to disable. */
   root?: RendererRoot | null;
 }>;
 
+/** Current discriminated WebXR lifecycle plus stable session actions. */
 export type UseXrSessionResult = XrSessionSnapshot & Readonly<{
   /** Requests a browser session from user activation; true means rendering became active. */
   enter(): Promise<boolean>;

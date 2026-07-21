@@ -13,6 +13,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly compressedTexImage2D: ReturnType<typeof vi.fn>;
+  readonly createBuffer: ReturnType<typeof vi.fn<() => WebGLBuffer | null>>;
   readonly createTexture: ReturnType<typeof vi.fn<() => WebGLTexture | null>>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly bufferSubData: ReturnType<typeof vi.fn>;
@@ -107,7 +108,7 @@ export const fakeGl = (): FakeGl => ({
   colorMask: vi.fn(),
   compileShader: vi.fn(),
   compressedTexImage2D: vi.fn(),
-  createBuffer: vi.fn(() => ({})),
+  createBuffer: vi.fn<() => WebGLBuffer | null>(() => ({} as WebGLBuffer)),
   createProgram: vi.fn(() => ({})),
   createSampler: vi.fn(() => ({})),
   createShader: vi.fn(() => ({})),

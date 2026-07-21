@@ -227,6 +227,7 @@ const logicalIdsFrom = (
   return copy;
 };
 
+/** Creates a stable packed transform channel for frequently updated glTF instances. */
 export const createGltfInstanceTransforms = (
   options: CreateGltfInstanceTransformsOptions,
 ): GltfInstanceTransforms => {
@@ -394,6 +395,7 @@ const GLTF_INSTANCES_FIELDS = [
   'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'version',
 ] as const;
 
+/** Creates one instanced glTF node using the canonical glTF material and picking path. */
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {
   objectWithAllowedFields(options, GLTF_INSTANCES_FIELDS, 'glTF instances');
   const instances = validateInstanceTransforms(options.instances);

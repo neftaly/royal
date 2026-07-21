@@ -338,7 +338,16 @@ describe("surface program ownership", () => {
       "texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip)",
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain("footprintSquared");
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
+      "float ancestorSpan = residentScale / desiredScale;",
+    );
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
+      "vec2 virtualTexel = uv * virtualSize;",
+    );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("virtualMipOffsets");
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("length(texelDx)");
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain(
+      "exp2(decoded.z - float(desiredMip))",
+    );
   });
 });

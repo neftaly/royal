@@ -157,6 +157,7 @@ export const validateGltfMaterialVariantName = (
   ? undefined
   : nonEmptyString(materialVariant, 'glTF materialVariant');
 
+/** Creates one glTF scene node from a source URI or exact asset options. */
 export function gltf(src: string): GltfNode;
 export function gltf(options: GltfOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {

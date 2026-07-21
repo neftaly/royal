@@ -87,6 +87,7 @@ const factor01 = (value: number | undefined, fallback: number, label: string): n
   return value;
 };
 
+/** Creates a metallic-roughness material from exactly one solid color or texture. */
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   objectWithAllowedFields(options, STANDARD_MATERIAL_FIELDS, 'standard material');
   const tint = materialTint(options, 'standard material');
@@ -99,6 +100,7 @@ export const standardMaterial = (options: StandardMaterialOptions): StandardMate
   };
 };
 
+/** Creates an unlit material from exactly one solid color or texture. */
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   objectWithAllowedFields(options, UNLIT_MATERIAL_FIELDS, 'unlit material');
   const tint = materialTint(options, 'unlit material');
@@ -109,6 +111,7 @@ export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   };
 };
 
+/** Creates a solid-color wireframe material. */
 export const wireframeMaterial = (options: WireframeMaterialOptions): WireframeMaterial => {
   objectWithAllowedFields(options, WIREFRAME_MATERIAL_FIELDS, 'wireframe material');
   return {

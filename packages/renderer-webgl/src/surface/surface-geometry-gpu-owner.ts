@@ -312,6 +312,21 @@ export class SurfaceGeometryGpuOwner {
     return this.#plannedGeometry.retainedBytes;
   }
 
+  /** Releases a committed arena plan only when the incoming scene cannot reuse it. */
+  releaseSupersededPlan(surfaces: readonly CanonicalDrawSurface[]): boolean {
+    if (this.#plannedSurfaces !== surfaces || this.#plannedGeometry === null) {
+      this.#plannedGeometry = planGeometryArenas(surfaces);
+      this.#plannedSurfaces = surfaces;
+    }
+    if (
+      this.#geometryPlan === null
+      || sameGeometryArenaPlan(this.#plannedGeometry, this.#geometryPlan)
+    ) return false;
+    this.#deleteResources();
+    this.#indexUploadWorkspace = {};
+    return true;
+  }
+
   dispose(): void {
     this.#deleteResources();
     this.#indexUploadWorkspace = {};

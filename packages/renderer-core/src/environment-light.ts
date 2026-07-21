@@ -39,6 +39,7 @@ export interface StudioEnvironmentOptions {
 const DEFAULT_ENVIRONMENT_ROTATION: EulerRads = [0, 0, 0];
 const STUDIO_ENVIRONMENT_FIELDS = ['radianceScaleNits', 'rotation'] as const;
 
+/** Creates Royal's built-in studio image-based-lighting environment. */
 export const studioEnvironment = (options: StudioEnvironmentOptions = {}): StudioEnvironmentLight => {
   objectWithAllowedFields(options, STUDIO_ENVIRONMENT_FIELDS, 'studio environment');
   return {

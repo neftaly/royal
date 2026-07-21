@@ -102,7 +102,7 @@ describe("ordinary texture GPU owner", () => {
     const owner = new TextureGpuOwner(gl, budget);
     expect(budget.availableBytes).toBe(300);
 
-    const bindings = owner.reconcile([
+    const bindings = owner.reconcileComplete([
       binding("nearest", "nearest"),
       binding("mipmapped", "linear-mipmap-linear"),
     ]);
@@ -155,7 +155,7 @@ describe("ordinary texture GPU owner", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(300);
     const owner = new TextureGpuOwner(gl, budget);
-    const bindings = owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
+    const bindings = owner.reconcileComplete([binding("mipmapped", "linear-mipmap-linear")]);
     expect(bindings[0]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(gl.createTexture).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(0);
@@ -168,7 +168,7 @@ describe("ordinary texture GPU owner", () => {
     const first = binding("first", "nearest", "first-image:srgb");
     const second = binding("second", "nearest", "second-image:srgb");
 
-    const initial = owner.reconcile([first, second]);
+    const initial = owner.reconcileComplete([first, second]);
     expect(initial[0]!.texture).not.toBeNull();
     expect(initial[1]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(owner.isUploadDeferred(second.storageKey)).toBe(true);
@@ -188,7 +188,7 @@ describe("ordinary texture GPU owner", () => {
   it("shares storage, separates samplers, and adds mipmaps once when later demanded", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
-    const first = owner.reconcile([
+    const first = owner.reconcileComplete([
       binding("nearest", "nearest"),
       binding("mipmapped", "linear-mipmap-linear"),
     ]);
@@ -199,11 +199,11 @@ describe("ordinary texture GPU owner", () => {
     expect(first[0]!.texture).toBe(first[1]!.texture);
     expect(first[0]!.sampler).not.toBe(first[1]!.sampler);
 
-    const retained = owner.reconcile([binding("mipmapped", "linear-mipmap-linear")]);
+    const retained = owner.reconcileComplete([binding("mipmapped", "linear-mipmap-linear")]);
     expect(retained[0]).toBe(first[1]);
     expect(gl.createTexture).toHaveBeenCalledTimes(1);
     expect(gl.generateMipmap).toHaveBeenCalledTimes(1);
-    owner.reconcile([]);
+    owner.reconcileComplete([]);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteSampler).toHaveBeenCalledTimes(2);
   });
@@ -215,13 +215,13 @@ describe("ordinary texture GPU owner", () => {
     const first = binding("first", "nearest", "first-image:srgb");
     const second = binding("second", "nearest", "second-image:srgb");
 
-    expect(owner.reconcile([first])[0]!.texture).not.toBeNull();
+    expect(owner.reconcileComplete([first])[0]!.texture).not.toBeNull();
     expect(budget.snapshot()).toEqual({
       budgetBytes: 256,
       deniedClaims: 0,
       retainedBytes: 256,
     });
-    const replacement = owner.reconcile([second]);
+    const replacement = owner.reconcileComplete([second]);
 
     expect(replacement[0]!.texture).not.toBeNull();
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
@@ -235,10 +235,117 @@ describe("ordinary texture GPU owner", () => {
     });
   });
 
+  it("keeps storage and samplers owned by later members of a bounded batch", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    const first = binding("first-sampler", "nearest", "first-image:srgb");
+    const later = binding("later-sampler", "linear", "later-image:srgb");
+
+    const initial = owner.reconcileComplete([first, later]);
+    vi.mocked(gl.deleteSampler).mockClear();
+    vi.mocked(gl.deleteTexture).mockClear();
+    const batch = owner.reconcileClaimedBatch(
+      [first],
+      new Set([first.storageKey, later.storageKey]),
+      new Set([first.samplerKey, later.samplerKey]),
+    );
+
+    expect(batch[0]).toBe(initial[0]);
+    expect(gl.deleteSampler).not.toHaveBeenCalled();
+    expect(gl.deleteTexture).not.toHaveBeenCalled();
+    expect(owner.reconcileClaimedBatch(
+      [later],
+      new Set([first.storageKey, later.storageKey]),
+      new Set([first.samplerKey, later.samplerKey]),
+    )[0]).toBe(initial[1]);
+    expect(gl.createSampler).toHaveBeenCalledTimes(2);
+    expect(gl.createTexture).toHaveBeenCalledTimes(2);
+  });
+
+  it("fuzzes bounded batch composition against complete storage and sampler ownership", () => {
+    forEachFuzzCase({
+      cases: 64,
+      envName: "ROYAL_TEXTURE_CLAIM_FUZZ_CASES",
+      seed: 0x0c1a_1a55,
+    }, ({ random }) => {
+      const gl = fakeGl();
+      const owner = new TextureGpuOwner(gl);
+      const storageCount = random.int(1, 9);
+      const samplerCount = random.int(1, 6);
+      const bindingCount = random.int(storageCount, 17);
+      const bindings = random.array(bindingCount, (index) => {
+        const storage = index < storageCount ? index : random.int(0, storageCount);
+        const sampler = random.int(0, samplerCount);
+        return binding(
+          `sampler-${sampler}`,
+          sampler % 2 === 0 ? "nearest" : "linear",
+          `storage-${storage}`,
+        );
+      });
+      const complete = owner.reconcileComplete(bindings);
+      const completeStorageClaim = new Set(bindings.map((entry) => entry.storageKey));
+      const completeSamplerClaim = new Set(bindings.map((entry) => entry.samplerKey));
+      const batchIndices: number[] = [];
+      for (let index = 0; index < bindings.length; index += 1) {
+        if (random.boolean()) batchIndices.push(index);
+      }
+      if (batchIndices.length === 0) batchIndices.push(random.int(0, bindings.length));
+      const batch = batchIndices.map((index) => bindings[index]!);
+      const createdTextures = vi.mocked(gl.createTexture).mock.calls.length;
+      const createdSamplers = vi.mocked(gl.createSampler).mock.calls.length;
+      const retained = owner.reconcileClaimedBatch(
+        batch,
+        completeStorageClaim,
+        completeSamplerClaim,
+      );
+
+      assertFuzz(
+        vi.mocked(gl.createTexture).mock.calls.length === createdTextures,
+        "a bounded batch must reuse every complete-claim texture",
+      );
+      assertFuzz(
+        vi.mocked(gl.createSampler).mock.calls.length === createdSamplers,
+        "a bounded batch must reuse every complete-claim sampler",
+      );
+      assertFuzz(
+        vi.mocked(gl.deleteTexture).mock.calls.length === 0,
+        "a bounded batch must not delete texture storage owned outside the batch",
+      );
+      assertFuzz(
+        vi.mocked(gl.deleteSampler).mock.calls.length === 0,
+        "a bounded batch must not delete samplers owned outside the batch",
+      );
+      for (let index = 0; index < batchIndices.length; index += 1) {
+        assertFuzz(
+          retained[index] === complete[batchIndices[index]!],
+          "a bounded batch must preserve each resident binding identity",
+        );
+      }
+    });
+  });
+
+  it("rejects a bounded batch outside either complete resource claim", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(gl);
+    const texture = binding("sampler", "nearest", "image:srgb");
+
+    expect(() => owner.reconcileClaimedBatch(
+      [texture],
+      new Set<string>(),
+      new Set([texture.samplerKey]),
+    )).toThrow("outside its complete storage claim");
+    expect(() => owner.reconcileClaimedBatch(
+      [texture],
+      new Set([texture.storageKey]),
+      new Set<string>(),
+    )).toThrow("outside its complete sampler claim");
+    expect(gl.createTexture).not.toHaveBeenCalled();
+  });
+
   it("allocates a known mip chain immutably before uploading its base level", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
-    expect(owner.reconcile([binding("mipmapped", "linear-mipmap-linear")])[0]!.texture)
+    expect(owner.reconcileComplete([binding("mipmapped", "linear-mipmap-linear")])[0]!.texture)
       .not.toBeNull();
     expect(gl.texStorage2D).toHaveBeenCalledWith(gl.TEXTURE_2D, 4, gl.SRGB8_ALPHA8, 8, 8);
     expect(gl.texSubImage2D).toHaveBeenCalledWith(
@@ -258,7 +365,7 @@ describe("ordinary texture GPU owner", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(112);
     const owner = new TextureGpuOwner(gl, budget);
-    const result = owner.reconcile([compressedBinding(4, "linear-mipmap-linear")]);
+    const result = owner.reconcileComplete([compressedBinding(4, "linear-mipmap-linear")]);
 
     expect(result[0]!.texture).not.toBeNull();
     expect(gl.compressedTexImage2D).toHaveBeenCalledTimes(4);
@@ -288,8 +395,8 @@ describe("ordinary texture GPU owner", () => {
   it("accepts a base-only ETC2 texture for non-mip sampling but rejects invented mipmaps", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
-    expect(owner.reconcile([compressedBinding(1, "linear")])[0]!.texture).not.toBeNull();
-    expect(() => owner.reconcile([compressedBinding(1, "linear-mipmap-linear")]))
+    expect(owner.reconcileComplete([compressedBinding(1, "linear")])[0]!.texture).not.toBeNull();
+    expect(() => owner.reconcileComplete([compressedBinding(1, "linear-mipmap-linear")]))
       .toThrow("complete offline mip pyramid");
     expect(gl.generateMipmap).not.toHaveBeenCalled();
   });
@@ -302,7 +409,7 @@ describe("ordinary texture GPU owner", () => {
       new FrameUploadBudgetOwner(),
       false,
     );
-    expect(() => owner.reconcile([compressedBinding(1, "linear")]))
+    expect(() => owner.reconcileComplete([compressedBinding(1, "linear")]))
       .toThrow("WEBGL_compressed_texture_etc");
     expect(gl.createTexture).not.toHaveBeenCalled();
     expect(gl.compressedTexImage2D).not.toHaveBeenCalled();
@@ -312,7 +419,7 @@ describe("ordinary texture GPU owner", () => {
     const gl = fakeGl();
     vi.mocked(gl.createSampler).mockReturnValue(null as unknown as WebGLSampler);
     const owner = new TextureGpuOwner(gl);
-    expect(() => owner.reconcile([binding("broken", "nearest")]))
+    expect(() => owner.reconcileComplete([binding("broken", "nearest")]))
       .toThrow("could not allocate a texture sampler");
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(owner.takeUploadedStorageKeys()).toEqual([]);
@@ -321,11 +428,11 @@ describe("ordinary texture GPU owner", () => {
   it("rolls back new sampler work without disturbing retained storage or bindings", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
-    const first = owner.reconcile([binding("nearest", "nearest")]);
+    const first = owner.reconcileComplete([binding("nearest", "nearest")]);
     vi.mocked(gl.createSampler).mockReturnValueOnce(null as unknown as WebGLSampler);
-    expect(() => owner.reconcile([binding("broken", "nearest")]))
+    expect(() => owner.reconcileComplete([binding("broken", "nearest")]))
       .toThrow("could not allocate a texture sampler");
-    const retained = owner.reconcile([binding("nearest", "nearest")]);
+    const retained = owner.reconcileComplete([binding("nearest", "nearest")]);
     expect(retained[0]).toBe(first[0]);
     expect(gl.createTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteTexture).not.toHaveBeenCalled();
@@ -338,7 +445,7 @@ describe("ordinary texture GPU owner", () => {
     expect(owner.retain(binding("nearest", "nearest"))).toBe(retained);
     expect(gl.createTexture).toHaveBeenCalledTimes(1);
     expect(gl.createSampler).toHaveBeenCalledTimes(1);
-    owner.reconcile([]);
+    owner.reconcileComplete([]);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteSampler).toHaveBeenCalledTimes(1);
   });
@@ -346,14 +453,14 @@ describe("ordinary texture GPU owner", () => {
   it("applies context-global unpack state once per context generation", () => {
     const gl = fakeGl();
     const owner = new TextureGpuOwner(gl);
-    owner.reconcile([
+    owner.reconcileComplete([
       binding("first", "nearest", "first-image:srgb"),
       binding("second", "nearest", "second-image:srgb"),
     ]);
     expect(gl.pixelStorei).toHaveBeenCalledTimes(3);
 
     owner.invalidate();
-    owner.reconcile([binding("third", "nearest", "third-image:srgb")]);
+    owner.reconcileComplete([binding("third", "nearest", "third-image:srgb")]);
     expect(gl.pixelStorei).toHaveBeenCalledTimes(6);
   });
 });

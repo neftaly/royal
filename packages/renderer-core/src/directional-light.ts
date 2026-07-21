@@ -27,6 +27,7 @@ export interface DirectionalLightOptions {
 const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const DIRECTIONAL_LIGHT_FIELDS = ['color', 'direction', 'illuminanceLux'] as const;
 
+/** Creates an infinite world-space directional light. */
 export const directionalLight = (options: DirectionalLightOptions): DirectionalLightNode => {
   objectWithAllowedFields(options, DIRECTIONAL_LIGHT_FIELDS, 'directional light');
   return {

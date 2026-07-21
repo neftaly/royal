@@ -6,6 +6,27 @@ Implementation began after the four gates below were accepted. This document
 now records the start criteria and the evidence still required before the
 replacement can be called release-ready; it is not a second current backlog.
 
+## Current roadmap completion audit
+
+This audit is intentionally stricter than feature presence. A row is complete
+only when its current implementation, consumer surface, automated oracles, and
+required physical evidence agree.
+
+| Roadmap requirement | Current evidence | Completion result |
+| --- | --- | --- |
+| Baseline PBR and static glTF fidelity | Core metallic-roughness, lights, IBL, normal/emissive/occlusion/specular/transmission/volume lowering, official asset manifest, pixel/decode gates, and required-extension failures pass the replacement suite. | Implementation-local proof complete; current-build physical regression pass still follows the shared device gate below. |
+| Authored LOD, variants and instances | Dense stereo-aware LOD selection, readiness fallback, variants, repeated occurrences, GPU-authored instances, explicit bulk instances, and shared picking identity have deterministic, fuzz, integration, and browser evidence. | Complete for the accepted static profile; lowest-LOD-first transport remains an explicit non-blocking optimization. |
+| Canvas and WebXR | One clock/frame transaction, ordered views, lifecycle/failure properties, synthetic stereo and 120 Hz harness evidence exist. | Physical Quest exact-build correctness, VT quality, thermal conditions, and sustained frame timing remain missing. |
+| VT2, SVG and ETC2 KTX2 | Authored/automatic VT share demand/publication/resource paths; near-plane and close-ground properties, GS SVG preferred/fallback behavior, and direct offline ETC2 upload/selection have focused and browser evidence. | Safari close-view VT is proven on an earlier exact build; current-build iPad texture integrity and physical Quest VT remain missing. |
+| React-first consumer DX | Packed consumer composition covers scenes, focused observation, controls, picking proxies, document scenes, variants, instances, XR and imperative root ownership. Public constructors validate unknown fields and declarations name identity, units and lifecycle. | Local compile/runtime/package proof complete. |
+| Performance, GC and deployed bytes | Retained packets/state, allocation-focused cores, exact resource accounting, upload governors, CPU/GPU traces and bundle attribution exist. Current local gates report 115.0 kB initial and 229.6 kB total deployed JavaScript gzip. | CPU/GC is not the present heavy-scene limit. Sponza misses a sustained physical p95 claim; Bistro and A Beautiful Game remain texture/fragment-bound below the desired device floor. Offline GPU-compressed content is the strongest accepted route, not a renderer quality shortcut. |
+| Validation, commit and release proof | The complete local replacement suite, glTF manifest, types, lint, builds, package entrypoints, VT benchmark build and bundle ceilings are repeatable gates. | The newest exact-budget replacement, authored sampler-claim and React DX work must still be committed/pushed; exact-build iPad and Quest captures must then close the physical rows before release completion. |
+
+The accepted unsupported/deferred rows—animation, skins, morphs, physics,
+interactivity and speculative optional WebGL features—do not block this roadmap.
+They also cannot be counted as implemented merely because the architecture can
+represent them later.
+
 ## Gate 1: consumer contract — accepted
 
 The [consumer API contract](consumer-api.md) defines the primary React tasks,
