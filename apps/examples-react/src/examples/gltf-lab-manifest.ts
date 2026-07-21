@@ -31,6 +31,7 @@ export type GltfLabCase = {
     readonly sha256: string;
   }[];
   readonly sha256: string;
+  readonly sourceRevision?: string;
   readonly status: GltfLabCaseStatus;
 };
 

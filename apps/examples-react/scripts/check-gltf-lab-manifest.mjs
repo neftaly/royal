@@ -64,6 +64,9 @@ if (JSON.stringify(fixtureNames) !== JSON.stringify(manifestFixtureNames)) {
 
 for (const entry of manifest.cases) {
   if (!statuses.has(entry.status)) throw new Error(`${entry.name}: unknown status ${entry.status}`);
+  if (entry.sourceRevision !== undefined && !/^[0-9a-f]{40}$/u.test(entry.sourceRevision)) {
+    throw new Error(`${entry.name}: sourceRevision must be a full Git commit`);
+  }
   const bytes = readFileSync(path.join(publicRoot, decodeURIComponent(entry.path)));
   if (bytes.length !== entry.bytes) throw new Error(`${entry.name}: byte count changed`);
   if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {

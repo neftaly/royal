@@ -23,6 +23,13 @@ returns.
 Included models: 62
 Included GLB bytes: 22812656 (21.76 MiB)
 
+The unchanged `SunglassesKhronos/glTF-Draco` variant is retained in addition to
+the primary GLB. Its 63,146-byte external payload is pinned to Sample Assets
+commit `2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf` and jointly exercises required
+WebP selection, Draco worker preparation, external resources, and the ordinary
+progressive texture lifecycle. The model's optional iridescence remains a core
+fallback oracle rather than a Royal iridescence support claim.
+
 Each included model stores:
 
 - `<Model>/README.upstream.md` from `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/<Model>/README.md`

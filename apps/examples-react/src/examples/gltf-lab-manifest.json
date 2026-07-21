@@ -1157,7 +1157,50 @@
         "skins": 0
       },
       "presentation": {
-        "scale": 0.38
+        "scale": 5.5
+      }
+    },
+    {
+      "name": "SunglassesKhronosWebPDraco",
+      "status": "core-fallback-oracle",
+      "path": "fixtures/khronos/SunglassesKhronos/glTF-Draco/SunglassesKhronos.gltf",
+      "bytes": 15082,
+      "sha256": "b83d4073ea7064c2d9ec67aa226943f2261f996988668220493d68c4f5c33ae0",
+      "provenance": "fixtures/khronos/SunglassesKhronos/README.upstream.md",
+      "sourceRevision": "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf",
+      "resources": [
+        {
+          "path": "fixtures/khronos/SunglassesKhronos/glTF-Draco/SunglassesKhronos.data.bin",
+          "bytes": 32160,
+          "sha256": "13ecf40786d7a7365494320646cf0652e878f0464bb13fcb0a7420fe057b4e0e"
+        },
+        {
+          "path": "fixtures/khronos/SunglassesKhronos/glTF-Draco/SunglassesKhronos.webp",
+          "bytes": 15904,
+          "sha256": "7456274b6ef28f36ef8e3deb6de714ff80e6ae5735573444ae47f54c6f725f23"
+        }
+      ],
+      "features": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression",
+        "KHR_materials_ior",
+        "KHR_materials_iridescence",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "external-resources",
+        "images"
+      ],
+      "extensionsRequired": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 5.5
       }
     },
     {
