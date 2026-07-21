@@ -5,6 +5,7 @@ import type {
   GltfNode,
 } from "@royal/renderer-core";
 import type { PreparedStaticGltf } from "./static-asset";
+import type { GltfDocumentScene } from "./static-node-selection";
 import type {
   TextureAssetSnapshot,
   TextureSourceRef,
@@ -55,6 +56,10 @@ export type GltfAssetSnapshot =
     nodeCount: number;
     /** Number of prepared draw primitives, including authored LOD levels. */
     primitiveCount: number;
+    /** Actual zero-based selected scene after resolving the document default. */
+    sceneIndex: number;
+    /** Complete document scene inventory without preparing unselected content. */
+    scenes: readonly GltfDocumentScene[];
     status: "degraded" | "ready" | "streaming";
     timings: GltfAssetTimings;
     textures: GltfTextureProgress;
@@ -355,6 +360,8 @@ export class GltfAssetOwner {
         lightCount: prepared.lights.length,
         nodeCount: prepared.nodeCount,
         primitiveCount: prepared.primitives.length,
+        sceneIndex: prepared.sceneIndex,
+        scenes: prepared.scenes,
         status: usableState(textures),
         timings: {
           externalResourceReadDurationMs,

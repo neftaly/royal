@@ -481,6 +481,8 @@ describe("canvas root asset publication", () => {
         lightCount: 0,
         nodeCount: 1,
         primitiveCount: 1,
+        sceneIndex: 0,
+        scenes: [{ index: 0 }],
         status: "ready",
         timings: {
           externalResourceReadDurationMs: 0,

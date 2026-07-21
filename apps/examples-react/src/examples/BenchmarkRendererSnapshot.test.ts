@@ -51,6 +51,12 @@ describe('current benchmark glTF adapter', () => {
       lightCount: 4,
       nodeCount: 397,
       primitiveCount: 381,
+      sceneIndex: 2,
+      scenes: [
+        { index: 0, name: 'Exterior' },
+        { index: 1, name: 'Interior' },
+        { index: 2, name: 'Interior Wine' },
+      ],
       status: 'streaming',
       timings: {
         externalResourceReadDurationMs: 70,
@@ -73,6 +79,7 @@ describe('current benchmark glTF adapter', () => {
       primitiveCount: 381,
       lightCount: 4,
       nodeCount: 397,
+      sceneIndex: 2,
       status: 'streaming',
       variantNames: ['Day', 'Night'],
       version: 'web-v2',
@@ -85,6 +92,12 @@ describe('current benchmark glTF adapter', () => {
       lightCount: 4,
       nodeCount: 397,
       primitiveCount: 381,
+      sceneIndex: 2,
+      scenes: [
+        { index: 0, name: 'Exterior' },
+        { index: 1, name: 'Interior' },
+        { index: 2, name: 'Interior Wine' },
+      ],
       status: 'degraded',
       timings: {
         externalResourceReadDurationMs: 70,

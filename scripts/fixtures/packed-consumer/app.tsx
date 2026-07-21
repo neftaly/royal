@@ -14,6 +14,7 @@ import {
   useTextureAssetStatus,
   useVirtualTextureAssetStatus,
   type RendererContextSnapshot,
+  type GltfDocumentScene,
   type RendererResourceSnapshot,
   type RendererRoot,
   type ScenePointerEvent,
@@ -151,10 +152,16 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
     || modelStatus.status === 'degraded'
     ? modelStatus.variantNames.join(', ')
     : '';
+  const documentScenes: readonly GltfDocumentScene[] = modelStatus.status === 'ready'
+    || modelStatus.status === 'streaming'
+    || modelStatus.status === 'degraded'
+    ? modelStatus.scenes
+    : [];
   return (
     <output>
       {renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.cssWidth ?? 0} by{' '}
-      {size?.cssHeight ?? 0}; model {modelStatus.status} ({variants}); texture{' '}
+      {size?.cssHeight ?? 0}; model {modelStatus.status} ({documentScenes.length} scenes,{' '}
+      {variants}); texture{' '}
       {textureStatus.status}; environment {environmentStatus.status}; VT{' '}
       {virtualTextureStatus.status}
     </output>

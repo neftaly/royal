@@ -87,10 +87,12 @@ unrelated frames.
 focused `idle` / `loading` / `streaming` / `ready` / `degraded` / `error` state
 for one exact source, version, and selected document scene. `streaming`, `ready`, and `degraded` all mean geometry is usable and
 include `nodeCount`, `primitiveCount`, `lightCount`, document-declared
-`variantNames`, `bounds`, and
+`variantNames`, the resolved `sceneIndex`, lightweight document `scenes`,
+`bounds`, and
 `textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
 logical textures whose preferred representation failed and whose declared
-alternative won. `streaming` has outstanding
+alternative won. Scene inventory does not fetch or prepare unselected scene
+content. `streaming` has outstanding
 images, `ready` has completed without image failures, and `degraded` remains
 drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;

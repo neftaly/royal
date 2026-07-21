@@ -7,6 +7,30 @@ import {
   type JsonObject,
 } from "./gltf-values";
 
+/** One glTF document scene available for exact selection. */
+export type GltfDocumentScene = Readonly<{
+  /** Zero-based value accepted by `gltf({ sceneIndex })`. */
+  index: number;
+  /** Authored display name when the document provides one. */
+  name?: string;
+}>;
+
+/** Reads the complete document scene inventory without preparing unselected content. */
+export const staticDocumentScenes = (
+  scenes: readonly unknown[],
+  label: string,
+): readonly GltfDocumentScene[] => scenes.map((value, sceneIndex) => {
+  const path = `scenes[${sceneIndex}]`;
+  const scene = object(value, label, path);
+  if (scene.name !== undefined && typeof scene.name !== "string") {
+    return fail(label, `${path}.name`, "must be a string");
+  }
+  return {
+    index: sceneIndex,
+    ...(scene.name === undefined ? {} : { name: scene.name }),
+  };
+});
+
 /** Reads one validated MSFT_lod edge list shared by inventory and lowering. */
 export const staticNodeLodIds = (
   node: JsonObject,

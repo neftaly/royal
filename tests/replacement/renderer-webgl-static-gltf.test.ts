@@ -26,7 +26,7 @@ describe("static glTF preparation core", () => {
 
   it("prepares an explicit document scene through the same canonical lowering path", () => {
     const document = staticTriangleDocument();
-    document.scenes = [{ nodes: [0] }, { nodes: [1] }];
+    document.scenes = [{ name: "Complete", nodes: [0] }, { nodes: [1] }];
     const bytes = staticTriangleGlb(document);
 
     const defaultScene = prepareStaticGlb(bytes, "scene-default");
@@ -40,7 +40,14 @@ describe("static glTF preparation core", () => {
     );
 
     expect(defaultScene.bounds).toEqual({ max: [2, 3, 0], min: [0, 1, 0] });
+    expect(defaultScene.sceneIndex).toBe(0);
+    expect(defaultScene.scenes).toEqual([
+      { index: 0, name: "Complete" },
+      { index: 1 },
+    ]);
     expect(secondScene.bounds).toEqual({ max: [1, 3, 0], min: [-1, 1, 0] });
+    expect(secondScene.sceneIndex).toBe(1);
+    expect(secondScene.scenes).toEqual(defaultScene.scenes);
     expect(() => prepareStaticGlb(
       bytes,
       "scene-invalid",
@@ -49,6 +56,11 @@ describe("static glTF preparation core", () => {
       true,
       2,
     )).toThrow("sceneIndex: index 2 is out of range");
+
+    const invalidName = staticTriangleDocument();
+    invalidName.scenes = [{ name: 3, nodes: [0] }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(invalidName), "scene-name-invalid"))
+      .toThrow("scenes[0].name: must be a string");
   });
 
   it("loads a JSON glTF external buffer relative to the document", async () => {

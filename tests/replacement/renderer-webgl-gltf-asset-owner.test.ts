@@ -35,10 +35,17 @@ describe("glTF asset lifecycle owner", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
       textureAssets: [],
       variantNames: [],
     } as const;
-    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(async () => prepared);
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
+      async (_bytes, _key, _label, _uri, _signal, _read, sceneIndex) => ({
+        ...prepared,
+        sceneIndex: sceneIndex ?? 0,
+      }),
+    );
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
@@ -56,6 +63,8 @@ describe("glTF asset lifecycle owner", () => {
     expect(prepare).toHaveBeenCalledTimes(2);
     expect(new Set(prepare.mock.calls.map((call) => call[1])).size).toBe(1);
     expect(prepare.mock.calls.map((call) => call[6])).toEqual([0, 1]);
+    expect(owner.getSnapshot(exterior.asset)).toMatchObject({ sceneIndex: 0 });
+    expect(owner.getSnapshot(interior.asset)).toMatchObject({ sceneIndex: 1 });
   });
 
   it("routes preparation through one injected lifecycle without duplicating resource IO", async () => {
@@ -65,6 +74,8 @@ describe("glTF asset lifecycle owner", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      sceneIndex: 2,
+      scenes: [{ index: 0 }, { index: 1 }, { index: 2 }],
       textureAssets: [],
       variantNames: [],
     } as const;
@@ -132,6 +143,8 @@ describe("glTF asset lifecycle owner", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
       textureAssets: [],
       variantNames: [],
     } as const;
@@ -199,6 +212,8 @@ describe("glTF asset lifecycle owner", () => {
         lightCount: 0,
         nodeCount: 2,
         primitiveCount: 1,
+        sceneIndex: 0,
+        scenes: [{ index: 0 }],
         status: "ready",
         timings: {
           externalResourceReadDurationMs: 0,
@@ -260,6 +275,8 @@ describe("glTF asset lifecycle owner", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
       textureAssets: [texture],
       variantNames: [],
     } as const;

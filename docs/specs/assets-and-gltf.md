@@ -35,7 +35,10 @@ inventory; an out-of-range index is an asset preparation error. Scene selection
 participates in prepared/status identity but not source-derived mesh or image
 content identity. Shared mesh and image references therefore reach the same
 resource owners even though each selected scene keeps an independently
-cancellable preparation lifecycle.
+cancellable preparation lifecycle. Drawable focused status reports the actual
+resolved `sceneIndex` and the complete lightweight `{ index, name? }` scene
+inventory, so a consumer can build a selector without parsing the document a
+second time. Inventory alone MUST NOT prepare or fetch unselected scene content.
 
 Geometry SHOULD become visible before independent texture work settles. Royal
 MUST NOT stall otherwise renderable geometry merely to avoid a minor texture or
@@ -54,10 +57,10 @@ silently replace consumer authentication, caching, or URI policy with a direct
 worker fetch.
 
 A prepared scene publishes atomically: traversable nodes, primitive records,
-bounds, lights, variant names, and image demands either form one coherent
-revision or do not replace the previous revision. Individual image outcomes may
-publish later into material-owned slots. A failed image MUST NOT invalidate
-unrelated images or geometry.
+bounds, lights, selected index, lightweight scene inventory, variant names, and
+image demands either form one coherent revision or do not replace the previous
+revision. Individual image outcomes may publish later into material-owned
+slots. A failed image MUST NOT invalidate unrelated images or geometry.
 
 ## Supported vertex and primitive profile
 

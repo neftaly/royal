@@ -49,7 +49,12 @@ import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selectio
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
 import { collectStaticTextureAssets } from "./static-texture-assets";
 import { readCanonicalStaticGltfSource } from "./static-source";
-import { selectedStaticSceneIndex, staticNodeLodIds } from "./static-node-selection";
+import {
+  selectedStaticSceneIndex,
+  staticDocumentScenes,
+  staticNodeLodIds,
+  type GltfDocumentScene,
+} from "./static-node-selection";
 
 export type PreparedStaticLodMembership = Readonly<{
   group: LodGroupId;
@@ -79,6 +84,10 @@ export type PreparedStaticGltf = Readonly<{
   /** Authored nodes reachable from the selected scene, including authored LOD members. */
   nodeCount: number;
   primitives: readonly PreparedStaticGltfPrimitive[];
+  /** Actual selected scene after resolving the document default. */
+  sceneIndex: number;
+  /** Complete lightweight scene inventory; unselected content is not prepared. */
+  scenes: readonly GltfDocumentScene[];
   textureAssets: readonly TextureSourceRef[];
   /** Unique document-declared material variant names in authored order. */
   variantNames: readonly string[];
@@ -714,6 +723,7 @@ const prepareStaticDocument = (
     }
   };
 
+  const documentScenes = staticDocumentScenes(scenes, label);
   const sceneIndex = selectedStaticSceneIndex(document, scenes, label, selectedSceneIndex);
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
@@ -906,6 +916,8 @@ const prepareStaticDocument = (
     lights,
     nodeCount: claimed.size,
     primitives: batchedPrimitives,
+    sceneIndex,
+    scenes: documentScenes,
     textureAssets: collectStaticTextureAssets(batchedPrimitives),
     variantNames,
   };

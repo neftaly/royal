@@ -223,11 +223,15 @@ diagnostics and does not rewrite successful decode status into a content error.
 Root-wide diagnostics are cold, bounded operational observation and MUST NOT be
 the only way to drive normal loading, variants, fitting, retries, or lifecycle UI.
 Drawable glTF status includes selected-scene node, primitive, and punctual-light
-counts plus document-declared material-variant names and
+counts, the actual resolved `sceneIndex`, the complete lightweight
+`scenes: { index, name? }[]` document inventory, document-declared
+material-variant names, and
 `textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
 logical textures whose preferred representation failed and whose declared
 alternative won; it is not a second texture or an asset failure. Consumers do
-not parse a second copy of the glTF merely to populate controls or summaries.
+not parse a second copy of the glTF merely to populate scene/variant controls or
+summaries. Reporting the inventory does not prepare or fetch unselected scene
+content.
 
 `rendererOptions.maxConcurrentPreparationJobs` is an immutable positive integer
 with default 8. It bounds admitted asynchronous asset-preparation lifecycles

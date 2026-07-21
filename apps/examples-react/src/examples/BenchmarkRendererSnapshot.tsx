@@ -80,6 +80,7 @@ export const benchmarkGltfDiagnostics = (
         sourceRead: status.timings.sourceReadDurationMs,
       }
     : {};
+  const sceneIndex = usable ? status.sceneIndex : asset.sceneIndex;
   return {
     ...(status.status === 'error' ? { error: status.error } : {}),
     imageCandidates: usable ? status.textures.total : 0,
@@ -91,7 +92,7 @@ export const benchmarkGltfDiagnostics = (
     nodeCount: usable ? status.nodeCount : 0,
     phaseMs,
     primitiveCount: usable ? status.primitiveCount : 0,
-    ...(asset.sceneIndex === undefined ? {} : { sceneIndex: asset.sceneIndex }),
+    ...(sceneIndex === undefined ? {} : { sceneIndex }),
     src: asset.src,
     status: status.status,
     variantNames: usable ? status.variantNames : [],

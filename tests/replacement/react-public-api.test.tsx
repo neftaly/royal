@@ -25,6 +25,7 @@ import {
   OrbitControls,
   type CanvasProps,
   createRendererRoot,
+  type GltfDocumentScene,
   useCanvasPick,
   useCanvasSize,
   type GltfAssetStatusIdentity,
@@ -187,6 +188,8 @@ describe("replacement React public API", () => {
     expectTypeOf({ manifestUri: "/map.vt.json", version: "v2" })
       .toMatchTypeOf<VirtualTextureAssetStatusIdentity>();
     expectTypeOf(gltf("/model.glb").asset).toMatchTypeOf<GltfAssetStatusInput>();
+    expectTypeOf({ index: 2, name: "Interior Wine" })
+      .toMatchTypeOf<GltfDocumentScene>();
     expectTypeOf(textureAsset({ src: "/texture.png" }))
       .toMatchTypeOf<TextureAssetStatusInput>();
     expectTypeOf(prefilteredEnvironment({ src: "/studio.ktx" }))

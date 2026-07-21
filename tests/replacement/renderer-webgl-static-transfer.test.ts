@@ -58,6 +58,8 @@ describe("prepared static glTF transfer ownership", () => {
           requiresTextureCoordinates: false,
         },
       }],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
       textureAssets: [{
         bytes: embeddedBytes,
         contentKey: "embedded:0",
@@ -90,6 +92,8 @@ describe("prepared static glTF transfer ownership", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
       textureAssets: [{ kind: "asset", src: "/texture.avif" }],
       variantNames: [],
     };
