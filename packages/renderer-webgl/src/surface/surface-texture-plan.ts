@@ -31,6 +31,7 @@ import {
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VOLUME_MATERIAL,
   SURFACE_TEXTURE_FEATURES,
+  surfaceLightCountFeatureBits,
 } from "./surface-program-features";
 
 export const MATERIAL_TEXTURE_UNITS = 9;
@@ -111,9 +112,8 @@ export const surfaceTexturesUseIdentityCoordinates = (
 };
 
 export type SurfaceProgramFeatureInput = Readonly<{
+  directionalLightCount: number;
   environmentFeatures: number;
-  hasDirectionalLights: boolean;
-  hasPunctualLights: boolean;
   hasTangent: boolean;
   hasVertexColor: boolean;
   hasVertexNormal: boolean;
@@ -121,13 +121,13 @@ export type SurfaceProgramFeatureInput = Readonly<{
   linearOutput: boolean;
   material: CanonicalSurfaceMaterial;
   ordinaryTextureMask: number;
+  punctualLightCount: number;
 }>;
 
 /** Pure selection of one shader feature set from canonical resident state. */
 export const surfaceProgramFeatureBits = ({
+  directionalLightCount,
   environmentFeatures,
-  hasDirectionalLights,
-  hasPunctualLights,
   hasTangent,
   hasVertexColor,
   hasVertexNormal,
@@ -135,6 +135,7 @@ export const surfaceProgramFeatureBits = ({
   linearOutput,
   material,
   ordinaryTextureMask,
+  punctualLightCount,
 }: SurfaceProgramFeatureInput): number => {
   let features = material.alphaBlend === true ? SURFACE_FEATURE_ALPHA_BLEND : 0;
   features |= baseColorTextureFeatureBits(
@@ -159,8 +160,9 @@ export const surfaceProgramFeatureBits = ({
     features |= environmentFeatures;
     if (ordinaryTextureMask & 16) features |= SURFACE_FEATURE_OCCLUSION_TEXTURE;
   }
-  if (hasDirectionalLights) features |= SURFACE_FEATURE_DIRECTIONAL_LIGHTS;
-  if (hasPunctualLights) features |= SURFACE_FEATURE_PUNCTUAL_LIGHTS;
+  if (directionalLightCount > 0) features |= SURFACE_FEATURE_DIRECTIONAL_LIGHTS;
+  if (punctualLightCount > 0) features |= SURFACE_FEATURE_PUNCTUAL_LIGHTS;
+  features |= surfaceLightCountFeatureBits(directionalLightCount, punctualLightCount);
   if (material.specularFactor !== undefined) {
     features |= SURFACE_FEATURE_SPECULAR_MATERIAL;
     if (ordinaryTextureMask & 32) features |= SURFACE_FEATURE_SPECULAR_TEXTURE;

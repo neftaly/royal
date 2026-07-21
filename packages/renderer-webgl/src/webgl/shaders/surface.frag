@@ -75,7 +75,6 @@ uniform vec4 baseColor;
 uniform vec4 cameraWorldPosition;
 #ifdef DIRECTIONAL_LIGHTS
 uniform vec4 directionalLightColors[MAX_DIRECTIONAL_LIGHTS];
-uniform int directionalLightCount;
 uniform vec4 directionalLightDirections[MAX_DIRECTIONAL_LIGHTS];
 #endif
 uniform vec4 emissiveFactor;
@@ -86,7 +85,6 @@ uniform vec4 specularFactors;
 #endif
 #ifdef PUNCTUAL_LIGHTS
 uniform vec4 punctualLightColors[MAX_PUNCTUAL_LIGHTS];
-uniform int punctualLightCount;
 uniform vec4 punctualLightDirections[MAX_PUNCTUAL_LIGHTS];
 uniform vec4 punctualLightPositions[MAX_PUNCTUAL_LIGHTS];
 uniform vec4 punctualLightSpotCones[MAX_PUNCTUAL_LIGHTS];
@@ -227,7 +225,6 @@ void main() {
   vec3 lit = vec3(0.0);
 #ifdef DIRECTIONAL_LIGHTS
   for (int index = 0; index < MAX_DIRECTIONAL_LIGHTS; index += 1) {
-    if (index >= directionalLightCount) break;
     vec3 lightDirection = -directionalLightDirections[index].xyz;
     lit += brdfContribution(
       normal,
@@ -243,7 +240,6 @@ void main() {
 #endif
 #ifdef PUNCTUAL_LIGHTS
   for (int index = 0; index < MAX_PUNCTUAL_LIGHTS; index += 1) {
-    if (index >= punctualLightCount) break;
     vec3 toLight = punctualLightPositions[index].xyz - worldPosition;
     float distanceSquared = max(dot(toLight, toLight), 0.000001);
     vec3 lightDirection = toLight * inversesqrt(distanceSquared);

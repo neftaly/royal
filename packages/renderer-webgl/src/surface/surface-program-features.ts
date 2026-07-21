@@ -23,6 +23,28 @@ export const SURFACE_FEATURE_ALPHA_BLEND = 2097152;
 export const SURFACE_FEATURE_VOLUME_MATERIAL = 4194304;
 export const SURFACE_FEATURE_VERTEX_NORMAL = 8388608;
 
+const SURFACE_DIRECTIONAL_LIGHT_COUNT_SHIFT = 24;
+const SURFACE_DIRECTIONAL_LIGHT_COUNT_MASK = 0b111;
+const SURFACE_PUNCTUAL_LIGHT_COUNT_SHIFT = 27;
+const SURFACE_PUNCTUAL_LIGHT_COUNT_MASK = 0b1111;
+
+/** Packs exact bounded light counts into the fragment-program identity. */
+export const surfaceLightCountFeatureBits = (
+  directionalLightCount: number,
+  punctualLightCount: number,
+): number => (
+  (directionalLightCount << SURFACE_DIRECTIONAL_LIGHT_COUNT_SHIFT)
+  | (punctualLightCount << SURFACE_PUNCTUAL_LIGHT_COUNT_SHIFT)
+);
+
+export const surfaceDirectionalLightCount = (features: number): number =>
+  (features >>> SURFACE_DIRECTIONAL_LIGHT_COUNT_SHIFT)
+  & SURFACE_DIRECTIONAL_LIGHT_COUNT_MASK;
+
+export const surfacePunctualLightCount = (features: number): number =>
+  (features >>> SURFACE_PUNCTUAL_LIGHT_COUNT_SHIFT)
+  & SURFACE_PUNCTUAL_LIGHT_COUNT_MASK;
+
 export const SURFACE_TEXTURE_FEATURES = SURFACE_FEATURE_BASE_COLOR_TEXTURE
   | SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE
   | SURFACE_FEATURE_NORMAL_TEXTURE

@@ -30,16 +30,17 @@ that same stream.
 
 ## Root-wide budgets
 
-Each root exposes three immutable creation ceilings:
+Each root exposes one consumer creation ceiling: retained persistent GPU bytes
+(default 256 MiB). It is a ceiling, not a preallocation, promise that memory
+exists, or target to fill. Hardware limits and subsystem-specific correctness
+constraints may be stricter. The option is immutable for the root lifetime.
 
-- retained persistent GPU bytes (default 256 MiB);
-- ordinary-texture GPU upload traffic per rendered frame (default 4 MiB);
-- concurrent asynchronous preparation jobs (default 8).
-
-These are ceilings, not preallocations, promises that memory exists, or targets
-to fill. Hardware limits and subsystem-specific correctness constraints may be
-stricter. Omitted overrides retain defaults; options are immutable for the root
-lifetime.
+Ordinary-texture GPU upload traffic per frame and concurrent asynchronous
+preparation jobs also have bounded root-owned ceilings, currently 4 MiB and
+eight jobs respectively. Those limits and their scheduling strategies are
+implementation policy: diagnostics expose them, but consumers do not tune or
+depend on them. This keeps later phase separation and browser-specific work
+attribution from becoming breaking API changes.
 
 The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
 authority shared by glTF asset pipelines, ordinary texture decode, authored-VT
@@ -53,7 +54,7 @@ work is never preempted.
 A job is an admitted asset-preparation lifecycle, not a promise that a browser
 created a worker or only one underlying request. A queued claim can be aborted
 without starting; active claims retain their slot until their promise settles.
-Root diagnostics expose the immutable limit plus active, total queued,
+Root diagnostics expose the current limit plus active, total queued,
 foreground queued, and detail queued counts without polling or waking rendering.
 
 Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
@@ -66,7 +67,7 @@ requires measured peak evidence and an accurate reservation contract rather
 than estimates attached to heterogeneous promises.
 
 Upload-traffic ceilings are reset exactly once per submitted canvas or XR
-frame. New ordinary-texture base-level bytes consume the public texture ceiling
+frame. New ordinary-texture base-level bytes consume the internal texture ceiling
 before GL allocation or transfer. Canonical geometry and packed instance bytes
 consume a separate internal 4 MiB ceiling so a texture-only resource commit
 cannot starve a later scene draw. Work that does not fit retains its legal
@@ -214,6 +215,14 @@ WebGL2 does not provide modern bindless resources. Royal SHOULD instead compile
 stable binding plans, batch compatible draws, reuse texture units, and avoid
 redundant binds. Texture atlases/VT are content representations, not a generic
 bindless abstraction.
+
+Lit fragment programs specialize their bounded directional and punctual light
+array sizes to the canonical scene counts. Absent lights compile out, static
+loops contain no runtime count branch, and the imperative shell uploads only
+the exact prefix of its retained maximum-capacity workspace. Count changes may
+compile another cached fragment variant, while vertex variants remain shared;
+this bounded cold cost avoids reserving the four-directional/eight-punctual
+maximum in every lit fragment on constrained GPUs.
 
 ## Hot-path vocabulary budget
 

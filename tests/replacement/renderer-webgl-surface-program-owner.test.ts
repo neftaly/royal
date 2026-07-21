@@ -14,6 +14,7 @@ import {
   SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VOLUME_MATERIAL,
+  surfaceLightCountFeatureBits,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import {
   SurfaceProgramOwner,
@@ -115,7 +116,7 @@ describe("surface program ownership", () => {
     expect(gl.deleteShader).toHaveBeenCalledTimes(1);
   });
 
-  it("removes directional-light work from environment-only fragments", () => {
+  it("removes absent lights and specializes retained programs to exact light counts", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);
     owner.get("standard", SURFACE_FEATURE_STUDIO_ENVIRONMENT, false, false, false);
@@ -130,14 +131,28 @@ describe("surface program ownership", () => {
 
     owner.get(
       "standard",
-      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT
+        | SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+        | SURFACE_FEATURE_PUNCTUAL_LIGHTS
+        | surfaceLightCountFeatureBits(3, 2),
       false,
       false,
       false,
     );
-    expect(gl.getUniformLocation).toHaveBeenCalledWith(
+    const specialized = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .filter((source) => source.includes("ggxDistribution"))
+      .at(-1);
+    expect(specialized).toContain("#define MAX_DIRECTIONAL_LIGHTS 3");
+    expect(specialized).toContain("#define MAX_PUNCTUAL_LIGHTS 2");
+    expect(specialized).not.toContain("uniform int directionalLightCount");
+    expect(specialized).not.toContain("uniform int punctualLightCount");
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
       expect.anything(),
       "directionalLightCount",
+    );
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "punctualLightCount",
     );
   });
 

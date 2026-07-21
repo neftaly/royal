@@ -31,6 +31,8 @@ import {
   SURFACE_FEATURE_TRANSMISSION_TEXTURE,
   SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VOLUME_MATERIAL,
+  surfaceDirectionalLightCount,
+  surfacePunctualLightCount,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import type { GpuTextureBinding } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { VirtualTextureGpuBinding } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
@@ -76,9 +78,8 @@ const standard = (
 describe("surface texture planning core", () => {
   it("selects alpha preservation only for blended surfaces", () => {
     const opaque = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: false,
@@ -86,11 +87,11 @@ describe("surface texture planning core", () => {
       linearOutput: false,
       material: standard(),
       ordinaryTextureMask: 0,
+      punctualLightCount: 0,
     });
     const blended = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: false,
@@ -98,6 +99,7 @@ describe("surface texture planning core", () => {
       linearOutput: false,
       material: standard({ alphaBlend: true }),
       ordinaryTextureMask: 0,
+      punctualLightCount: 0,
     });
     expect(opaque & SURFACE_FEATURE_ALPHA_BLEND).toBe(0);
     expect(blended & SURFACE_FEATURE_ALPHA_BLEND).toBe(SURFACE_FEATURE_ALPHA_BLEND);
@@ -105,9 +107,8 @@ describe("surface texture planning core", () => {
 
   it("selects authored vertex normals independently from normal textures", () => {
     const features = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: true,
@@ -115,6 +116,7 @@ describe("surface texture planning core", () => {
       linearOutput: false,
       material: standard(),
       ordinaryTextureMask: 0,
+      punctualLightCount: 0,
     });
     expect(features & SURFACE_FEATURE_VERTEX_NORMAL).toBe(SURFACE_FEATURE_VERTEX_NORMAL);
     expect(features & SURFACE_FEATURE_NORMAL_TEXTURE).toBe(0);
@@ -373,9 +375,8 @@ describe("surface texture planning core", () => {
     });
     const residentMask = 1 << 0 | 1 << 1 | 1 << 3 | 1 << 7;
     const features = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: true,
@@ -383,6 +384,7 @@ describe("surface texture planning core", () => {
       linearOutput: true,
       material: settled,
       ordinaryTextureMask: presentableOrdinaryTextureMask(settled, residentMask),
+      punctualLightCount: 0,
     });
     expect(features & SURFACE_FEATURE_BASE_COLOR_TEXTURE).not.toBe(0);
     expect(features & SURFACE_FEATURE_EMISSIVE_TEXTURE).not.toBe(0);
@@ -402,9 +404,8 @@ describe("surface texture planning core", () => {
       transmissionFactor: 1,
     });
     const features = surfaceProgramFeatureBits({
+      directionalLightCount: 2,
       environmentFeatures: SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
-      hasDirectionalLights: true,
-      hasPunctualLights: true,
       hasTangent: true,
       hasVertexColor: true,
       hasVertexNormal: true,
@@ -412,16 +413,18 @@ describe("surface texture planning core", () => {
       linearOutput: true,
       material,
       ordinaryTextureMask: 0b1_1111_1111,
+      punctualLightCount: 3,
     });
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
     expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
     expect(features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS).not.toBe(0);
+    expect(surfaceDirectionalLightCount(features)).toBe(2);
+    expect(surfacePunctualLightCount(features)).toBe(3);
     expect(features & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(SURFACE_FEATURE_VOLUME_MATERIAL);
 
     const virtualFeatures = surfaceProgramFeatureBits({
+      directionalLightCount: 1,
       environmentFeatures: SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
-      hasDirectionalLights: true,
-      hasPunctualLights: true,
       hasTangent: true,
       hasVertexColor: true,
       hasVertexNormal: true,
@@ -429,15 +432,15 @@ describe("surface texture planning core", () => {
       linearOutput: true,
       material,
       ordinaryTextureMask: 0b1_1111_1111,
+      punctualLightCount: 1,
     });
     expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111);
   });
 
   it("specializes thin transmission separately from authored volume", () => {
     const thin = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: false,
@@ -445,11 +448,11 @@ describe("surface texture planning core", () => {
       linearOutput: true,
       material: standard({ transmissionFactor: 1 }),
       ordinaryTextureMask: 0,
+      punctualLightCount: 0,
     });
     const volume = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
       environmentFeatures: 0,
-      hasDirectionalLights: false,
-      hasPunctualLights: false,
       hasTangent: false,
       hasVertexColor: false,
       hasVertexNormal: false,
@@ -457,6 +460,7 @@ describe("surface texture planning core", () => {
       linearOutput: true,
       material: standard({ thicknessFactor: 0.5, transmissionFactor: 1 }),
       ordinaryTextureMask: 0,
+      punctualLightCount: 0,
     });
 
     expect(thin & SURFACE_FEATURE_TRANSMISSION_MATERIAL).not.toBe(0);

@@ -1,7 +1,3 @@
-import {
-  MAX_CANONICAL_DIRECTIONAL_LIGHTS,
-  MAX_CANONICAL_PUNCTUAL_LIGHTS,
-} from "./scene-lowering";
 import unlitVertexShader from "../webgl/shaders/unlit.vert";
 import unlitFragmentShader from "../webgl/shaders/unlit.frag";
 import standardVertexShader from "../webgl/shaders/surface.vert";
@@ -38,6 +34,8 @@ import {
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VOLUME_MATERIAL,
   SURFACE_TEXTURE_FEATURES,
+  surfaceDirectionalLightCount,
+  surfacePunctualLightCount,
 } from "./surface-program-features";
 
 export type TextureCoordinatesProgram = Readonly<{
@@ -79,7 +77,6 @@ export type StandardProgram = Readonly<{
   attenuationColor: WebGLUniformLocation | null;
   cameraWorldPosition: WebGLUniformLocation;
   directionalLightColors: WebGLUniformLocation | null;
-  directionalLightCount: WebGLUniformLocation | null;
   directionalLightDirections: WebGLUniformLocation | null;
   emissive: WebGLUniformLocation | null;
   emissiveCoordinates: TextureCoordinatesProgram | null;
@@ -108,7 +105,6 @@ export type StandardProgram = Readonly<{
   virtualSettings1: WebGLUniformLocation | null;
   virtualSettings2: WebGLUniformLocation | null;
   punctualLightColors: WebGLUniformLocation | null;
-  punctualLightCount: WebGLUniformLocation | null;
   punctualLightDirections: WebGLUniformLocation | null;
   punctualLightPositions: WebGLUniformLocation | null;
   punctualLightSpotCones: WebGLUniformLocation | null;
@@ -138,9 +134,7 @@ const UNLIT_VERTEX_SHADER = unlitVertexShader;
 const UNLIT_FRAGMENT_SHADER = unlitFragmentShader;
 const STANDARD_VERTEX_SHADER = standardVertexShader;
 const STANDARD_FRAGMENT_SHADER = standardFragmentShader
-  .replace("__PRESENTATION_FUNCTIONS__", PRESENTATION_GLSL)
-  .replace("__MAX_DIRECTIONAL_LIGHTS__", String(MAX_CANONICAL_DIRECTIONAL_LIGHTS))
-  .replace("__MAX_PUNCTUAL_LIGHTS__", String(MAX_CANONICAL_PUNCTUAL_LIGHTS));
+  .replace("__PRESENTATION_FUNCTIONS__", PRESENTATION_GLSL);
 
 const STANDARD_VERTEX_FEATURES = SURFACE_TEXTURE_FEATURES
   | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
@@ -183,28 +177,36 @@ const shaderVariant = (
   virtualDeclarations: string,
   transmissionSource: SurfaceTransmissionShaderSource,
 ): string => {
+  const directionalLightCount = Math.max(1, surfaceDirectionalLightCount(features));
+  const punctualLightCount = Math.max(1, surfacePunctualLightCount(features));
   const variant = source.replace(
-  "__VIRTUAL_TEXTURE_DECLARATIONS__",
-  features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
-).replace(
-  "__TRANSMISSION_DECLARATIONS__",
-  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
-    ? transmissionSource.fragmentDeclarations : "",
-).replace(
-  "__TRANSMISSION_BODY__",
-  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
-    ? transmissionSource.fragmentBody : "",
-).replace(
-  "__TRANSMISSION_VERTEX_DECLARATIONS__",
-  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
-    ? transmissionSource.vertexDeclarations : "",
-).replace(
-  "__TRANSMISSION_VERTEX_BODY__",
-  features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
-    ? transmissionSource.vertexBody : "",
-).replace(
-  "\n",
-  `\n${features & SURFACE_FEATURE_VERTEX_NORMAL ? "#define VERTEX_NORMAL\n" : ""}${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_VOLUME_MATERIAL ? "#define VOLUME_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS ? "#define DIRECTIONAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${features & SURFACE_FEATURE_ALPHA_BLEND ? "#define ALPHA_BLEND\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+    "__MAX_DIRECTIONAL_LIGHTS__",
+    String(directionalLightCount),
+  ).replace(
+    "__MAX_PUNCTUAL_LIGHTS__",
+    String(punctualLightCount),
+  ).replace(
+    "__VIRTUAL_TEXTURE_DECLARATIONS__",
+    features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
+  ).replace(
+    "__TRANSMISSION_DECLARATIONS__",
+    features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? transmissionSource.fragmentDeclarations : "",
+  ).replace(
+    "__TRANSMISSION_BODY__",
+    features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? transmissionSource.fragmentBody : "",
+  ).replace(
+    "__TRANSMISSION_VERTEX_DECLARATIONS__",
+    features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? transmissionSource.vertexDeclarations : "",
+  ).replace(
+    "__TRANSMISSION_VERTEX_BODY__",
+    features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      ? transmissionSource.vertexBody : "",
+  ).replace(
+    "\n",
+    `\n${features & SURFACE_FEATURE_VERTEX_NORMAL ? "#define VERTEX_NORMAL\n" : ""}${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_VOLUME_MATERIAL ? "#define VOLUME_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS ? "#define DIRECTIONAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${features & SURFACE_FEATURE_ALPHA_BLEND ? "#define ALPHA_BLEND\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
   );
   return features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
     ? variant.replace(SEMANTIC_TEXTURE_COORDINATE, "surfaceTextureCoordinate")
@@ -291,8 +293,6 @@ const createStandardProgram = (
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
     directionalLightColors: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
       ? uniform(gl, program, "directionalLightColors") : null,
-    directionalLightCount: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
-      ? uniform(gl, program, "directionalLightCount") : null,
     directionalLightDirections: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
       ? uniform(gl, program, "directionalLightDirections") : null,
     emissive: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
@@ -348,9 +348,6 @@ const createStandardProgram = (
     program,
     punctualLightColors: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
       ? uniform(gl, program, "punctualLightColors")
-      : null,
-    punctualLightCount: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
-      ? uniform(gl, program, "punctualLightCount")
       : null,
     punctualLightDirections: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
       ? uniform(gl, program, "punctualLightDirections")

@@ -252,7 +252,6 @@ export class SurfaceGpuOwner {
   #depthProgramLoadRequested = false;
   #depthPrepassOwner: SurfaceDepthPrepassOwner | null = null;
   #depthPrepassRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
-  #directionalLightCount = 0;
   #dirty = false;
   readonly #drawFrame: MutableSurfaceDrawFrame = {
     framebuffer: null,
@@ -1021,32 +1020,52 @@ export class SurfaceGpuOwner {
               !== this.#sceneGlobalsRevision
           ) {
             if (
-              program.directionalLightCount !== null
-              && program.directionalLightColors !== null
+              program.directionalLightColors !== null
               && program.directionalLightDirections !== null
             ) {
-              gl.uniform1i(program.directionalLightCount, this.#directionalLightCount);
-              gl.uniform4fv(program.directionalLightColors, this.#lightUniforms.directionalColors);
+              gl.uniform4fv(
+                program.directionalLightColors,
+                this.#lightUniforms.directionalColors,
+                0,
+                scene.directionalLights.length * 4,
+              );
               gl.uniform4fv(
                 program.directionalLightDirections,
                 this.#lightUniforms.directionalDirections,
+                0,
+                scene.directionalLights.length * 4,
               );
             }
             if (
-              program.punctualLightCount !== null
-              && program.punctualLightColors !== null
+              program.punctualLightColors !== null
               && program.punctualLightDirections !== null
               && program.punctualLightPositions !== null
               && program.punctualLightSpotCones !== null
             ) {
-              gl.uniform1i(program.punctualLightCount, scene.punctualLights.length);
-              gl.uniform4fv(program.punctualLightColors, this.#lightUniforms.punctualColors);
+              gl.uniform4fv(
+                program.punctualLightColors,
+                this.#lightUniforms.punctualColors,
+                0,
+                scene.punctualLights.length * 4,
+              );
               gl.uniform4fv(
                 program.punctualLightDirections,
                 this.#lightUniforms.punctualDirections,
+                0,
+                scene.punctualLights.length * 4,
               );
-              gl.uniform4fv(program.punctualLightPositions, this.#lightUniforms.punctualPositions);
-              gl.uniform4fv(program.punctualLightSpotCones, this.#lightUniforms.punctualSpotCones);
+              gl.uniform4fv(
+                program.punctualLightPositions,
+                this.#lightUniforms.punctualPositions,
+                0,
+                scene.punctualLights.length * 4,
+              );
+              gl.uniform4fv(
+                program.punctualLightSpotCones,
+                this.#lightUniforms.punctualSpotCones,
+                0,
+                scene.punctualLights.length * 4,
+              );
             }
             if (program.environmentSettings !== null) {
               const environment = scene.environment;
@@ -1300,9 +1319,8 @@ export class SurfaceGpuOwner {
         ? undefined
         : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
     const features = surfaceProgramFeatureBits({
+      directionalLightCount: scene?.directionalLights.length ?? 0,
       environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-      hasDirectionalLights: (scene?.directionalLights.length ?? 0) > 0,
-      hasPunctualLights: (scene?.punctualLights.length ?? 0) > 0,
       hasTangent: geometrySurface.geometry.tangentBuffer !== null,
       hasVertexColor: geometrySurface.geometry.colorBuffer !== null,
       hasVertexNormal: geometrySurface.geometry.normalBuffer !== null,
@@ -1313,6 +1331,7 @@ export class SurfaceGpuOwner {
         material,
         residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
+      punctualLightCount: scene?.punctualLights.length ?? 0,
     });
     const bindings = Array<GpuTextureBinding>(12);
     composeSurfaceTextureBindingsInto(
@@ -1470,14 +1489,11 @@ export class SurfaceGpuOwner {
       throw error;
     }
     if (scene !== null) {
-      this.#directionalLightCount = scene.directionalLights.length;
       packCanonicalLightUniformsInto(
         scene.directionalLights,
         scene.punctualLights,
         this.#lightUniforms,
       );
-    } else {
-      this.#directionalLightCount = 0;
     }
     this.#fullReconcileRequired = false;
     this.#instanceTransformsPending = false;
@@ -1510,9 +1526,8 @@ export class SurfaceGpuOwner {
         const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
         deferred ||= this.#materialUploadDeferred(material);
         const features = surfaceProgramFeatureBits({
+          directionalLightCount: scene.directionalLights.length,
           environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-          hasDirectionalLights: scene.directionalLights.length > 0,
-          hasPunctualLights: scene.punctualLights.length > 0,
           hasTangent: resource.geometry.tangentBuffer !== null,
           hasVertexColor: resource.geometry.colorBuffer !== null,
           hasVertexNormal: resource.geometry.normalBuffer !== null,
@@ -1523,6 +1538,7 @@ export class SurfaceGpuOwner {
             material,
             residentOrdinaryTextureMask(ordinaryBindings, 0),
           ),
+          punctualLightCount: scene.punctualLights.length,
         });
         const textureUnits = surfaceTextureUnitMask(features);
         resource.surface = surface;

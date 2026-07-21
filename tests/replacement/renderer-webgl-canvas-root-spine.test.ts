@@ -483,7 +483,10 @@ describe("clear-only canvas root", () => {
 
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
-    expect(canvas.gl.uniform1i).toHaveBeenCalledWith(expect.anything(), 1);
+    expect(canvas.gl.uniform1i).not.toHaveBeenCalled();
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.filter(
+      ([, , sourceOffset, sourceLength]) => sourceOffset === 0 && sourceLength === 4,
+    )).toHaveLength(6);
     expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
       const values = Array.from(value);
       return Math.abs(values[0]! - 1 / 4.8) < 0.000_001
@@ -498,6 +501,10 @@ describe("clear-only canvas root", () => {
       String(source).includes("#define STUDIO_ENVIRONMENT"))).toBe(true);
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
       String(source).includes("#define PUNCTUAL_LIGHTS"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define MAX_DIRECTIONAL_LIGHTS 1"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define MAX_PUNCTUAL_LIGHTS 1"))).toBe(true);
     expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
       String(source).includes("normalize(mat3(environmentRotation)"))).toBe(false);
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledWith(
