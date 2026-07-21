@@ -66,7 +66,9 @@ export const summarizeResourceTimings = (
     capacity,
     count: rows.length,
     entries: rows,
-    overflowed: bufferFullCount > 0 || rows.length >= capacity,
+    overflowed:
+      bufferFullCount > 0
+      || (Number.isFinite(capacity) && rows.length >= capacity),
     slowest: [...rows]
       .sort((left, right) => finite(right.duration) - finite(left.duration))
       .slice(0, slowestCount),

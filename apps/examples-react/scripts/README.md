@@ -344,11 +344,13 @@ drew rather than measuring an idle display clock.
 Add `--capture-canvas=true` to retain a PNG of the final physical canvas beside
 the JSON report. This is useful for texture-corruption and fidelity regressions:
 the image is captured only after readiness, warmup, and measured motion complete.
-The collector installs a WebKit bootstrap script before navigation and raises
-the Resource Timing buffer to 10,000 entries, so large scenes do not silently
-lose their later texture requests at Safari's default limit. Each report keeps
-the exact resource rows plus grouped and slowest-request summaries, and records
-whether the buffer filled. Override the capacity with
+The collector records the authoritative request lifecycle through WebKit's
+Network protocol. It also installs a bootstrap script before navigation and
+raises the page Resource Timing buffer to 10,000 entries for comparison; some
+iPadOS releases still expose only the first 150 page entries without reporting
+overflow. Each report keeps the exact protocol rows plus grouped and
+slowest-request summaries, alongside the page-API snapshot. Override the latter
+capacity with
 `--resource-timings=<count>` or `IPAD_BENCH_RESOURCE_TIMINGS` when investigating
 an even larger document; this affects only the inspector harness, not the app.
 Add `--capture-current-page=true` when investigating an already-visible issue.

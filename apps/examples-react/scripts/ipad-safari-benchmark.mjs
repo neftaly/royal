@@ -10,6 +10,7 @@ import {
   resourceTimingBootstrapSource,
   summarizeResourceTimings,
 } from './resource-timing-report.mjs';
+import { createWebKitNetworkRecorder } from './webkit-network-report.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../..');
@@ -283,6 +284,19 @@ const captureWebKitDiagnostics = (client, targetId, { maxEntries = 500 } = {}) =
     },
     snapshot: () => ({ droppedEntries, entries: [...entries] }),
   };
+};
+
+const captureWebKitNetwork = (client, targetId) => {
+  const recorder = createWebKitNetworkRecorder();
+  const unsubscribe = client.onMessage((event) => {
+    if (
+      event.method !== 'Target.dispatchMessageFromTarget'
+      && event.method !== 'Target.receivedMessageFromTarget'
+    ) return;
+    if (event.params?.targetId !== targetId || typeof event.params?.message !== 'string') return;
+    recorder.handle(JSON.parse(event.params.message));
+  });
+  return { close: unsubscribe, reset: recorder.reset, snapshot: recorder.snapshot };
 };
 
 let currentRunToken = '';
@@ -699,10 +713,12 @@ const run = async () => {
   const targetId = targetEvent.params?.targetInfo?.targetId;
   if (typeof targetId !== 'string') throw new Error('WebKit target id was missing');
   const browserDiagnostics = captureWebKitDiagnostics(client, targetId);
+  const networkCapture = captureWebKitNetwork(client, targetId);
   let report;
   let physicalOrientation;
   let canvasCapture;
-  let resourceTimings;
+  let pageResourceTimings;
+  let webKitNetwork;
 
   try {
     await targetCommand(client, targetId, 'Console.enable');
@@ -731,10 +747,18 @@ const run = async () => {
       5_000,
     );
     browserDiagnostics.reset();
+    networkCapture.reset();
     await targetCommand(client, targetId, 'Page.navigate', { url });
     await waitForNavigationCommit(client, targetId);
     report = await waitForReport(client, targetId);
-    resourceTimings = await captureResourceTimings(client, targetId);
+    pageResourceTimings = await captureResourceTimings(client, targetId);
+    const networkSnapshot = networkCapture.snapshot();
+    webKitNetwork = {
+      ...summarizeResourceTimings(networkSnapshot.entries, { capacity: Number.POSITIVE_INFINITY }),
+      failedCount: networkSnapshot.failedCount,
+      pendingCount: networkSnapshot.pendingCount,
+      source: 'webkit-network-protocol',
+    };
     if (report.source?.buildId !== expectedSource.buildId) {
       throw new Error(
         `iPad loaded Royal build ${String(report.source?.buildId)}, expected ${expectedSource.buildId}`,
@@ -801,10 +825,11 @@ const run = async () => {
         },
       }),
       coldCache,
+      pageResourceTimings,
       physicalOrientation,
       receivedAt: new Date().toISOString(),
       report,
-      resourceTimings,
+      webKitNetwork,
     }, null, 2)}\n`);
     console.log(`Wrote ${outputPath}`);
     console.log(`mode=${cameraDrag ? 'camera-drag' : 'idle'} p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
@@ -844,16 +869,18 @@ const run = async () => {
       error: error instanceof Error ? error.stack ?? error.message : String(error),
       expectedSource,
       generatedAt,
+      pageResourceTimings,
       page: parsedPage,
       progress: lastBenchmarkProgress,
       report,
-      resourceTimings,
       route,
+      webKitNetwork,
     }, null, 2)}\n`);
     console.error(`Wrote ${outputPath}`);
     throw error;
   } finally {
     browserDiagnostics.close();
+    networkCapture.close();
     try {
       await targetCommand(client, targetId, 'Page.setBootstrapScript');
     } catch {
