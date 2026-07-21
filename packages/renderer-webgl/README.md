@@ -123,13 +123,29 @@ console.log(info.colorSpace, info.width, info.height, info.storageBytes);
 ```
 
 The repository command below attaches already-encoded KTX2 images to existing
-core-fallback glTF textures. Mappings use glTF texture indices, and KTX2 paths
-are relative to the output document. It validates the complete byte profile and
-the linear/sRGB material-slot use before writing.
+core-fallback glTF textures. It accepts JSON `.gltf` and binary `.glb`, requires
+the output to retain that container format, and preserves every non-JSON GLB
+chunk byte-for-byte. Mappings use glTF texture indices, and KTX2 paths are
+relative to the output document. It validates every input byte profile and the
+linear/sRGB material-slot use before writing.
 
 ```sh
 pnpm author:gltf-etc2 scene.gltf scene.etc2.gltf \
   0=textures/base-color.ktx2 3=textures/normal.ktx2
+```
+
+Large scenes can keep the mappings in a reviewable attachment file:
+
+```json
+[
+  { "textureIndex": 0, "uri": "textures/base-color.ktx2" },
+  { "textureIndex": 3, "uri": "textures/normal.ktx2" }
+]
+```
+
+```sh
+pnpm author:gltf-etc2 scene.glb scene.etc2.glb \
+  --attachments=scene.etc2-attachments.json
 ```
 
 This command does not encode source pixels. Encoding stays an offline pipeline

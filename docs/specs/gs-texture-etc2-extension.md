@@ -184,7 +184,8 @@ are measured on physical Safari 17/A10+ and Quest 2.
 Before this extension is described as stable, Royal needs:
 
 1. an offline encoder that emits valid ETC2 KTX2; Royal's checked-in attachment
-   tool already validates and wires pre-encoded images into core-fallback glTF;
+   tool already validates and wires batches of pre-encoded images into JSON
+   glTF or GLB without rewriting retained GLB payload chunks;
 2. schema and sample assets for optional and required forms; the optional
    fallback oracle is checked in and exercised by the browser lab;
 3. cold selection, malformed payload, wrong-placement, embedded-image,

@@ -1,8 +1,20 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const EXTENSION = "GS_texture_etc2";
+const GLB_JSON_CHUNK = 0x4e4f534a;
+const GLB_MAGIC = 0x46546c67;
+const GLB_VERSION = 2;
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const textEncoder = new TextEncoder();
+const USAGE = [
+  "usage: pnpm author:gltf-etc2 INPUT.(gltf|glb) OUTPUT.(gltf|glb)",
+  "       [--attachments=ATTACHMENTS.json] [TEXTURE_INDEX=RELATIVE.ktx2 ...]",
+  "",
+  "Attachment files contain an array of { textureIndex, uri } records.",
+  "Every KTX2 URI is relative to the output glTF/GLB document.",
+].join("\n");
 
 const object = (value, label) => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -14,6 +26,106 @@ const object = (value, label) => {
 const array = (value, label) => {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value;
+};
+
+const uint32 = (view, offset, label) => {
+  if (offset < 0 || offset + 4 > view.byteLength) {
+    throw new Error(`${label} is truncated`);
+  }
+  return view.getUint32(offset, true);
+};
+
+const gltfDocument = (value, label) => object(value, `${label} JSON`);
+
+/** Parses JSON glTF or GLB while retaining every non-JSON GLB chunk byte-for-byte. */
+export const decodeGltfContainer = (input, label = "glTF input") => {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.byteLength < 4 || uint32(view, 0, label) !== GLB_MAGIC) {
+    return {
+      document: gltfDocument(JSON.parse(textDecoder.decode(bytes)), label),
+      format: "gltf",
+      trailingChunks: [],
+    };
+  }
+  if (bytes.byteLength < 12) throw new Error(`${label} GLB header is truncated`);
+  const version = uint32(view, 4, `${label} GLB version`);
+  if (version !== GLB_VERSION) {
+    throw new Error(`${label} GLB version must be ${GLB_VERSION}, received ${version}`);
+  }
+  const declaredLength = uint32(view, 8, `${label} GLB length`);
+  if (declaredLength !== bytes.byteLength) {
+    throw new Error(
+      `${label} GLB length ${declaredLength} does not match ${bytes.byteLength} bytes`,
+    );
+  }
+  let offset = 12;
+  let document;
+  const trailingChunks = [];
+  while (offset < bytes.byteLength) {
+    if (offset + 8 > bytes.byteLength) throw new Error(`${label} GLB chunk header is truncated`);
+    const length = uint32(view, offset, `${label} GLB chunk length`);
+    const type = uint32(view, offset + 4, `${label} GLB chunk type`);
+    offset += 8;
+    if (length % 4 !== 0) throw new Error(`${label} GLB chunk length must be 4-byte aligned`);
+    const end = offset + length;
+    if (!Number.isSafeInteger(end) || end > bytes.byteLength) {
+      throw new Error(`${label} GLB chunk exceeds the declared container length`);
+    }
+    const data = bytes.slice(offset, end);
+    offset = end;
+    if (document === undefined) {
+      if (type !== GLB_JSON_CHUNK) throw new Error(`${label} GLB first chunk must be JSON`);
+      document = gltfDocument(JSON.parse(textDecoder.decode(data)), label);
+    } else {
+      if (type === GLB_JSON_CHUNK) throw new Error(`${label} GLB has more than one JSON chunk`);
+      trailingChunks.push({ data, type });
+    }
+  }
+  if (document === undefined) throw new Error(`${label} GLB has no JSON chunk`);
+  return { document, format: "glb", trailingChunks };
+};
+
+/** Rewrites only semantic JSON; retained GLB payload chunks remain byte-identical. */
+export const encodeGltfContainer = (container, document) => {
+  const checkedDocument = gltfDocument(document, "glTF output");
+  if (container.format === "gltf") {
+    return textEncoder.encode(`${JSON.stringify(checkedDocument, null, 2)}\n`);
+  }
+  if (container.format !== "glb") throw new Error("glTF output container format is invalid");
+  const json = textEncoder.encode(JSON.stringify(checkedDocument));
+  const jsonLength = Math.ceil(json.byteLength / 4) * 4;
+  let totalLength = 12 + 8 + jsonLength;
+  for (const [index, chunk] of container.trailingChunks.entries()) {
+    if (
+      !(chunk.data instanceof Uint8Array)
+      || !Number.isSafeInteger(chunk.type)
+      || chunk.type < 0
+      || chunk.type > 0xffff_ffff
+      || chunk.data.byteLength % 4 !== 0
+    ) throw new Error(`glTF output trailing chunk ${index} is invalid`);
+    totalLength += 8 + chunk.data.byteLength;
+  }
+  if (!Number.isSafeInteger(totalLength) || totalLength > 0xffff_ffff) {
+    throw new Error("glTF output GLB exceeds the 32-bit container length");
+  }
+  const output = new Uint8Array(totalLength);
+  const view = new DataView(output.buffer);
+  view.setUint32(0, GLB_MAGIC, true);
+  view.setUint32(4, GLB_VERSION, true);
+  view.setUint32(8, totalLength, true);
+  view.setUint32(12, jsonLength, true);
+  view.setUint32(16, GLB_JSON_CHUNK, true);
+  output.fill(0x20, 20, 20 + jsonLength);
+  output.set(json, 20);
+  let offset = 20 + jsonLength;
+  for (const chunk of container.trailingChunks) {
+    view.setUint32(offset, chunk.data.byteLength, true);
+    view.setUint32(offset + 4, chunk.type, true);
+    output.set(chunk.data, offset + 8);
+    offset += 8 + chunk.data.byteLength;
+  }
+  return output;
 };
 
 const textureInfoIndex = (value, label, textureCount) => {
@@ -172,36 +284,78 @@ const parseMapping = (value, index) => {
   if (separator < 1 || separator === value.length - 1) {
     throw new Error(`mapping ${index + 1} must be TEXTURE_INDEX=RELATIVE.ktx2`);
   }
-  const textureIndex = Number(value.slice(0, separator));
-  const uri = value.slice(separator + 1);
-  if (!Number.isSafeInteger(textureIndex) || textureIndex < 0) {
-    throw new Error(`mapping ${index + 1} texture index must be a non-negative integer`);
+  return checkedAttachmentRecord({
+    textureIndex: Number(value.slice(0, separator)),
+    uri: value.slice(separator + 1),
+  }, `mapping ${index + 1}`);
+};
+
+const checkedAttachmentRecord = (value, label) => {
+  const record = object(value, label);
+  const keys = Object.keys(record);
+  if (keys.some((key) => key !== "textureIndex" && key !== "uri")) {
+    throw new Error(`${label} supports only textureIndex and uri`);
   }
-  if (isAbsolute(uri) || /^[a-z][a-z0-9+.-]*:/iu.test(uri) || /[?#]/u.test(uri)) {
-    throw new Error(`mapping ${index + 1} URI must be a relative file path without query or fragment`);
+  if (!Number.isSafeInteger(record.textureIndex) || record.textureIndex < 0) {
+    throw new Error(`${label}.textureIndex must be a non-negative integer`);
   }
-  return { textureIndex, uri };
+  if (
+    typeof record.uri !== "string"
+    || record.uri.length === 0
+    || isAbsolute(record.uri)
+    || /^[a-z][a-z0-9+.-]*:/iu.test(record.uri)
+    || /[?#]/u.test(record.uri)
+  ) throw new Error(`${label}.uri must be a relative file path without query or fragment`);
+  return { textureIndex: record.textureIndex, uri: record.uri };
+};
+
+/** Validates the batch-authoring input before reading any encoded texture bytes. */
+export const parseGltfEtc2Attachments = (value) => array(value, "ETC2 attachments")
+  .map((entry, index) => checkedAttachmentRecord(entry, `ETC2 attachments[${index}]`));
+
+const outputFormat = (path) => {
+  const extension = extname(path).toLowerCase();
+  if (extension === ".gltf") return "gltf";
+  if (extension === ".glb") return "glb";
+  throw new Error("output path must end in .gltf or .glb");
 };
 
 const main = async () => {
-  const [, , inputPath, outputPath, ...mappingValues] = process.argv;
-  if (inputPath === undefined || outputPath === undefined || mappingValues.length === 0) {
-    throw new Error(
-      "usage: attach-gltf-etc2.mjs INPUT.gltf OUTPUT.gltf TEXTURE_INDEX=RELATIVE.ktx2 [...]",
-    );
+  const [, , inputPath, outputPath, ...argumentsAfterPaths] = process.argv;
+  if (inputPath === undefined || outputPath === undefined) throw new Error(USAGE);
+  let attachmentPath;
+  const mappingValues = [];
+  for (const argument of argumentsAfterPaths) {
+    if (argument.startsWith("--attachments=")) {
+      if (attachmentPath !== undefined) throw new Error("--attachments may be provided only once");
+      attachmentPath = argument.slice("--attachments=".length);
+      if (attachmentPath.length === 0) throw new Error("--attachments requires a JSON file path");
+    } else if (argument.startsWith("--")) throw new Error(`unknown option ${argument}\n${USAGE}`);
+    else mappingValues.push(argument);
   }
   const { inspectEtc2Ktx2 } = await import("@royal/renderer-webgl/ktx2");
-  const mappings = mappingValues.map(parseMapping);
+  const fileMappings = attachmentPath === undefined
+    ? []
+    : parseGltfEtc2Attachments(JSON.parse(await readFile(resolve(attachmentPath), "utf8")));
+  const mappings = [...fileMappings, ...mappingValues.map(parseMapping)];
+  if (mappings.length === 0) throw new Error(USAGE);
   const attachments = await Promise.all(mappings.map(async ({ textureIndex, uri }) => ({
     inspection: inspectEtc2Ktx2(new Uint8Array(await readFile(resolve(dirname(outputPath), uri)))),
     textureIndex,
     uri,
   })));
-  const input = JSON.parse(await readFile(inputPath, "utf8"));
-  const result = attachGltfEtc2Sources(input, attachments);
-  await writeFile(outputPath, `${JSON.stringify(result.document, null, 2)}\n`);
+  const container = decodeGltfContainer(await readFile(inputPath), inputPath);
+  const expectedFormat = outputFormat(outputPath);
+  if (container.format !== expectedFormat) {
+    throw new Error(`input is ${container.format}; output must retain the same container format`);
+  }
+  const result = attachGltfEtc2Sources(container.document, attachments);
+  await writeFile(outputPath, encodeGltfContainer(container, result.document));
   const bytes = result.attachments.reduce((total, attachment) => total + attachment.storageBytes, 0);
-  console.log(`glTF ETC2: attached ${result.attachments.length} textures (${bytes} GPU bytes)`);
+  console.log(
+    `glTF ETC2: attached ${result.attachments.length} textures`
+    + ` (${bytes} GPU bytes) to ${outputPath}`,
+  );
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

@@ -18,14 +18,14 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "author:gltf-etc2": "pnpm --filter @royal/renderer-webgl build && node apps/examples-react/scripts/attach-gltf-etc2.mjs",
+    "author:gltf-etc2": "pnpm --filter @royal/renderer-webgl build && node scripts/gltf-etc2-authoring.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:bundle-size:details": "node scripts/check-bundle-size.mjs --details",
     "check:package-consumer": "node scripts/package-consumer-smoke.mjs",
     "check:package-imports": "node scripts/package-import-smoke.mjs",
     "dev": "pnpm --filter @royal/examples-react dev",
     "lint": "pnpm -r --if-present lint",
-    "test": "vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest",
+    "test": "vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts tests/tooling/*.test.mjs apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest",
     "typecheck": "tsc"
   },
   "devDependencies": {
