@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readEncodedImageDimensions } from "../../packages/renderer-webgl/src/texture/encoded-image-dimensions";
+import {
+  encodedImageDimensionPrefixByteLength,
+  readEncodedImageDimensions,
+} from "../../packages/renderer-webgl/src/texture/encoded-image-dimensions";
 import { forEachFuzzCase } from "../fuzz";
 import { createAvifHeader } from "./support/avif-header";
 
@@ -18,6 +21,15 @@ const pngHeader = (width: number, height: number): Uint8Array => {
 };
 
 describe("encoded image dimension hints", () => {
+  it("reads fixed-header formats without copying a container-sized prefix", () => {
+    expect(encodedImageDimensionPrefixByteLength("image/png")).toBe(24);
+    expect(encodedImageDimensionPrefixByteLength("IMAGE/WEBP; charset=binary")).toBe(30);
+    expect(encodedImageDimensionPrefixByteLength("image/jpeg")).toBe(16 * 1024);
+    expect(encodedImageDimensionPrefixByteLength("image/avif")).toBe(128 * 1024);
+    expect(encodedImageDimensionPrefixByteLength("")).toBe(128 * 1024);
+    expect(encodedImageDimensionPrefixByteLength("image/svg+xml")).toBeUndefined();
+  });
+
   it("reads PNG IHDR dimensions without requiring the image payload", () => {
     expect(readEncodedImageDimensions(pngHeader(2048, 1024))).toEqual({
       height: 1024,

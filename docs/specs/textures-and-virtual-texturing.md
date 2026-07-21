@@ -70,7 +70,9 @@ Eviction MUST leave a reconstruction recipe or legal refetch path.
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative
 dimension parser and asks the browser to decode directly to the selected fitted
-size. AVIF dimensions are accepted only from the primary item's associated
+size. Fixed-header PNG and WebP reads stop at 24 and 30 bytes respectively;
+JPEG reads stop at 16 KiB, while AVIF and missing-MIME container reads stop at
+128 KiB. AVIF dimensions are accepted only from the primary item's associated
 BMFF spatial property; Royal does not scan for plausible width/height bytes.
 Malformed, truncated, unsupported, or unusually deep headers fall back to the
 browser-authoritative decode-then-fit path. The hint cannot expand an image,

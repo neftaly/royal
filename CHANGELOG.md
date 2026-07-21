@@ -48,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Bounded early texture-budget inspection to fixed 24-byte PNG, 30-byte WebP,
+  and 16 KiB JPEG prefixes while retaining a bounded AVIF container prefix,
+  without changing the browser-authoritative decode fallback.
 - Consolidated shader validation at program link, allowing both stages to
   compile before one synchronization while preserving stage-specific failure
   logs without successful-path status polling.

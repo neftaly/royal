@@ -4,7 +4,10 @@ import type {
   TextureSourceRef,
 } from "./asset-owner";
 import { decodeBrowserImageElement } from "./browser-image-element";
-import { readEncodedImageDimensions } from "./encoded-image-dimensions";
+import {
+  encodedImageDimensionPrefixByteLength,
+  readEncodedImageDimensions,
+} from "./encoded-image-dimensions";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import { RetainedFifo } from "../resource/retained-fifo";
 
@@ -23,17 +26,6 @@ type PendingWork = {
 };
 
 const aborted = (): DOMException => new DOMException("Texture decode was aborted", "AbortError");
-const IMAGE_HEADER_PREFIX_BYTES = 128 * 1024;
-
-const mayContainDimensionHint = (blob: Blob): boolean => {
-  const type = blob.type.split(";", 1)[0]!.trim().toLowerCase();
-  return type.length === 0
-    || type === "image/avif"
-    || type === "image/jpeg"
-    || type === "image/png"
-    || type === "image/webp";
-};
-
 /** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */
 class BrowserWorkQueue {
   #active = 0;
@@ -192,13 +184,14 @@ const decodeTextureBlob = async (
   } as const;
   let sourceDimensions: Readonly<{ height: number; width: number }> | undefined;
   let directFit: Readonly<{ height: number; width: number }> | undefined;
+  const dimensionPrefixBytes = encodedImageDimensionPrefixByteLength(blob.type);
   if (
     maxStorageBytes !== undefined
     && maxStorageBytes >= 4
-    && mayContainDimensionHint(blob)
+    && dimensionPrefixBytes !== undefined
   ) {
     const prefix = new Uint8Array(
-      await blob.slice(0, IMAGE_HEADER_PREFIX_BYTES).arrayBuffer(),
+      await blob.slice(0, dimensionPrefixBytes).arrayBuffer(),
     );
     if (signal.aborted) throw aborted();
     const dimensions = readEncodedImageDimensions(prefix);

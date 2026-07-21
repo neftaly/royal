@@ -3,6 +3,24 @@ export type EncodedImageDimensions = Readonly<{
   width: number;
 }>;
 
+const CONTAINER_DIMENSION_PREFIX_BYTES = 128 * 1024;
+const JPEG_DIMENSION_PREFIX_BYTES = 16 * 1024;
+
+/** Pure bounded-read policy for the formats whose dimensions Royal can inspect. */
+export const encodedImageDimensionPrefixByteLength = (
+  mimeType: string,
+): number | undefined => {
+  switch (mimeType.split(";", 1)[0]!.trim().toLowerCase()) {
+    case "image/png": return 24;
+    case "image/webp": return 30;
+    case "image/jpeg": return JPEG_DIMENSION_PREFIX_BYTES;
+    case "":
+    case "image/avif":
+      return CONTAINER_DIMENSION_PREFIX_BYTES;
+    default: return undefined;
+  }
+};
+
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
 const isJpegStartOfFrame = (marker: number): boolean => (
   (marker >= 0xc0 && marker <= 0xc3)

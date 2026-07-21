@@ -211,6 +211,14 @@ describe("browser texture decode shell", () => {
   });
 
   it("decodes PNG directly to its fitted budget dimensions from a bounded header hint", async () => {
+    const NativeBlob = Blob;
+    const sliceEnds: Array<number | undefined> = [];
+    class TrackingBlob extends NativeBlob {
+      override slice(start?: number, end?: number, contentType?: string): Blob {
+        sliceEnds.push(end);
+        return super.slice(start, end, contentType);
+      }
+    }
     const bytes = new Uint8Array([
       137, 80, 78, 71, 13, 10, 26, 10,
       0, 0, 0, 13,
@@ -228,6 +236,7 @@ describe("browser texture decode shell", () => {
       _blob: Blob,
       _options?: ImageBitmapOptions,
     ) => bitmap);
+    vi.stubGlobal("Blob", TrackingBlob);
     vi.stubGlobal("createImageBitmap", createImageBitmap);
 
     const result = await decodeTextureWithBrowser({
@@ -239,6 +248,7 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal, 340);
 
     expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(sliceEnds).toEqual([24]);
     expect(createImageBitmap.mock.calls[0]![1]).toMatchObject({
       resizeHeight: fitted.height,
       resizeQuality: "high",
