@@ -131,6 +131,7 @@ export type CanonicalSurfaceScene = Readonly<{
   alphaMaskTextureAssets: readonly TextureSourceRef[];
   camera: CanonicalCamera;
   directionalLights: readonly CanonicalDirectionalLight[];
+  instanceLightSources: ReadonlySet<GltfInstanceTransforms>;
   environment?: CanonicalEnvironment;
   exposure: number;
   gltfNodes: readonly (GltfNode | GltfInstancesNode)[];
@@ -382,6 +383,7 @@ export const prepareCanonicalSurfaceScene = (
   }
   const environment = prepareEnvironment(scene, requiresLighting);
   const directionalLights: CanonicalDirectionalLight[] = [];
+  const instanceLightSources = new Set<GltfInstanceTransforms>();
   const gltfNodes: Array<GltfNode | GltfInstancesNode> = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
   const punctualLights: CanonicalPunctualLight[] = [];
@@ -459,6 +461,9 @@ export const prepareCanonicalSurfaceScene = (
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
+      if (requiresLighting && node.kind === "gltf-instances" && prepared.lights.length > 0) {
+        instanceLightSources.add(node.instances);
+      }
       geometryLodGroupIds.length = 0;
       for (const light of prepared.lights) {
         if (!requiresLighting) break;
@@ -766,6 +771,7 @@ export const prepareCanonicalSurfaceScene = (
     alphaMaskTextureAssets: collectCanonicalAlphaMaskTextureAssets(pickSurfaces),
     camera,
     directionalLights,
+    instanceLightSources,
     ...(environment === undefined ? {} : { environment }),
     exposure: sceneExposure(scene),
     gltfNodes,

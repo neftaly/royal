@@ -1,7 +1,9 @@
 import {
   boxGeometry,
+  createGltfInstanceTransforms,
   directionalLight,
   gltf,
+  gltfInstances,
   imageTexture,
   mesh,
   perspectiveCamera,
@@ -705,6 +707,31 @@ describe("canonical direct surface lowering", () => {
       kind: "point",
       position: [11, 2, 0],
     }]);
+  });
+
+  it("retains the instance sources whose pose changes require light relowering", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_lights_punctual"];
+    const materials = document.materials as Array<Record<string, unknown>>;
+    delete materials[0]!.extensions;
+    document.extensions = {
+      KHR_lights_punctual: { lights: [{ intensity: 3, type: "point" }] },
+    };
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "instanced-light-asset");
+    const transforms = createGltfInstanceTransforms({ count: 2 });
+    const node = gltfInstances({
+      instances: transforms,
+      src: "/instanced-light.glb",
+    });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [node],
+    }), () => asset);
+
+    expect(prepared.instanceLightSources.has(transforms)).toBe(true);
   });
 
   it("erases glTF lights and environment state when selected materials are unlit", () => {

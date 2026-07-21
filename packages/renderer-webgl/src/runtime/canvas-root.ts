@@ -946,17 +946,10 @@ export class CanvasRoot implements RendererRoot {
           requiresStructuralRefresh = true;
           break;
         }
-        for (const node of this.#surfaceSceneInput?.nodes ?? []) {
-          if (
-            node.kind === "gltf-instances"
-            && node.instances === source
-            && (this.#getGltfAsset(node)?.lights.length ?? 0) > 0
-          ) {
-            requiresStructuralRefresh = true;
-            break;
-          }
+        if (this.#surfaceScene?.instanceLightSources.has(source)) {
+          requiresStructuralRefresh = true;
+          break;
         }
-        if (requiresStructuralRefresh) break;
       }
     }
     if (requiresStructuralRefresh) {
