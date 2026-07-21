@@ -52,6 +52,18 @@ describe("canvas size selection", () => {
 });
 
 describe("clear-only canvas root", () => {
+  it("reports immutable VT policy before the lazy runtime exists", () => {
+    const { root } = harness({}, {}, {
+      automaticVirtualTexturing: true,
+      ordinaryTextureUploadByteBudgetPerFrame: 12_345,
+    });
+
+    expect(root.getSnapshot().resources.virtualTextures).toMatchObject({
+      automaticEnabled: true,
+      uploadBudgetBytes: 12_345,
+    });
+  });
+
   it("enables ETC2 once and preserves that negotiated capability across restoration", () => {
     const etc2 = {};
     const extensionLookup = vi.fn((name: string) => name === "WEBGL_compressed_texture_etc"

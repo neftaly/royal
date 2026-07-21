@@ -181,6 +181,12 @@ status, renderer lifecycle, and renderer diagnostics.
 every submitted frame or resource change. It is deliberately unsuitable as a
 replacement for focused product-status hooks.
 
+The lower-level aggregate types are importable as `RendererContextSnapshot`
+and `RendererResourceSnapshot`; consumers never need to name a private owner
+module to type a stored diagnostic or selector. Inactive optional subsystems
+still report the root's configured policy—for example VT reports the actual
+upload budget and automatic-VT choice before its lazy runtime exists.
+
 Focused status hooks return small discriminated unions and push changes without
 polling. Product decisions use focused status:
 

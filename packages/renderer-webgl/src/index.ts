@@ -1,6 +1,8 @@
 export { createRendererRoot } from "./runtime/canvas-root";
 export { resolveRendererRootOptions } from "./runtime/root-options";
 export type {
+  RendererContextSnapshot,
+  RendererResourceSnapshot,
   RendererRootOptions,
   RendererRootSnapshot,
   ResolvedRendererRootOptions,

@@ -67,6 +67,8 @@ export type {
 export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
 export type {
   GltfTextureProgress,
+  RendererContextSnapshot,
+  RendererResourceSnapshot,
   RendererRootOptions,
   RendererRootSnapshot,
   ResolvedRendererRootOptions,

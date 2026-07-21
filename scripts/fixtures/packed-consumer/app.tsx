@@ -13,6 +13,8 @@ import {
   useRendererSnapshot,
   useTextureAssetStatus,
   useVirtualTextureAssetStatus,
+  type RendererContextSnapshot,
+  type RendererResourceSnapshot,
   type RendererRoot,
   type ScenePointerEvent,
   type ScenePointerEvents,
@@ -46,6 +48,10 @@ const ktx2Inspection = inspectEtc2Ktx2 as (bytes: Uint8Array) => {
   readonly width: number;
 };
 void ktx2Inspection;
+type RootContext = RendererContextSnapshot;
+type RootResources = RendererResourceSnapshot;
+void (undefined as RootContext | undefined);
+void (undefined as RootResources | undefined);
 
 const orbit = createOrbitCameraController({
   far: 100,

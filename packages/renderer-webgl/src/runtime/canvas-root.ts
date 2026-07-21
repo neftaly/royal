@@ -79,6 +79,7 @@ import {
   type ResolvedRendererRootOptions,
 } from "./root-options";
 import {
+  idleVirtualTextureRuntimeSnapshot,
   virtualTextureRuntimeRequired,
   virtualTextureAssetKey,
   type VirtualTextureAssetSnapshot,
@@ -100,7 +101,6 @@ import {
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import {
-  DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
@@ -112,23 +112,36 @@ import {
 
 export type { RendererRootOptions, ResolvedRendererRootOptions } from "./root-options";
 
+/** WebGL context lifecycle reported by the lower-level renderer root. */
+export type RendererContextSnapshot = ContextLifecycleSnapshot;
+
+/** Cold resource and scheduling diagnostics reported by a renderer root. */
+export type RendererResourceSnapshot = Readonly<{
+  /** Root-wide preparation concurrency and queue pressure. */
+  asyncPreparation: AsyncPreparationSnapshot;
+  /** Geometry bytes uploaded or deferred during the latest submitted frame. */
+  geometryUploads: SurfaceGeometryUploadSnapshot;
+  /** Decoded ordinary-texture handoff pressure. */
+  ordinaryTexturePreparation: TexturePreparationSnapshot;
+  /** Ordinary-texture bytes uploaded or deferred during the latest frame. */
+  ordinaryTextureUploads: FrameUploadBudgetSnapshot;
+  /** Current ordinary-texture GPU residency and compression totals. */
+  ordinaryTextures: OrdinaryTextureGpuSnapshot;
+  /** Root-wide persistent GPU admission and retained-byte totals. */
+  persistentGpu: PersistentGpuBudgetSnapshot;
+  /** Authored and automatic virtual-texture demand, residency, and policy. */
+  virtualTextures: VirtualTextureRuntimeSnapshot;
+}>;
+
 export type CanvasRootSnapshot = Readonly<{
   /** WebGL context lifecycle, including loss/restoration generations. */
-  context: ContextLifecycleSnapshot;
+  context: RendererContextSnapshot;
   /** Successfully submitted canvas or external frames since root creation. */
   frame: number;
   /** Bounded message from the latest scheduled frame failure, if any. */
   lastFrameFailure?: string;
   /** Cold operational diagnostics; use focused asset hooks for product UI. */
-  resources: Readonly<{
-    asyncPreparation: AsyncPreparationSnapshot;
-    geometryUploads: SurfaceGeometryUploadSnapshot;
-    ordinaryTexturePreparation: TexturePreparationSnapshot;
-    ordinaryTextureUploads: FrameUploadBudgetSnapshot;
-    ordinaryTextures: OrdinaryTextureGpuSnapshot;
-    persistentGpu: PersistentGpuBudgetSnapshot;
-    virtualTextures: VirtualTextureRuntimeSnapshot;
-  }>;
+  resources: RendererResourceSnapshot;
   /** Current CSS/backing size, or `null` before the host supplies a size. */
   size: ResolvedCanvasSize | null;
 }>;
@@ -288,25 +301,6 @@ const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
   residentPages: 0,
   state: "loading",
 };
-const IDLE_VIRTUAL_TEXTURE_RUNTIME: VirtualTextureRuntimeSnapshot = {
-  admittedUploadBytes: 0,
-  atlasBytes: 0,
-  atlasPools: 0,
-  automaticCandidates: 0,
-  automaticDecodedBytes: 0,
-  automaticEnabled: 0,
-  automaticIneligible: 0,
-  automaticResources: 0,
-  automaticWaiting: 0,
-  deferredUploads: 0,
-  failedPages: 0,
-  pageRequests: 0,
-  pendingPages: 0,
-  residentPages: 0,
-  uploadedPages: 0,
-  uploadBudgetBytes: DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
-};
-
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
   left[0] === right[0]
   && left[1] === right[1]
@@ -373,6 +367,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
   readonly #frameUploadBudget: FrameUploadBudgetOwner;
+  readonly #idleVirtualTextureRuntimeSnapshot: VirtualTextureRuntimeSnapshot;
   readonly #getDecodedAlpha = (asset: TextureSourceRef): DecodedTextureAlpha | undefined =>
     this.#textureAssets.alpha(asset);
   readonly #getDecodedTexture = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
@@ -468,6 +463,10 @@ export class CanvasRoot implements RendererRoot {
       },
     );
     this.#frameUploadBudget = new FrameUploadBudgetOwner(
+      resolvedOptions.ordinaryTextureUploadByteBudgetPerFrame,
+    );
+    this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
+      resolvedOptions.automaticVirtualTexturing,
       resolvedOptions.ordinaryTextureUploadByteBudgetPerFrame,
     );
     this.#sizeLimits = readSizeLimits(this.#gl);
@@ -631,7 +630,7 @@ export class CanvasRoot implements RendererRoot {
           ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
           virtualTextures: this.#virtualTextureRuntime?.runtimeSnapshot()
-            ?? IDLE_VIRTUAL_TEXTURE_RUNTIME,
+            ?? this.#idleVirtualTextureRuntimeSnapshot,
         },
         size: this.#size,
       };

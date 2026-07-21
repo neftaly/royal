@@ -7,6 +7,8 @@ import {
 } from "@royal/renderer-core";
 import {
   resolveRendererRootOptions,
+  type RendererContextSnapshot,
+  type RendererResourceSnapshot,
   type RendererRoot,
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
@@ -87,6 +89,10 @@ describe("replacement React public API", () => {
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RendererRoot>();
+    expectTypeOf<RendererContextSnapshot>()
+      .toEqualTypeOf<ReturnType<RendererRoot["getLifecycleSnapshot"]>>();
+    expectTypeOf<RendererResourceSnapshot>()
+      .toEqualTypeOf<ReturnType<RendererRoot["getSnapshot"]>["resources"]>();
     expectTypeOf<CanvasProps["scene"]>().toEqualTypeOf<Scene>();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();

@@ -68,8 +68,8 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   automaticCandidates: number;
   /** Estimated CPU bytes retained by current automatic raster VT leases. */
   automaticDecodedBytes: number;
-  /** `1` when automatic VT is enabled for this root, otherwise `0`. */
-  automaticEnabled: number;
+  /** Whether automatic VT is enabled for this root. */
+  automaticEnabled: boolean;
   /** Latest-scene candidates rejected by format, size, or decoded-memory policy. */
   automaticIneligible: number;
   /** Current automatic VT resources with a retained page source. */
@@ -91,6 +91,29 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   /** Immutable VT upload-byte target per runtime update. */
   uploadBudgetBytes: number;
 }>;
+
+/** Pure inactive-runtime snapshot preserving the root's immutable VT policy. */
+export const idleVirtualTextureRuntimeSnapshot = (
+  automaticVirtualTexturing: boolean,
+  uploadBudgetBytes: number,
+): VirtualTextureRuntimeSnapshot => ({
+  admittedUploadBytes: 0,
+  atlasBytes: 0,
+  atlasPools: 0,
+  automaticCandidates: 0,
+  automaticDecodedBytes: 0,
+  automaticEnabled: automaticVirtualTexturing,
+  automaticIneligible: 0,
+  automaticResources: 0,
+  automaticWaiting: 0,
+  deferredUploads: 0,
+  failedPages: 0,
+  pageRequests: 0,
+  pendingPages: 0,
+  residentPages: 0,
+  uploadedPages: 0,
+  uploadBudgetBytes,
+});
 
 /** Focused manifest lifecycle plus current bounded page residency. */
 export type VirtualTextureAssetSnapshot = Readonly<{

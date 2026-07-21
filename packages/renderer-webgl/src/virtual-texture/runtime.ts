@@ -481,7 +481,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       atlasPools: this.#atlases.size,
       automaticCandidates: this.#automaticCandidates,
       automaticDecodedBytes,
-      automaticEnabled: this.#automatic === undefined ? 0 : 1,
+      automaticEnabled: this.#automatic !== undefined,
       automaticIneligible: this.#automaticIneligible,
       automaticResources,
       automaticWaiting: this.#automaticWaiting,
