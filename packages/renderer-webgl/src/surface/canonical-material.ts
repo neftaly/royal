@@ -254,11 +254,12 @@ export const resolveCanonicalMaterialTexture = (
 /** Erases the public material shape while retaining cold texture recipes. */
 export const prepareCanonicalMaterialSource = (material: Material): CanonicalSurfaceMaterial => {
   const source = material.baseColor;
+  const tint = material.kind === "wireframe" ? undefined : material.tint;
   const baseColor = source.kind === "solid"
     ? source.color
-    : [1, 1, 1, 1] as const;
+    : tint ?? [1, 1, 1, 1] as const;
   const common = {
-    ...(source.kind === "solid" && source.color[3] < 1 ? { alphaBlend: true as const } : {}),
+    ...(baseColor[3] < 1 ? { alphaBlend: true as const } : {}),
     baseColor,
     ...(source.kind === "asset" ? { baseColorAsset: source } : {}),
     ...(source.kind === "virtual-asset" ? { baseColorVirtualAsset: source } : {}),

@@ -1,23 +1,28 @@
 import type { LinearRgba } from './primitives';
-import { finiteNumber, objectWithAllowedFields } from './descriptor-values';
+import { finiteNumber, objectWithAllowedFields, resolveRgba } from './descriptor-values';
 import { solidTexture, type TextureRef } from './texture';
 
 export type MaterialSurfaceOptions =
   | {
-    /** Scene-linear RGBA base color. Use `linearRgbaFromSrgb` for authored sRGB values. */
+    /** Scene-linear RGBA base color; alpha below 1 selects ordered blending. */
     readonly color: LinearRgba;
+    readonly tint?: never;
     readonly texture?: never;
   }
   | {
     readonly color?: never;
     /** Base-color texture using Royal's upper-left source orientation. */
     readonly texture: TextureRef;
+    /** Scene-linear RGBA multiplier; alpha below 1 selects ordered blending. @defaultValue `[1, 1, 1, 1]` */
+    readonly tint?: LinearRgba;
   };
 
 /** Normalized lit material descriptor. Create with `standardMaterial({ color })` or `standardMaterial({ texture })`. */
 export interface StandardMaterial {
   readonly kind: 'standard';
   readonly baseColor: TextureRef;
+  /** Scene-linear RGBA multiplier for a textured base color; alpha below 1 selects blending. */
+  readonly tint?: LinearRgba;
   /** Metallic weight within 0..1. */
   readonly metallic: number;
   /** Perceptual roughness within 0..1. */
@@ -28,6 +33,8 @@ export interface StandardMaterial {
 export interface UnlitMaterial {
   readonly kind: 'unlit';
   readonly baseColor: TextureRef;
+  /** Scene-linear RGBA multiplier for a textured base color; alpha below 1 selects blending. */
+  readonly tint?: LinearRgba;
 }
 
 /** Surface wireframe material. Authoring accepts a solid line color only. */
@@ -60,8 +67,17 @@ const toBaseColorTexture = (options: MaterialSurfaceOptions, label: string): Tex
   return solidTexture({ color: options.color });
 };
 
-const STANDARD_MATERIAL_FIELDS = ['color', 'metallic', 'roughness', 'texture'] as const;
-const UNLIT_MATERIAL_FIELDS = ['color', 'texture'] as const;
+const materialTint = (
+  options: MaterialSurfaceOptions,
+  label: string,
+): LinearRgba | undefined => {
+  if (options.tint === undefined) return undefined;
+  if (options.texture === undefined) throw new TypeError(`${label} tint requires texture`);
+  return resolveRgba(options.tint, `${label} tint`);
+};
+
+const STANDARD_MATERIAL_FIELDS = ['color', 'metallic', 'roughness', 'texture', 'tint'] as const;
+const UNLIT_MATERIAL_FIELDS = ['color', 'texture', 'tint'] as const;
 const WIREFRAME_MATERIAL_FIELDS = ['color'] as const;
 
 const factor01 = (value: number | undefined, fallback: number, label: string): number => {
@@ -73,9 +89,11 @@ const factor01 = (value: number | undefined, fallback: number, label: string): n
 
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   objectWithAllowedFields(options, STANDARD_MATERIAL_FIELDS, 'standard material');
+  const tint = materialTint(options, 'standard material');
   return {
     kind: 'standard',
     baseColor: toBaseColorTexture(options, 'standard material'),
+    ...(tint === undefined ? {} : { tint }),
     metallic: factor01(options.metallic, 0, 'standard material metallic'),
     roughness: factor01(options.roughness, 1, 'standard material roughness')
   };
@@ -83,9 +101,11 @@ export const standardMaterial = (options: StandardMaterialOptions): StandardMate
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   objectWithAllowedFields(options, UNLIT_MATERIAL_FIELDS, 'unlit material');
+  const tint = materialTint(options, 'unlit material');
   return {
     kind: 'unlit',
-    baseColor: toBaseColorTexture(options, 'unlit material')
+    baseColor: toBaseColorTexture(options, 'unlit material'),
+    ...(tint === undefined ? {} : { tint }),
   };
 };
 

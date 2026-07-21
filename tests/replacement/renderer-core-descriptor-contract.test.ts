@@ -343,6 +343,13 @@ describe("renderer-core descriptor contract", () => {
 
     expect(standardMaterial({ texture }).baseColor).toBe(texture);
     expect(unlitMaterial({ texture }).baseColor).toBe(texture);
+    expect(standardMaterial({
+      texture,
+      tint: [0.25, 0.5, 0.75, 0.5],
+    })).toMatchObject({
+      baseColor: texture,
+      tint: [0.25, 0.5, 0.75, 0.5],
+    });
     expect(texture).toEqual({
       contentKey: "sha256:terrain",
       kind: "virtual-asset",
@@ -416,6 +423,10 @@ describe("renderer-core descriptor contract", () => {
     } as unknown as Parameters<typeof standardMaterial>[0])).toThrow(/exactly one of color or texture/);
     expect(() => unlitMaterial({} as Parameters<typeof unlitMaterial>[0]))
       .toThrow(/exactly one of color or texture/);
+    expect(() => unlitMaterial({
+      color: [1, 1, 1, 1],
+      tint: [0.5, 0.5, 0.5, 1],
+    } as unknown as Parameters<typeof unlitMaterial>[0])).toThrow(/tint requires texture/);
     expect(() => standardMaterial({
       color: [1, 1, 1, 1],
       metalic: 0.5,
@@ -426,6 +437,9 @@ describe("renderer-core descriptor contract", () => {
     } as unknown as Parameters<typeof wireframeMaterial>[0])).toThrow(/unsupported option "width"/);
 
     if (false) {
+      // @ts-expect-error tint is a texture multiplier, not an alias for solid color.
+      unlitMaterial({ color: [1, 1, 1, 1], tint: [0.5, 0.5, 0.5, 1] });
+
       // @ts-expect-error Native WebGL line width is not portable; wireframes are one device pixel.
       wireframeMaterial({ color: [1, 1, 1, 1], width: 2 });
     }

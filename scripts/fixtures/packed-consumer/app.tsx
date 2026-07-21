@@ -112,7 +112,12 @@ const renderScene: Scene = scene({
     }),
     mesh({
       geometry: pickingGeometry,
-      material: standardMaterial({ metallic: 0.2, roughness: 0.7, texture: albedo }),
+      material: standardMaterial({
+        metallic: 0.2,
+        roughness: 0.7,
+        texture: albedo,
+        tint: [0.9, 0.8, 0.7, 1],
+      }),
     }),
     mesh({
       geometry: pickingGeometry,

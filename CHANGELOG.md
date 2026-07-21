@@ -30,6 +30,8 @@ versions identify source-level prerelease checkpoints in this repository.
   objects and made every focused status hook reject misspelled input fields.
 - Kept authored `standardMaterial` values named `metallic` and `roughness` in
   both constructor input and normalized public output.
+- Added an explicit scene-linear `tint` multiplier for textured standard and
+  unlit materials, keeping solid `color` authoring unambiguous.
 - Moved pure orbit authoring helpers from the React runtime barrel to
   `@royal/react/scene`, alongside the rest of the pure scene vocabulary.
 - Removed browser-session test-port types and the scene-only `WorldPosition3`

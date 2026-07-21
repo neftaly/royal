@@ -203,6 +203,30 @@ describe("canonical direct surface lowering", () => {
     expect(ready.surfaces[0]!.material.baseColorTexture?.decoded).toBe(source);
   });
 
+  it("lowers a direct texture tint through the existing canonical base-color factor", () => {
+    const texture = imageTexture("/tinted.png");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: planeGeometry(1),
+        material: standardMaterial({
+          metallic: 0.2,
+          roughness: 0.7,
+          texture,
+          tint: [0.25, 0.5, 0.75, 0.5],
+        }),
+      })],
+    }));
+
+    expect(prepared.surfaces[0]!.material).toMatchObject({
+      alphaBlend: true,
+      baseColor: [0.25, 0.5, 0.75, 0.5],
+      baseColorAsset: texture,
+      metallicFactor: 0.2,
+      roughnessFactor: 0.7,
+    });
+  });
+
   it("carries one glTF MASK material and decoded-alpha demand into exact picking", () => {
     const asset = prepareStaticGlb(staticTexturedTriangleGlb(
       undefined,

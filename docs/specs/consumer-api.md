@@ -124,6 +124,8 @@ self-documenting field names:
 - `pickingGeometry` for an exact local-space triangle proxy;
 - `version` when bytes behind one source identity change;
 - `contentKey` only when the caller asserts decoded-content equivalence.
+- `tint` for an optional scene-linear RGBA multiplier on a textured direct
+  material; `color` remains the unambiguous solid-material form.
 
 Unknown fields, invalid unions, non-finite values, invalid ranges, contradictory
 options, and empty identity/source strings fail synchronously with the operation

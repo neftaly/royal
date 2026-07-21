@@ -42,6 +42,18 @@ descriptors: glTF and ordinary image references expose `src`; authored virtual
 textures expose `manifestUri` because that source is a JSON manifest. Pick
 targets likewise preserve the authored `pickingId` name.
 
+Textured standard and unlit materials accept an optional scene-linear `tint`
+multiplier. The name is deliberately distinct from the mutually exclusive
+solid `color` form. An authored `color` or `tint` alpha below one selects the
+renderer's ordered blend path:
+
+```ts
+standardMaterial({
+  texture: imageTexture('/paint.webp'),
+  tint: linearRgbaFromSrgb([0.8, 0.35, 0.2, 0.75]),
+});
+```
+
 `prefilteredEnvironment({ src, version, rotation, radianceScaleNits })` selects
 one offline Royal KTX 1 environment artifact. Raw HDR decode and convolution
 are deliberately not runtime scene operations. `src` plus the type and value of
