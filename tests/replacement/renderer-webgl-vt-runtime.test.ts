@@ -193,7 +193,7 @@ describe("browser virtual texture runtime", () => {
     expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
   });
 
-  it("resolves every current demand before replacing a shared-atlas slot", async () => {
+  it("protects current demand and commits replacement only after upload succeeds", async () => {
     const manifest = {
       borderTexels: 1,
       contractVersion: 2,
@@ -235,9 +235,15 @@ describe("browser virtual texture runtime", () => {
             transform: { position: secondPosition },
           }),
         ],
-      }));
+    }));
     const gl = fakeGl();
-    Object.assign(gl, { getParameter: vi.fn(() => 3) });
+    let rejectAtlasUpload = false;
+    const texSubImage2D = vi.fn((...args: unknown[]) => {
+      if (rejectAtlasUpload && !(args[args.length - 1] instanceof Uint8Array)) {
+        throw new Error("replacement upload failed");
+      }
+    });
+    Object.assign(gl, { getParameter: vi.fn(() => 3), texSubImage2D });
     const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn());
     const matrix = identityMat4();
     const view: SurfaceFrameView = {
@@ -263,10 +269,11 @@ describe("browser virtual texture runtime", () => {
     firstRead.resolve(new Response(new Blob([new Uint8Array([1])])));
     await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
     runtime.setScene(preparedScene([100, 0, 0]));
-    runtime.update([view]);
+    rejectAtlasUpload = true;
 
-    expect(runtime.binding(first)).toBeDefined();
-    expect(runtime.binding(second)).toBeUndefined();
+    expect(() => runtime.update([view])).toThrow("replacement upload failed");
+    expect(runtime.binding(first)).toBeUndefined();
+    expect(runtime.binding(second)).toBeDefined();
     runtime.dispose();
   });
 

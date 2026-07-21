@@ -33,11 +33,10 @@ import {
   type VirtualTexturePageId,
 } from "./manifest";
 import {
-  planVirtualTexturePoolAdmission,
+  selectVirtualTexturePoolSlot,
   virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
   type VirtualTexturePageKey,
-  type VirtualTexturePoolAdmissionPlan,
   type VirtualTexturePoolSlot,
 } from "./residency";
 import type {
@@ -82,7 +81,6 @@ const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare
 
 type ReadyPage = Readonly<{
   decoded: DecodedVirtualTexturePage;
-  page: VirtualTexturePageId;
   pageKey: VirtualTexturePageKey;
 }>;
 
@@ -724,21 +722,22 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           settledPages += 1;
           continue;
         }
-        const plan = planVirtualTexturePoolAdmission(
+        const slot = selectVirtualTexturePoolSlot(
           resource.key,
-          ready.page,
+          ready.pageKey,
           gpu.atlas.slots,
           gpu.atlas.lastUsedFrames,
           this.#protectedPoolPages,
         );
-        if (plan === undefined) break;
+        if (slot < 0) break;
+        const evicted = gpu.atlas.slots[slot];
         const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
         const pageByteLength = ready.decoded.kind === "etc2-rgba"
           ? ready.decoded.blocks.byteLength
           : storedPageSize * storedPageSize * 4;
-        const evictedGpu = plan.evicted === undefined
+        const evictedGpu = evicted === undefined
           ? undefined
-          : this.#resources.get(plan.evicted.resourceKey)?.gpu;
+          : this.#resources.get(evicted.resourceKey)?.gpu;
         const uploadByteLength = pageByteLength
           + (gpu.pageTableDirty ? 0 : gpu.pageTableBytes.byteLength)
           + (evictedGpu === undefined || evictedGpu === gpu || evictedGpu.pageTableDirty
@@ -750,7 +749,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           break;
         }
         try {
-          this.#uploadReadyPage(resource, ready, plan);
+          this.#uploadReadyPage(resource, ready, slot, evicted);
         } catch (error) {
           this.#settleReadyPage(resource);
           ready.decoded.close();
@@ -1098,7 +1097,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       ) decoded.close();
       else {
         resource.readyPageKeys.add(pageKey);
-        resource.readyPages.push({ decoded, page, pageKey });
+        resource.readyPages.push({ decoded, pageKey });
         this.#readyPages += 1;
       }
     }).catch(() => {
@@ -1117,25 +1116,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #uploadReadyPage(
     resource: RuntimeResource,
     ready: ReadyPage,
-    plan: VirtualTexturePoolAdmissionPlan,
+    slot: number,
+    evicted: VirtualTexturePoolSlot | undefined,
   ): void {
     const gpu = resource.gpu!;
     const atlas = gpu.atlas;
     const storedPageSize = atlas.storedPageSize;
-    const slotX = plan.slot % atlas.atlasColumns;
-    const slotY = Math.floor(plan.slot / atlas.atlasColumns);
-    if (plan.evicted !== undefined) {
-      const evictedResource = this.#resources.get(plan.evicted.resourceKey);
-      const evictedGpu = evictedResource?.gpu;
-      if (evictedResource !== undefined && evictedGpu !== undefined) {
-        const hadOneResident = evictedGpu.residentSlots.size === 1;
-        evictedGpu.residentSlots.delete(plan.evicted.pageKey);
-        evictedGpu.pageTableDirty = true;
-        if (hadOneResident) this.#bindingRevision += 1;
-        if (evictedResource !== resource) this.#changed(evictedResource);
-      }
-      atlas.slots[plan.slot] = undefined;
-    }
+    const slotX = slot % atlas.atlasColumns;
+    const slotY = Math.floor(slot / atlas.atlasColumns);
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, atlas.atlasTexture);
@@ -1169,10 +1157,23 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         ready.decoded.source,
       );
     }
-    atlas.slots[plan.slot] = { pageKey: plan.pageKey, resourceKey: resource.key };
-    atlas.lastUsedFrames[plan.slot] = this.#frame;
+    // Commit logical eviction only after validation and the replacement upload
+    // succeed, so a rejected page cannot destroy a usable ancestor fallback.
     const firstResident = gpu.residentSlots.size === 0;
-    gpu.residentSlots.set(plan.pageKey, plan.slot);
+    if (evicted !== undefined) {
+      const evictedResource = this.#resources.get(evicted.resourceKey);
+      const evictedGpu = evictedResource?.gpu;
+      if (evictedResource !== undefined && evictedGpu !== undefined) {
+        const hadOneResident = evictedGpu.residentSlots.size === 1;
+        evictedGpu.residentSlots.delete(evicted.pageKey);
+        evictedGpu.pageTableDirty = true;
+        if (hadOneResident && evictedResource !== resource) this.#bindingRevision += 1;
+        if (evictedResource !== resource) this.#changed(evictedResource);
+      }
+    }
+    atlas.slots[slot] = { pageKey: ready.pageKey, resourceKey: resource.key };
+    atlas.lastUsedFrames[slot] = this.#frame;
+    gpu.residentSlots.set(ready.pageKey, slot);
     gpu.pageTableDirty = true;
     this.#uploadedPages += 1;
     if (firstResident) this.#bindingRevision += 1;

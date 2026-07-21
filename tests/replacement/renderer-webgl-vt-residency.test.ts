@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseVirtualTextureManifest, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
 import {
-  planVirtualTextureAdmission,
-  planVirtualTexturePoolAdmission,
+  selectVirtualTexturePoolSlot,
   virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
 } from "../../packages/renderer-webgl/src/virtual-texture/residency";
@@ -17,31 +16,6 @@ const manifest = parseVirtualTextureManifest({
 });
 
 describe("VT2 residency core", () => {
-  it("chooses free then oldest unprotected slots without changing live mappings", () => {
-    const keys = [virtualTexturePageKey({ mip: 2, x: 0, y: 0 }), undefined];
-    expect(planVirtualTextureAdmission(
-      { mip: 1, x: 0, y: 0 },
-      keys,
-      new Uint32Array([4, 0]),
-      new Set(),
-    )).toMatchObject({ slot: 1 });
-    expect(keys[1]).toBeUndefined();
-
-    const full = ["protected", "old", "new"];
-    expect(planVirtualTextureAdmission(
-      { mip: 0, x: 0, y: 0 },
-      full,
-      new Uint32Array([1, 2, 20]),
-      new Set(["protected"]),
-    )).toMatchObject({ evictedKey: "old", slot: 1 });
-    expect(planVirtualTextureAdmission(
-      { mip: 0, x: 0, y: 0 },
-      full,
-      new Uint32Array([1, 2, 20]),
-      new Set(full),
-    )).toBeUndefined();
-  });
-
   it("maps missing fine pages to the closest committed ancestor", () => {
     const root = { mip: 2, x: 0, y: 0 };
     const fine = { mip: 0, x: 1, y: 1 };
@@ -69,24 +43,30 @@ describe("VT2 residency core", () => {
       has: (resourceKey: string): boolean => resourceKey === "first",
     };
 
-    expect(planVirtualTexturePoolAdmission(
+    expect(selectVirtualTexturePoolSlot(
       "second",
-      page,
+      pageKey,
       slots,
       new Uint32Array([1, 2]),
       protectedPages,
-    )).toMatchObject({
-      evicted: { resourceKey: "second" },
-      pageKey,
+    )).toBe(1);
+    expect(slots[1]).toEqual({
+      pageKey: virtualTexturePageKey({ mip: 1, x: 0, y: 0 }),
       resourceKey: "second",
-      slot: 1,
     });
-    expect(planVirtualTexturePoolAdmission(
+    expect(selectVirtualTexturePoolSlot(
       "third",
-      page,
+      pageKey,
       slots,
       new Uint32Array([1, 2]),
       { has: () => true },
-    )).toBeUndefined();
+    )).toBe(-1);
+    expect(selectVirtualTexturePoolSlot(
+      "third",
+      pageKey,
+      [...slots, undefined],
+      new Uint32Array([1, 2, 0]),
+      { has: () => true },
+    )).toBe(2);
   });
 });

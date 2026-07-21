@@ -89,8 +89,9 @@ Virtual-texture publication retains both a four-page count ceiling and a
 separate 4 MiB byte ceiling. A transaction accounts the exact compressed block
 bytes or canonical RGBA page bytes plus one page-table publication per affected
 resource. A denied page remains decoded and ready for the next demanded frame;
-one oversize first transaction still makes progress. Residency eviction is a
-pure plan and does not remove the old mapping unless the atlas upload succeeds.
+one oversize first transaction still makes progress. Residency chooses a slot
+through an allocation-free pure core and does not remove the old mapping unless
+replacement validation and atlas upload succeed.
 Render-target `texStorage`/allocation is persistent or transient capacity, not
 source upload traffic, and MUST NOT be added to these transfer counters.
 
