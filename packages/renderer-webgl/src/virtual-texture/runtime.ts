@@ -1,11 +1,11 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
+import type { SurfaceFrameView } from "../frame/surface-frame";
 import { IDENTITY_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
 import {
   canonicalTextureSampler,
   type CanonicalTextureSampler,
 } from "../surface/canonical-material";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
-import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 import { etc2RgbaWebGlFormat } from "../texture/etc2-storage";
 import {
   openAuthoredVirtualTexturePageSource,

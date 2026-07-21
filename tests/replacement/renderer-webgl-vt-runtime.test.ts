@@ -14,7 +14,7 @@ import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/reso
 import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
 import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
-import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/frame/surface-frame";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
 import { virtualTextureRuntimeRequired } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
 import { fakeGl } from "./support/canvas-root-harness";

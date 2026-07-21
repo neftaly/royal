@@ -5,13 +5,13 @@ import {
   type ExternalFrameCapableRoot,
   type ExternalSurfaceFrame,
 } from "../frame/external-frame";
+import type { SurfaceFrameView } from "../frame/surface-frame";
 import type { RendererRoot } from "../runtime/canvas-root";
 import {
   identityMat4,
   multiplyMat4Into,
   type MutableMat4,
 } from "../math/mat4";
-import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 
 export type XrReferenceSpaceType =
   | "viewer"

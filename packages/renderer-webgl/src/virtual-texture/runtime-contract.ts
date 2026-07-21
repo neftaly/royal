@@ -1,6 +1,6 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
+import type { SurfaceFrameView } from "../frame/surface-frame";
 import { decodedTextureKey, type TextureSourceRef } from "../texture/asset-owner";
-import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 

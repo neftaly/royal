@@ -1,6 +1,6 @@
 import type { FramebufferSize } from "./clear-frame";
 import type { ExternalFrameClock } from "./frame-clock-owner";
-import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
+import type { SurfaceFrameView } from "./surface-frame";
 
 /** @internal Capability keys keep the browser XR seam out of the base API surface. */
 export const rendererAcquireExternalClock: unique symbol = Symbol("royal.webgl.external-clock");

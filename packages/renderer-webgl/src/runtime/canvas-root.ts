@@ -33,6 +33,7 @@ import {
   rendererSubmitExternalFrame,
   type ExternalSurfaceFrame,
 } from "../frame/external-frame";
+import type { SurfaceFrameView } from "../frame/surface-frame";
 import {
   GltfAssetOwner,
   readGltfResourceWithFetch,
@@ -55,7 +56,6 @@ import {
 } from "../surface/scene-lowering";
 import {
   SurfaceGpuOwner,
-  type SurfaceFrameView,
   type SurfaceGeometryUploadSnapshot,
 } from "../surface/surface-gpu-owner";
 import { SurfacePicker } from "../surface/surface-picker";

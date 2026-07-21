@@ -81,6 +81,18 @@ const staticSpecifiers = (file: string): string[] => {
   return specifiers;
 };
 
+const allModuleSpecifiers = (file: string): string[] => {
+  const specifiers: string[] = [];
+  for (const statement of sourceTrees.get(file)!.statements) {
+    if (
+      (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))
+      && statement.moduleSpecifier !== undefined
+      && ts.isStringLiteral(statement.moduleSpecifier)
+    ) specifiers.push(statement.moduleSpecifier.text);
+  }
+  return specifiers;
+};
+
 const referencesBrowserAuthority = (file: string): boolean => {
   const source = sourceTrees.get(file)!;
   const names = new Set([
@@ -174,6 +186,19 @@ describe("source architecture fitness", () => {
       }
       if (referencesBrowserAuthority(file)) {
         violations.push(`${relative(file)} references browser authority`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps shared frame data below renderer feature owners", () => {
+    const frameRoot = path.join(packagesRoot, "renderer-webgl", "src", "frame");
+    const violations: string[] = [];
+    for (const file of packageSourceFiles.filter((candidate) => candidate.startsWith(frameRoot))) {
+      for (const specifier of allModuleSpecifiers(file)) {
+        if (specifier.startsWith(".") && !specifier.startsWith("./") && specifier !== "../math/mat4") {
+          violations.push(`${relative(file)} imports ${specifier}`);
+        }
       }
     }
     expect(violations).toEqual([]);

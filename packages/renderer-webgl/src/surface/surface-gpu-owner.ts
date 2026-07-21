@@ -7,6 +7,7 @@ import {
   type MutableMat4,
 } from "../math/mat4";
 import type { FrameViewport } from "../frame/clear-frame";
+import type { SurfaceFrameView } from "../frame/surface-frame";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type {
   MutableSurfaceDrawFrame,
@@ -141,12 +142,6 @@ import {
   sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "./surface-depth-order";
-
-export type SurfaceFrameView = Readonly<{
-  view: Mat4;
-  viewProjection: Mat4;
-  viewport: FrameViewport;
-}>;
 
 export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
   /** Scene surfaces still waiting for bounded geometry/instance admission. */
