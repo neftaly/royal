@@ -5,6 +5,7 @@ import {
   sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
+import { forEachFuzzCase } from "../fuzz";
 
 type Surface = {
   depthOrder: number;
@@ -33,17 +34,13 @@ const item = (id: number, depth: number, alphaBlend = false): Surface => ({
 
 describe("surface depth ordering core", () => {
   it("matches a stable ordering oracle across adversarial camera orders", () => {
-    let random = 0x12_34_56_78;
-    const next = (): number => {
-      random ^= random << 13;
-      random ^= random >>> 17;
-      random ^= random << 5;
-      return random >>> 0;
-    };
     const view = identityMat4();
-    for (let round = 0; round < 100; round += 1) {
-      const count = next() % 65;
-      const surfaces = Array.from({ length: count }, (_, id) => item(id, next() % 11));
+    forEachFuzzCase({ cases: 100, seed: 0x12_34_56_78 }, ({ random }) => {
+      const count = random.int(0, 65);
+      const surfaces = Array.from(
+        { length: count },
+        (_, id) => item(id, random.int(0, 11)),
+      );
       const expected = [...surfaces]
         .map((surface, index) => ({ depth: surface.surface.worldBounds.min[2], index, surface }))
         .sort((left, right) => left.depth - right.depth || left.index - right.index)
@@ -52,7 +49,7 @@ describe("surface depth ordering core", () => {
       sortSurfacesBackToFront(surfaces, view);
 
       expect(surfaces.map((surface) => surface.id)).toEqual(expected);
-    }
+    });
   });
 
   it("leaves an already ordered run stable", () => {
