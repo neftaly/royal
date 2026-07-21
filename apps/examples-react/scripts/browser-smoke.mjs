@@ -481,6 +481,27 @@ const assertNeutralTextureTransition = (fallback, authored) => {
   }
 };
 
+const assertSecondaryTextureTransition = (fallback, authored) => {
+  if (!Array.isArray(fallback) || !Array.isArray(authored)) {
+    throw new Error(`secondary texture smoke could not sample both states: ${JSON.stringify({ authored, fallback })}`);
+  }
+  for (const [label, color] of [['fallback', fallback], ['authored', authored]]) {
+    const looksDebugMagenta = color[0] > 0.7 && color[1] < 0.3 && color[2] > 0.7;
+    const looksUninitializedWhite = color.every((channel) => channel > 0.92);
+    if (looksDebugMagenta || looksUninitializedWhite) {
+      throw new Error(`secondary texture ${label} presentation exposed a placeholder: ${JSON.stringify(color)}`);
+    }
+  }
+  const distance = Math.hypot(
+    authored[0] - fallback[0],
+    authored[1] - fallback[1],
+    authored[2] - fallback[2],
+  );
+  if (distance <= 0.02) {
+    throw new Error(`secondary texture did not visibly refine the material: ${JSON.stringify({ authored, fallback })}`);
+  }
+};
+
 const assertRoute = (expected, state) => {
   const failures = [];
   if (state.route.id !== expected.id) {
@@ -1752,8 +1773,10 @@ const main = async () => {
             : {}),
         };
       let textureFallbackPause;
+      let textureFallbackKind;
       const pausedVirtualTextureRequests = [];
       if (route.id === 'texture-materials') {
+        textureFallbackKind = 'base-color';
         await session.call('Fetch.enable', {
           patterns: [{
             requestStage: 'Request',
@@ -1765,7 +1788,21 @@ const main = async () => {
           ({ request }) => request.url.includes('/DamagedHelmet/Default_albedo.jpg'),
           { timeoutMs: 10_000 },
         );
+      } else if (route.id === 'gltf-helmet') {
+        textureFallbackKind = 'secondary';
+        await session.call('Fetch.enable', {
+          patterns: [{
+            requestStage: 'Request',
+            urlPattern: '*Default_normal.jpg*',
+          }],
+        });
+        textureFallbackPause = session.wait(
+          'Fetch.requestPaused',
+          ({ request }) => request.url.includes('/DamagedHelmet/Default_normal.jpg'),
+          { timeoutMs: 10_000 },
+        );
       } else if (route.id === 'virtual-texture-stress') {
+        textureFallbackKind = 'virtual';
         await session.call('Fetch.enable', {
           patterns: [{
             requestStage: 'Request',
@@ -1793,7 +1830,8 @@ const main = async () => {
           await session.call('Fetch.disable');
           throw new Error('texture fallback smoke did not intercept the authored image request');
         }
-        const virtualTextureFallback = route.id === 'virtual-texture-stress';
+        const virtualTextureFallback = textureFallbackKind === 'virtual';
+        const secondaryTextureFallback = textureFallbackKind === 'secondary';
         const fallbackRoute = virtualTextureFallback
           ? {
               ...effectiveRoute,
@@ -1801,7 +1839,14 @@ const main = async () => {
               minColorBuckets: undefined,
               resourceSubstrings: ['/fixtures/virtual-texture-stress/map.vt.json'],
             }
-          : {
+          : secondaryTextureFallback
+            ? {
+                ...effectiveRoute,
+                absentResourceSubstrings: ['/DamagedHelmet/Default_normal.jpg'],
+                minColorBuckets: 8,
+                resourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
+              }
+            : {
               ...effectiveRoute,
               absentResourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
               resourceSubstrings: [],
@@ -1874,16 +1919,17 @@ const main = async () => {
           virtualTextureInteraction,
         };
       }
-      if (route.id === 'texture-materials' || route.id === 'virtual-texture-stress') {
+      if (textureFallbackKind !== undefined) {
         state = {
           ...state,
           textureTransition: {
             authored: await compositedCanvasColorAt(
               session,
-              route.id === 'virtual-texture-stress' ? 0.35 : 0.5,
+              textureFallbackKind === 'virtual' ? 0.35 : 0.5,
               0.5,
             ),
             fallback: textureFallbackColor,
+            kind: textureFallbackKind,
           },
         };
       }
@@ -1904,12 +1950,13 @@ const main = async () => {
         }
         assertRoute(effectiveRoute, state);
         if (state.textureTransition !== undefined) {
-          assertNeutralTextureTransition(
-            state.textureTransition.fallback,
-            state.textureTransition.authored,
-          );
+          const assertTransition = state.textureTransition.kind === 'secondary'
+            ? assertSecondaryTextureTransition
+            : assertNeutralTextureTransition;
+          assertTransition(state.textureTransition.fallback, state.textureTransition.authored);
           console.log(
-            `ok texture-transition fallback=${state.textureTransition.fallback.map((value) => value.toFixed(3)).join(',')}`
+            `ok texture-transition kind=${state.textureTransition.kind}`
+            + ` fallback=${state.textureTransition.fallback.map((value) => value.toFixed(3)).join(',')}`
             + ` authored=${state.textureTransition.authored.map((value) => value.toFixed(3)).join(',')}`,
           );
         }
