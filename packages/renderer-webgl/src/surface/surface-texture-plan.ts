@@ -253,30 +253,22 @@ export const materialTextureBindingAt = (
  * Owns the fixed shader-unit ABI. Optional representations replace only their
  * assigned slots; absent features receive explicit null bindings.
  */
-export const composeSurfaceTextureBindings = (
+export const composeSurfaceTextureBindingsInto = (
+  bindings: GpuTextureBinding[],
   ordinary: readonly GpuTextureBinding[],
   offset: number,
   virtualTexture: VirtualTextureGpuBinding | undefined,
   sceneColor: GpuTextureBinding | undefined,
   environment: PrefilteredEnvironmentGpuBinding | undefined,
-): GpuTextureBinding[] => {
-  const bindings = [
-    ordinary[offset]!,
-    ordinary[offset + 1]!,
-    ordinary[offset + 2]!,
-    ordinary[offset + 3]!,
-    ordinary[offset + 4]!,
-    ordinary[offset + 5]!,
-    ordinary[offset + 6]!,
-    EMPTY_TEXTURE_BINDING,
-    ordinary[offset + 7]!,
-    ordinary[offset + 8]!,
-    sceneColor ?? EMPTY_TEXTURE_BINDING,
-    environment?.texture ?? EMPTY_TEXTURE_BINDING,
-  ];
+): void => {
+  for (let unit = 0; unit < 7; unit += 1) bindings[unit] = ordinary[offset + unit]!;
+  bindings[7] = EMPTY_TEXTURE_BINDING;
+  bindings[8] = ordinary[offset + 7]!;
+  bindings[9] = ordinary[offset + 8]!;
+  bindings[10] = sceneColor ?? EMPTY_TEXTURE_BINDING;
+  bindings[11] = environment?.texture ?? EMPTY_TEXTURE_BINDING;
   if (virtualTexture !== undefined) {
     bindings[0] = virtualTexture.atlas;
     bindings[7] = virtualTexture.pageTable;
   }
-  return bindings;
 };

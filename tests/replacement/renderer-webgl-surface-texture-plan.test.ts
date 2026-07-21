@@ -5,7 +5,7 @@ import {
   type CanonicalTextureBinding,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
-  composeSurfaceTextureBindings,
+  composeSurfaceTextureBindingsInto,
   materialTextureBindingAt,
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
@@ -167,7 +167,9 @@ describe("surface texture planning core", () => {
       mipCount: 1,
       texture: environment,
     } satisfies PrefilteredEnvironmentGpuBinding;
-    const bindings = composeSurfaceTextureBindings(
+    const bindings = Array<GpuTextureBinding>(12);
+    composeSurfaceTextureBindingsInto(
+      bindings,
       ordinary,
       2,
       virtualTexture,
@@ -194,7 +196,9 @@ describe("surface texture planning core", () => {
 
   it("uses explicit null bindings for absent optional representations", () => {
     const ordinary = Array.from({ length: 9 }, (_, index) => gpuBinding(`ordinary-${index}`));
-    const bindings = composeSurfaceTextureBindings(
+    const bindings = Array<GpuTextureBinding>(12);
+    composeSurfaceTextureBindingsInto(
+      bindings,
       ordinary,
       0,
       undefined,

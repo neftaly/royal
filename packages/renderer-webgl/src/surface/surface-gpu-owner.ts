@@ -88,11 +88,10 @@ import {
 } from "../resource/frame-upload-budget";
 import { planContiguousRunEnds } from "./contiguous-run-plan";
 import {
-  activeTextureBindingsEqual,
   surfacesShareMultiDrawState,
 } from "./surface-multi-draw";
 import {
-  composeSurfaceTextureBindings,
+  composeSurfaceTextureBindingsInto,
   MATERIAL_TEXTURE_UNITS,
   materialTextureBindingAt,
   presentableBaseColorInto,
@@ -1174,7 +1173,9 @@ export class SurfaceGpuOwner {
         residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
     });
-    const bindings = composeSurfaceTextureBindings(
+    const bindings = Array<GpuTextureBinding>(12);
+    composeSurfaceTextureBindingsInto(
+      bindings,
       ordinaryBindings,
       bindingOffset,
       virtualTexture,
@@ -1366,7 +1367,19 @@ export class SurfaceGpuOwner {
         });
         const textureUnits = surfaceTextureUnitMask(features);
         resource.surface = surface;
-        const bindings = composeSurfaceTextureBindings(
+        const retainedBindings = resource.drawPacket.textureBindings as GpuTextureBinding[];
+        const textureUnitsChanged = textureUnits !== resource.drawPacket.textureUnits;
+        const program = textureUnitsChanged
+          ? this.#programs.get(
+            material.kind,
+            features,
+            resource.instanceCount > 0,
+            material.alphaCutoff !== undefined,
+            canonicalSurfaceIsDoubleSided(material),
+          )
+          : resource.program;
+        composeSurfaceTextureBindingsInto(
+          retainedBindings,
           ordinaryBindings,
           0,
           resource.virtualTexture,
@@ -1377,27 +1390,13 @@ export class SurfaceGpuOwner {
             : undefined,
           this.#environmentGpu?.binding,
         );
-        if (
-          textureUnits === resource.drawPacket.textureUnits
-          && activeTextureBindingsEqual(
-            resource.drawPacket.textureBindings,
-            bindings,
-            textureUnits,
-          )
-        ) continue;
-        const program = this.#programs.get(
-          material.kind,
-          features,
-          resource.instanceCount > 0,
-          material.alphaCutoff !== undefined,
-          canonicalSurfaceIsDoubleSided(material),
-        );
+        if (!textureUnitsChanged) continue;
         regroup ||= program.program !== resource.program.program;
         resource.drawPacket = surfaceDrawPacket(
           this.#gl,
           surface,
           program.program,
-          bindings,
+          retainedBindings,
           textureUnits,
           resource.vertexArray,
         );
