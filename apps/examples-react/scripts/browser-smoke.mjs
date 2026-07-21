@@ -927,8 +927,9 @@ const runVirtualTextureInteractionSmoke = async (session) => {
 (async () => {
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing virtual texture canvas' };
-  const buttons = [...document.querySelectorAll('.vt-stress-actions button')];
-  if (buttons.length !== 5 || buttons.some((button) => !(button instanceof HTMLButtonElement))) {
+  const buttons = ['Both', 'NW', 'NE', 'SW', 'SE']
+    .map((preset) => document.querySelector('[data-vt-preset="' + preset + '"]'));
+  if (buttons.some((button) => !(button instanceof HTMLButtonElement))) {
     return { error: 'missing virtual texture camera presets' };
   }
   const pageUrls = () => performance.getEntriesByType('resource')

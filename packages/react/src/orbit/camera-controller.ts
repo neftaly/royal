@@ -53,13 +53,14 @@ export interface OrbitCameraController {
 export interface OrbitCameraOptions {
   /** Initial-only target and distance in metres; angles are radians. */
   readonly initial: OrbitCameraViewOptions;
-  /** Far clipping distance in metres. */
+  /** Far clipping distance in metres. @defaultValue `100` */
   readonly far?: Metres;
-  /** Vertical field of view in radians. */
+  /** Vertical field of view in radians. @defaultValue `Math.PI / 4` */
   readonly fovY?: Rads;
   /**
    * Near clipping distance in metres. Keep this below the closest intended
    * camera-to-surface distance; for example, use `0.01` when orbiting to `0.1`.
+   * @defaultValue `0.1`
    */
   readonly near?: Metres;
 }

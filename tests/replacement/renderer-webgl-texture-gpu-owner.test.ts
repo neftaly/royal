@@ -100,6 +100,7 @@ describe("ordinary texture GPU owner", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(300);
     const owner = new TextureGpuOwner(gl, budget);
+    expect(budget.availableBytes).toBe(300);
 
     const bindings = owner.reconcile([
       binding("nearest", "nearest"),
@@ -110,6 +111,9 @@ describe("ordinary texture GPU owner", () => {
     expect(bindings[1]).toEqual({ sampler: null, target: "2d", texture: null });
     expect(gl.generateMipmap).not.toHaveBeenCalled();
     expect(budget.snapshot()).toEqual({ budgetBytes: 300, deniedClaims: 1, retainedBytes: 256 });
+    expect(budget.availableBytes).toBe(44);
+    owner.dispose();
+    expect(budget.availableBytes).toBe(300);
   });
 
   it("fits the largest aspect-preserving mip chain under a storage ceiling", () => {

@@ -30,18 +30,22 @@ export type OrbitControlsBehaviorOptions = {
   readonly minPitch?: Rads | undefined;
   /** Called after a gesture commits a changed, clamped view. */
   readonly onChange?: ((view: OrbitCameraView) => void) | undefined;
-  /** Target displacement ratio per CSS pixel, scaled by orbit distance. */
+  /** Target displacement ratio per CSS pixel, scaled by orbit distance. @defaultValue `0.0016` */
   readonly panSpeed?: number | undefined;
-  /** Radians per CSS pixel. */
+  /** Radians per CSS pixel. @defaultValue `0.006` */
   readonly rotateSpeed?: number | undefined;
-  /** Exponential zoom coefficient per CSS pixel. */
+  /** Exponential zoom coefficient per CSS pixel. @defaultValue `0.0018` */
   readonly zoomSpeed?: number | undefined;
 };
 
 export type OrbitControlsHandle = {
+  /** Detaches listeners, releases pointer capture, and restores the canvas touch-action style. */
   dispose(): void;
+  /** Reads the latest committed controls view. */
   getView(): OrbitCameraView;
+  /** Merges changed behavior into the current options; explicit `undefined` restores a default. */
   setOptions(options: OrbitControlsBehaviorOptions): void;
+  /** Replaces the complete controls view. */
   setView(
     view: OrbitCameraViewOptions,
     options?: OrbitControlsSetViewOptions,
@@ -56,7 +60,7 @@ export type OrbitControlsSetViewOptions = {
 };
 
 export type OrbitControlsOptions = OrbitControlsBehaviorOptions & {
-  /** View used to initialize this imperative controls instance. */
+  /** Initial-only view used by this imperative controls instance. */
   readonly initialView: OrbitCameraViewOptions;
 };
 

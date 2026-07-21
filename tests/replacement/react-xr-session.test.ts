@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { XrFrame, XrReferenceSpace, XrSessionRenderer } from "@royal/renderer-webgl/xr";
 import {
   createXrSessionControllerWithPlatform,
@@ -8,6 +8,7 @@ import {
 import {
   initialXrSessionSnapshot,
   reduceXrSessionSnapshot,
+  type XrSessionSnapshot,
 } from "../../packages/react/src/xr/session-state";
 import { canvasRootHarness } from "./support/canvas-root-harness";
 
@@ -47,6 +48,34 @@ const fakeRenderer = (): XrSessionRenderer => {
 };
 
 describe("XR session state", () => {
+  it("narrows visibility and failure fields with lifecycle status", () => {
+    const visibility = (snapshot: XrSessionSnapshot): string | null => {
+      if (snapshot.status === "active") {
+        expectTypeOf(snapshot.visibilityState)
+          .toEqualTypeOf<"visible" | "visible-blurred">();
+      }
+      if (snapshot.status === "blocked" || snapshot.status === "error") {
+        expectTypeOf(snapshot.error).toEqualTypeOf<string>();
+      }
+      if (snapshot.status === "checking" || snapshot.status === "available") {
+        expectTypeOf(snapshot.visibilityState).toEqualTypeOf<null>();
+      }
+      return snapshot.visibilityState;
+    };
+
+    expect(visibility(initialXrSessionSnapshot("immersive-vr"))).toBeNull();
+  });
+
+  it("ignores browser end events when no session can be owned", () => {
+    const checking = initialXrSessionSnapshot("immersive-vr");
+    expect(reduceXrSessionSnapshot(checking, { kind: "ended" })).toBe(checking);
+    const available = reduceXrSessionSnapshot(checking, {
+      kind: "availability",
+      supported: true,
+    });
+    expect(reduceXrSessionSnapshot(available, { kind: "ended" })).toBe(available);
+  });
+
   it("keeps hidden sessions live and restores a rejected end request", () => {
     let state = initialXrSessionSnapshot("immersive-vr");
     state = reduceXrSessionSnapshot(state, { kind: "availability", supported: true });
@@ -61,6 +90,25 @@ describe("XR session state", () => {
 });
 
 describe("XR session controller", () => {
+  it("uses the guaranteed viewer reference space for inline sessions by default", async () => {
+    const { root } = canvasRootHarness();
+    const session = new FakeBrowserSession();
+    const createRenderer = vi.fn(async () => fakeRenderer());
+    const controller = createXrSessionControllerWithPlatform(root, { mode: "inline" }, {
+      createRenderer,
+      xrSystem: () => ({
+        isSessionSupported: async () => true,
+        requestSession: async () => session,
+      }),
+    });
+
+    await expect(controller.enter()).resolves.toBe(true);
+    expect(createRenderer).toHaveBeenCalledWith(root, session, {
+      referenceSpacePreference: ["viewer"],
+    });
+    controller.dispose();
+  });
+
   it("coalesces acquisition, owns one RAF chain, and retains a hidden session", async () => {
     const { root } = canvasRootHarness();
     const session = new FakeBrowserSession();

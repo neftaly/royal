@@ -857,8 +857,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let atlas = this.#atlases.get(atlasKey);
     const created = atlas === undefined;
     if (atlas === undefined) {
-      const budgetSnapshot = this.#budget.snapshot();
-      const remainingBytes = budgetSnapshot.budgetBytes - budgetSnapshot.retainedBytes;
+      const remainingBytes = this.#budget.availableBytes;
       const pageTableBytes = virtualTexturePageTableByteLength(manifest);
       const availableAtlasBytes = Math.max(0, remainingBytes - pageTableBytes);
       const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;

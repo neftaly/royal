@@ -1,23 +1,34 @@
 export type ContextLifecycleSnapshot =
   | Readonly<{
     failure?: never;
+    /** Current WebGL resource generation; changes when handles become invalid. */
     generation: number;
+    /** Context-loss transitions observed since root creation. */
     interruptions: number;
     phase: "active";
+    /** Successful context restorations since root creation. */
     recoveries: number;
   }>
   | Readonly<{
+    /** Bounded restoration failure, retained while the context remains unavailable. */
     failure?: string;
+    /** Current WebGL resource generation; changes when handles become invalid. */
     generation: number;
+    /** Context-loss transitions observed since root creation. */
     interruptions: number;
     phase: "lost" | "restoring";
+    /** Successful context restorations since root creation. */
     recoveries: number;
   }>
   | Readonly<{
+    /** Last bounded context/restoration failure, when one preceded disposal. */
     failure?: string;
+    /** Terminal generation after disposal invalidated every retained handle. */
     generation: number;
+    /** Context-loss transitions observed before disposal. */
     interruptions: number;
     phase: "disposed";
+    /** Successful context restorations observed before disposal. */
     recoveries: number;
   }>;
 

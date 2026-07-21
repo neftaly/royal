@@ -63,12 +63,12 @@ describe("canonical LOD selection", () => {
   });
 
   it("shares one cold-start and selected-level rule across visual and picking paths", () => {
-    const level0 = [{ group: "detail", level: 0 }];
-    const level1 = [{ group: "detail", level: 1 }];
+    const level0 = [{ group: 0, level: 0 }];
+    const level1 = [{ group: 0, level: 1 }];
     expect(lodMembershipsSelected(undefined, undefined)).toBe(true);
     expect(lodMembershipsSelected(level0, undefined)).toBe(true);
     expect(lodMembershipsSelected(level1, undefined)).toBe(false);
-    const selected = new Map([["detail", 1]]);
+    const selected = new Map([[0, 1]]);
     expect(lodMembershipsSelected(level0, selected)).toBe(false);
     expect(lodMembershipsSelected(level1, selected)).toBe(true);
   });
@@ -76,29 +76,29 @@ describe("canonical LOD selection", () => {
   it("retains one admitted compound LOD combination without frame allocations", () => {
     const workspace = createDrawableLodSelectionWorkspace();
     const groups = [{
-      group: "node",
+      group: 0,
       levels: [0, 1],
       selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
       surfaceIndices: [0, 1],
       thresholds: [0.5, 0],
     }, {
-      group: "material",
+      group: 1,
       levels: [0, 1],
       selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
       surfaceIndices: [0, 2],
       thresholds: [0.5, 0],
     }] as const;
     const resources = [{
-      surface: { lods: [{ group: "node", level: 0 }, { group: "material", level: 0 }] },
+      surface: { lods: [{ group: 0, level: 0 }, { group: 1, level: 0 }] },
     }, {
-      surface: { lods: [{ group: "node", level: 1 }, { group: "material", level: 0 }] },
+      surface: { lods: [{ group: 0, level: 1 }, { group: 1, level: 0 }] },
     }, {
-      surface: { lods: [{ group: "node", level: 0 }, { group: "material", level: 1 }] },
+      surface: { lods: [{ group: 0, level: 0 }, { group: 1, level: 1 }] },
     }];
     const views = [{ viewProjection: identityMat4() }];
 
     const selections = selectDrawableLodsInto(groups, views, resources, workspace);
-    expect([...selections]).toEqual([["node", 0], ["material", 0]]);
+    expect([...selections]).toEqual([[0, 0], [1, 0]]);
     const drawableLevels = workspace.drawableLevels;
     expect(selectDrawableLodsInto(groups, views, resources, workspace)).toBe(selections);
     expect(workspace.drawableLevels).toBe(drawableLevels);
@@ -107,17 +107,17 @@ describe("canonical LOD selection", () => {
   it("cleans unavailable and stale LOD selections in the deterministic core", () => {
     const workspace = createDrawableLodSelectionWorkspace();
     const group = {
-      group: "detail",
+      group: 0,
       levels: [0, 1],
       selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
       surfaceIndices: [0, 1],
       thresholds: [0.5, 0],
     } as const;
-    const resources = [{ surface: { lods: [{ group: "detail", level: 0 }] } }];
+    const resources = [{ surface: { lods: [{ group: 0, level: 0 }] } }];
     const views = [{ viewProjection: identityMat4() }];
 
     expect([...selectDrawableLodsInto([group], views, resources, workspace)])
-      .toEqual([["detail", 0]]);
+      .toEqual([[0, 0]]);
     expect(selectDrawableLodsInto([], views, resources, workspace).size).toBe(0);
     expect(workspace.activeGroups.size).toBe(0);
   });

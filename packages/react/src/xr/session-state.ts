@@ -1,6 +1,10 @@
 export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
 export type XrVisibilityState = "hidden" | "visible" | "visible-blurred";
 
+/**
+ * Browser XR lifecycle: capability check, availability, acquisition, live
+ * visibility, termination, or terminal controller disposal.
+ */
 export type XrSessionStatus =
   | "checking"
   | "unavailable"
@@ -13,13 +17,42 @@ export type XrSessionStatus =
   | "error"
   | "disposed";
 
-export type XrSessionSnapshot = Readonly<{
-  /** Human-readable failure retained until the next successful transition. */
-  error?: string;
-  mode: XrSessionMode;
-  status: XrSessionStatus;
-  visibilityState: XrVisibilityState | null;
-}>;
+/** Exact observable state of one browser XR session controller. */
+export type XrSessionSnapshot =
+  | Readonly<{
+    error?: never;
+    mode: XrSessionMode;
+    status: "available" | "checking" | "disposed" | "starting" | "unavailable";
+    visibilityState: null;
+  }>
+  | Readonly<{
+    /** Human-readable acquisition or renderer failure. */
+    error: string;
+    mode: XrSessionMode;
+    status: "blocked" | "error";
+    visibilityState: null;
+  }>
+  | Readonly<{
+    /** Rejected termination failure retained while the session stays live. */
+    error?: string;
+    mode: XrSessionMode;
+    status: "active";
+    visibilityState: "visible" | "visible-blurred";
+  }>
+  | Readonly<{
+    /** Rejected termination failure retained while the session stays live. */
+    error?: string;
+    mode: XrSessionMode;
+    status: "suspended";
+    visibilityState: "hidden";
+  }>
+  | Readonly<{
+    /** Earlier rejected termination failure, if a later exit is now pending. */
+    error?: string;
+    mode: XrSessionMode;
+    status: "ending";
+    visibilityState: XrVisibilityState;
+  }>;
 
 export type XrSessionEvent =
   | Readonly<{ kind: "availability"; supported: boolean }>
@@ -59,32 +92,40 @@ export const reduceXrSessionSnapshot = (
       return { mode: current.mode, status: "starting", visibilityState: null };
     case "activate":
       if (current.status !== "starting") return current;
-      return {
-        mode: current.mode,
-        status: event.visibilityState === "hidden" ? "suspended" : "active",
-        visibilityState: event.visibilityState,
-      };
+      return event.visibilityState === "hidden"
+        ? { mode: current.mode, status: "suspended", visibilityState: "hidden" }
+        : {
+            mode: current.mode,
+            status: "active",
+            visibilityState: event.visibilityState,
+          };
     case "visibility":
       if (current.status !== "active" && current.status !== "suspended"
         && current.status !== "ending") return current;
-      return {
-        ...current,
-        status: current.status === "ending"
-          ? "ending"
-          : event.visibilityState === "hidden" ? "suspended" : "active",
-        visibilityState: event.visibilityState,
-      };
+      if (current.status === "ending") {
+        return { ...current, visibilityState: event.visibilityState };
+      }
+      return event.visibilityState === "hidden"
+        ? { ...current, status: "suspended", visibilityState: "hidden" }
+        : { ...current, status: "active", visibilityState: event.visibilityState };
     case "begin-end":
       if (current.status !== "active" && current.status !== "suspended") return current;
       return { ...current, status: "ending" };
     case "end-failed":
-      if (current.status !== "ending" || current.visibilityState === null) return current;
-      return {
-        ...current,
-        error: event.error,
-        status: current.visibilityState === "hidden" ? "suspended" : "active",
-      };
+      if (current.status !== "ending") return current;
+      return current.visibilityState === "hidden"
+        ? { ...current, error: event.error, status: "suspended", visibilityState: "hidden" }
+        : {
+            ...current,
+            error: event.error,
+            status: "active",
+            visibilityState: current.visibilityState === "visible-blurred"
+              ? "visible-blurred"
+              : "visible",
+          };
     case "ended":
+      if (current.status !== "starting" && current.status !== "active"
+        && current.status !== "suspended" && current.status !== "ending") return current;
       return { mode: current.mode, status: "available", visibilityState: null };
     case "fail":
       return {

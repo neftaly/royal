@@ -92,8 +92,10 @@ extension-specific executor path survives lowering.
 Each mounted node occurrence owns its LOD identity and world-space selection
 bounds. Reusing one prepared asset at multiple transforms MUST NOT merge those
 bounds or force the mounts to select the same level. Canonical lowering scopes
-the asset-local group key to its stable mount occurrence before retained
-hysteresis, visible submission, and picking consume it.
+the asset-local group key to its stable mount occurrence, then assigns one
+dense scene-local numeric identity before retained hysteresis, visible
+submission, and picking consume it. Asset-local identities and compound mount
+strings do not survive into those retained paths.
 
 If the ideal level is not drawable, Royal SHOULD select the closest drawable
 level that preserves content. A positive authored terminal threshold MAY cull

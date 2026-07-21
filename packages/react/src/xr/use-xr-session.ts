@@ -11,17 +11,35 @@ import {
 } from "./session-state";
 
 export type UseXrSessionOptions = XrSessionControllerOptions & Readonly<{
-  /** Explicit root for controls outside Canvas; omit inside Canvas. */
+  /** Explicit root for controls outside Canvas; omit inside Canvas, or pass `null` to disable. */
   root?: RendererRoot | null;
 }>;
 
 export type UseXrSessionResult = XrSessionSnapshot & Readonly<{
+  /** Requests a browser session from user activation; true means rendering became active. */
   enter(): Promise<boolean>;
+  /** Requests termination of the current browser session. */
   exit(): Promise<void>;
+  /** Rechecks support while no browser session is owned. */
   refreshAvailability(): Promise<void>;
 }>;
 
 const unavailableSubscribe = (): (() => void) => () => undefined;
+
+const emptyXrStringList: readonly never[] = [];
+
+const useStableXrStringList = <Value extends string>(
+  values: readonly Value[] | undefined,
+): readonly Value[] => {
+  const retained = useRef<readonly Value[]>(emptyXrStringList);
+  const next = values ?? emptyXrStringList;
+  let changed = retained.current.length !== next.length;
+  for (let index = 0; !changed && index < next.length; index += 1) {
+    changed = retained.current[index] !== next[index];
+  }
+  if (changed) retained.current = [...next];
+  return retained.current;
+};
 
 /** Owns one lazy browser XR lifecycle for the surrounding Royal Canvas. */
 export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionResult => {
@@ -32,9 +50,9 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
   }
   const root = hasExplicitRoot ? options.root ?? null : contextRoot ?? null;
   const mode = options.mode ?? "immersive-vr";
-  const requiredFeatures = options.session?.requiredFeatures?.join("\u0000") ?? "";
-  const optionalFeatures = options.session?.optionalFeatures?.join("\u0000") ?? "";
-  const referenceSpaces = options.renderer?.referenceSpacePreference?.join("\u0000") ?? "";
+  const requiredFeatures = useStableXrStringList(options.session?.requiredFeatures);
+  const optionalFeatures = useStableXrStringList(options.session?.optionalFeatures);
+  const referenceSpaces = useStableXrStringList(options.renderer?.referenceSpacePreference);
   const antialias = options.renderer?.webGlLayer?.antialias;
   const framebufferScaleFactor = options.renderer?.webGlLayer?.framebufferScaleFactor;
   const onFrameSnapshot = options.renderer?.onFrameSnapshot;
@@ -51,7 +69,7 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
       ...(telemetry ? { onFrameSnapshot: stableFrameSnapshot } : {}),
       ...(options.renderer.referenceSpacePreference === undefined
         ? {}
-        : { referenceSpacePreference: options.renderer.referenceSpacePreference }),
+        : { referenceSpacePreference: referenceSpaces }),
       ...(options.renderer.webGlLayer === undefined
         ? {}
         : { webGlLayer: options.renderer.webGlLayer }),
@@ -59,10 +77,10 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
     ...(options.session === undefined ? {} : { session: {
       ...(options.session.optionalFeatures === undefined
         ? {}
-        : { optionalFeatures: options.session.optionalFeatures }),
+        : { optionalFeatures }),
       ...(options.session.requiredFeatures === undefined
         ? {}
-        : { requiredFeatures: options.session.requiredFeatures }),
+        : { requiredFeatures }),
     } }),
   }), [
     antialias,
@@ -89,8 +107,8 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
       });
     };
   }, [controller, activeControllerRef]);
-  const unavailable = useMemo(() => root === null
-    ? { ...initialXrSessionSnapshot(mode), status: "unavailable" as const }
+  const unavailable = useMemo<XrSessionSnapshot>(() => root === null
+    ? { mode, status: "unavailable", visibilityState: null }
     : initialXrSessionSnapshot(mode), [mode, root]);
   const getUnavailable = useCallback(() => unavailable, [unavailable]);
   const snapshot = useSyncExternalStore(

@@ -14,6 +14,7 @@ import {
   planGeometryBatchChunks,
   planGeometryBatchLayout,
   type GeometryIndexArray,
+  type GeometryBatchInput,
   type GeometryBatchLayoutPlan,
   type GeometryBatchRange,
 } from "./geometry-batch-plan";
@@ -71,6 +72,9 @@ type GpuInstanceVertexArray = Readonly<{
   key: string;
   vertexArray: WebGLVertexArrayObject;
 }>;
+
+const instanceVertexArrayKey = (geometryKey: string, instanceKey: string): string =>
+  `${geometryKey.length}:${geometryKey}${instanceKey}`;
 
 const changedInstanceSurface = (
   surfaces: readonly CanonicalDrawSurface[],
@@ -171,7 +175,6 @@ const indexUploadWorkspace = (
 const planGeometryArenas = (
   surfaces: readonly CanonicalDrawSurface[],
 ): Readonly<{
-  key: string;
   plans: readonly PlannedGeometryArena[];
   uploads: ReadonlyMap<string, PlannedGeometry>;
 }> => {
@@ -187,42 +190,66 @@ const planGeometryArenas = (
     else entries.push({ key, surface });
   }
   const plans: PlannedGeometryArena[] = [];
-  const identity: unknown[] = [];
   for (const [layout, entries] of byLayout) {
-    const inputs = entries.map(({ surface }) => ({
-      indices: surface.geometry.indices,
-      vertexCount: surface.geometry.positions.length / 3,
-    }));
+    const inputs = Array<GeometryBatchInput>(entries.length);
+    for (let index = 0; index < entries.length; index += 1) {
+      const geometry = entries[index]!.surface.geometry;
+      inputs[index] = {
+        indices: geometry.indices,
+        vertexCount: geometry.positions.length / 3,
+      };
+    }
     for (const chunk of planGeometryBatchChunks(
       inputs,
       geometryVertexStrideBytes(layout),
       DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
     )) {
-      const chunkEntries = entries.slice(chunk.start, chunk.end);
-      const batch = planGeometryBatchLayout(inputs.slice(chunk.start, chunk.end));
+      const chunkLength = chunk.end - chunk.start;
+      const chunkInputs = Array<(typeof inputs)[number]>(chunkLength);
+      for (let index = 0; index < chunkLength; index += 1) {
+        chunkInputs[index] = inputs[chunk.start + index]!;
+      }
+      const batch = planGeometryBatchLayout(chunkInputs);
       const planIndex = plans.length;
-      plans.push({
-        batch,
-        entries: chunkEntries.map((entry, index) => ({
-          ...entry,
+      const plannedEntries = Array<PlannedGeometry>(chunkLength);
+      for (let index = 0; index < chunkLength; index += 1) {
+        plannedEntries[index] = {
+          ...entries[chunk.start + index]!,
           planIndex,
           range: batch.ranges[index]!,
-        })),
+        };
+      }
+      plans.push({
+        batch,
+        entries: plannedEntries,
         layout,
       });
     }
-    identity.push(layout, entries.map(({ key, surface }) => [
-      key,
-      surface.geometry.positions.length,
-      surface.geometry.indices.length,
-    ]));
   }
   const uploads = new Map<string, PlannedGeometry>();
   for (const plan of plans) {
     for (const entry of plan.entries) uploads.set(entry.key, entry);
   }
-  return { key: JSON.stringify(identity), plans, uploads };
+  return { plans, uploads };
 };
+
+const sameGeometryArenaPlan = (
+  left: ReturnType<typeof planGeometryArenas>,
+  right: ReturnType<typeof planGeometryArenas>,
+): boolean => left.plans.length === right.plans.length
+  && left.plans.every((leftPlan, planIndex) => {
+    const rightPlan = right.plans[planIndex]!;
+    return leftPlan.layout === rightPlan.layout
+      && leftPlan.entries.length === rightPlan.entries.length
+      && leftPlan.entries.every((leftEntry, entryIndex) => {
+        const rightEntry = rightPlan.entries[entryIndex]!;
+        return leftEntry.key === rightEntry.key
+          && leftEntry.surface.geometry.positions.length
+            === rightEntry.surface.geometry.positions.length
+          && leftEntry.surface.geometry.indices.length
+            === rightEntry.surface.geometry.indices.length;
+      });
+  });
 
 /** Owns geometry buffers and vertex arrays for one context generation. */
 export class SurfaceGeometryGpuOwner {
@@ -230,7 +257,7 @@ export class SurfaceGeometryGpuOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #uploadBudget: FrameUploadBudgetOwner;
   #geometryArenas: (GpuGeometryArena | undefined)[] = [];
-  #geometryPlanKey = "";
+  #geometryPlan: ReturnType<typeof planGeometryArenas> | null = null;
   #geometryResourcesByKey = new Map<string, GpuGeometry>();
   #indexUploadWorkspace: GeometryIndexUploadWorkspace = {};
   #uploadedGeometryKeys = new Set<string>();
@@ -272,7 +299,7 @@ export class SurfaceGeometryGpuOwner {
       if (arena !== undefined) this.#budget.release(arena.budgetIdentity);
     }
     this.#geometryArenas = [];
-    this.#geometryPlanKey = "";
+    this.#geometryPlan = null;
     this.#geometryResourcesByKey.clear();
     this.#indexUploadWorkspace = {};
     this.#uploadedGeometryKeys.clear();
@@ -308,7 +335,7 @@ export class SurfaceGeometryGpuOwner {
       if (arena !== undefined) this.#deleteGeometryArena(arena);
     }
     this.#geometryArenas = [];
-    this.#geometryPlanKey = "";
+    this.#geometryPlan = null;
     this.#geometryResourcesByKey.clear();
     this.#uploadedGeometryKeys.clear();
     this.#instanceResources = [];
@@ -760,23 +787,23 @@ export class SurfaceGeometryGpuOwner {
       this.#plannedGeometry = planned;
       this.#plannedSurfaces = surfaces;
     }
-    const geometryPlanChanged = planned.key !== this.#geometryPlanKey;
+    const geometryPlanChanged = this.#geometryPlan === null
+      || !sameGeometryArenaPlan(planned, this.#geometryPlan);
     const surfaceOffset = geometryPlanChanged ? 0 : retainedSurfaceCount;
     const retainsPrefix = surfaceOffset > 0;
     if (geometryPlanChanged) this.#indexUploadWorkspace = {};
-    const previousInstancesByKey = new Map(
-      this.#instanceResources.map((resource) => [resource.key, resource] as const),
-    );
-    const previousInstanceVaosByKey = geometryPlanChanged
-      ? new Map<string, GpuInstanceVertexArray>()
-      : new Map(
-        this.#instanceVertexArrays.map((resource) => [resource.key, resource] as const),
-      );
+    const previousInstancesByKey = new Map<string, GpuInstanceData>();
+    for (const resource of this.#instanceResources) {
+      previousInstancesByKey.set(resource.key, resource);
+    }
+    const previousInstanceVaosByKey = new Map<string, GpuInstanceVertexArray>();
+    if (!geometryPlanChanged) {
+      for (const resource of this.#instanceVertexArrays) {
+        previousInstanceVaosByKey.set(resource.key, resource);
+      }
+    }
     const nextInstancesByKey = new Map(
       retainsPrefix ? previousInstancesByKey : undefined,
-    );
-    const nextInstanceVaosByKey = new Map(
-      retainsPrefix ? previousInstanceVaosByKey : undefined,
     );
     const nextInstanceResources: GpuInstanceData[] = retainsPrefix
       ? [...this.#instanceResources]
@@ -784,6 +811,9 @@ export class SurfaceGeometryGpuOwner {
     const nextInstanceVertexArrays: GpuInstanceVertexArray[] = retainsPrefix
       ? [...this.#instanceVertexArrays]
       : [];
+    const nextInstanceVaosByKey = new Map(
+      retainsPrefix ? previousInstanceVaosByKey : undefined,
+    );
     const nextSurfaces: GpuGeometrySurface[] = [];
     const stagedGeometryByKey = new Map<string, GpuGeometry>();
     const stagedUploadedGeometryKeys = new Set<string>();
@@ -873,7 +903,7 @@ export class SurfaceGeometryGpuOwner {
             nextInstancesByKey.set(instances.key, instanceData);
             nextInstanceResources.push(instanceData);
           }
-          const vaoKey = JSON.stringify([key, instances.key]);
+          const vaoKey = instanceVertexArrayKey(key, instances.key);
           let instanceVao = nextInstanceVaosByKey.get(vaoKey)
             ?? previousInstanceVaosByKey.get(vaoKey);
           if (instanceVao === undefined) {
@@ -951,7 +981,7 @@ export class SurfaceGeometryGpuOwner {
             this.#uploadedGeometryKeys.add(key);
           }
         }
-        this.#geometryPlanKey = planned.key;
+        this.#geometryPlan = planned;
         this.#instanceResources = nextInstanceResources;
         this.#instanceVertexArrays = nextInstanceVertexArrays;
       },

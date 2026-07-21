@@ -1,11 +1,11 @@
 export const DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME = 4 * 1024 * 1024;
 
 export type FrameUploadBudgetSnapshot = Readonly<{
-  /** Ordinary-texture bytes admitted during the most recently submitted frame. */
+  /** Upload bytes admitted during the most recent frame handled by this owner. */
   admittedBytes: number;
   /** Immutable per-frame target; one larger upload may be admitted alone. */
   budgetBytes: number;
-  /** Unique ordinary-texture uploads deferred during the most recent frame. */
+  /** Uploads deferred during the most recent frame handled by this owner. */
   deferredUploads: number;
 }>;
 

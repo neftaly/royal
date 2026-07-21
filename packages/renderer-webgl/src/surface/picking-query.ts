@@ -1,6 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
-import { lodMembershipsSelected } from "./lod-selection";
+import { lodMembershipsSelected, type LodGroupId } from "./lod-selection";
 import type { CanonicalPickSurface } from "./scene-lowering";
 
 export type CanonicalPickRay = Readonly<{
@@ -191,7 +191,7 @@ export const pickCanonicalSurfaceInto = (
   ray: CanonicalPickRay,
   surfaces: readonly CanonicalPickSurface[],
   scratch: CanonicalPickingScratch,
-  selectedLodLevels?: ReadonlyMap<string, number>,
+  selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
   acceptsHit?: CanonicalPickHitAcceptance,
 ): boolean => {
   let nearest = ray.maxDistance;

@@ -69,7 +69,7 @@ export type XrViewport = Readonly<{
 export type XrWebGlLayerOptions = Readonly<{
   /** Requests browser multisampling for the XR layer. @defaultValue `false` */
   antialias?: boolean;
-  /** Scale applied to the browser-recommended XR framebuffer dimensions. */
+  /** Scale applied to browser-recommended XR framebuffer dimensions; omitted uses the browser default. */
   framebufferScaleFactor?: number;
 }>;
 
@@ -82,7 +82,9 @@ export interface XrWebGlLayerConstructor {
 }
 
 export type XrSessionRendererFrameSnapshot = Readonly<{
+  /** Zero-based count of successfully submitted frames. */
   frameIndex: number;
+  /** Allocated copy of the viewports submitted for this frame. */
   viewports: readonly XrViewport[];
 }>;
 
@@ -95,10 +97,15 @@ export type XrSessionRendererOptions = Readonly<{
 }>;
 
 export type XrSessionRenderer = Readonly<{
+  /** Whether Royal has released this session renderer. */
   readonly disposed: boolean;
+  /** Browser layer installed as the session's base layer. */
   readonly layer: XrWebGlLayer;
+  /** First supported reference space from `referenceSpacePreference`. */
   readonly referenceSpace: XrReferenceSpace;
+  /** Releases Royal's external frame-clock ownership; safe to call repeatedly. */
   dispose(): void;
+  /** Submits one browser XR frame; false means no pose was available or ownership ended. */
   renderFrame(frame: XrFrame): boolean;
 }>;
 

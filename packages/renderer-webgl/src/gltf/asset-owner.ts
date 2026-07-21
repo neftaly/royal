@@ -253,9 +253,6 @@ export class GltfAssetOwner {
   }
 
   subscribe(asset: GltfAssetRef, listener: () => void): () => void {
-    if (typeof listener !== "function") {
-      throw new TypeError("Royal glTF asset subscriber must be a function");
-    }
     const key = gltfAssetKey(asset);
     if (this.#disposed) return () => undefined;
     return this.#listeners.subscribe(key, listener);

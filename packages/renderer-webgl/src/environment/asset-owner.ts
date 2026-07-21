@@ -134,9 +134,6 @@ export class PrefilteredEnvironmentAssetOwner {
     environment: Pick<PrefilteredEnvironmentLight, "src" | "version">,
     listener: () => void,
   ): () => void {
-    if (typeof listener !== "function") {
-      throw new TypeError("Royal prefiltered environment subscriber must be a function");
-    }
     if (this.#disposed) return () => undefined;
     const key = prefilteredEnvironmentAssetKey(environment);
     return this.#listeners.subscribe(key, listener);

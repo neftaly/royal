@@ -179,3 +179,6 @@ function XrButton() {
 The hook owns capability checking, one browser session, one session RAF chain,
 and cleanup. `suspended` is a live hidden session, not a failure. An `exit()`
 rejection restores that live state and retains its message in `error`.
+Inline sessions default to the `viewer` reference space. Immersive sessions
+try `local-floor`, then `local`; pass `renderer.referenceSpacePreference` to
+replace that ordered fallback explicitly.

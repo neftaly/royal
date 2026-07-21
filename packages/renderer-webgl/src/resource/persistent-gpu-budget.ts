@@ -27,6 +27,11 @@ export class PersistentGpuBudgetOwner {
     this.#budgetBytes = budgetBytes;
   }
 
+  /** Currently unclaimed capacity for resource admission; never negative. */
+  get availableBytes(): number {
+    return this.#budgetBytes - this.#retainedBytes;
+  }
+
   release(identity: object): void {
     const bytes = this.#claims.get(identity);
     if (bytes === undefined) return;

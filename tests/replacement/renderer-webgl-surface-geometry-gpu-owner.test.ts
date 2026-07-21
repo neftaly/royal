@@ -213,6 +213,33 @@ describe("surface geometry GPU owner", () => {
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(2);
   });
 
+  it("retains and releases distinct instance vertex-array identities", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const base = surface(planeGeometry(1))[0]!;
+    const localModels = new Float32Array([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ]);
+    const instanced = (key: string) => ({
+      ...base,
+      instances: { count: 1, key, localModels },
+    });
+    owner.prepare([instanced("instances:a"), instanced("instances:b")]).commit();
+    expect(gl.createBuffer).toHaveBeenCalledTimes(4);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(3);
+
+    owner.prepare([instanced("instances:a"), instanced("instances:b")]).commit();
+    expect(gl.createBuffer).toHaveBeenCalledTimes(4);
+    expect(gl.createVertexArray).toHaveBeenCalledTimes(3);
+
+    owner.dispose();
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(4);
+    expect(gl.deleteVertexArray).toHaveBeenCalledTimes(3);
+  });
+
   it("packs compatible admission work into one shared GPU arena", () => {
     const gl = fakeGl();
     const owner = new SurfaceGeometryGpuOwner(gl);

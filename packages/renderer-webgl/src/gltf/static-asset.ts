@@ -45,14 +45,14 @@ import {
   prepareMaterial,
 } from "./static-material";
 import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
-import { normalizeLodThresholds } from "../surface/lod-selection";
+import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selection";
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
 import { collectStaticTextureAssets } from "./static-texture-assets";
 import { readCanonicalStaticGltfSource } from "./static-source";
 import { staticNodeLodIds } from "./static-node-selection";
 
 export type PreparedStaticLodMembership = Readonly<{
-  group: string;
+  group: LodGroupId;
   level: number;
   thresholds: readonly number[];
 }>;
@@ -742,6 +742,9 @@ const prepareStaticDocument = (
   }
   const lights: PreparedStaticGltfLight[] = [];
   const primitives: PreparedStaticGltfPrimitive[] = [];
+  const lodGroupIds = new Int32Array(nodes.length);
+  lodGroupIds.fill(-1);
+  let nextLodGroupId = 0;
   const visit = (
     nodeIndex: number,
     parentModel: Mat4,
@@ -761,7 +764,12 @@ const prepareStaticDocument = (
           ? undefined
           : array(extras.MSFT_screencoverage, label, `${path}.extras.MSFT_screencoverage`);
         const thresholds = normalizeLodThresholds(hints, levelCount);
-        const group = `${contentKey}:node:${nodeIndex}:lod`;
+        let group = lodGroupIds[nodeIndex]!;
+        if (group < 0) {
+          group = nextLodGroupId;
+          nextLodGroupId += 1;
+          lodGroupIds[nodeIndex] = group;
+        }
         const highMembership = { group, level: 0, thresholds };
         visit(
           nodeIndex,

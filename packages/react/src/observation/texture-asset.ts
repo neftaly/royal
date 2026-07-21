@@ -13,8 +13,8 @@ export type TextureAssetStatusIdentity = Readonly<Pick<
   TextureAssetRef,
   "contentKey" | "src" | "version"
 >>;
-/** Source string or exact decoded-content/version identity observed by `useTextureAssetStatus`. */
-export type TextureAssetStatusInput = string | TextureAssetStatusIdentity;
+/** Source string, compact identity, or complete texture asset observed by `useTextureAssetStatus`. */
+export type TextureAssetStatusInput = string | TextureAssetStatusIdentity | TextureAssetRef;
 /** Focused decode lifecycle for one ordinary texture asset. */
 export type TextureAssetStatus = TextureAssetSnapshot;
 

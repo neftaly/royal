@@ -1,4 +1,10 @@
-import { prefilteredEnvironment, type Scene } from "@royal/renderer-core";
+import {
+  gltf,
+  prefilteredEnvironment,
+  textureAsset,
+  virtualTexture,
+  type Scene,
+} from "@royal/renderer-core";
 import {
   resolveRendererRootOptions,
   type RendererRoot,
@@ -19,12 +25,16 @@ import {
   useCanvasPick,
   useCanvasSize,
   type GltfAssetStatusIdentity,
+  type GltfAssetStatusInput,
   useGltfAssetStatus,
   type PrefilteredEnvironmentStatusIdentity,
+  type PrefilteredEnvironmentStatusInput,
   type TextureAssetStatusIdentity,
+  type TextureAssetStatusInput,
   useTextureAssetStatus,
   type VirtualTextureAssetStatus,
   type VirtualTextureAssetStatusIdentity,
+  type VirtualTextureAssetStatusInput,
   useVirtualTextureAssetStatus,
   useOrbitCamera,
   useOrbitCameraView,
@@ -102,6 +112,13 @@ describe("replacement React public API", () => {
       .toMatchTypeOf<PrefilteredEnvironmentStatusIdentity>();
     expectTypeOf({ manifestUri: "/map.vt.json", version: "v2" })
       .toMatchTypeOf<VirtualTextureAssetStatusIdentity>();
+    expectTypeOf(gltf("/model.glb").asset).toMatchTypeOf<GltfAssetStatusInput>();
+    expectTypeOf(textureAsset({ src: "/texture.png" }))
+      .toMatchTypeOf<TextureAssetStatusInput>();
+    expectTypeOf(prefilteredEnvironment({ src: "/studio.ktx" }))
+      .toMatchTypeOf<PrefilteredEnvironmentStatusInput>();
+    expectTypeOf(virtualTexture({ manifestUri: "/map.vt.json" }))
+      .toMatchTypeOf<VirtualTextureAssetStatusInput>();
   });
 
   it("keeps pure orbit authoring on the scene entrypoint", () => {
@@ -336,6 +353,21 @@ describe("replacement React public API", () => {
     expect(selectObservedRoot(undefined, { root }, "useThing")).toBe(root);
     expect(selectObservedRoot(undefined, { root: null }, "useThing")).toBeNull();
     expect(selectObservedRoot(root, undefined, "useThing")).toBe(root);
+    expect(() => selectObservedRoot(undefined, {
+      rendererRoot: root,
+    } as unknown as { root: RendererRoot | null }, "useThing")).toThrow(
+      'useThing options contains unsupported option "rendererRoot"',
+    );
+    expect(() => selectObservedRoot(
+      undefined,
+      {} as { root: RendererRoot | null },
+      "useThing",
+    )).toThrow("useThing options require root");
+    expect(() => selectObservedRoot(undefined, {
+      root: undefined,
+    } as unknown as { root: RendererRoot | null }, "useThing")).toThrow(
+      "useThing root must be a renderer root or null",
+    );
     expect(() => selectObservedRoot(undefined, undefined, "useThing")).toThrow(
       "useThing must be used inside <Canvas> or receive { root }",
     );

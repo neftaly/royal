@@ -442,7 +442,7 @@ describe("canonical direct surface lowering", () => {
       min: [10, 1, -2],
     });
     expect(prepared.lodGroups).toEqual([{
-      group: "mount:0:lod-asset:node:1:lod",
+      group: 0,
       levels: [0, 1],
       selectionBounds: { max: [12, 3, 0], min: [10, 1, -2] },
       surfaceIndices: [0, 1],
@@ -468,11 +468,12 @@ describe("canonical direct surface lowering", () => {
 
     expect(prepared.surfaces.map((surface) => surface.lods?.[0]?.group))
       .toEqual([
-        "mount:0:repeated-lod-asset:node:1:lod",
-        "mount:0:repeated-lod-asset:node:1:lod",
-        "mount:1:repeated-lod-asset:node:1:lod",
-        "mount:1:repeated-lod-asset:node:1:lod",
+        0,
+        0,
+        1,
+        1,
       ]);
+    expect(prepared.lodGroups.map(({ group }) => group)).toEqual([0, 1]);
     expect(prepared.lodGroups.map((group) => group.selectionBounds)).toEqual([
       { max: [2, 3, 0], min: [0, 1, -2] },
       { max: [12, 3, 0], min: [10, 1, -2] },
@@ -505,12 +506,14 @@ describe("canonical direct surface lowering", () => {
       [0.05, 0.1, 0.2, 1],
     ]);
     expect(prepared.lodGroups).toMatchObject([{
+      group: 0,
       levels: [0, 1],
       surfaceIndices: [0, 1],
       thresholds: [0.5, 0],
     }]);
     expect(prepared.pickSurfaces).toHaveLength(2);
     expect(prepared.pickSurfaces.map((surface) => surface.lods?.[0]?.level)).toEqual([0, 1]);
+    expect(prepared.pickSurfaces.map((surface) => surface.lods?.[0]?.group)).toEqual([0, 0]);
   });
 
   it("normalizes standard material and directional-light state before touching WebGL", () => {

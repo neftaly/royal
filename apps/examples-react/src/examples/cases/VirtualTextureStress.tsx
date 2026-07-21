@@ -116,6 +116,7 @@ export const VirtualTextureStress = (): ReactNode => {
           {(['Both', 'NW', 'NE', 'SW', 'SE', 'Ground'] as const).map((name) => (
             <button
               aria-pressed={activeView(name)}
+              data-vt-preset={name}
               key={name}
               type="button"
               onClick={() => chooseView(name)}

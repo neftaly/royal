@@ -1,5 +1,13 @@
 export type RetainedListener = () => void;
 
+export const requireRetainedListener: (
+  listener: unknown,
+) => asserts listener is RetainedListener = (listener) => {
+  if (typeof listener !== "function") {
+    throw new TypeError("Royal subscriber must be a function");
+  }
+};
+
 type ListenerEntry = {
   active: boolean;
   readonly listener: RetainedListener;
@@ -54,6 +62,7 @@ export class RetainedListeners {
   }
 
   subscribe(listener: RetainedListener): () => void {
+    requireRetainedListener(listener);
     let entry = this.#entries.find(
       (candidate) => candidate.active && candidate.listener === listener,
     );
@@ -99,6 +108,7 @@ export class KeyedRetainedListeners<Key> {
   }
 
   subscribe(key: Key, listener: RetainedListener): () => void {
+    requireRetainedListener(listener);
     let group = this.#groups.get(key);
     if (group === undefined) {
       group = new RetainedListeners();

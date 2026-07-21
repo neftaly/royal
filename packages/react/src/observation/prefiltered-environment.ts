@@ -18,8 +18,11 @@ export type PrefilteredEnvironmentStatusIdentity = Readonly<Pick<
   PrefilteredEnvironmentLight,
   "src" | "version"
 >>;
-/** Source string or exact environment descriptor observed by `usePrefilteredEnvironmentStatus`. */
-export type PrefilteredEnvironmentStatusInput = string | PrefilteredEnvironmentStatusIdentity;
+/** Source string, compact identity, or complete environment descriptor observed by the hook. */
+export type PrefilteredEnvironmentStatusInput =
+  | string
+  | PrefilteredEnvironmentStatusIdentity
+  | PrefilteredEnvironmentLight;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;

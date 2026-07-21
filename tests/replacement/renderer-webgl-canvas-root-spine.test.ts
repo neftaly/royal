@@ -865,6 +865,16 @@ describe("clear-only canvas root", () => {
     expect(sizeListener).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects invalid focused and broad subscribers at the public boundary", () => {
+    const { root } = harness();
+    expect(() => root.subscribe(null as unknown as () => void))
+      .toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeLifecycle(null as unknown as () => void))
+      .toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeSize(null as unknown as () => void))
+      .toThrow("Royal subscriber must be a function");
+  });
+
   it("blocks stale work on loss and reconstructs the current clear intent on restore", () => {
     const { callbacks, canvas, root } = harness();
     const phases: string[] = [];

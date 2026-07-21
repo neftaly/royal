@@ -79,11 +79,17 @@ export type TextureAssetSnapshot =
   | Readonly<{ error: string; state: "error" }>;
 
 export type TexturePreparationSnapshot = Readonly<{
+  /** Browser texture decodes currently executing. */
   activeDecodes: number;
+  /** Maximum simultaneous active-decode and decoded-handoff source reservations. */
   decodeReservationLimit: number;
+  /** Active decodes plus decoded sources currently retaining a handoff reservation. */
   decodeReservations: number;
+  /** Estimated CPU bytes currently retained for decoded GPU handoff. */
   decodedHandoffBytes: number;
+  /** Soft decoded-handoff byte ceiling; one source may exceed it alone. */
   decodedHandoffThresholdBytes: number;
+  /** Claimed color-space/sampler storage representations not yet GPU-resident. */
   pendingStorageRepresentations: number;
 }>;
 
@@ -446,9 +452,6 @@ export class TextureAssetOwner {
   }
 
   subscribe(asset: TextureAssetRef, listener: () => void): () => void {
-    if (typeof listener !== "function") {
-      throw new TypeError("Royal texture asset subscriber must be a function");
-    }
     const key = this.#key(asset);
     if (this.#disposed) return () => undefined;
     return this.#listeners.subscribe(key, listener);

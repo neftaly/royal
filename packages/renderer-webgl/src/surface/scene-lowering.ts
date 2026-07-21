@@ -53,7 +53,7 @@ import {
   transformedWorldBounds,
   type WorldBounds,
 } from "./surface-visibility";
-import type { LodMembership } from "./lod-selection";
+import type { LodGroupId, LodMembership } from "./lod-selection";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -116,7 +116,7 @@ const canonicalPickMaterial = (
 });
 
 export type CanonicalLodGroup = Readonly<{
-  group: string;
+  group: LodGroupId;
   levels: readonly number[];
   selectionBounds: WorldBounds;
   surfaceIndices: readonly number[];
@@ -204,33 +204,31 @@ const indexSurfaceTextures = (
 const indexSurfaceLods = (
   surfaces: readonly CanonicalDrawSurface[],
 ): readonly CanonicalLodGroup[] => {
-  const groups = new Map<string, {
+  const groups: Array<{
+    group: LodGroupId;
     levels: number[];
-    membership: LodMembership;
+    selectionBounds: WorldBounds;
     surfaceIndices: number[];
-  }>();
+    thresholds: readonly number[];
+  }> = [];
   for (let surfaceIndex = 0; surfaceIndex < surfaces.length; surfaceIndex += 1) {
     for (const membership of surfaces[surfaceIndex]!.lods ?? []) {
-      const group = groups.get(membership.group);
+      const group = groups[membership.group];
       if (group === undefined) {
-        groups.set(membership.group, {
+        groups[membership.group] = {
+          group: membership.group,
           levels: [membership.level],
-          membership,
+          selectionBounds: membership.selectionBounds,
           surfaceIndices: [surfaceIndex],
-        });
+          thresholds: membership.thresholds,
+        };
       } else {
         group.levels.push(membership.level);
         group.surfaceIndices.push(surfaceIndex);
       }
     }
   }
-  return Array.from(groups, ([group, index]) => ({
-    group,
-    levels: index.levels,
-    selectionBounds: index.membership.selectionBounds,
-    surfaceIndices: index.surfaceIndices,
-    thresholds: index.membership.thresholds,
-  }));
+  return groups;
 };
 
 export type CanonicalDirectionalLight = Readonly<{
@@ -355,7 +353,8 @@ export const prepareCanonicalSurfaceScene = (
   const punctualLights: CanonicalPunctualLight[] = [];
   const surfaces: CanonicalDrawSurface[] = [];
   const virtualTextureAssets: VirtualTextureAssetRef[] = [];
-  const lodBounds = new Map<string, ReturnType<typeof emptyWorldBounds>>();
+  const lodBounds: ReturnType<typeof emptyWorldBounds>[] = [];
+  const geometryLodGroupIds: LodGroupId[] = [];
   const directMaterials = new WeakMap<Material, CanonicalSurfaceMaterial>();
   const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
@@ -391,7 +390,7 @@ export const prepareCanonicalSurfaceScene = (
     }
     return canonical;
   };
-  let materialLodGroupIndex = 0;
+  let nextLodGroupId: LodGroupId = 0;
   for (const node of scene.nodes) {
     if (node.kind === "gltf" || node.kind === "gltf-instances") {
       gltfNodes.push(node);
@@ -426,6 +425,7 @@ export const prepareCanonicalSurfaceScene = (
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
+      geometryLodGroupIds.length = 0;
       for (const light of prepared.lights) {
         const color: LinearRgba = [
           light.color[0] * light.intensity,
@@ -533,11 +533,16 @@ export const prepareCanonicalSurfaceScene = (
           geometryLods = Array<LodMembership>(primitive.lods.length);
           for (let lodIndex = 0; lodIndex < primitive.lods.length; lodIndex += 1) {
             const primitiveLod = primitive.lods[lodIndex]!;
-            const group = `mount:${mountIndex}:${primitiveLod.group}`;
-            let selectionBounds = lodBounds.get(group);
+            let group = geometryLodGroupIds[primitiveLod.group];
+            if (group === undefined) {
+              group = nextLodGroupId;
+              nextLodGroupId += 1;
+              geometryLodGroupIds[primitiveLod.group] = group;
+            }
+            let selectionBounds = lodBounds[group];
             if (selectionBounds === undefined) {
               selectionBounds = emptyWorldBounds();
-              lodBounds.set(group, selectionBounds);
+              lodBounds[group] = selectionBounds;
             }
             includeWorldBounds(selectionBounds, worldBounds);
             geometryLods[lodIndex] = { ...primitiveLod, group, selectionBounds };
@@ -549,7 +554,7 @@ export const prepareCanonicalSurfaceScene = (
         const materialLevelCount = materialLod?.levels.length ?? 1;
         const materialGroup = materialLod === undefined
           ? undefined
-          : `${primitive.geometry.key}:mount:${materialLodGroupIndex++}:material-lod`;
+          : nextLodGroupId++;
         for (let materialLevel = 0; materialLevel < materialLevelCount; materialLevel += 1) {
           const levelMaterial = materialLod?.levels[materialLevel] ?? materialSource;
           let lods = geometryLods;

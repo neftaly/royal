@@ -16,9 +16,29 @@ import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/sr
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
+import { virtualTextureRuntimeRequired } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
 import { fakeGl } from "./support/canvas-root-harness";
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("VT runtime activation core", () => {
+  it("separates authored demand from opt-in automatic base-color demand", () => {
+    const ordinary = imageTexture("/large.png");
+    const authored = virtualTexture("/authored.vt.json");
+    const empty = { surfaces: [], virtualTextureAssets: [] };
+    const ordinaryScene = {
+      surfaces: [{ material: { baseColorAsset: ordinary } }],
+      virtualTextureAssets: [],
+    };
+    const authoredScene = { surfaces: [], virtualTextureAssets: [authored] };
+
+    expect(virtualTextureRuntimeRequired(empty, false)).toBe(false);
+    expect(virtualTextureRuntimeRequired(empty, true)).toBe(false);
+    expect(virtualTextureRuntimeRequired(ordinaryScene, false)).toBe(false);
+    expect(virtualTextureRuntimeRequired(ordinaryScene, true)).toBe(true);
+    expect(virtualTextureRuntimeRequired(authoredScene, false)).toBe(true);
+  });
+});
 
 describe("browser virtual texture runtime", () => {
   it("allocates an authored atlas only after projected demand becomes non-empty", async () => {

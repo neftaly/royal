@@ -75,6 +75,7 @@ import {
   createDrawableLodSelectionWorkspace,
   lodMembershipsSelected,
   selectDrawableLodsInto,
+  type LodGroupId,
 } from "./lod-selection";
 import type { LinearRgba } from "@royal/renderer-core";
 import type {
@@ -129,6 +130,7 @@ export type SurfaceFrameView = Readonly<{
 }>;
 
 export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
+  /** Scene surfaces still waiting for bounded geometry/instance admission. */
   pendingSurfaces: number;
 }>;
 
@@ -389,7 +391,7 @@ export class SurfaceGpuOwner {
   }
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */
-  lodSelections(): ReadonlyMap<string, number> {
+  lodSelections(): ReadonlyMap<LodGroupId, number> {
     return this.#lodSelection.selections;
   }
 

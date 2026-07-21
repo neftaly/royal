@@ -20,17 +20,22 @@ export type OrbitCameraView = {
 export type OrbitCameraViewOptions = {
   /** Camera-to-target distance in metres. */
   readonly distance: Metres;
+  /** Vertical angle in radians. @defaultValue `0` */
   readonly pitch?: Rads | undefined;
+  /** World-space point the camera orbits. @defaultValue `[0, 0, 0]` */
   readonly target?: WorldPosition3 | undefined;
+  /** Horizontal angle in radians. @defaultValue `0` */
   readonly yaw?: Rads | undefined;
 };
 
 export type OrbitCameraViewConstraints = {
   /** Maximum camera-to-target distance in metres. */
   readonly maxDistance?: Metres | undefined;
+  /** Maximum vertical angle in radians. */
   readonly maxPitch?: Rads | undefined;
   /** Minimum camera-to-target distance in metres. */
   readonly minDistance?: Metres | undefined;
+  /** Minimum vertical angle in radians. */
   readonly minPitch?: Rads | undefined;
 };
 
@@ -43,7 +48,9 @@ export type OrbitCameraFitOptions = {
   readonly minDistance?: Metres | undefined;
   /** Multiplicative clearance around the conservative bounding sphere. @defaultValue `1` */
   readonly padding?: number | undefined;
+  /** Vertical angle in radians. @defaultValue `0` */
   readonly pitch?: Rads | undefined;
+  /** Horizontal angle in radians. @defaultValue `0` */
   readonly yaw?: Rads | undefined;
 };
 

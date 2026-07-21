@@ -49,24 +49,44 @@ export const GltfOrbitCameraFit = ({
     || status.state === "degraded"
     ? status.bounds
     : node.asset.bounds;
-  const fitKey = bounds === undefined || size === undefined ? undefined : JSON.stringify([
-    node.asset.src, node.asset.version, bounds.min, bounds.max, node.transform,
-    size.aspectRatio, fovY, minDistance, padding, pitch, yaw,
-  ]);
+  const aspectRatio = size?.aspectRatio;
 
   useLayoutEffect(() => {
-    if (fitKey === undefined || bounds === undefined || size === undefined) return;
+    if (bounds === undefined || aspectRatio === undefined) return;
     const current = orbit.getView();
     orbit.fit(transformGltfAssetBounds(bounds, node.transform), {
-      aspectRatio: size.aspectRatio,
+      aspectRatio,
       ...(fovY === undefined ? {} : { fovY }),
       ...(minDistance === undefined ? {} : { minDistance }),
       ...(padding === undefined ? {} : { padding }),
       pitch: pitch ?? current.pitch,
       yaw: yaw ?? current.yaw,
     });
-  // The semantic key prevents image-progress snapshots from resetting a camera.
-  }, [fitKey, orbit]);
+  // Scalar dependencies prevent image-progress snapshots from resetting a camera.
+  }, [
+    aspectRatio,
+    bounds?.max[0],
+    bounds?.max[1],
+    bounds?.max[2],
+    bounds?.min[0],
+    bounds?.min[1],
+    bounds?.min[2],
+    fovY,
+    minDistance,
+    node.transform?.position[0],
+    node.transform?.position[1],
+    node.transform?.position[2],
+    node.transform?.rotation[0],
+    node.transform?.rotation[1],
+    node.transform?.rotation[2],
+    node.transform?.scale[0],
+    node.transform?.scale[1],
+    node.transform?.scale[2],
+    orbit,
+    padding,
+    pitch,
+    yaw,
+  ]);
 
   return null;
 };

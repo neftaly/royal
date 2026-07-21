@@ -445,8 +445,8 @@ describe("static glTF preparation core", () => {
     const prepared = prepareStaticGlb(staticTriangleGlb(document), "lod-v1");
     expect(prepared.primitives).toHaveLength(2);
     expect(prepared.primitives.map((primitive) => primitive.lods)).toEqual([
-      [{ group: "lod-v1:node:1:lod", level: 0, thresholds: [0.6, 0.02] }],
-      [{ group: "lod-v1:node:1:lod", level: 1, thresholds: [0.6, 0.02] }],
+      [{ group: 0, level: 0, thresholds: [0.6, 0.02] }],
+      [{ group: 0, level: 1, thresholds: [0.6, 0.02] }],
     ]);
     expect(prepared.primitives[0]!.localModel.slice(12, 15)).toEqual([1, 2, 0]);
     expect(prepared.primitives[1]!.localModel.slice(12, 15)).toEqual([1, 2, -1]);

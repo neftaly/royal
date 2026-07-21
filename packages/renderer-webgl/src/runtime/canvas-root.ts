@@ -79,6 +79,7 @@ import {
   type ResolvedRendererRootOptions,
 } from "./root-options";
 import {
+  virtualTextureRuntimeRequired,
   virtualTextureAssetKey,
   type VirtualTextureAssetSnapshot,
   type VirtualTextureRuntime,
@@ -106,6 +107,7 @@ import {
 import {
   KeyedRetainedListeners,
   RetainedListeners,
+  requireRetainedListener,
 } from "../resource/retained-listeners";
 
 export type { RendererRootOptions, ResolvedRendererRootOptions } from "./root-options";
@@ -501,7 +503,7 @@ export class CanvasRoot implements RendererRoot {
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
       schedule: this.#asyncPreparation.run,
-    }, Math.floor(this.#persistentGpuBudget.snapshot().budgetBytes * 0.75));
+    }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75));
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
     this.#clock = new FrameClockOwner({
@@ -762,8 +764,10 @@ export class CanvasRoot implements RendererRoot {
   };
 
   /** Subscribes only to context lifecycle changes. */
-  subscribeLifecycle = (listener: () => void): (() => void) =>
-    this.#context.subscribe(listener);
+  subscribeLifecycle = (listener: () => void): (() => void) => {
+    requireRetainedListener(listener);
+    return this.#context.subscribe(listener);
+  };
 
   /** Subscribes only to semantic canvas-size changes. */
   subscribeSize = (listener: () => void): (() => void) => {
@@ -1023,7 +1027,7 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
-    const required = this.#virtualTextureRequired(scene);
+    const required = virtualTextureRuntimeRequired(scene, this.#automaticVirtualTexturing);
     if (!required) {
       this.#virtualTextureLoadGeneration += 1;
       this.#virtualTextureRequested = false;
@@ -1046,7 +1050,7 @@ export class CanvasRoot implements RendererRoot {
         this.#disposed
         || generation !== this.#virtualTextureLoadGeneration
         || this.#surfaceScene === null
-        || !this.#virtualTextureRequired(this.#surfaceScene)
+        || !virtualTextureRuntimeRequired(this.#surfaceScene, this.#automaticVirtualTexturing)
       ) return;
       const runtime = module.createBrowserVirtualTextureRuntime(
         this.#gl,
@@ -1076,13 +1080,6 @@ export class CanvasRoot implements RendererRoot {
       this.#releaseUploadedTextures();
       this.#captureScheduledFailure(error);
     });
-  }
-
-  #virtualTextureRequired(scene: CanonicalSurfaceScene): boolean {
-    return scene.virtualTextureAssets.length > 0 || (
-      this.#automaticVirtualTexturing
-      && scene.surfaces.some((surface) => surface.material.baseColorAsset !== undefined)
-    );
   }
 
   #publishVirtualTexture(asset: VirtualTextureAssetRef): void {

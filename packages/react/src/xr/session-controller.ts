@@ -15,7 +15,9 @@ import {
 import { recordWithAllowedFields } from "../validation";
 
 export type XrSessionInit = Readonly<{
+  /** WebXR feature names requested when available. */
   optionalFeatures?: readonly string[];
+  /** WebXR feature names required for session creation. */
   requiredFeatures?: readonly string[];
 }>;
 
@@ -34,9 +36,13 @@ export interface BrowserXrSystem {
 }
 
 export type XrSessionControllerOptions = Readonly<{
-  /** Browser session mode. Defaults to immersive-vr. */
+  /** Browser session mode. @defaultValue `"immersive-vr"` */
   mode?: XrSessionMode;
-  /** Renderer-owned layer, reference-space, and opt-in telemetry policy. */
+  /**
+   * Renderer-owned layer, reference-space, and opt-in telemetry policy.
+   * Inline sessions default to `viewer`; immersive sessions use the renderer's
+   * `local-floor`, then `local` fallback.
+   */
   renderer?: XrSessionRendererOptions;
   /** Features forwarded verbatim to navigator.xr.requestSession. */
   session?: XrSessionInit;
@@ -45,13 +51,15 @@ export type XrSessionControllerOptions = Readonly<{
 export type XrSessionController = Readonly<{
   /** Releases Royal immediately and asks the browser to end any live session. */
   dispose(): void;
-  /** Requests a session. Resolves true only after rendering becomes active. */
+  /** Requests a session. Call from user activation; resolves true only after rendering becomes active. */
   enter(): Promise<boolean>;
   /** Requests browser termination; a rejected request restores the live session. */
   exit(): Promise<void>;
+  /** Reads the current lifecycle snapshot without subscribing. */
   getSnapshot(): XrSessionSnapshot;
   /** Re-runs browser capability detection while no session is owned. */
   refreshAvailability(): Promise<void>;
+  /** Subscribes to lifecycle changes and returns an idempotent unsubscribe function. */
   subscribe(listener: () => void): () => void;
 }>;
 
@@ -210,6 +218,13 @@ export const createXrSessionControllerWithPlatform = (
 ): XrSessionController => {
   const normalized = normalizeOptions(options);
   const mode = normalized.mode;
+  const rendererOptions = mode === "inline"
+    && normalized.renderer?.referenceSpacePreference === undefined
+    ? {
+        ...normalized.renderer,
+        referenceSpacePreference: ["viewer"] as const,
+      }
+    : normalized.renderer;
   let snapshot = initialXrSessionSnapshot(mode);
   let ownedSession: BrowserXrSession | null = null;
   let renderer: XrSessionRenderer | null = null;
@@ -376,7 +391,7 @@ export const createXrSessionControllerWithPlatform = (
           ownedSession = session;
           session.addEventListener("end", onEnd);
           session.addEventListener("visibilitychange", onVisibility);
-          renderer = await platform.createRenderer(root, session, normalized.renderer);
+          renderer = await platform.createRenderer(root, session, rendererOptions);
           if (disposed || ownedSession !== session) {
             renderer.dispose();
             renderer = null;

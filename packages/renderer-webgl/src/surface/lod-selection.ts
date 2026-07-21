@@ -3,8 +3,11 @@ import type { WorldBounds } from "./surface-visibility";
 
 export const CULLED_LOD_LEVEL = -1;
 
+/** Dense scene-local identity shared by visual and picking LOD selection. */
+export type LodGroupId = number;
+
 export type LodMembership = Readonly<{
-  group: string;
+  group: LodGroupId;
   level: number;
   selectionBounds: WorldBounds;
   thresholds: readonly number[];
@@ -13,7 +16,7 @@ export type LodMembership = Readonly<{
 /** Shared visual/picking membership rule; an unselected cold group starts at level zero. */
 export const lodMembershipsSelected = (
   lods: readonly Pick<LodMembership, "group" | "level">[] | undefined,
-  selections: ReadonlyMap<string, number> | undefined,
+  selections: ReadonlyMap<LodGroupId, number> | undefined,
 ): boolean => {
   if (lods === undefined) return true;
   for (const lod of lods) {
@@ -224,7 +227,7 @@ export const maximumProjectedBoundsScreenCoverage = (
 };
 
 export type DrawableLodGroup = Readonly<{
-  group: string;
+  group: LodGroupId;
   levels: readonly number[];
   selectionBounds: WorldBounds;
   surfaceIndices: readonly number[];
@@ -238,10 +241,10 @@ export type DrawableLodResource = Readonly<{
 }>;
 
 export type DrawableLodSelectionWorkspace = {
-  readonly activeGroups: Set<string>;
+  readonly activeGroups: Set<LodGroupId>;
   drawableLevels: Uint8Array;
   readonly projection: ProjectedBoundsWorkspace;
-  readonly selections: Map<string, number>;
+  readonly selections: Map<LodGroupId, number>;
 };
 
 export const createDrawableLodSelectionWorkspace = (): DrawableLodSelectionWorkspace => ({
@@ -261,7 +264,7 @@ export const selectDrawableLodsInto = (
   views: readonly Readonly<{ viewProjection: Mat4 }>[],
   resources: readonly (DrawableLodResource | undefined)[],
   workspace: DrawableLodSelectionWorkspace,
-): ReadonlyMap<string, number> => {
+): ReadonlyMap<LodGroupId, number> => {
   const { activeGroups, selections } = workspace;
   activeGroups.clear();
   if (groups.length === 0) {

@@ -12,6 +12,7 @@ import {
 } from "./picking-query";
 import type { CanonicalSurfaceScene } from "./scene-lowering";
 import type { CanonicalCamera } from "./camera-source-owner";
+import type { LodGroupId } from "./lod-selection";
 
 type CanvasClientRect = Readonly<{
   height: number;
@@ -89,7 +90,7 @@ export class SurfacePicker {
     scene: CanonicalSurfaceScene,
     viewProjection: Mat4,
     rect: CanvasClientRect,
-    selectedLodLevels?: ReadonlyMap<string, number>,
+    selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
   ): PickResult | undefined {
     const ray = this.#canvasRay(input, scene.camera, viewProjection, rect);
     if (ray === undefined) return undefined;
