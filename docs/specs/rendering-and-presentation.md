@@ -77,8 +77,9 @@ remain on their single semantic pass because coverage or pass ordering cannot
 be reproduced by the position-only program, or because a second pass has no
 sound cost case. The depth pass writes no color and uses the same model,
 instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
-the later draw. Its program and shaders load only after the cold classifier
-admits the pass. The central state owner represents its color mask explicitly;
+the later draw. Its submission owner, programs, shaders, and batching scratch
+load only after the cold classifier admits the pass. The central state owner
+represents its color mask explicitly;
 no pass may inherit hidden GL state. Without multi-draw, the stable fallback is
 the existing front-to-back PBR pass rather than one extra JavaScript draw per
 surface.

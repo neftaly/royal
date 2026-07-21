@@ -54,9 +54,9 @@ import {
   type UnlitProgram,
 } from "./surface-program-owner";
 import type {
-  SurfaceDepthProgramOwner,
+  SurfaceDepthPrepassOwner,
   SurfaceDepthProgram,
-} from "./surface-depth-program-owner";
+} from "./surface-depth-prepass-owner";
 import {
   opaqueDepthPrepassRequested,
   surfaceCanUseOpaqueDepthPrepass,
@@ -99,6 +99,7 @@ import { planContiguousRunEnds } from "./contiguous-run-plan";
 import {
   surfacesShareMultiDrawState,
   surfacesShareDepthPrepassState,
+  type WebGlMultiDraw,
 } from "./surface-multi-draw";
 import {
   composeSurfaceTextureBindingsInto,
@@ -159,18 +160,6 @@ type GpuSurface = {
   readonly vertexArray: WebGLVertexArrayObject;
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
-
-type WebGlMultiDraw = Readonly<{
-  multiDrawElementsWEBGL: (
-    mode: number,
-    counts: Int32Array,
-    countsOffset: number,
-    type: number,
-    offsets: Int32Array,
-    offsetsOffset: number,
-    drawCount: number,
-  ) => void;
-}>;
 
 const SURFACE_UPLOADS_PER_FRAME = 16;
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
@@ -256,7 +245,7 @@ export class SurfaceGpuOwner {
   #depthPrepassActive = false;
   #depthProgramLoadGeneration = 0;
   #depthProgramLoadRequested = false;
-  #depthPrograms: SurfaceDepthProgramOwner | null = null;
+  #depthPrepassOwner: SurfaceDepthPrepassOwner | null = null;
   #depthPrepassRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #directionalLightCount = 0;
   #dirty = false;
@@ -345,8 +334,8 @@ export class SurfaceGpuOwner {
     this.#geometryGpu.dispose();
     this.#depthProgramLoadGeneration += 1;
     this.#depthProgramLoadRequested = false;
-    this.#depthPrograms?.dispose();
-    this.#depthPrograms = null;
+    this.#depthPrepassOwner?.dispose();
+    this.#depthPrepassOwner = null;
     this.#textureGpu.dispose();
     this.#programs.dispose();
     this.#compositeLoadGeneration += 1;
@@ -383,7 +372,7 @@ export class SurfaceGpuOwner {
     }
     this.#environmentGpu?.invalidate();
     this.#geometryGpu.invalidate();
-    this.#depthPrograms?.invalidate();
+    this.#depthPrepassOwner?.invalidate();
     this.#opaqueSurfaces = [];
     this.#depthPrepassRunEnds = EMPTY_RUN_ENDS;
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
@@ -768,31 +757,33 @@ export class SurfaceGpuOwner {
   #setDepthPrepassActive(surfaces: readonly CanonicalDrawSurface[]): void {
     const active = this.#multiDraw !== null && opaqueDepthPrepassRequested(surfaces);
     if (active === this.#depthPrepassActive) {
-      if (active && this.#depthPrograms === null) this.#requestDepthProgramOwner();
+      if (active && this.#depthPrepassOwner === null) this.#requestDepthPrepassOwner();
       return;
     }
     this.#depthPrepassActive = active;
     if (active) {
-      this.#requestDepthProgramOwner();
+      this.#requestDepthPrepassOwner();
       return;
     }
     if (this.#depthProgramLoadRequested) {
       this.#depthProgramLoadGeneration += 1;
       this.#depthProgramLoadRequested = false;
     }
-    this.#depthPrograms?.dispose();
-    this.#depthPrograms = null;
+    this.#depthPrepassOwner?.dispose();
+    this.#depthPrepassOwner = null;
   }
 
-  #requestDepthProgramOwner(): void {
-    if (this.#depthProgramLoadRequested || this.#depthPrograms !== null) return;
+  #requestDepthPrepassOwner(): void {
+    if (this.#depthProgramLoadRequested || this.#depthPrepassOwner !== null) return;
     this.#depthProgramLoadRequested = true;
     const generation = ++this.#depthProgramLoadGeneration;
-    void import("./surface-depth-program-owner").then(({ SurfaceDepthProgramOwner }) => {
+    void import("./surface-depth-prepass-owner").then(({ SurfaceDepthPrepassOwner }) => {
       if (generation !== this.#depthProgramLoadGeneration) return;
       this.#depthProgramLoadRequested = false;
       if (!this.#depthPrepassActive) return;
-      this.#depthPrograms = new SurfaceDepthProgramOwner(this.#gl);
+      const multiDraw = this.#multiDraw;
+      if (multiDraw === null) return;
+      this.#depthPrepassOwner = new SurfaceDepthPrepassOwner(this.#gl, multiDraw);
       this.#dirty = true;
       this.#fullReconcileRequired = true;
       this.#onChanged();
@@ -872,7 +863,15 @@ export class SurfaceGpuOwner {
         view,
       );
       if (this.#depthPrepassActive) {
-        this.#drawOpaqueDepthPrepass(frameView, state);
+        this.#depthPrepassOwner?.draw(
+          this.#drawFrame,
+          frameView.viewProjection,
+          this.#opaqueSurfaces,
+          this.#depthPrepassRunEnds,
+          this.#lodSelection.selections,
+          this.#compositeFramePlan.frustumPlanes,
+          state,
+        );
       }
     }
     const opaqueCount = this.#opaqueSurfaces.length;
@@ -1216,100 +1215,6 @@ export class SurfaceGpuOwner {
     }
   }
 
-  #drawOpaqueDepthPrepass(
-    frameView: SurfaceFrameView,
-    state: WebGlStateOwner,
-  ): void {
-    const gl = this.#gl;
-    let activeProgram: WebGLProgram | null = null;
-    let activeModel: Mat4 | null = null;
-    for (let index = 0; index < this.#opaqueSurfaces.length; index += 1) {
-      const resource = this.#opaqueSurfaces[index]!;
-      const packet = resource.depthPacket;
-      const program = resource.depthProgram;
-      if (
-        packet === null
-        || program === null
-        || !lodMembershipsSelected(resource.surface.lods, this.#lodSelection.selections)
-        || !worldBoundsVisible(
-          resource.surface.worldBounds,
-          this.#compositeFramePlan.frustumPlanes,
-        )
-      ) continue;
-      state.applySurfaceDraw(this.#drawFrame, packet);
-      if (activeProgram !== program.program) {
-        gl.uniformMatrix4fv(program.viewProjection, false, frameView.viewProjection);
-        activeProgram = program.program;
-        activeModel = null;
-      }
-      if (
-        activeModel === null
-        || (
-          activeModel !== resource.surface.model
-          && !mat4ValuesEqual(activeModel, resource.surface.model)
-        )
-      ) {
-        gl.uniformMatrix4fv(program.model, false, resource.surface.model);
-        activeModel = resource.surface.model;
-      }
-      if (
-        this.#multiDraw !== null
-        && resource.instanceCount === 0
-        && resource.geometry.indexOffset <= 0x7fff_ffff
-      ) {
-        this.#multiDrawCounts[0] = resource.geometry.indexCount;
-        this.#multiDrawOffsets[0] = resource.geometry.indexOffset;
-        let drawCount = 1;
-        const runEnd = this.#depthPrepassRunEnds[index] ?? index + 1;
-        let nextIndex = index + 1;
-        for (; nextIndex < runEnd; nextIndex += 1) {
-          const next = this.#opaqueSurfaces[nextIndex]!;
-          if (next.geometry.indexOffset > 0x7fff_ffff) break;
-          if (
-            lodMembershipsSelected(next.surface.lods, this.#lodSelection.selections)
-            && worldBoundsVisible(
-              next.surface.worldBounds,
-              this.#compositeFramePlan.frustumPlanes,
-            )
-          ) {
-            this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
-            this.#multiDrawOffsets[drawCount] = next.geometry.indexOffset;
-            drawCount += 1;
-          }
-        }
-        if (drawCount > 1) {
-          this.#multiDraw.multiDrawElementsWEBGL(
-            resource.mode,
-            this.#multiDrawCounts,
-            0,
-            resource.geometry.indexType,
-            this.#multiDrawOffsets,
-            0,
-            drawCount,
-          );
-          index = nextIndex - 1;
-          continue;
-        }
-      }
-      if (resource.instanceCount > 0) {
-        gl.drawElementsInstanced(
-          resource.mode,
-          resource.geometry.indexCount,
-          resource.geometry.indexType,
-          resource.geometry.indexOffset,
-          resource.instanceCount,
-        );
-      } else {
-        gl.drawElements(
-          resource.mode,
-          resource.geometry.indexCount,
-          resource.geometry.indexType,
-          resource.geometry.indexOffset,
-        );
-      }
-    }
-  }
-
   #retainOrdinaryTextureBindings(
     material: CanonicalSurfaceMaterial,
   ): readonly GpuTextureBinding[] {
@@ -1371,7 +1276,7 @@ export class SurfaceGpuOwner {
     );
     const depthProgram = this.#depthPrepassActive
       && surfaceCanUseOpaqueDepthPrepass(geometrySurface.surface)
-      ? this.#depthPrograms?.get(geometrySurface.instanceCount > 0) ?? null
+      ? this.#depthPrepassOwner?.get(geometrySurface.instanceCount > 0) ?? null
       : null;
     return {
       depthOrder: 0,

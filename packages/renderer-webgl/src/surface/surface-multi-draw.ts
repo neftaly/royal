@@ -6,6 +6,18 @@ import type {
 } from "../webgl/draw-state-transition";
 import type { CanonicalSurfaceMaterial } from "./canonical-material";
 
+export type WebGlMultiDraw = Readonly<{
+  multiDrawElementsWEBGL: (
+    mode: number,
+    counts: Int32Array,
+    countsOffset: number,
+    type: number,
+    offsets: Int32Array,
+    offsetsOffset: number,
+    drawCount: number,
+  ) => void;
+}>;
+
 /** Minimal retained draw state that can participate in one indexed multi-draw call. */
 export type SurfaceMultiDrawCandidate = Readonly<{
   drawPacket: SurfaceDrawPacket;
