@@ -32,6 +32,9 @@ versions identify source-level prerelease checkpoints in this repository.
   both constructor input and normalized public output.
 - Added an explicit scene-linear `tint` multiplier for textured standard and
   unlit materials, keeping solid `color` authoring unambiguous.
+- Added `sceneIndex` to glTF and glTF-instance descriptors and their focused
+  status identity, selecting one exact document scene before mesh, Draco, and
+  image inventory.
 - Moved pure orbit authoring helpers from the React runtime barrel to
   `@royal/react/scene`, alongside the rest of the pure scene vocabulary.
 - Removed browser-session test-port types and the scene-only `WorldPosition3`
@@ -65,6 +68,8 @@ versions identify source-level prerelease checkpoints in this repository.
 - Added a selectable glTF scene gallery for Sponza, A Beautiful Game, Virtual
   City, and Damaged Helmet, with source-pinned Khronos fixtures and browser
   smoke coverage for every entry.
+- Added a URL-backed selector for all three document scenes in the Bistro web
+  workload without copying or rewriting its source asset.
 - Corrected the synthetic WebXR layer's framebuffer contract and made fake-XR
   reports reject inactive or zero-frame sessions instead of presenting window
   RAF timing as XR evidence.

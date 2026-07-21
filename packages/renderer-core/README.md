@@ -42,6 +42,11 @@ descriptors: glTF and ordinary image references expose `src`; authored virtual
 textures expose `manifestUri` because that source is a JSON manifest. Pick
 targets likewise preserve the authored `pickingId` name.
 
+`gltf({ src, sceneIndex })` selects one exact zero-based document scene;
+omitting `sceneIndex` uses the glTF document default. The selected scene is part
+of asset/status identity, while shared source-derived mesh and image identities
+remain stable across selections.
+
 Textured standard and unlit materials accept an optional scene-linear `tint`
 multiplier. The name is deliberately distinct from the mutually exclusive
 solid `color` form. An authored `color` or `tint` alpha below one selects the

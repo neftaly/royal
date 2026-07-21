@@ -23,7 +23,7 @@ export type GltfTextureProgress = Readonly<{
   total: number;
 }>;
 
-/** Monotonic load milestones for one exact source/version claim. */
+/** Monotonic load milestones for one exact source/version/selected-scene claim. */
 export type GltfAssetTimings = Readonly<{
   /** Wall time spent reading the root `.gltf` or `.glb` source. */
   sourceReadDurationMs: number;
@@ -36,7 +36,7 @@ export type GltfAssetTimings = Readonly<{
 }>;
 
 /**
- * Focused lifecycle for one exact glTF source/version identity.
+ * Focused lifecycle for one exact glTF source/version/selected-scene identity.
  * `status` is the discriminant shared by every focused Royal lifecycle.
  * `streaming`, `ready`, and `degraded` all have drawable geometry. `streaming`
  * still has pending images; `degraded` finished with one or more image failures.

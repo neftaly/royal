@@ -159,7 +159,7 @@ export interface RendererRoot {
   flushInvalidated(): void;
   /** Stable getter for a cached, cold operational snapshot. */
   readonly getSnapshot: () => RendererRootSnapshot;
-  /** Stable getter for one exact source/version identity. */
+  /** Stable getter for one exact glTF source/version/selected-scene identity. */
   readonly getGltfAssetSnapshot: (asset: GltfAssetRef) => GltfAssetSnapshot;
   /** Stable getter for the current context lifecycle. */
   readonly getLifecycleSnapshot: () => RendererContextSnapshot;
@@ -185,7 +185,7 @@ export interface RendererRoot {
   setSize(input: CanvasSizeInput): void;
   /** Stable subscription function for broad operational snapshot changes. */
   readonly subscribe: (listener: () => void) => () => void;
-  /** Stable subscription function for one exact glTF source/version identity. */
+  /** Stable subscription for one exact glTF source/version/selected-scene identity. */
   readonly subscribeGltfAsset: (asset: GltfAssetRef, listener: () => void) => () => void;
   /** Stable subscription function for context lifecycle changes. */
   readonly subscribeLifecycle: (listener: () => void) => () => void;
@@ -650,7 +650,7 @@ export class CanvasRoot implements RendererRoot {
   /** Focused canvas-size snapshot for product observation. */
   getSizeSnapshot = (): ResolvedCanvasSize | null => this.#size;
 
-  /** Focused readiness for one exact source/version identity. */
+  /** Focused readiness for one exact glTF source/version/selected-scene identity. */
   getGltfAssetSnapshot = (asset: GltfAssetRef): GltfAssetSnapshot =>
     this.#gltfAssets.getSnapshot(asset);
 
@@ -787,7 +787,7 @@ export class CanvasRoot implements RendererRoot {
     return this.#sizeListeners.subscribe(listener);
   };
 
-  /** Subscribes only to one exact glTF source/version identity. */
+  /** Subscribes only to one exact glTF source/version/selected-scene identity. */
   subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) =>
     this.#gltfAssets.subscribe(asset, listener);
 

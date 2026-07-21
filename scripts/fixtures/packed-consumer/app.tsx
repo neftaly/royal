@@ -77,6 +77,7 @@ const model = gltf({
   materialVariant: 'Ruby',
   pickingGeometry,
   pickingId: 'hero',
+  sceneIndex: 2,
   src: '/model.gltf',
   version: 'model-sha256',
 });
@@ -108,6 +109,7 @@ const renderScene: Scene = scene({
       instances: transforms,
       pickingGeometry,
       pickingId: 'trees',
+      sceneIndex: 1,
       src: '/tree.glb',
     }),
     mesh({

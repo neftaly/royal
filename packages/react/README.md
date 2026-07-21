@@ -97,8 +97,9 @@ tooling; it updates for submitted frames and resource changes, so product UI
 should prefer the focused lifecycle, size, and asset-status hooks.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
-`useGltfAssetStatus(sourceOrAsset)` observes one exact asset without polling or
-waking for unrelated frames. Its `streaming`, `ready`, and `degraded` states all
+`useGltfAssetStatus(sourceOrAsset)` observes one exact source, version, and
+selected document scene without polling or waking for unrelated frames. Its
+`streaming`, `ready`, and `degraded` states all
 mean geometry is drawable; `status.textures` reports total, loading, ready, and
 failed images as progressive materials arrive. Those drawable states also
 report selected-scene `nodeCount`, `primitiveCount`, and `lightCount`, plus
