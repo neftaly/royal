@@ -6,6 +6,10 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isExpectedIpadDevTransportDiagnostic } from './ipad-benchmark-report-check.mjs';
+import {
+  resourceTimingBootstrapSource,
+  summarizeResourceTimings,
+} from './resource-timing-report.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../..');
@@ -50,6 +54,13 @@ const orientationTimeoutMs = numericOption(
   'orientation-timeout-ms',
   Number.parseInt(process.env.IPAD_BENCH_ORIENTATION_TIMEOUT_MS ?? '120000', 10),
 );
+const resourceTimingBufferSize = numericOption(
+  'resource-timings',
+  Number.parseInt(process.env.IPAD_BENCH_RESOURCE_TIMINGS ?? '10000', 10),
+);
+if (!Number.isInteger(resourceTimingBufferSize) || resourceTimingBufferSize < 1) {
+  throw new Error('--resource-timings must be a positive integer');
+}
 const host = optionValue('host', process.env.IPAD_BENCH_HOST);
 const appPort = numericOption('app-port', Number.parseInt(process.env.IPAD_BENCH_APP_PORT ?? '4673', 10));
 const outputDir = path.resolve(
@@ -364,6 +375,31 @@ const evaluate = async (client, targetId, expression, waitMs = timeoutMs) => {
   return response.result?.result?.value;
 };
 
+const captureResourceTimings = async (client, targetId) => {
+  const value = await evaluate(
+    client,
+    targetId,
+    `JSON.stringify({
+      bufferFullCount: globalThis.__royalIpadBenchmarkResourceTiming?.bufferFullCount ?? 0,
+      rows: performance.getEntriesByType('resource').map((entry) => ({
+        decodedBodySize: entry.decodedBodySize ?? 0,
+        duration: entry.duration,
+        encodedBodySize: entry.encodedBodySize ?? 0,
+        initiatorType: entry.initiatorType,
+        name: entry.name,
+        startTime: entry.startTime,
+        transferSize: entry.transferSize ?? 0
+      }))
+    })`,
+    30_000,
+  );
+  const capture = JSON.parse(value);
+  return summarizeResourceTimings(capture.rows, {
+    bufferFullCount: capture.bufferFullCount,
+    capacity: resourceTimingBufferSize,
+  });
+};
+
 const waitForNavigationCommit = async (client, targetId) => {
   const deadline = Date.now() + Math.min(timeoutMs, 15_000);
   let lastUrl;
@@ -666,11 +702,15 @@ const run = async () => {
   let report;
   let physicalOrientation;
   let canvasCapture;
+  let resourceTimings;
 
   try {
     await targetCommand(client, targetId, 'Console.enable');
     await targetCommand(client, targetId, 'Network.enable');
     await targetCommand(client, targetId, 'Runtime.enable');
+    await targetCommand(client, targetId, 'Page.setBootstrapScript', {
+      source: resourceTimingBootstrapSource(resourceTimingBufferSize),
+    });
     await targetCommand(client, targetId, 'Network.setResourceCachingDisabled', {
       disabled: coldCache,
     });
@@ -694,6 +734,7 @@ const run = async () => {
     await targetCommand(client, targetId, 'Page.navigate', { url });
     await waitForNavigationCommit(client, targetId);
     report = await waitForReport(client, targetId);
+    resourceTimings = await captureResourceTimings(client, targetId);
     if (report.source?.buildId !== expectedSource.buildId) {
       throw new Error(
         `iPad loaded Royal build ${String(report.source?.buildId)}, expected ${expectedSource.buildId}`,
@@ -763,6 +804,7 @@ const run = async () => {
       physicalOrientation,
       receivedAt: new Date().toISOString(),
       report,
+      resourceTimings,
     }, null, 2)}\n`);
     console.log(`Wrote ${outputPath}`);
     console.log(`mode=${cameraDrag ? 'camera-drag' : 'idle'} p95=${report.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms frames=${report.frameStats?.sampleCount ?? 0}/${report.frameStats?.requestedSampleCount ?? 0}`);
@@ -805,12 +847,19 @@ const run = async () => {
       page: parsedPage,
       progress: lastBenchmarkProgress,
       report,
+      resourceTimings,
       route,
     }, null, 2)}\n`);
     console.error(`Wrote ${outputPath}`);
     throw error;
   } finally {
     browserDiagnostics.close();
+    try {
+      await targetCommand(client, targetId, 'Page.setBootstrapScript');
+    } catch {
+      // The inspected page may have disappeared; closing the inspector target
+      // also clears its bootstrap script.
+    }
     client.close();
   }
 };
