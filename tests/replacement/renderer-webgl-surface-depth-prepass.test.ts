@@ -3,6 +3,7 @@ import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src
 import type { CanonicalDrawSurface } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import {
   opaqueDepthPrepassRequested,
+  planOpaqueDepthPrepass,
   surfaceCanUseOpaqueDepthPrepass,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass";
 import { SurfaceDepthPrepassOwner } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass-owner";
@@ -28,8 +29,9 @@ const surface = (
   topology?: "lines",
 ): CanonicalDrawSurface => ({
   material,
+  worldBounds: { max: [1, 1, 1], min: [-1, -1, -1] },
   ...(topology === undefined ? {} : { topology }),
-}) as CanonicalDrawSurface;
+}) as unknown as CanonicalDrawSurface;
 
 describe("opaque depth-prepass policy core", () => {
   it("keeps clip positions invariant across the depth and color programs", () => {
@@ -50,8 +52,28 @@ describe("opaque depth-prepass policy core", () => {
   });
 
   it("activates only after enough exact opaque triangle work can amortize a pass", () => {
-    expect(opaqueDepthPrepassRequested(Array.from({ length: 31 }, () => surface()))).toBe(false);
-    expect(opaqueDepthPrepassRequested(Array.from({ length: 32 }, () => surface()))).toBe(true);
+    const camera = [0, 0, 0];
+    expect(opaqueDepthPrepassRequested(
+      planOpaqueDepthPrepass(Array.from({ length: 31 }, () => surface())),
+      camera,
+    )).toBe(false);
+    expect(opaqueDepthPrepassRequested(
+      planOpaqueDepthPrepass(Array.from({ length: 32 }, () => surface())),
+      camera,
+    )).toBe(true);
+  });
+
+  it("avoids doubling draw work while the camera is outside the opaque volume", () => {
+    const plan = planOpaqueDepthPrepass(Array.from({ length: 32 }, () => surface()));
+    expect(opaqueDepthPrepassRequested(plan, [2, 0, 0])).toBe(false);
+    expect(opaqueDepthPrepassRequested(plan, [0, 0, 0])).toBe(true);
+  });
+
+  it("keeps an active plan across a small boundary crossing", () => {
+    const plan = planOpaqueDepthPrepass(Array.from({ length: 32 }, () => surface()));
+    expect(opaqueDepthPrepassRequested(plan, [1.04, 0, 0])).toBe(false);
+    expect(opaqueDepthPrepassRequested(plan, [1.04, 0, 0], true)).toBe(true);
+    expect(opaqueDepthPrepassRequested(plan, [1.11, 0, 0], true)).toBe(false);
   });
 
   it("excludes surfaces whose depth depends on coverage or later composition", () => {
@@ -72,6 +94,6 @@ describe("opaque depth-prepass policy core", () => {
       { length: 64 },
       () => surface(standard({ alphaCutoff: 0.5 })),
     );
-    expect(opaqueDepthPrepassRequested(excluded)).toBe(false);
+    expect(opaqueDepthPrepassRequested(planOpaqueDepthPrepass(excluded), [0, 0, 0])).toBe(false);
   });
 });

@@ -70,12 +70,15 @@ and MUST agree for opaque standard surfaces.
 
 A retained scene with at least 32 fully opaque standard triangle surfaces MAY
 run a position-only depth pass before PBR shading when exact-compatible
-`WEBGL_multi_draw` is available. This is a cold, GL-capability-and-scene
-classifier rather than a camera, route, asset-name, browser-name, or frame-time
-branch. Alpha mask, alpha blend, transmission, lines, and cheap unlit surfaces
-remain on their single semantic pass because coverage or pass ordering cannot
-be reproduced by the position-only program, or because a second pass has no
-sound cost case. The depth pass writes no color and uses the same model,
+`WEBGL_multi_draw` is available and the camera lies inside their aggregate
+world-space volume. The cold plan owns eligible count and bounds; one pure
+camera decision avoids doubling vertex work for outside views, with a 5% exit
+margin so boundary motion cannot repeatedly rebuild the pass. It is never a
+route, asset-name, browser-name, or frame-time branch. Alpha mask, alpha blend,
+transmission, lines, and cheap unlit surfaces remain on their single semantic
+pass because coverage or pass ordering cannot be reproduced by the
+position-only program, or because a second pass has no sound cost case. The
+depth pass writes no color and uses the same model,
 instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
 the later draw. Both vertex programs MUST declare `gl_Position` invariant so
 driver optimization cannot make the position-only pass self-occlude the color
@@ -87,12 +90,13 @@ the existing front-to-back PBR pass rather than one extra JavaScript draw per
 surface.
 
 Clean exact-build Safari 17.14 evidence at commit `df631f9c` validates the
-classifier's intended cost case. Full-DPR Sponza camera motion fell from the
-preceding clean 30.3 ms average / 38 ms p95 to 16.5 / 19 ms over 120 samples.
-The larger Bistro case improved from 21.8 / 24 ms to 20.25 / 22 ms over 60
-samples rather than regressing under the extra vertex work. Sponza therefore
-reaches a 60 Hz mean cadence on that physical iPad, though its 19 ms p95 is not
-a claim of sustained 60 Hz and Quest remains separately unproven.
+inside-volume cost case. Full-DPR Sponza camera motion fell from the preceding
+clean 30.3 ms average / 38 ms p95 to 16.5 / 19 ms over 120 samples. A later
+controlled removal reached 39 ms p95, while the camera-volume plan restored the
+pass and reached a 17 ms median / 23 ms p95 with the same ~1.2 ms callback cost.
+Conversely, the normalized Bistro Exterior camera remains outside the opaque
+volume, so the plan keeps its 147-draw single path instead of inferring hidden
+fragment savings from 146 scene primitives. Quest remains separately unproven.
 
 Exact clean commit `cc9a749e` confirms the invariant-position correction on
 physical Safari 17.14 after the original self-occlusion was reproduced. The

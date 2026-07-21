@@ -345,11 +345,14 @@ Encoding never excuses an unbounded or serial runtime pipeline.
 
 Opaque depth prepass admission is also a resource trade, not a universal
 "optimization." Royal admits it only for a sufficiently large retained set of
-expensive, coverage-independent PBR draws and only when compatible draws can be
-amortized through multi-draw. It adds vertex submissions and a tiny retained
-program to reject hidden full-PBR fragments; it does not allocate another
-framebuffer, duplicate geometry, change authored coverage, or add a public
-mode. Cheap unlit work and coverage-dependent materials stay single-pass.
+expensive, coverage-independent PBR draws, while the camera remains inside
+their aggregate volume, and only when compatible draws can be amortized through
+multi-draw. A retained cold plan makes the frame decision allocation-free and a
+5% exit margin prevents boundary thrash. It adds vertex submissions and a tiny
+retained program to reject hidden full-PBR fragments; it does not allocate
+another framebuffer, duplicate geometry, change authored coverage, or add a
+public mode. Cheap unlit work, outside views, and coverage-dependent materials
+stay single-pass.
 
 For selected-scene Draco workloads, container reads and multi-buffer packing
 first converge on one canonical source. Only primitives reachable through the

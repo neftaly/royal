@@ -59,6 +59,7 @@ import type {
 } from "./surface-depth-prepass-owner";
 import {
   opaqueDepthPrepassRequested,
+  planOpaqueDepthPrepass,
   surfaceCanUseOpaqueDepthPrepass,
 } from "./surface-depth-prepass";
 import {
@@ -250,6 +251,7 @@ export class SurfaceGpuOwner {
     viewport: this.#compositeViewport,
   };
   #depthPrepassActive = false;
+  #depthPrepassPlan = planOpaqueDepthPrepass([]);
   #depthProgramLoadGeneration = 0;
   #depthProgramLoadRequested = false;
   #depthPrepassOwner: SurfaceDepthPrepassOwner | null = null;
@@ -395,7 +397,7 @@ export class SurfaceGpuOwner {
     this.#compositeGpu?.invalidate();
     this.#virtualTexture?.invalidate();
     this.#multiDraw = this.#readMultiDraw();
-    this.#setDepthPrepassActive(this.#scene?.surfaces ?? []);
+    this.#setDepthPrepassActive(this.#scene?.camera.position ?? this.#cameraPosition);
     this.#fullReconcileRequired = true;
     this.#admittedSurfaceCount = 0;
     this.#dirty = this.#scene !== null;
@@ -496,7 +498,8 @@ export class SurfaceGpuOwner {
       this.#admittedSurfaceCount,
     );
     this.#scene = scene;
-    this.#setDepthPrepassActive(scene?.surfaces ?? []);
+    this.#depthPrepassPlan = planOpaqueDepthPrepass(scene?.surfaces ?? []);
+    this.#setDepthPrepassActive(scene?.camera.position ?? this.#cameraPosition);
     this.#instanceTransformsPending = false;
     this.#compositeGpu?.resetAdmission();
     this.#terminalPresentationEligible = scene !== null
@@ -551,7 +554,6 @@ export class SurfaceGpuOwner {
       return;
     }
     this.#scene = scene;
-    this.#setDepthPrepassActive(scene.surfaces);
     this.#terminalPresentationEligible = scene.surfaces.every(
       (surface) => surface.material.kind === "standard",
     );
@@ -565,6 +567,7 @@ export class SurfaceGpuOwner {
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
+    this.#depthPrepassPlan = planOpaqueDepthPrepass(this.#scene.surfaces);
     this.#dirty = true;
     if (
       this.#gpuScene !== this.#scene
@@ -587,6 +590,10 @@ export class SurfaceGpuOwner {
     clearColor: LinearRgba,
   ): boolean {
     const scene = this.#scene;
+    if (scene !== null && views.length !== 0) {
+      cameraWorldPositionFromViewInto(this.#cameraPosition, views[0]!.view);
+      this.#setDepthPrepassActive(this.#cameraPosition);
+    }
     planCompositeFrameInto(
       scene?.surfaces ?? [],
       views,
@@ -795,17 +802,27 @@ export class SurfaceGpuOwner {
     });
   }
 
-  #setDepthPrepassActive(surfaces: readonly CanonicalDrawSurface[]): void {
-    const active = this.#multiDraw !== null && opaqueDepthPrepassRequested(surfaces);
+  #setDepthPrepassActive(cameraPosition: ArrayLike<number>): void {
+    const active = this.#multiDraw !== null
+      && opaqueDepthPrepassRequested(
+        this.#depthPrepassPlan,
+        cameraPosition,
+        this.#depthPrepassActive,
+      );
     if (active === this.#depthPrepassActive) {
       if (active && this.#depthPrepassOwner === null) this.#requestDepthPrepassOwner();
       return;
     }
     this.#depthPrepassActive = active;
     if (active) {
-      this.#requestDepthPrepassOwner();
+      if (this.#depthPrepassOwner === null) this.#requestDepthPrepassOwner();
+      else {
+        this.#dirty = true;
+        this.#fullReconcileRequired = true;
+      }
       return;
     }
+    if (this.#multiDraw !== null && this.#depthPrepassPlan.candidateCount >= 32) return;
     if (this.#depthProgramLoadRequested) {
       this.#depthProgramLoadGeneration += 1;
       this.#depthProgramLoadRequested = false;
