@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -121,6 +122,14 @@ SwapFree:         900000 kB
 });
 
 describe("Quest telemetry command contract", () => {
+  it("keeps the documented Quest commands executable from the repository root", () => {
+    const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(manifest.scripts?.["quest:browser"]).toBe("node scripts/quest-browser-control.mjs");
+    expect(manifest.scripts?.["quest:telemetry"]).toBe("node scripts/quest-telemetry.ts");
+  });
+
   it("keeps the wrapped command opaque and resolves only the sidecar path", () => {
     const options = parseRecordArgs([
       "record",

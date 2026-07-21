@@ -25,6 +25,8 @@
     "check:package-imports": "node scripts/package-import-smoke.mjs",
     "dev": "pnpm --filter @royal/examples-react dev",
     "lint": "pnpm -r --if-present lint",
+    "quest:browser": "node scripts/quest-browser-control.mjs",
+    "quest:telemetry": "node scripts/quest-telemetry.ts",
     "test": "vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts tests/tooling/*.test.mjs apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest",
     "typecheck": "tsc"
   },
