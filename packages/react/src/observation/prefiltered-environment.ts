@@ -8,7 +8,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 /** Focused transport/preparation lifecycle for one offline environment artifact. */
@@ -51,7 +51,7 @@ const validateInput = (input: PrefilteredEnvironmentStatusInput): void => {
 /** Observes one offline environment source/version without frame-wide subscriptions. */
 export const usePrefilteredEnvironmentStatus = (
   input: PrefilteredEnvironmentStatusInput,
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): PrefilteredEnvironmentStatus => {
   const root = selectObservedRoot(
     useOptionalCanvasRoot(),

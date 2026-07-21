@@ -5,7 +5,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 /** Only descriptor fields that participate in authored VT identity and representation. */
@@ -58,7 +58,7 @@ const inputDescriptor = (
 /** Observes manifest readiness and bounded page residency without frame-wide polling. */
 export const useVirtualTextureAssetStatus = (
   input: VirtualTextureAssetStatusInput,
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): VirtualTextureAssetStatus => {
   const root = selectObservedRoot(
     useOptionalCanvasRoot(),

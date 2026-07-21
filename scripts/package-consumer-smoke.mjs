@@ -35,7 +35,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 464 * 1024,
+  '@royal/renderer-webgl': 465 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(

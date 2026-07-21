@@ -88,7 +88,7 @@ raster or SVG textures should use Royal's progressive VT representation. It is
 a root policy rather than a material flag, and SVG remains vector-backed while
 requested pages are rasterized.
 
-Focused hooks use one placement rule: call them under `Canvas`, or pass
+Root-consuming hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents
 pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake for
 unrelated frames. `useInvalidate()` requests one coalesced frame.

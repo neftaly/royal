@@ -18,7 +18,7 @@ export type { CanvasSize } from "./observation/canvas-size";
 export { useRendererLifecycle } from "./observation/renderer-lifecycle";
 export type { RendererLifecycleSnapshot } from "./observation/renderer-lifecycle";
 export { useRendererSnapshot } from "./observation/renderer-snapshot";
-export type { RendererObservationOptions } from "./observation/select-root";
+export type { RendererHookOptions } from "./observation/select-root";
 export { useGltfAssetStatus } from "./observation/gltf-asset";
 export type {
   GltfAssetStatus,

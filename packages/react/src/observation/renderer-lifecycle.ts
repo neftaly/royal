@@ -3,7 +3,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { useLifecycleSnapshot } from "./root-snapshot";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 /** Focused renderer lifecycle using the same `status` discriminant as asset and XR status. */
@@ -32,7 +32,7 @@ const UNAVAILABLE: RendererLifecycleSnapshot = {
 
 /** Observes renderer availability without polling or subscribing to unrelated state. */
 export const useRendererLifecycle = (
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): RendererLifecycleSnapshot => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useRendererLifecycle");
   const context = useLifecycleSnapshot(root);

@@ -169,7 +169,7 @@ They do not require React state updates per frame.
 Every focused React observation hook follows one placement model:
 
 ```ts
-interface RendererObservationOptions {
+interface RendererHookOptions {
   readonly root: RendererRoot | null;
 }
 ```
@@ -177,7 +177,9 @@ interface RendererObservationOptions {
 Inside `Canvas`, omit options and use context. In a parent that receives
 `Canvas.rendererRef`, pass `{ root }`. `null` represents the legitimate
 pre-mount state. This applies consistently to canvas size, glTF status, texture
-status, renderer lifecycle, and renderer diagnostics.
+status, renderer lifecycle, renderer diagnostics, exact picking, and explicit
+invalidation. `useCanvasElement` and `useCanvasRoot` are direct context accessors
+and therefore remain intentionally Canvas-only.
 
 `useRendererSnapshot()` is the broad React diagnostics subscription. It returns
 `undefined` before mount, accepts the same optional `{ root }`, and may wake for

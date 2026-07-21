@@ -31,8 +31,10 @@ import {
   type GltfAssetStatusIdentity,
   type GltfAssetStatusInput,
   useGltfAssetStatus,
+  useInvalidate,
   type PrefilteredEnvironmentStatusIdentity,
   type PrefilteredEnvironmentStatusInput,
+  type RendererHookOptions,
   type TextureAssetStatusIdentity,
   type TextureAssetStatusInput,
   useTextureAssetStatus,
@@ -177,6 +179,8 @@ describe("replacement React public API", () => {
     expectTypeOf(useOrbitCamera).toBeFunction();
     expectTypeOf(useOrbitCameraView).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
+    expectTypeOf(useInvalidate).toBeFunction();
+    expectTypeOf({ root: null }).toMatchTypeOf<RendererHookOptions>();
     expectTypeOf(useRendererLifecycle).toBeFunction();
     expectTypeOf(useRendererSnapshot).toBeFunction();
     expectTypeOf({ sceneIndex: 1, src: "/model.glb", version: 2 })
@@ -448,6 +452,24 @@ describe("replacement React public API", () => {
     expect(() => selectObservedRoot(undefined, undefined, "useThing")).toThrow(
       "useThing must be used inside <Canvas> or receive { root }",
     );
+  });
+
+  it("lets parent-owned controls pick and invalidate through the same explicit root option", () => {
+    const invalidate = vi.fn();
+    const pick = vi.fn(() => undefined);
+    const root = { invalidate, pick } as unknown as RendererRoot;
+    const Controls = () => {
+      const invalidateRoot = useInvalidate({ root });
+      const pickRoot = useCanvasPick({ root });
+      invalidateRoot();
+      pickRoot({ clientX: 12, clientY: 34 });
+      return null;
+    };
+
+    renderToStaticMarkup(createElement(Controls));
+
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(pick).toHaveBeenCalledWith({ clientX: 12, clientY: 34 });
   });
 
   it("observes canvas size without forcing layout and reuses it for DPR changes", () => {

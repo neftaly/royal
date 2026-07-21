@@ -3,7 +3,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { useSizeSnapshot } from "./root-snapshot";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 export type CanvasSize = Readonly<{
@@ -25,7 +25,7 @@ export type CanvasSize = Readonly<{
 
 /** Observes the current CSS and backing dimensions; zero-area/pre-mount returns undefined. */
 export const useCanvasSize = (
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): CanvasSize | undefined => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useCanvasSize");
   const size = useSizeSnapshot(root);

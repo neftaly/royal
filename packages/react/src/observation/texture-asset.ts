@@ -5,7 +5,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 /** Only descriptor fields that participate in decoded ordinary-texture identity. */
@@ -50,7 +50,7 @@ const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {
 /** Observes one decoded content/version identity without polling or frame-wide subscriptions. */
 export const useTextureAssetStatus = (
   input: TextureAssetStatusInput,
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): TextureAssetStatus => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useTextureAssetStatus");
   validateInput(input);

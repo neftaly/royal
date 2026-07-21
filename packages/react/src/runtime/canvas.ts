@@ -20,8 +20,12 @@ import {
 import {
   CanvasElementContext,
   CanvasRootContext,
-  useCanvasRoot,
+  useOptionalCanvasRoot,
 } from "./canvas-context";
+import {
+  selectObservedRoot,
+  type RendererHookOptions,
+} from "../observation/select-root";
 import { createCanvasPointerInteractionState } from "../interaction/canvas-pointer-interaction";
 import {
   attachCanvasPointerEventHandlers,
@@ -170,14 +174,16 @@ export const observeCanvasSize = (
 export { useCanvasElement, useCanvasRoot } from "./canvas-context";
 
 /** Requests one coalesced frame from the surrounding Canvas. */
-export const useInvalidate = (): (() => void) => {
-  const root = useCanvasRoot();
+export const useInvalidate = (options?: RendererHookOptions): (() => void) => {
+  const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useInvalidate");
   return useCallback(() => root?.invalidate(), [root]);
 };
 
-/** Returns the Canvas root's exact picker; pre-mount calls have no hit. */
-export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
-  const root = useCanvasRoot();
+/** Returns the selected root's exact picker; pre-mount calls have no hit. */
+export const useCanvasPick = (
+  options?: RendererHookOptions,
+): ((input: PickInput) => PickResult | undefined) => {
+  const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useCanvasPick");
   return useCallback((input: PickInput) => root?.pick(input), [root]);
 };
 

@@ -1,9 +1,10 @@
 import type { RendererRoot } from "@royal/renderer-webgl";
 import { recordWithAllowedFields } from "../validation";
 
-const OBSERVATION_OPTION_FIELDS = ["root"] as const;
+const HOOK_OPTION_FIELDS = ["root"] as const;
 
-export interface RendererObservationOptions {
+/** Selects an explicit root when a Royal hook is used outside its Canvas. */
+export interface RendererHookOptions {
   /** Root received from `Canvas.rendererRef`; `null` represents pre-mount. */
   readonly root: RendererRoot | null;
 }
@@ -11,13 +12,13 @@ export interface RendererObservationOptions {
 /** @internal Resolves the one consistent context-or-explicit-root placement model. */
 export const selectObservedRoot = (
   contextRoot: RendererRoot | null | undefined,
-  options: RendererObservationOptions | undefined,
+  options: RendererHookOptions | undefined,
   hookName: string,
 ): RendererRoot | null => {
   if (options !== undefined) {
     const record = recordWithAllowedFields(
       options,
-      OBSERVATION_OPTION_FIELDS,
+      HOOK_OPTION_FIELDS,
       `${hookName} options`,
       "option",
     );

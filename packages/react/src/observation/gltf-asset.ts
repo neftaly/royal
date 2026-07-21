@@ -5,7 +5,7 @@ import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 /** Only fields that participate in glTF loading/status identity. */
@@ -37,7 +37,7 @@ const resolveInput = (input: GltfAssetStatusInput): GltfAssetRef => {
 /** Observes one exact source/version/scene selection without polling renderer frames. */
 export const useGltfAssetStatus = (
   input: GltfAssetStatusInput,
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): GltfAssetStatus => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useGltfAssetStatus");
   validateInputShape(input);

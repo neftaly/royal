@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import {
   selectObservedRoot,
-  type RendererObservationOptions,
+  type RendererHookOptions,
 } from "./select-root";
 
 const subscribeUnavailable = (): (() => void) => () => undefined;
@@ -16,7 +16,7 @@ const getUnavailable = (): undefined => undefined;
  * UI should prefer the focused lifecycle, size, and asset-status hooks.
  */
 export const useRendererSnapshot = (
-  options?: RendererObservationOptions,
+  options?: RendererHookOptions,
 ): RendererRootSnapshot | undefined => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useRendererSnapshot");
   const subscribe = useCallback(
