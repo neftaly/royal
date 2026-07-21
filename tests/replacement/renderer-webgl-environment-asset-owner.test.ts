@@ -37,18 +37,18 @@ describe("prefiltered environment asset owner", () => {
     const secondEnvironment = prefilteredEnvironment({ src: "/second.ktx" });
     const firstStates: string[] = [];
     owner.subscribe(firstEnvironment, () => {
-      firstStates.push(owner.getSnapshot(firstEnvironment).state);
+      firstStates.push(owner.getSnapshot(firstEnvironment).status);
     });
     owner.subscribe(secondEnvironment, () => { throw new Error("listener failure"); });
 
     owner.reconcile(firstEnvironment);
-    expect(owner.getSnapshot(firstEnvironment)).toEqual({ state: "loading" });
+    expect(owner.getSnapshot(firstEnvironment)).toEqual({ status: "loading" });
     owner.reconcile(secondEnvironment);
     expect(requests[0]!.signal.aborted).toBe(true);
     await waitFor(() => expect(owner.getSnapshot(secondEnvironment)).toMatchObject({
       mipCount: 2,
       size: 2,
-      state: "ready",
+      status: "ready",
     }));
     expect(owner.prepared(secondEnvironment)?.source.byteLength).toBeGreaterThan(0);
     expect(onAssetChanged).toHaveBeenCalledOnce();
@@ -57,7 +57,7 @@ describe("prefiltered environment asset owner", () => {
 
     resolveFirst?.(environmentKtx1Fixture(1).source);
     await Promise.resolve();
-    expect(owner.getSnapshot(firstEnvironment)).toEqual({ state: "idle" });
+    expect(owner.getSnapshot(firstEnvironment)).toEqual({ status: "idle" });
     owner.dispose();
     expect(requests[1]!.signal.aborted).toBe(true);
   });
@@ -75,7 +75,7 @@ describe("prefiltered environment asset owner", () => {
 
     await waitFor(() => expect(owner.getSnapshot(environment)).toMatchObject({
       error: expect.stringMatching(/truncated/u),
-      state: "error",
+      status: "error",
     }));
     expect(onAssetChanged).not.toHaveBeenCalled();
   });

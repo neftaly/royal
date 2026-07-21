@@ -51,7 +51,7 @@ describe('current benchmark glTF adapter', () => {
       lightCount: 4,
       nodeCount: 397,
       primitiveCount: 381,
-      state: 'streaming',
+      status: 'streaming',
       timings: {
         externalResourceReadDurationMs: 70,
         preparationDurationMs: 250,
@@ -84,7 +84,7 @@ describe('current benchmark glTF adapter', () => {
       lightCount: 4,
       nodeCount: 397,
       primitiveCount: 381,
-      state: 'degraded',
+      status: 'degraded',
       timings: {
         externalResourceReadDurationMs: 70,
         imagesCompleteAfterMs: 1_200,
@@ -109,13 +109,13 @@ describe('current benchmark VT adapter', () => {
       failedPages: 0,
       pendingPages: 0,
       residentPages: 0,
-      state: 'idle',
+      status: 'idle',
     })?.manifestRequests).toBe(0);
     expect(benchmarkVirtualTextureDiagnostics({
       failedPages: 2,
       pendingPages: 3,
       residentPages: 17,
-      state: 'ready',
+      status: 'ready',
     })).toEqual({
       failedPages: 2,
       manifestFailures: 0,

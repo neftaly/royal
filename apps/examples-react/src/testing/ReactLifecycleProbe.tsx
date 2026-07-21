@@ -69,10 +69,10 @@ const RendererObserverProbe = (): ReactNode => {
   const lifecycle = useRendererLifecycle();
   return (
     <output
-      data-probe-asset-state={asset.state}
-      data-probe-lifecycle-state={lifecycle.state}
+      data-probe-asset-status={asset.status}
+      data-probe-lifecycle-status={lifecycle.status}
     >
-      {lifecycle.state}/{asset.state}
+      {lifecycle.status}/{asset.status}
     </output>
   );
 };

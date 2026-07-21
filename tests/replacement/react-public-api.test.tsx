@@ -16,6 +16,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as reactApi from "../../packages/react/src/index";
 import * as sceneApi from "../../packages/react/src/scene";
+import * as xrApi from "../../packages/react/src/xr";
 import {
   Canvas,
   createOrbitCameraController,
@@ -64,8 +65,75 @@ const emptyScene = {
 } as unknown as Scene;
 
 describe("replacement React public API", () => {
+  it("keeps runtime entrypoints narrow and ownership-oriented", () => {
+    expect(Object.keys(reactApi).sort()).toEqual([
+      "Canvas",
+      "GltfOrbitCameraFit",
+      "OrbitControls",
+      "createOrbitCameraController",
+      "createOrbitControls",
+      "createRendererRoot",
+      "resolveRendererRootOptions",
+      "useCanvasElement",
+      "useCanvasPick",
+      "useCanvasRoot",
+      "useCanvasSize",
+      "useGltfAssetStatus",
+      "useInvalidate",
+      "useOrbitCamera",
+      "useOrbitCameraView",
+      "usePrefilteredEnvironmentStatus",
+      "useRendererLifecycle",
+      "useRendererSnapshot",
+      "useTextureAssetStatus",
+      "useVirtualTextureAssetStatus",
+    ]);
+    expect(Object.keys(sceneApi).sort()).toEqual([
+      "boxGeometry",
+      "clampOrbitCameraView",
+      "createCameraViewResource",
+      "createGltfInstanceTransforms",
+      "directionalLight",
+      "fitOrbitCameraView",
+      "gltf",
+      "gltfInstances",
+      "imageTexture",
+      "linearRgbaFromSrgb",
+      "mesh",
+      "metresPerWorldUnit",
+      "orbitCameraBasis",
+      "orbitCameraTransform",
+      "orbitPerspectiveCamera",
+      "orthographicCamera",
+      "panOrbitCameraView",
+      "perspectiveCamera",
+      "planeGeometry",
+      "pointLight",
+      "prefilteredEnvironment",
+      "resolveOrbitCameraView",
+      "rotateOrbitCameraView",
+      "royalCoordinateConvention",
+      "scene",
+      "solidTexture",
+      "spotLight",
+      "standardMaterial",
+      "studioEnvironment",
+      "textureAsset",
+      "transformGltfAssetBounds",
+      "triangleGeometry",
+      "unlitMaterial",
+      "virtualTexture",
+      "wireframeMaterial",
+      "zoomOrbitCameraView",
+    ]);
+    expect(Object.keys(xrApi).sort()).toEqual([
+      "createXrSessionController",
+      "useXrSession",
+    ]);
+  });
+
   it("server-renders an ordinary canvas with stable pre-mount observation", () => {
-    const Status = () => createElement("output", null, useRendererLifecycle().state);
+    const Status = () => createElement("output", null, useRendererLifecycle().status);
     const html = renderToStaticMarkup(createElement(
       Canvas,
       { "aria-label": "preview", scene: emptyScene },
@@ -173,7 +241,7 @@ describe("replacement React public API", () => {
   });
 
   it("server-renders exact glTF status as idle before root mount", () => {
-    const Status = () => createElement("output", null, useGltfAssetStatus("/model.glb").state);
+    const Status = () => createElement("output", null, useGltfAssetStatus("/model.glb").status);
     const html = renderToStaticMarkup(createElement(
       Canvas,
       { scene: emptyScene },
@@ -186,7 +254,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      useVirtualTextureAssetStatus("/map.vt.json").state,
+      useVirtualTextureAssetStatus("/map.vt.json").status,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -198,9 +266,9 @@ describe("replacement React public API", () => {
 
   it("accepts plain texture and virtual-texture status identities", () => {
     const Status = () => createElement("output", null,
-      useTextureAssetStatus({ src: "/texture.png", version: 2 }).state,
+      useTextureAssetStatus({ src: "/texture.png", version: 2 }).status,
       ":",
-      useVirtualTextureAssetStatus({ manifestUri: "/map.vt.json", version: 2 }).state,
+      useVirtualTextureAssetStatus({ manifestUri: "/map.vt.json", version: 2 }).status,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -215,7 +283,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).state,
+      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).status,
     );
     expect(() => renderToStaticMarkup(createElement(
       Canvas,
@@ -229,7 +297,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).state,
+      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).status,
     );
     expect(() => renderToStaticMarkup(createElement(
       Canvas,
@@ -243,7 +311,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      usePrefilteredEnvironmentStatus(environment).state,
+      usePrefilteredEnvironmentStatus(environment).status,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -257,7 +325,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement(
       "output",
       null,
-      usePrefilteredEnvironmentStatus("/studio.ktx").state,
+      usePrefilteredEnvironmentStatus("/studio.ktx").status,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -271,7 +339,7 @@ describe("replacement React public API", () => {
     const Status = () => createElement("output", null, useTextureAssetStatus({
       contentKey: "",
       src: "/texture.png",
-    }).state);
+    }).status);
     expect(() => renderToStaticMarkup(createElement(
       Canvas,
       { scene: emptyScene },
@@ -281,7 +349,7 @@ describe("replacement React public API", () => {
 
   it("exposes one predictable error field for failed and unsupported VT", () => {
     const message = (status: VirtualTextureAssetStatus): string | undefined =>
-      status.state === "error" || status.state === "unsupported"
+      status.status === "error" || status.status === "unsupported"
         ? status.error
         : undefined;
     expect(message({
@@ -289,13 +357,13 @@ describe("replacement React public API", () => {
       failedPages: 0,
       pendingPages: 0,
       residentPages: 0,
-      state: "unsupported",
+      status: "unsupported",
     })).toBe("atlas is too large");
     expect(message({
       failedPages: 0,
       pendingPages: 0,
       residentPages: 2,
-      state: "ready",
+      status: "ready",
     })).toBeUndefined();
   });
 

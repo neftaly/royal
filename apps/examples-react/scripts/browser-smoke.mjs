@@ -232,8 +232,8 @@ const smokeExpression = `
         };
       })() : undefined,
       prefilteredEnvironmentState: document
-        .querySelector('[data-prefiltered-environment-state]')
-        ?.getAttribute('data-prefiltered-environment-state'),
+        .querySelector('[data-prefiltered-environment-status]')
+        ?.getAttribute('data-prefiltered-environment-status'),
       renderer: ${rendererSnapshotExpression},
       resources: performance.getEntriesByType('resource')
         .slice(-20)
@@ -1506,8 +1506,8 @@ const runReactLifecycleSmoke = async (session) => {
       canvasReplaced: document.querySelector('canvas') !== initialCanvas,
       current: safeSnapshot(globalThis[snapshotKey]),
       errorBoundary: document.querySelector('[data-probe-error]')?.textContent,
-      observerAsset: document.querySelector('[data-probe-lifecycle-state]')?.getAttribute('data-probe-asset-state'),
-      observerLifecycle: document.querySelector('[data-probe-lifecycle-state]')?.getAttribute('data-probe-lifecycle-state'),
+      observerAsset: document.querySelector('[data-probe-lifecycle-status]')?.getAttribute('data-probe-asset-status'),
+      observerLifecycle: document.querySelector('[data-probe-lifecycle-status]')?.getAttribute('data-probe-lifecycle-status'),
       readerReplaced: globalThis[snapshotKey] !== initialReader,
     },
   };
@@ -1565,11 +1565,11 @@ const runReactLifecycleSmoke = async (session) => {
     const snapshot = safeSnapshot(remountedReader);
     return (snapshot?.frame ?? 0) > 0 ? snapshot : undefined;
   });
-  const remountedObserver = document.querySelector('[data-probe-lifecycle-state]');
+  const remountedObserver = document.querySelector('[data-probe-lifecycle-status]');
   const remountedObserverState = remountedObserver instanceof HTMLElement
     ? {
-      asset: remountedObserver.dataset.probeAssetState,
-      lifecycle: remountedObserver.dataset.probeLifecycleState,
+      asset: remountedObserver.dataset.probeAssetStatus,
+      lifecycle: remountedObserver.dataset.probeLifecycleStatus,
     }
     : null;
   if (remountedSnapshot === undefined) return { error: 'remounted Canvas did not produce a frame' };
@@ -1594,13 +1594,13 @@ const runReactLifecycleSmoke = async (session) => {
   });
   if (typeof recoveredReader !== 'function') return { error: 'ErrorBoundary reset did not create a fresh renderer root' };
   const recoveredObserver = await waitFor(() => {
-    const output = document.querySelector('[data-probe-lifecycle-state]');
+    const output = document.querySelector('[data-probe-lifecycle-status]');
     return output instanceof HTMLElement
-      && output.dataset.probeLifecycleState === 'available'
-      && output.dataset.probeAssetState === 'idle'
+      && output.dataset.probeLifecycleStatus === 'available'
+      && output.dataset.probeAssetStatus === 'idle'
       ? {
-        asset: output.dataset.probeAssetState,
-        lifecycle: output.dataset.probeLifecycleState,
+        asset: output.dataset.probeAssetStatus,
+        lifecycle: output.dataset.probeLifecycleStatus,
       }
       : undefined;
   });

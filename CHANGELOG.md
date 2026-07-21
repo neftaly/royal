@@ -7,6 +7,8 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Public API
 
+- Standardized every focused lifecycle union on the `status` discriminator,
+  matching XR and removing the former `FooStatus.state` naming mismatch.
 - Renamed the authored descriptor types to `Scene`, `SceneNode`, and
   `SceneToneMapping`, avoiding confusion with the imperative renderer root.
 - Changed `createOrbitCameraController` to one options object and exposed its

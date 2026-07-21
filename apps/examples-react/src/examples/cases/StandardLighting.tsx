@@ -23,7 +23,7 @@ import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcas
 
 const EnvironmentStatus = (): ReactNode => {
   const status = usePrefilteredEnvironmentStatus(browserProofPrefilteredEnvironment);
-  return <output data-prefiltered-environment-state={status.state}>Environment: {status.state}</output>;
+  return <output data-prefiltered-environment-status={status.status}>Environment: {status.status}</output>;
 };
 
 export const StandardLighting = (): ReactNode => {

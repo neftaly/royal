@@ -36,7 +36,7 @@ const pointerEvents: ScenePointerEvents = {
 function Status() {
   const lifecycle = useRendererLifecycle();
   const size = useCanvasSize();
-  return <output>{lifecycle.state}: {size?.cssWidth ?? 0} CSS px</output>;
+  return <output>{lifecycle.status}: {size?.cssWidth ?? 0} CSS px</output>;
 }
 
 export function App() {
@@ -145,7 +145,7 @@ const environment = prefilteredEnvironment({
 
 function EnvironmentStatus() {
   const status = usePrefilteredEnvironmentStatus(environment);
-  return <output>{status.state}</output>;
+  return <output>{status.status}</output>;
 }
 
 const renderScene = scene({ camera, environment, nodes });

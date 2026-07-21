@@ -15,7 +15,7 @@ export type GltfAssetStatusInput = string | GltfAssetStatusIdentity | GltfAssetR
 /** Focused lifecycle for one glTF asset; drawable states include bounds and texture progress. */
 export type GltfAssetStatus = GltfAssetSnapshot;
 
-const IDLE: GltfAssetSnapshot = { state: "idle" };
+const IDLE: GltfAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): GltfAssetSnapshot => IDLE;
 const GLTF_STATUS_INPUT_FIELDS = ["bounds", "src", "version"] as const;

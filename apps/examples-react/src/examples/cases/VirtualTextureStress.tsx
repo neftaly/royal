@@ -51,8 +51,8 @@ const VirtualTextureStatusLabel = (): ReactNode => {
   return (
     <>
       <BenchmarkRendererSnapshot virtualTextureStatus={status} />
-      <output className="status" data-vt-state={status.state}>
-        {status.state} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
+      <output className="status" data-vt-status={status.status}>
+        {status.status} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
       </output>
     </>
   );

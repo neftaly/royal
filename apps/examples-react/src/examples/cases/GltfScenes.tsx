@@ -129,8 +129,8 @@ const writeSceneId = (id: SceneId): void => {
 const SceneLoadStatus = ({ asset }: { readonly asset: GltfAssetRef }): ReactNode => {
   const status = useGltfAssetStatus(asset);
   const lifecycle = useRendererLifecycle();
-  const assetLabel = status.state === 'error' ? `error: ${status.error}` : status.state;
-  const rendererLabel = lifecycle.state === 'failed' ? `failed: ${lifecycle.error}` : lifecycle.state;
+  const assetLabel = status.status === 'error' ? `error: ${status.error}` : status.status;
+  const rendererLabel = lifecycle.status === 'failed' ? `failed: ${lifecycle.error}` : lifecycle.status;
   return (
     <>
       <BenchmarkRendererSnapshot asset={asset} status={status} />

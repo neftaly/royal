@@ -32,9 +32,9 @@ export const benchmarkVirtualTextureDiagnostics = (
   status: VirtualTextureAssetStatus | undefined,
 ): Record<string, number> | null => status === undefined ? null : {
   failedPages: status.failedPages,
-  manifestFailures: status.state === 'error' || status.state === 'unsupported' ? 1 : 0,
-  manifestRequests: status.state === 'idle' ? 0 : 1,
-  manifestsReady: status.state === 'ready' ? 1 : 0,
+  manifestFailures: status.status === 'error' || status.status === 'unsupported' ? 1 : 0,
+  manifestRequests: status.status === 'idle' ? 0 : 1,
+  manifestsReady: status.status === 'ready' ? 1 : 0,
   pendingPages: status.pendingPages,
   residentPages: status.residentPages,
 };
@@ -63,10 +63,10 @@ export const benchmarkGltfDiagnostics = (
   asset: GltfAssetRef | undefined,
   status: GltfAssetStatus | undefined,
 ): GltfLoadDiagnosticsAsset | undefined => {
-  if (asset === undefined || status === undefined || status.state === 'idle') return undefined;
-  const usable = status.state === 'streaming'
-    || status.state === 'ready'
-    || status.state === 'degraded';
+  if (asset === undefined || status === undefined || status.status === 'idle') return undefined;
+  const usable = status.status === 'streaming'
+    || status.status === 'ready'
+    || status.status === 'degraded';
   const phaseMs = usable
     ? {
         firstUsable: status.timings.sourceReadDurationMs
@@ -81,7 +81,7 @@ export const benchmarkGltfDiagnostics = (
       }
     : {};
   return {
-    ...(status.state === 'error' ? { error: status.error } : {}),
+    ...(status.status === 'error' ? { error: status.error } : {}),
     imageCandidates: usable ? status.textures.total : 0,
     imageFailures: usable ? status.textures.failed : 0,
     imagesLoaded: usable ? status.textures.ready : 0,
@@ -91,7 +91,7 @@ export const benchmarkGltfDiagnostics = (
     phaseMs,
     primitiveCount: usable ? status.primitiveCount : 0,
     src: asset.src,
-    status: status.state,
+    status: status.status,
     variantNames: usable ? status.variantNames : [],
     ...(asset.version === undefined ? {} : { version: asset.version }),
   };

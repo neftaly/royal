@@ -68,18 +68,19 @@ export type TextureSourceRef =
  * Focused decode lifecycle for one exact texture identity. `ready` means a
  * decoder established fitted dimensions successfully. The bounded CPU handoff
  * may already be released; GPU admission and residency are root diagnostics.
+ * `status` is the discriminant shared by every focused Royal lifecycle.
  */
 export type TextureAssetSnapshot =
-  | Readonly<{ state: "idle" }>
-  | Readonly<{ state: "loading" }>
+  | Readonly<{ status: "idle" }>
+  | Readonly<{ status: "loading" }>
   | Readonly<{
     /** Fitted upload height in texels. */
     height: number;
-    state: "ready";
+    status: "ready";
     /** Fitted upload width in texels. */
     width: number;
   }>
-  | Readonly<{ error: string; state: "error" }>;
+  | Readonly<{ error: string; status: "error" }>;
 
 export type TexturePreparationSnapshot = Readonly<{
   /** Browser texture decodes currently executing. */
@@ -128,7 +129,7 @@ type AssetEntry = {
   snapshot: TextureAssetSnapshot;
 };
 
-const IDLE: TextureAssetSnapshot = { state: "idle" };
+const IDLE: TextureAssetSnapshot = { status: "idle" };
 const ACTIVE_TEXTURE_DECODE_LIMIT = 8;
 const DECODED_HANDOFF_BYTE_THRESHOLD = 64 * 1024 * 1024;
 const DECODED_HANDOFF_SOURCE_LIMIT = 32;
@@ -369,7 +370,7 @@ export class TextureAssetOwner {
         entry.retainAlpha = retainAlpha;
         if (!retainAlpha) {
           entry.alpha = undefined;
-        } else if (entry.alpha === undefined && entry.snapshot.state !== "error") {
+        } else if (entry.alpha === undefined && entry.snapshot.status !== "error") {
           if (entry.controller !== undefined && !entry.decodeRetainsAlpha) {
             entry.controller.abort();
             entry.controller = undefined;
@@ -380,7 +381,7 @@ export class TextureAssetOwner {
       }
       if (
         entry.decodedReleased
-        && entry.snapshot.state !== "error"
+        && entry.snapshot.status !== "error"
         && storageIncomplete(claim.storageKeys, entry.residentStorageKeys)
       ) this.#queueDecode(entry);
     }
@@ -454,7 +455,7 @@ export class TextureAssetOwner {
       entry.decodeDeferred = false;
       if (entry.decodedClaims === 0) {
         this.#releaseDecodeReservation(entry);
-        entry.snapshot = { state: "loading" };
+        entry.snapshot = { status: "loading" };
         this.#queueDecode(entry);
       }
       this.#platform.onAssetChanged(entry.key);
@@ -504,7 +505,7 @@ export class TextureAssetOwner {
       queued: false,
       residentStorageKeys: new Set(),
       retainAlpha,
-      snapshot: { state: "loading" },
+      snapshot: { status: "loading" },
     };
     this.#entries.set(key, entry);
     this.#publish(key);
@@ -643,7 +644,7 @@ export class TextureAssetOwner {
       entry.alpha = entry.retainAlpha ? alpha : undefined;
       entry.decoded = decodedSource;
       entry.decodedReleased = false;
-      entry.snapshot = { height: decoded.height, state: "ready", width: decoded.width };
+      entry.snapshot = { height: decoded.height, status: "ready", width: decoded.width };
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
@@ -664,7 +665,7 @@ export class TextureAssetOwner {
       if (entry.residentStorageKeys.size === 0) {
         entry.decoded = undefined;
         entry.decodedReleased = false;
-        entry.snapshot = { error: formatFailure(error), state: "error" };
+        entry.snapshot = { error: formatFailure(error), status: "error" };
       }
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);

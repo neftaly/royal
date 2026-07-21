@@ -188,7 +188,9 @@ still report the root's configured policy—for example VT reports the actual
 upload budget and automatic-VT choice before its lazy runtime exists.
 
 Focused status hooks return small discriminated unions and push changes without
-polling. Product decisions use focused status:
+polling. Every focused lifecycle uses the self-describing `status` discriminator;
+`state` is reserved for internal state machines. Product decisions use focused
+status:
 
 - glTF: `idle`, `loading`, `streaming`, `ready`, `degraded`, `error`;
 - ordinary texture: `idle`, `loading`, `ready`, `error`;

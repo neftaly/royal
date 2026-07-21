@@ -115,7 +115,10 @@ export const idleVirtualTextureRuntimeSnapshot = (
   uploadBudgetBytes,
 });
 
-/** Focused manifest lifecycle plus current bounded page residency. */
+/**
+ * Focused manifest lifecycle plus current bounded page residency. `status` is
+ * the shared focused-lifecycle discriminant.
+ */
 export type VirtualTextureAssetSnapshot = Readonly<{
   /** Page requests that ended in failure for the retained asset generation. */
   failedPages: number;
@@ -126,11 +129,11 @@ export type VirtualTextureAssetSnapshot = Readonly<{
 }> & (
   | Readonly<{
     error?: never;
-    state: "idle" | "loading" | "ready";
+    status: "idle" | "loading" | "ready";
   }>
   | Readonly<{
     error: string;
-    state: "error" | "unsupported";
+    status: "error" | "unsupported";
   }>
 );
 

@@ -39,7 +39,7 @@ const renderScene = scene({
 
 function Status() {
   const lifecycle = useRendererLifecycle();
-  return <output>{lifecycle.state}</output>;
+  return <output>{lifecycle.status}</output>;
 }
 
 export function App() {

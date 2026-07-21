@@ -24,7 +24,7 @@ export type PrefilteredEnvironmentStatusInput =
   | PrefilteredEnvironmentStatusIdentity
   | PrefilteredEnvironmentLight;
 
-const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
+const IDLE: PrefilteredEnvironmentAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): PrefilteredEnvironmentAssetSnapshot => IDLE;
 const PREFILTERED_ENVIRONMENT_STATUS_INPUT_FIELDS = [

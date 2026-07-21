@@ -293,13 +293,13 @@ const IDLE_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
   failedPages: 0,
   pendingPages: 0,
   residentPages: 0,
-  state: "idle",
+  status: "idle",
 };
 const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
   failedPages: 0,
   pendingPages: 0,
   residentPages: 0,
-  state: "loading",
+  status: "loading",
 };
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
   left[0] === right[0]
@@ -377,8 +377,8 @@ export class CanvasRoot implements RendererRoot {
   readonly #getTextureSnapshot = (asset: TextureSourceRef): TextureAssetSnapshot =>
     this.#textureAssets.getSourceSnapshot(asset);
   readonly #isTexturePending = (asset: TextureSourceRef): boolean => {
-    const state = this.#getTextureSnapshot(asset).state;
-    return state === "idle" || state === "loading";
+    const status = this.#getTextureSnapshot(asset).status;
+    return status === "idle" || status === "loading";
   };
   #lastFrameFailure: string | undefined;
   readonly #listeners = new RetainedListeners();
@@ -1227,8 +1227,8 @@ export class CanvasRoot implements RendererRoot {
     if (this.#surfaceResourcesPending || this.#textureResourcesPending) return false;
     const assets = this.#surfaceScene?.textureAssets ?? [];
     return assets.every((asset) => {
-      const state = this.#getTextureSnapshot(asset).state;
-      return state === "ready" || state === "error";
+      const status = this.#getTextureSnapshot(asset).status;
+      return status === "ready" || status === "error";
     });
   }
 

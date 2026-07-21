@@ -6,27 +6,28 @@ import {
   type RendererObservationOptions,
 } from "./select-root";
 
+/** Focused renderer lifecycle using the same `status` discriminant as asset and XR status. */
 export type RendererLifecycleSnapshot =
   | Readonly<{
     error?: never;
     generation: number;
     interruptions: number;
     recoveries: number;
-    state: "available" | "disposed" | "unavailable";
+    status: "available" | "disposed" | "unavailable";
   }>
   | Readonly<{
     error: string;
     generation: number;
     interruptions: number;
     recoveries: number;
-    state: "failed";
+    status: "failed";
   }>;
 
 const UNAVAILABLE: RendererLifecycleSnapshot = {
   generation: 0,
   interruptions: 0,
   recoveries: 0,
-  state: "unavailable",
+  status: "unavailable",
 };
 
 /** Observes renderer availability without polling or subscribing to unrelated state. */
@@ -42,11 +43,11 @@ export const useRendererLifecycle = (
       interruptions: context.interruptions,
       recoveries: context.recoveries,
     };
-    if (context.phase === "active") return { ...shared, state: "available" };
-    if (context.phase === "disposed") return { ...shared, state: "disposed" };
+    if (context.phase === "active") return { ...shared, status: "available" };
+    if (context.phase === "disposed") return { ...shared, status: "disposed" };
     if (context.failure !== undefined) {
-      return { ...shared, error: context.failure, state: "failed" };
+      return { ...shared, error: context.failure, status: "failed" };
     }
-    return { ...shared, state: "unavailable" };
+    return { ...shared, status: "unavailable" };
   }, [context]);
 };

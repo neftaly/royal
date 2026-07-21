@@ -69,7 +69,7 @@ const IDLE_VIRTUAL_TEXTURE_SNAPSHOT: VirtualTextureAssetSnapshot = {
   failedPages: 0,
   pendingPages: 0,
   residentPages: 0,
-  state: "idle",
+  status: "idle",
 };
 const FRAME_RESULTS = [
   { pending: false, webGlStateChanged: false },
@@ -505,20 +505,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         failedPages: resource.failedPages.size,
         pendingPages: 0,
         residentPages: resource.gpu?.residentSlots.size ?? 0,
-        state: resource.manifestFailureState ?? "error",
+        status: resource.manifestFailureState ?? "error",
       };
     } else {
       next = {
         failedPages: resource.failedPages.size,
         pendingPages: resource.loadingPages.size + resource.readyPages.length,
         residentPages: resource.gpu?.residentSlots.size ?? 0,
-        state: resource.manifestPending ? "loading" : "ready",
+        status: resource.manifestPending ? "loading" : "ready",
       };
     }
     const previous = resource.snapshot;
     if (
       previous !== undefined
-      && previous.state === next.state
+      && previous.status === next.status
       && previous.failedPages === next.failedPages
       && previous.pendingPages === next.pendingPages
       && previous.residentPages === next.residentPages

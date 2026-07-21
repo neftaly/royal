@@ -43,7 +43,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/models/large.gltf");
     owner.reconcile([node]);
-    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     expect(prepare).toHaveBeenCalledWith(
       bytes,
       expect.any(String),
@@ -68,14 +68,14 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/models/triangle.gltf");
     owner.reconcile([node]);
-    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     expect(readResource).toHaveBeenCalledWith(
       "/models/triangle.bin",
       expect.any(AbortSignal),
     );
     const ready = owner.getSnapshot(node.asset);
-    expect(ready.state).toBe("ready");
-    if (ready.state === "ready") {
+    expect(ready.status).toBe("ready");
+    if (ready.status === "ready") {
       expect(ready.timings.externalResourceReadDurationMs).toBeGreaterThanOrEqual(0);
     }
   });
@@ -121,10 +121,10 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/parallel.gltf");
     owner.reconcile([node]);
-    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     const snapshot = owner.getSnapshot(node.asset);
     expect(snapshot).toMatchObject({
-      state: "ready",
+      status: "ready",
       timings: {
         externalResourceReadDurationMs: 22,
         preparationDurationMs: 13,
@@ -147,7 +147,7 @@ describe("glTF asset lifecycle owner", () => {
     const second = gltf({ src: "/model.glb", version: "v1" });
     owner.subscribe(first.asset, listener);
     owner.reconcile([first, second]);
-    expect(owner.getSnapshot(first.asset)).toEqual({ state: "loading" });
+    expect(owner.getSnapshot(first.asset)).toEqual({ status: "loading" });
     expect(listener).toHaveBeenCalledTimes(1);
 
     await waitFor(() => {
@@ -156,7 +156,7 @@ describe("glTF asset lifecycle owner", () => {
         lightCount: 0,
         nodeCount: 2,
         primitiveCount: 1,
-        state: "ready",
+        status: "ready",
         timings: {
           externalResourceReadDurationMs: 0,
           preparationDurationMs: expect.any(Number),
@@ -171,8 +171,8 @@ describe("glTF asset lifecycle owner", () => {
     expect(listener).toHaveBeenCalledTimes(2);
     expect(owner.prepared(first.asset)?.primitives).toHaveLength(1);
     const ready = owner.getSnapshot(first.asset);
-    expect(ready.state).toBe("ready");
-    if (ready.state === "ready") {
+    expect(ready.status).toBe("ready");
+    if (ready.status === "ready") {
       expect(ready.timings.sourceReadDurationMs).toBeGreaterThanOrEqual(0);
       expect(ready.timings.externalResourceReadDurationMs).toBe(0);
       expect(ready.timings.preparationDurationMs).toBeGreaterThanOrEqual(0);
@@ -201,12 +201,12 @@ describe("glTF asset lifecycle owner", () => {
     owner.reconcile([node]);
     owner.reconcile([]);
     expect(signal?.aborted).toBe(true);
-    expect(owner.getSnapshot(node.asset)).toEqual({ state: "idle" });
+    expect(owner.getSnapshot(node.asset)).toEqual({ status: "idle" });
     expect(listener).toHaveBeenCalledTimes(2);
     resolveRead?.(staticTriangleGlb());
     await Promise.resolve();
     await Promise.resolve();
-    expect(owner.getSnapshot(node.asset)).toEqual({ state: "idle" });
+    expect(owner.getSnapshot(node.asset)).toEqual({ status: "idle" });
     expect(changes).not.toHaveBeenCalled();
   });
 
@@ -229,10 +229,10 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/textured.gltf");
     owner.reconcile([node]);
-    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("streaming"));
-    owner.refreshTextureProgress(() => ({ error: "decode failed", state: "error" }));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("streaming"));
+    owner.refreshTextureProgress(() => ({ error: "decode failed", status: "error" }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
-      state: "degraded",
+      status: "degraded",
       timings: {
         externalResourceReadDurationMs: expect.any(Number),
         imagesCompleteAfterMs: expect.any(Number),
@@ -242,20 +242,20 @@ describe("glTF asset lifecycle owner", () => {
       textures: { failed: 1, loading: 0, ready: 0, total: 1 },
     });
     const degraded = owner.getSnapshot(node.asset);
-    expect(degraded.state).toBe("degraded");
-    const completionMs = degraded.state === "degraded"
+    expect(degraded.status).toBe("degraded");
+    const completionMs = degraded.status === "degraded"
       ? degraded.timings.imagesCompleteAfterMs
       : undefined;
-    if (degraded.state === "degraded") {
+    if (degraded.status === "degraded") {
       expect(completionMs).toBeGreaterThanOrEqual(
         degraded.timings.sourceReadDurationMs
           + degraded.timings.externalResourceReadDurationMs
           + degraded.timings.preparationDurationMs,
       );
     }
-    owner.refreshTextureProgress(() => ({ height: 16, state: "ready", width: 16 }));
+    owner.refreshTextureProgress(() => ({ height: 16, status: "ready", width: 16 }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
-      state: "ready",
+      status: "ready",
       timings: { imagesCompleteAfterMs: completionMs },
       textures: { failed: 0, loading: 0, ready: 1, total: 1 },
     });
@@ -271,10 +271,10 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/broken.glb");
     owner.reconcile([node]);
-    await waitFor(() => expect(owner.getSnapshot(node.asset).state).toBe("error"));
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("error"));
     const snapshot = owner.getSnapshot(node.asset);
-    expect(snapshot).toMatchObject({ state: "error" });
-    if (snapshot.state === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);
+    expect(snapshot).toMatchObject({ status: "error" });
+    if (snapshot.status === "error") expect(snapshot.error.length).toBeLessThanOrEqual(400);
     owner.reconcile([node]);
     expect(read).toHaveBeenCalledTimes(1);
   });

@@ -18,7 +18,7 @@ export type TextureAssetStatusInput = string | TextureAssetStatusIdentity | Text
 /** Focused decode lifecycle for one ordinary texture asset. */
 export type TextureAssetStatus = TextureAssetSnapshot;
 
-const IDLE: TextureAssetSnapshot = { state: "idle" };
+const IDLE: TextureAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): TextureAssetSnapshot => IDLE;
 const TEXTURE_STATUS_INPUT_FIELDS = [

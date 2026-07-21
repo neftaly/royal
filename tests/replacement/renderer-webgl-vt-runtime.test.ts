@@ -72,7 +72,7 @@ describe("browser virtual texture runtime", () => {
     const viewport = { height: 1024, width: 1024, x: 0, y: 0 };
 
     runtime.setScene(prepared);
-    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).status).toBe("ready"));
     runtime.update([{ view: identity, viewProjection: identity, viewport }]);
     expect(texStorage2D).not.toHaveBeenCalled();
 
@@ -120,7 +120,7 @@ describe("browser virtual texture runtime", () => {
     const viewport = { height: 1024, width: 1024, x: 0, y: 0 };
 
     runtime.setScene(prepared);
-    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).status).toBe("ready"));
     runtime.update([{ view: identity, viewProjection: identity, viewport }]);
     await waitFor(() => expect(pageSignals.length).toBeGreaterThan(0));
 
@@ -191,7 +191,7 @@ describe("browser virtual texture runtime", () => {
 
     runtime.setScene(prepared);
     await waitFor(() => {
-      expect(textures.every((texture) => runtime.snapshot(texture).state === "ready")).toBe(true);
+      expect(textures.every((texture) => runtime.snapshot(texture).status === "ready")).toBe(true);
     });
     runtime.update([view]);
     // Five compatible logical textures share one atlas and retain five page tables.
@@ -274,8 +274,8 @@ describe("browser virtual texture runtime", () => {
 
     runtime.setScene(preparedScene([0, 0, 0]));
     await waitFor(() => {
-      expect(runtime.snapshot(first).state).toBe("ready");
-      expect(runtime.snapshot(second).state).toBe("ready");
+      expect(runtime.snapshot(first).status).toBe("ready");
+      expect(runtime.snapshot(second).status).toBe("ready");
     });
     runtime.update([view]);
     await waitFor(() => expect(pageReads).toHaveLength(2));
@@ -354,7 +354,7 @@ describe("browser virtual texture runtime", () => {
     };
 
     runtime.setScene(prepared);
-    await waitFor(() => expect(runtime.snapshot(texture).state).toBe("ready"));
+    await waitFor(() => expect(runtime.snapshot(texture).status).toBe("ready"));
     expect(scheduled).toHaveBeenCalledOnce();
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     runtime.update([view]);

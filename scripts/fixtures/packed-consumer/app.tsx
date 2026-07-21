@@ -138,18 +138,18 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
   const textureStatus = useTextureAssetStatus(albedo, options);
   const environmentStatus = usePrefilteredEnvironmentStatus(environment, options);
   const virtualTextureStatus = useVirtualTextureAssetStatus(authoredVirtualTexture, options);
-  const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  const variants = modelStatus.state === 'ready'
-    || modelStatus.state === 'streaming'
-    || modelStatus.state === 'degraded'
+  const renderer = lifecycle.status === 'failed' ? lifecycle.error : lifecycle.status;
+  const variants = modelStatus.status === 'ready'
+    || modelStatus.status === 'streaming'
+    || modelStatus.status === 'degraded'
     ? modelStatus.variantNames.join(', ')
     : '';
   return (
     <output>
       {renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.cssWidth ?? 0} by{' '}
-      {size?.cssHeight ?? 0}; model {modelStatus.state} ({variants}); texture{' '}
-      {textureStatus.state}; environment {environmentStatus.state}; VT{' '}
-      {virtualTextureStatus.state}
+      {size?.cssHeight ?? 0}; model {modelStatus.status} ({variants}); texture{' '}
+      {textureStatus.status}; environment {environmentStatus.status}; VT{' '}
+      {virtualTextureStatus.status}
     </output>
   );
 };

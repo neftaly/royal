@@ -25,7 +25,7 @@ const IDLE: VirtualTextureAssetSnapshot = {
   failedPages: 0,
   pendingPages: 0,
   residentPages: 0,
-  state: "idle",
+  status: "idle",
 };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): VirtualTextureAssetSnapshot => IDLE;

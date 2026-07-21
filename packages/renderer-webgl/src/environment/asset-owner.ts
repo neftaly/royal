@@ -3,10 +3,13 @@ import type { PreparedRoyalEnvironment } from "./royal-environment-ktx1";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
-/** Focused transport and preparation lifecycle for one offline environment identity. */
+/**
+ * Focused transport and preparation lifecycle for one offline environment
+ * identity. `status` is the shared focused-lifecycle discriminant.
+ */
 export type PrefilteredEnvironmentAssetSnapshot =
-  | Readonly<{ state: "idle" }>
-  | Readonly<{ state: "loading" }>
+  | Readonly<{ status: "idle" }>
+  | Readonly<{ status: "loading" }>
   | Readonly<{
     /** Number of authored roughness mip levels. */
     mipCount: number;
@@ -14,9 +17,9 @@ export type PrefilteredEnvironmentAssetSnapshot =
     provenance: string;
     /** Width and height of one square cubemap face in texels. */
     size: number;
-    state: "ready";
+    status: "ready";
   }>
-  | Readonly<{ error: string; state: "error" }>;
+  | Readonly<{ error: string; status: "error" }>;
 
 export type PrefilteredEnvironmentAssetOwnerOptions = Readonly<{
   onAssetChanged: () => void;
@@ -33,7 +36,7 @@ type ActiveEnvironment = {
   snapshot: PrefilteredEnvironmentAssetSnapshot;
 };
 
-const IDLE: PrefilteredEnvironmentAssetSnapshot = { state: "idle" };
+const IDLE: PrefilteredEnvironmentAssetSnapshot = { status: "idle" };
 
 export const prefilteredEnvironmentAssetKey = (
   environment: Pick<PrefilteredEnvironmentLight, "src" | "version">,
@@ -122,7 +125,7 @@ export class PrefilteredEnvironmentAssetOwner {
     const active: ActiveEnvironment = {
       controller: new AbortController(),
       key,
-      snapshot: { state: "loading" },
+      snapshot: { status: "loading" },
     };
     this.#active = active;
     if (previous !== undefined) this.#publish(previous.key);
@@ -156,12 +159,12 @@ export class PrefilteredEnvironmentAssetOwner {
         mipCount: result.levels.length,
         provenance: result.metadata.provenance,
         size: result.size,
-        state: "ready",
+        status: "ready",
       };
       prepared = true;
     } catch (failure) {
       if (this.#disposed || this.#active !== active || active.controller.signal.aborted) return;
-      active.snapshot = { error: failureMessage(failure), state: "error" };
+      active.snapshot = { error: failureMessage(failure), status: "error" };
     }
     if (prepared) this.#options.onAssetChanged();
     this.#publish(active.key);

@@ -35,21 +35,21 @@ const bistroNodes = [
 
 const BistroStatus = (): ReactNode => {
   const status = useGltfAssetStatus(bistro.asset);
-  let value: string = status.state;
+  let value: string = status.status;
   if (
-    status.state === "ready"
-    || status.state === "streaming"
-    || status.state === "degraded"
+    status.status === "ready"
+    || status.status === "streaming"
+    || status.status === "degraded"
   ) {
     const failed = status.textures.failed === 0
       ? ""
       : ` · ${status.textures.failed} failed`;
-    value = `${status.state} · ${status.primitiveCount} primitives · ${status.textures.ready}/${status.textures.total} textures${failed}`;
-  } else if (status.state === "error") value = `error · ${status.error}`;
+    value = `${status.status} · ${status.primitiveCount} primitives · ${status.textures.ready}/${status.textures.total} textures${failed}`;
+  } else if (status.status === "error") value = `error · ${status.error}`;
   return (
     <>
       <BenchmarkRendererSnapshot asset={bistro.asset} status={status} />
-      <output className="status" data-gltf-state={status.state}>{value}</output>
+      <output className="status" data-gltf-status={status.status}>{value}</output>
     </>
   );
 };
