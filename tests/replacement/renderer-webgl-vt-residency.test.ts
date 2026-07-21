@@ -16,6 +16,29 @@ const manifest = parseVirtualTextureManifest({
 });
 
 describe("VT2 residency core", () => {
+  it("resolves one retained lookup per logical page", () => {
+    class CountedResidents extends Map<number | string, number> {
+      gets = 0;
+
+      override get(key: number | string): number | undefined {
+        this.gets += 1;
+        return super.get(key);
+      }
+    }
+    const residents = new CountedResidents([
+      [virtualTexturePageKey({ mip: 2, x: 0, y: 0 }), 0],
+    ]);
+    writeVirtualTexturePageTable(
+      manifest,
+      residents,
+      2,
+      new Uint8Array(virtualTexturePageTableByteLength(manifest)),
+    );
+    expect(residents.gets).toBe(
+      manifest.mipLayouts.reduce((pages, layout) => pages + layout.width * layout.height, 0),
+    );
+  });
+
   it("maps missing fine pages to the closest committed ancestor", () => {
     const root = { mip: 2, x: 0, y: 0 };
     const fine = { mip: 0, x: 1, y: 1 };

@@ -64,35 +64,33 @@ export const writeVirtualTexturePageTable = (
     throw new RangeError("Royal VT page-table storage has the wrong byte length");
   }
   target.fill(0);
-  for (let mip = 0; mip < manifest.mipCount; mip += 1) {
+  // Coarse entries are complete before their children. A missing child can
+  // therefore inherit its parent's already-resolved closest ancestor instead
+  // of searching the complete ancestor chain again.
+  for (let mip = manifest.mipCount - 1; mip >= 0; mip -= 1) {
     const layout = manifest.mipLayouts[mip]!;
+    const storageWidth = Math.max(1, manifest.tableWidth / 2 ** mip);
+    const parentLayout = manifest.mipLayouts[mip + 1];
+    const parentWidth = Math.max(1, manifest.tableWidth / 2 ** (mip + 1));
     for (let y = 0; y < layout.height; y += 1) {
       for (let x = 0; x < layout.width; x += 1) {
-        let ancestorMip = mip;
-        let ancestorX = x;
-        let ancestorY = y;
-        let slot: number | undefined;
-        while (ancestorMip < manifest.mipCount) {
-          slot = residentSlots.get(virtualTexturePageKeyParts(
-            ancestorMip,
-            ancestorX,
-            ancestorY,
-          ));
-          if (slot !== undefined) break;
-          ancestorMip += 1;
-          ancestorX = Math.floor(ancestorX / 2);
-          ancestorY = Math.floor(ancestorY / 2);
-        }
-        if (slot === undefined) continue;
-        const slotX = slot % atlasColumns;
-        const slotY = Math.floor(slot / atlasColumns);
-        if (slotY > 255) throw new RangeError("Royal VT atlas rows must be within 1..256");
-        const storageWidth = Math.max(1, manifest.tableWidth / 2 ** mip);
         const offset = layout.byteOffset + (y * storageWidth + x) * 4;
-        target[offset] = slotX;
-        target[offset + 1] = slotY;
-        target[offset + 2] = ancestorMip;
-        target[offset + 3] = 255;
+        const slot = residentSlots.get(virtualTexturePageKeyParts(mip, x, y));
+        if (slot !== undefined) {
+          const slotY = Math.floor(slot / atlasColumns);
+          if (slotY > 255) throw new RangeError("Royal VT atlas rows must be within 1..256");
+          target[offset] = slot % atlasColumns;
+          target[offset + 1] = slotY;
+          target[offset + 2] = mip;
+          target[offset + 3] = 255;
+        } else if (parentLayout !== undefined) {
+          const parentOffset = parentLayout.byteOffset
+            + (Math.floor(y / 2) * parentWidth + Math.floor(x / 2)) * 4;
+          target[offset] = target[parentOffset]!;
+          target[offset + 1] = target[parentOffset + 1]!;
+          target[offset + 2] = target[parentOffset + 2]!;
+          target[offset + 3] = target[parentOffset + 3]!;
+        }
       }
     }
   }

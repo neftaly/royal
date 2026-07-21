@@ -104,8 +104,29 @@ describe("VT2 bounded planning properties", () => {
         for (let y = 0; y < layout.height; y += 1) {
           for (let x = 0; x < layout.width; x += 1) {
             const offset = layout.byteOffset + (y * storageWidth + x) * 4;
-            assertFuzz(table[offset + 3] === 255, "coarsest resident ancestor was lost");
-            assertFuzz(table[offset + 2]! < manifest.mipCount, "resident mip escaped manifest");
+            let ancestorMip = mip;
+            let ancestorX = x;
+            let ancestorY = y;
+            let expectedSlot: number | undefined;
+            while (ancestorMip < manifest.mipCount) {
+              expectedSlot = residents.get(virtualTexturePageKeyParts(
+                ancestorMip,
+                ancestorX,
+                ancestorY,
+              ));
+              if (expectedSlot !== undefined) break;
+              ancestorMip += 1;
+              ancestorX = Math.floor(ancestorX / 2);
+              ancestorY = Math.floor(ancestorY / 2);
+            }
+            assertFuzz(expectedSlot !== undefined, "fuzz oracle lost coarsest resident page");
+            assertFuzz(table[offset] === expectedSlot % 8, "page-table atlas x diverged");
+            assertFuzz(
+              table[offset + 1] === Math.floor(expectedSlot / 8),
+              "page-table atlas y diverged",
+            );
+            assertFuzz(table[offset + 2] === ancestorMip, "page-table ancestor mip diverged");
+            assertFuzz(table[offset + 3] === 255, "page-table residency diverged");
           }
         }
       }
