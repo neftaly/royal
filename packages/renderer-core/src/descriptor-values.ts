@@ -9,9 +9,10 @@ export const objectWithAllowedFields = <Options extends object>(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TypeError(`${label} options must be an object`);
   }
-  for (const field of Object.keys(value)) {
-    if (!allowedFields.includes(field)) {
-      throw new TypeError(`${label} options contain unsupported option ${JSON.stringify(field)}`);
+  for (const field of Reflect.ownKeys(value)) {
+    if (typeof field !== 'string' || !allowedFields.includes(field)) {
+      const name = typeof field === 'string' ? JSON.stringify(field) : String(field);
+      throw new TypeError(`${label} options contain unsupported option ${name}`);
     }
   }
   return value;

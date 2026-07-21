@@ -497,6 +497,17 @@ describe("renderer-core descriptor contract", () => {
     for (const [label, create] of cases) {
       expect(create, label).toThrow(/unsupported option/);
     }
+    expect(() => perspectiveCamera({
+      [Symbol("hidden")]: true,
+    } as unknown as Parameters<typeof perspectiveCamera>[0]))
+      .toThrow(/unsupported option Symbol\(hidden\)/);
+
+    const nonEnumerable = { position: [0, 0, 0] };
+    Object.defineProperty(nonEnumerable, "aperture", { value: 2 });
+    expect(() => perspectiveCamera(
+      nonEnumerable as unknown as Parameters<typeof perspectiveCamera>[0],
+    )).toThrow(/unsupported option "aperture"/);
+
     expect(() => scene(null as unknown as Parameters<typeof scene>[0]))
       .toThrow('scene options must be an object');
   });
