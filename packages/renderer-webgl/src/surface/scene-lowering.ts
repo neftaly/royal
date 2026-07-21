@@ -533,13 +533,14 @@ export const prepareCanonicalSurfaceScene = (
           geometryLods = Array<LodMembership>(primitive.lods.length);
           for (let lodIndex = 0; lodIndex < primitive.lods.length; lodIndex += 1) {
             const primitiveLod = primitive.lods[lodIndex]!;
-            let selectionBounds = lodBounds.get(primitiveLod.group);
+            const group = `mount:${mountIndex}:${primitiveLod.group}`;
+            let selectionBounds = lodBounds.get(group);
             if (selectionBounds === undefined) {
               selectionBounds = emptyWorldBounds();
-              lodBounds.set(primitiveLod.group, selectionBounds);
+              lodBounds.set(group, selectionBounds);
             }
             includeWorldBounds(selectionBounds, worldBounds);
-            geometryLods[lodIndex] = { ...primitiveLod, selectionBounds };
+            geometryLods[lodIndex] = { ...primitiveLod, group, selectionBounds };
           }
         }
         const handedness = instanceBatch === undefined

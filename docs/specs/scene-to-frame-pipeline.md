@@ -89,6 +89,12 @@ projected screen coverage across views and hysteresis around transitions.
 `MSFT_lod` and `MSFT_screencoverage` are ingestion declarations; no
 extension-specific executor path survives lowering.
 
+Each mounted node occurrence owns its LOD identity and world-space selection
+bounds. Reusing one prepared asset at multiple transforms MUST NOT merge those
+bounds or force the mounts to select the same level. Canonical lowering scopes
+the asset-local group key to its stable mount occurrence before retained
+hysteresis, visible submission, and picking consume it.
+
 If the ideal level is not drawable, Royal SHOULD select the closest drawable
 level that preserves content. A positive authored terminal threshold MAY cull
 the whole set below that coverage. LOD changes MUST NOT alter logical picking

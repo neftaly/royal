@@ -103,6 +103,7 @@ Royal currently:
 - reads node and material LOD chains, including material LOD inside variants;
 - normalizes screen-coverage thresholds;
 - selects projected-coverage LOD with hysteresis across all active views;
+- selects repeated mounts independently even when they share one prepared asset;
 - honors a positive lowest threshold by rendering nothing below it;
 - preserves a drawable level while a selected replacement texture settles;
 - shares texture/resource identity across levels.

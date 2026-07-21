@@ -442,12 +442,41 @@ describe("canonical direct surface lowering", () => {
       min: [10, 1, -2],
     });
     expect(prepared.lodGroups).toEqual([{
-      group: "lod-asset:node:1:lod",
+      group: "mount:0:lod-asset:node:1:lod",
       levels: [0, 1],
       selectionBounds: { max: [12, 3, 0], min: [10, 1, -2] },
       surfaceIndices: [0, 1],
       thresholds: [0.5, 0],
     }]);
+  });
+
+  it("gives repeated mounts independent LOD occurrence identities", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    document.extensionsUsed = ["KHR_materials_unlit", "MSFT_lod"];
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { MSFT_lod: { ids: [2] } };
+    nodes[1]!.extras = { MSFT_screencoverage: [0.5, 0] };
+    nodes.push({ mesh: 0, translation: [0, 2, -2] });
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "repeated-lod-asset");
+    const left = gltf({ src: "/lod.glb" });
+    const right = gltf({ src: "/lod.glb", transform: { position: [10, 0, 0] } });
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [left, right] }),
+      () => asset,
+    );
+
+    expect(prepared.surfaces.map((surface) => surface.lods?.[0]?.group))
+      .toEqual([
+        "mount:0:repeated-lod-asset:node:1:lod",
+        "mount:0:repeated-lod-asset:node:1:lod",
+        "mount:1:repeated-lod-asset:node:1:lod",
+        "mount:1:repeated-lod-asset:node:1:lod",
+      ]);
+    expect(prepared.lodGroups.map((group) => group.selectionBounds)).toEqual([
+      { max: [2, 3, 0], min: [0, 1, -2] },
+      { max: [12, 3, 0], min: [10, 1, -2] },
+    ]);
   });
 
   it("lowers selected material LOD levels onto the same geometry and selector ABI", () => {
