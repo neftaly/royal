@@ -11,7 +11,7 @@ import {
   spawnLogged,
   startVitePreview,
   stopProcess,
-  waitForHttp,
+  waitForPreviewBuild,
 } from './browser-harness.mjs';
 import {
   exampleContract,
@@ -1820,7 +1820,16 @@ const main = async () => {
   const consoleMessages = [];
 
   try {
-    await waitForHttp(baseUrl, 15_000);
+    const expectedSource = JSON.parse(readFileSync(
+      path.join(appRoot, 'dist/__royal-source.json'),
+      'utf8',
+    ));
+    await waitForPreviewBuild({
+      baseUrl,
+      expected: expectedSource,
+      preview,
+      timeoutMs: 15_000,
+    });
     session = await connectPage();
     session.on('Runtime.exceptionThrown', (event) => {
       const details = event.exceptionDetails;

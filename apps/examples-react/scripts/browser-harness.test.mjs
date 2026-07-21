@@ -8,8 +8,10 @@ import {
   replaceWebSocketAuthority,
   selectCdpPage,
   startPerformanceTrace,
+  waitForExactSourceIdentity,
   waitForHttp,
   waitForJson,
+  waitForPreviewBuild,
 } from './browser-harness.mjs';
 
 const fakeSession = () => {
@@ -145,6 +147,55 @@ describe('browser harness', () => {
 
     await expect(waitForHttp('http://example.test/status', 1, fetchImpl))
       .rejects.toThrow('http://example.test/status returned 503');
+  });
+
+  it('requires the server to expose the exact current build identity', async () => {
+    const expected = {
+      buildId: 'current-build',
+      builtAt: '2026-07-22T00:00:00.000Z',
+      dirty: false,
+      revision: 'abc123',
+    };
+    const matchingFetch = async () => ({
+      json: async () => expected,
+      ok: true,
+      status: 200,
+    });
+    await expect(waitForExactSourceIdentity(
+      'http://example.test:4673',
+      expected,
+      1_000,
+      matchingFetch,
+    )).resolves.toEqual(expected);
+
+    const staleFetch = async () => ({
+      json: async () => ({ ...expected, buildId: 'stale-build' }),
+      ok: true,
+      status: 200,
+    });
+    await expect(waitForExactSourceIdentity(
+      'http://example.test:4673',
+      expected,
+      1_000,
+      staleFetch,
+    )).rejects.toThrow('stale-build');
+  });
+
+  it('requires managed preview readiness as well as matching bytes', async () => {
+    const preview = { royalReady: Promise.reject(new Error('preview port is occupied')) };
+    const expected = {
+      buildId: 'current-build',
+      builtAt: '2026-07-22T00:00:00.000Z',
+      dirty: false,
+      revision: 'abc123',
+    };
+    await expect(waitForPreviewBuild({
+      baseUrl: 'http://example.test:4673',
+      expected,
+      fetchImpl: async () => ({ json: async () => expected, ok: true, status: 200 }),
+      preview,
+      timeoutMs: 1_000,
+    })).rejects.toThrow('preview port is occupied');
   });
 
   it('retains one CDP page and closes surplus page targets only', async () => {

@@ -6,6 +6,14 @@ if Chromium reports SwiftShader, llvmpipe, lavapipe, or another software
 renderer. `EXAMPLES_BENCH_GPU=hardware-headed` remains available when a visible
 desktop Chromium window is preferable.
 
+Every browser smoke, route benchmark, and glTF-load run reads the immutable
+identity emitted in `dist/__royal-source.json` and requires the server to expose
+that exact build before navigation. A managed run additionally requires its own
+Vite preview process to announce readiness. An occupied port, stale deployment,
+or coincidentally live older server fails instead of producing admissible
+evidence. Saved route and glTF-load reports retain the matched build ID,
+revision, dirty flag, and build timestamp.
+
 `benchmark-examples.mjs` builds a route-by-route browser report for the examples app.
 It records browser load timing, DevTools navigation synchronization, renderer
 readiness, frame pacing, heap growth, WebGL draw/upload counters,

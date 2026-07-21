@@ -48,6 +48,50 @@ export const waitForHttp = async (url, timeoutMs, fetchImpl) => {
 export const waitForJson = (url, timeoutMs, fetchImpl) =>
   waitForResponse(url, timeoutMs, (response) => response.json(), fetchImpl);
 
+const sourceIdentityFields = ['buildId', 'builtAt', 'dirty', 'revision'];
+
+/** Requires the server to expose the exact immutable identity emitted by the current build. */
+export const waitForExactSourceIdentity = async (
+  baseUrl,
+  expected,
+  timeoutMs,
+  fetchImpl,
+) => {
+  const url = new URL('/__royal-source.json', baseUrl);
+  url.searchParams.set('requestedAt', String(Date.now()));
+  const actual = await waitForJson(url.href, timeoutMs, fetchImpl);
+  for (const field of sourceIdentityFields) {
+    if (actual?.[field] !== expected?.[field]) {
+      throw new Error(
+        `Royal served build ${JSON.stringify(actual?.buildId)} does not match `
+        + `the current build ${JSON.stringify(expected?.buildId)} (${field} differs)`,
+      );
+    }
+  }
+  return actual;
+};
+
+/** Also rejects an occupied port whose newly spawned preview exits behind a live old server. */
+export const waitForPreviewBuild = async ({
+  baseUrl,
+  expected,
+  fetchImpl,
+  preview,
+  timeoutMs,
+}) => {
+  if (preview === undefined) {
+    return waitForExactSourceIdentity(baseUrl, expected, timeoutMs, fetchImpl);
+  }
+  if (preview.royalReady === undefined) {
+    throw new TypeError('Royal managed preview must expose an explicit readiness promise');
+  }
+  const [identity] = await Promise.all([
+    waitForExactSourceIdentity(baseUrl, expected, timeoutMs, fetchImpl),
+    preview.royalReady,
+  ]);
+  return identity;
+};
+
 export const replaceWebSocketAuthority = (webSocketUrl, host, port) => {
   const url = new URL(webSocketUrl);
   url.hostname = host;
@@ -395,18 +439,39 @@ export const spawnLogged = (command, args, options = {}) => {
   return child;
 };
 
-export const startVitePreview = ({ appRoot, host, port }) => spawnLogged('pnpm', [
-  'exec',
-  'vite',
-  'preview',
-  '--config',
-  'vite.config.ts',
-  '--host',
-  host,
-  '--port',
-  String(port),
-  '--strictPort',
-], { cwd: appRoot });
+export const startVitePreview = ({ appRoot, host, port }) => {
+  let readyOutput = '';
+  let resolveReady;
+  let rejectReady;
+  const royalReady = new Promise((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  void royalReady.catch(() => undefined);
+  const child = spawnLogged('pnpm', [
+    'exec',
+    'vite',
+    'preview',
+    '--config',
+    'vite.config.ts',
+    '--host',
+    host,
+    '--port',
+    String(port),
+    '--strictPort',
+  ], {
+    cwd: appRoot,
+    onStdout: (chunk) => {
+      readyOutput = (readyOutput + String(chunk)).slice(-2_000);
+      if (/\bLocal:\s+https?:\/\//u.test(readyOutput)) resolveReady();
+    },
+  });
+  child.once('exit', (code, signal) => rejectReady(new Error(
+    `Royal Vite preview exited before readiness (code ${String(code)}, signal ${String(signal)})`,
+  )));
+  Object.defineProperty(child, 'royalReady', { value: royalReady });
+  return child;
+};
 
 export const stopProcess = async (child) => {
   if (child === undefined || child.exitCode !== null || child.signalCode !== null) return;

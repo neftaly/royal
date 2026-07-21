@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import {
   spawnLogged,
   startVitePreview,
   stopProcess,
-  waitForHttp,
+  waitForPreviewBuild,
 } from './browser-harness.mjs';
 import { rendererSnapshotExpression } from './example-contract.mjs';
 
@@ -1151,6 +1152,7 @@ const buildReport = ({
   fullState,
   routeStartedAt,
   snapshot,
+  source,
   vtFrameSample,
 }) => {
   const counters = snapshot.counters ?? {};
@@ -1167,6 +1169,7 @@ const buildReport = ({
 
   return {
     generatedAt: new Date().toISOString(),
+    source,
     route: {
       path: routePath,
       url: baseUrl + routePath,
@@ -1337,7 +1340,16 @@ const main = async () => {
   const consoleMessages = [];
 
   try {
-    if (managePreview) await waitForHttp(baseUrl, 15_000);
+    const expectedSource = JSON.parse(readFileSync(
+      path.join(appRoot, 'dist/__royal-source.json'),
+      'utf8',
+    ));
+    const source = await waitForPreviewBuild({
+      baseUrl,
+      expected: expectedSource,
+      preview,
+      timeoutMs: 15_000,
+    });
     session = await connectPage();
     session.on('Runtime.exceptionThrown', (event) => {
       const details = event.exceptionDetails;
@@ -1416,6 +1428,7 @@ const main = async () => {
       fullState,
       routeStartedAt,
       snapshot,
+      source,
       vtFrameSample,
     });
     printSummary(report);
