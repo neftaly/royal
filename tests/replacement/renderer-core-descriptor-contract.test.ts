@@ -508,6 +508,11 @@ describe("renderer-core descriptor contract", () => {
       nonEnumerable as unknown as Parameters<typeof perspectiveCamera>[0],
     )).toThrow(/unsupported option "aperture"/);
 
+    expect(() => mesh({
+      geometry: { ...boxGeometry(1), [Symbol("hidden")]: true },
+      material,
+    })).toThrow(/mesh geometry contains unsupported field Symbol\(hidden\)/);
+
     expect(() => scene(null as unknown as Parameters<typeof scene>[0]))
       .toThrow('scene options must be an object');
   });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   createWebXrSessionRendererWithPlatform,
+  validateXrSessionRendererOptions,
   type XrReferenceSpace,
   type XrSession,
   type XrView,
@@ -50,6 +51,12 @@ const RIGHT_VIEW: XrView = {
 };
 
 describe("WebXR session renderer", () => {
+  it("rejects hidden renderer option fields", () => {
+    expect(() => validateXrSessionRendererOptions({
+      [Symbol("hidden")]: true,
+    })).toThrow("Royal XR renderer options has unsupported field Symbol(hidden)");
+  });
+
   it("borrows one root context and submits both eyes in one frame transaction", async () => {
     const { callbacks, canvas, root } = canvasRootHarness();
     const makeXRCompatible = vi.fn(async () => undefined);

@@ -131,8 +131,10 @@ const rejectUnknownFields = (
   fields: ReadonlySet<string>,
   label: string,
 ): void => {
-  for (const field of Object.keys(value)) {
-    if (!fields.has(field)) throw new TypeError(`${label} has unsupported field ${field}`);
+  for (const field of Reflect.ownKeys(value)) {
+    if (typeof field !== "string" || !fields.has(field)) {
+      throw new TypeError(`${label} has unsupported field ${String(field)}`);
+    }
   }
 };
 

@@ -153,9 +153,13 @@ export const validateGeometry: (
     validateTriangleChannels(triangle as TriangleGeometry, label);
     return;
   }
-  for (const field of Object.keys(value)) {
-    if (!GEOMETRY_DESCRIPTOR_FIELDS.includes(field as (typeof GEOMETRY_DESCRIPTOR_FIELDS)[number])) {
-      throw new TypeError(`${label} contains unsupported field ${JSON.stringify(field)}`);
+  for (const field of Reflect.ownKeys(value)) {
+    if (
+      typeof field !== 'string'
+      || !GEOMETRY_DESCRIPTOR_FIELDS.includes(field as (typeof GEOMETRY_DESCRIPTOR_FIELDS)[number])
+    ) {
+      const name = typeof field === 'string' ? JSON.stringify(field) : String(field);
+      throw new TypeError(`${label} contains unsupported field ${name}`);
     }
   }
   const dimensions = descriptor.kind === 'box' ? 3 : descriptor.kind === 'plane' ? 2 : 0;

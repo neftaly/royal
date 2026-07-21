@@ -201,6 +201,20 @@ describe("replacement React public API", () => {
     ))).toThrow('useGltfAssetStatus input contains unsupported field "verison"');
   });
 
+  it("rejects symbol fields in focused-status identities", () => {
+    const invalid = { src: "/model.glb", [Symbol("hidden")]: true };
+    const Status = () => createElement(
+      "output",
+      null,
+      useGltfAssetStatus(invalid as unknown as GltfAssetStatusIdentity).state,
+    );
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ))).toThrow("useGltfAssetStatus input contains unsupported field Symbol(hidden)");
+  });
+
   it("server-renders an offline environment as idle before root mount", () => {
     const environment = prefilteredEnvironment({ src: "/studio.ktx" });
     const Status = () => createElement(

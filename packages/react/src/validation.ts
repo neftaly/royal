@@ -21,10 +21,11 @@ export const recordWithAllowedFields = (
   fieldKind: "field" | "option" = "field",
 ): Record<string, unknown> => {
   const record = objectRecord(value, label);
-  for (const field of Object.keys(record)) {
-    if (!allowsField(allowedFields, field)) {
+  for (const field of Reflect.ownKeys(record)) {
+    if (typeof field !== "string" || !allowsField(allowedFields, field)) {
+      const name = typeof field === "string" ? JSON.stringify(field) : String(field);
       throw new TypeError(
-        `${label} contains unsupported ${fieldKind} ${JSON.stringify(field)}`,
+        `${label} contains unsupported ${fieldKind} ${name}`,
       );
     }
   }
