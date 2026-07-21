@@ -5,6 +5,9 @@ import {
   opaqueDepthPrepassRequested,
   surfaceCanUseOpaqueDepthPrepass,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass";
+import { SurfaceDepthPrepassOwner } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass-owner";
+import { SurfaceProgramOwner } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
+import { fakeGl } from "./support/canvas-root-harness";
 
 const standard = (
   overrides: Partial<Extract<CanonicalSurfaceMaterial, { kind: "standard" }>> = {},
@@ -29,6 +32,23 @@ const surface = (
 }) as CanonicalDrawSurface;
 
 describe("opaque depth-prepass policy core", () => {
+  it("keeps clip positions invariant across the depth and color programs", () => {
+    const gl = fakeGl();
+    const depth = new SurfaceDepthPrepassOwner(gl, {
+      multiDrawElementsWEBGL: () => undefined,
+    });
+    const color = new SurfaceProgramOwner(gl);
+
+    depth.get(false);
+    color.get("standard", 0, false, false, false);
+
+    const vertexSources = gl.shaderSource.mock.calls
+      .map(([, source]) => String(source))
+      .filter((source) => source.includes("layout(location = 0) in vec3 position"));
+    expect(vertexSources).toHaveLength(2);
+    for (const source of vertexSources) expect(source).toContain("invariant gl_Position;");
+  });
+
   it("activates only after enough exact opaque triangle work can amortize a pass", () => {
     expect(opaqueDepthPrepassRequested(Array.from({ length: 31 }, () => surface()))).toBe(false);
     expect(opaqueDepthPrepassRequested(Array.from({ length: 32 }, () => surface()))).toBe(true);

@@ -77,7 +77,9 @@ remain on their single semantic pass because coverage or pass ordering cannot
 be reproduced by the position-only program, or because a second pass has no
 sound cost case. The depth pass writes no color and uses the same model,
 instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
-the later draw. Its submission owner, programs, shaders, and batching scratch
+the later draw. Both vertex programs MUST declare `gl_Position` invariant so
+driver optimization cannot make the position-only pass self-occlude the color
+pass through cross-program depth drift. Its submission owner, programs, shaders, and batching scratch
 load only after the cold classifier admits the pass. The central state owner
 represents its color mask explicitly;
 no pass may inherit hidden GL state. Without multi-draw, the stable fallback is

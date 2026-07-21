@@ -1,4 +1,5 @@
 #version 300 es
+invariant gl_Position;
 layout(location = 0) in vec3 position;
 #ifdef INSTANCED
 layout(location = 3) in mat4 instanceModel;
