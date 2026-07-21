@@ -82,6 +82,7 @@ import {
   materialTextureBindingAt,
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
+  residentOrdinaryTextureMask,
   surfaceProgramFeatureBits,
   surfaceTextureUnitMask,
 } from "./surface-texture-plan";
@@ -1181,8 +1182,7 @@ export class SurfaceGpuOwner {
       material,
       ordinaryTextureMask: presentableOrdinaryTextureMask(
         material,
-        ordinaryBindings,
-        bindingOffset,
+        residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
     });
     const bindings = composeSurfaceTextureBindings(
@@ -1388,7 +1388,10 @@ export class SurfaceGpuOwner {
           hasVirtualBaseColor: resource.virtualTexture !== undefined,
           linearOutput: this.#compositeActive,
           material,
-          ordinaryTextureMask: presentableOrdinaryTextureMask(material, ordinaryBindings, 0),
+          ordinaryTextureMask: presentableOrdinaryTextureMask(
+            material,
+            residentOrdinaryTextureMask(ordinaryBindings, 0),
+          ),
         });
         const textureUnits = surfaceTextureUnitMask(features);
         resource.surface = surface;

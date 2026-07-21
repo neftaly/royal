@@ -209,10 +209,9 @@ const TRANSMISSION_TEXTURE_MASK = 0b110_000_000;
  */
 export const presentableOrdinaryTextureMask = (
   material: CanonicalSurfaceMaterial,
-  bindings: readonly GpuTextureBinding[],
-  offset: number,
+  residentMask: number,
 ): number => {
-  let resident = residentOrdinaryTextureMask(bindings, offset);
+  let resident = residentMask;
   if (material.kind !== "standard") return resident;
   const detail = (material.metallicRoughnessTexture === undefined ? 0 : 1 << 1)
     | (material.normalTexture === undefined ? 0 : 1 << 2)

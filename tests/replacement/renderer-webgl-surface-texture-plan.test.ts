@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { CanonicalSurfaceMaterial, CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import {
+  resolveCanonicalMaterialTexture,
+  type CanonicalSurfaceMaterial,
+  type CanonicalTextureBinding,
+} from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
   composeSurfaceTextureBindings,
   materialTextureBindingAt,
@@ -14,16 +18,27 @@ import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
+  SURFACE_FEATURE_EMISSIVE_TEXTURE,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
+  SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
   SURFACE_FEATURE_NORMAL_TEXTURE,
+  SURFACE_FEATURE_OCCLUSION_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+  SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
+  SURFACE_FEATURE_SPECULAR_TEXTURE,
+  SURFACE_FEATURE_THICKNESS_TEXTURE,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
+  SURFACE_FEATURE_TRANSMISSION_TEXTURE,
   SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VOLUME_MATERIAL,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import type { GpuTextureBinding } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import type { VirtualTextureGpuBinding } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
 import type { PrefilteredEnvironmentGpuBinding } from "../../packages/renderer-webgl/src/environment/gpu-owner";
+import type {
+  DecodedTextureSource,
+  TextureSourceRef,
+} from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 const gpuBinding = (label: string): GpuTextureBinding => ({
   sampler: { label: `${label}-sampler` } as unknown as WebGLSampler,
@@ -242,18 +257,21 @@ describe("surface texture planning core", () => {
 
     expect(presentableOrdinaryTextureMask(
       { ...material, mapWaits: 1 },
-      [resident, resident, resident, empty, empty, empty, empty, empty, empty],
-      0,
+      residentOrdinaryTextureMask(
+        [resident, resident, resident, empty, empty, empty, empty, empty, empty], 0,
+      ),
     )).toBe(0b1);
     expect(presentableOrdinaryTextureMask(
       material,
-      [resident, resident, empty, empty, empty, empty, empty, empty, empty],
-      0,
+      residentOrdinaryTextureMask(
+        [resident, resident, empty, empty, empty, empty, empty, empty, empty], 0,
+      ),
     )).toBe(0b1);
     expect(presentableOrdinaryTextureMask(
       material,
-      [resident, resident, resident, empty, empty, empty, empty, empty, empty],
-      0,
+      residentOrdinaryTextureMask(
+        [resident, resident, resident, empty, empty, empty, empty, empty, empty], 0,
+      ),
     )).toBe(0b111);
 
     const transmissionMaterial = standard({
@@ -262,14 +280,115 @@ describe("surface texture planning core", () => {
     });
     expect(presentableOrdinaryTextureMask(
       transmissionMaterial,
-      [resident, empty, empty, empty, empty, empty, empty, resident, empty],
-      0,
+      residentOrdinaryTextureMask(
+        [resident, empty, empty, empty, empty, empty, empty, resident, empty], 0,
+      ),
     )).toBe(0b1);
     expect(presentableOrdinaryTextureMask(
       transmissionMaterial,
-      [resident, empty, empty, empty, empty, empty, empty, resident, resident],
-      0,
+      residentOrdinaryTextureMask(
+        [resident, empty, empty, empty, empty, empty, empty, resident, resident], 0,
+      ),
     )).toBe(0b1_1000_0001);
+  });
+
+  it("publishes successful maps after sibling failures settle to neutral semantics", () => {
+    const asset = (name: string): TextureSourceRef => ({
+      kind: "asset",
+      src: `/${name}.png`,
+    });
+    const assets = {
+      baseColor: asset("base-color"),
+      emissive: asset("emissive"),
+      metallicRoughness: asset("metallic-roughness"),
+      normal: asset("normal"),
+      occlusion: asset("occlusion"),
+      specular: asset("specular"),
+      specularColor: asset("specular-color"),
+      thickness: asset("thickness"),
+      transmission: asset("transmission"),
+    };
+    const source = standard({
+      baseColor: [0.25, 0.5, 0.75, 0.8],
+      baseColorAsset: assets.baseColor,
+      emissiveAsset: assets.emissive,
+      emissiveFactor: [0.2, 0.3, 0.4],
+      metallicFactor: 0.6,
+      metallicRoughnessAsset: assets.metallicRoughness,
+      normalAsset: assets.normal,
+      normalScale: 0.7,
+      occlusionAsset: assets.occlusion,
+      occlusionStrength: 0.5,
+      roughnessFactor: 0.35,
+      specularColorAsset: assets.specularColor,
+      specularColorFactor: [0.8, 0.7, 0.6],
+      specularFactor: 0.9,
+      specularTextureAsset: assets.specular,
+      thicknessAsset: assets.thickness,
+      thicknessFactor: 0.4,
+      transmissionAsset: assets.transmission,
+      transmissionFactor: 0.75,
+    });
+    const decodedSource: DecodedTextureSource = {
+      height: 1,
+      source: {} as ImageBitmap,
+      width: 1,
+    };
+    const successful = new Set<TextureSourceRef>([
+      assets.baseColor,
+      assets.emissive,
+      assets.metallicRoughness,
+      assets.transmission,
+    ]);
+    const pending = resolveCanonicalMaterialTexture(
+      source,
+      (candidate) => successful.has(candidate) ? decodedSource : undefined,
+      () => true,
+    );
+    expect(pending.kind === "standard" && pending.mapWaits).toBe(0b11);
+
+    const settled = resolveCanonicalMaterialTexture(
+      source,
+      (candidate) => successful.has(candidate) ? decodedSource : undefined,
+      () => false,
+    );
+    expect(settled.kind).toBe("standard");
+    if (settled.kind !== "standard") throw new Error("expected standard material");
+    expect(settled.mapWaits).toBeUndefined();
+    expect(settled).toMatchObject({
+      baseColor: source.baseColor,
+      emissiveFactor: source.emissiveFactor,
+      metallicFactor: source.metallicFactor,
+      normalScale: source.normalScale,
+      occlusionStrength: source.occlusionStrength,
+      roughnessFactor: source.roughnessFactor,
+      specularColorFactor: source.specularColorFactor,
+      specularFactor: source.specularFactor,
+      thicknessFactor: source.thicknessFactor,
+      transmissionFactor: source.transmissionFactor,
+    });
+    const residentMask = 1 << 0 | 1 << 1 | 1 << 3 | 1 << 7;
+    const features = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: true,
+      hasVirtualBaseColor: false,
+      linearOutput: true,
+      material: settled,
+      ordinaryTextureMask: presentableOrdinaryTextureMask(settled, residentMask),
+    });
+    expect(features & SURFACE_FEATURE_BASE_COLOR_TEXTURE).not.toBe(0);
+    expect(features & SURFACE_FEATURE_EMISSIVE_TEXTURE).not.toBe(0);
+    expect(features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE).not.toBe(0);
+    expect(features & SURFACE_FEATURE_TRANSMISSION_TEXTURE).not.toBe(0);
+    expect(features & SURFACE_FEATURE_NORMAL_TEXTURE).toBe(0);
+    expect(features & SURFACE_FEATURE_OCCLUSION_TEXTURE).toBe(0);
+    expect(features & SURFACE_FEATURE_SPECULAR_TEXTURE).toBe(0);
+    expect(features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE).toBe(0);
+    expect(features & SURFACE_FEATURE_THICKNESS_TEXTURE).toBe(0);
   });
 
   it("selects every standard texture feature without aliasing shader units", () => {

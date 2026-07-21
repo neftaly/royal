@@ -39,6 +39,10 @@ versions identify source-level prerelease checkpoints in this repository.
 - Expanded packed-consumer and bundle gates across React scene observation,
   XR, picking proxies, instances, glTF authoring, and entrypoint ownership; glTF
   scene authoring adds about 1.1 kB gzip to the measured Royal initial path.
+- Decoupled coherent PBR map publication from WebGL bindings: the functional
+  core now consumes a compact residency mask, keeps paced map groups atomic,
+  and publishes successful maps once failed sibling slots settle to their
+  semantic-neutral behavior without changing authored material factors.
 - Standardized authoring failures on `TypeError` for malformed values and
   `RangeError` for invalid finite ranges, and stopped silently clamping invalid
   normalized sRGB input.
