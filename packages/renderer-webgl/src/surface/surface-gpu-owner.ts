@@ -85,7 +85,7 @@ import {
   createDrawableLodSelectionWorkspace,
   lodMembershipsSelected,
   selectDrawableLodsInto,
-  type LodGroupId,
+  type LodLevelSelections,
 } from "./lod-selection";
 import type { LinearRgba } from "@royal/renderer-core";
 import type {
@@ -358,8 +358,6 @@ export class SurfaceGpuOwner {
     this.#instanceTransformsPending = false;
     this.#scene = null;
     this.#texturePublicationKeys.clear();
-    this.#lodSelection.activeGroups.clear();
-    this.#lodSelection.selections.clear();
     this.#compositeActive = false;
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
@@ -417,8 +415,8 @@ export class SurfaceGpuOwner {
   }
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */
-  lodSelections(): ReadonlyMap<LodGroupId, number> {
-    return this.#lodSelection.selections;
+  lodSelections(): LodLevelSelections {
+    return this.#lodSelection.currentLevels;
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {
@@ -921,7 +919,7 @@ export class SurfaceGpuOwner {
           frameView.viewProjection,
           this.#opaqueSurfaces,
           this.#depthPrepassRunEnds,
-          this.#lodSelection.selections,
+          this.#lodSelection.currentLevels,
           this.#compositeFramePlan.frustumPlanes,
           state,
         );
@@ -944,7 +942,7 @@ export class SurfaceGpuOwner {
       const bucketIndex = index - bucketOffset;
       const resource = bucket[bucketIndex]!;
       const surface = resource.surface;
-      if (!lodMembershipsSelected(surface.lods, this.#lodSelection.selections)) continue;
+      if (!lodMembershipsSelected(surface.lods, this.#lodSelection.currentLevels)) continue;
       if (transmissionBucket) {
         if (
           this.#compositeFramePlan.visibility[
@@ -1241,7 +1239,7 @@ export class SurfaceGpuOwner {
           const next = bucket[nextIndex - bucketOffset]!;
           if (next.geometry.indexOffset > 0x7fff_ffff) break;
           if (
-            lodMembershipsSelected(next.surface.lods, this.#lodSelection.selections)
+            lodMembershipsSelected(next.surface.lods, this.#lodSelection.currentLevels)
             && (transmissionBucket
               ? this.#compositeFramePlan.visibility[
                   viewIndex * visibilityStride + next.slot

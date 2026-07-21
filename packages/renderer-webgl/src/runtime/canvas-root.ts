@@ -1285,11 +1285,13 @@ export class CanvasRoot implements RendererRoot {
 
   #progressiveResourcesSettled(): boolean {
     if (this.#surfaceResourcesPending || this.#textureResourcesPending) return false;
-    const assets = this.#surfaceScene?.textureAssets ?? [];
-    return assets.every((asset) => {
-      const status = this.#getTextureSnapshot(asset).status;
-      return status === "ready" || status === "error";
-    });
+    const assets = this.#surfaceScene?.textureAssets;
+    if (assets === undefined) return true;
+    for (let index = 0; index < assets.length; index += 1) {
+      const status = this.#getTextureSnapshot(assets[index]!).status;
+      if (status !== "ready" && status !== "error") return false;
+    }
+    return true;
   }
 
   #updateClearColor(color: LinearRgba): boolean {

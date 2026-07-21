@@ -13,7 +13,7 @@ import type {
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import {
   lodMembershipsSelected,
-  type LodGroupId,
+  type LodLevelSelections,
   type LodMembership,
 } from "./lod-selection";
 import type { WebGlMultiDraw } from "./surface-multi-draw";
@@ -82,7 +82,7 @@ export class SurfaceDepthPrepassOwner {
     viewProjection: Mat4,
     surfaces: readonly SurfaceDepthPrepassResource[],
     runEnds: Uint32Array<ArrayBufferLike>,
-    lodSelections: ReadonlyMap<LodGroupId, number>,
+    lodSelections: LodLevelSelections,
     frustumPlanes: Float32Array<ArrayBufferLike>,
     state: WebGlStateOwner,
   ): void {

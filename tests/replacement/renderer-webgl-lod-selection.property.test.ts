@@ -1,9 +1,15 @@
 import { describe, it } from "vitest";
+import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   CULLED_LOD_LEVEL,
   closestDrawableLodLevel,
+  createDrawableLodSelectionWorkspace,
+  createProjectedBoundsWorkspace,
   hystereticLodLevel,
+  lodMembershipsSelected,
+  maximumProjectedBoundsScreenCoverage,
   normalizeLodThresholds,
+  selectDrawableLodsInto,
 } from "../../packages/renderer-webgl/src/surface/lod-selection";
 import {
   assertFuzz,
@@ -12,6 +18,58 @@ import {
 } from "../fuzz";
 
 describe("canonical LOD selection properties", () => {
+  it("matches a readable retained-map model across dense scene changes", () => {
+    forEachFuzzCase({ cases: 32, seed: 0x4c_4f_44_03 }, ({ random }) => {
+      const workspace = createDrawableLodSelectionWorkspace();
+      const projection = createProjectedBoundsWorkspace();
+      let previous = new Map<number, number>();
+      for (let frame = 0; frame < 24; frame += 1) {
+        const groupCount = random.int(0, 17);
+        const groups = Array.from({ length: groupCount }, (_unused, group) => ({
+          group,
+          levels: [0, 1, 2],
+          selectionBounds: {
+            max: [0.1 + group * 0.001, 0.1, 0] as const,
+            min: [-0.1 - group * 0.001, -0.1, 0] as const,
+          },
+          surfaceIndices: [group * 3, group * 3 + 1, group * 3 + 2],
+          thresholds: [0.35, 0.04, 0],
+        }));
+        const resources = Array.from({ length: groupCount * 3 }, (_unused, index) => ({
+          surface: { lods: [{ group: Math.floor(index / 3), level: index % 3 }] },
+        }));
+        const viewProjection = identityMat4();
+        const scale = random.number(0.25, 8);
+        viewProjection[0] = scale;
+        viewProjection[5] = scale;
+        const views = [{ viewProjection }];
+        const expected = new Map<number, number>();
+        for (const group of groups) {
+          const coverage = maximumProjectedBoundsScreenCoverage(
+            group.selectionBounds,
+            views,
+            projection,
+          );
+          expected.set(group.group, hystereticLodLevel(
+            coverage,
+            group.thresholds,
+            previous.get(group.group),
+          ));
+        }
+
+        const actual = selectDrawableLodsInto(groups, views, resources, workspace);
+        for (let group = 0; group < Math.max(groupCount, previous.size); group += 1) {
+          const expectedLevel = expected.get(group);
+          assertFuzzEqual(lodMembershipsSelected(
+            [{ group, level: expectedLevel ?? 0 }],
+            actual,
+          ), true, `frame ${frame} group ${group}`);
+        }
+        previous = expected;
+      }
+    });
+  });
+
   it("normalizes arbitrary hints into a finite descending threshold contract", () => {
     forEachFuzzCase({ cases: 48, seed: 0x4c_4f_44_01 }, ({ random }) => {
       const levelCount = random.int(1, 33);

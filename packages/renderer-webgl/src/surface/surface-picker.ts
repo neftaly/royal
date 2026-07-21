@@ -6,7 +6,7 @@ import {
   createCanonicalAlphaMaskSamplingScratch,
 } from "./alpha-mask-sampling";
 import type { CanonicalCamera } from "./camera-source-owner";
-import type { LodGroupId } from "./lod-selection";
+import type { LodLevelSelections } from "./lod-selection";
 import {
   createCanonicalPickingScratch,
   pickCanonicalSurfaceInto,
@@ -110,7 +110,7 @@ export class SurfacePicker {
     rect: CanvasClientRect,
     backingWidth: number,
     backingHeight: number,
-    selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
+    selectedLodLevels?: LodLevelSelections,
   ): PickResult | undefined {
     const footprintRequired = scene.alphaMaskTextureAssets.length > 0;
     const ray = this.#canvasRay(

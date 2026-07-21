@@ -68,7 +68,7 @@ describe("canonical LOD selection", () => {
     expect(lodMembershipsSelected(undefined, undefined)).toBe(true);
     expect(lodMembershipsSelected(level0, undefined)).toBe(true);
     expect(lodMembershipsSelected(level1, undefined)).toBe(false);
-    const selected = new Map([[0, 1]]);
+    const selected = new Int32Array([1]);
     expect(lodMembershipsSelected(level0, selected)).toBe(false);
     expect(lodMembershipsSelected(level1, selected)).toBe(true);
   });
@@ -98,8 +98,9 @@ describe("canonical LOD selection", () => {
     const views = [{ viewProjection: identityMat4() }];
 
     const selections = selectDrawableLodsInto(groups, views, resources, workspace);
-    expect([...selections]).toEqual([[0, 0], [1, 0]]);
+    expect(Array.from(selections)).toEqual([0, 0]);
     const drawableLevels = workspace.drawableLevels;
+    selectDrawableLodsInto(groups, views, resources, workspace);
     expect(selectDrawableLodsInto(groups, views, resources, workspace)).toBe(selections);
     expect(workspace.drawableLevels).toBe(drawableLevels);
   });
@@ -116,9 +117,13 @@ describe("canonical LOD selection", () => {
     const resources = [{ surface: { lods: [{ group: 0, level: 0 }] } }];
     const views = [{ viewProjection: identityMat4() }];
 
-    expect([...selectDrawableLodsInto([group], views, resources, workspace)])
-      .toEqual([[0, 0]]);
-    expect(selectDrawableLodsInto([], views, resources, workspace).size).toBe(0);
-    expect(workspace.activeGroups.size).toBe(0);
+    expect(lodMembershipsSelected(
+      [{ group: 0, level: 0 }],
+      selectDrawableLodsInto([group], views, resources, workspace),
+    )).toBe(true);
+    expect(lodMembershipsSelected(
+      [{ group: 0, level: 1 }],
+      selectDrawableLodsInto([], views, resources, workspace),
+    )).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
-import { lodMembershipsSelected, type LodGroupId } from "./lod-selection";
+import { lodMembershipsSelected, type LodLevelSelections } from "./lod-selection";
 import type { CanonicalPickSurface } from "./scene-lowering";
 
 export type CanonicalPickRay = Readonly<{
@@ -215,7 +215,7 @@ export const pickCanonicalSurfaceInto = (
   ray: CanonicalPickRay,
   surfaces: readonly CanonicalPickSurface[],
   scratch: CanonicalPickingScratch,
-  selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
+  selectedLodLevels?: LodLevelSelections,
   acceptsHit?: CanonicalPickHitAcceptance,
   footprint?: CanonicalPickRayFootprint,
 ): boolean => {

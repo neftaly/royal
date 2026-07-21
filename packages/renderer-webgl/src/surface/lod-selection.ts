@@ -2,9 +2,13 @@ import type { Mat4 } from "../math/mat4";
 import type { WorldBounds } from "./surface-visibility";
 
 export const CULLED_LOD_LEVEL = -1;
+const ABSENT_LOD_LEVEL = -2;
 
 /** Dense scene-local identity shared by visual and picking LOD selection. */
 export type LodGroupId = number;
+
+/** Narrow retained lookup shared by visual, depth, and picking consumers. */
+export type LodLevelSelections = ArrayLike<number>;
 
 export type LodMembership = Readonly<{
   group: LodGroupId;
@@ -16,11 +20,14 @@ export type LodMembership = Readonly<{
 /** Shared visual/picking membership rule; an unselected cold group starts at level zero. */
 export const lodMembershipsSelected = (
   lods: readonly Pick<LodMembership, "group" | "level">[] | undefined,
-  selections: ReadonlyMap<LodGroupId, number> | undefined,
+  selections: LodLevelSelections | undefined,
 ): boolean => {
   if (lods === undefined) return true;
   for (const lod of lods) {
-    if ((selections?.get(lod.group) ?? 0) !== lod.level) return false;
+    const selected = selections?.[lod.group];
+    if ((selected === ABSENT_LOD_LEVEL ? 0 : selected ?? 0) !== lod.level) {
+      return false;
+    }
   }
   return true;
 };
@@ -241,17 +248,17 @@ export type DrawableLodResource = Readonly<{
 }>;
 
 export type DrawableLodSelectionWorkspace = {
-  readonly activeGroups: Set<LodGroupId>;
+  currentLevels: Int32Array;
   drawableLevels: Uint8Array;
+  previousLevels: Int32Array;
   readonly projection: ProjectedBoundsWorkspace;
-  readonly selections: Map<LodGroupId, number>;
 };
 
 export const createDrawableLodSelectionWorkspace = (): DrawableLodSelectionWorkspace => ({
-  activeGroups: new Set(),
+  currentLevels: new Int32Array(0),
   drawableLevels: new Uint8Array(1),
+  previousLevels: new Int32Array(0),
   projection: createProjectedBoundsWorkspace(),
-  selections: new Map(),
 });
 
 /**
@@ -264,13 +271,14 @@ export const selectDrawableLodsInto = (
   views: readonly Readonly<{ viewProjection: Mat4 }>[],
   resources: readonly (DrawableLodResource | undefined)[],
   workspace: DrawableLodSelectionWorkspace,
-): ReadonlyMap<LodGroupId, number> => {
-  const { activeGroups, selections } = workspace;
-  activeGroups.clear();
-  if (groups.length === 0) {
-    selections.clear();
-    return selections;
+): LodLevelSelections => {
+  const previousLevels = workspace.currentLevels;
+  workspace.currentLevels = workspace.previousLevels;
+  workspace.previousLevels = previousLevels;
+  if (workspace.currentLevels.length < groups.length) {
+    workspace.currentLevels = new Int32Array(groups.length);
   }
+  workspace.currentLevels.fill(ABSENT_LOD_LEVEL);
   for (const group of groups) {
     if (workspace.drawableLevels.length < group.thresholds.length) {
       workspace.drawableLevels = new Uint8Array(group.thresholds.length);
@@ -282,42 +290,43 @@ export const selectDrawableLodsInto = (
       drawable = true;
     }
     if (!drawable) continue;
-    activeGroups.add(group.group);
     const coverage = maximumProjectedBoundsScreenCoverage(
       group.selectionBounds,
       views,
       workspace.projection,
     );
-    const previous = selections.get(group.group);
+    const previousLevel = workspace.previousLevels[group.group];
+    const previous = previousLevel === ABSENT_LOD_LEVEL ? undefined : previousLevel;
     const target = hystereticLodLevel(coverage, group.thresholds, previous);
-    selections.set(group.group, closestDrawableLodLevel(
+    workspace.currentLevels[group.group] = closestDrawableLodLevel(
       target,
       previous,
       workspace.drawableLevels,
       group.thresholds.length,
-    ));
+    );
   }
   // Admission is prefix-bounded. Independent selectors may temporarily pick
   // a node/material combination whose complete packet is not uploaded yet;
   // retain one admitted combination for every affected set instead of a hole.
   for (const group of groups) {
-    if (!activeGroups.has(group.group)) continue;
+    if (workspace.currentLevels[group.group] === ABSENT_LOD_LEVEL) continue;
     let matched = false;
     let fallback: DrawableLodResource["surface"] | undefined;
     for (const surfaceIndex of group.surfaceIndices) {
       const surface = resources[surfaceIndex]?.surface;
       if (surface === undefined) continue;
       fallback ??= surface;
-      if (lodMembershipsSelected(surface.lods, selections)) {
+      if (lodMembershipsSelected(surface.lods, workspace.currentLevels)) {
         matched = true;
         break;
       }
     }
     if (matched || fallback?.lods === undefined) continue;
-    for (const lod of fallback.lods) selections.set(lod.group, lod.level);
+    for (const lod of fallback.lods) {
+      if (workspace.currentLevels[lod.group] !== ABSENT_LOD_LEVEL) {
+        workspace.currentLevels[lod.group] = lod.level;
+      }
+    }
   }
-  for (const group of selections.keys()) {
-    if (!activeGroups.has(group)) selections.delete(group);
-  }
-  return selections;
+  return workspace.currentLevels;
 };
