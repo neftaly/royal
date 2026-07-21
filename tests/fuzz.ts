@@ -1,4 +1,4 @@
-export type FuzzCaseContext = {
+type FuzzCaseContext = {
   readonly caseIndex: number;
   readonly label: string;
   readonly random: SeededRandom;
@@ -6,35 +6,17 @@ export type FuzzCaseContext = {
   readonly replay?: unknown;
   readonly seed: number;
 };
-export type FuzzCaseOptions = {
+type FuzzCaseOptions = {
   readonly cases?: number;
   readonly envName?: string;
   readonly replays?: readonly FuzzReplay[];
   readonly seed: number;
 };
-export type FuzzReplay = {
+type FuzzReplay = {
   readonly label: string;
   readonly seed?: number;
   readonly value: unknown;
 };
-export type FuzzTraceReplay<Operation> = {
-  readonly label: string;
-  readonly value: readonly Operation[];
-};
-
-export type FuzzTraceOptions<Operation> = {
-  readonly cases?: number;
-  readonly envName?: string;
-  readonly maxShrinkAttempts?: number;
-  readonly operation: (random: SeededRandom, step: number) => Operation;
-  readonly replayEnvName?: string;
-  readonly replays?: readonly FuzzTraceReplay<Operation>[];
-  readonly run: (trace: readonly Operation[], label: string) => Promise<void> | void;
-  readonly seed: number;
-  readonly shrinkOperation?: (operation: Operation) => readonly Operation[];
-  readonly steps: number;
-};
-
 /** Low-overhead assertions for hot property-test loops. The fuzz runner adds seed context. */
 export const assertFuzz: (condition: boolean, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -59,21 +41,6 @@ export const assertFuzzArrayEqual = (
   for (let index = 0; index < actual.length; index += 1) {
     assertFuzzEqual(actual[index], expected[index], `${message}[${index}]`);
   }
-};
-
-export const assertFuzzThrows = (
-  run: () => unknown,
-  expectedMessage: RegExp,
-  message: string,
-): void => {
-  try {
-    run();
-  } catch (error) {
-    const actualMessage = error instanceof Error ? error.message : String(error);
-    assertFuzz(expectedMessage.test(actualMessage), `${message}: unexpected error ${actualMessage}`);
-    return;
-  }
-  throw new Error(`${message}: expected function to throw`);
 };
 
 const defaultFuzzCasesEnvName = "ROYAL_FUZZ_CASES";
@@ -118,7 +85,7 @@ export class SeededRandom {
     return Array.from({ length }, (_value, index) => item(index));
   }
 }
-export const fuzzCaseCount = (
+const fuzzCaseCount = (
   defaultCases: number,
   envName = defaultFuzzCasesEnvName,
 ): number => {
@@ -176,111 +143,5 @@ export const forEachFuzzCase = (
     } catch (error) {
       throw wrapFuzzFailure(context, error);
     }
-  }
-};
-
-export const forEachFuzzCaseAsync = async (
-  options: FuzzCaseOptions,
-  run: (context: FuzzCaseContext) => Promise<void>,
-): Promise<void> => {
-  for (const context of fuzzCases(options)) {
-    try {
-      await run(context);
-    } catch (error) {
-      throw wrapFuzzFailure(context, error);
-    }
-  }
-};
-const traceFailure = async <Operation>(
-  run: FuzzTraceOptions<Operation>["run"],
-  trace: readonly Operation[],
-  label: string,
-): Promise<unknown | undefined> => {
-  try {
-    await run(trace, label);
-    return undefined;
-  } catch (error) {
-    return { error };
-  }
-};
-
-const shrinkTrace = async <Operation>(
-  options: FuzzTraceOptions<Operation>,
-  original: readonly Operation[],
-  label: string,
-): Promise<readonly Operation[]> => {
-  let attempts = 0;
-  const maximum = options.maxShrinkAttempts ?? 128;
-  let trace = [...original];
-  for (let chunks = 2; trace.length > 1 && attempts < maximum;) {
-    const width = Math.ceil(trace.length / chunks);
-    let reduced = false;
-    for (let start = 0; start < trace.length && attempts < maximum; start += width) {
-      const candidate = [...trace.slice(0, start), ...trace.slice(start + width)];
-      if (candidate.length === 0) continue;
-      attempts += 1;
-      if (await traceFailure(options.run, candidate, `${label} shrink=${attempts}`) !== undefined) {
-        trace = candidate;
-        chunks = Math.max(2, chunks - 1);
-        reduced = true;
-        break;
-      }
-    }
-    if (!reduced && chunks >= trace.length) break;
-    if (!reduced) chunks = Math.min(trace.length, chunks * 2);
-  }
-  if (options.shrinkOperation === undefined) return trace;
-  for (let index = 0; index < trace.length && attempts < maximum; index += 1) {
-    for (const simpler of options.shrinkOperation(trace[index]!)) {
-      const candidate = [...trace];
-      candidate[index] = simpler;
-      attempts += 1;
-      if (await traceFailure(options.run, candidate, `${label} shrink=${attempts}`) !== undefined) {
-        trace = candidate;
-        break;
-      }
-      if (attempts >= maximum) break;
-    }
-  }
-  return trace;
-};
-/** Runs serializable state-machine traces with bounded deterministic shrinking and replay. */
-export const runFuzzTraces = async <Operation>(options: FuzzTraceOptions<Operation>): Promise<void> => {
-  if (!Number.isInteger(options.steps) || options.steps < 1) {
-    throw new Error("fuzz trace steps must be positive");
-  }
-  const replayEnvName = options.replayEnvName ?? "ROYAL_FUZZ_REPLAY";
-  const envReplay = process.env[replayEnvName];
-  const replays = [...(options.replays ?? [])];
-  if (envReplay !== undefined && envReplay.trim() !== "") {
-    const parsed: unknown = JSON.parse(envReplay);
-    if (!Array.isArray(parsed)) throw new Error(`${replayEnvName} must contain a JSON operation array`);
-    replays.push({ label: replayEnvName, value: parsed as Operation[] });
-  }
-  const traces: Array<{ readonly label: string; readonly trace: readonly Operation[] }> = replays.map((replay) => (
-    { label: `replay=${replay.label}`, trace: replay.value }
-  ));
-  const count = envReplay === undefined || envReplay.trim() === ""
-    ? fuzzCaseCount(options.cases ?? 12, options.envName)
-    : 0;
-  for (let caseIndex = 0; caseIndex < count; caseIndex += 1) {
-    const seed = seedForCase(options.seed, caseIndex);
-    const random = new SeededRandom(seed);
-    traces.push({
-      label: `seed=0x${seed.toString(16).padStart(8, "0")} case=${caseIndex}`,
-      trace: random.array(options.steps, (step) => options.operation(random, step)),
-    });
-  }
-  for (const { label, trace } of traces) {
-    const failure = await traceFailure(options.run, trace, label);
-    if (failure === undefined) continue;
-    const minimized = await shrinkTrace(options, trace, label);
-    let finalCause: unknown;
-    try {
-      await options.run(minimized, `${label} minimized`);
-    } catch (error) {
-      finalCause = error;
-    }
-    throw new Error(`Fuzz trace failed (${label}) trace=${JSON.stringify(minimized)}`, { cause: finalCause });
   }
 };
