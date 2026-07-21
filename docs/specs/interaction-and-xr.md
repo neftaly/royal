@@ -56,12 +56,22 @@ not vary by input device.
 
 Exact mask picking interpolates the selected authored UV set barycentrically,
 applies `KHR_texture_transform`, sampler wrap, base-color alpha factor, and
-cutoff in the canonical CPU query. Missing or failed pixels follow the visible
-opaque neutral fallback, so a progressively arriving mask may refine a hit.
-Because a ray has no pixel derivatives, the current query samples retained base
-alpha with the magnification filter rather than guessing a GPU minification
-mip. Close/intermediate silhouettes are exact; minified mip silhouettes are a
-documented approximation until the query accepts an explicit ray footprint.
+cutoff in the canonical CPU query. Missing, non-resident, denied, or failed
+pixels follow the visible opaque neutral fallback, so a progressively arriving
+mask may refine a hit only after its matching GPU storage is resident. The
+canvas query constructs adjacent rays one physical framebuffer pixel away and
+transforms all three rays through the same camera and instance path. Their
+triangle-plane UV footprint selects retained alpha mips and applies the authored
+nearest/linear and mip-nearest/mip-linear filter combination. This extra work is
+skipped when a scene has no pickable mask texture.
+
+For KTX2, retained alpha is decoded from the exact authored mip levels. For an
+ordinary browser image, Royal retains a deterministic alpha-only box pyramid
+generated from the fitted base. WebGL permits implementation-dependent texture
+footprint approximation and mip generation, so a minified pixel close to an LOD
+or cutoff boundary can still disagree. Close silhouettes and all
+geometry, identity, UV, wrap, filter-selection and cutoff semantics remain
+shared; bit-exact driver downsampling is not promised.
 
 LOD changes preserve the parent logical target. Instance indices refer to the
 authored/caller instance channel, never a compacted visible index.
@@ -89,7 +99,9 @@ Pointer move MAY be coalesced to the next appropriate animation frame. Picking
 MUST NOT render a color-ID framebuffer merely to answer CPU-exact geometry that
 is already retained. Broad phase must bound exact triangle work. Scratch storage
 SHOULD be retained and high-water bounded so repeated pointer movement does not
-produce proportional garbage.
+produce proportional garbage. The canonical query retains its primary ray,
+two optional footprint rays, per-instance transformed rays, triangle hit and UV
+workspace rather than allocating them per pointer sample.
 
 The imperative root `pick` and React pointer events call the same query. XR ray
 picking, when exposed, MUST lower to that same canonical query/identity model

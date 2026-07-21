@@ -38,6 +38,13 @@ describe("shared offline KTX2/ETC2 storage", () => {
       94, 104, 94, 104,
       80, 118, 80, 118,
     ]));
+    expect(() => decodeKtx2Etc2Alpha(parseKtx2Etc2(bytes), 1)).toThrow("out of range");
+  });
+
+  it("extracts the exact authored alpha dimensions at every KTX2 mip", () => {
+    const texture = parseKtx2Etc2(ktx2(152, 8, 4, 4));
+    expect(texture.levels.map((_level, index) =>
+      decodeKtx2Etc2Alpha(texture, index).length)).toEqual([32, 8, 2, 1]);
   });
 
   it("keeps the VT page contract single-level", () => {

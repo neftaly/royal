@@ -1,18 +1,20 @@
-import {
-  type PickInput,
-  type PickResult,
-} from "@royal/renderer-core";
+import type { PickInput, PickResult } from "@royal/renderer-core";
 import { identityMat4, inverseMat4Into, type Mat4 } from "../math/mat4";
 import type { DecodedTextureAlpha, TextureSourceRef } from "../texture/asset-owner";
-import { canonicalAlphaMaskAcceptsTrianglePoint } from "./alpha-mask-sampling";
+import {
+  canonicalAlphaMaskAcceptsTrianglePoint,
+  createCanonicalAlphaMaskSamplingScratch,
+} from "./alpha-mask-sampling";
+import type { CanonicalCamera } from "./camera-source-owner";
+import type { LodGroupId } from "./lod-selection";
 import {
   createCanonicalPickingScratch,
   pickCanonicalSurfaceInto,
+  type CanonicalLocalPickRayFootprint,
   type CanonicalPickRay,
+  type CanonicalPickRayFootprint,
 } from "./picking-query";
 import type { CanonicalSurfaceScene } from "./scene-lowering";
-import type { CanonicalCamera } from "./camera-source-owner";
-import type { LodGroupId } from "./lod-selection";
 
 type CanvasClientRect = Readonly<{
   height: number;
@@ -27,6 +29,13 @@ type MutablePickRay = {
   minDistance: number;
   origin: [number, number, number];
 };
+
+const mutablePickRay = (): MutablePickRay => ({
+  direction: [0, 0, -1],
+  maxDistance: 0,
+  minDistance: 0,
+  origin: [0, 0, 0],
+});
 
 const unprojectInto = (
   target: [number, number, number],
@@ -52,6 +61,7 @@ export class SurfacePicker {
     cIndex: number,
     barycentricB: number,
     barycentricC: number,
+    footprint?: CanonicalLocalPickRayFootprint,
   ): boolean => {
     const material = surface.materialSource;
     if (material === undefined) return true;
@@ -66,19 +76,27 @@ export class SurfacePicker {
       cIndex,
       barycentricB,
       barycentricC,
+      footprint,
+      this.#alphaSamplingScratch,
     );
   };
+  readonly #alphaSamplingScratch = createCanonicalAlphaMaskSamplingScratch();
   readonly #alphaTexture: (asset: TextureSourceRef) => DecodedTextureAlpha | undefined;
+  readonly #far: [number, number, number] = [0, 0, 0];
+  readonly #footprintXFar: [number, number, number] = [0, 0, 0];
+  readonly #footprintXNear: [number, number, number] = [0, 0, 0];
+  readonly #footprintXRay = mutablePickRay();
+  readonly #footprintYFar: [number, number, number] = [0, 0, 0];
+  readonly #footprintYNear: [number, number, number] = [0, 0, 0];
+  readonly #footprintYRay = mutablePickRay();
+  readonly #footprint: CanonicalPickRayFootprint = {
+    x: this.#footprintXRay,
+    y: this.#footprintYRay,
+  };
   readonly #hit = { distance: 0, surfaceIndex: -1 };
   readonly #inverseViewProjection = identityMat4();
   readonly #near: [number, number, number] = [0, 0, 0];
-  readonly #far: [number, number, number] = [0, 0, 0];
-  readonly #ray: MutablePickRay = {
-    direction: [0, 0, -1],
-    maxDistance: 0,
-    minDistance: 0,
-    origin: [0, 0, 0],
-  };
+  readonly #ray = mutablePickRay();
   readonly #scratch = createCanonicalPickingScratch();
 
   constructor(alphaTexture: (asset: TextureSourceRef) => DecodedTextureAlpha | undefined) {
@@ -90,9 +108,20 @@ export class SurfacePicker {
     scene: CanonicalSurfaceScene,
     viewProjection: Mat4,
     rect: CanvasClientRect,
+    backingWidth: number,
+    backingHeight: number,
     selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
   ): PickResult | undefined {
-    const ray = this.#canvasRay(input, scene.camera, viewProjection, rect);
+    const footprintRequired = scene.alphaMaskTextureAssets.length > 0;
+    const ray = this.#canvasRay(
+      input,
+      scene.camera,
+      viewProjection,
+      rect,
+      backingWidth,
+      backingHeight,
+      footprintRequired,
+    );
     if (ray === undefined) return undefined;
     if (!pickCanonicalSurfaceInto(
       this.#hit,
@@ -101,6 +130,7 @@ export class SurfacePicker {
       this.#scratch,
       selectedLodLevels,
       this.#acceptHit,
+      footprintRequired ? this.#footprint : undefined,
     )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
@@ -149,8 +179,14 @@ export class SurfacePicker {
     camera: CanonicalCamera,
     viewProjection: Mat4,
     rect: CanvasClientRect,
+    backingWidth: number,
+    backingHeight: number,
+    footprintRequired: boolean,
   ): CanonicalPickRay | undefined {
-    if (!(rect.width > 0 && rect.height > 0)) return undefined;
+    if (
+      !(rect.width > 0 && rect.height > 0)
+      || !(backingWidth > 0 && backingHeight > 0)
+    ) return undefined;
     const relativeX = (input.clientX - rect.left) / rect.width;
     const relativeY = (input.clientY - rect.top) / rect.height;
     if (relativeX < 0 || relativeX > 1 || relativeY < 0 || relativeY > 1) return undefined;
@@ -158,36 +194,71 @@ export class SurfacePicker {
     if (inverse === undefined) return undefined;
     const ndcX = relativeX * 2 - 1;
     const ndcY = 1 - relativeY * 2;
+    if (!this.#rayAtNdc(this.#ray, this.#near, this.#far, camera, inverse, ndcX, ndcY)) {
+      return undefined;
+    }
+    if (footprintRequired) {
+      if (!this.#rayAtNdc(
+        this.#footprintXRay,
+        this.#footprintXNear,
+        this.#footprintXFar,
+        camera,
+        inverse,
+        ndcX + 2 / backingWidth,
+        ndcY,
+      )) return undefined;
+      if (!this.#rayAtNdc(
+        this.#footprintYRay,
+        this.#footprintYNear,
+        this.#footprintYFar,
+        camera,
+        inverse,
+        ndcX,
+        ndcY - 2 / backingHeight,
+      )) return undefined;
+    }
+    return this.#ray;
+  }
+
+  #rayAtNdc(
+    target: MutablePickRay,
+    near: [number, number, number],
+    far: [number, number, number],
+    camera: CanonicalCamera,
+    inverse: Mat4,
+    ndcX: number,
+    ndcY: number,
+  ): boolean {
     if (
-      !unprojectInto(this.#near, inverse, ndcX, ndcY, -1)
-      || !unprojectInto(this.#far, inverse, ndcX, ndcY, 1)
-    ) return undefined;
-    const origin = this.#ray.origin;
+      !unprojectInto(near, inverse, ndcX, ndcY, -1)
+      || !unprojectInto(far, inverse, ndcX, ndcY, 1)
+    ) return false;
+    const origin = target.origin;
     if (camera.kind === "perspective-camera") {
       origin[0] = camera.position[0];
       origin[1] = camera.position[1];
       origin[2] = camera.position[2];
     } else {
-      origin[0] = this.#near[0];
-      origin[1] = this.#near[1];
-      origin[2] = this.#near[2];
+      origin[0] = near[0];
+      origin[1] = near[1];
+      origin[2] = near[2];
     }
-    const x = this.#far[0] - origin[0];
-    const y = this.#far[1] - origin[1];
-    const z = this.#far[2] - origin[2];
+    const x = far[0] - origin[0];
+    const y = far[1] - origin[1];
+    const z = far[2] - origin[2];
     const length = Math.hypot(x, y, z);
-    if (!(length > 0) || !Number.isFinite(length)) return undefined;
-    const direction = this.#ray.direction;
+    if (!(length > 0) || !Number.isFinite(length)) return false;
+    const direction = target.direction;
     direction[0] = x / length;
     direction[1] = y / length;
     direction[2] = z / length;
-    this.#ray.minDistance = camera.kind === "perspective-camera"
+    target.minDistance = camera.kind === "perspective-camera"
       ? Math.max(0,
-        (this.#near[0] - origin[0]) * direction[0]
-        + (this.#near[1] - origin[1]) * direction[1]
-        + (this.#near[2] - origin[2]) * direction[2])
+        (near[0] - origin[0]) * direction[0]
+        + (near[1] - origin[1]) * direction[1]
+        + (near[2] - origin[2]) * direction[2])
       : 0;
-    this.#ray.maxDistance = length;
-    return this.#ray;
+    target.maxDistance = length;
+    return true;
   }
 }

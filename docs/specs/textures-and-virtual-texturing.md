@@ -95,15 +95,19 @@ original source dimensions. Capability detection is behavioral; user-agent or
 engine-name branching is not part of the texture contract.
 
 Ordinary images used by pickable `MASK` materials additionally retain one
-8-bit alpha plane at the already fitted upload dimensions. This demand is
+8-bit alpha plane at the already fitted upload dimensions. When their sampler
+uses mipmaps, they retain a complete deterministic alpha-only box pyramid; a
+square power-of-two pyramid costs less than one third again the base alpha
+plane, and arbitrary dimensions remain below twice the base plane. This demand is
 keyed by decoded content, shared across color interpretations and samplers, and
 is absent for ordinary opaque/blended textures and authoritative picking
 proxies. Browser images use a transient canvas RGBA readback only during
-demanded decode. Offline ETC2 RGBA decodes only its EAC alpha blocks into that
-same one-byte plane; RGB remains compressed and no GPU readback occurs. The
-upload source is released after GPU upload. Removing the final mask claim
-releases the alpha plane. Decode failure keeps the visible/pick fallback opaque
-rather than inventing a cutout.
+demanded decode. Offline ETC2 RGBA decodes only each demanded authored EAC alpha
+mip into that same one-byte-per-texel representation; RGB remains compressed
+and no GPU readback occurs. Non-mipmapped samplers retain only the base plane.
+The upload source is released after GPU upload. Removing the final mask claim
+releases the alpha pyramid. Decode failure keeps the visible/pick fallback
+opaque rather than inventing a cutout.
 
 ### Direct offline ETC2 KTX2 subset
 

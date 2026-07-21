@@ -11,6 +11,7 @@ import {
 } from "./encoded-image-dimensions";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import { RetainedFifo } from "../resource/retained-fifo";
+import { createTextureAlphaMipChain } from "./alpha-mipmap-generation";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
@@ -92,6 +93,9 @@ const declaresKtx2 = (asset: TextureLeafSourceRef): boolean =>
     ? isKtx2MimeType(asset.mimeType)
     : isKtx2Uri(asset.src));
 
+const alphaMipmapsRequired = (asset: TextureLeafSourceRef): boolean =>
+  (asset.sampler?.minFilter ?? "linear-mipmap-linear").includes("mipmap");
+
 const readTextureBlob = async (
   asset: TextureLeafSourceRef,
   signal: AbortSignal,
@@ -141,11 +145,18 @@ const decodeKtx2Texture = async (
   const texture = maxStorageBytes === undefined
     ? sourceTexture
     : fitKtx2Etc2Storage(sourceTexture, maxStorageBytes);
-  const alpha = retainAlpha ? {
-    height: texture.height,
-    values: decodeKtx2Etc2Alpha(texture),
-    width: texture.width,
-  } : undefined;
+  let alpha: DecodedTextureSource["alpha"];
+  if (retainAlpha) {
+    const levels = texture.levels.map((level, index) => ({
+      height: level.height,
+      values: decodeKtx2Etc2Alpha(texture, index),
+      width: level.width,
+    }));
+    const base = levels[0]!;
+    alpha = alphaMipmapsRequired(asset) && levels.length > 1
+      ? { ...base, levels }
+      : base;
+  }
   const emptyBlocks = new Uint8Array(0);
   const levels = texture.levels.map((level) => ({
     blocks: level.blocks,
@@ -188,7 +199,9 @@ const decodeTextureBlob = async (
         ? undefined
         : (width, height) => fitOrdinaryTextureStorage(width, height, maxStorageBytes),
     );
-    return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+    return retainAlpha
+      ? retainTextureAlpha(decoded, signal, alphaMipmapsRequired(asset))
+      : decoded;
   };
   if (typeof globalThis.createImageBitmap !== "function") {
     return decodeImageElement();
@@ -306,12 +319,15 @@ const decodeTextureBlob = async (
       : { sourceHeight, sourceWidth }),
     width: bitmap.width,
   };
-  return retainAlpha ? retainTextureAlpha(decoded, signal) : decoded;
+  return retainAlpha
+    ? retainTextureAlpha(decoded, signal, alphaMipmapsRequired(asset))
+    : decoded;
 };
 
 const retainTextureAlpha = (
   decoded: DecodedImageTextureSource,
   signal: AbortSignal,
+  retainMipmaps: boolean,
 ): DecodedImageTextureSource => {
   let canvas: HTMLCanvasElement | undefined;
   try {
@@ -331,9 +347,14 @@ const retainTextureAlpha = (
       values[target] = rgba[source]!;
     }
     if (signal.aborted) throw aborted();
+    const base = {
+      height: decoded.height,
+      values,
+      width: decoded.width,
+    };
     return {
       ...decoded,
-      alpha: { height: decoded.height, values, width: decoded.width },
+      alpha: retainMipmaps ? createTextureAlphaMipChain(base) : base,
     };
   } catch (error) {
     decoded.close?.();

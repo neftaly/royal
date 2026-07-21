@@ -2,8 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   canonicalAlphaMaskAcceptsTrianglePoint,
+  createCanonicalAlphaMaskSamplingScratch,
   sampleCanonicalTextureAlpha,
+  sampleCanonicalTextureAlphaAtLod,
 } from "../../packages/renderer-webgl/src/surface/alpha-mask-sampling";
+import {
+  textureAlphaStorageBytes,
+  validateTextureAlphaMipChain,
+} from "../../packages/renderer-webgl/src/texture/alpha-mipmap";
+import { createTextureAlphaMipChain } from "../../packages/renderer-webgl/src/texture/alpha-mipmap-generation";
+import { assertFuzz, forEachFuzzCase } from "../fuzz";
 import type { CanonicalTriangleGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import type {
   CanonicalSurfaceMaterial,
@@ -13,6 +21,7 @@ import type {
 import {
   createCanonicalPickingScratch,
   pickCanonicalSurfaceInto,
+  type CanonicalPickHitAcceptance,
 } from "../../packages/renderer-webgl/src/surface/picking-query";
 import type { CanonicalPickSurface } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 
@@ -93,6 +102,141 @@ describe("canonical alpha-mask picking", () => {
     )).toBe(false);
   });
 
+  it("mirrors minification filters through a retained alpha-only mip chain", () => {
+    const alpha = createTextureAlphaMipChain({
+      height: 4,
+      values: new Uint8Array([
+        0, 0, 255, 255,
+        0, 0, 255, 255,
+        255, 255, 255, 255,
+        255, 255, 255, 255,
+      ]),
+      width: 4,
+    });
+    expect(alpha.levels?.map((level) => [level.width, level.height])).toEqual([
+      [4, 4], [2, 2], [1, 1],
+    ]);
+    expect(sampleCanonicalTextureAlpha(alpha, sampler(), 0.125, 0.125)).toBe(0);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha,
+      sampler({ minFilter: "nearest-mipmap-nearest" }),
+      0.125,
+      0.125,
+      2,
+    )).toBeCloseTo(0.75, 2);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha,
+      sampler({ minFilter: "nearest" }),
+      0.125,
+      0.125,
+      2,
+    )).toBe(0);
+  });
+
+  it("uses the authored texel and mip interpolation axes independently", () => {
+    const base = { height: 4, values: new Uint8Array(16), width: 4 };
+    const alpha = {
+      ...base,
+      levels: [
+        base,
+        { height: 2, values: new Uint8Array(4).fill(64), width: 2 },
+        { height: 1, values: new Uint8Array([255]), width: 1 },
+      ],
+    };
+    expect(sampleCanonicalTextureAlphaAtLod(alpha, sampler({ minFilter: "nearest" }), 0.5, 0.5, 2))
+      .toBe(0);
+    expect(sampleCanonicalTextureAlphaAtLod(alpha, sampler({ minFilter: "linear" }), 0.5, 0.5, 2))
+      .toBe(0);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ minFilter: "nearest-mipmap-nearest" }), 0.5, 0.5, 1,
+    )).toBeCloseTo(64 / 255);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ minFilter: "linear-mipmap-nearest" }), 0.5, 0.5, 1,
+    )).toBeCloseTo(64 / 255);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ minFilter: "nearest-mipmap-linear" }), 0.5, 0.5, 1.5,
+    )).toBeCloseTo((64 / 255 + 1) / 2);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ minFilter: "linear-mipmap-linear" }), 0.5, 0.5, 1.5,
+    )).toBeCloseTo((64 / 255 + 1) / 2);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ minFilter: "nearest-mipmap-nearest" }), 0.5, 0.5, Infinity,
+    )).toBe(1);
+    expect(sampleCanonicalTextureAlphaAtLod(
+      alpha, sampler({ magFilter: "nearest" }), 0.5, 0.5, Number.NaN,
+    )).toBe(0);
+  });
+
+  it("keeps arbitrary alpha mip dimensions complete and bounded", () => {
+    forEachFuzzCase({ cases: 64, seed: 0xa1_fa_11ce }, ({ random }) => {
+      const width = random.int(1, 65);
+      const height = random.int(1, 65);
+      const values = new Uint8Array(width * height);
+      for (let index = 0; index < values.length; index += 1) {
+        values[index] = random.int(0, 256);
+      }
+      const alpha = createTextureAlphaMipChain({ height, values, width });
+      validateTextureAlphaMipChain(alpha);
+      const terminal = alpha.levels?.at(-1);
+      assertFuzz(terminal?.width === 1 && terminal.height === 1, "terminal mip must be 1x1");
+      assertFuzz(
+        textureAlphaStorageBytes(alpha) < values.byteLength * 2,
+        "alpha mip storage must stay below twice the base level",
+      );
+    });
+  });
+
+  it("rejects a mip chain whose base storage does not alias the decoded alpha", () => {
+    expect(() => validateTextureAlphaMipChain({
+      height: 1,
+      levels: [{ height: 1, values: new Uint8Array([255]), width: 1 }],
+      values: new Uint8Array([255]),
+      width: 1,
+    })).toThrow(/mip level 0/);
+  });
+
+  it("derives mip LOD from adjacent physical-pixel rays in the shared query", () => {
+    const alpha = createTextureAlphaMipChain({
+      height: 4,
+      values: new Uint8Array([
+        0, 0, 255, 255,
+        0, 0, 255, 255,
+        255, 255, 255, 255,
+        255, 255, 255, 255,
+      ]),
+      width: 4,
+    });
+    const material = maskedMaterial();
+    const footprint = {
+      x: { direction: [0, 0, -1] as const, origin: [1.25, 0.25, 1] as const },
+      y: { direction: [0, 0, -1] as const, origin: [0.25, 1.25, 1] as const },
+    };
+    expect(canonicalAlphaMaskAcceptsTrianglePoint(
+      material,
+      geometry(),
+      alpha,
+      sampler({ minFilter: "nearest-mipmap-nearest" }),
+      0,
+      1,
+      2,
+      0.25,
+      0.25,
+    )).toBe(false);
+    expect(canonicalAlphaMaskAcceptsTrianglePoint(
+      material,
+      geometry(),
+      alpha,
+      sampler({ minFilter: "nearest-mipmap-nearest" }),
+      0,
+      1,
+      2,
+      0.25,
+      0.25,
+      footprint,
+      createCanonicalAlphaMaskSamplingScratch(),
+    )).toBe(true);
+  });
+
   it("lets the shared exact query reject a cutout and continue to the next surface", () => {
     const node = { kind: "mesh" } as CanonicalPickSurface["node"];
     const surfaces: readonly CanonicalPickSurface[] = [geometry(0), geometry(-1)].map(
@@ -115,7 +259,30 @@ describe("canonical alpha-mask picking", () => {
     )).toBe(true);
     expect(hit).toEqual({ distance: 2, surfaceIndex: 1 });
     expect(accepts).toHaveBeenCalledTimes(2);
-    expect(accepts.mock.calls[0]!.slice(1)).toEqual([0, 1, 2, 0.25, 0.25]);
+    expect(accepts.mock.calls[0]!.slice(1, 6)).toEqual([0, 1, 2, 0.25, 0.25]);
+  });
+
+  it("transforms adjacent footprint rays through the same instance model", () => {
+    const inverseModel = identityMat4();
+    inverseModel[12] = -2;
+    const node = { kind: "mesh" } as CanonicalPickSurface["node"];
+    const accepts = vi.fn<CanonicalPickHitAcceptance>(() => true);
+    expect(pickCanonicalSurfaceInto(
+      { distance: 0, surfaceIndex: -1 },
+      { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [2.25, 0.25, 1] },
+      [{ inverseModel, modelHandedness: 1, node, pickingGeometry: geometry() }],
+      createCanonicalPickingScratch(),
+      undefined,
+      accepts,
+      {
+        x: { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [3.25, 0.25, 1] },
+        y: { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [2.25, 1.25, 1] },
+      },
+    )).toBe(true);
+    expect(accepts.mock.calls[0]![6]).toMatchObject({
+      x: { origin: [1.25, 0.25, 1] },
+      y: { origin: [0.25, 1.25, 1] },
+    });
   });
 
   it("accepts a back-facing triangle only when canonical raster intent is double-sided", () => {

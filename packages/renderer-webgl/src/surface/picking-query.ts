@@ -10,17 +10,34 @@ export type CanonicalPickRay = Readonly<{
   origin: Vec3;
 }>;
 
+/** Adjacent physical-pixel rays used only to mirror texture minification. */
+export type CanonicalPickRayFootprint = Readonly<{
+  x: CanonicalPickRay;
+  y: CanonicalPickRay;
+}>;
+
 export type MutableCanonicalPickHit = {
   distance: number;
   surfaceIndex: number;
 };
+
+export type CanonicalLocalPickRay = Readonly<{
+  readonly direction: readonly [number, number, number];
+  readonly origin: readonly [number, number, number];
+}>;
 
 type MutableLocalRay = {
   readonly direction: [number, number, number];
   readonly origin: [number, number, number];
 };
 
+export type CanonicalLocalPickRayFootprint = Readonly<{
+  x: CanonicalLocalPickRay;
+  y: CanonicalLocalPickRay;
+}>;
+
 export type CanonicalPickingScratch = Readonly<{
+  localFootprint: Readonly<{ x: MutableLocalRay; y: MutableLocalRay }>;
   localRay: MutableLocalRay;
   triangleHit: MutableTriangleHit;
 }>;
@@ -38,9 +55,14 @@ export type CanonicalPickHitAcceptance = (
   cIndex: number,
   barycentricB: number,
   barycentricC: number,
+  footprint?: CanonicalLocalPickRayFootprint,
 ) => boolean;
 
 export const createCanonicalPickingScratch = (): CanonicalPickingScratch => ({
+  localFootprint: {
+    x: { direction: [0, 0, -1], origin: [0, 0, 0] },
+    y: { direction: [0, 0, -1], origin: [0, 0, 0] },
+  },
   localRay: {
     direction: [0, 0, -1],
     origin: [0, 0, 0],
@@ -147,6 +169,7 @@ const exactSurfaceDistance = (
   maxDistance: number,
   triangleHit: MutableTriangleHit,
   acceptsHit?: CanonicalPickHitAcceptance,
+  footprint?: CanonicalLocalPickRayFootprint,
 ): number | undefined => {
   const { indices, positions } = surface.pickingGeometry;
   let nearest = maxDistance;
@@ -176,6 +199,7 @@ const exactSurfaceDistance = (
         cIndex,
         triangleHit.u,
         triangleHit.v,
+        footprint,
       ))
     ) {
       nearest = distance;
@@ -193,6 +217,7 @@ export const pickCanonicalSurfaceInto = (
   scratch: CanonicalPickingScratch,
   selectedLodLevels?: ReadonlyMap<LodGroupId, number>,
   acceptsHit?: CanonicalPickHitAcceptance,
+  footprint?: CanonicalPickRayFootprint,
 ): boolean => {
   let nearest = ray.maxDistance;
   let surfaceIndex = -1;
@@ -201,6 +226,11 @@ export const pickCanonicalSurfaceInto = (
     if (!lodMembershipsSelected(surface.lods, selectedLodLevels)) continue;
     if (surface.inverseModel === undefined) continue;
     transformRayInto(scratch.localRay, ray, surface.inverseModel);
+    const localFootprint = footprint === undefined ? undefined : scratch.localFootprint;
+    if (footprint !== undefined) {
+      transformRayInto(scratch.localFootprint.x, footprint.x, surface.inverseModel);
+      transformRayInto(scratch.localFootprint.y, footprint.y, surface.inverseModel);
+    }
     if (!rayIntersectsBounds(scratch.localRay, surface, ray.minDistance, nearest)) continue;
     const distance = exactSurfaceDistance(
       surface,
@@ -209,6 +239,7 @@ export const pickCanonicalSurfaceInto = (
       nearest,
       scratch.triangleHit,
       acceptsHit,
+      localFootprint,
     );
     if (distance !== undefined && (surfaceIndex < 0 || distance < nearest)) {
       nearest = distance;

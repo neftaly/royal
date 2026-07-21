@@ -9,6 +9,13 @@ import type { AsyncPreparationScheduler } from "../resource/async-preparation-ow
 import { RetainedFifo } from "../resource/retained-fifo";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import type { ParsedSvgTextureSource } from "./svg-source";
+import {
+  textureAlphaStorageBytes,
+  validateTextureAlphaMipChain,
+  type DecodedTextureAlpha,
+} from "./alpha-mipmap";
+
+export type { DecodedTextureAlpha } from "./alpha-mipmap";
 
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
@@ -54,12 +61,6 @@ export type DecodedTextureLease = Readonly<{
 }>;
 
 /** Compact CPU representation retained only while an alpha-mask pick claim exists. */
-export type DecodedTextureAlpha = Readonly<{
-  height: number;
-  values: Uint8Array;
-  width: number;
-}>;
-
 export type TextureSourceEncoding = "ktx2-etc2" | "svg";
 
 export type EmbeddedTextureAssetRef = Readonly<{
@@ -164,7 +165,7 @@ export const decodedTextureHandoffBytes = (
   const textureBytes = decoded.kind === "ktx2-etc2"
     ? decoded.levels.reduce((total, level) => total + level.blocks.byteLength, 0)
     : decoded.width * decoded.height * 4;
-  const bytes = textureBytes + (alpha?.values.byteLength ?? 0);
+  const bytes = textureBytes + (alpha === undefined ? 0 : textureAlphaStorageBytes(alpha));
   if (!Number.isSafeInteger(bytes) || bytes < 1) {
     throw new RangeError("Royal decoded texture handoff exceeds safe integer range");
   }
@@ -351,7 +352,10 @@ export class TextureAssetOwner {
 
   alpha(asset: TextureSourceRef): DecodedTextureAlpha | undefined {
     const entry = this.#entries.get(this.#key(asset));
-    return entry?.retainAlpha === true ? entry.alpha : undefined;
+    return entry?.retainAlpha === true
+      && entry.residentStorageKeys.has(textureStorageKey(asset))
+      ? entry.alpha
+      : undefined;
   }
 
   getSnapshot(asset: TextureAssetRef): TextureAssetSnapshot {
@@ -675,10 +679,17 @@ export class TextureAssetOwner {
       if (alpha !== undefined && (
         alpha.width !== decoded.width
         || alpha.height !== decoded.height
-        || alpha.values.length !== decoded.width * decoded.height
       )) {
         decoded.close?.();
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid retained alpha`);
+      }
+      if (alpha !== undefined) {
+        try {
+          validateTextureAlphaMipChain(alpha);
+        } catch (error) {
+          decoded.close?.();
+          throw error;
+        }
       }
       let decodedSource: DecodedTextureSource = decoded;
       if (alpha !== undefined) {

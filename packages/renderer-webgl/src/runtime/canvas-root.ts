@@ -699,6 +699,8 @@ export class CanvasRoot implements RendererRoot {
       scene,
       this.#viewProjection,
       this.#canvas.getBoundingClientRect(),
+      size.backingWidth,
+      size.backingHeight,
       this.#surfaceGpu.lodSelections(),
     );
   }

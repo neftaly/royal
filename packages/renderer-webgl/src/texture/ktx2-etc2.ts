@@ -252,8 +252,12 @@ export const parseKtx2Etc2 = (bytes: Uint8Array): Ktx2Etc2Texture => {
 };
 
 /** Extracts only base-level alpha for exact alpha-mask queries; RGB remains compressed. */
-export const decodeKtx2Etc2Alpha = (texture: Ktx2Etc2Texture): Uint8Array => {
-  const level = texture.levels[0]!;
+export const decodeKtx2Etc2Alpha = (
+  texture: Ktx2Etc2Texture,
+  levelIndex = 0,
+): Uint8Array => {
+  const level = texture.levels[levelIndex];
+  if (level === undefined) throw new RangeError("Royal ETC2 alpha mip level is out of range");
   const values = new Uint8Array(level.width * level.height);
   const blockColumns = Math.ceil(level.width / 4);
   const blockRows = Math.ceil(level.height / 4);

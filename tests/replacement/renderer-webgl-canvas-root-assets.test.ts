@@ -908,7 +908,7 @@ describe("canvas root asset publication", () => {
         document.scenes = [{ nodes: [0] }];
       },
     ));
-    const { callbacks, root } = harness({ decodeTexture, readGltf });
+    const { callbacks, flushScheduledFrames, root } = harness({ decodeTexture, readGltf });
     const node = gltf("/models/cutout.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
@@ -930,7 +930,68 @@ describe("canvas root asset publication", () => {
       width: 1,
     });
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready"));
+    expect(root.pick({ clientX: 150, clientY: 100 })?.target).toMatchObject({ node });
+    flushScheduledFrames();
     expect(root.pick({ clientX: 150, clientY: 100 })).toBeUndefined();
+  });
+
+  it("uses the canvas physical-pixel footprint for minified MASK picking", async () => {
+    let resolveDecode: ((source: {
+      alpha: {
+        height: number;
+        levels: readonly { height: number; values: Uint8Array; width: number }[];
+        values: Uint8Array;
+        width: number;
+      };
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      alpha: {
+        height: number;
+        levels: readonly { height: number; values: Uint8Array; width: number }[];
+        values: Uint8Array;
+        width: number;
+      };
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      undefined,
+      "cutout.png",
+      (document) => {
+        const materials = document.materials as Array<Record<string, unknown>>;
+        materials[0]!.alphaMode = "MASK";
+        materials[0]!.alphaCutoff = 0.5;
+        document.nodes = [{ mesh: 0 }];
+        document.scenes = [{ nodes: [0] }];
+      },
+    ));
+    const { callbacks, flushScheduledFrames, root } = harness({ decodeTexture, readGltf });
+    const node = gltf("/models/minified-cutout.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 2 });
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [node] }));
+    callbacks.shift()!();
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("streaming"));
+
+    const base = { height: 1024, values: new Uint8Array(1024 * 1024), width: 1024 };
+    resolveDecode?.({
+      alpha: {
+        ...base,
+        levels: [
+          base,
+          { height: 512, values: new Uint8Array(512 * 512).fill(255), width: 512 },
+        ],
+      },
+      height: 1024,
+      source: {} as ImageBitmap,
+      width: 1024,
+    });
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready"));
+    flushScheduledFrames();
+    expect(root.pick({ clientX: 150, clientY: 100 })?.target).toMatchObject({ node });
   });
 
   it("reports failed glTF images without stalling geometry or republishing GPU state", async () => {

@@ -267,7 +267,8 @@ describe("ordinary texture asset lifecycle owner", () => {
     const asset = imageTexture("/cutout.png");
 
     owner.reconcile([asset], [asset]);
-    await waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+    expect(owner.alpha(asset)).toBeUndefined();
     expect(decode.mock.calls[0]![3]).toBe(true);
     owner.releaseUploaded([textureStorageKey(asset)]);
     expect(close).toHaveBeenCalledOnce();
@@ -391,6 +392,15 @@ describe("ordinary texture asset lifecycle owner", () => {
       source: {} as ImageBitmap,
       width: 8,
     }, alpha)).toBe(320);
+    const mipAlpha = {
+      ...alpha,
+      levels: [alpha, { height: 4, values: new Uint8Array(16), width: 4 }],
+    };
+    expect(decodedTextureHandoffBytes({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }, mipAlpha)).toBe(336);
     expect(decodedTextureHandoffBytes({
       colorSpace: "srgb",
       height: 8,

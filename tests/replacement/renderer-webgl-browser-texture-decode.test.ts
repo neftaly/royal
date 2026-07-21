@@ -554,7 +554,15 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal, undefined, true);
 
     expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 2, 1);
-    expect(result.alpha).toEqual({ height: 1, values: new Uint8Array([40, 200]), width: 2 });
+    expect(result.alpha).toEqual({
+      height: 1,
+      levels: [
+        { height: 1, values: new Uint8Array([40, 200]), width: 2 },
+        { height: 1, values: new Uint8Array([120]), width: 1 },
+      ],
+      values: new Uint8Array([40, 200]),
+      width: 2,
+    });
     expect(canvas).toMatchObject({ height: 0, width: 0 });
   });
 
