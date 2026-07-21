@@ -235,21 +235,23 @@ not parse a second copy of the glTF merely to populate scene/variant controls or
 summaries. Reporting the inventory does not prepare or fetch unselected scene
 content.
 
-`rendererOptions.maxConcurrentPreparationJobs` is an immutable positive integer
-with default 8. It bounds admitted asynchronous asset-preparation lifecycles
-across glTF, ordinary textures, authored VT, and prefiltered environments; it
-does not request workers. Broad renderer diagnostics expose
+Royal owns a bounded asynchronous preparation scheduler shared across glTF,
+ordinary textures, authored VT, and prefiltered environments. Its limit and
+lane policy are renderer implementation details rather than consumer creation
+options. Broad renderer diagnostics expose
 `resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs,
 queuedForegroundJobs, queuedDetailJobs }` for operational inspection. The two
 queued lane counts sum to `queuedJobs`; they diagnose scheduling and are not
 separate consumer lifecycles. Focused asset status remains the product
 lifecycle.
 
-`rendererOptions.ordinaryTextureUploadByteBudgetPerFrame` is an immutable positive byte
-ceiling with default 4 MiB. Broad diagnostics expose
+Royal also owns the bounded ordinary-texture upload pacing policy. Broad
+diagnostics expose
 `resources.ordinaryTextureUploads: { admittedBytes, budgetBytes, deferredUploads }` for
 the latest submitted frame. Deferral is renderer scheduling, not an asset
-failure or a separate consumer lifecycle.
+failure or a separate consumer lifecycle. Neither scheduler policy is a public
+tuning knob; future implementations may change their strategy without breaking
+consumer code.
 
 `usePrefilteredEnvironmentStatus(environment)` observes the exact `src` and
 typed `version` identity. `ready` means the artifact bytes have been fetched

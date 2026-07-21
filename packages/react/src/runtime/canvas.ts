@@ -75,7 +75,7 @@ const EMPTY_RUNTIME: CanvasRuntime = { canvas: null, error: null, root: null };
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
-  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}${options.automaticVirtualTexturing ? 1 : 0}:${options.persistentGpuByteBudget}:${options.maxConcurrentPreparationJobs}:${options.ordinaryTextureUploadByteBudgetPerFrame}`;
+  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}${options.automaticVirtualTexturing ? 1 : 0}:${options.persistentGpuByteBudget}`;
 
 /** A root belongs only to the exact canvas generation that created it. */
 const activeCanvasRuntime = (

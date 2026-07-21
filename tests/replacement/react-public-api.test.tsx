@@ -379,23 +379,17 @@ describe("replacement React public API", () => {
       alpha: false,
       antialias: false,
       automaticVirtualTexturing: false,
-      maxConcurrentPreparationJobs: 8,
-      ordinaryTextureUploadByteBudgetPerFrame: 4_194_304,
       persistentGpuByteBudget: 268_435_456,
     });
     expect(resolveRendererRootOptions({
       alpha: true,
       antialias: true,
       automaticVirtualTexturing: true,
-      maxConcurrentPreparationJobs: 2,
-      ordinaryTextureUploadByteBudgetPerFrame: 1024,
       persistentGpuByteBudget: 2048,
     })).toEqual({
       alpha: true,
       antialias: true,
       automaticVirtualTexturing: true,
-      maxConcurrentPreparationJobs: 2,
-      ordinaryTextureUploadByteBudgetPerFrame: 1024,
       persistentGpuByteBudget: 2048,
     });
   });
@@ -419,13 +413,15 @@ describe("replacement React public API", () => {
     expect(() => resolveRendererRootOptions({ persistentGpuByteBudget: 0 })).toThrow(
       "persistentGpuByteBudget must be a positive safe integer",
     );
-    expect(() => resolveRendererRootOptions({ maxConcurrentPreparationJobs: 0 })).toThrow(
-      "maxConcurrentPreparationJobs must be a positive safe integer",
+    expect(() => resolveRendererRootOptions({
+      maxConcurrentPreparationJobs: 8,
+    } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
+      "unsupported field maxConcurrentPreparationJobs",
     );
     expect(() => resolveRendererRootOptions({
-      ordinaryTextureUploadByteBudgetPerFrame: 0,
-    })).toThrow(
-      "ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
+      ordinaryTextureUploadByteBudgetPerFrame: 4_194_304,
+    } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
+      "unsupported field ordinaryTextureUploadByteBudgetPerFrame",
     );
   });
 

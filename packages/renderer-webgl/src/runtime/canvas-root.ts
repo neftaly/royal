@@ -104,9 +104,11 @@ import {
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 import {
   AsyncPreparationOwner,
+  DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import {
+  DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
@@ -215,7 +217,11 @@ export interface RendererRoot {
 }
 
 export type CanvasRootPlatform = Readonly<{
+  /** @internal Test/host seam; not renderer product policy. */
+  asyncPreparationJobLimit?: number;
   cancelDelay?(handle: unknown): void;
+  /** @internal Test/host seam; not renderer product policy. */
+  frameUploadByteBudget?: number;
   now?(): number;
   onListenerError(error: unknown): void;
   reportScheduledFailure(error: unknown): void;
@@ -455,6 +461,10 @@ export class CanvasRoot implements RendererRoot {
     platform: CanvasRootPlatform = defaultPlatform(),
   ) {
     const resolvedOptions = resolveRendererRootOptions(options);
+    const asyncPreparationJobLimit = platform.asyncPreparationJobLimit
+      ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT;
+    const frameUploadByteBudget = platform.frameUploadByteBudget
+      ?? DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME;
     this.#canvas = canvas;
     this.#platform = platform;
     this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
@@ -464,17 +474,15 @@ export class CanvasRoot implements RendererRoot {
       resolvedOptions.persistentGpuByteBudget,
     );
     this.#asyncPreparation = new AsyncPreparationOwner(
-      resolvedOptions.maxConcurrentPreparationJobs,
+      asyncPreparationJobLimit,
       () => {
         if (!this.#disposed) this.#publish();
       },
     );
-    this.#frameUploadBudget = new FrameUploadBudgetOwner(
-      resolvedOptions.ordinaryTextureUploadByteBudgetPerFrame,
-    );
+    this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);
     this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
       resolvedOptions.automaticVirtualTexturing,
-      resolvedOptions.ordinaryTextureUploadByteBudgetPerFrame,
+      frameUploadByteBudget,
     );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);

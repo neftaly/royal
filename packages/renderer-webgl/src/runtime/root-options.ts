@@ -1,6 +1,4 @@
 import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-budget";
-import { DEFAULT_ASYNC_PREPARATION_JOB_LIMIT } from "../resource/async-preparation-owner";
-import { DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME } from "../resource/frame-upload-budget";
 
 /** Immutable creation policy for one renderer root and its WebGL2 context. */
 export type RendererRootOptions = Readonly<{
@@ -12,14 +10,6 @@ export type RendererRootOptions = Readonly<{
   automaticVirtualTexturing?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
-  /**
-   * Root-wide concurrent asynchronous asset-preparation ceiling. Visible scene
-   * work has bounded priority over detail texture work; this is not a worker
-   * count. @defaultValue `8`
-   */
-  maxConcurrentPreparationJobs?: number;
-  /** Ordinary-texture upload traffic admitted per rendered frame. @defaultValue 4 MiB */
-  ordinaryTextureUploadByteBudgetPerFrame?: number;
 }>;
 
 /** Fully validated renderer creation policy with every default made explicit. */
@@ -28,8 +18,6 @@ export type ResolvedRendererRootOptions = Readonly<{
   antialias: boolean;
   automaticVirtualTexturing: boolean;
   persistentGpuByteBudget: number;
-  maxConcurrentPreparationJobs: number;
-  ordinaryTextureUploadByteBudgetPerFrame: number;
 }>;
 
 /** Validates immutable renderer options and fills every documented default. */
@@ -45,8 +33,6 @@ export const resolveRendererRootOptions = (
       && key !== "antialias"
       && key !== "automaticVirtualTexturing"
       && key !== "persistentGpuByteBudget"
-      && key !== "maxConcurrentPreparationJobs"
-      && key !== "ordinaryTextureUploadByteBudgetPerFrame"
     ) {
       throw new TypeError(`Royal renderer options contain unsupported field ${String(key)}`);
     }
@@ -68,29 +54,10 @@ export const resolveRendererRootOptions = (
   if (!Number.isSafeInteger(persistentGpuByteBudget) || persistentGpuByteBudget < 1) {
     throw new RangeError("Royal renderer option persistentGpuByteBudget must be a positive safe integer");
   }
-  const maxConcurrentPreparationJobs = options.maxConcurrentPreparationJobs
-    ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT;
-  if (!Number.isSafeInteger(maxConcurrentPreparationJobs) || maxConcurrentPreparationJobs < 1) {
-    throw new RangeError(
-      "Royal renderer option maxConcurrentPreparationJobs must be a positive safe integer",
-    );
-  }
-  const ordinaryTextureUploadByteBudgetPerFrame = options.ordinaryTextureUploadByteBudgetPerFrame
-    ?? DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME;
-  if (
-    !Number.isSafeInteger(ordinaryTextureUploadByteBudgetPerFrame)
-    || ordinaryTextureUploadByteBudgetPerFrame < 1
-  ) {
-    throw new RangeError(
-      "Royal renderer option ordinaryTextureUploadByteBudgetPerFrame must be a positive safe integer",
-    );
-  }
   return {
     alpha: options.alpha === true,
     antialias: options.antialias === true,
     automaticVirtualTexturing: options.automaticVirtualTexturing === true,
-    maxConcurrentPreparationJobs,
-    ordinaryTextureUploadByteBudgetPerFrame,
     persistentGpuByteBudget,
   };
 };

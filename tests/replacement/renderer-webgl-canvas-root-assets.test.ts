@@ -181,7 +181,8 @@ describe("canvas root asset publication", () => {
       decodeTexture,
       preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
       readPrefilteredEnvironment: async () => environmentRead,
-    }, {}, { maxConcurrentPreparationJobs: 1 });
+      asyncPreparationJobLimit: 1,
+    });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       environment,
@@ -280,7 +281,8 @@ describe("canvas root asset publication", () => {
         presentationDelays.push(delayMs);
         return handle;
       },
-    }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+      frameUploadByteBudget: 16,
+    });
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
@@ -340,7 +342,8 @@ describe("canvas root asset publication", () => {
         source: {} as ImageBitmap,
         width: 2,
       }),
-    }, {}, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+      frameUploadByteBudget: 16,
+    });
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
@@ -393,6 +396,7 @@ describe("canvas root asset publication", () => {
         source: sources.get(asset.kind === "asset" ? asset.src : "")!,
         width: 2,
       }),
+      frameUploadByteBudget: 16,
     }, {
       activeTexture: vi.fn((unit: number) => { activeUnit = unit - 0x84c0; }),
       bindTexture: vi.fn((target: number, texture: WebGLTexture | null) => {
@@ -403,7 +407,7 @@ describe("canvas root asset publication", () => {
         uploaded.set(arguments_.at(-1) as TexImageSource, bound[activeUnit]);
       }),
       useProgram: vi.fn((next: WebGLProgram | null) => { program = next; }),
-    }, { ordinaryTextureUploadByteBudgetPerFrame: 16 });
+    });
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),

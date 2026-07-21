@@ -71,17 +71,12 @@ it is not mislabeled as the device's physical DPR when an override is active.
 `rendererOptions` contains readonly `alpha` and `antialias` context requests,
 both defaulting to `false`, plus immutable resource policy. Opt into alpha for
 page compositing and antialias for browser multisampling. The default
-`persistentGpuByteBudget` is 256 MiB and `maxConcurrentPreparationJobs` is 8.
-The latter is a root-wide concurrency ceiling shared by glTF, ordinary texture,
-VT, and prefiltered-environment preparation; it is not a worker count. Newly
-claimed visible scene work uses a bounded-priority lane, while FIFO order is
-preserved within visible-work and detail-work lanes so texture progress cannot
-starve. A semantic option change replaces both the root and canvas. `rendererRef`
+`persistentGpuByteBudget` is 256 MiB. Royal owns bounded, fair preparation
+scheduling and ordinary-texture upload pacing; those implementation policies
+remain observable through diagnostics rather than becoming consumer tuning
+knobs. A semantic option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount/replacement
 lifecycle; a disposed root is never published for a newer canvas generation.
-`ordinaryTextureUploadByteBudgetPerFrame` defaults to 4 MiB and paces new ordinary-texture
-transfer across real canvas/XR frames without changing focused asset readiness.
-One individually larger texture is admitted alone rather than starving.
 `automaticVirtualTexturing` defaults to `false`; opt in through
 `rendererOptions={{ automaticVirtualTexturing: true }}` when large base-color
 raster or SVG textures should use Royal's progressive VT representation. It is
