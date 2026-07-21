@@ -30,7 +30,16 @@ const packageSourceFiles = readdirSync(packagesRoot)
   })
   .flatMap(sourceFilesBelow);
 
-const sourceText = new Map(packageSourceFiles.map((file) => [file, readFileSync(file, "utf8")]));
+const sourceTrees = new Map(packageSourceFiles.map((file) => [
+  file,
+  ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    false,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  ),
+]));
 const workspaceEntrypoints = new Map([
   ["@royal/react", path.join(packagesRoot, "react", "src", "index.ts")],
   ["@royal/react/scene", path.join(packagesRoot, "react", "src", "scene.ts")],
@@ -45,13 +54,7 @@ const workspaceEntrypoints = new Map([
 ]);
 
 const staticSpecifiers = (file: string): string[] => {
-  const source = ts.createSourceFile(
-    file,
-    sourceText.get(file)!,
-    ts.ScriptTarget.Latest,
-    false,
-    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const source = sourceTrees.get(file)!;
   const specifiers: string[] = [];
   for (const statement of source.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -79,13 +82,7 @@ const staticSpecifiers = (file: string): string[] => {
 };
 
 const referencesBrowserAuthority = (file: string): boolean => {
-  const source = ts.createSourceFile(
-    file,
-    sourceText.get(file)!,
-    ts.ScriptTarget.Latest,
-    false,
-    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const source = sourceTrees.get(file)!;
   const names = new Set([
     "HTMLCanvasElement",
     "WebGL2RenderingContext",
@@ -118,7 +115,7 @@ const resolveRelativeSource = (from: string, specifier: string): string | undefi
     path.join(unresolved, "index.ts"),
     path.join(unresolved, "index.tsx"),
   ]) {
-    if (sourceText.has(candidate)) return candidate;
+    if (sourceTrees.has(candidate)) return candidate;
   }
   return undefined;
 };
@@ -188,6 +185,7 @@ describe("source architecture fitness", () => {
     const forbidden = [
       "/gltf/browser-static-preparation.ts",
       "/gltf/static-asset.ts",
+      "/surface/surface-depth-prepass-owner.ts",
       "/virtual-texture/automatic-page-source.ts",
       "/virtual-texture/browser-page-source.ts",
       "/virtual-texture/runtime.ts",
@@ -200,13 +198,7 @@ describe("source architecture fitness", () => {
   it("does not introduce TypeScript runtime feature helpers", () => {
     const violations: string[] = [];
     for (const file of packageSourceFiles) {
-      const source = ts.createSourceFile(
-        file,
-        sourceText.get(file)!,
-        ts.ScriptTarget.Latest,
-        false,
-        file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      );
+      const source = sourceTrees.get(file)!;
       const visit = (node: ts.Node): void => {
         if (ts.isEnumDeclaration(node)) violations.push(`${relative(file)} declares an enum`);
         if (ts.isModuleDeclaration(node)) violations.push(`${relative(file)} declares a namespace`);

@@ -162,7 +162,7 @@ export interface RendererRoot {
   /** Stable getter for one exact source/version identity. */
   readonly getGltfAssetSnapshot: (asset: GltfAssetRef) => GltfAssetSnapshot;
   /** Stable getter for the current context lifecycle. */
-  readonly getLifecycleSnapshot: () => ContextLifecycleSnapshot;
+  readonly getLifecycleSnapshot: () => RendererContextSnapshot;
   /** Stable getter for one exact offline environment identity. */
   readonly getPrefilteredEnvironmentSnapshot: (
     environment: PrefilteredEnvironmentLight,
@@ -640,7 +640,7 @@ export class CanvasRoot implements RendererRoot {
   };
 
   /** Focused context lifecycle snapshot for product observation. */
-  getLifecycleSnapshot = (): ContextLifecycleSnapshot => this.#context.getSnapshot();
+  getLifecycleSnapshot = (): RendererContextSnapshot => this.#context.getSnapshot();
 
   /** Focused canvas-size snapshot for product observation. */
   getSizeSnapshot = (): ResolvedCanvasSize | null => this.#size;
