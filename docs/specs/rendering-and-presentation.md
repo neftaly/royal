@@ -83,6 +83,14 @@ no pass may inherit hidden GL state. Without multi-draw, the stable fallback is
 the existing front-to-back PBR pass rather than one extra JavaScript draw per
 surface.
 
+Clean exact-build Safari 17.14 evidence at commit `df631f9c` validates the
+classifier's intended cost case. Full-DPR Sponza camera motion fell from the
+preceding clean 30.3 ms average / 38 ms p95 to 16.5 / 19 ms over 120 samples.
+The larger Bistro case improved from 21.8 / 24 ms to 20.25 / 22 ms over 60
+samples rather than regressing under the extra vertex work. Sponza therefore
+reaches a 60 Hz mean cadence on that physical iPad, though its 19 ms p95 is not
+a claim of sustained 60 Hz and Quest remains separately unproven.
+
 ## Geometry and materials
 
 Royal's simple public materials are standard PBR, unlit, and wireframe. glTF

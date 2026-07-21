@@ -1,0 +1,378 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "cameraDrag": true,
+  "coldCache": false,
+  "receivedAt": "2026-07-21T08:44:51.233Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 709.1875,
+        "cssWidth": 702,
+        "height": 1418,
+        "width": 1404
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-bistro-web",
+      "path": "/gltf-bistro-web",
+      "sourceFile": "examples/cases/GltfBistroWeb.tsx",
+      "title": "glTF Bistro Web Tier"
+    },
+    "frameStats": {
+      "averageMs": 20.249999999999332,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 2,
+      "maxMs": 39.99999999999636,
+      "minMs": 3,
+      "p50Ms": 20,
+      "p95Ms": 22,
+      "p99Ms": 23,
+      "requestedSampleCount": 60,
+      "sampleCount": 60,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 180000
+    },
+    "frameTiming": {
+      "callbackCalls": 120,
+      "callbackMaxMs": 17,
+      "callbackTotalMs": 134.0000000000182,
+      "supported": true
+    },
+    "generatedAt": "2026-07-21T08:44:50.554Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 12300,
+        "bindVertexArray": 8186,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 60,
+        "drawArrays": 60,
+        "drawArraysInstanced": 0,
+        "drawCalls": 11606,
+        "drawElements": 7065,
+        "drawElementsInstanced": 1380,
+        "instancedDrawCalls": 1380,
+        "multiDrawCalls": 3101,
+        "multiDrawDraws": 18435,
+        "nonInstancedDrawCalls": 10226,
+        "stateChanges": 22662,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 25384,
+        "uniformMatrixCalls": 6168,
+        "useProgram": 2176
+      },
+      "setup": {
+        "bindBuffer": 2045,
+        "bindTexture": 3994,
+        "bindVertexArray": 5591,
+        "bufferDataBytes": 17510976,
+        "bufferDataCalls": 52,
+        "bufferSubDataBytes": 17454528,
+        "bufferSubDataCalls": 1891,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 46,
+        "drawArrays": 46,
+        "drawArraysInstanced": 0,
+        "drawCalls": 7715,
+        "drawElements": 4774,
+        "drawElementsInstanced": 1062,
+        "instancedDrawCalls": 1062,
+        "multiDrawCalls": 1833,
+        "multiDrawDraws": 11497,
+        "nonInstancedDrawCalls": 6653,
+        "stateChanges": 13097,
+        "texImage2D": 0,
+        "texSubImage2D": 110,
+        "uniformCalls": 16970,
+        "uniformMatrixCalls": 4102,
+        "useProgram": 1467
+      }
+    },
+    "options": {
+      "autorun": true,
+      "cameraDrag": true,
+      "frames": 60,
+      "timeoutMs": 180000,
+      "warmupFrames": 12
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 213,
+        "duration": 213,
+        "loadEventEnd": 213,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 134,
+        "totalDecodedBodySize": 39415252,
+        "totalEncodedBodySize": 39411435,
+        "totalTransferSize": 39448035
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 109,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 110,
+              "imageFailures": 0,
+              "imagesLoaded": 110,
+              "imageRequests": 110,
+              "lightCount": 0,
+              "nodeCount": 324,
+              "phaseMs": {
+                "firstUsable": 5407,
+                "imagesComplete": 22186,
+                "preparation": 1204,
+                "externalResourceRead": 4062,
+                "sourceRead": 141
+              },
+              "primitiveCount": 381,
+              "src": "/BistroWeb/Bistro.gltf",
+              "status": "ready",
+              "variantNames": [],
+              "version": "web-draco-avif-v5"
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 0,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 233726592,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 171422400,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 94,
+          "resources": 110
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 49,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 110,
+              "imageFailures": 0,
+              "imagesLoaded": 110,
+              "imageRequests": 110,
+              "lightCount": 0,
+              "nodeCount": 324,
+              "phaseMs": {
+                "firstUsable": 5407,
+                "imagesComplete": 22186,
+                "preparation": 1204,
+                "externalResourceRead": 4062,
+                "sourceRead": 141
+              },
+              "primitiveCount": 381,
+              "src": "/BistroWeb/Bistro.gltf",
+              "status": "ready",
+              "variantNames": [],
+              "version": "web-draco-avif-v5"
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 1368900,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 233726592,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 171422400,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 94,
+          "resources": 110
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 60,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 49,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 110,
+              "imageFailures": 0,
+              "imagesLoaded": 110,
+              "imageRequests": 110,
+              "lightCount": 0,
+              "nodeCount": 324,
+              "phaseMs": {
+                "firstUsable": 5407,
+                "imagesComplete": 22186,
+                "preparation": 1204,
+                "externalResourceRead": 4062,
+                "sourceRead": 141
+              },
+              "primitiveCount": 381,
+              "src": "/BistroWeb/Bistro.gltf",
+              "status": "ready",
+              "variantNames": [],
+              "version": "web-draco-avif-v5"
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 1368900,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 233726592,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 171422400,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 94,
+          "resources": 110
+        },
+        "virtualTexturing": null
+      }
+    },
+    "source": {
+      "buildId": "df631f9c974e-clean-mrueopol",
+      "builtAt": "2026-07-21T08:43:06.103Z",
+      "dirty": false,
+      "revision": "df631f9c974e1f7b5a17f55dc9e599bfdd7f2853"
+    },
+    "url": "http://192.168.1.102:3301/gltf-bistro-web?bench=auto&cameraDrag=1&frames=60&warmup=12&timeoutMs=180000&run=1784623466434",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 23843
+  }
+}
