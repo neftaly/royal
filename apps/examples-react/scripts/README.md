@@ -125,6 +125,22 @@ as a successful orientation test. CDP commands have a 30-second default timeout,
 overridable with `EXAMPLES_SMOKE_CDP_TIMEOUT_MS`, so a sleeping device cannot
 stall the harness indefinitely.
 
+Official GLB material cases can also gate their embedded browser-image decodes
+after geometry becomes usable, capture the factor-only presentation, then
+release every decode and require a stable visual refinement:
+
+```sh
+EXAMPLES_SMOKE_ROUTE=gltf-lab \
+EXAMPLES_SMOKE_QUERY='case=SpecularTest' \
+EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE=1 \
+pnpm --filter @royal/examples-react test:browser
+```
+
+The gate bypasses harness-owned screenshot decoding, so the before/after pixel
+comparison measures Royal's texture publication rather than deadlocking its own
+observer. `TransmissionThinwallTestGrid` covers the corresponding transmission
+and thickness group.
+
 The Ghostscript Tiger SVG route exposes the same React canvas in generated-VT
 and ordinary-texture modes. Its focused smoke toggles the renderer option,
 requires each distinct residency path to settle, captures the composited canvas

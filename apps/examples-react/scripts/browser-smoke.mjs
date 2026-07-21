@@ -45,6 +45,7 @@ const cdpCommandTimeoutMs = envNumber(
 );
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
+const embeddedTextureGate = process.env.EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE === '1';
 
 if (!new Set(['cdp', 'chromium']).has(browserMode)) {
   throw new Error(
@@ -427,7 +428,11 @@ const compositedCanvasSample = async (session) => {
     (async () => {
       const summarizeCanvasPixels = ${summarizeCanvasPixels.toString()};
       const response = await fetch('data:image/png;base64,${capture}');
-      const bitmap = await createImageBitmap(await response.blob());
+      const gate = globalThis.__royalEmbeddedTextureGate;
+      if (gate !== undefined) gate.bypass = true;
+      const decoding = createImageBitmap(await response.blob());
+      if (gate !== undefined) gate.bypass = false;
+      const bitmap = await decoding;
       const width = Math.max(1, Math.min(160, bitmap.width));
       const height = Math.max(1, Math.min(160, bitmap.height));
       const sample = document.createElement('canvas');
@@ -466,7 +471,11 @@ const compositedCanvasColorAt = async (session, x = 0.5, y = 0.5) => {
   return evaluate(session, `
     (async () => {
       const response = await fetch('data:image/png;base64,${capture}');
-      const bitmap = await createImageBitmap(await response.blob());
+      const gate = globalThis.__royalEmbeddedTextureGate;
+      if (gate !== undefined) gate.bypass = true;
+      const decoding = createImageBitmap(await response.blob());
+      if (gate !== undefined) gate.bypass = false;
+      const bitmap = await decoding;
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
@@ -519,6 +528,9 @@ const compareCompositedCanvasCaptures = async (session, before, after) => evalua
       const beforePixels = pixels(beforeBitmap);
       const afterPixels = pixels(afterBitmap);
       let changedPixels = 0;
+      let materialChangedPixels = 0;
+      let materialMaximumDelta = 0;
+      let materialTotalDelta = 0;
       let maximumDelta = 0;
       let totalDelta = 0;
       for (let index = 0; index < beforePixels.length; index += 4) {
@@ -530,11 +542,21 @@ const compareCompositedCanvasCaptures = async (session, before, after) => evalua
         totalDelta += delta;
         maximumDelta = Math.max(maximumDelta, delta);
         if (delta > 0.5 / 255) changedPixels += 1;
+        if ((index / 4) % width >= width / 2) {
+          materialTotalDelta += delta;
+          materialMaximumDelta = Math.max(materialMaximumDelta, delta);
+          if (delta > 0.5 / 255) materialChangedPixels += 1;
+        }
       }
       const pixelCount = beforePixels.length / 4;
+      const materialPixelCount = Math.floor(width / 2) * height;
       return {
         changedPixels,
         changedRatio: changedPixels / pixelCount,
+        materialChangedPixels,
+        materialChangedRatio: materialChangedPixels / materialPixelCount,
+        materialMaximumDelta,
+        materialMeanDelta: materialTotalDelta / materialPixelCount,
         maximumDelta,
         meanDelta: totalDelta / pixelCount,
       };
@@ -593,6 +615,17 @@ const assertSecondaryTextureTransition = (fallback, authored, comparison, repeat
     && comparison.meanDelta > repeatMean + 1e-7;
   if (distance <= 0.02 && !changedAwayFromSample) {
     throw new Error(`secondary texture did not visibly refine the material: ${JSON.stringify({ authored, comparison, fallback })}`);
+  }
+};
+
+const assertEmbeddedTextureTransition = (fallback, authored, comparison, repeatComparison) => {
+  assertSecondaryTextureTransition(fallback, authored, comparison, repeatComparison);
+  if (
+    !(comparison?.materialChangedPixels > 0)
+    || !(comparison.materialMaximumDelta > (repeatComparison?.materialMaximumDelta ?? 0) + 1 / 255)
+    || !(comparison.materialMeanDelta > (repeatComparison?.materialMeanDelta ?? 0) + 1e-7)
+  ) {
+    throw new Error(`embedded texture publication did not refine the material region: ${JSON.stringify({ comparison, repeatComparison })}`);
   }
 };
 
@@ -1939,6 +1972,35 @@ const main = async () => {
           { timeoutMs: 10_000 },
         );
       }
+      if (embeddedTextureGate && route.id === 'gltf-lab') {
+        textureFallbackKind = 'embedded';
+        await session.call('Page.addScriptToEvaluateOnNewDocument', { source: `
+          (() => {
+            const decode = globalThis.createImageBitmap?.bind(globalThis);
+            if (decode === undefined) return;
+            const pending = [];
+            let released = false;
+            globalThis.__royalEmbeddedTextureGate = {
+              bypass: false,
+              get pending() { return pending.length; },
+              release() {
+                released = true;
+                for (const run of pending.splice(0)) run();
+              },
+            };
+            globalThis.createImageBitmap = (...arguments_) => {
+              if (
+                released
+                || globalThis.__royalEmbeddedTextureGate.bypass
+                || !(arguments_[0] instanceof Blob)
+              ) return decode(...arguments_);
+              return new Promise((resolve, reject) => {
+                pending.push(() => decode(...arguments_).then(resolve, reject));
+              });
+            };
+          })();
+        ` });
+      }
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });
       await Promise.race([
@@ -1946,7 +2008,27 @@ const main = async () => {
         sleep(5_000),
       ]);
       let textureFallbackColor;
-      if (textureFallbackPause !== undefined) {
+      if (textureFallbackKind === 'embedded') {
+        let pending = 0;
+        const deadline = Date.now() + 10_000;
+        while (pending === 0 && Date.now() < deadline) {
+          pending = await evaluate(
+            session,
+            'globalThis.__royalEmbeddedTextureGate?.pending ?? 0',
+          );
+          if (pending === 0) await sleep(25);
+        }
+        if (pending === 0) throw new Error('embedded texture gate did not intercept a decode');
+        await evaluate(session, 'globalThis.__royalSmokeAllowPendingGltf = true');
+        const fallbackState = await waitForCompositedRouteState(session, effectiveRoute);
+        if (!routeCanvasReady(effectiveRoute, fallbackState)) {
+          throw new Error(`embedded texture fallback did not become presentable: ${JSON.stringify(fallbackState)}`);
+        }
+        textureFallbackColor = await compositedCanvasColorAt(session);
+        textureFallbackCapture = await captureCompositedCanvas(session);
+        await evaluate(session, 'globalThis.__royalEmbeddedTextureGate.release()');
+        await evaluate(session, 'globalThis.__royalSmokeAllowPendingGltf = false');
+      } else if (textureFallbackPause !== undefined) {
         const paused = await textureFallbackPause;
         if (paused === undefined) {
           await session.call('Fetch.disable');
@@ -2020,6 +2102,12 @@ const main = async () => {
             Buffer.from(capture, 'base64'),
           );
         }
+        if (textureFallbackCapture !== undefined) {
+          await writeFile(
+            path.join(captureDirectory, `${route.id}-fallback.png`),
+            Buffer.from(textureFallbackCapture, 'base64'),
+          );
+        }
       }
       if (route.id === 'picking') {
         state = {
@@ -2050,6 +2138,7 @@ const main = async () => {
       }
       if (textureFallbackKind !== undefined) {
         const authoredCapture = textureFallbackKind === 'secondary'
+          || textureFallbackKind === 'embedded'
           ? await captureCompositedCanvas(session)
           : undefined;
         const authoredRepeatCapture = authoredCapture === undefined
@@ -2103,9 +2192,11 @@ const main = async () => {
         }
         assertRoute(effectiveRoute, state);
         if (state.textureTransition !== undefined) {
-          const assertTransition = state.textureTransition.kind === 'secondary'
-            ? assertSecondaryTextureTransition
-            : assertNeutralTextureTransition;
+          const assertTransition = state.textureTransition.kind === 'embedded'
+            ? assertEmbeddedTextureTransition
+            : state.textureTransition.kind === 'secondary'
+              ? assertSecondaryTextureTransition
+              : assertNeutralTextureTransition;
           assertTransition(
             state.textureTransition.fallback,
             state.textureTransition.authored,
