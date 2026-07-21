@@ -14,7 +14,11 @@ const packages = [
   },
   {
     cwd: 'packages/renderer-webgl',
-    specifiers: ['@royal/renderer-webgl', '@royal/renderer-webgl/xr']
+    specifiers: [
+      '@royal/renderer-webgl',
+      '@royal/renderer-webgl/ktx2',
+      '@royal/renderer-webgl/xr'
+    ]
   },
   {
     cwd: 'packages/react',

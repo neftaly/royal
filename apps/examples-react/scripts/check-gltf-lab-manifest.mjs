@@ -21,6 +21,7 @@ const statuses = new Set([
 const supportedRequiredExtensions = new Set([
   'EXT_mesh_gpu_instancing',
   'EXT_texture_webp',
+  'GS_texture_etc2',
   'KHR_draco_mesh_compression',
   'KHR_lights_punctual',
   'KHR_materials_emissive_strength',
@@ -50,13 +51,13 @@ if (new Set(manifestNames).size !== manifestNames.length) {
 }
 const fixtureNameFor = (entry) => {
   const [fixtures, collection, fixtureName, ...assetPath] = decodeURIComponent(entry.path).split('/');
-  if (fixtures !== 'fixtures' || collection !== 'khronos' || fixtureName === undefined
+  if (fixtures !== 'fixtures' || collection === undefined || fixtureName === undefined
     || assetPath.length === 0) {
-    throw new Error(`${entry.name}: path is outside the Khronos fixture inventory`);
+    throw new Error(`${entry.name}: path is outside the fixture inventory`);
   }
-  return fixtureName;
+  return collection === 'khronos' ? fixtureName : undefined;
 };
-const manifestFixtureNames = [...new Set(manifest.cases.map(fixtureNameFor))]
+const manifestFixtureNames = [...new Set(manifest.cases.map(fixtureNameFor).filter(Boolean))]
   .sort((left, right) => left.localeCompare(right));
 if (JSON.stringify(fixtureNames) !== JSON.stringify(manifestFixtureNames)) {
   throw new Error(`Manifest inventory differs from vendored fixtures (${manifestFixtureNames.length}/${fixtureNames.length})`);

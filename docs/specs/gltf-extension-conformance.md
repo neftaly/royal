@@ -72,8 +72,11 @@ transform math is generic.
 - `GS_texture_etc2` accepts one image source containing Royal's validated,
   unsupercompressed ETC2 RGBA KTX2 subset. Its source marker disappears at
   canonical decode; sampler, material, budget, upload, draw and picking remain
-  ordinary paths. When WebP and core alternatives also exist, selection is
-  ETC2, then WebP, then core, and only the selected source is fetched.
+  ordinary paths. The root first enables `WEBGL_compressed_texture_etc` and
+  passes that capability into cold/worker preparation. When available,
+  selection is ETC2, then WebP, then core; when absent, optional selection is
+  WebP then core and a required declaration fails preflight. Only the selected
+  source is fetched.
 - Mesh quantization currently accepts the normalized integer attribute forms
   decoded by the Draco adapter. Uncompressed quantized attributes still fail
   at their semantic reader instead of being interpreted as floats.

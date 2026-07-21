@@ -267,6 +267,20 @@ describe("ordinary texture GPU owner", () => {
     expect(gl.generateMipmap).not.toHaveBeenCalled();
   });
 
+  it("rejects compressed storage before allocation when ETC2 was not enabled", () => {
+    const gl = fakeGl();
+    const owner = new TextureGpuOwner(
+      gl,
+      new PersistentGpuBudgetOwner(),
+      new FrameUploadBudgetOwner(),
+      false,
+    );
+    expect(() => owner.reconcile([compressedBinding(1, "linear")]))
+      .toThrow("WEBGL_compressed_texture_etc");
+    expect(gl.createTexture).not.toHaveBeenCalled();
+    expect(gl.compressedTexImage2D).not.toHaveBeenCalled();
+  });
+
   it("deletes newly allocated storage when sampler preparation fails", () => {
     const gl = fakeGl();
     vi.mocked(gl.createSampler).mockReturnValue(null as unknown as WebGLSampler);

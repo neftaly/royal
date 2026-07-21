@@ -71,6 +71,7 @@ export class TextureGpuOwner {
   readonly #deniedStorageKeys = new Set<string>();
   readonly #deferredStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
+  readonly #etc2Available: boolean;
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
   readonly #uploadedStorageKeys = new Set<string>();
@@ -81,10 +82,12 @@ export class TextureGpuOwner {
     gl: WebGL2RenderingContext,
     budget = new PersistentGpuBudgetOwner(),
     uploadBudget = new FrameUploadBudgetOwner(),
+    etc2Available = true,
   ) {
     this.#gl = gl;
     this.#budget = budget;
     this.#uploadBudget = uploadBudget;
+    this.#etc2Available = etc2Available;
   }
 
   dispose(): void {
@@ -294,6 +297,9 @@ export class TextureGpuOwner {
     const gl = this.#gl;
     const decoded = binding.decoded;
     const compressed = decoded.kind === "ktx2-etc2";
+    if (compressed && !this.#etc2Available) {
+      throw new Error("Royal ETC2 KTX2 upload requires WEBGL_compressed_texture_etc");
+    }
     const mipmapsRequired = usesMipmaps(binding.sampler.minFilter);
     const mipmapped = compressed
       ? decoded.levels.length === completeKtx2MipLevelCount(decoded.width, decoded.height)

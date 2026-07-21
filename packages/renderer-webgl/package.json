@@ -24,6 +24,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./ktx2": {
+      "types": "./dist/ktx2.d.ts",
+      "import": "./dist/ktx2.js",
+      "default": "./dist/ktx2.js"
+    },
     "./xr": {
       "types": "./dist/xr.d.ts",
       "import": "./dist/xr.js",

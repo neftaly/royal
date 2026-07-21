@@ -37,6 +37,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
+        ktx2: 'src/ktx2.ts',
         xr: 'src/xr.ts'
       },
       formats: ['es'],
@@ -71,6 +72,7 @@ const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/xr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/xr.ts') },
+  { find: '@royal/renderer-webgl/ktx2', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/ktx2.ts') },
   { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },

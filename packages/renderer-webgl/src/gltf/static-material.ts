@@ -113,6 +113,7 @@ export const createTextureAssetReader = (
   contentKey: string,
   sourceUri: string,
   label: string,
+  etc2Available = true,
 ): ((
   value: unknown,
   path: string,
@@ -149,7 +150,7 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.EXT_texture_webp`,
       );
-    const selectedExtension = etc2Extension !== undefined
+    const selectedExtension = etc2Extension !== undefined && etc2Available
       ? "GS_texture_etc2"
       : webpExtension === undefined ? undefined : "EXT_texture_webp";
     if (etc2Extension !== undefined && texture.source === undefined && !etc2Required) {
@@ -159,7 +160,9 @@ export const createTextureAssetReader = (
         "is required when optional GS_texture_etc2 needs a core fallback",
       );
     }
-    const sourceValue = etc2Extension?.source ?? webpExtension?.source ?? texture.source;
+    const sourceValue = selectedExtension === "GS_texture_etc2"
+      ? etc2Extension!.source
+      : selectedExtension === "EXT_texture_webp" ? webpExtension!.source : texture.source;
     const sourcePath = selectedExtension === undefined
       ? `${texturePath}.source`
       : `${texturePath}.extensions.${selectedExtension}.source`;

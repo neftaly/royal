@@ -36,7 +36,11 @@ describe("browser static glTF preparation", () => {
       () => worker as unknown as Worker,
     );
     expect(worker.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ contentKey: "asset:v1", kind: "prepare" }),
+      expect.objectContaining({
+        contentKey: "asset:v1",
+        etc2Available: true,
+        kind: "prepare",
+      }),
       [bytes.buffer],
     );
     const prepared = {

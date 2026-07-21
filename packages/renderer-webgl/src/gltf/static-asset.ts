@@ -197,6 +197,7 @@ const preflightStaticDocument = (
   contentKey: string,
   label: string,
   dracoAvailable: boolean,
+  etc2Available: boolean,
 ): StaticDocumentPreflight => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
   const asset = object(document.asset, label, "asset");
@@ -218,6 +219,7 @@ const preflightStaticDocument = (
     usedExtensions,
     label,
     dracoAvailable,
+    etc2Available,
   );
 
   const buffers = array(document.buffers, label, "buffers");
@@ -252,6 +254,7 @@ const prepareStaticDocument = (
   label: string,
   sourceUri: string,
   preflight: StaticDocumentPreflight,
+  etc2Available: boolean,
   decodeDraco?: StaticDracoDecoder,
 ): PreparedStaticGltf => {
   const { bufferByteLength } = preflight;
@@ -305,6 +308,7 @@ const prepareStaticDocument = (
     contentKey,
     sourceUri,
     label,
+    etc2Available,
   );
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
@@ -912,6 +916,7 @@ export const prepareStaticGlb = (
   contentKey: string,
   label = "glTF asset",
   sourceUri = "asset.glb",
+  etc2Available = true,
 ): PreparedStaticGltf => {
   const parsed = parseGlb(bytes, label);
   const document = object(parsed.document, label, "document");
@@ -924,6 +929,7 @@ export const prepareStaticGlb = (
     contentKey,
     label,
     false,
+    etc2Available,
   );
   return prepareStaticDocument(
     document,
@@ -932,6 +938,7 @@ export const prepareStaticGlb = (
     label,
     sourceUri,
     preflight,
+    etc2Available,
   );
 };
 
@@ -943,6 +950,7 @@ const prepareDocumentWithCodecs = async (
   label: string,
   sourceUri: string,
   executeDracoTasks?: StaticDracoTaskExecutor,
+  etc2Available = true,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -951,6 +959,7 @@ const prepareDocumentWithCodecs = async (
     contentKey,
     label,
     true,
+    etc2Available,
   );
   const decodeDraco = preflight.usesDraco
     ? await import("./draco").then((module) =>
@@ -963,6 +972,7 @@ const prepareDocumentWithCodecs = async (
     label,
     sourceUri,
     preflight,
+    etc2Available,
     decodeDraco,
   );
 };
@@ -975,6 +985,7 @@ export const prepareStaticGltfSource = async (
   sourceUri: string,
   read: (uri: string) => Promise<Uint8Array>,
   executeDracoTasks?: StaticDracoTaskExecutor,
+  etc2Available = true,
 ): Promise<PreparedStaticGltf> => {
   const canonical = await readCanonicalStaticGltfSource(bytes, label, sourceUri, read);
   return prepareDocumentWithCodecs(
@@ -985,5 +996,6 @@ export const prepareStaticGltfSource = async (
     label,
     sourceUri,
     executeDracoTasks,
+    etc2Available,
   );
 };

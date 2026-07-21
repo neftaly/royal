@@ -51,6 +51,8 @@ The intended entrypoints are:
 - `@royal/renderer-core`: the same pure scene vocabulary for non-React hosts and
   renderer adapters;
 - `@royal/renderer-webgl`: lower-level WebGL host integration;
+- `@royal/renderer-webgl/ktx2`: side-effect-free offline validation and compact
+  inspection of Royal's exact directly uploadable ETC2 KTX2 profile;
 - narrow optional WebGL capability/XR subpaths where the host owns those
   browser APIs deliberately.
 

@@ -80,6 +80,12 @@ const isKtx2MimeType = (mimeType: string): boolean =>
 
 const isKtx2Uri = (uri: string): boolean => /\.ktx2(?:[?#]|$)/i.test(uri);
 
+const declaresKtx2 = (asset: TextureSourceRef): boolean =>
+  asset.sourceEncoding === "ktx2-etc2"
+  || (asset.kind === "embedded-asset"
+    ? isKtx2MimeType(asset.mimeType)
+    : isKtx2Uri(asset.src));
+
 const readTextureBlob = async (
   asset: TextureSourceRef,
   signal: AbortSignal,
@@ -339,6 +345,7 @@ const retainTextureAlpha = (
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
   maxParallelJobs = 8,
+  etc2Available = true,
 ): BrowserTextureDecoder => {
   if (maxParallelJobs < maxParallelDecodes) {
     throw new RangeError("Royal browser texture jobs must not be fewer than decodes");
@@ -346,7 +353,13 @@ export const createBrowserTextureDecoder = (
   const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
   return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
+    if (!etc2Available && declaresKtx2(asset)) {
+      throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
+    }
     const { blob, ktx2 } = await readTextureBlob(asset, signal);
+    if (ktx2 && !etc2Available) {
+      throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
+    }
     return decodes.run(
       signal,
       () => ktx2

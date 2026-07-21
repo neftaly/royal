@@ -10,6 +10,7 @@ import {
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
   contentKey: string;
+  etc2Available: boolean;
   kind: "prepare";
   label: string;
   sourceUri: string;
@@ -100,6 +101,7 @@ workerScope.addEventListener("message", (event) => {
     request.sourceUri,
     readResource,
     executeDracoTasksInWorkers,
+    request.etc2Available,
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },

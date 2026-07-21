@@ -830,6 +830,27 @@ describe("static glTF preparation core", () => {
       sourceEncoding: "ktx2-etc2",
       src: "/models/content?id=albedo",
     }]);
+
+    const fallbackDocument = structuredClone(document);
+    fallbackDocument.extensionsRequired = ["KHR_materials_unlit"];
+    const fallback = prepareStaticGlb(
+      glbFromDocument(fallbackDocument, parsed.binaryChunk!),
+      "etc2-fallback",
+      "etc2.gltf",
+      "/models/etc2.gltf",
+      false,
+    );
+    expect(fallback.textureAssets).toMatchObject([{
+      kind: "asset",
+      src: "/models/fallback.webp",
+    }]);
+    expect(() => prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "etc2-required-unavailable",
+      "etc2.gltf",
+      "/models/etc2.gltf",
+      false,
+    )).toThrow("GS_texture_etc2");
   });
 
   it("lowers embedded GS_texture_etc2 bytes into the ordinary cold recipe", () => {

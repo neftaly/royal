@@ -35,7 +35,17 @@ import {
   type WorldPosition3,
 } from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
+import { inspectEtc2Ktx2 } from '@royal/renderer-webgl/ktx2';
 import { useState, type ReactNode } from 'react';
+
+const ktx2Inspection = inspectEtc2Ktx2 as (bytes: Uint8Array) => {
+  readonly colorSpace: 'linear' | 'srgb';
+  readonly height: number;
+  readonly levelCount: number;
+  readonly storageBytes: number;
+  readonly width: number;
+};
+void ktx2Inspection;
 
 const orbit = createOrbitCameraController({
   far: 100,

@@ -379,6 +379,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #viewRevision = 0;
   #viewState = new Float64Array(0);
   readonly #gl: WebGL2RenderingContext;
+  readonly #etc2Available: boolean;
   readonly #atlases = new Map<string, GpuVirtualTextureAtlas>();
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions | undefined;
@@ -401,6 +402,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     schedule: AsyncPreparationScheduler,
     automatic: AutomaticVirtualTextureRuntimeOptions | undefined,
     uploadBudget: FrameUploadBudgetOwner,
+    etc2Available: boolean,
   ) {
     this.#gl = gl;
     this.#onChanged = onChanged;
@@ -408,6 +410,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#schedule = schedule;
     this.#automatic = automatic;
     this.#uploadBudget = uploadBudget;
+    this.#etc2Available = etc2Available;
   }
 
   get bindingRevision(): number {
@@ -853,6 +856,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource: RuntimeResource,
     manifest: VirtualTextureManifest,
   ): GpuVirtualTexture {
+    if (manifest.pageEncoding === "ktx2-etc2" && !this.#etc2Available) {
+      throw new Error("Royal ETC2 KTX2 VT pages require WEBGL_compressed_texture_etc");
+    }
     const atlasKey = virtualTextureAtlasKey(resource.asset, manifest);
     let atlas = this.#atlases.get(atlasKey);
     const created = atlas === undefined;
@@ -1226,6 +1232,7 @@ export const createBrowserVirtualTextureRuntime = (
   schedule: AsyncPreparationScheduler = prepareDirectly,
   automatic?: AutomaticVirtualTextureRuntimeOptions,
   uploadBudget = new FrameUploadBudgetOwner(),
+  etc2Available = true,
 ): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(
   gl,
   onChanged,
@@ -1233,4 +1240,5 @@ export const createBrowserVirtualTextureRuntime = (
   schedule,
   automatic,
   uploadBudget,
+  etc2Available,
 );

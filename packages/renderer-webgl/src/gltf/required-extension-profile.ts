@@ -51,6 +51,7 @@ export const validateRequiredExtensionProfile = (
   usedExtensions: readonly unknown[],
   label: string,
   dracoAvailable: boolean,
+  etc2Available = true,
 ): void => {
   const used = new Set<string>();
   for (let index = 0; index < usedExtensions.length; index += 1) {
@@ -73,6 +74,7 @@ export const validateRequiredExtensionProfile = (
     if (
       profile === undefined
       || (extensionName === "KHR_draco_mesh_compression" && !dracoAvailable)
+      || (extensionName === "GS_texture_etc2" && !etc2Available)
     ) {
       fail(
         label,

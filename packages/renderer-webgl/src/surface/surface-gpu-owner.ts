@@ -294,6 +294,7 @@ export class SurfaceGpuOwner {
     onChanged: () => void = () => undefined,
     onFailure: (error: unknown) => void = () => undefined,
     uploadBudget = new FrameUploadBudgetOwner(),
+    etc2Available = true,
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
@@ -306,7 +307,7 @@ export class SurfaceGpuOwner {
     };
     this.#programs = new SurfaceProgramOwner(gl);
     this.#resourceBudget = budget;
-    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget);
+    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available);
     this.#uploadBudget = uploadBudget;
   }
 

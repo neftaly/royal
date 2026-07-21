@@ -183,3 +183,51 @@ export const validateIpadSafariBenchmarkEnvelope = (envelope) => {
 
   return { errors, warnings };
 };
+
+/** Exact physical positive oracle for Royal's optional ETC2 glTF delivery path. */
+export const validateIpadEtc2BenchmarkEnvelope = (envelope) => {
+  const result = validateIpadSafariBenchmarkEnvelope(envelope);
+  const errors = [...result.errors];
+  const report = envelope?.report;
+  if (!isRecord(report)) return { errors, warnings: result.warnings };
+  if (report.source?.dirty !== false) errors.push('ETC2 oracle source must be a clean build');
+  if (report.example?.id !== 'gltf-lab') errors.push('ETC2 oracle example must be gltf-lab');
+  if (!String(report.url ?? '').includes('case=RoyalEtc2OptionalFallback')) {
+    errors.push('ETC2 oracle URL must select RoyalEtc2OptionalFallback');
+  }
+  const extensions = report.device?.webgl?.extensions;
+  if (!Array.isArray(extensions) || !extensions.includes('WEBGL_compressed_texture_etc')) {
+    errors.push('ETC2 oracle device must expose WEBGL_compressed_texture_etc');
+  }
+  const residency = report.renderer?.after?.textureResidency;
+  if (!isRecord(residency)) {
+    errors.push('ETC2 oracle textureResidency must be an object');
+  } else {
+    const exact = {
+      bytes: 16,
+      compressedBytes: 16,
+      compressedResources: 1,
+      fitted: 0,
+      resources: 1,
+    };
+    for (const [key, value] of Object.entries(exact)) {
+      if (residency[key] !== value) errors.push(`ETC2 oracle textureResidency.${key} must be ${value}`);
+    }
+  }
+  const assets = report.renderer?.after?.gltfLoadDiagnostics?.assets;
+  const asset = Array.isArray(assets)
+    ? assets.find((candidate) => candidate?.src?.endsWith('/optional-fallback-quad.gltf'))
+    : undefined;
+  if (!isRecord(asset)) {
+    errors.push('ETC2 oracle glTF asset diagnostics are missing');
+  } else if (
+    asset.status !== 'ready'
+    || asset.imageCandidates !== 1
+    || asset.imageRequests !== 1
+    || asset.imagesLoaded !== 1
+    || asset.imageFailures !== 0
+  ) {
+    errors.push('ETC2 oracle must settle exactly one selected image without failure');
+  }
+  return { errors, warnings: result.warnings };
+};

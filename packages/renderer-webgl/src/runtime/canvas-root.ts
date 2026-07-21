@@ -241,27 +241,32 @@ const defaultPlatform = (): CanvasRootPlatform => ({
   },
 });
 
-const lazyBrowserTextureDecoder = (): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
+const lazyBrowserTextureDecoder = (
+  etc2Available: boolean,
+): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
   return async (asset, signal, maxStorageBytes, retainAlpha) => {
     decoder ??= import("../texture/browser-decode")
-      .then((module) => module.createBrowserTextureDecoder());
+      .then((module) => module.createBrowserTextureDecoder(4, 8, etc2Available));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
 };
 
-const lazyBrowserGltfPreparer = (): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
-  let prepare: Promise<NonNullable<GltfAssetOwnerPlatform["prepare"]>> | undefined;
+const lazyBrowserGltfPreparer = (
+  etc2Available: boolean,
+): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
+  let modulePromise: Promise<typeof import("../gltf/browser-static-preparation")> | undefined;
   return async (bytes, contentKey, label, sourceUri, signal, readResource) => {
-    prepare ??= import("../gltf/browser-static-preparation")
-      .then((module) => module.prepareStaticGltfInBrowser);
-    return (await prepare)(
+    modulePromise ??= import("../gltf/browser-static-preparation");
+    return (await modulePromise).prepareStaticGltfInBrowser(
       bytes,
       contentKey,
       label,
       sourceUri,
       signal,
       readResource,
+      undefined,
+      etc2Available,
     );
   };
 };
@@ -360,6 +365,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #clock: FrameClockOwner;
   readonly #context: ContextLifecycleOwner;
   readonly #environmentAssets: PrefilteredEnvironmentAssetOwner;
+  readonly #etc2Available: boolean;
   #clearColor: LinearRgba = [0, 0, 0, 0];
   #disposed = false;
   #frame = 0;
@@ -451,6 +457,7 @@ export class CanvasRoot implements RendererRoot {
     this.#platform = platform;
     this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
     this.#gl = createContext(canvas, resolvedOptions);
+    this.#etc2Available = this.#gl.getExtension("WEBGL_compressed_texture_etc") !== null;
     this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
       resolvedOptions.persistentGpuByteBudget,
     );
@@ -471,6 +478,7 @@ export class CanvasRoot implements RendererRoot {
       () => this.#invalidatePresentation(),
       (error) => this.#captureScheduledFailure(error),
       this.#frameUploadBudget,
+      this.#etc2Available,
     );
     this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
       onAssetChanged: () => {
@@ -492,13 +500,13 @@ export class CanvasRoot implements RendererRoot {
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
       onListenerError: (error) => platform.onListenerError(error),
-      prepare: lazyBrowserGltfPreparer(),
+      prepare: lazyBrowserGltfPreparer(this.#etc2Available),
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
       schedule: this.#asyncPreparation.runForeground,
     });
     this.#textureAssets = new TextureAssetOwner({
-      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
+      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(this.#etc2Available),
       onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
@@ -1068,6 +1076,8 @@ export class CanvasRoot implements RendererRoot {
             if (!this.#disposed) this.#invalidatePresentation();
           },
         } : undefined,
+        this.#frameUploadBudget,
+        this.#etc2Available,
       );
       this.#virtualTextureRuntime = runtime;
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
@@ -1162,6 +1172,10 @@ export class CanvasRoot implements RendererRoot {
   #restoreContext(): void {
     if (this.#disposed || !this.#context.transition({ kind: "restoration-started" })) return;
     try {
+      if (
+        this.#etc2Available
+        && this.#gl.getExtension("WEBGL_compressed_texture_etc") === null
+      ) throw new Error("Royal could not restore WEBGL_compressed_texture_etc");
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#state.invalidate();
       this.#surfaceGpu.invalidate();

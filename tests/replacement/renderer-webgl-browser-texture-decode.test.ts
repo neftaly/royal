@@ -187,6 +187,18 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal, 15)).rejects.toThrow("needs at least 16 bytes");
   });
 
+  it("rejects explicit ETC2 before transport when the WebGL capability is absent", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const decode = createBrowserTextureDecoder(1, 1, false);
+    await expect(decode({
+      kind: "asset",
+      sourceEncoding: "ktx2-etc2",
+      src: "/opaque?id=albedo",
+    }, new AbortController().signal)).rejects.toThrow("WEBGL_compressed_texture_etc");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("fits compressed storage by rebasing an authored mip suffix without resampling", async () => {
     const bytes = createKtx2Etc2Fixture(152, 8, 8, 4);
     vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer)));

@@ -8,10 +8,12 @@ Vendor prefix owner: Garbo Succus / future registered successor
 
 `GS_texture_etc2` lets a glTF texture prefer an offline-authored, directly
 uploadable ETC2/EAC image while retaining a core PNG or JPEG source for other
-glTF consumers. It exists because Royal's browser floor has ETC2 in WebGL2,
-while `KHR_texture_basisu` specifies Basis Universal payloads and therefore
-requires a runtime transcoder. Royal deliberately ships no Basis or WASM
-transcoder.
+glTF consumers. Target mobile GPUs commonly expose ETC2, while
+`KHR_texture_basisu` specifies Basis Universal payloads and therefore requires
+a runtime transcoder. Royal deliberately ships no Basis or WASM transcoder.
+WebGL exposes ETC2 through `WEBGL_compressed_texture_etc`, including on WebGL2;
+the context owner MUST enable and retain that capability before selecting this
+source.
 
 The extension is an experimental Royal delivery contract, not a registered
 glTF compatibility claim. It MUST NOT be emitted under the reserved `KHR` or
@@ -87,18 +89,23 @@ inside this extension.
 ## Optional and required forms
 
 With a valid parent `texture.source`, the extension SHOULD be listed only in
-`extensionsUsed`. Royal selects the extension source before fetching it;
-unaware consumers use the core source. Once selected, a malformed, missing, or
-failed ETC2 resource is a texture failure. Royal does not start or retain a
-second fallback request, because doing so would duplicate content identity,
-admission, cancellation, diagnostics, and memory policy. Applications that
-need network retry may change the asset source/version explicitly.
+`extensionsUsed`. Royal enables and tests the context capability before cold
+glTF preparation, then selects exactly one source: ETC2 when available, or the
+ordinary alternate preference/core fallback when unavailable. No alternate is
+fetched merely to make that choice. Once ETC2 is selected, a malformed,
+missing, or failed resource is a texture failure; Royal does not start a second
+fallback request after transport begins because doing so would duplicate
+content identity, admission, cancellation, diagnostics, and memory policy.
+Applications that need network retry may change the asset source/version
+explicitly.
 
 Without a parent `texture.source`, the document MUST list `GS_texture_etc2` in
 both `extensionsUsed` and `extensionsRequired`. A consumer without support
-must fail the asset. Royal also accepts the extension as required only at its
-documented texture placement and after validating the payload through the
-ordinary cold texture reader.
+must fail the asset. Royal rejects this required declaration during cold
+preflight when the context capability is absent, before texture transport.
+Royal otherwise accepts the extension as required only at its documented
+texture placement and after validating the payload through the ordinary cold
+texture reader.
 
 The extension and `EXT_texture_webp` may both occur on one texture. Royal's
 deterministic preference is ETC2, then WebP, then the core source. Only the
@@ -109,7 +116,9 @@ Royal does not compare alternate pixels.
 ## Canonical lowering and ownership
 
 Selection produces the same immutable cold texture recipe used by ordinary
-images, with an internal ETC2 encoding marker. The marker participates in
+images, with an internal ETC2 encoding marker. The context owner enables the
+WebGL extension once per generation and passes a Boolean capability into cold
+preparation; workers never probe GL. The marker participates in
 decoded-content identity and controls only cold byte parsing. Successful decode
 produces the existing canonical ETC2 level union; from that boundary onward it
 uses the same:
@@ -174,8 +183,10 @@ are measured on physical Safari 17/A10+ and Quest 2.
 
 Before this extension is described as stable, Royal needs:
 
-1. an offline builder that emits valid ETC2 KTX2 plus core-fallback glTF;
-2. schema and sample assets for optional and required forms;
+1. an offline encoder that emits valid ETC2 KTX2; Royal's checked-in attachment
+   tool already validates and wires pre-encoded images into core-fallback glTF;
+2. schema and sample assets for optional and required forms; the optional
+   fallback oracle is checked in and exercised by the browser lab;
 3. cold selection, malformed payload, wrong-placement, embedded-image,
    identity, alpha-picking, budget, cancellation, and restoration tests;
 4. physical Safari 17/A10+ and Quest 2 load, residency, frame, and visual proof;
@@ -184,3 +195,8 @@ Before this extension is described as stable, Royal needs:
 
 Until those gates are complete, the implementation is experimental and assets
 should retain a core source when interoperability matters.
+
+The WebGL capability rule follows the Khronos
+[`WEBGL_compressed_texture_etc` specification](https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc/).
+The distinction from Basis payloads follows the Khronos
+[`KHR_texture_basisu` specification](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_texture_basisu).

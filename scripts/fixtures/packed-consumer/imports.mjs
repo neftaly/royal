@@ -2,6 +2,7 @@ const entrypoints = [
   '@royal/renderer-core',
   '@royal/renderer-core/render-object',
   '@royal/renderer-webgl',
+  '@royal/renderer-webgl/ktx2',
   '@royal/renderer-webgl/xr',
   '@royal/react',
   '@royal/react/scene',

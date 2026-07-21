@@ -111,6 +111,33 @@ buffer. Unknown required glTF semantics fail instead of silently approximating
 support. The repository's
 [conformance ledger](../../docs/specs/conformance-and-review.md) is the
 authoritative feature and limitation inventory.
+
+Offline asset tools may validate Royal's directly uploadable ETC2 profile
+without creating WebGL or importing the renderer root:
+
+```ts
+import { inspectEtc2Ktx2 } from "@royal/renderer-webgl/ktx2";
+
+const info = inspectEtc2Ktx2(encodedBytes);
+console.log(info.colorSpace, info.width, info.height, info.storageBytes);
+```
+
+The repository command below attaches already-encoded KTX2 images to existing
+core-fallback glTF textures. Mappings use glTF texture indices, and KTX2 paths
+are relative to the output document. It validates the complete byte profile and
+the linear/sRGB material-slot use before writing.
+
+```sh
+pnpm author:gltf-etc2 scene.gltf scene.etc2.gltf \
+  0=textures/base-color.ktx2 3=textures/normal.ktx2
+```
+
+This command does not encode source pixels. Encoding stays an offline pipeline
+choice; Royal ships no runtime Basis/WASM transcoder. At runtime the root
+enables `WEBGL_compressed_texture_etc` once. Optional `GS_texture_etc2` uses its
+core fallback when unavailable, while required/direct compressed sources fail
+explicitly instead of issuing an invalid upload.
+
 The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
 `createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It
 borrows the root's existing context, acquires exclusive external-clock

@@ -52,6 +52,24 @@ describe("canvas size selection", () => {
 });
 
 describe("clear-only canvas root", () => {
+  it("enables ETC2 once and preserves that negotiated capability across restoration", () => {
+    const etc2 = {};
+    const extensionLookup = vi.fn((name: string) => name === "WEBGL_compressed_texture_etc"
+      ? etc2
+      : null);
+    const { canvas, root } = harness({}, {
+      getExtension: extensionLookup as WebGL2RenderingContext["getExtension"],
+    });
+
+    expect(extensionLookup.mock.calls.filter(([name]) =>
+      name === "WEBGL_compressed_texture_etc")).toHaveLength(1);
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    canvas.dispatchEvent(new Event("webglcontextrestored"));
+    expect(extensionLookup.mock.calls.filter(([name]) =>
+      name === "WEBGL_compressed_texture_etc")).toHaveLength(2);
+    expect(root.getSnapshot().context.phase).toBe("active");
+  });
+
   it("defaults persistent context costs off and preserves explicit opt-ins", () => {
     const defaults = new FakeCanvas();
     const defaultRoot = new CanvasRoot(defaults as unknown as HTMLCanvasElement);
@@ -274,7 +292,11 @@ describe("clear-only canvas root", () => {
       })),
       width: 8,
     }));
-    const { callbacks, canvas, root } = harness({ decodeTexture });
+    const { callbacks, canvas, root } = harness({ decodeTexture }, {
+      getExtension: vi.fn((name: string) => name === "WEBGL_compressed_texture_etc"
+        ? {}
+        : null) as WebGL2RenderingContext["getExtension"],
+    });
     const texture = imageTexture("/checker.ktx2");
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({

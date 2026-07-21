@@ -137,6 +137,7 @@ export const fakeGl = (): FakeGl => ({
   getParameter: vi.fn((parameter: number) => parameter === 0x0d3a
     ? new Int32Array([4096, 4096])
     : 4096),
+  getExtension: vi.fn(() => null),
   getUniformLocation: vi.fn(() => ({})),
   linkProgram: vi.fn(),
   pixelStorei: vi.fn(),

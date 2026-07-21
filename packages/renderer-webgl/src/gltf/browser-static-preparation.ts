@@ -40,6 +40,7 @@ export const prepareStaticGltfInBrowser = async (
   createWorker: (() => Worker) | undefined = typeof Worker === "function"
     ? defaultWorker
     : undefined,
+  etc2Available = true,
 ): Promise<PreparedStaticGltf> => {
   if (signal.aborted) throw abortFailure();
   if (createWorker === undefined || !shouldPrepareStaticGltfInWorker(bytes)) {
@@ -51,6 +52,8 @@ export const prepareStaticGltfInBrowser = async (
       label,
       sourceUri,
       readResource,
+      undefined,
+      etc2Available,
     );
   }
   return new Promise<PreparedStaticGltf>((resolve, reject) => {
@@ -119,7 +122,7 @@ export const prepareStaticGltfInBrowser = async (
     worker.addEventListener("messageerror", onMessageError);
     try {
       worker.postMessage(
-        { bytes, contentKey, kind: "prepare", label, sourceUri },
+        { bytes, contentKey, etc2Available, kind: "prepare", label, sourceUri },
         [bytes.buffer],
       );
     } catch (error) {
