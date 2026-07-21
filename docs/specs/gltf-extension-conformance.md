@@ -37,6 +37,7 @@ oracle.
 | --- | --- | --- |
 | `EXT_mesh_gpu_instancing` | node | validated instance transform batches sharing ordinary geometry/materials |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
+| `GS_texture_etc2` | texture | explicitly marked offline ETC2 KTX2 recipe using the ordinary texture lifecycle |
 | `KHR_draco_mesh_compression` | mesh primitive, async preparation with available decoder | validated canonical triangle attributes and indices |
 | `KHR_lights_punctual` | document and node | canonical punctual light definition and transformed occurrences |
 | `KHR_materials_emissive_strength` | material | multiplied canonical emissive factor |
@@ -68,6 +69,11 @@ transform math is generic.
   volume fails because its rendering semantics depend on transmission.
 - Texture transforms accept offset, rotation, scale, and UV-set override and
   disappear into canonical rows.
+- `GS_texture_etc2` accepts one image source containing Royal's validated,
+  unsupercompressed ETC2 RGBA KTX2 subset. Its source marker disappears at
+  canonical decode; sampler, material, budget, upload, draw and picking remain
+  ordinary paths. When WebP and core alternatives also exist, selection is
+  ETC2, then WebP, then core, and only the selected source is fetched.
 - Mesh quantization currently accepts the normalized integer attribute forms
   decoded by the Draco adapter. Uncompressed quantized attributes still fail
   at their semantic reader instead of being interpreted as floats.
@@ -88,5 +94,7 @@ Royal currently rejects required `KHR_texture_basisu`,
 extensions, the remaining PBR extension family, and all draft or imaginary
 texture extensions. Browser AVIF remains valid as a direct ordinary Royal
 texture source; `EXT_texture_avif` is not a registered glTF extension and is
-never interpreted. `GS_texture_svg` remains a documented vendor proposal, not
-a current required-extension claim.
+never interpreted. `GS_texture_etc2` is an explicitly unregistered experimental
+vendor extension rather than an ecosystem compatibility claim.
+`GS_texture_svg` remains a documented vendor proposal, not a current
+required-extension claim.

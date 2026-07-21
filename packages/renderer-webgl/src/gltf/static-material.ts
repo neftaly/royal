@@ -121,6 +121,8 @@ export const createTextureAssetReader = (
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
   const textures = optionalArray(document.textures, label, "textures");
+  const etc2Required = optionalArray(document.extensionsRequired, label, "extensionsRequired")
+    .some((extension) => extension === "GS_texture_etc2");
   const prepared = new Map<string, TextureSourceRef>();
   return (value, path, colorSpace = "srgb") => {
     const textureIndex = index(value, textures, label, path);
@@ -133,6 +135,13 @@ export const createTextureAssetReader = (
     const textureExtensions = texture.extensions === undefined
       ? {}
       : object(texture.extensions, label, `${texturePath}.extensions`);
+    const etc2Extension = textureExtensions.GS_texture_etc2 === undefined
+      ? undefined
+      : object(
+        textureExtensions.GS_texture_etc2,
+        label,
+        `${texturePath}.extensions.GS_texture_etc2`,
+      );
     const webpExtension = textureExtensions.EXT_texture_webp === undefined
       ? undefined
       : object(
@@ -140,14 +149,24 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.EXT_texture_webp`,
       );
-    const selectedExtension = webpExtension === undefined ? undefined : "EXT_texture_webp";
-    const sourceValue = webpExtension?.source ?? texture.source;
+    const selectedExtension = etc2Extension !== undefined
+      ? "GS_texture_etc2"
+      : webpExtension === undefined ? undefined : "EXT_texture_webp";
+    if (etc2Extension !== undefined && texture.source === undefined && !etc2Required) {
+      fail(
+        label,
+        `${texturePath}.source`,
+        "is required when optional GS_texture_etc2 needs a core fallback",
+      );
+    }
+    const sourceValue = etc2Extension?.source ?? webpExtension?.source ?? texture.source;
     const sourcePath = selectedExtension === undefined
       ? `${texturePath}.source`
       : `${texturePath}.extensions.${selectedExtension}.source`;
     const imageIndex = index(sourceValue, images, label, sourcePath);
     const imagePath = `images[${imageIndex}]`;
     const image = object(images[imageIndex], label, imagePath);
+    const etc2 = selectedExtension === "GS_texture_etc2";
     if ((image.uri === undefined) === (image.bufferView === undefined)) {
       fail(label, imagePath, "must contain exactly one of uri or bufferView");
     }
@@ -169,21 +188,31 @@ export const createTextureAssetReader = (
         fail(label, `${imagePath}.uri`, "must be a non-empty URI");
       }
       const resolvedUri = resolveAssetUri(sourceUri, image.uri as string);
+      if (etc2 && image.mimeType !== undefined && image.mimeType !== "image/ktx2") {
+        fail(label, `${imagePath}.mimeType`, "must be image/ktx2 for GS_texture_etc2");
+      }
       asset = {
         colorSpace,
         contentKey: `${contentKey}:external:${resolvedUri}`,
         kind: "asset",
         sampler,
+        ...(etc2 ? { sourceEncoding: "ktx2-etc2" as const } : {}),
         src: resolvedUri,
       };
     } else {
-      if (
+      if (etc2 ? image.mimeType !== "image/ktx2" : (
         image.mimeType !== "image/avif"
         && image.mimeType !== "image/jpeg"
         && image.mimeType !== "image/png"
         && image.mimeType !== "image/webp"
-      ) {
-        fail(label, `${imagePath}.mimeType`, "must be image/avif, image/jpeg, image/png, or image/webp");
+      )) {
+        fail(
+          label,
+          `${imagePath}.mimeType`,
+          etc2
+            ? "must be image/ktx2 for GS_texture_etc2"
+            : "must be image/avif, image/jpeg, image/png, or image/webp",
+        );
       }
       const mimeType = image.mimeType as EmbeddedTextureAssetRef["mimeType"];
       const viewIndex = index(image.bufferView, bufferViews, label, `${imagePath}.bufferView`);
@@ -210,6 +239,7 @@ export const createTextureAssetReader = (
         label: `${label} ${imagePath}`,
         mimeType,
         sampler,
+        ...(etc2 ? { sourceEncoding: "ktx2-etc2" as const } : {}),
       } satisfies EmbeddedTextureAssetRef;
     }
     prepared.set(preparedKey, asset);

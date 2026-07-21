@@ -26,14 +26,15 @@ not in an undocumented compatibility path.
 9. [Optional glTF feature profile](optional-gltf-features.md)
 10. [glTF required-extension conformance ledger](gltf-extension-conformance.md)
 11. [Textures and virtual texturing](textures-and-virtual-texturing.md)
-12. [Proposed `GS_texture_svg` glTF extension](gs-texture-svg-extension.md)
-13. [Rendering and presentation](rendering-and-presentation.md)
-14. [Interaction and XR](interaction-and-xr.md)
-15. [Resources and performance](resources-and-performance.md)
-16. [Hot-path normalization](hot-path-normalization.md)
-17. [Failures and diagnostics](failures-and-diagnostics.md)
-18. [Specification verification strategy](verification-strategy.md)
-19. [Conformance and adversarial review](conformance-and-review.md)
+12. [`GS_texture_etc2` glTF extension](gs-texture-etc2-extension.md)
+13. [Proposed `GS_texture_svg` glTF extension](gs-texture-svg-extension.md)
+14. [Rendering and presentation](rendering-and-presentation.md)
+15. [Interaction and XR](interaction-and-xr.md)
+16. [Resources and performance](resources-and-performance.md)
+17. [Hot-path normalization](hot-path-normalization.md)
+18. [Failures and diagnostics](failures-and-diagnostics.md)
+19. [Specification verification strategy](verification-strategy.md)
+20. [Conformance and adversarial review](conformance-and-review.md)
 
 ## Normative language
 

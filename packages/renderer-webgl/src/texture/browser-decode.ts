@@ -86,7 +86,7 @@ const readTextureBlob = async (
 ): Promise<TextureBlob> => asset.kind === "embedded-asset"
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
-      ktx2: false,
+      ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2MimeType(asset.mimeType),
     }
     : await (async () => {
       const response = await fetch(asset.src, { signal });
@@ -96,7 +96,9 @@ const readTextureBlob = async (
       const blob = await response.blob();
       return {
         blob,
-        ktx2: isKtx2Uri(asset.src) || isKtx2MimeType(blob.type),
+        ktx2: asset.sourceEncoding === "ktx2-etc2"
+          || isKtx2Uri(asset.src)
+          || isKtx2MimeType(blob.type),
       };
     })();
 

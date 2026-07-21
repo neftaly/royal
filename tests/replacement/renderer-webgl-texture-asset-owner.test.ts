@@ -54,6 +54,17 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(changed).toHaveBeenCalledWith(decodedTextureKey(first));
   });
 
+  it("keeps an explicitly encoded ETC2 source distinct from auto-decoded bytes", () => {
+    const ordinary = textureAsset({ contentKey: "hero", src: "/content" });
+    const etc2 = { ...ordinary, sourceEncoding: "ktx2-etc2" as const };
+    expect(decodedTextureKey(etc2)).not.toBe(decodedTextureKey(ordinary));
+    expect(textureStorageKey(etc2)).not.toBe(textureStorageKey(ordinary));
+    expect(() => decodedTextureKey({
+      ...ordinary,
+      sourceEncoding: "basis" as "ktx2-etc2",
+    })).toThrow("sourceEncoding must be ktx2-etc2");
+  });
+
   it("keeps concurrent out-of-order decode results attached to their content identities", async () => {
     const completions = new Map<string, (source: DecodedTextureSource) => void>();
     const owner = new TextureAssetOwner({

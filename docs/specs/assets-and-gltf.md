@@ -95,7 +95,8 @@ diagnosed once.
 
 The current replacement implementation accepts these required declarations:
 
-- `EXT_mesh_gpu_instancing` and `EXT_texture_webp`;
+- `EXT_mesh_gpu_instancing`, `EXT_texture_webp`, and experimental
+  `GS_texture_etc2`;
 - `KHR_draco_mesh_compression` through demanded async codec preparation;
 - `KHR_lights_punctual`;
 - `KHR_materials_emissive_strength`, `KHR_materials_ior`,
@@ -111,8 +112,9 @@ This is an implementation ledger, not the desired eventual static profile.
 Notably, glTF `KHR_texture_basisu`, `EXT_meshopt_compression`,
 image-based-light extensions, and the remaining PBR
 family are not yet accepted as required. Direct Royal offline ETC2 KTX2
-ingestion is not Basis ingestion and does not imply support for the glTF texture
-extension.
+ingestion is not Basis ingestion. Only the explicitly unregistered
+`GS_texture_etc2` vendor extension selects that storage from glTF; it does not
+imply `KHR_texture_basisu` support.
 
 Unknown `extensionsUsed` declarations do not fail core content. An unknown
 `extensionsRequired` declaration MUST fail before knowingly incomplete content

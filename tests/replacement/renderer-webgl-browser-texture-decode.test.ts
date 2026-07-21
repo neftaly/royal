@@ -145,6 +145,34 @@ describe("browser texture decode shell", () => {
     expect(decoded.alpha?.values).toHaveLength(16);
   });
 
+  it("uses an explicit ETC2 source marker for opaque CDN URLs and embedded bytes", async () => {
+    const bytes = createKtx2Etc2Fixture(152);
+    const createImageBitmap = vi.fn();
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      bytes.slice().buffer as ArrayBuffer,
+      { headers: { "content-type": "application/octet-stream" } },
+    )));
+
+    const external = await decodeTextureWithBrowser({
+      kind: "asset",
+      sourceEncoding: "ktx2-etc2",
+      src: "/opaque?id=albedo",
+    }, new AbortController().signal);
+    const embedded = await decodeTextureWithBrowser({
+      bytes,
+      contentKey: "embedded-etc2",
+      kind: "embedded-asset",
+      label: "embedded ETC2",
+      mimeType: "image/ktx2",
+      sourceEncoding: "ktx2-etc2",
+    }, new AbortController().signal);
+
+    expect(external.kind).toBe("ktx2-etc2");
+    expect(embedded.kind).toBe("ktx2-etc2");
+    expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
   it("rejects KTX2 color-space and exact compressed-storage budget mismatches", async () => {
     const bytes = createKtx2Etc2Fixture(152);
     vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer)));

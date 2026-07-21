@@ -12,6 +12,7 @@ import {
   staticTriangleGltf,
   staticTexturedTriangleGlb,
 } from "./support/static-glb";
+import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 
 describe("static glTF preparation core", () => {
   const requireExtensions = (
@@ -795,6 +796,93 @@ describe("static glTF preparation core", () => {
       kind: "asset",
       src: "/models/albedo.webp",
     }]);
+  });
+
+  it("selects GS_texture_etc2 before WebP and marks opaque URLs explicitly", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "etc2.gltf");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_unlit", "GS_texture_etc2"];
+    document.extensionsUsed = [
+      "KHR_materials_unlit",
+      "EXT_texture_webp",
+      "GS_texture_etc2",
+    ];
+    document.images = [
+      { uri: "fallback.png" },
+      { uri: "fallback.webp" },
+      { mimeType: "image/ktx2", uri: "content?id=albedo" },
+    ];
+    document.textures = [{
+      extensions: {
+        EXT_texture_webp: { source: 1 },
+        GS_texture_etc2: { source: 2 },
+      },
+      source: 0,
+    }];
+    const prepared = prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "etc2-v1",
+      "etc2.gltf",
+      "/models/etc2.gltf",
+    );
+    expect(prepared.textureAssets).toMatchObject([{
+      kind: "asset",
+      sourceEncoding: "ktx2-etc2",
+      src: "/models/content?id=albedo",
+    }]);
+  });
+
+  it("lowers embedded GS_texture_etc2 bytes into the ordinary cold recipe", () => {
+    const ktx2 = createKtx2Etc2Fixture(152);
+    const prepared = prepareStaticGlb(staticTexturedTriangleGlb(
+      ktx2,
+      "unused.png",
+      (document) => {
+        requireExtensions(document, "GS_texture_etc2");
+        document.images = [{ bufferView: 3, mimeType: "image/ktx2" }];
+        document.textures = [{ extensions: { GS_texture_etc2: { source: 0 } } }];
+      },
+    ), "embedded-etc2");
+    expect(prepared.textureAssets).toMatchObject([{
+      bytes: ktx2,
+      kind: "embedded-asset",
+      mimeType: "image/ktx2",
+      sourceEncoding: "ktx2-etc2",
+    }]);
+  });
+
+  it("rejects invalid GS_texture_etc2 placement and image MIME", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "bad-etc2.gltf");
+    const misplaced = parsed.document as Record<string, unknown>;
+    requireExtensions(misplaced, "GS_texture_etc2");
+    (misplaced.nodes as Array<Record<string, unknown>>)[0]!.extensions = {
+      GS_texture_etc2: { source: 0 },
+    };
+    expect(() => prepareStaticGlb(
+      glbFromDocument(misplaced, parsed.binaryChunk!),
+      "misplaced-etc2",
+    )).toThrow("nodes[0].extensions.GS_texture_etc2: is outside Royal's supported placement profile");
+
+    const wrongMime = parseGlb(staticTexturedTriangleGlb(), "bad-mime.gltf");
+    const wrongMimeDocument = wrongMime.document as Record<string, unknown>;
+    requireExtensions(wrongMimeDocument, "GS_texture_etc2");
+    wrongMimeDocument.images = [{ mimeType: "image/png", uri: "opaque" }];
+    wrongMimeDocument.textures = [{ extensions: { GS_texture_etc2: { source: 0 } } }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(wrongMimeDocument, wrongMime.binaryChunk!),
+      "wrong-etc2-mime",
+    )).toThrow("images[0].mimeType: must be image/ktx2 for GS_texture_etc2");
+
+    const missingFallback = parseGlb(staticTexturedTriangleGlb(), "missing-fallback.gltf");
+    const missingFallbackDocument = missingFallback.document as Record<string, unknown>;
+    missingFallbackDocument.extensionsRequired = ["KHR_materials_unlit"];
+    missingFallbackDocument.extensionsUsed = ["KHR_materials_unlit", "GS_texture_etc2"];
+    missingFallbackDocument.images = [{ uri: "albedo.ktx2" }];
+    missingFallbackDocument.textures = [{ extensions: { GS_texture_etc2: { source: 0 } } }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(missingFallbackDocument, missingFallback.binaryChunk!),
+      "missing-etc2-fallback",
+    )).toThrow("textures[0].source: is required when optional GS_texture_etc2 needs a core fallback");
   });
 
   it("converges core material texture channels on color-space-aware source recipes", () => {

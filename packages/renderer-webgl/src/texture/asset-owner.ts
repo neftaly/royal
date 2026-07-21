@@ -54,12 +54,15 @@ export type EmbeddedTextureAssetRef = Readonly<{
   contentKey: string;
   kind: "embedded-asset";
   label: string;
-  mimeType: "image/avif" | "image/jpeg" | "image/png" | "image/webp";
+  mimeType: "image/avif" | "image/jpeg" | "image/ktx2" | "image/png" | "image/webp";
   sampler?: TextureAssetRef["sampler"];
+  sourceEncoding?: "ktx2-etc2";
 }>;
 
 /** Cold source recipe shared by direct assets and container-embedded images. */
-export type TextureSourceRef = TextureAssetRef | EmbeddedTextureAssetRef;
+export type TextureSourceRef =
+  | (TextureAssetRef & Readonly<{ sourceEncoding?: "ktx2-etc2" }>)
+  | EmbeddedTextureAssetRef;
 
 /**
  * Focused decode lifecycle for one exact texture identity. `ready` means a
@@ -179,6 +182,9 @@ const validateAsset = (asset: TextureSourceRef): void => {
   if (typeof asset !== "object" || asset === null || Array.isArray(asset)) {
     throw new TypeError("Royal texture asset identity must be an object");
   }
+  if (asset.sourceEncoding !== undefined && asset.sourceEncoding !== "ktx2-etc2") {
+    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2 when present");
+  }
   if (asset.kind === "embedded-asset") {
     if (asset.contentKey.length === 0) {
       throw new TypeError("Royal embedded texture contentKey must not be empty");
@@ -197,11 +203,17 @@ const validateAsset = (asset: TextureSourceRef): void => {
 /** Identity of decoded pixels; color interpretation and sampling deliberately do not participate. */
 export const decodedTextureKey = (asset: TextureSourceRef): string => {
   validateAsset(asset);
-  if (asset.kind === "embedded-asset") return JSON.stringify(["content", asset.contentKey]);
+  if (asset.kind === "embedded-asset") {
+    return JSON.stringify(["content", asset.contentKey, asset.sourceEncoding ?? asset.mimeType]);
+  }
   const content = asset.contentKey === undefined
     ? ["src", asset.src] as const
     : ["content", ...identityPart(asset.contentKey, "contentKey")] as const;
-  return JSON.stringify([content, identityPart(asset.version, "version")]);
+  return JSON.stringify([
+    content,
+    identityPart(asset.version, "version"),
+    asset.sourceEncoding ?? "auto",
+  ]);
 };
 
 /** GPU storage identity; one decoded image may be interpreted in both color spaces. */

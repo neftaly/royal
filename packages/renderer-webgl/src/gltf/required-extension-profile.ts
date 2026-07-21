@@ -23,6 +23,7 @@ const materialOnly: PlacementProfile = (path) => material.test(path);
 const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> = {
   EXT_mesh_gpu_instancing: (path) => node.test(path),
   EXT_texture_webp: (path) => texture.test(path),
+  GS_texture_etc2: (path) => texture.test(path),
   KHR_draco_mesh_compression: (path) => primitive.test(path),
   KHR_lights_punctual: (path) => path === "" || node.test(path),
   KHR_materials_emissive_strength: materialOnly,
