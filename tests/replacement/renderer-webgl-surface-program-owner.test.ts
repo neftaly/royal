@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
-  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_NORMAL_TEXTURE,
-  SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
   SURFACE_FEATURE_TANGENT,
@@ -52,7 +50,7 @@ describe("surface program ownership", () => {
     expect(surfaceVertexFeatures("standard", (
       SURFACE_FEATURE_BASE_COLOR_TEXTURE
       | SURFACE_FEATURE_NORMAL_TEXTURE
-      | SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      | surfaceLightCountFeatureBits(0, 1)
       | SURFACE_FEATURE_STUDIO_ENVIRONMENT
       | SURFACE_FEATURE_VERTEX_COLOR
     ))).toBe(
@@ -73,7 +71,7 @@ describe("surface program ownership", () => {
 
     owner.get("standard", SURFACE_FEATURE_STUDIO_ENVIRONMENT, false, false, false);
     owner.get("standard", (
-      SURFACE_FEATURE_STUDIO_ENVIRONMENT | SURFACE_FEATURE_PUNCTUAL_LIGHTS
+      SURFACE_FEATURE_STUDIO_ENVIRONMENT | surfaceLightCountFeatureBits(0, 1)
     ), false, false, false);
 
     expect(gl.createProgram).toHaveBeenCalledTimes(2);
@@ -132,8 +130,6 @@ describe("surface program ownership", () => {
     owner.get(
       "standard",
       SURFACE_FEATURE_STUDIO_ENVIRONMENT
-        | SURFACE_FEATURE_DIRECTIONAL_LIGHTS
-        | SURFACE_FEATURE_PUNCTUAL_LIGHTS
         | surfaceLightCountFeatureBits(3, 2),
       false,
       false,

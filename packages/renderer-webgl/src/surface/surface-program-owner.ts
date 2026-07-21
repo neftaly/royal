@@ -11,7 +11,6 @@ import {
 import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
-  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_LINEAR_OUTPUT,
@@ -19,7 +18,6 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_OCCLUSION_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
-  SURFACE_FEATURE_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
   SURFACE_FEATURE_SPECULAR_MATERIAL,
@@ -177,14 +175,14 @@ const shaderVariant = (
   virtualDeclarations: string,
   transmissionSource: SurfaceTransmissionShaderSource,
 ): string => {
-  const directionalLightCount = Math.max(1, surfaceDirectionalLightCount(features));
-  const punctualLightCount = Math.max(1, surfacePunctualLightCount(features));
+  const directionalLightCount = surfaceDirectionalLightCount(features);
+  const punctualLightCount = surfacePunctualLightCount(features);
   const variant = source.replace(
     "__MAX_DIRECTIONAL_LIGHTS__",
-    String(directionalLightCount),
+    String(Math.max(1, directionalLightCount)),
   ).replace(
     "__MAX_PUNCTUAL_LIGHTS__",
-    String(punctualLightCount),
+    String(Math.max(1, punctualLightCount)),
   ).replace(
     "__VIRTUAL_TEXTURE_DECLARATIONS__",
     features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? virtualDeclarations : "",
@@ -206,7 +204,7 @@ const shaderVariant = (
       ? transmissionSource.vertexBody : "",
   ).replace(
     "\n",
-    `\n${features & SURFACE_FEATURE_VERTEX_NORMAL ? "#define VERTEX_NORMAL\n" : ""}${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_VOLUME_MATERIAL ? "#define VOLUME_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS ? "#define DIRECTIONAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_PUNCTUAL_LIGHTS ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${features & SURFACE_FEATURE_ALPHA_BLEND ? "#define ALPHA_BLEND\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
+    `\n${features & SURFACE_FEATURE_VERTEX_NORMAL ? "#define VERTEX_NORMAL\n" : ""}${features & SURFACE_TEXTURE_FEATURES ? "#define TEXTURED\n" : ""}${features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES ? "#define IDENTITY_TEXTURE_COORDINATES\n" : ""}${features & SURFACE_FEATURE_ROTATED_ENVIRONMENT ? "#define ROTATED_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_BASE_COLOR_TEXTURE ? "#define BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? "#define VIRTUAL_BASE_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE ? "#define METALLIC_ROUGHNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_NORMAL_TEXTURE ? "#define NORMAL_TEXTURED\n" : ""}${features & SURFACE_FEATURE_EMISSIVE_TEXTURE ? "#define EMISSIVE_TEXTURED\n" : ""}${features & SURFACE_FEATURE_TANGENT ? "#define TANGENT\n" : ""}${features & SURFACE_FEATURE_OCCLUSION_TEXTURE ? "#define OCCLUSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_TEXTURE ? "#define SPECULAR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE ? "#define SPECULAR_COLOR_TEXTURED\n" : ""}${features & SURFACE_FEATURE_SPECULAR_MATERIAL ? "#define SPECULAR_MATERIAL\n" : ""}${features & SURFACE_FEATURE_LINEAR_OUTPUT ? "#define LINEAR_OUTPUT\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? "#define TRANSMISSION_MATERIAL\n" : ""}${features & SURFACE_FEATURE_VOLUME_MATERIAL ? "#define VOLUME_MATERIAL\n" : ""}${features & SURFACE_FEATURE_TRANSMISSION_TEXTURE ? "#define TRANSMISSION_TEXTURED\n" : ""}${features & SURFACE_FEATURE_THICKNESS_TEXTURE ? "#define THICKNESS_TEXTURED\n" : ""}${features & SURFACE_FEATURE_STUDIO_ENVIRONMENT ? "#define STUDIO_ENVIRONMENT\n" : ""}${features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? "#define PREFILTERED_ENVIRONMENT\n" : ""}${directionalLightCount > 0 ? "#define DIRECTIONAL_LIGHTS\n" : ""}${punctualLightCount > 0 ? "#define PUNCTUAL_LIGHTS\n" : ""}${features & SURFACE_FEATURE_VERTEX_COLOR ? "#define VERTEX_COLOR\n" : ""}${features & SURFACE_FEATURE_ALPHA_BLEND ? "#define ALPHA_BLEND\n" : ""}${instanced ? "#define INSTANCED\n" : ""}${alphaMasked ? "#define ALPHA_MASK\n" : ""}${doubleSided ? "#define DOUBLE_SIDED\n" : ""}`,
   );
   return features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
     ? variant.replace(SEMANTIC_TEXTURE_COORDINATE, "surfaceTextureCoordinate")
@@ -291,9 +289,9 @@ const createStandardProgram = (
       : null,
     baseColor: uniform(gl, program, "baseColor"),
     cameraWorldPosition: uniform(gl, program, "cameraWorldPosition"),
-    directionalLightColors: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+    directionalLightColors: surfaceDirectionalLightCount(features) > 0
       ? uniform(gl, program, "directionalLightColors") : null,
-    directionalLightDirections: features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS
+    directionalLightDirections: surfaceDirectionalLightCount(features) > 0
       ? uniform(gl, program, "directionalLightDirections") : null,
     emissive: features & SURFACE_FEATURE_EMISSIVE_TEXTURE
       ? uniform(gl, program, "emissiveTexture")
@@ -346,16 +344,16 @@ const createStandardProgram = (
       ? null
       : uniform(gl, program, "presentation"),
     program,
-    punctualLightColors: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+    punctualLightColors: surfacePunctualLightCount(features) > 0
       ? uniform(gl, program, "punctualLightColors")
       : null,
-    punctualLightDirections: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+    punctualLightDirections: surfacePunctualLightCount(features) > 0
       ? uniform(gl, program, "punctualLightDirections")
       : null,
-    punctualLightPositions: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+    punctualLightPositions: surfacePunctualLightCount(features) > 0
       ? uniform(gl, program, "punctualLightPositions")
       : null,
-    punctualLightSpotCones: features & SURFACE_FEATURE_PUNCTUAL_LIGHTS
+    punctualLightSpotCones: surfacePunctualLightCount(features) > 0
       ? uniform(gl, program, "punctualLightSpotCones")
       : null,
     specular: features & SURFACE_FEATURE_SPECULAR_TEXTURE

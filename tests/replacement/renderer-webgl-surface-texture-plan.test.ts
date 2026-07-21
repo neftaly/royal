@@ -17,7 +17,6 @@ import {
 import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
-  SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
   SURFACE_FEATURE_EMISSIVE_TEXTURE,
   SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES,
   SURFACE_FEATURE_METALLIC_ROUGHNESS_TEXTURE,
@@ -417,7 +416,6 @@ describe("surface texture planning core", () => {
     });
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
     expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
-    expect(features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS).not.toBe(0);
     expect(surfaceDirectionalLightCount(features)).toBe(2);
     expect(surfacePunctualLightCount(features)).toBe(3);
     expect(features & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(SURFACE_FEATURE_VOLUME_MATERIAL);
