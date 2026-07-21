@@ -16,12 +16,80 @@ import {
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import {
   decodedTextureKey,
+  textureStorageKey,
+  type DecodedTextureSource,
   type TextureSourceRef,
 } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
 import { fakeGl } from "./support/canvas-root-harness";
+import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 describe("retained surface texture publication", () => {
+  it("fuzzes out-of-order publication without crossing authored identities", () => {
+    const geometry = planeGeometry(1);
+    const assets = Array.from(
+      { length: 24 },
+      (_value, index) => imageTexture({
+        src: `/publication-${index}.avif`,
+        version: `revision-${index}`,
+      }),
+    );
+    const authored = scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: assets.map((texture) => mesh({
+        geometry,
+        material: unlitMaterial({ texture }),
+      })),
+    });
+
+    forEachFuzzCase({
+      cases: 32,
+      envName: "ROYAL_TEXTURE_PUBLICATION_FUZZ_CASES",
+      seed: 0x7e87_1d3a,
+    }, ({ random }) => {
+      const decoded = new Map<string, DecodedTextureSource>();
+      const resolve = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
+        decoded.get(decodedTextureKey(asset));
+      let prepared = prepareCanonicalSurfaceScene(authored, undefined, undefined, resolve);
+      const remaining = assets.map((_asset, index) => index);
+      while (remaining.length > 0) {
+        const batch: string[] = [];
+        const count = Math.min(remaining.length, random.int(1, 6));
+        for (let offset = 0; offset < count; offset += 1) {
+          const selected = random.int(0, remaining.length);
+          const assetIndex = remaining.splice(selected, 1)[0]!;
+          const asset = assets[assetIndex]!;
+          const key = decodedTextureKey(asset);
+          decoded.set(key, {
+            height: 2,
+            source: { assetIndex } as unknown as ImageBitmap,
+            width: 2,
+          });
+          batch.push(key);
+        }
+        prepared = refreshCanonicalSurfaceTextures(prepared, batch, resolve);
+        for (let surfaceIndex = 0; surfaceIndex < assets.length; surfaceIndex += 1) {
+          const asset = assets[surfaceIndex]!;
+          const binding = prepared.surfaces[surfaceIndex]!.material.baseColorTexture;
+          const expected = decoded.get(decodedTextureKey(asset));
+          assertFuzz(
+            (binding === undefined) === (expected === undefined),
+            `surface ${surfaceIndex} publication readiness crossed identity`,
+          );
+          if (binding === undefined || expected === undefined) continue;
+          assertFuzz(
+            binding.storageKey === textureStorageKey(asset),
+            `surface ${surfaceIndex} storage key crossed identity`,
+          );
+          assertFuzz(
+            binding.decoded === expected,
+            `surface ${surfaceIndex} decoded source crossed identity`,
+          );
+        }
+      }
+    });
+  });
+
   it("replaces a resident binding when the shader feature set stays unchanged", () => {
     let activeUnit = 0;
     const bound: Array<WebGLTexture | null | undefined> = [];
