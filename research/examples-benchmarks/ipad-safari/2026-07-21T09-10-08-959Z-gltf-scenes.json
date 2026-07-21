@@ -1,0 +1,375 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "cameraDrag": true,
+  "coldCache": false,
+  "receivedAt": "2026-07-21T09:10:09.527Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 368,
+        "cssWidth": 736,
+        "height": 736,
+        "width": 1472
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-scenes",
+      "path": "/gltf-scenes",
+      "sourceFile": "examples/cases/GltfScenes.tsx",
+      "title": "glTF Scenes"
+    },
+    "frameStats": {
+      "averageMs": 12.816666666666606,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 1,
+      "maxMs": 15,
+      "minMs": 8,
+      "p50Ms": 13,
+      "p95Ms": 14,
+      "p99Ms": 15,
+      "requestedSampleCount": 60,
+      "sampleCount": 60,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 90000
+    },
+    "frameTiming": {
+      "callbackCalls": 120,
+      "callbackMaxMs": 8,
+      "callbackTotalMs": 238.00000000000136,
+      "supported": true
+    },
+    "generatedAt": "2026-07-21T09:10:08.959Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 7992,
+        "bindVertexArray": 300,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 60,
+        "drawArraysInstanced": 0,
+        "drawCalls": 12719,
+        "drawElements": 11836,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 823,
+        "multiDrawDraws": 2066,
+        "nonInstancedDrawCalls": 12719,
+        "stateChanges": 8532,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 44628,
+        "uniformMatrixCalls": 17304,
+        "useProgram": 240
+      },
+      "setup": {
+        "bindBuffer": 655,
+        "bindTexture": 288,
+        "bindVertexArray": 230,
+        "bufferDataBytes": 669786,
+        "bufferDataCalls": 7,
+        "bufferSubDataBytes": 669786,
+        "bufferSubDataCalls": 648,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 4,
+        "drawArraysInstanced": 0,
+        "drawCalls": 697,
+        "drawElements": 633,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 60,
+        "multiDrawDraws": 131,
+        "nonInstancedDrawCalls": 697,
+        "stateChanges": 1195,
+        "texImage2D": 0,
+        "texSubImage2D": 40,
+        "uniformCalls": 2342,
+        "uniformMatrixCalls": 947,
+        "useProgram": 22
+      }
+    },
+    "options": {
+      "autorun": true,
+      "cameraDrag": true,
+      "frames": 60,
+      "timeoutMs": 90000,
+      "warmupFrames": 12
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 201,
+        "duration": 203,
+        "loadEventEnd": 203,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 23,
+        "totalDecodedBodySize": 3708085,
+        "totalEncodedBodySize": 3274221,
+        "totalTransferSize": 3280221
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 67,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 40,
+              "imageFailures": 0,
+              "imagesLoaded": 40,
+              "imageRequests": 40,
+              "lightCount": 0,
+              "nodeCount": 234,
+              "phaseMs": {
+                "firstUsable": 798,
+                "imagesComplete": 1532,
+                "preparation": 134,
+                "externalResourceRead": 0,
+                "sourceRead": 664
+              },
+              "primitiveCount": 167,
+              "src": "/fixtures/scenes/VirtualCity/glTF-Binary/VirtualCity.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 0,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 33768186,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 20097696,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 0,
+          "resources": 40
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 7,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 40,
+              "imageFailures": 0,
+              "imagesLoaded": 40,
+              "imageRequests": 40,
+              "lightCount": 0,
+              "nodeCount": 234,
+              "phaseMs": {
+                "firstUsable": 798,
+                "imagesComplete": 1532,
+                "preparation": 134,
+                "externalResourceRead": 0,
+                "sourceRead": 664
+              },
+              "primitiveCount": 167,
+              "src": "/fixtures/scenes/VirtualCity/glTF-Binary/VirtualCity.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 6058,
+          "admittedOrdinaryTextureUploadBytes": 524288,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 33768186,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 20097696,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 0,
+          "resources": 40
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 60,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 7,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 40,
+              "imageFailures": 0,
+              "imagesLoaded": 40,
+              "imageRequests": 40,
+              "lightCount": 0,
+              "nodeCount": 234,
+              "phaseMs": {
+                "firstUsable": 798,
+                "imagesComplete": 1532,
+                "preparation": 134,
+                "externalResourceRead": 0,
+                "sourceRead": 664
+              },
+              "primitiveCount": 167,
+              "src": "/fixtures/scenes/VirtualCity/glTF-Binary/VirtualCity.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 6058,
+          "admittedOrdinaryTextureUploadBytes": 524288,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 33768186,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 20097696,
+          "compressedBytes": 0,
+          "compressedResources": 0,
+          "fitted": 0,
+          "resources": 40
+        },
+        "virtualTexturing": null
+      }
+    },
+    "source": {
+      "buildId": "1100f9b26b31-clean-mruflbz3",
+      "builtAt": "2026-07-21T09:08:27.990Z",
+      "dirty": false,
+      "revision": "1100f9b26b31aeff1499d0a32046f64da2a27bf2"
+    },
+    "url": "http://192.168.1.102:3301/gltf-scenes?scene=virtual-city&bench=auto&cameraDrag=1&frames=60&warmup=12&timeoutMs=90000&run=1784625005614",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 2912
+  }
+}
