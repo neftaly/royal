@@ -8,6 +8,11 @@ import standardVertexShader from "../webgl/shaders/surface.vert";
 import standardFragmentShader from "../webgl/shaders/surface.frag";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 import {
+  compileWebGlShader,
+  linkWebGlProgram,
+  requiredWebGlUniform,
+} from "../webgl/program";
+import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_DIRECTIONAL_LIGHTS,
@@ -137,18 +142,6 @@ const STANDARD_FRAGMENT_SHADER = standardFragmentShader
   .replace("__MAX_DIRECTIONAL_LIGHTS__", String(MAX_CANONICAL_DIRECTIONAL_LIGHTS))
   .replace("__MAX_PUNCTUAL_LIGHTS__", String(MAX_CANONICAL_PUNCTUAL_LIGHTS));
 
-const compileShader = (
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-): WebGLShader => {
-  const shader = gl.createShader(type);
-  if (shader === null) throw new Error("Royal could not allocate a surface shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  return shader;
-};
-
 const STANDARD_VERTEX_FEATURES = SURFACE_TEXTURE_FEATURES
   | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
   | SURFACE_FEATURE_TANGENT
@@ -173,27 +166,12 @@ const createProgram = (
   vertex: WebGLShader,
   fragmentSource: string,
 ): WebGLProgram => {
-  const fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  const program = gl.createProgram();
-  if (program === null) {
+  const fragment = compileWebGlShader(gl, gl.FRAGMENT_SHADER, fragmentSource, "surface");
+  try {
+    return linkWebGlProgram(gl, vertex, fragment, "surface");
+  } finally {
     gl.deleteShader(fragment);
-    throw new Error("Royal could not allocate a surface program");
   }
-  gl.attachShader(program, vertex);
-  gl.attachShader(program, fragment);
-  gl.linkProgram(program);
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    let detail = gl.getProgramInfoLog(program) || "unknown linker failure";
-    const vertexDetail = gl.getShaderInfoLog(vertex);
-    const fragmentDetail = gl.getShaderInfoLog(fragment);
-    if (vertexDetail) detail += `; vertex: ${vertexDetail}`;
-    if (fragmentDetail) detail += `; fragment: ${fragmentDetail}`;
-    gl.deleteShader(fragment);
-    gl.deleteProgram(program);
-    throw new Error(`Royal surface program link failed: ${detail}`);
-  }
-  gl.deleteShader(fragment);
-  return program;
 };
 
 const shaderVariant = (
@@ -238,12 +216,7 @@ const uniform = (
   program: WebGLProgram,
   name: string,
 ): WebGLUniformLocation => {
-  const location = gl.getUniformLocation(program, name);
-  if (location === null) {
-    gl.deleteProgram(program);
-    throw new Error(`Royal surface program is missing ${name}`);
-  }
-  return location;
+  return requiredWebGlUniform(gl, program, name, "surface");
 };
 
 const textureCoordinatesProgram = (
@@ -560,7 +533,7 @@ export class SurfaceProgramOwner {
     );
     const retained = this.#vertexShaders.get(source);
     if (retained !== undefined) return retained;
-    const shader = compileShader(this.#gl, this.#gl.VERTEX_SHADER, source);
+    const shader = compileWebGlShader(this.#gl, this.#gl.VERTEX_SHADER, source, "surface");
     this.#vertexShaders.set(source, shader);
     return shader;
   }

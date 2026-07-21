@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
+  surfacesShareDepthPrepassState,
   surfacesShareMultiDrawState,
+  type SurfaceDepthMultiDrawCandidate,
   type SurfaceMultiDrawCandidate,
 } from "../../packages/renderer-webgl/src/surface/surface-multi-draw";
 
@@ -32,6 +34,7 @@ const candidate = (
   return {
     drawPacket: {
       alphaBlend: false,
+      colorWrite: true,
       cullBackFaces: true,
       depthTest: true,
       depthWrite: true,
@@ -51,6 +54,22 @@ const candidate = (
     ...overrides,
   };
 };
+
+const depthCandidate = (
+  overrides: Partial<SurfaceDepthMultiDrawCandidate> = {},
+): SurfaceDepthMultiDrawCandidate => ({
+  depthPacket: {
+    ...candidate().drawPacket,
+    colorWrite: false,
+    textureBindings: [],
+    textureUnits: 0,
+  },
+  geometry: { indexType: 0x1403 },
+  instanceCount: 0,
+  mode: 0x0004,
+  surface: { model: identityMat4() },
+  ...overrides,
+});
 
 describe("surface multi-draw compatibility core", () => {
   it("accepts adjacent draws whose complete retained state is interchangeable", () => {
@@ -199,6 +218,31 @@ describe("surface multi-draw compatibility core", () => {
     expect(surfacesShareMultiDrawState(left, candidate({
       instanceCount: 2,
       surface: left.surface,
+    }))).toBe(false);
+  });
+});
+
+describe("surface depth-prepass multi-draw compatibility core", () => {
+  it("combines exact position-only state across material boundaries", () => {
+    const left = depthCandidate();
+    const right = depthCandidate({
+      depthPacket: { ...left.depthPacket! },
+      surface: { model: [...left.surface.model] },
+    });
+    expect(surfacesShareDepthPrepassState(left, right)).toBe(true);
+  });
+
+  it("rejects absent, instanced, or transform-incompatible candidates", () => {
+    const left = depthCandidate();
+    expect(surfacesShareDepthPrepassState(left, depthCandidate({ depthPacket: null }))).toBe(false);
+    expect(surfacesShareDepthPrepassState(left, depthCandidate({ instanceCount: 2 }))).toBe(false);
+    expect(surfacesShareDepthPrepassState(left, depthCandidate({
+      surface: { model: [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        1, 0, 0, 1,
+      ] },
     }))).toBe(false);
   });
 });

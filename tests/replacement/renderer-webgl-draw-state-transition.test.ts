@@ -33,6 +33,7 @@ const draw = (): Readonly<{ frame: SurfaceDrawFrame; packet: SurfaceDrawPacket }
   },
   packet: {
     alphaBlend: false,
+    colorWrite: true,
     cullBackFaces: true,
     depthTest: true,
     depthWrite: true,
@@ -96,6 +97,20 @@ describe("surface draw state transition core", () => {
       vertexArray: true,
       viewport: false,
     });
+  });
+
+  it("tracks a depth-only color mask without invalidating unrelated state", () => {
+    const previous = state();
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, frame, { ...packet, colorWrite: false }, transition);
+    expect(transition.colorMask).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "colorMask")
+      .every(([, value]) => !value)).toBe(true);
+    commitAppliedSurfaceDrawState(previous, frame, { ...packet, colorWrite: false });
+    expect(previous.colorWrite).toBe(false);
   });
 
   it("isolates mirrored-front-face changes from the rest of the pipeline", () => {

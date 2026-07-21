@@ -18,6 +18,14 @@ export type SurfaceMultiDrawCandidate = Readonly<{
   }>;
 }>;
 
+export type SurfaceDepthMultiDrawCandidate = Readonly<{
+  depthPacket: SurfaceDrawPacket | null;
+  geometry: Readonly<{ indexType: number }>;
+  instanceCount: number;
+  mode: number;
+  surface: Readonly<{ model: Mat4 }>;
+}>;
+
 export const activeTextureBindingsEqual = (
   left: readonly TextureUnitBinding[],
   right: readonly TextureUnitBinding[],
@@ -50,6 +58,7 @@ export const surfacesShareMultiDrawState = (
   && left.mode === right.mode
   && left.surface.materialSource === right.surface.materialSource
   && left.drawPacket.alphaBlend === right.drawPacket.alphaBlend
+  && left.drawPacket.colorWrite === right.drawPacket.colorWrite
   && left.drawPacket.cullBackFaces === right.drawPacket.cullBackFaces
   && left.drawPacket.depthTest === right.drawPacket.depthTest
   && left.drawPacket.depthWrite === right.drawPacket.depthWrite
@@ -64,3 +73,23 @@ export const surfacesShareMultiDrawState = (
     left.drawPacket.textureUnits,
   )
 );
+
+/** Exact retained-state equivalence for a position-only opaque multi-draw. */
+export const surfacesShareDepthPrepassState = (
+  left: SurfaceDepthMultiDrawCandidate,
+  right: SurfaceDepthMultiDrawCandidate,
+): boolean => {
+  const leftPacket = left.depthPacket;
+  const rightPacket = right.depthPacket;
+  return leftPacket !== null
+    && rightPacket !== null
+    && left.instanceCount === 0
+    && right.instanceCount === 0
+    && leftPacket.program === rightPacket.program
+    && left.mode === right.mode
+    && leftPacket.cullBackFaces === rightPacket.cullBackFaces
+    && leftPacket.frontFace === rightPacket.frontFace
+    && leftPacket.vertexArray === rightPacket.vertexArray
+    && left.geometry.indexType === right.geometry.indexType
+    && mat4ValuesEqual(left.surface.model, right.surface.model);
+};

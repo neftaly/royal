@@ -13,6 +13,7 @@ export type SurfaceDrawFrame = Readonly<{
 
 export type SurfaceDrawPacket = Readonly<{
   alphaBlend: boolean;
+  colorWrite: boolean;
   cullBackFaces: boolean;
   depthTest: boolean;
   depthWrite: boolean;
@@ -104,7 +105,9 @@ export const planSurfaceDrawStateTransition = (
   output.depthFunction = packet.depthTest
     && (unknown || !previous.depthFunctionKnown);
   output.frontFace = unknown || previous.frontFace !== packet.frontFace;
-  output.colorMask = unknown || !previous.colorMaskKnown;
+  output.colorMask = unknown
+    || !previous.colorMaskKnown
+    || previous.colorWrite !== packet.colorWrite;
   output.depthWrite = unknown || previous.depthWrite !== packet.depthWrite;
   output.program = unknown || previous.program !== packet.program;
   output.textureUnits = 0;
@@ -127,6 +130,7 @@ export const commitAppliedSurfaceDrawState = (
   state.alphaBlend = packet.alphaBlend;
   if (packet.alphaBlend) state.blendFunctionKnown = true;
   state.cullBackFaces = packet.cullBackFaces;
+  state.colorWrite = packet.colorWrite;
   if (packet.cullBackFaces) state.cullFaceKnown = true;
   state.depthTest = packet.depthTest;
   if (packet.depthTest) state.depthFunctionKnown = true;

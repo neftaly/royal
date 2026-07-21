@@ -10,6 +10,7 @@ import type {
 import presentationFragmentShader from "../webgl/shaders/presentation.frag";
 import presentationVertexShader from "../webgl/shaders/presentation.vert";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
+import { compileWebGlShader, linkWebGlProgram } from "../webgl/program";
 import {
   compositeTargetByteLength,
   transmissionSceneColorMaxLod,
@@ -138,55 +139,36 @@ type CompositeResources = Readonly<{
   width: number;
 }>;
 
-const compileShader = (
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-): WebGLShader => {
-  const shader = gl.createShader(type);
-  if (shader === null) throw new Error("Royal could not allocate a presentation shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  return shader;
-};
-
 const PRESENTATION_FRAGMENT_SHADER = presentationFragmentShader.replace(
   "__PRESENTATION_FUNCTIONS__",
   PRESENTATION_GLSL,
 );
 
 const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
-  const vertex = compileShader(gl, gl.VERTEX_SHADER, presentationVertexShader);
+  const vertex = compileWebGlShader(
+    gl,
+    gl.VERTEX_SHADER,
+    presentationVertexShader,
+    "presentation",
+  );
   let fragment: WebGLShader;
   try {
-    fragment = compileShader(gl, gl.FRAGMENT_SHADER, PRESENTATION_FRAGMENT_SHADER);
+    fragment = compileWebGlShader(
+      gl,
+      gl.FRAGMENT_SHADER,
+      PRESENTATION_FRAGMENT_SHADER,
+      "presentation",
+    );
   } catch (error) {
     gl.deleteShader(vertex);
     throw error;
   }
-  const program = gl.createProgram();
-  if (program === null) {
+  try {
+    return linkWebGlProgram(gl, vertex, fragment, "presentation");
+  } finally {
     gl.deleteShader(vertex);
     gl.deleteShader(fragment);
-    throw new Error("Royal could not allocate a presentation program");
   }
-  gl.attachShader(program, vertex);
-  gl.attachShader(program, fragment);
-  gl.linkProgram(program);
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    let detail = gl.getProgramInfoLog(program) || "unknown linker failure";
-    const vertexDetail = gl.getShaderInfoLog(vertex);
-    const fragmentDetail = gl.getShaderInfoLog(fragment);
-    if (vertexDetail) detail += `; vertex: ${vertexDetail}`;
-    if (fragmentDetail) detail += `; fragment: ${fragmentDetail}`;
-    gl.deleteShader(vertex);
-    gl.deleteShader(fragment);
-    gl.deleteProgram(program);
-    throw new Error(`Royal presentation program link failed: ${detail}`);
-  }
-  gl.deleteShader(vertex);
-  gl.deleteShader(fragment);
-  return program;
 };
 
 /** Owns the optional per-view linear target and its terminal presentation packet. */
@@ -418,6 +400,7 @@ export class SurfaceCompositeOwner {
     if (packet === null) {
       packet = {
         alphaBlend: false,
+        colorWrite: true,
         cullBackFaces: false,
         depthTest: false,
         depthWrite: false,

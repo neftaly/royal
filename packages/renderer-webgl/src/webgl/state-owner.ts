@@ -124,7 +124,9 @@ export class WebGlStateOwner {
       }
       if (transition.cullFace) gl.cullFace(gl.BACK);
       if (transition.frontFace) gl.frontFace(packet.frontFace);
-      if (transition.colorMask) gl.colorMask(true, true, true, true);
+      if (transition.colorMask) {
+        gl.colorMask(packet.colorWrite, packet.colorWrite, packet.colorWrite, packet.colorWrite);
+      }
       if (transition.depthWrite) gl.depthMask(packet.depthWrite);
       if (transition.program) gl.useProgram(packet.program);
       let changedTextureUnits = transition.textureUnits;

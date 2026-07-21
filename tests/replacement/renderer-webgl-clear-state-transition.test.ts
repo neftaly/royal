@@ -68,6 +68,15 @@ describe("clear WebGL state transition", () => {
     });
   });
 
+  it("restores color writes after a depth-only draw", () => {
+    const state = createUnknownClearState();
+    commitAppliedClearState(state, frame());
+    state.colorWrite = false;
+    const output = createClearStateTransition();
+    planClearStateTransition(state, frame(), output);
+    expect(output.colorMask).toBe(true);
+  });
+
   it("distinguishes scissor enablement from rectangle changes", () => {
     const state = createUnknownClearState();
     commitAppliedClearState(state, frame());

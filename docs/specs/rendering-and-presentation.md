@@ -68,6 +68,21 @@ charged to the root persistent GPU budget and released when the need
 deactivates. Direct and retained paths consume the same shared transform source
 and MUST agree for opaque standard surfaces.
 
+A retained scene with at least 32 fully opaque standard triangle surfaces MAY
+run a position-only depth pass before PBR shading when exact-compatible
+`WEBGL_multi_draw` is available. This is a cold, GL-capability-and-scene
+classifier rather than a camera, route, asset-name, browser-name, or frame-time
+branch. Alpha mask, alpha blend, transmission, lines, and cheap unlit surfaces
+remain on their single semantic pass because coverage or pass ordering cannot
+be reproduced by the position-only program, or because a second pass has no
+sound cost case. The depth pass writes no color and uses the same model,
+instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
+the later draw. Its program and shaders load only after the cold classifier
+admits the pass. The central state owner represents its color mask explicitly;
+no pass may inherit hidden GL state. Without multi-draw, the stable fallback is
+the existing front-to-back PBR pass rather than one extra JavaScript draw per
+surface.
+
 ## Geometry and materials
 
 Royal's simple public materials are standard PBR, unlit, and wireframe. glTF

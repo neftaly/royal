@@ -2,6 +2,7 @@ import type { ClearFrameIntent } from "../frame/clear-frame";
 
 export type AppliedClearState = {
   colorMaskKnown: boolean;
+  colorWrite: boolean | null;
   clearColorAlpha: number;
   clearColorBlue: number;
   clearColorGreen: number;
@@ -32,6 +33,7 @@ export type ClearStateTransition = {
 
 export const createUnknownClearState = (): AppliedClearState => ({
   colorMaskKnown: false,
+  colorWrite: null,
   clearColorAlpha: 0,
   clearColorBlue: 0,
   clearColorGreen: 0,
@@ -88,7 +90,7 @@ export const planClearStateTransition = (
     || previous.clearColorBlue !== next.clearColor[2]
     || previous.clearColorAlpha !== next.clearColor[3];
   output.clearDepth = unknown || previous.clearDepth !== next.clearDepth;
-  output.colorMask = unknown || !previous.colorMaskKnown;
+  output.colorMask = unknown || !previous.colorMaskKnown || previous.colorWrite !== true;
 };
 
 export const commitAppliedClearState = (
@@ -101,6 +103,7 @@ export const commitAppliedClearState = (
   state.clearColorAlpha = intent.clearColor[3];
   state.clearDepth = intent.clearDepth;
   state.colorMaskKnown = true;
+  state.colorWrite = true;
   state.framebuffer = intent.framebuffer;
   state.scissorEnabled = intent.scissor !== null;
   if (intent.scissor !== null) {

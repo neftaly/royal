@@ -340,6 +340,14 @@ LOD can improve time to useful pixels and steady-state vertex/fragment work.
 Geometry compression alone does not reduce submitted triangles after decode.
 Encoding never excuses an unbounded or serial runtime pipeline.
 
+Opaque depth prepass admission is also a resource trade, not a universal
+"optimization." Royal admits it only for a sufficiently large retained set of
+expensive, coverage-independent PBR draws and only when compatible draws can be
+amortized through multi-draw. It adds vertex submissions and a tiny retained
+program to reject hidden full-PBR fragments; it does not allocate another
+framebuffer, duplicate geometry, change authored coverage, or add a public
+mode. Cheap unlit work and coverage-dependent materials stay single-pass.
+
 For selected-scene Draco workloads, container reads and multi-buffer packing
 first converge on one canonical source. Only primitives reachable through the
 selected child/`MSFT_lod` graph become serializable codec tasks. The browser
