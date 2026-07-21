@@ -54,13 +54,15 @@ type GltfInstanceTransformsListenerSlot = {
 };
 
 export interface CreateGltfInstanceTransformsOptions {
+  /** Positive number of stable logical instances represented by every channel. */
   readonly count: number;
+  /** Optional stable application identity for each logical index (`count` entries). */
   readonly logicalIds?: readonly PickingId[];
-  /** Packed XYZ translations in metres (`count * 3`). */
+  /** Packed XYZ translations in metres (`count * 3`). @defaultValue all zero */
   readonly positions?: ArrayLike<number>;
-  /** Packed XYZ Euler angles in radians (`count * 3`). */
+  /** Packed XYZ Euler angles in radians (`count * 3`). @defaultValue all zero */
   readonly rotations?: ArrayLike<number>;
-  /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). */
+  /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). @defaultValue all one */
   readonly scales?: ArrayLike<number>;
 }
 
@@ -363,20 +365,26 @@ export interface GltfInstancesNode {
   readonly kind: 'gltf-instances';
   /** Exact triangle proxy repeated in each instance's local space. */
   readonly pickingGeometry?: Geometry;
+  /** Stable application identity shared by the instance collection. */
   readonly pickingId?: PickingId;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
 }
 
 export interface GltfInstancesOptions {
+  /** Optional declared asset-space bounds available before source preparation completes. */
   readonly bounds?: GltfAssetBounds;
+  /** Versioned bulk-transform source retained by renderer roots. */
   readonly instances: GltfInstanceTransforms;
   /** Exact triangle proxy repeated in each instance's local space, available before asset load. */
   readonly pickingGeometry?: Geometry;
+  /** Stable application identity returned with every picked instance. */
   readonly pickingId?: PickingId;
+  /** URI of the glTF asset repeated by the bulk-transform source. */
   readonly src: string;
   /** Exact `KHR_materials_variants` name selected from the asset. */
   readonly materialVariant?: GltfMaterialVariantName;
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: GltfAssetRef['version'];
 }
 

@@ -7,6 +7,7 @@ import {
   stringChoice,
 } from './descriptor-values';
 
+/** Interpretation of encoded RGB texels before material sampling. */
 export type TextureColorSpace = 'linear' | 'srgb';
 
 export type TextureSamplerFilter =
@@ -20,13 +21,13 @@ export type TextureSamplerFilter =
 export type TextureSamplerWrap = 'clamp-to-edge' | 'mirrored-repeat' | 'repeat';
 
 export interface TextureSampler {
-  /** Filter used when texture texels are magnified across screen pixels. */
+  /** Filter used when texture texels are magnified across screen pixels. @defaultValue `"linear"` */
   readonly magFilter?: Extract<TextureSamplerFilter, 'linear' | 'nearest'>;
-  /** Filter used when texture texels are minified; `mipmap` values select between mip levels. */
+  /** Filter used when texture texels are minified. @defaultValue `"linear-mipmap-linear"` */
   readonly minFilter?: TextureSamplerFilter;
-  /** Addressing along glTF/WebGL S, equivalent to the horizontal U coordinate. */
+  /** Addressing along glTF/WebGL S, equivalent to horizontal U. @defaultValue `"clamp-to-edge"` */
   readonly wrapS?: TextureSamplerWrap;
-  /** Addressing along glTF/WebGL T, equivalent to the vertical V coordinate. */
+  /** Addressing along glTF/WebGL T, equivalent to vertical V. @defaultValue `"clamp-to-edge"` */
   readonly wrapT?: TextureSamplerWrap;
 }
 
@@ -37,14 +38,17 @@ export type TextureContentKey = number | string;
 
 export interface SolidTextureRef {
   readonly kind: 'solid';
+  /** Scene-linear RGBA texel value. */
   readonly color: LinearRgba;
 }
 
 export interface TextureAssetRef {
   readonly kind: 'asset';
+  /** Encoded RGB interpretation. @defaultValue `"srgb"` */
   readonly colorSpace?: TextureColorSpace;
   /** Caller-asserted identity for equal decoded content across source URIs. */
   readonly contentKey?: TextureContentKey;
+  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
   readonly sampler?: TextureSampler;
   /** URI of the image asset, using the same field name as `imageTexture(...)`. */
   readonly src: string;
@@ -54,10 +58,13 @@ export interface TextureAssetRef {
 
 export interface VirtualTextureAssetRef {
   readonly kind: 'virtual-asset';
+  /** Override for the manifest color space; otherwise the manifest declaration is authoritative. */
   readonly colorSpace?: TextureColorSpace;
   /** Caller-asserted identity for equal decoded content across manifest URIs. */
   readonly contentKey?: TextureContentKey;
+  /** URI of the authored virtual-texture JSON manifest. */
   readonly manifestUri: string;
+  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
   readonly sampler?: TextureSampler;
   /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
   readonly version?: TextureVersion;
@@ -71,9 +78,11 @@ export interface SolidTextureOptions {
 }
 
 interface TextureAssetBaseOptions {
+  /** Encoded RGB interpretation. @defaultValue `"srgb"` */
   readonly colorSpace?: TextureColorSpace;
   /** Caller-asserted identity for equal decoded content across source URIs. */
   readonly contentKey?: TextureContentKey;
+  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
   readonly sampler?: TextureSampler;
   /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: TextureVersion;
@@ -92,6 +101,7 @@ interface VirtualTextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
   /** Caller-asserted identity for equal decoded content across manifest URIs. */
   readonly contentKey?: TextureContentKey;
+  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
   readonly sampler?: TextureSampler;
   /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
   readonly version?: TextureVersion;
