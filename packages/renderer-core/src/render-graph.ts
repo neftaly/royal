@@ -4,7 +4,7 @@ import type { EnvironmentLight } from './environment-light';
 import type { LinearRgba } from './primitives';
 import type { SceneNode } from './scene-node';
 
-const TRANSPARENT_BLACK = resolveRgba([0, 0, 0, 0], 'scene clearColor');
+const DEFAULT_CLEAR_COLOR: LinearRgba = [0, 0, 0, 0];
 const RENDER_TONE_MAPPINGS = ['linear-clamp', 'pbr-neutral'] as const;
 const MIN_EXPOSURE_EV100 = -128;
 const MAX_EXPOSURE_EV100 = 149;
@@ -60,9 +60,7 @@ export const scene = (options: SceneOptions): Scene => {
     kind: 'scene',
     camera: options.camera,
     nodes: [...options.nodes],
-    clearColor: options.clearColor === undefined
-      ? TRANSPARENT_BLACK
-      : resolveRgba(options.clearColor, 'scene clearColor'),
+    clearColor: resolveRgba(options.clearColor ?? DEFAULT_CLEAR_COLOR, 'scene clearColor'),
     ...(options.environment === undefined ? {} : { environment: options.environment }),
     ...(exposureEv100 === undefined ? {} : { exposureEv100 }),
     ...(toneMapping === undefined ? {} : { toneMapping })

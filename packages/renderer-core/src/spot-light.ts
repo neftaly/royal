@@ -40,7 +40,7 @@ export interface SpotLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'spot light color');
+const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const SPOT_LIGHT_FIELDS = [
   'color', 'direction', 'innerConeAngle', 'intensityCandela', 'outerConeAngle', 'position', 'range',
 ] as const;
@@ -58,7 +58,7 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   }
   return {
     kind: 'spot-light',
-    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'spot light color'),
+    color: resolveRgba(options.color ?? DEFAULT_LIGHT_COLOR, 'spot light color'),
     direction: resolveDirection3(options.direction, 'spot light direction'),
     innerConeAngle,
     intensityCandela: nonNegativeFiniteNumber(

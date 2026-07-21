@@ -171,6 +171,38 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/clearColor.*finite/);
   });
 
+  it("does not share mutable default tuples between descriptors", () => {
+    const firstScene = scene({ camera, nodes: [] });
+    const firstDirectional = directionalLight({ direction: [0, -1, 0] });
+    const firstPoint = pointLight({ intensityCandela: 1, position: [0, 0, 0] });
+    const firstSpot = spotLight({
+      direction: [0, -1, 0],
+      intensityCandela: 1,
+      position: [0, 0, 0],
+    });
+    const firstStudio = studioEnvironment();
+    const firstPrefiltered = prefilteredEnvironment({ src: "/environment.ktx" });
+
+    (firstScene.clearColor as unknown as number[])[0] = 1;
+    (firstDirectional.color as unknown as number[])[0] = 0;
+    (firstPoint.color as unknown as number[])[1] = 0;
+    (firstSpot.color as unknown as number[])[2] = 0;
+    (firstStudio.rotation as unknown as number[])[0] = 1;
+    (firstPrefiltered.rotation as unknown as number[])[1] = 1;
+
+    expect(scene({ camera, nodes: [] }).clearColor).toEqual([0, 0, 0, 0]);
+    expect(directionalLight({ direction: [0, -1, 0] }).color).toEqual([1, 1, 1, 1]);
+    expect(pointLight({ intensityCandela: 1, position: [0, 0, 0] }).color)
+      .toEqual([1, 1, 1, 1]);
+    expect(spotLight({
+      direction: [0, -1, 0],
+      intensityCandela: 1,
+      position: [0, 0, 0],
+    }).color).toEqual([1, 1, 1, 1]);
+    expect(studioEnvironment().rotation).toEqual([0, 0, 0]);
+    expect(prefilteredEnvironment({ src: "/environment.ktx" }).rotation).toEqual([0, 0, 0]);
+  });
+
   it("describes offline-prefiltered environment identity explicitly", () => {
     expect(prefilteredEnvironment({
       radianceScaleNits: 2,

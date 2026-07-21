@@ -24,7 +24,7 @@ export interface DirectionalLightOptions {
   readonly illuminanceLux?: number;
 }
 
-const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'directional light color');
+const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const DIRECTIONAL_LIGHT_FIELDS = ['color', 'direction', 'illuminanceLux'] as const;
 
 export const directionalLight = (options: DirectionalLightOptions): DirectionalLightNode => {
@@ -32,7 +32,7 @@ export const directionalLight = (options: DirectionalLightOptions): DirectionalL
   return {
     kind: 'directional-light',
     direction: resolveDirection3(options.direction, 'directional light direction'),
-    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'directional light color'),
+    color: resolveRgba(options.color ?? DEFAULT_LIGHT_COLOR, 'directional light color'),
     illuminanceLux: nonNegativeFiniteNumber(options.illuminanceLux ?? 1, 'directional light illuminanceLux')
   };
 };

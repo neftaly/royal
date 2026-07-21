@@ -29,7 +29,7 @@ export interface PointLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: LinearRgba = resolveRgba([1, 1, 1, 1], 'point light color');
+const DEFAULT_LIGHT_COLOR: LinearRgba = [1, 1, 1, 1];
 const POINT_LIGHT_FIELDS = ['color', 'intensityCandela', 'position', 'range'] as const;
 export const pointLight = (options: PointLightOptions): PointLightNode => {
   objectWithAllowedFields(options, POINT_LIGHT_FIELDS, 'point light');
@@ -38,7 +38,7 @@ export const pointLight = (options: PointLightOptions): PointLightNode => {
     : positiveFiniteNumber(options.range, 'point light range');
   return {
     kind: 'point-light',
-    color: options.color === undefined ? WHITE : resolveRgba(options.color, 'point light color'),
+    color: resolveRgba(options.color ?? DEFAULT_LIGHT_COLOR, 'point light color'),
     intensityCandela: nonNegativeFiniteNumber(
       options.intensityCandela,
       'point light intensityCandela',

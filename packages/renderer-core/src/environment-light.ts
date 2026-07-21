@@ -36,7 +36,7 @@ export interface StudioEnvironmentOptions {
   readonly rotation?: EulerRads;
 }
 
-const DEFAULT_ENVIRONMENT_ROTATION = resolveVec3([0, 0, 0], 'environment rotation') as EulerRads;
+const DEFAULT_ENVIRONMENT_ROTATION: EulerRads = [0, 0, 0];
 const STUDIO_ENVIRONMENT_FIELDS = ['radianceScaleNits', 'rotation'] as const;
 
 export const studioEnvironment = (options: StudioEnvironmentOptions = {}): StudioEnvironmentLight => {
@@ -48,9 +48,10 @@ export const studioEnvironment = (options: StudioEnvironmentOptions = {}): Studi
       options.radianceScaleNits ?? 1,
       'environment radianceScaleNits',
     ),
-    rotation: options.rotation === undefined
-      ? DEFAULT_ENVIRONMENT_ROTATION
-      : resolveVec3(options.rotation, 'environment rotation') as EulerRads,
+    rotation: resolveVec3(
+      options.rotation ?? DEFAULT_ENVIRONMENT_ROTATION,
+      'environment rotation',
+    ) as EulerRads,
   };
 };
 
@@ -82,8 +83,9 @@ export const prefilteredEnvironment = (
       options.radianceScaleNits ?? 1,
       'environment radianceScaleNits',
     ),
-    rotation: options.rotation === undefined
-      ? DEFAULT_ENVIRONMENT_ROTATION
-      : resolveVec3(options.rotation, 'environment rotation') as EulerRads,
+    rotation: resolveVec3(
+      options.rotation ?? DEFAULT_ENVIRONMENT_ROTATION,
+      'environment rotation',
+    ) as EulerRads,
   };
 };
