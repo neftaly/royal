@@ -107,7 +107,9 @@ import {
   type WebGlMultiDraw,
 } from "./surface-multi-draw";
 import {
+  collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
+  createTexturePublicationWorkspace,
   MATERIAL_TEXTURE_UNITS,
   materialTextureBindingAt,
   presentableBaseColorInto,
@@ -292,6 +294,7 @@ export class SurfaceGpuOwner {
   #standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
   readonly #textureGpu: TextureGpuOwner;
   readonly #texturePublicationKeys = new Set<string>();
+  readonly #texturePublicationWorkspace = createTexturePublicationWorkspace();
   #terminalPresentationEligible = false;
   #terminalPresentationHasAlphaBlend = false;
   readonly #linearCompositeCapabilities: LinearCompositeCapabilities;
@@ -1508,7 +1511,76 @@ export class SurfaceGpuOwner {
   #reconcileTexturePublications(): void {
     const scene = this.#scene!;
     const surfaces = this.#gpuSurfacesBySceneIndex;
+    const workspace = this.#texturePublicationWorkspace;
+    const affectedIndices = collectTexturePublicationSurfaceIndicesInto(
+      workspace,
+      this.#texturePublicationKeys,
+      scene.textureSurfaceIndices,
+      scene.surfaces.length,
+    );
     let regroup = false;
+    for (const index of affectedIndices) {
+      if (index >= surfaces.length) {
+        workspace.deferred[index] = 0;
+        continue;
+      }
+      const resource = surfaces[index]!;
+      const surface = scene.surfaces[index]!;
+      const material = surface.material;
+      const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
+      workspace.deferred[index] = this.#materialUploadDeferred(material) ? 1 : 0;
+      const features = surfaceProgramFeatureBits({
+        directionalLightCount: scene.directionalLights.length,
+        environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+        hasTangent: resource.geometry.tangentBuffer !== null,
+        hasVertexColor: resource.geometry.colorBuffer !== null,
+        hasVertexNormal: resource.geometry.normalBuffer !== null,
+        hasVirtualBaseColor: resource.virtualTexture !== undefined,
+        linearOutput: this.#compositeActive,
+        material,
+        ordinaryTextureMask: presentableOrdinaryTextureMask(
+          material,
+          residentOrdinaryTextureMask(ordinaryBindings, 0),
+        ),
+        punctualLightCount: scene.punctualLights.length,
+      });
+      const textureUnits = surfaceTextureUnitMask(features);
+      resource.surface = surface;
+      const retainedBindings = resource.drawPacket.textureBindings as GpuTextureBinding[];
+      const textureUnitsChanged = textureUnits !== resource.drawPacket.textureUnits;
+      const program = textureUnitsChanged
+        ? this.#programs.get(
+          material.kind,
+          features,
+          resource.instanceCount > 0,
+          material.alphaCutoff !== undefined,
+          canonicalSurfaceIsDoubleSided(material),
+        )
+        : resource.program;
+      composeSurfaceTextureBindingsInto(
+        retainedBindings,
+        ordinaryBindings,
+        0,
+        resource.virtualTexture,
+        this.#compositeActive
+          && material.kind === "standard"
+          && canonicalMaterialHasTransmission(material)
+          ? this.#compositeGpu?.sceneColorBinding()
+          : undefined,
+        this.#environmentGpu?.binding,
+      );
+      if (!textureUnitsChanged) continue;
+      regroup ||= program.program !== resource.program.program;
+      resource.drawPacket = surfaceDrawPacket(
+        this.#gl,
+        surface,
+        program.program,
+        retainedBindings,
+        textureUnits,
+        resource.vertexArray,
+      );
+      resource.program = program;
+    }
     for (const key of this.#texturePublicationKeys) {
       const indices = scene.textureSurfaceIndices.get(key);
       if (indices === undefined) {
@@ -1517,63 +1589,10 @@ export class SurfaceGpuOwner {
       }
       let deferred = false;
       for (const index of indices) {
-        if (index >= surfaces.length) continue;
-        const resource = surfaces[index]!;
-        const surface = scene.surfaces[index]!;
-        const material = surface.material;
-        const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
-        deferred ||= this.#materialUploadDeferred(material);
-        const features = surfaceProgramFeatureBits({
-          directionalLightCount: scene.directionalLights.length,
-          environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-          hasTangent: resource.geometry.tangentBuffer !== null,
-          hasVertexColor: resource.geometry.colorBuffer !== null,
-          hasVertexNormal: resource.geometry.normalBuffer !== null,
-          hasVirtualBaseColor: resource.virtualTexture !== undefined,
-          linearOutput: this.#compositeActive,
-          material,
-          ordinaryTextureMask: presentableOrdinaryTextureMask(
-            material,
-            residentOrdinaryTextureMask(ordinaryBindings, 0),
-          ),
-          punctualLightCount: scene.punctualLights.length,
-        });
-        const textureUnits = surfaceTextureUnitMask(features);
-        resource.surface = surface;
-        const retainedBindings = resource.drawPacket.textureBindings as GpuTextureBinding[];
-        const textureUnitsChanged = textureUnits !== resource.drawPacket.textureUnits;
-        const program = textureUnitsChanged
-          ? this.#programs.get(
-            material.kind,
-            features,
-            resource.instanceCount > 0,
-            material.alphaCutoff !== undefined,
-            canonicalSurfaceIsDoubleSided(material),
-          )
-          : resource.program;
-        composeSurfaceTextureBindingsInto(
-          retainedBindings,
-          ordinaryBindings,
-          0,
-          resource.virtualTexture,
-          this.#compositeActive
-            && material.kind === "standard"
-            && canonicalMaterialHasTransmission(material)
-            ? this.#compositeGpu?.sceneColorBinding()
-            : undefined,
-          this.#environmentGpu?.binding,
-        );
-        if (!textureUnitsChanged) continue;
-        regroup ||= program.program !== resource.program.program;
-        resource.drawPacket = surfaceDrawPacket(
-          this.#gl,
-          surface,
-          program.program,
-          retainedBindings,
-          textureUnits,
-          resource.vertexArray,
-        );
-        resource.program = program;
+        if (index < surfaces.length && workspace.deferred[index] === 1) {
+          deferred = true;
+          break;
+        }
       }
       if (!deferred) this.#texturePublicationKeys.delete(key);
     }

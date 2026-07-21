@@ -5,7 +5,9 @@ import {
   type CanonicalTextureBinding,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
+  collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
+  createTexturePublicationWorkspace,
   materialTextureBindingAt,
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
@@ -75,6 +77,36 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("deduplicates overlapping texture publication surfaces in first-occurrence order", () => {
+    const workspace = createTexturePublicationWorkspace();
+    const index = new Map<string, readonly number[]>([
+      ["base", [3, 1, 3]],
+      ["normal", [1, 2]],
+      ["unused", [7, -1]],
+    ]);
+
+    expect(collectTexturePublicationSurfaceIndicesInto(
+      workspace,
+      ["base", "normal", "unused", "missing"],
+      index,
+      4,
+    )).toEqual([3, 1, 2]);
+    const storage = workspace.indices;
+    expect(collectTexturePublicationSurfaceIndicesInto(
+      workspace,
+      ["normal"],
+      index,
+      4,
+    )).toEqual([1, 2]);
+    expect(workspace.indices).toBe(storage);
+    expect(collectTexturePublicationSurfaceIndicesInto(
+      workspace,
+      ["unused", "base"],
+      index,
+      8,
+    )).toEqual([7, 3, 1]);
+  });
+
   it("selects alpha preservation only for blended surfaces", () => {
     const opaque = surfaceProgramFeatureBits({
       directionalLightCount: 0,

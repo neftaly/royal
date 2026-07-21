@@ -36,6 +36,54 @@ export const MATERIAL_TEXTURE_UNITS = 9;
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
 const NEUTRAL_PERCEPTUAL_GREY_LINEAR = 0.214_041;
 
+export type TexturePublicationWorkspace = {
+  deferred: Uint8Array;
+  generation: number;
+  indices: number[];
+  marks: Uint32Array;
+};
+
+/** Allocates caller-retained storage for deduplicating one texture publication batch. */
+export const createTexturePublicationWorkspace = (): TexturePublicationWorkspace => ({
+  deferred: new Uint8Array(0),
+  generation: 0,
+  indices: [],
+  marks: new Uint32Array(0),
+});
+
+/**
+ * Collects each surface affected by a batch exactly once. Output order follows
+ * the first key/index occurrence and storage is reused after high-water growth.
+ */
+export const collectTexturePublicationSurfaceIndicesInto = (
+  workspace: TexturePublicationWorkspace,
+  textureKeys: Iterable<string>,
+  textureSurfaceIndices: ReadonlyMap<string, readonly number[]>,
+  surfaceCount: number,
+): readonly number[] => {
+  if (workspace.marks.length < surfaceCount) {
+    workspace.marks = new Uint32Array(surfaceCount);
+    workspace.deferred = new Uint8Array(surfaceCount);
+    workspace.generation = 0;
+  }
+  workspace.generation = (workspace.generation + 1) >>> 0;
+  if (workspace.generation === 0) {
+    workspace.marks.fill(0);
+    workspace.generation = 1;
+  }
+  const generation = workspace.generation;
+  const indices = workspace.indices;
+  indices.length = 0;
+  for (const key of textureKeys) {
+    for (const index of textureSurfaceIndices.get(key) ?? []) {
+      if (index < 0 || index >= surfaceCount || workspace.marks[index] === generation) continue;
+      workspace.marks[index] = generation;
+      indices.push(index);
+    }
+  }
+  return indices;
+};
+
 /**
  * Resolves one base-color presentation without changing canonical authored
  * material factors. Missing ordinary and virtual representations share the
