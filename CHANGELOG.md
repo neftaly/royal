@@ -70,6 +70,8 @@ versions identify source-level prerelease checkpoints in this repository.
   smoke coverage for every entry.
 - Added a URL-backed selector for all three document scenes in the Bistro web
   workload without copying or rewriting its source asset.
+- Made every rendered glTF Lab oracle fit from its prepared selected-scene
+  bounds, replacing the fixed camera that clipped wide transmission grids.
 - Corrected the synthetic WebXR layer's framebuffer contract and made fake-XR
   reports reject inactive or zero-frame sessions instead of presenting window
   RAF timing as XR evidence.

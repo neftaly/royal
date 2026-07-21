@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import {
   Canvas,
+  GltfOrbitCameraFit,
   OrbitControls,
   useGltfAssetStatus,
   useOrbitCamera,
@@ -81,6 +82,13 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
       style={interactiveCanvasStyle}
     >
       <GltfLabLoadStatus asset={model.asset} />
+      <GltfOrbitCameraFit
+        node={model}
+        orbit={orbit}
+        padding={1.08}
+        pitch={0}
+        yaw={0}
+      />
       <OrbitControls orbit={orbit} maxDistance={60} minDistance={0.1} />
     </Canvas>
   );

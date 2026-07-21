@@ -403,6 +403,20 @@ authored base color, then produce a composited refinement above a same-state
 repeat-capture noise floor. Narrow one probe while diagnosing with
 `EXAMPLES_SMOKE_TEXTURE_PROBE=normal|metallic-roughness|occlusion|emissive`.
 
+Official material cases can be isolated without creating more example routes.
+The glTF Lab fits the selected asset from prepared bounds, so wide grids remain
+complete visual oracles rather than inheriting one fixed test camera:
+
+```sh
+EXAMPLES_SMOKE_ROUTE=gltf-lab \
+EXAMPLES_SMOKE_QUERY='case=SpecularTest' \
+pnpm --filter @royal/examples-react test:browser
+
+EXAMPLES_SMOKE_ROUTE=gltf-lab \
+EXAMPLES_SMOKE_QUERY='case=TransmissionThinwallTestGrid' \
+pnpm --filter @royal/examples-react test:browser
+```
+
 The unfiltered browser smoke also opens the query-only React lifecycle probe.
 It verifies StrictMode cleanup plus semantic renderer-option replacement, an
 active `useFrame` clock stopping on unmount, disposal during a delayed VT
