@@ -29,10 +29,14 @@ import type {
   CanonicalSurfaceMaterial,
   CanonicalTextureBinding,
 } from "./canonical-material";
+import { canonicalMaterialHasTransmission } from "./canonical-material";
 import {
-  canonicalMaterialHasTransmission,
-  dielectricF0FromIndexOfRefraction,
-} from "./canonical-material";
+  createCanonicalMaterialUniformStorage,
+  packCanonicalAttenuationUniformsInto,
+  packCanonicalBaseMaterialUniformsInto,
+  packCanonicalSpecularUniformsInto,
+  packCanonicalTransmissionUniformsInto,
+} from "./material-uniform-packing";
 import {
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
   SURFACE_FEATURE_ROTATED_ENVIRONMENT,
@@ -148,7 +152,6 @@ type WebGlMultiDraw = Readonly<{
 }>;
 
 const SURFACE_UPLOADS_PER_FRAME = 16;
-const DEFAULT_ATTENUATION_COLOR = new Float32Array([1, 1, 1]);
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 
 /** @internal Applies one semantic coordinate change into caller-retained state. */
@@ -212,7 +215,6 @@ const surfaceDrawPacket = (
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
   readonly #cameraPosition = new Float32Array(4);
-  readonly #attenuation = new Float32Array(4);
   #compositeActive = false;
   #compositeBindingRevision = 0;
   #compositeGpu: SurfaceCompositeOwner | null = null;
@@ -251,18 +253,16 @@ export class SurfaceGpuOwner {
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
   #instanceTransformsPending = false;
-  readonly #materialFactors = new Float32Array(4);
+  readonly #materialUniforms = createCanonicalMaterialUniformStorage();
   #multiDraw: WebGlMultiDraw | null;
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #lightUniforms = createCanonicalLightUniformStorage();
-  readonly #emissiveFactor = new Float32Array(4);
   readonly #environmentSettings = new Float32Array(4);
   readonly #fallbackBaseColor = new Float32Array(4);
   readonly #presentation = new Float32Array(4);
-  readonly #specularFactors = new Float32Array(4);
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
   #scene: CanonicalSurfaceScene | null = null;
@@ -275,7 +275,6 @@ export class SurfaceGpuOwner {
   #terminalPresentationHasAlphaBlend = false;
   readonly #linearCompositeCapabilities: LinearCompositeCapabilities;
   readonly #uploadBudget: FrameUploadBudgetOwner;
-  readonly #transmissionFactors = new Float32Array(4);
   readonly #transmissionCandidateIndices: number[] = [];
   #transmissionVisibility = new Uint8Array(0);
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
@@ -1029,41 +1028,31 @@ export class SurfaceGpuOwner {
           if (program.occlusionStrength !== null) {
             gl.uniform1f(program.occlusionStrength, material.occlusionStrength);
           }
-          if (material.emissiveAsset !== undefined && (resource.drawPacket.textureUnits & 8) === 0) {
-            this.#emissiveFactor.fill(0);
-          } else this.#emissiveFactor.set(material.emissiveFactor);
-          this.#emissiveFactor[3] = material.indexOfRefraction === undefined
-            ? 0.04
-            : dielectricF0FromIndexOfRefraction(material.indexOfRefraction);
-          gl.uniform4fv(program.emissiveFactor, this.#emissiveFactor);
-          this.#materialFactors[0] = material.metallicFactor;
-          this.#materialFactors[1] = material.roughnessFactor;
-          this.#materialFactors[2] = program.alphaMasked ? material.alphaCutoff ?? 0.5 : 0;
-          this.#materialFactors[3] = material.normalScale;
-          gl.uniform4fv(program.materialFactors, this.#materialFactors);
+          packCanonicalBaseMaterialUniformsInto(
+            material,
+            program.alphaMasked,
+            (resource.drawPacket.textureUnits & 8) !== 0,
+            this.#materialUniforms,
+          );
+          gl.uniform4fv(program.emissiveFactor, this.#materialUniforms.emissiveAndF0);
+          gl.uniform4fv(program.materialFactors, this.#materialUniforms.materialFactors);
           if (program.specularFactors !== null) {
-            const color = material.specularColorFactor;
-            this.#specularFactors[0] = color?.[0] ?? 1;
-            this.#specularFactors[1] = color?.[1] ?? 1;
-            this.#specularFactors[2] = color?.[2] ?? 1;
-            this.#specularFactors[3] = material.specularFactor ?? 1;
-            gl.uniform4fv(program.specularFactors, this.#specularFactors);
+            packCanonicalSpecularUniformsInto(material, this.#materialUniforms);
+            gl.uniform4fv(program.specularFactors, this.#materialUniforms.specularFactors);
           }
           if (program.transmissionFactors !== null) {
-            this.#transmissionFactors[0] = material.transmissionFactor ?? 0;
-            this.#transmissionFactors[1] = material.thicknessFactor ?? 0;
-            this.#transmissionFactors[2] = material.indexOfRefraction ?? 1.5;
-            this.#transmissionFactors[3] = this.#compositeGpu?.sceneColorMaxLod ?? 0;
-            gl.uniform4fv(program.transmissionFactors, this.#transmissionFactors);
+            packCanonicalTransmissionUniformsInto(
+              material,
+              this.#compositeGpu?.sceneColorMaxLod ?? 0,
+              this.#materialUniforms,
+            );
+            gl.uniform4fv(
+              program.transmissionFactors,
+              this.#materialUniforms.transmissionFactors,
+            );
             if (program.attenuationColor !== null) {
-              const attenuation = material.attenuationColor ?? DEFAULT_ATTENUATION_COLOR;
-              this.#attenuation[0] = attenuation[0]!;
-              this.#attenuation[1] = attenuation[1]!;
-              this.#attenuation[2] = attenuation[2]!;
-              this.#attenuation[3] = material.attenuationDistance === undefined
-                ? 0
-                : 1 / material.attenuationDistance;
-              gl.uniform4fv(program.attenuationColor, this.#attenuation);
+              packCanonicalAttenuationUniformsInto(material, this.#materialUniforms);
+              gl.uniform4fv(program.attenuationColor, this.#materialUniforms.attenuation);
             }
           }
           this.#applyVirtualTexture(program, resource.virtualTexture);
