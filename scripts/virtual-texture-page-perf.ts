@@ -12,16 +12,19 @@ type BenchmarkReport = {
   readonly maxMs: number;
   readonly medianMs: number;
   readonly pageTableMedianMs: number;
+  readonly pageTableLogicalPages: number;
+  readonly pageTableLookups: number;
   readonly pageTableMotions: number;
   readonly pageTableP95Ms: number;
-  readonly pageTableUpdates: number;
   readonly p95Ms: number;
   readonly userAgent: string;
 };
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const browserPath = process.env.CHROMIUM_BIN ?? "/usr/bin/chromium";
-const buildDir = mkdtempSync(path.join(tmpdir(), "royal-vt-perf-build-"));
+const retainedBuildDir = process.env.ROYAL_VT_PERF_BUILD_DIR;
+const buildDir = retainedBuildDir ?? mkdtempSync(path.join(tmpdir(), "royal-vt-perf-build-"));
+const buildOnly = process.argv.includes("--build-only");
 const contentType = (filePath: string): string => filePath.endsWith(".js")
   ? "text/javascript"
   : "text/html";
@@ -50,6 +53,7 @@ const runBrowser = (url: string): Promise<string> => new Promise((resolve, rejec
     "--headless=new",
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
+    "--virtual-time-budget=30000",
     "--dump-dom",
     url,
   ]);
@@ -83,6 +87,7 @@ const runBrowser = (url: string): Promise<string> => new Promise((resolve, rejec
 
 try {
   await build({
+    base: "./",
     configFile: false,
     logLevel: "error",
     publicDir: false,
@@ -95,37 +100,44 @@ try {
       },
     },
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (address === null || address === undefined || typeof address === "string") {
-    throw new Error("VT page benchmark server did not expose a TCP port");
+  if (buildOnly) {
+    process.stdout.write(`VT page benchmark built at ${buildDir}\n`);
+  } else {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || address === undefined || typeof address === "string") {
+      throw new Error("VT page benchmark server did not expose a TCP port");
+    }
+    const html = await runBrowser(
+      `http://127.0.0.1:${address.port}/scripts/virtual-texture-page-perf.html`,
+    );
+    const encoded = html.match(/data-royal-vt-perf="([^"]+)"/)?.[1];
+    if (encoded === undefined || encoded === "pending") {
+      throw new Error("VT page benchmark did not publish a report");
+    }
+    const report = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as BenchmarkReport;
+    if (report.batchPages !== 4 || report.batches !== 128 || report.pageTableMotions !== 128) {
+      throw new Error(`Invalid VT page benchmark workload: ${JSON.stringify(report)}`);
+    }
+    if (report.pageTableLookups !== report.pageTableLogicalPages * report.pageTableMotions) {
+      throw new Error(`VT page-table lookup invariant failed: ${JSON.stringify(report)}`);
+    }
+    if (report.medianMs > 4 || report.p95Ms > 8) {
+      throw new Error(`Generated VT page batch exceeded budget: ${JSON.stringify(report)}`);
+    }
+    if (report.pageTableMedianMs > 2 || report.pageTableP95Ms > 5) {
+      throw new Error(`VT page-table motion exceeded budget: ${JSON.stringify(report)}`);
+    }
+    process.stdout.write(`${JSON.stringify(report)}\n`);
   }
-  const html = await runBrowser(
-    `http://127.0.0.1:${address.port}/scripts/virtual-texture-page-perf.html`,
-  );
-  const encoded = html.match(/data-royal-vt-perf="([^"]+)"/)?.[1];
-  if (encoded === undefined || encoded === "pending") {
-    throw new Error("VT page benchmark did not publish a report");
-  }
-  const report = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as BenchmarkReport;
-  if (report.batchPages !== 4 || report.batches !== 128 || report.pageTableMotions !== 256) {
-    throw new Error(`Invalid VT page benchmark workload: ${JSON.stringify(report)}`);
-  }
-  if (report.medianMs > 4 || report.p95Ms > 8) {
-    throw new Error(`Generated VT page batch exceeded budget: ${JSON.stringify(report)}`);
-  }
-  if (report.pageTableMedianMs > 2 || report.pageTableP95Ms > 5) {
-    throw new Error(`VT page-table motion exceeded budget: ${JSON.stringify(report)}`);
-  }
-  process.stdout.write(`${JSON.stringify(report)}\n`);
 } finally {
   if (server.listening) {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error === undefined ? resolve() : reject(error));
     });
   }
-  rmSync(buildDir, { force: true, recursive: true });
+  if (retainedBuildDir === undefined) rmSync(buildDir, { force: true, recursive: true });
 }

@@ -4,14 +4,16 @@
 <body data-royal-vt-perf="pending">
 <script type="module">
   import {
-    generatedRasterVirtualTextureManifest,
-    generatedRasterVirtualTexturePageImage,
-  } from "/packages/renderer-webgl/src/virtual-texture/automatic-source.ts";
+    createAutomaticRasterPageSource,
+  } from "/packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts";
   import {
-    VirtualTextureAtlasPageTable,
-    parentVirtualTexturePage,
-    virtualTexturePageKey,
-  } from "/packages/renderer-webgl/src/virtual-texture/model.ts";
+    createGeneratedVirtualTextureManifest,
+    virtualTexturePageKeyParts,
+  } from "/packages/renderer-webgl/src/virtual-texture/manifest.ts";
+  import {
+    virtualTexturePageTableByteLength,
+    writeVirtualTexturePageTable,
+  } from "/packages/renderer-webgl/src/virtual-texture/residency.ts";
 
   const sourceCanvas = document.createElement("canvas");
   sourceCanvas.width = 4096;
@@ -24,73 +26,89 @@
   sourceContext.fillStyle = gradient;
   sourceContext.fillRect(0, 0, 4096, 4096);
 
-  const source = {
-    canvasSource: sourceCanvas,
-    colorSpace: "srgb",
+  const sampler = {
+    magFilter: "linear",
+    minFilter: "linear-mipmap-linear",
+    wrapS: "repeat",
+    wrapT: "repeat",
+  };
+  const source = createAutomaticRasterPageSource({
+    close: () => undefined,
     height: 4096,
-    label: "native-headless VT benchmark",
     source: sourceCanvas,
     width: 4096,
-  };
-  const manifest = generatedRasterVirtualTextureManifest(source);
+  }, sampler, "srgb");
+  const manifest = source.manifest;
   const pageAt = (ordinal) => ({
     mip: 0,
     x: ordinal % 16,
     y: Math.floor(ordinal / 16) % 16,
   });
-  const generateBatch = (batchOrdinal) => {
+  const generateBatch = async (batchOrdinal) => {
     const pages = [];
     for (let page = 0; page < 4; page += 1) {
-      pages.push(generatedRasterVirtualTexturePageImage(
-        source,
-        manifest,
+      pages.push(await source.read(
         pageAt(batchOrdinal * 4 + page),
+        new AbortController().signal,
       ));
     }
     return pages;
   };
 
-  for (let warmup = 0; warmup < 16; warmup += 1) generateBatch(warmup);
+  for (let warmup = 0; warmup < 16; warmup += 1) {
+    for (const page of await generateBatch(warmup)) page.close();
+  }
   const samples = [];
   for (let batch = 0; batch < 128; batch += 1) {
     const started = performance.now();
-    const pages = generateBatch(batch);
+    const pages = await generateBatch(batch);
     samples.push(performance.now() - started);
     if (pages.length !== 4) throw new Error("generated VT batch was incomplete");
+    for (const page of pages) page.close();
   }
   samples.sort((left, right) => left - right);
 
-  const pageTable = new VirtualTextureAtlasPageTable({ slotCount: 1365 });
-  for (let mip = 5; mip >= 0; mip -= 1) {
-    const width = 32 / (2 ** mip);
-    for (let y = 0; y < width; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const transaction = pageTable.planResident({ mip, x, y });
-        pageTable.commitResident(transaction);
-      }
+  class CountedResidents extends Map {
+    gets = 0;
+    get(key) {
+      this.gets += 1;
+      return super.get(key);
     }
   }
-  while (pageTable.dirtyPageTableUpdateCount > 0) pageTable.commitDirtyPageTableUpdate();
+  const pageTableManifest = createGeneratedVirtualTextureManifest({
+    borderTexels: 2,
+    colorSpace: "srgb",
+    height: 16384,
+    pageSize: 128,
+    width: 16384,
+  });
+  const logicalPages = pageTableManifest.mipLayouts.reduce(
+    (total, layout) => total + layout.width * layout.height,
+    0,
+  );
+  const pageTable = new Uint8Array(virtualTexturePageTableByteLength(pageTableManifest));
   const pageTableSamples = [];
-  let pageTableUpdates = 0;
-  for (let motion = 0; motion < 256; motion += 1) {
-    const active = new Set();
-    const originX = motion % 25;
-    const originY = Math.floor(motion / 25) % 25;
+  let pageTableLookups = 0;
+  for (let motion = 0; motion < 128; motion += 1) {
+    const residents = new CountedResidents();
+    const rootMip = pageTableManifest.mipCount - 1;
+    residents.set(virtualTexturePageKeyParts(rootMip, 0, 0), 0);
+    const originX = motion % 121;
+    const originY = Math.floor(motion / 16) * 8;
+    let slot = 1;
     for (let y = originY; y < originY + 8; y += 1) {
       for (let x = originX; x < originX + 8; x += 1) {
-        let page = { mip: 0, x, y };
-        while (page.mip <= 5) {
-          active.add(virtualTexturePageKey(page));
-          page = parentVirtualTexturePage(page);
-        }
+        residents.set(virtualTexturePageKeyParts(0, x, y), slot);
+        slot += 1;
       }
     }
     const started = performance.now();
-    pageTable.reconcileActivePageKeys(active);
-    pageTableUpdates += pageTable.dirtyPageTableUpdateCount;
-    while (pageTable.dirtyPageTableUpdateCount > 0) pageTable.commitDirtyPageTableUpdate();
+    writeVirtualTexturePageTable(pageTableManifest, residents, 16, pageTable);
     pageTableSamples.push(performance.now() - started);
+    if (residents.gets !== logicalPages) {
+      throw new Error(`VT page-table performed ${residents.gets} lookups for ${logicalPages} pages`);
+    }
+    pageTableLookups += residents.gets;
   }
   pageTableSamples.sort((left, right) => left - right);
 
@@ -102,7 +120,8 @@
     pageTableMedianMs: pageTableSamples[Math.floor(pageTableSamples.length * 0.5)],
     pageTableMotions: pageTableSamples.length,
     pageTableP95Ms: pageTableSamples[Math.floor(pageTableSamples.length * 0.95)],
-    pageTableUpdates,
+    pageTableLogicalPages: logicalPages,
+    pageTableLookups,
     p95Ms: samples[Math.floor(samples.length * 0.95)],
     userAgent: navigator.userAgent,
   };

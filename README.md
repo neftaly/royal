@@ -63,6 +63,8 @@ pnpm test
 pnpm check:package-imports
 pnpm check:package-consumer
 pnpm check:bundle-size:details
+pnpm check:vt-pages-build
+pnpm bench:vt-pages
 ```
 
 The default example exercises the replacement root under React StrictMode.
@@ -72,6 +74,12 @@ The Royal bundle baseline tracks total initial gzip and the incremental
 Royal cost separately. glTF, VT, IBL, codecs, and XR receive their own reachable
 and lazy-byte gates when their actual slices land; unused features are not
 counted as working merely because legacy source still exists.
+
+`check:vt-pages-build` verifies that the VT2 page-generation and page-table
+benchmark still compiles against the current source graph. `bench:vt-pages`
+runs that microbenchmark in a native browser when loopback and headless browser
+execution are available. It is a focused regression signal, not a substitute
+for representative scene traces or physical Safari and Quest evidence.
 
 ## Core conventions
 
