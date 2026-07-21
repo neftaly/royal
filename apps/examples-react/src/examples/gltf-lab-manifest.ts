@@ -20,8 +20,16 @@ export type GltfLabCase = {
     readonly skins: number;
   };
   readonly path: string;
-  readonly presentation: { readonly scale: number };
+  readonly presentation: {
+    readonly position?: readonly [number, number, number];
+    readonly scale: number;
+  };
   readonly provenance: string;
+  readonly resources?: readonly {
+    readonly bytes: number;
+    readonly path: string;
+    readonly sha256: string;
+  }[];
   readonly sha256: string;
   readonly status: GltfLabCaseStatus;
 };

@@ -36,6 +36,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Examples
 
+- Added the unchanged official external Duck Draco variant as a glTF Lab oracle,
+  covering worker preparation, lazy decoder loading, external buffers, ordinary
+  images, and visual equivalence with the uncompressed Duck.
 - Added an authored ground-plane preset to the VT stress example and made the
   automated close-view oracle exercise it at 10 cm, including physical Safari
   17.14 evidence at DPR 2.

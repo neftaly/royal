@@ -26,6 +26,13 @@ core fallback remains renderable; it is not evidence that Royal implements the
 extension's visible semantics. An asset that requires unsupported semantics is
 an `expected-required-failure` and is never included in a success sweep.
 
+The pinned Khronos Duck `glTF-Draco` variant is the independent required-Draco
+oracle. Its unchanged JSON glTF, external compressed buffer, and external PNG
+exercise the async worker preparation and lazy decoder path in the browser as
+well as the deterministic preparation contract. The ordinary Duck variant uses
+the same lab presentation transform, so compression does not change the visual
+oracle.
+
 | Required extension | Accepted placements | Canonical result |
 | --- | --- | --- |
 | `EXT_mesh_gpu_instancing` | node | validated instance transform batches sharing ordinary geometry/materials |

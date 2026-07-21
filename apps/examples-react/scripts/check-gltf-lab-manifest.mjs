@@ -44,10 +44,22 @@ const unsupportedVisibleFeatures = new Set([
 const fixtureNames = readdirSync(fixtureRoot)
   .filter((name) => existsSync(path.join(fixtureRoot, name, 'glTF-Binary', `${name}.glb`)))
   .sort((left, right) => left.localeCompare(right));
-const manifestNames = manifest.cases.map((entry) => entry.name)
+const manifestNames = manifest.cases.map((entry) => entry.name);
+if (new Set(manifestNames).size !== manifestNames.length) {
+  throw new Error('Manifest case names must be unique');
+}
+const fixtureNameFor = (entry) => {
+  const [fixtures, collection, fixtureName, ...assetPath] = decodeURIComponent(entry.path).split('/');
+  if (fixtures !== 'fixtures' || collection !== 'khronos' || fixtureName === undefined
+    || assetPath.length === 0) {
+    throw new Error(`${entry.name}: path is outside the Khronos fixture inventory`);
+  }
+  return fixtureName;
+};
+const manifestFixtureNames = [...new Set(manifest.cases.map(fixtureNameFor))]
   .sort((left, right) => left.localeCompare(right));
-if (JSON.stringify(fixtureNames) !== JSON.stringify(manifestNames)) {
-  throw new Error(`Manifest inventory differs from vendored fixtures (${manifestNames.length}/${fixtureNames.length})`);
+if (JSON.stringify(fixtureNames) !== JSON.stringify(manifestFixtureNames)) {
+  throw new Error(`Manifest inventory differs from vendored fixtures (${manifestFixtureNames.length}/${fixtureNames.length})`);
 }
 
 for (const entry of manifest.cases) {
@@ -59,6 +71,15 @@ for (const entry of manifest.cases) {
   }
   if (!existsSync(path.join(publicRoot, decodeURIComponent(entry.provenance)))) {
     throw new Error(`${entry.name}: provenance file is missing`);
+  }
+  for (const resource of entry.resources ?? []) {
+    const resourceBytes = readFileSync(path.join(publicRoot, decodeURIComponent(resource.path)));
+    if (resourceBytes.length !== resource.bytes) {
+      throw new Error(`${entry.name}: ${resource.path} byte count changed`);
+    }
+    if (createHash('sha256').update(resourceBytes).digest('hex') !== resource.sha256) {
+      throw new Error(`${entry.name}: ${resource.path} SHA-256 changed`);
+    }
   }
   const unsupportedRequired = entry.extensionsRequired.filter(
     (extension) => !supportedRequiredExtensions.has(extension),
@@ -77,10 +98,15 @@ for (const entry of manifest.cases) {
     throw new Error(`${entry.name}: unsupported visible features need core-fallback-oracle status`);
   }
 
-  const jsonLength = bytes.readUInt32LE(12);
-  let jsonEnd = 20 + jsonLength;
-  while (bytes[jsonEnd - 1] === 0) jsonEnd -= 1;
-  const document = JSON.parse(bytes.toString('utf8', 20, jsonEnd));
+  let document;
+  if (entry.path.endsWith('.gltf')) {
+    document = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/u, ''));
+  } else {
+    const jsonLength = bytes.readUInt32LE(12);
+    let jsonEnd = 20 + jsonLength;
+    while (bytes[jsonEnd - 1] === 0) jsonEnd -= 1;
+    document = JSON.parse(bytes.toString('utf8', 20, jsonEnd));
+  }
   const primitives = (document.meshes ?? []).flatMap((mesh) => mesh.primitives ?? []);
   const parsed = {
     animations: document.animations?.length ?? 0,
@@ -99,7 +125,7 @@ for (const entry of manifest.cases) {
   }
 }
 
-console.log(`glTF lab manifest: ${manifest.cases.length} fixtures, ` +
+console.log(`glTF lab manifest: ${manifest.cases.length} cases, ` +
   `${manifest.cases.filter((entry) => entry.status === 'core-fallback-oracle').length} core-fallback, ` +
   `${manifest.cases.filter((entry) => entry.status === 'expected-required-failure').length} required-failure, ` +
   `${manifest.cases.filter((entry) => entry.status === 'parsed-unsupported').length} parsed-unsupported, ` +

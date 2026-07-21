@@ -1,9 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
+import {
+  prepareStaticGlb,
+  prepareStaticGltfSource,
+} from "../../packages/renderer-webgl/src/gltf/static-asset";
 
 const fixture = (name: string): Uint8Array => new Uint8Array(readFileSync(new URL(
   `../../apps/examples-react/public/fixtures/khronos/${name}/glTF-Binary/${name}.glb`,
+  import.meta.url,
+)));
+
+const dracoDuckFixture = (name: string): Uint8Array => new Uint8Array(readFileSync(new URL(
+  `../../apps/examples-react/public/fixtures/khronos/Duck/glTF-Draco/${name}`,
   import.meta.url,
 )));
 
@@ -86,6 +94,25 @@ describe("official glTF extension-profile oracles", () => {
     );
     expect(prepared.primitives.some(({ instanceBatch }) =>
       (instanceBatch?.localModels.length ?? 0) > 16)).toBe(true);
+  });
+
+  it("decodes the pinned official external Duck Draco variant", async () => {
+    const prepared = await prepareStaticGltfSource(
+      dracoDuckFixture("Duck.gltf"),
+      "official:DuckDraco",
+      "DuckDraco.gltf",
+      "/fixtures/khronos/Duck/glTF-Draco/Duck.gltf",
+      async (uri) => dracoDuckFixture(uri.slice(uri.lastIndexOf("/") + 1)),
+    );
+    expect(prepared.primitives).toHaveLength(1);
+    expect(prepared.primitives[0]!.geometry.positions).toHaveLength(2_399 * 3);
+    expect(prepared.primitives[0]!.geometry.indices).toHaveLength(12_636);
+    expect(prepared.textureAssets).toEqual([
+      expect.objectContaining({
+        kind: "asset",
+        src: "/fixtures/khronos/Duck/glTF-Draco/DuckCM.png",
+      }),
+    ]);
   });
 
   it.each([

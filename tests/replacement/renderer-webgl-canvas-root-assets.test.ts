@@ -913,5 +913,12 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
     expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
+    expect(vi.mocked(canvas.gl.uniform4fv).mock.calls.some(([, value]) => {
+      const values = Array.from(value);
+      return Math.abs(values[0]! - (0.25 * 0.214_041)) < 0.000_001
+        && Math.abs(values[1]! - (0.5 * 0.214_041)) < 0.000_001
+        && Math.abs(values[2]! - 0.214_041) < 0.000_001
+        && values[3] === 1;
+    })).toBe(true);
   });
 });

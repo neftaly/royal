@@ -225,6 +225,21 @@ describe("surface texture planning core", () => {
       [resident, resident, resident, empty, empty, empty, empty, empty, empty],
       0,
     )).toBe(0b111);
+
+    const transmissionMaterial = standard({
+      thicknessTexture: canonicalBinding("thickness"),
+      transmissionTexture: canonicalBinding("transmission"),
+    });
+    expect(presentableOrdinaryTextureMask(
+      transmissionMaterial,
+      [resident, empty, empty, empty, empty, empty, empty, resident, empty],
+      0,
+    )).toBe(0b1);
+    expect(presentableOrdinaryTextureMask(
+      transmissionMaterial,
+      [resident, empty, empty, empty, empty, empty, empty, resident, resident],
+      0,
+    )).toBe(0b1_1000_0001);
   });
 
   it("selects every standard texture feature without aliasing shader units", () => {

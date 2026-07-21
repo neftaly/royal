@@ -39,6 +39,8 @@ const GltfLabLoadStatus = ({ asset }: { readonly asset: GltfAssetRef }): ReactNo
 const selectedCaseName = (): string =>
   new URLSearchParams(globalThis.location?.search ?? '').get('case') ?? 'Box';
 
+const origin = [0, 0, 0] as const;
+
 const writeSelectedCase = (name: string): void => {
   const url = new URL(globalThis.location.href);
   url.searchParams.set('case', name);
@@ -51,14 +53,15 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     far: 120,
   });
   const src = import.meta.env.BASE_URL + entry.path;
+  const position = entry.presentation.position ?? origin;
   const model = useMemo(() => gltf({
     src,
     transform: {
-      position: [0, 0, 0],
+      position,
       rotation: [0, 0, 0],
       scale: [entry.presentation.scale, entry.presentation.scale, entry.presentation.scale],
     },
-  }), [entry.presentation.scale, src]);
+  }), [entry.presentation.scale, position, src]);
   const renderScene = useMemo(() => scene({
     camera: orbit.camera,
     environment: showcaseEnvironment,

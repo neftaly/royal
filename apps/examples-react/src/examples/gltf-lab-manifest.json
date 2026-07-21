@@ -667,7 +667,54 @@
         "skins": 0
       },
       "presentation": {
-        "scale": 0.74
+        "position": [
+          0,
+          -0.56,
+          0
+        ],
+        "scale": 0.64
+      }
+    },
+    {
+      "name": "DuckDraco",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/Duck/glTF-Draco/Duck.gltf",
+      "bytes": 3797,
+      "sha256": "022457ac914363a8a175b3f28bb2539f90315b7e44a03157cc0f9e5a651c56df",
+      "provenance": "fixtures/khronos/Duck/README.draco-upstream.md",
+      "resources": [
+        {
+          "path": "fixtures/khronos/Duck/glTF-Draco/Duck.bin",
+          "bytes": 10368,
+          "sha256": "f59b26a8caf37e4f8a2fac83407bc4f2a78fe76b24f943ca48f3add34462744e"
+        },
+        {
+          "path": "fixtures/khronos/Duck/glTF-Draco/DuckCM.png",
+          "bytes": 16302,
+          "sha256": "8aedb428cbb815dffea650fe75bff032ea240f00ccad2f64dc8f62a0c5e30313"
+        }
+      ],
+      "features": [
+        "KHR_draco_mesh_compression",
+        "cameras",
+        "external-buffers",
+        "images"
+      ],
+      "extensionsRequired": [
+        "KHR_draco_mesh_compression"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "position": [
+          0,
+          -0.56,
+          0
+        ],
+        "scale": 0.64
       }
     },
     {
