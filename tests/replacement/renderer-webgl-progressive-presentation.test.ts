@@ -55,4 +55,28 @@ describe("progressive presentation policy", () => {
     delayed?.();
     expect(present).toHaveBeenCalledTimes(2);
   });
+
+  it("uses an already-presented frame as the cadence boundary without requesting another", () => {
+    let now = 20;
+    const cancelDelay = vi.fn();
+    const present = vi.fn();
+    const requestDelay = vi.fn(() => 9);
+    const owner = new ProgressivePresentationOwner({
+      cancelDelay,
+      intervalMs: 100,
+      now: () => now,
+      onFailure: vi.fn(),
+      present,
+      requestDelay,
+    });
+
+    owner.presented();
+    now = 45;
+    owner.changed();
+
+    expect(present).not.toHaveBeenCalled();
+    expect(requestDelay).toHaveBeenCalledWith(expect.any(Function), 75);
+    owner.presented();
+    expect(cancelDelay).toHaveBeenCalledWith(9);
+  });
 });

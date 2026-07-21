@@ -35,6 +35,14 @@ export class ProgressivePresentationOwner {
     this.#cancelDelay();
   }
 
+  /** Records a presentation already owned by the current frame transaction. */
+  presented(): void {
+    if (this.#disposed) return;
+    this.#pending = false;
+    this.#cancelDelay();
+    this.#lastPresentationAt = this.#options.now();
+  }
+
   reset(): void {
     if (this.#disposed) return;
     this.#pending = false;

@@ -189,13 +189,13 @@ describe("clear-only canvas root", () => {
     );
   });
 
-  it("admits large surface sets across follow-up frames without duplicating geometry", () => {
+  it("admits intermediate surface batches without redrawing unchanged content", () => {
     const { callbacks, canvas, root } = harness();
     const geometry = planeGeometry([2, 1]);
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: Array.from({ length: 20 }, (_, index) => mesh({
+      nodes: Array.from({ length: 40 }, (_, index) => mesh({
         geometry,
         material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
         transform: { position: [index * 0.01, 0, 0] },
@@ -207,7 +207,12 @@ describe("clear-only canvas root", () => {
     expect(callbacks).toHaveLength(1);
 
     callbacks.shift()!();
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(36);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(16);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(1);
+
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(56);
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(callbacks).toHaveLength(0);
   });
@@ -332,23 +337,23 @@ describe("clear-only canvas root", () => {
     await waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
 
     now = 10;
     resolvers.get("/two.png")!({ height: 8, source: {} as ImageBitmap, width: 8 });
     await waitFor(() => expect(callbacks).toHaveLength(1));
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
-    expect(root.getSnapshot().frame).toBe(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
+    expect(root.getSnapshot().frame).toBe(1);
     expect(delays.size).toBe(1);
 
     now = 100;
     delays.values().next().value!();
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(9);
-    expect(root.getSnapshot().frame).toBe(3);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+    expect(root.getSnapshot().frame).toBe(2);
     root.dispose();
   });
 

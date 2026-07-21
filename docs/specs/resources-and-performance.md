@@ -292,13 +292,16 @@ can otherwise leave an unbounded queue of completed RGBA images waiting behind
 progressive GPU admission.
 
 GPU resource commitment and scene presentation are separate lifecycle effects.
-The first decoded texture and the terminal settled texture set present
-immediately. Intermediate ordinary-texture improvements commit promptly so
+The first usable surface set, first decoded texture, and terminal settled
+resource set present immediately. Intermediate geometry admissions and
+ordinary-texture improvements commit promptly so upload work progresses and
 decode reservations are released, while scene presentation is coalesced to a
 bounded 250 ms cadence. A resource-only commit MUST NOT clear the framebuffer,
-submit scene draws, or increment the public presented-frame counter. Camera,
-scene, size, context, VT, or application invalidation always overrides this
-cadence and presents the latest committed resources.
+submit scene draws, or increment the public presented-frame counter. A frame
+already presenting the committed state resets that cadence rather than
+scheduling a duplicate presentation. Camera, scene, size, context, VT, or
+application invalidation always overrides the cadence and presents the latest
+committed resources.
 
 Committing one map in a visually coherent material group MUST NOT rebuild its
 retained draw packet while the sampled texture-unit mask is unchanged. The GPU

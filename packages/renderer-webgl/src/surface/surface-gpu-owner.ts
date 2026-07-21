@@ -419,6 +419,10 @@ export class SurfaceGpuOwner {
     return this.#texturePublicationKeys.size > 0;
   }
 
+  surfacePublicationsPending(): boolean {
+    return this.#admittedSurfaceCount < (this.#scene?.surfaces.length ?? 0);
+  }
+
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
     this.#sceneGlobalsRevision += 1;
@@ -504,18 +508,10 @@ export class SurfaceGpuOwner {
     else this.#instanceTransformsPending = true;
   }
 
-  /** Commits pending texture representations without requiring a scene presentation. */
-  flushTexturePublications(state: WebGlStateOwner): boolean {
-    if (
-      !this.#dirty
-      || this.#fullReconcileRequired
-      || this.#texturePublicationKeys.size === 0
-    ) return false;
-    try {
-      this.#reconcileTexturePublications();
-    } finally {
-      state.invalidateTextureUnit(0);
-    }
+  /** Commits a bounded progressive resource batch without drawing an unchanged frame. */
+  flushResourcePublications(state: WebGlStateOwner): boolean {
+    if (!this.#dirty || this.#admittedSurfaceCount === 0) return false;
+    this.#reconcilePendingResources(state);
     return true;
   }
 
@@ -613,24 +609,7 @@ export class SurfaceGpuOwner {
         this.#fullReconcileRequired = true;
       }
     }
-    if (this.#dirty) {
-      if (this.#instanceTransformsPending && !this.#fullReconcileRequired) {
-        if (this.#geometryGpu.updateInstanceTransforms(scene?.surfaces ?? [])) {
-          this.#instanceTransformsPending = false;
-          this.#dirty = this.#texturePublicationKeys.size > 0;
-        } else {
-          this.#fullReconcileRequired = true;
-        }
-      }
-      if (this.#dirty && !this.flushTexturePublications(state)) {
-        try {
-          this.#reconcile();
-        } finally {
-          state.invalidateVertexArray();
-          state.invalidateTextureUnit(0);
-        }
-      }
-    }
+    this.#reconcilePendingResources(state);
     if (scene === null) return virtualTexturePending;
     const presentationWorkPending = virtualTexturePending
       || this.#admittedSurfaceCount < scene.surfaces.length;
@@ -697,6 +676,40 @@ export class SurfaceGpuOwner {
     cameraWorldPositionFromViewInto(this.#cameraPosition, frameView.view);
     this.#cameraPosition[3] = 1;
     frustumPlanesInto(this.#frustumPlanes, frameView.viewProjection);
+  }
+
+  #reconcilePendingResources(state: WebGlStateOwner): void {
+    if (!this.#dirty) return;
+    if (this.#instanceTransformsPending && !this.#fullReconcileRequired) {
+      if (this.#geometryGpu.updateInstanceTransforms(this.#scene?.surfaces ?? [])) {
+        this.#instanceTransformsPending = false;
+        this.#dirty = this.#texturePublicationKeys.size > 0;
+      } else {
+        this.#fullReconcileRequired = true;
+      }
+    }
+    if (this.#dirty && !this.#flushTexturePublications(state)) {
+      try {
+        this.#reconcile();
+      } finally {
+        state.invalidateVertexArray();
+        state.invalidateTextureUnit(0);
+      }
+    }
+  }
+
+  #flushTexturePublications(state: WebGlStateOwner): boolean {
+    if (
+      !this.#dirty
+      || this.#fullReconcileRequired
+      || this.#texturePublicationKeys.size === 0
+    ) return false;
+    try {
+      this.#reconcileTexturePublications();
+    } finally {
+      state.invalidateTextureUnit(0);
+    }
+    return true;
   }
 
   #requestCompositeOwner(): void {

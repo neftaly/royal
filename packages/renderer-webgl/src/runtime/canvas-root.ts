@@ -388,7 +388,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #platform: CanvasRootPlatform;
   readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #presentationRequired = false;
-  readonly #progressiveTexturePresentation: ProgressivePresentationOwner;
+  readonly #progressivePresentation: ProgressivePresentationOwner;
   #revision = 0;
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
@@ -399,6 +399,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #state: WebGlStateOwner;
   readonly #surfaceGpu: SurfaceGpuOwner;
   readonly #surfacePicker = new SurfacePicker(this.#getDecodedAlpha);
+  #surfaceResourcesPending = false;
   readonly #textureAssets: TextureAssetOwner;
   #textureResourcesPending = false;
   readonly #unsubscribeContext: () => void;
@@ -508,7 +509,7 @@ export class CanvasRoot implements RendererRoot {
       reportScheduledFailure: (error) => this.#captureScheduledFailure(error),
       requestFrame: platform.requestFrame,
     });
-    this.#progressiveTexturePresentation = new ProgressivePresentationOwner({
+    this.#progressivePresentation = new ProgressivePresentationOwner({
       cancelDelay: platform.cancelDelay
         ?? ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)),
       intervalMs: 250,
@@ -568,6 +569,7 @@ export class CanvasRoot implements RendererRoot {
       this.#releaseUploadedTextures();
     }
     this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
+    this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
     this.#presentationRequired = false;
     this.#frame += 1;
     this.#lastFrameFailure = undefined;
@@ -580,7 +582,7 @@ export class CanvasRoot implements RendererRoot {
     this.#disposed = true;
     this.#canvas.removeEventListener("webglcontextlost", this.#onContextLost);
     this.#canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
-    this.#progressiveTexturePresentation.dispose();
+    this.#progressivePresentation.dispose();
     this.#clock.dispose();
     this.#cameraSource.dispose();
     this.#environmentAssets.dispose();
@@ -709,7 +711,8 @@ export class CanvasRoot implements RendererRoot {
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
     this.#instancePickingDirty = false;
-    this.#progressiveTexturePresentation.reset();
+    this.#progressivePresentation.reset();
+    this.#surfaceResourcesPending = false;
     this.#textureResourcesPending = false;
     this.#surfaceGpu.setScene(prepared);
     this.#reconcilePrefilteredEnvironment(prepared);
@@ -952,7 +955,8 @@ export class CanvasRoot implements RendererRoot {
     );
     this.#surfaceScene = prepared;
     if (!instanceOnly) {
-      this.#progressiveTexturePresentation.reset();
+      this.#progressivePresentation.reset();
+      this.#surfaceResourcesPending = false;
       this.#textureResourcesPending = false;
     }
     this.#surfaceGpu.setScene(prepared);
@@ -983,7 +987,7 @@ export class CanvasRoot implements RendererRoot {
         this.#surfaceGpu.publishTextureScene(prepared, key);
         this.#virtualTextureRuntime?.setScene(prepared);
         this.#textureResourcesPending = true;
-        this.#progressiveTexturePresentation.changed();
+        this.#progressivePresentation.changed();
         this.#clock.invalidate();
       }
     }
@@ -1015,7 +1019,7 @@ export class CanvasRoot implements RendererRoot {
 
   #refreshGltfTextureProgress(): void {
     this.#gltfAssets.refreshTextureProgress(this.#getTextureSnapshot);
-    if (this.#textureAssetsSettled()) this.#progressiveTexturePresentation.settled();
+    if (this.#progressiveResourcesSettled()) this.#progressivePresentation.settled();
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
@@ -1093,23 +1097,28 @@ export class CanvasRoot implements RendererRoot {
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
     this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
-    if (this.#textureResourcesPending) {
-      let texturesUploaded: boolean;
+    if (this.#surfaceResourcesPending || this.#textureResourcesPending) {
+      let resourcesCommitted = false;
       try {
-        if (!this.#surfaceGpu.flushTexturePublications(this.#state)) {
+        resourcesCommitted = this.#surfaceGpu.flushResourcePublications(this.#state);
+        if (!resourcesCommitted) {
           this.#presentationRequired = true;
         }
       } finally {
+        this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
         this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-        texturesUploaded = this.#releaseUploadedTextures();
+        resourcesCommitted = this.#releaseUploadedTextures() || resourcesCommitted;
       }
-      if (texturesUploaded && !this.#presentationRequired) {
-        this.#progressiveTexturePresentation.changed();
-        if (this.#textureAssetsSettled() && !this.#textureResourcesPending) {
-          this.#progressiveTexturePresentation.settled();
-        }
+      if (resourcesCommitted && !this.#presentationRequired) {
+        if (this.#progressiveResourcesSettled()) this.#presentationRequired = true;
+        else this.#progressivePresentation.changed();
       }
-      if (this.#textureResourcesPending) this.#clock.invalidate();
+      if (
+        !this.#presentationRequired
+        && (this.#surfaceResourcesPending || this.#textureResourcesPending)
+      ) {
+        this.#clock.invalidate();
+      }
     }
     if (!this.#presentationRequired) {
       this.#publish();
@@ -1126,20 +1135,28 @@ export class CanvasRoot implements RendererRoot {
       this.#canvasViewport.height = size.backingHeight;
       this.#canvasViewport.width = size.backingWidth;
       try {
-        if (this.#surfaceGpu.drawViews(
+        const pending = this.#surfaceGpu.drawViews(
           this.#canvasViews,
           null,
           this.#state,
           this.#clearColor,
-        )) {
-          this.#invalidatePresentation();
+        );
+        this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
+        if (pending) {
+          if (this.#surfaceResourcesPending) {
+            this.#clock.invalidate();
+          } else this.#invalidatePresentation();
         }
       } finally {
         this.#releaseUploadedTextures();
+        this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
         this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-        if (this.#textureResourcesPending) this.#clock.invalidate();
+        if (this.#surfaceResourcesPending || this.#textureResourcesPending) {
+          this.#clock.invalidate();
+        }
       }
     }
+    this.#progressivePresentation.presented();
     this.#frame += 1;
     this.#lastFrameFailure = undefined;
     this.#publish();
@@ -1196,9 +1213,10 @@ export class CanvasRoot implements RendererRoot {
     return uploaded.length !== 0;
   }
 
-  #textureAssetsSettled(): boolean {
+  #progressiveResourcesSettled(): boolean {
+    if (this.#surfaceResourcesPending || this.#textureResourcesPending) return false;
     const assets = this.#surfaceScene?.textureAssets ?? [];
-    return assets.length !== 0 && assets.every((asset) => {
+    return assets.every((asset) => {
       const state = this.#getTextureSnapshot(asset).state;
       return state === "ready" || state === "error";
     });

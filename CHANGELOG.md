@@ -48,6 +48,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Decoupled intermediate geometry and texture commitment from scene
+  presentation, cutting the Bistro startup profile from 3,185 to 1,110 draws
+  while preserving urgent first-usable and terminal frames.
 - Bounded early texture-budget inspection to fixed 24-byte PNG, 30-byte WebP,
   and 16 KiB JPEG prefixes while retaining a bounded AVIF container prefix,
   without changing the browser-authoritative decode fallback.

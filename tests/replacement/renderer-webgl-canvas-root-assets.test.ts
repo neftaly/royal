@@ -206,6 +206,10 @@ describe("canvas root asset publication", () => {
       await waitFor(() => expect(root.getTextureAssetSnapshot(texture).state).toBe("ready"));
       callbacks.shift()!();
       expect(reconcile).toHaveBeenCalledTimes(1);
+      expect(retain).toHaveBeenCalledTimes(16 * 9);
+      expect(callbacks).toHaveLength(1);
+      callbacks.shift()!();
+      expect(reconcile).toHaveBeenCalledTimes(1);
       expect(retain).toHaveBeenCalledTimes(20 * 9);
       expect(callbacks).toHaveLength(0);
     } finally {
@@ -262,7 +266,7 @@ describe("canvas root asset publication", () => {
 
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
@@ -271,7 +275,7 @@ describe("canvas root asset publication", () => {
     expect(root.getTextureAssetSnapshot(second).state).toBe("ready");
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
     expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
@@ -279,7 +283,7 @@ describe("canvas root asset publication", () => {
     });
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(3);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(9);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
     expect(root.getSnapshot().resources.ordinaryTextureUploads.deferredUploads).toBe(0);
     expect(presentationDelays).toContain(250);
     root.dispose();
@@ -379,9 +383,7 @@ describe("canvas root asset publication", () => {
     draws.length = 0;
 
     callbacks.shift()!();
-    expect(draws[0]!.texture).toBe(uploaded.get(sources.get("/first.png")!));
-    expect(draws[1]!.program).not.toBe(draws[0]!.program);
-    draws.length = 0;
+    expect(draws).toHaveLength(0);
     callbacks.shift()!();
     expect(draws.map((draw) => draw.texture)).toEqual([
       uploaded.get(sources.get("/first.png")!),
