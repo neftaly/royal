@@ -1,0 +1,375 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "cameraDrag": true,
+  "coldCache": false,
+  "receivedAt": "2026-07-21T07:45:35.914Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 368,
+        "cssWidth": 736,
+        "height": 736,
+        "width": 1472
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-lab",
+      "path": "/gltf-lab",
+      "sourceFile": "examples/cases/GltfLab.tsx",
+      "title": "Khronos Compatibility Lab"
+    },
+    "frameStats": {
+      "averageMs": 15.91666666666662,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 1.0000000000002274,
+      "maxMs": 36,
+      "minMs": 6,
+      "p50Ms": 15.999999999999773,
+      "p95Ms": 17,
+      "p99Ms": 17,
+      "requestedSampleCount": 24,
+      "sampleCount": 24,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 30000
+    },
+    "frameTiming": {
+      "callbackCalls": 48,
+      "callbackMaxMs": 2,
+      "callbackTotalMs": 18.000000000000682,
+      "supported": true
+    },
+    "generatedAt": "2026-07-21T07:45:35.628Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 0,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 24,
+        "drawElements": 24,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 0,
+        "multiDrawDraws": 0,
+        "nonInstancedDrawCalls": 24,
+        "stateChanges": 0,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 24,
+        "uniformMatrixCalls": 24,
+        "useProgram": 0
+      },
+      "setup": {
+        "bindBuffer": 6,
+        "bindTexture": 2,
+        "bindVertexArray": 3,
+        "bufferDataBytes": 86,
+        "bufferDataCalls": 3,
+        "bufferSubDataBytes": 86,
+        "bufferSubDataCalls": 3,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 2,
+        "drawElements": 2,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 0,
+        "multiDrawDraws": 0,
+        "nonInstancedDrawCalls": 2,
+        "stateChanges": 13,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 5,
+        "uniformMatrixCalls": 2,
+        "useProgram": 2
+      }
+    },
+    "options": {
+      "autorun": true,
+      "cameraDrag": true,
+      "frames": 24,
+      "timeoutMs": 30000,
+      "warmupFrames": 8
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 108,
+        "duration": 108,
+        "loadEventEnd": 108,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 22,
+        "totalDecodedBodySize": 639027,
+        "totalEncodedBodySize": 192415,
+        "totalTransferSize": 198115
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 27,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 1,
+              "imageFailures": 0,
+              "imagesLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "firstUsable": 87.00000000000011,
+                "imagesComplete": 131,
+                "preparation": 67.00000000000011,
+                "externalResourceRead": 2,
+                "sourceRead": 18
+              },
+              "primitiveCount": 1,
+              "src": "/fixtures/royal/GsTextureEtc2/optional-fallback-quad.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 0,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 102,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 16,
+          "compressedBytes": 16,
+          "compressedResources": 1,
+          "fitted": 0,
+          "resources": 1
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 3,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 1,
+              "imageFailures": 0,
+              "imagesLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "firstUsable": 87.00000000000011,
+                "imagesComplete": 131,
+                "preparation": 67.00000000000011,
+                "externalResourceRead": 2,
+                "sourceRead": 18
+              },
+              "primitiveCount": 1,
+              "src": "/fixtures/royal/GsTextureEtc2/optional-fallback-quad.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 16,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 102,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 16,
+          "compressedBytes": 16,
+          "compressedResources": 1,
+          "fitted": 0,
+          "resources": 1
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 24,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 3,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 1,
+              "imageFailures": 0,
+              "imagesLoaded": 1,
+              "imageRequests": 1,
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "firstUsable": 87.00000000000011,
+                "imagesComplete": 131,
+                "preparation": 67.00000000000011,
+                "externalResourceRead": 2,
+                "sourceRead": 18
+              },
+              "primitiveCount": 1,
+              "src": "/fixtures/royal/GsTextureEtc2/optional-fallback-quad.gltf",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 16,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedDetailPreparationJobs": 0,
+          "queuedForegroundPreparationJobs": 0,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 102,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "bytes": 16,
+          "compressedBytes": 16,
+          "compressedResources": 1,
+          "fitted": 0,
+          "resources": 1
+        },
+        "virtualTexturing": null
+      }
+    },
+    "source": {
+      "buildId": "4ed853632068-clean-mrucltqz",
+      "builtAt": "2026-07-21T07:44:52.178Z",
+      "dirty": false,
+      "revision": "4ed853632068d4d176d0b4e29e430528f7565777"
+    },
+    "url": "http://192.168.1.102:3301/gltf-lab?case=RoyalEtc2OptionalFallback&bench=auto&cameraDrag=1&frames=24&warmup=8&timeoutMs=30000&run=1784619933890",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 1081
+  }
+}
