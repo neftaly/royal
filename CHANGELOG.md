@@ -30,6 +30,15 @@ versions identify source-level prerelease checkpoints in this repository.
   both constructor input and normalized public output.
 - Moved pure orbit authoring helpers from the React runtime barrel to
   `@royal/react/scene`, alongside the rest of the pure scene vocabulary.
+- Removed browser-session test-port types and the scene-only `WorldPosition3`
+  alias from React runtime entrypoints; browser ports stay internal and authored
+  coordinate types remain on `@royal/react/scene`.
+- Kept authored vertex normals smooth across non-degenerate model scales by selecting
+  the authored-normal shader path explicitly; derivative face normals remain
+  the fallback only for geometry that actually omits normals.
+- Expanded packed-consumer and bundle gates across React scene observation,
+  XR, picking proxies, instances, glTF authoring, and entrypoint ownership; glTF
+  scene authoring adds about 1.1 kB gzip to the measured Royal initial path.
 - Standardized authoring failures on `TypeError` for malformed values and
   `RangeError` for invalid finite ranges, and stopped silently clamping invalid
   normalized sRGB input.

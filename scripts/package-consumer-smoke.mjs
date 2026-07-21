@@ -16,6 +16,7 @@ import { gunzipSync } from 'node:zlib';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'royal-package-consumer-'));
 const artifactsDirectory = path.join(temporaryRoot, 'artifacts');
+const fixtureDirectory = path.join(repoRoot, 'scripts/fixtures/packed-consumer');
 mkdirSync(artifactsDirectory);
 const pnpmCli = process.env.npm_execpath;
 
@@ -142,111 +143,14 @@ try {
       strict: true,
       target: 'ES2022',
     },
-    include: ['app.tsx'],
+    include: ['*.ts', '*.tsx'],
   }, null, 2)}\n`);
-  writeFileSync(path.join(temporaryRoot, 'app.tsx'), `
-import {
-  Canvas,
-  createOrbitCameraController,
-  OrbitControls,
-  resolveRendererRootOptions,
-  useCanvasSize,
-  useGltfAssetStatus,
-  useRendererLifecycle,
-  useRendererSnapshot,
-  type RendererRoot,
-  type ScenePointerEvent,
-  type ScenePointerEvents,
-} from '@royal/react';
-import {
-  clampOrbitCameraView,
-  mesh,
-  orbitPerspectiveCamera,
-  scene,
-  triangleGeometry,
-  unlitMaterial,
-  type Scene,
-} from '@royal/react/scene';
-import { useXrSession } from '@royal/react/xr';
-import type { ReactNode } from 'react';
-
-const orbit = createOrbitCameraController({
-  far: 100,
-  fovY: Math.PI / 4,
-  initial: { distance: 3 },
-  near: 0.1,
-});
-const rendererOptions = resolveRendererRootOptions({ antialias: true });
-const pureOrbitCamera = orbitPerspectiveCamera({
-  view: clampOrbitCameraView({ distance: 0.01 }, { minDistance: 0.1 }),
-});
-void pureOrbitCamera;
-// @ts-expect-error Orbit camera mutation belongs to the controller.
-orbit.camera.commit();
-const renderScene: Scene = scene({
-  camera: orbit.camera,
-  clearColor: [0.1, 0.15, 0.2, 1],
-  nodes: [mesh({
-    geometry: triangleGeometry({
-      positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
-    }),
-    material: unlitMaterial({ color: [1, 1, 1, 1] }),
-    pickingId: 'hero',
-  })],
-});
-
-const reportPick = (event: ScenePointerEvent): void => {
-  console.log(event.target.pickingId, event.hit.point);
-};
-const scenePointerEvents: ScenePointerEvents = {
-  hero: { onClick: reportPick },
-};
-
-const Status = (): ReactNode => {
-  const size = useCanvasSize();
-  const lifecycle = useRendererLifecycle();
-  const rendererSnapshot = useRendererSnapshot();
-  const model = useGltfAssetStatus('/model.glb');
-  const renderer = lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state;
-  return <output>{renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.cssWidth ?? 0} by {size?.cssHeight ?? 0}; model {model.state}</output>;
-};
-
-const XrControl = (): ReactNode => {
-  const xr = useXrSession({ mode: 'immersive-vr' });
-  return <button onClick={() => void xr.enter()}>{xr.status}</button>;
-};
-
-export const App = (): ReactNode => {
-  return (
-    <Canvas
-      aria-label="Royal preview"
-      data-testid="royal-canvas"
-      rendererOptions={rendererOptions}
-      scene={renderScene}
-      scenePointerEvents={scenePointerEvents}
-    >
-      <OrbitControls orbit={orbit} />
-      <Status />
-      <XrControl />
-    </Canvas>
-  );
-};
-
-export const requestAnotherFrame = (root: RendererRoot | null) => root?.invalidate();
-`);
-  writeFileSync(path.join(temporaryRoot, 'imports.mjs'), `
-const entrypoints = [
-  '@royal/renderer-core',
-  '@royal/renderer-core/render-object',
-  '@royal/renderer-webgl',
-  '@royal/renderer-webgl/xr',
-  '@royal/react',
-  '@royal/react/scene',
-  '@royal/react/xr',
-];
-for (const entrypoint of entrypoints) await import(entrypoint);
-console.log('ok packed Royal entrypoints');
-`);
+  for (const fixture of readdirSync(fixtureDirectory)) {
+    writeFileSync(
+      path.join(temporaryRoot, fixture),
+      readFileSync(path.join(fixtureDirectory, fixture)),
+    );
+  }
 
   runPnpm(['install', '--prefer-offline', '--ignore-scripts'], { cwd: temporaryRoot });
   runPnpm(['exec', 'tsc'], { cwd: temporaryRoot });

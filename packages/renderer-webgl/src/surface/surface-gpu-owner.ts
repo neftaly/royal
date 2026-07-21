@@ -82,7 +82,7 @@ import {
   materialTextureBindingAt,
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
-  surfaceTextureFeatureBits,
+  surfaceProgramFeatureBits,
   surfaceTextureUnitMask,
 } from "./surface-texture-plan";
 import {
@@ -1169,17 +1169,22 @@ export class SurfaceGpuOwner {
       : material.baseColorAsset === undefined
         ? undefined
         : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
-    const features = surfaceTextureFeatureBits(
+    const features = surfaceProgramFeatureBits({
+      environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+      hasDirectionalLights: (scene?.directionalLights.length ?? 0) > 0,
+      hasPunctualLights: (scene?.punctualLights.length ?? 0) > 0,
+      hasTangent: geometrySurface.geometry.tangentBuffer !== null,
+      hasVertexColor: geometrySurface.geometry.colorBuffer !== null,
+      hasVertexNormal: geometrySurface.geometry.normalBuffer !== null,
+      hasVirtualBaseColor: virtualTexture !== undefined,
+      linearOutput: this.#compositeActive,
       material,
-      geometrySurface.geometry.colorBuffer !== null,
-      geometrySurface.geometry.tangentBuffer !== null,
-      sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-      (scene?.directionalLights.length ?? 0) > 0,
-      (scene?.punctualLights.length ?? 0) > 0,
-      virtualTexture !== undefined,
-      presentableOrdinaryTextureMask(material, ordinaryBindings, bindingOffset),
-      this.#compositeActive,
-    );
+      ordinaryTextureMask: presentableOrdinaryTextureMask(
+        material,
+        ordinaryBindings,
+        bindingOffset,
+      ),
+    });
     const bindings = composeSurfaceTextureBindings(
       ordinaryBindings,
       bindingOffset,
@@ -1373,17 +1378,18 @@ export class SurfaceGpuOwner {
         const material = surface.material;
         const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
         deferred ||= this.#materialUploadDeferred(material);
-        const features = surfaceTextureFeatureBits(
+        const features = surfaceProgramFeatureBits({
+          environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+          hasDirectionalLights: scene.directionalLights.length > 0,
+          hasPunctualLights: scene.punctualLights.length > 0,
+          hasTangent: resource.geometry.tangentBuffer !== null,
+          hasVertexColor: resource.geometry.colorBuffer !== null,
+          hasVertexNormal: resource.geometry.normalBuffer !== null,
+          hasVirtualBaseColor: resource.virtualTexture !== undefined,
+          linearOutput: this.#compositeActive,
           material,
-          resource.geometry.colorBuffer !== null,
-          resource.geometry.tangentBuffer !== null,
-          sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-          scene.directionalLights.length > 0,
-          scene.punctualLights.length > 0,
-          resource.virtualTexture !== undefined,
-          presentableOrdinaryTextureMask(material, ordinaryBindings, 0),
-          this.#compositeActive,
-        );
+          ordinaryTextureMask: presentableOrdinaryTextureMask(material, ordinaryBindings, 0),
+        });
         const textureUnits = surfaceTextureUnitMask(features);
         resource.surface = surface;
         const bindings = composeSurfaceTextureBindings(

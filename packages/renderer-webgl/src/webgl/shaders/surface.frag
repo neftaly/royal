@@ -152,11 +152,11 @@ void main() {
 #ifdef ALPHA_MASK
   if (surfaceBaseColor.a < materialFactors.z) discard;
 #endif
-  vec3 normal = worldNormal;
-  if (dot(normal, normal) <= 0.00000001) {
-    normal = cross(dFdx(worldPosition), dFdy(worldPosition));
-  }
-  normal = normalize(normal);
+#ifdef VERTEX_NORMAL
+  vec3 normal = normalize(worldNormal);
+#else
+  vec3 normal = normalize(cross(dFdx(worldPosition), dFdy(worldPosition)));
+#endif
 #ifdef NORMAL_TEXTURED
   vec3 mappedNormal = texture(normalTexture, surfaceNormalTextureCoordinate).xyz * 2.0 - 1.0;
   mappedNormal.xy *= materialFactors.w;

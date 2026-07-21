@@ -63,7 +63,6 @@ export type {
   OrbitControlsOptions,
   OrbitControlsProps,
   OrbitControlsSetViewOptions,
-  WorldPosition3,
 } from "./orbit/controls";
 export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
 export type {

@@ -11,6 +11,7 @@ import {
   SURFACE_FEATURE_TANGENT,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
   SURFACE_FEATURE_VERTEX_COLOR,
+  SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VOLUME_MATERIAL,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
@@ -80,6 +81,19 @@ describe("surface program ownership", () => {
     const vertexSources = gl.shaderSource.mock.calls.filter(([, source]) =>
       String(source).includes("layout(location = 0) in vec3 position"));
     expect(vertexSources).toHaveLength(1);
+  });
+
+  it("specializes authored normals without a scale-sensitive runtime fallback", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+    owner.get("standard", 0, false, false, false);
+    owner.get("standard", SURFACE_FEATURE_VERTEX_NORMAL, false, false, false);
+
+    const fragments = gl.shaderSource.mock.calls.map(([, source]) => String(source))
+      .filter((source) => source.includes("ggxDistribution"));
+    expect(fragments[0]).not.toContain("#define VERTEX_NORMAL");
+    expect(fragments[1]).toContain("#define VERTEX_NORMAL");
+    expect(fragments[1]).not.toContain("dot(normal, normal) <=");
   });
 
   it("synchronizes once at link and reports stage logs only on failure", () => {

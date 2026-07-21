@@ -107,6 +107,55 @@ describe("official glTF extension-profile oracles", () => {
     expect(prepared.primitives).toHaveLength(1);
     expect(prepared.primitives[0]!.geometry.positions).toHaveLength(2_399 * 3);
     expect(prepared.primitives[0]!.geometry.indices).toHaveLength(12_636);
+    const ordinary = prepareStaticGlb(fixture("Duck"), "official:Duck", "Duck.glb");
+    const ordinaryGeometry = ordinary.primitives[0]!.geometry;
+    const dracoGeometry = prepared.primitives[0]!.geometry;
+    const ordinaryNormals = ordinaryGeometry.normals!;
+    const dracoNormals = dracoGeometry.normals!;
+    let maximumNormalLengthError = 0;
+    for (const normals of [ordinaryNormals, dracoNormals]) {
+      for (let offset = 0; offset < normals.length; offset += 3) {
+        maximumNormalLengthError = Math.max(maximumNormalLengthError, Math.abs(1 - Math.hypot(
+          normals[offset]!,
+          normals[offset + 1]!,
+          normals[offset + 2]!,
+        )));
+      }
+    }
+    const meanVertexFaceAgreement = (
+      geometry: typeof ordinaryGeometry,
+    ): number => {
+      const { indices, normals, positions } = geometry;
+      let agreement = 0;
+      for (let index = 0; index < indices.length; index += 3) {
+        const a = indices[index]! * 3;
+        const b = indices[index + 1]! * 3;
+        const c = indices[index + 2]! * 3;
+        const abx = positions[b]! - positions[a]!;
+        const aby = positions[b + 1]! - positions[a + 1]!;
+        const abz = positions[b + 2]! - positions[a + 2]!;
+        const acx = positions[c]! - positions[a]!;
+        const acy = positions[c + 1]! - positions[a + 1]!;
+        const acz = positions[c + 2]! - positions[a + 2]!;
+        const faceX = aby * acz - abz * acy;
+        const faceY = abz * acx - abx * acz;
+        const faceZ = abx * acy - aby * acx;
+        const faceLength = Math.hypot(faceX, faceY, faceZ);
+        for (const offset of [a, b, c]) {
+          agreement += (
+            faceX * normals![offset]!
+            + faceY * normals![offset + 1]!
+            + faceZ * normals![offset + 2]!
+          ) / faceLength;
+        }
+      }
+      return agreement / indices.length;
+    };
+    const ordinaryAgreement = meanVertexFaceAgreement(ordinaryGeometry);
+    const dracoAgreement = meanVertexFaceAgreement(dracoGeometry);
+    expect(dracoAgreement).toBeCloseTo(ordinaryAgreement, 2);
+    expect(ordinaryAgreement).toBeLessThan(0.995);
+    expect(maximumNormalLengthError).toBeLessThan(0.000_01);
     expect(prepared.textureAssets).toEqual([
       expect.objectContaining({
         kind: "asset",

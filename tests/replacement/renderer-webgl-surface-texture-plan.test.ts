@@ -7,7 +7,7 @@ import {
   presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
   surfaceTexturesUseIdentityCoordinates,
-  surfaceTextureFeatureBits,
+  surfaceProgramFeatureBits,
   surfaceTextureUnitMask,
 } from "../../packages/renderer-webgl/src/surface/surface-texture-plan";
 import {
@@ -18,6 +18,7 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
+  SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VOLUME_MATERIAL,
 } from "../../packages/renderer-webgl/src/surface/surface-program-features";
 import type { GpuTextureBinding } from "../../packages/renderer-webgl/src/texture/gpu-owner";
@@ -59,20 +60,49 @@ const standard = (
 
 describe("surface texture planning core", () => {
   it("selects alpha preservation only for blended surfaces", () => {
-    const opaque = surfaceTextureFeatureBits(standard(), false, false, 0, false, false, false, 0, false);
-    const blended = surfaceTextureFeatureBits(
-      standard({ alphaBlend: true }),
-      false,
-      false,
-      0,
-      false,
-      false,
-      false,
-      0,
-      false,
-    );
+    const opaque = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: false,
+      hasVirtualBaseColor: false,
+      linearOutput: false,
+      material: standard(),
+      ordinaryTextureMask: 0,
+    });
+    const blended = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: false,
+      hasVirtualBaseColor: false,
+      linearOutput: false,
+      material: standard({ alphaBlend: true }),
+      ordinaryTextureMask: 0,
+    });
     expect(opaque & SURFACE_FEATURE_ALPHA_BLEND).toBe(0);
     expect(blended & SURFACE_FEATURE_ALPHA_BLEND).toBe(SURFACE_FEATURE_ALPHA_BLEND);
+  });
+
+  it("selects authored vertex normals independently from normal textures", () => {
+    const features = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: true,
+      hasVirtualBaseColor: false,
+      linearOutput: false,
+      material: standard(),
+      ordinaryTextureMask: 0,
+    });
+    expect(features & SURFACE_FEATURE_VERTEX_NORMAL).toBe(SURFACE_FEATURE_VERTEX_NORMAL);
+    expect(features & SURFACE_FEATURE_NORMAL_TEXTURE).toBe(0);
   });
 
   it("keeps one neutral fallback for ordinary and virtual base-color representations", () => {
@@ -248,59 +278,63 @@ describe("surface texture planning core", () => {
       thicknessFactor: 1,
       transmissionFactor: 1,
     });
-    const features = surfaceTextureFeatureBits(
+    const features = surfaceProgramFeatureBits({
+      environmentFeatures: SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+      hasDirectionalLights: true,
+      hasPunctualLights: true,
+      hasTangent: true,
+      hasVertexColor: true,
+      hasVertexNormal: true,
+      hasVirtualBaseColor: false,
+      linearOutput: true,
       material,
-      true,
-      true,
-      SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
-      true,
-      true,
-      false,
-      0b1_1111_1111,
-      true,
-    );
+      ordinaryTextureMask: 0b1_1111_1111,
+    });
     expect(surfaceTextureUnitMask(features)).toBe(0b1111_0111_1111);
     expect(features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES).not.toBe(0);
     expect(features & SURFACE_FEATURE_DIRECTIONAL_LIGHTS).not.toBe(0);
     expect(features & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(SURFACE_FEATURE_VOLUME_MATERIAL);
 
-    const virtualFeatures = surfaceTextureFeatureBits(
+    const virtualFeatures = surfaceProgramFeatureBits({
+      environmentFeatures: SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+      hasDirectionalLights: true,
+      hasPunctualLights: true,
+      hasTangent: true,
+      hasVertexColor: true,
+      hasVertexNormal: true,
+      hasVirtualBaseColor: true,
+      linearOutput: true,
       material,
-      true,
-      true,
-      SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
-      true,
-      true,
-      true,
-      0b1_1111_1111,
-      true,
-    );
+      ordinaryTextureMask: 0b1_1111_1111,
+    });
     expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111);
   });
 
   it("specializes thin transmission separately from authored volume", () => {
-    const thin = surfaceTextureFeatureBits(
-      standard({ transmissionFactor: 1 }),
-      false,
-      false,
-      0,
-      false,
-      false,
-      false,
-      0,
-      true,
-    );
-    const volume = surfaceTextureFeatureBits(
-      standard({ thicknessFactor: 0.5, transmissionFactor: 1 }),
-      false,
-      false,
-      0,
-      false,
-      false,
-      false,
-      0,
-      true,
-    );
+    const thin = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: false,
+      hasVirtualBaseColor: false,
+      linearOutput: true,
+      material: standard({ transmissionFactor: 1 }),
+      ordinaryTextureMask: 0,
+    });
+    const volume = surfaceProgramFeatureBits({
+      environmentFeatures: 0,
+      hasDirectionalLights: false,
+      hasPunctualLights: false,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: false,
+      hasVirtualBaseColor: false,
+      linearOutput: true,
+      material: standard({ thicknessFactor: 0.5, transmissionFactor: 1 }),
+      ordinaryTextureMask: 0,
+    });
 
     expect(thin & SURFACE_FEATURE_TRANSMISSION_MATERIAL).not.toBe(0);
     expect(thin & SURFACE_FEATURE_VOLUME_MATERIAL).toBe(0);

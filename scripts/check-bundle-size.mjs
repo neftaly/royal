@@ -164,11 +164,15 @@ const formatBytes = (bytes) => `${(bytes / 1000).toFixed(1)} kB`;
 try {
   const react = await buildFixture('react');
   const royal = await buildFixture('royal');
+  const gltf = await buildFixture('gltf');
   const incrementalGzipBytes = royal.initialGzipBytes - react.initialGzipBytes;
+  const gltfIncrementalGzipBytes = gltf.initialGzipBytes - royal.initialGzipBytes;
 
   console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
   console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
   console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
+  console.log(`Royal glTF initial:   ${formatBytes(gltf.initialGzipBytes)} gzip`);
+  console.log(`glTF authoring delta: ${formatBytes(gltfIncrementalGzipBytes)} gzip`);
   console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
   console.log(`Royal worker assets:  ${formatBytes(royal.workerGzipBytes)} gzip`);
   console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
@@ -208,6 +212,16 @@ try {
   if (incrementalGzipBytes > budget.royalIncrementalGzipBytes) {
     failures.push(
       `Royal incremental gzip ${incrementalGzipBytes} exceeds ${budget.royalIncrementalGzipBytes}`,
+    );
+  }
+  if (gltf.initialGzipBytes > budget.royalGltfInitialGzipBytes) {
+    failures.push(
+      `Royal glTF initial gzip ${gltf.initialGzipBytes} exceeds ${budget.royalGltfInitialGzipBytes}`,
+    );
+  }
+  if (gltfIncrementalGzipBytes > budget.royalGltfIncrementalGzipBytes) {
+    failures.push(
+      `Royal glTF authoring delta ${gltfIncrementalGzipBytes} exceeds ${budget.royalGltfIncrementalGzipBytes}`,
     );
   }
   if (royal.lazyGzipBytes > budget.royalLazyGzipBytes) {

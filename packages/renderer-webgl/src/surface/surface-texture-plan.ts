@@ -27,6 +27,7 @@ import {
   SURFACE_FEATURE_TRANSMISSION_MATERIAL,
   SURFACE_FEATURE_TRANSMISSION_TEXTURE,
   SURFACE_FEATURE_VERTEX_COLOR,
+  SURFACE_FEATURE_VERTEX_NORMAL,
   SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE,
   SURFACE_FEATURE_VOLUME_MATERIAL,
   SURFACE_TEXTURE_FEATURES,
@@ -109,24 +110,39 @@ export const surfaceTexturesUseIdentityCoordinates = (
     || material.thicknessTextureCoordinates === undefined;
 };
 
-/** Selects one shader feature set from canonical material and resident GPU state. */
-export const surfaceTextureFeatureBits = (
-  material: CanonicalSurfaceMaterial,
-  hasVertexColor: boolean,
-  hasTangent: boolean,
-  environmentFeatures: number,
-  hasDirectionalLights: boolean,
-  hasPunctualLights: boolean,
-  hasVirtualBaseColor: boolean,
-  ordinaryTextureMask: number,
-  linearOutput: boolean,
-): number => {
+export type SurfaceProgramFeatureInput = Readonly<{
+  environmentFeatures: number;
+  hasDirectionalLights: boolean;
+  hasPunctualLights: boolean;
+  hasTangent: boolean;
+  hasVertexColor: boolean;
+  hasVertexNormal: boolean;
+  hasVirtualBaseColor: boolean;
+  linearOutput: boolean;
+  material: CanonicalSurfaceMaterial;
+  ordinaryTextureMask: number;
+}>;
+
+/** Pure selection of one shader feature set from canonical resident state. */
+export const surfaceProgramFeatureBits = ({
+  environmentFeatures,
+  hasDirectionalLights,
+  hasPunctualLights,
+  hasTangent,
+  hasVertexColor,
+  hasVertexNormal,
+  hasVirtualBaseColor,
+  linearOutput,
+  material,
+  ordinaryTextureMask,
+}: SurfaceProgramFeatureInput): number => {
   let features = material.alphaBlend === true ? SURFACE_FEATURE_ALPHA_BLEND : 0;
   features |= baseColorTextureFeatureBits(
     (ordinaryTextureMask & 1) !== 0,
     hasVirtualBaseColor,
   );
   if (hasVertexColor) features |= SURFACE_FEATURE_VERTEX_COLOR;
+  if (hasVertexNormal) features |= SURFACE_FEATURE_VERTEX_NORMAL;
   if (linearOutput) features |= SURFACE_FEATURE_LINEAR_OUTPUT;
   if (material.kind !== "standard") {
     return surfaceTexturesUseIdentityCoordinates(material, features)
