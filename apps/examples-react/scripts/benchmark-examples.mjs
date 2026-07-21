@@ -767,7 +767,12 @@ const installBenchmarkHooks = async (session) => {
       ? 'surface'
       : sources.includes('uniform vec4 linearColor')
         ? 'unlit'
-        : sources.includes('uniform sampler2D sceneColor') ? 'presentation' : 'unknown';
+        : sources.includes('uniform sampler2D sceneColor')
+          ? 'presentation'
+          : sources.includes('uniform mat4 viewProjection')
+            && sources.includes('uniform mat4 model')
+            ? 'depth'
+            : 'unknown';
     const instanced = defines('INSTANCED') ? '-instanced' : '';
     const features = [
       ['BASE_COLOR_TEXTURED', 'baseColor'],
