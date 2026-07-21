@@ -68,6 +68,10 @@ import {
 } from "./gpu-admission";
 import { frustumPlanesInto, worldBoundsVisible } from "./surface-visibility";
 import {
+  createCompositeFramePlanWorkspace,
+  planCompositeFrameInto,
+} from "./composite-frame-plan";
+import {
   createDrawableLodSelectionWorkspace,
   lodMembershipsSelected,
   selectDrawableLodsInto,
@@ -99,7 +103,6 @@ import {
 } from "./surface-texture-plan";
 import {
   canonicalSurfaceIsDoubleSided,
-  canonicalTransmissionSceneColorRoughness,
   planGroupedSurfacePasses,
   planSurfacePasses,
   surfaceDrawPassNeedsDepthOrder,
@@ -247,7 +250,7 @@ export class SurfaceGpuOwner {
   #environmentGpuLoadGeneration = 0;
   #environmentGpuLoadRequested = false;
   #environmentGpuPrepared: PreparedRoyalEnvironment | undefined;
-  readonly #frustumPlanes = new Float32Array(24);
+  readonly #compositeFramePlan = createCompositeFramePlanWorkspace();
   readonly #gl: WebGL2RenderingContext;
   readonly #onChanged: () => void;
   readonly #onFailure: (error: unknown) => void;
@@ -280,7 +283,6 @@ export class SurfaceGpuOwner {
   readonly #linearCompositeCapabilities: LinearCompositeCapabilities;
   readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #transmissionCandidateIndices: number[] = [];
-  #transmissionVisibility = new Uint8Array(0);
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
   #virtualTexture: VirtualTextureRuntime | null = null;
   #virtualTextureBindingRevision = -1;
@@ -342,7 +344,7 @@ export class SurfaceGpuOwner {
     this.#compositeBindingRevision = 0;
     this.#transmissionSurfaces = [];
     this.#transmissionCandidateIndices.length = 0;
-    this.#transmissionVisibility = new Uint8Array(0);
+    this.#compositeFramePlan.visibility = new Uint8Array(0);
     this.#terminalPresentationEligible = false;
     this.#terminalPresentationHasAlphaBlend = false;
   }
@@ -523,38 +525,24 @@ export class SurfaceGpuOwner {
     clearColor: LinearRgba,
   ): boolean {
     const scene = this.#scene;
-    let transmissionRequested = false;
-    let sceneColorMaxRoughness = 0;
-    const visibilityStride = this.#transmissionCandidateIndices.length;
-    const visibilityLength = visibilityStride * views.length;
-    if (this.#transmissionVisibility.length < visibilityLength) {
-      this.#transmissionVisibility = new Uint8Array(visibilityLength);
-    }
-    if (scene !== null && this.#transmissionCandidateIndices.length > 0) {
-      for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
-        const view = views[viewIndex]!;
-        frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
-        const visibilityOffset = viewIndex * visibilityStride;
-        for (let slot = 0; slot < visibilityStride; slot += 1) {
-          const sceneIndex = this.#transmissionCandidateIndices[slot]!;
-          const surface = scene.surfaces[sceneIndex]!;
-          const visible = worldBoundsVisible(surface.worldBounds, this.#frustumPlanes);
-          this.#transmissionVisibility[visibilityOffset + slot] = visible ? 1 : 0;
-          if (!visible) continue;
-          transmissionRequested = true;
-          sceneColorMaxRoughness = Math.max(
-            sceneColorMaxRoughness,
-            canonicalTransmissionSceneColorRoughness(surface.material),
-          );
-        }
-      }
-    }
-    const terminalPresentation = scene !== null && terminalPresentationRequested(
+    planCompositeFrameInto(
+      scene?.surfaces ?? [],
+      views,
+      this.#transmissionCandidateIndices,
       this.#terminalPresentationEligible,
       this.#terminalPresentationHasAlphaBlend,
       this.#linearCompositeCapabilities,
+      this.#compositeFramePlan,
     );
-    const compositeRequested = transmissionRequested || terminalPresentation;
+    const {
+      compositeRequested,
+      height,
+      sceneColorMaxRoughness,
+      terminalPresentation,
+      transmissionRequested,
+      visibilityStride,
+      width,
+    } = this.#compositeFramePlan;
     let compositeActive = false;
     if (compositeRequested) {
       const composite = this.#compositeGpu;
@@ -562,12 +550,6 @@ export class SurfaceGpuOwner {
       else {
         composite.setSceneColorRequired(transmissionRequested);
         composite.setSceneColorMaxRoughness(sceneColorMaxRoughness);
-        let width = 1;
-        let height = 1;
-        for (const view of views) {
-          width = Math.max(width, view.viewport.width);
-          height = Math.max(height, view.viewport.height);
-        }
         compositeActive = composite.ensure(
           width,
           height,
@@ -676,7 +658,7 @@ export class SurfaceGpuOwner {
   #prepareView(frameView: SurfaceFrameView): void {
     cameraWorldPositionFromViewInto(this.#cameraPosition, frameView.view);
     this.#cameraPosition[3] = 1;
-    frustumPlanesInto(this.#frustumPlanes, frameView.viewProjection);
+    frustumPlanesInto(this.#compositeFramePlan.frustumPlanes, frameView.viewProjection);
   }
 
   #reconcilePendingResources(state: WebGlStateOwner): void {
@@ -832,11 +814,14 @@ export class SurfaceGpuOwner {
       if (!lodMembershipsSelected(surface.lods, this.#lodSelection.selections)) continue;
       if (transmissionBucket) {
         if (
-          this.#transmissionVisibility[
+          this.#compositeFramePlan.visibility[
             viewIndex * visibilityStride + resource.slot
           ] !== 1
         ) continue;
-      } else if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
+      } else if (!worldBoundsVisible(
+        surface.worldBounds,
+        this.#compositeFramePlan.frustumPlanes,
+      )) continue;
       const program = resource.program;
       state.applySurfaceDraw(this.#drawFrame, resource.drawPacket);
       if (initializedProgram !== program.program) {
@@ -1099,10 +1084,13 @@ export class SurfaceGpuOwner {
           if (
             lodMembershipsSelected(next.surface.lods, this.#lodSelection.selections)
             && (transmissionBucket
-              ? this.#transmissionVisibility[
+              ? this.#compositeFramePlan.visibility[
                   viewIndex * visibilityStride + next.slot
                 ] === 1
-              : worldBoundsVisible(next.surface.worldBounds, this.#frustumPlanes))
+              : worldBoundsVisible(
+                next.surface.worldBounds,
+                this.#compositeFramePlan.frustumPlanes,
+              ))
           ) {
             this.#multiDrawCounts[drawCount] = next.geometry.indexCount;
             this.#multiDrawOffsets[drawCount] = next.geometry.indexOffset;
