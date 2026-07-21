@@ -387,7 +387,9 @@ DPR, remain available, and return VT demand to zero pending pages. It does not
 substitute an emulated device-metrics override.
 
 The script drives the existing Safari tab over the WebKit inspector protocol,
-navigates it to `?bench=auto`, waits for the in-page collector, and writes JSON
+navigates the prior document through `about:blank` so its canceled fetches and
+WebGL teardown cannot be attributed to the measured page, resets diagnostics,
+then navigates to `?bench=auto`, waits for the in-page collector, and writes JSON
 reports under `research/examples-benchmarks/ipad-safari/`. The collector runs
 inside the real route so WebGL hooks install before the canvas initializes; it is
 not a user-facing benchmark UI. Reports are rejected unless route readiness,

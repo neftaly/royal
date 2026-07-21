@@ -437,6 +437,38 @@ const waitForNavigationCommit = async (client, targetId) => {
   throw new Error(`iPad navigation did not commit; lastUrl=${String(lastUrl)}${transport}`);
 };
 
+const resetInspectedDocument = async (client, targetId) => {
+  await evaluate(
+    client,
+    targetId,
+    [
+      'delete globalThis.__royalBrowserBenchmarkError;',
+      'delete globalThis.__royalBrowserBenchmarkReport;',
+      // Prevent physical-device runs from retaining prior WebGL documents in
+      // Safari's back-forward cache on memory-constrained iPads.
+      'globalThis.addEventListener("unload", () => undefined, { once: true });',
+      '"cleared";',
+    ].join(' '),
+    5_000,
+  );
+  await targetCommand(client, targetId, 'Page.navigate', { url: 'about:blank' });
+  const deadline = Date.now() + Math.min(timeoutMs, 15_000);
+  while (Date.now() < deadline) {
+    try {
+      if (await evaluate(client, targetId, 'location.href', 5_000) === 'about:blank') {
+        // WebKit can deliver canceled old-document requests just after commit.
+        // Drain them before the measured document owns the diagnostic window.
+        await sleep(250);
+        return;
+      }
+    } catch {
+      // A process swap may briefly suspend inspector evaluation.
+    }
+    await sleep(100);
+  }
+  throw new Error('iPad reset navigation to about:blank did not commit');
+};
+
 const waitForReport = async (client, targetId) => {
   const deadline = Date.now() + timeoutMs + frames * 1000;
   let lastTransportError;
@@ -733,19 +765,7 @@ const run = async () => {
     if (captureCurrentPage) await preserveCurrentPage(client, targetId, browserDiagnostics);
     const url = benchmarkUrl();
     console.log(`Navigating iPad Safari to ${url}`);
-    await evaluate(
-      client,
-      targetId,
-      [
-        'delete globalThis.__royalBrowserBenchmarkError;',
-        'delete globalThis.__royalBrowserBenchmarkReport;',
-        // Prevent repeated physical-device runs from retaining prior WebGL
-        // documents in Safari's back-forward cache on memory-constrained iPads.
-        'globalThis.addEventListener("unload", () => undefined, { once: true });',
-        '"cleared";',
-      ].join(' '),
-      5_000,
-    );
+    await resetInspectedDocument(client, targetId);
     browserDiagnostics.reset();
     networkCapture.reset();
     await targetCommand(client, targetId, 'Page.navigate', { url });
