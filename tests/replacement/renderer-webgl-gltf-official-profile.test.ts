@@ -35,6 +35,17 @@ describe("official glTF extension-profile oracles", () => {
     expect(prepared.primitives.every(({ material }) => material.kind === "standard")).toBe(true);
   });
 
+  it("executes official core texture transforms while keeping optional clearcoat opaque", () => {
+    const transformed = materials("TextureTransformMultiTest");
+    expect(transformed.length).toBeGreaterThan(0);
+    expect(transformed.some((material) =>
+      material.baseColorTextureCoordinates?.row0[2] !== 0
+      || (
+        material.kind === "standard"
+        && material.normalTextureCoordinates?.row0[2] !== 0
+      ))).toBe(true);
+  });
+
   it("lowers the official punctual-light asset to canonical directional lights", () => {
     const prepared = prepareStaticGlb(
       fixture("DirectionalLight"),
@@ -80,7 +91,6 @@ describe("official glTF extension-profile oracles", () => {
   it.each([
     ["ClearCoatCarPaint", "KHR_materials_clearcoat"],
     ["IridescenceSuzanne", "KHR_materials_iridescence"],
-    ["TextureTransformMultiTest", "outside Royal's supported placement profile"],
   ])("rejects unsupported required semantics in %s", (name, reason) => {
     expect(() => prepareStaticGlb(fixture(name), `official:${name}`, `${name}.glb`))
       .toThrow(reason);

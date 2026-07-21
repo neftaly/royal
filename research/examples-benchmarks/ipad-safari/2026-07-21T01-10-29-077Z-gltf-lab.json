@@ -1,0 +1,388 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": [
+      {
+        "kind": "console",
+        "level": "error",
+        "text": "WebSocket connection to 'ws://192.168.1.97:4742/?token=PDDhDt4wtRwz' failed: WebSocket is closed due to suspension.",
+        "timestamp": 1784596223.393108,
+        "url": "",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      {
+        "kind": "console",
+        "level": "debug",
+        "text": "[vite] connecting...",
+        "timestamp": 1784596223.573142,
+        "url": "http://192.168.1.97:4673/@vite/client",
+        "lineNumber": 851,
+        "columnNumber": 14
+      },
+      {
+        "kind": "console",
+        "level": "debug",
+        "text": "[vite] connected.",
+        "timestamp": 1784596223.64195,
+        "url": "http://192.168.1.97:4673/@vite/client",
+        "lineNumber": 955,
+        "columnNumber": 17
+      }
+    ]
+  },
+  "cameraDrag": false,
+  "coldCache": false,
+  "receivedAt": "2026-07-21T01:10:29.621Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 368,
+        "cssWidth": 736,
+        "height": 736,
+        "width": 1472
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_polygon_offset_clamp",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBKIT_WEBGL_compressed_texture_pvrtc"
+        ],
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-lab",
+      "path": "/gltf-lab",
+      "sourceFile": "examples/cases/GltfLab.tsx",
+      "title": "Khronos Compatibility Lab"
+    },
+    "frameStats": {
+      "averageMs": 16.708333333333332,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 1,
+      "maxMs": 19,
+      "minMs": 15,
+      "p50Ms": 17,
+      "p95Ms": 18,
+      "p99Ms": 18,
+      "requestedSampleCount": 24,
+      "sampleCount": 24,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 30000
+    },
+    "frameTiming": {
+      "callbackCalls": 24,
+      "callbackMaxMs": 1.0000000000009095,
+      "callbackTotalMs": 2.0000000000009095,
+      "supported": true
+    },
+    "generatedAt": "2026-07-21T01:10:29.077Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 0,
+        "bindTexture": 0,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 0,
+        "drawElements": 0,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 0,
+        "multiDrawDraws": 0,
+        "nonInstancedDrawCalls": 0,
+        "stateChanges": 0,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 0,
+        "uniformMatrixCalls": 0,
+        "useProgram": 0
+      },
+      "setup": {
+        "bindBuffer": 126,
+        "bindTexture": 11,
+        "bindVertexArray": 66,
+        "bufferDataBytes": 79684,
+        "bufferDataCalls": 22,
+        "bufferSubDataBytes": 79684,
+        "bufferSubDataCalls": 104,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 45,
+        "drawElements": 45,
+        "drawElementsInstanced": 0,
+        "instancedDrawCalls": 0,
+        "multiDrawCalls": 0,
+        "multiDrawDraws": 0,
+        "nonInstancedDrawCalls": 45,
+        "stateChanges": 220,
+        "texImage2D": 0,
+        "texSubImage2D": 4,
+        "uniformCalls": 351,
+        "uniformMatrixCalls": 102,
+        "useProgram": 17
+      }
+    },
+    "options": {
+      "autorun": true,
+      "cameraDrag": false,
+      "frames": 24,
+      "timeoutMs": 30000,
+      "warmupFrames": 8
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 915,
+        "duration": 918,
+        "loadEventEnd": 918,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 134,
+        "totalDecodedBodySize": 5742922,
+        "totalEncodedBodySize": 5742922,
+        "totalTransferSize": 5783122
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 3,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 4,
+              "imageFailures": 0,
+              "imagesLoaded": 4,
+              "imageRequests": 4,
+              "lightCount": 0,
+              "nodeCount": 29,
+              "phaseMs": {
+                "firstUsable": 638,
+                "imagesComplete": 956.0000000000005,
+                "preparation": 439,
+                "externalResourceRead": 0,
+                "sourceRead": 199
+              },
+              "primitiveCount": 29,
+              "src": "/fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 4194304,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 5672084,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 0,
+          "resources": 4
+        },
+        "virtualTexturing": null
+      },
+      "beforeFrames": {
+        "frame": 3,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 4,
+              "imageFailures": 0,
+              "imagesLoaded": 4,
+              "imageRequests": 4,
+              "lightCount": 0,
+              "nodeCount": 29,
+              "phaseMs": {
+                "firstUsable": 638,
+                "imagesComplete": 956.0000000000005,
+                "preparation": 439,
+                "externalResourceRead": 0,
+                "sourceRead": 199
+              },
+              "primitiveCount": 29,
+              "src": "/fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 4194304,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 5672084,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 0,
+          "resources": 4
+        },
+        "virtualTexturing": null
+      },
+      "delta": {
+        "frame": 0,
+        "gltfInstancing": null,
+        "resourcePressure": null,
+        "virtualTexturing": null
+      },
+      "setup": {
+        "frame": 3,
+        "gltfInstancing": null,
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "imageCandidates": 4,
+              "imageFailures": 0,
+              "imagesLoaded": 4,
+              "imageRequests": 4,
+              "lightCount": 0,
+              "nodeCount": 29,
+              "phaseMs": {
+                "firstUsable": 638,
+                "imagesComplete": 956.0000000000005,
+                "preparation": 439,
+                "externalResourceRead": 0,
+                "sourceRead": 199
+              },
+              "primitiveCount": 29,
+              "src": "/fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
+              "status": "ready",
+              "variantNames": []
+            }
+          ]
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "recoveries": 0,
+          "state": "available"
+        },
+        "resourcePressure": {
+          "activePreparationJobs": 0,
+          "activeTextureDecodes": 0,
+          "admittedGeometryUploadBytes": 0,
+          "admittedOrdinaryTextureUploadBytes": 4194304,
+          "decodeReservationLimit": 32,
+          "decodeReservations": 0,
+          "decodedTextureHandoffBytes": 0,
+          "decodedTextureHandoffThresholdBytes": 67108864,
+          "deferredGeometryUploads": 0,
+          "deferredOrdinaryTextureUploads": 0,
+          "ordinaryTextureUploadBudgetBytes": 4194304,
+          "preparationJobLimit": 8,
+          "queuedPreparationJobs": 0,
+          "persistentGpuBudgetBytes": 268435456,
+          "persistentGpuDeniedClaims": 0,
+          "persistentGpuRetainedBytes": 5672084,
+          "pendingOrdinaryTextureStorageRepresentations": 0,
+          "pendingSurfaceUploads": 0
+        },
+        "textureResidency": {
+          "fitted": 0,
+          "resources": 4
+        },
+        "virtualTexturing": null
+      }
+    },
+    "source": {
+      "buildId": "a43cf5487eae-dirty-mrtyi7ut",
+      "builtAt": "2026-07-21T01:10:09.208Z",
+      "dirty": true,
+      "revision": "a43cf5487eaefae03a75ac17f0b6499995f53513"
+    },
+    "url": "http://192.168.1.97:4673/gltf-lab?case=TextureTransformMultiTest&bench=auto&frames=24&warmup=8&timeoutMs=30000&run=1784596223298",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 4056.000000000001
+  }
+}

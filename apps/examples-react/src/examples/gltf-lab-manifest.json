@@ -1196,7 +1196,7 @@
     },
     {
       "name": "TextureTransformMultiTest",
-      "status": "expected-required-failure",
+      "status": "core-fallback-oracle",
       "path": "fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
       "bytes": 388264,
       "sha256": "569aedb53822d5721e7e06af5983348683d4b2ffb1d469338ad4f02bf6a74911",

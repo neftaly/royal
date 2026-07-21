@@ -252,6 +252,42 @@ describe("static glTF preparation core", () => {
     ];
     expect(() => prepareStaticGlb(staticTriangleGlb(duplicateUsed), "duplicate-used"))
       .toThrow("extensionsUsed[2]: must not be duplicated");
+    const opaqueOptionalPayload = staticTriangleDocument();
+    opaqueOptionalPayload.extensionsRequired = ["KHR_materials_unlit", "KHR_texture_transform"];
+    opaqueOptionalPayload.extensionsUsed = [
+      "KHR_materials_unlit",
+      "KHR_materials_clearcoat",
+      "KHR_texture_transform",
+    ];
+    opaqueOptionalPayload.materials = [{
+      extensions: {
+        KHR_materials_clearcoat: {
+          clearcoatTexture: {
+            extensions: { KHR_texture_transform: { offset: [0.25, 0.5] } },
+            index: 0,
+          },
+        },
+        KHR_materials_unlit: {},
+      },
+    }];
+    expect(prepareStaticGlb(
+      staticTriangleGlb(opaqueOptionalPayload),
+      "opaque-optional-payload",
+    ).primitives).toHaveLength(1);
+    const executablePayload = staticTriangleDocument();
+    requireExtensions(executablePayload, "KHR_materials_specular", "KHR_texture_transform");
+    executablePayload.materials = [{
+      extensions: {
+        KHR_materials_specular: {
+          futureTexture: {
+            extensions: { KHR_texture_transform: { offset: [0.25, 0.5] } },
+            index: 0,
+          },
+        },
+      },
+    }];
+    expect(() => prepareStaticGlb(staticTriangleGlb(executablePayload), "executable-payload"))
+      .toThrow("outside Royal's supported placement profile");
     expect(() => prepareStaticGlb(staticTriangleGlb(undefined, 3), "bad-index", "bad.glb"))
       .toThrow("vertex index is out of range");
   });

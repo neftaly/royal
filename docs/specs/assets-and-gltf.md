@@ -119,6 +119,15 @@ Unknown `extensionsUsed` declarations do not fail core content. An unknown
 is published. Royal MUST NOT claim support for imaginary, draft, or similarly
 named extensions merely because it can ignore them.
 
+Validation follows the executable extension graph. Payloads of unsupported
+optional extensions are opaque because their core fallback does not execute
+those fields; supported extension payloads remain recursively validated. Thus a
+required `KHR_texture_transform` used by core texture infos MUST be honored,
+while another occurrence nested only inside ignored optional clearcoat data does
+not turn otherwise-valid core fallback into an asset failure. Extension objects
+on the executable graph still MUST be declared in `extensionsUsed`, and every
+required occurrence there MUST use an implemented placement.
+
 The Draco adapter loads only when demanded. Codec output is validated as
 strictly as uncompressed input. Codec or worker absence for a required path
 produces an explicit asset failure; it MUST NOT hang. Meshopt and glTF Basis

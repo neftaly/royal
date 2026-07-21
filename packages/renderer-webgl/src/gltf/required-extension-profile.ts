@@ -107,26 +107,30 @@ export const validateRequiredExtensionProfile = (
     const objectValue = value as JsonObject;
     const extensions = objectValue.extensions;
     if (extensions !== undefined) {
-      const extensionObject = typeof extensions === "object"
+      const extensionObject: JsonObject = typeof extensions === "object"
         && extensions !== null
         && !Array.isArray(extensions)
-        ? extensions
+        ? extensions as JsonObject
         : fail(label, extensionsPath(path), "must be an object");
       for (const extension of Object.keys(extensionObject)) {
         if (!used.has(extension)) {
           fail(label, extensionPath(path, extension), "must be declared in extensionsUsed");
         }
-      }
-      for (const extension of required) {
-        if (!Object.hasOwn(extensionObject, extension)) continue;
-        const profile = REQUIRED_EXTENSION_PLACEMENTS[extension]!;
-        if (!profile(path)) {
+        const profile = REQUIRED_EXTENSION_PLACEMENTS[extension];
+        if (required.has(extension) && !profile!(path)) {
           fail(label, extensionPath(path, extension), "is outside Royal's supported placement profile");
+        }
+        // Optional unsupported extensions are opaque fallback branches.
+        // Supported payloads remain part of the executable declaration graph.
+        if (profile !== undefined) {
+          visit(extensionObject[extension], extensionPath(path, extension));
         }
       }
     }
     for (const [key, child] of Object.entries(objectValue)) {
-      visit(child, path.length === 0 ? key : `${path}.${key}`);
+      if (key !== "extensions") {
+        visit(child, path.length === 0 ? key : `${path}.${key}`);
+      }
     }
   };
   visit(document, "");

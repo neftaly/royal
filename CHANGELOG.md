@@ -48,6 +48,10 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Made unsupported optional glTF extension payloads opaque to required-placement
+  validation while recursively validating extension payloads Royal executes,
+  preserving core `KHR_texture_transform` behavior in the official mixed
+  clearcoat oracle.
 - Decoupled intermediate geometry and texture commitment from scene
   presentation, cutting the Bistro startup profile from 3,185 to 1,110 draws
   while preserving urgent first-usable and terminal frames.
