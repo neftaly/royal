@@ -159,6 +159,8 @@ describe("canvas root asset publication", () => {
     expect(root.getSnapshot().resources.asyncPreparation).toEqual({
       activeJobs: 1,
       jobLimit: 1,
+      queuedDetailJobs: 1,
+      queuedForegroundJobs: 0,
       queuedJobs: 1,
     });
     expect(decodeTexture).not.toHaveBeenCalled();
@@ -168,6 +170,8 @@ describe("canvas root asset publication", () => {
     expect(root.getSnapshot().resources.asyncPreparation).toEqual({
       activeJobs: 0,
       jobLimit: 1,
+      queuedDetailJobs: 0,
+      queuedForegroundJobs: 0,
       queuedJobs: 0,
     });
   });

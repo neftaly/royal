@@ -30,11 +30,9 @@ that same stream.
 
 ## Root-wide budgets
 
-Each root admits work against five public ceilings:
+Each root exposes three immutable creation ceilings:
 
-- retained decoded CPU bytes (default 512 MiB);
 - retained persistent GPU bytes (default 256 MiB);
-- concurrent transient/scratch peak bytes (default 192 MiB);
 - ordinary-texture GPU upload traffic per rendered frame (default 4 MiB);
 - concurrent asynchronous preparation jobs (default 8).
 
@@ -43,13 +41,29 @@ to fill. Hardware limits and subsystem-specific correctness constraints may be
 stricter. Omitted overrides retain defaults; options are immutable for the root
 lifetime.
 
-The asynchronous job ceiling is one root-owned FIFO admission authority shared
-by glTF asset pipelines, ordinary texture decode, authored-VT transport/decode,
-and prefiltered-environment work. A job is an admitted asset-preparation
-lifecycle, not a promise that a browser created a worker or only one underlying
-request. A queued claim can be aborted without starting; active claims retain
-their slot until their promise settles. Root diagnostics expose the immutable
-limit and current active/queued counts without polling or waking rendering.
+The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
+authority shared by glTF asset pipelines, ordinary texture decode, authored-VT
+transport/decode, and prefiltered-environment work. Newly claimed scene,
+environment, and visible-VT work uses the foreground lane, so an existing image
+detail backlog cannot delay first usable geometry. Ordinary texture decode uses
+the detail lane. FIFO order is preserved within each lane; after at most four
+foreground starts while detail remains queued, one detail job starts. Active
+work is never preempted.
+
+A job is an admitted asset-preparation lifecycle, not a promise that a browser
+created a worker or only one underlying request. A queued claim can be aborted
+without starting; active claims retain their slot until their promise settles.
+Root diagnostics expose the immutable limit plus active, total queued,
+foreground queued, and detail queued counts without polling or waking rendering.
+
+Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
+ceiling. Browser image decode allocations and worker scratch peaks are not
+reliably observable or predictable before work starts. Ordinary texture decode
+instead has explicit source-count, reservation-count, and decoded-handoff byte
+bounds; Draco workers, VT reads, environment artifacts, and GPU/upload domains
+retain their own exact limits. A future cross-domain byte admission policy
+requires measured peak evidence and an accurate reservation contract rather
+than estimates attached to heterogeneous promises.
 
 Upload-traffic ceilings are reset exactly once per submitted canvas or XR
 frame. New ordinary-texture base-level bytes consume the public texture ceiling

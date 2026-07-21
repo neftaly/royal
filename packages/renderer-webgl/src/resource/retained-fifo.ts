@@ -33,4 +33,8 @@ export class RetainedFifo<Value> {
   enqueue(value: Value): void {
     this.#values.push(value);
   }
+
+  peek(): Value | undefined {
+    return this.#values[this.#head];
+  }
 }

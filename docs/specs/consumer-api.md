@@ -216,8 +216,11 @@ second copy of the glTF merely to populate variant controls or asset summaries.
 with default 8. It bounds admitted asynchronous asset-preparation lifecycles
 across glTF, ordinary textures, authored VT, and prefiltered environments; it
 does not request workers. Broad renderer diagnostics expose
-`resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs }` for
-operational inspection. Focused asset status remains the product lifecycle.
+`resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs,
+queuedForegroundJobs, queuedDetailJobs }` for operational inspection. The two
+queued lane counts sum to `queuedJobs`; they diagnose scheduling and are not
+separate consumer lifecycles. Focused asset status remains the product
+lifecycle.
 
 `rendererOptions.ordinaryTextureUploadByteBudgetPerFrame` is an immutable positive byte
 ceiling with default 4 MiB. Broad diagnostics expose

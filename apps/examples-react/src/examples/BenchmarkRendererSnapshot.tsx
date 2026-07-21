@@ -133,6 +133,10 @@ export const BenchmarkRendererSnapshot = ({
           ordinaryTextureUploadBudgetBytes:
             current.resources.ordinaryTextureUploads.budgetBytes,
           preparationJobLimit: current.resources.asyncPreparation.jobLimit,
+          queuedDetailPreparationJobs:
+            current.resources.asyncPreparation.queuedDetailJobs,
+          queuedForegroundPreparationJobs:
+            current.resources.asyncPreparation.queuedForegroundJobs,
           queuedPreparationJobs: current.resources.asyncPreparation.queuedJobs,
           persistentGpuBudgetBytes: current.resources.persistentGpu.budgetBytes,
           persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,

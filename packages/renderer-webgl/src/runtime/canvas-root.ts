@@ -485,7 +485,7 @@ export class CanvasRoot implements RendererRoot {
       ...(platform.readPrefilteredEnvironment === undefined
         ? {}
         : { read: platform.readPrefilteredEnvironment }),
-      schedule: this.#asyncPreparation.run,
+      schedule: this.#asyncPreparation.runForeground,
     });
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: () => this.#refreshPreparedScene(),
@@ -493,7 +493,7 @@ export class CanvasRoot implements RendererRoot {
       prepare: lazyBrowserGltfPreparer(),
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
-      schedule: this.#asyncPreparation.run,
+      schedule: this.#asyncPreparation.runForeground,
     });
     this.#textureAssets = new TextureAssetOwner({
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(),
@@ -1056,7 +1056,7 @@ export class CanvasRoot implements RendererRoot {
           this.#invalidatePresentation();
         },
         this.#persistentGpuBudget,
-        this.#asyncPreparation.run,
+        this.#asyncPreparation.runForeground,
         this.#automaticVirtualTexturing ? {
           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
           decoded: (asset) => this.#textureAssets.decoded(asset),

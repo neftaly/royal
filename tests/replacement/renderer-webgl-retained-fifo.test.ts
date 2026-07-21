@@ -19,6 +19,8 @@ describe("retained FIFO", () => {
     expect(queue.dequeue()).toBeUndefined();
     const retained = { value: 3 };
     queue.enqueue(retained);
+    expect(queue.peek()).toBe(retained);
     expect(queue.dequeue()).toBe(retained);
+    expect(queue.peek()).toBeUndefined();
   });
 });
