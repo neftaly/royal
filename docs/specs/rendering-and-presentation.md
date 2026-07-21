@@ -118,6 +118,13 @@ Lighting includes directional, point, spot, explicit scene environment, and
 asset-scoped fallback environment. Environment precedence is semantic and
 independent of asynchronous completion order.
 
+Once every selected material is known to be unlit, canonical lowering erases
+environment and direct-light state before resource ownership. Variant and
+material-LOD selection use the same pure material-set rule as surface emission,
+so an inactive base or alternate material cannot keep IBL work alive. An
+unresolved glTF remains conservatively lighting-capable to preserve concurrent
+environment preparation for the common lit case.
+
 The current profile does not promise shadow maps, screen-space ambient
 occlusion, or another visibility term for direct lights. Directional and
 punctual lights are unshadowed; material occlusion textures affect environment

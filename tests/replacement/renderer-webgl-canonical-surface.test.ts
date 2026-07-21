@@ -430,6 +430,7 @@ describe("canonical direct surface lowering", () => {
     });
     const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 5] }),
+      environment: studioEnvironment(),
       nodes: [node],
     }));
     expect(prepared.surfaces).toHaveLength(0);
@@ -440,6 +441,7 @@ describe("canonical direct surface lowering", () => {
     });
     expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toBe(pickingGeometry.indices);
     expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toBe(pickingGeometry.positions);
+    expect(prepared.environment).toBeDefined();
   });
 
   it("selects an exact glTF material variant and falls back to the base material", () => {
@@ -450,6 +452,7 @@ describe("canonical direct surface lowering", () => {
       KHR_materials_variants: { variants: [{ name: "Ruby" }] },
     };
     const materials = document.materials as Array<Record<string, unknown>>;
+    delete materials[0]!.extensions;
     materials.push({
       extensions: { KHR_materials_unlit: {} },
       pbrMetallicRoughness: { baseColorFactor: [0.9, 0.01, 0.03, 1] },
@@ -462,12 +465,18 @@ describe("canonical direct surface lowering", () => {
     const ruby = gltf({ materialVariant: "Ruby", src: "/variant.glb" });
     const unknown = gltf({ materialVariant: "Unknown", src: "/variant.glb" });
     const render = (node: typeof ruby) => prepareCanonicalSurfaceScene(
-      scene({ camera: perspectiveCamera({}), nodes: [node] }),
+      scene({
+        camera: perspectiveCamera({}),
+        environment: studioEnvironment(),
+        nodes: [node],
+      }),
       () => asset,
     );
 
     expect(render(ruby).surfaces[0]!.material.baseColor).toEqual([0.9, 0.01, 0.03, 1]);
+    expect(render(ruby).environment).toBeUndefined();
     expect(render(unknown).surfaces[0]!.material.baseColor).toEqual([0.2, 0.4, 0.8, 1]);
+    expect(render(unknown).environment).toBeDefined();
   });
 
   it("shares one world-space LOD selection bound across authored levels", () => {
@@ -539,13 +548,16 @@ describe("canonical direct surface lowering", () => {
     materials[0]!.extensions = { KHR_materials_unlit: {}, MSFT_lod: { ids: [1] } };
     materials[0]!.extras = { MSFT_screencoverage: [0.5, 0] };
     materials.push({
-      extensions: { KHR_materials_unlit: {} },
       pbrMetallicRoughness: { baseColorFactor: [0.05, 0.1, 0.2, 1] },
     });
     const asset = prepareStaticGlb(staticTriangleGlb(document), "material-lod-asset");
     const node = gltf({ src: "/material-lod.glb" });
     const prepared = prepareCanonicalSurfaceScene(
-      scene({ camera: perspectiveCamera({}), nodes: [node] }),
+      scene({
+        camera: perspectiveCamera({}),
+        environment: studioEnvironment(),
+        nodes: [node],
+      }),
       () => asset,
     );
 
@@ -556,6 +568,9 @@ describe("canonical direct surface lowering", () => {
       [0.2, 0.4, 0.8, 1],
       [0.05, 0.1, 0.2, 1],
     ]);
+    expect(prepared.surfaces.map((surface) => surface.material.kind))
+      .toEqual(["unlit", "standard"]);
+    expect(prepared.environment).toBeDefined();
     expect(prepared.lodGroups).toMatchObject([{
       group: 0,
       levels: [0, 1],
@@ -619,6 +634,7 @@ describe("canonical direct surface lowering", () => {
       ],
     }));
     expect(prepared.directionalLights).toEqual([]);
+    expect(prepared.environment).toBeUndefined();
     expect(prepared.surfaces[0]!.material.kind).toBe("unlit");
   });
 
@@ -669,8 +685,10 @@ describe("canonical direct surface lowering", () => {
 
   it("composes authored glTF punctual lights through the same scene ABI", () => {
     const document = staticTriangleDocument();
-    document.extensionsRequired = ["KHR_materials_unlit", "KHR_lights_punctual"];
-    document.extensionsUsed = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensionsRequired = ["KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_lights_punctual"];
+    const materials = document.materials as Array<Record<string, unknown>>;
+    delete materials[0]!.extensions;
     document.extensions = {
       KHR_lights_punctual: { lights: [{ intensity: 3, type: "point" }] },
     };
@@ -687,6 +705,28 @@ describe("canonical direct surface lowering", () => {
       kind: "point",
       position: [11, 2, 0],
     }]);
+  });
+
+  it("erases glTF lights and environment state when selected materials are unlit", () => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_materials_unlit", "KHR_lights_punctual"];
+    document.extensions = {
+      KHR_lights_punctual: { lights: [{ intensity: 3, type: "point" }] },
+    };
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "unlit-light-asset");
+    const node = gltf({ src: "/unlit-light.glb" });
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      environment: studioEnvironment(),
+      nodes: [node],
+    }), () => asset);
+
+    expect(prepared.surfaces[0]!.material.kind).toBe("unlit");
+    expect(prepared.environment).toBeUndefined();
+    expect(prepared.punctualLights).toEqual([]);
   });
 
   it("normalizes the built-in studio environment only when a lit surface demands it", () => {

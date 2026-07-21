@@ -20,7 +20,11 @@ import {
   transformPoint,
   type Mat4,
 } from "../math/mat4";
-import type { PreparedStaticGltf } from "../gltf/static-asset";
+import type {
+  PreparedStaticGltf,
+  PreparedStaticGltfPrimitive,
+  PreparedStaticMaterialLod,
+} from "../gltf/static-asset";
 import {
   prepareGltfInstanceBatches,
   type IndexedStaticInstanceBatch,
@@ -325,6 +329,29 @@ const prepareEnvironment = (
   };
 };
 
+type SelectedStaticMaterial = CanonicalSurfaceMaterial | PreparedStaticMaterialLod;
+
+/** One variant/LOD selection rule shared by lighting demand and surface emission. */
+const selectStaticPrimitiveMaterial = (
+  primitive: PreparedStaticGltfPrimitive,
+  variant: string | undefined,
+): SelectedStaticMaterial => {
+  if (variant === undefined) return primitive.materialLod ?? primitive.material;
+  const material = primitive.materialVariants?.get(variant);
+  if (material === undefined) return primitive.materialLod ?? primitive.material;
+  return primitive.materialVariantLods?.get(variant) ?? material;
+};
+
+const selectedStaticPrimitiveIsLit = (
+  primitive: PreparedStaticGltfPrimitive,
+  variant: string | undefined,
+): boolean => {
+  const material = selectStaticPrimitiveMaterial(primitive, variant);
+  return "levels" in material
+    ? material.levels.some((level) => level.kind === "standard")
+    : material.kind === "standard";
+};
+
 /** Validates and lowers a complete direct scene before any GL resource work. */
 export const prepareCanonicalSurfaceScene = (
   scene: Scene,
@@ -337,10 +364,17 @@ export const prepareCanonicalSurfaceScene = (
 ): CanonicalSurfaceScene => {
   let requiresLighting = false;
   for (const node of scene.nodes) {
+    if (node.kind === "mesh" && node.material.kind === "standard") {
+      requiresLighting = true;
+      break;
+    }
+    if (node.kind !== "gltf" && node.kind !== "gltf-instances") continue;
+    const prepared = preparedGltf(node);
+    // Preserve eager IBL preparation while the asset's selected materials are unknown.
     if (
-      node.kind === "gltf"
-      || node.kind === "gltf-instances"
-      || (node.kind === "mesh" && node.material.kind === "standard")
+      prepared === undefined
+      || prepared.primitives.some((primitive) =>
+        selectedStaticPrimitiveIsLit(primitive, node.materialVariant))
     ) {
       requiresLighting = true;
       break;
@@ -427,6 +461,7 @@ export const prepareCanonicalSurfaceScene = (
       if (prepared === undefined) continue;
       geometryLodGroupIds.length = 0;
       for (const light of prepared.lights) {
+        if (!requiresLighting) break;
         const color: LinearRgba = [
           light.color[0] * light.intensity,
           light.color[1] * light.intensity,
@@ -504,14 +539,14 @@ export const prepareCanonicalSurfaceScene = (
         const explicitBatch = node.kind === "gltf-instances"
           ? instanceBatch as PreparedExplicitInstanceBatch
           : undefined;
-        const materialSource = node.materialVariant === undefined
-          ? primitive.material
-          : primitive.materialVariants?.get(node.materialVariant) ?? primitive.material;
-        const materialLod = node.materialVariant === undefined
-          ? primitive.materialLod
-          : primitive.materialVariants?.has(node.materialVariant) === true
-            ? primitive.materialVariantLods?.get(node.materialVariant)
-            : primitive.materialLod;
+        const selectedMaterial = selectStaticPrimitiveMaterial(
+          primitive,
+          node.materialVariant,
+        );
+        const materialLod = "levels" in selectedMaterial ? selectedMaterial : undefined;
+        const materialSource = "levels" in selectedMaterial
+          ? selectedMaterial.levels[0]!
+          : selectedMaterial;
         const model = instanceBatch === undefined
           ? multiplyMat4Into(identityMat4(), rootModel, primitive.localModel)
           : rootModel;
