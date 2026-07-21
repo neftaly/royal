@@ -210,8 +210,9 @@ regenerates only the prefix reachable by the greatest visible authored
 roughness; sharp transmission uses level zero, and a roughness texture cannot
 raise the material's multiplicative roughness-factor ceiling. The shader keeps
 the complete-resolution LOD scale, so truncating unreachable suffix levels does
-not change samples within that ceiling. Thin transmission samples scene color
-at the current fragment and does not compile volume-only refraction or
+not change samples within that ceiling. Sampled transmitted radiance is tinted
+by the material's fully sampled base-color RGB. Thin transmission samples scene
+color at the current fragment and does not compile volume-only refraction or
 attenuation work. A nonzero-thickness volume variant projects the IOR-bent ray
 back into the current view, and attenuation uses its grazing-angle-adjusted
 travel distance. Samples outside the current view fall back to the material's

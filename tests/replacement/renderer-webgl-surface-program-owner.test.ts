@@ -297,6 +297,7 @@ describe("surface program ownership", () => {
     if (thin.kind !== "standard") throw new Error("expected a standard thin program");
     expect(thin.attenuationColor).toBeNull();
     expect(thinFragment).not.toContain("#define VOLUME_MATERIAL");
+    expect(thinFragment).toContain("* surfaceBaseColor.rgb;");
     expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
       expect.anything(),
       "attenuationColor",
@@ -316,6 +317,8 @@ describe("surface program ownership", () => {
     if (volume.kind !== "standard") throw new Error("expected a standard volume program");
     expect(volume.attenuationColor).not.toBeNull();
     expect(volumeFragment).toContain("#define VOLUME_MATERIAL");
+    expect(volumeFragment).toContain("? textureLod(sceneColor, sampleCoordinate, sourceLod).rgb * surfaceBaseColor.rgb");
+    expect(volumeFragment).toContain("if (sourceAvailable && attenuationColor.a > 0.0)");
   });
 
   it("keeps ordinary programs and vertex stages across lazy VT source changes", () => {

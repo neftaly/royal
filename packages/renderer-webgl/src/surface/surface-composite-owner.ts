@@ -72,13 +72,14 @@ uniform sampler2D thicknessTexture;
   float sourceLod = roughness * transmissionFactors.w;
 #ifdef VOLUME_MATERIAL
   vec3 transmitted = sourceAvailable
-    ? textureLod(sceneColor, sampleCoordinate, sourceLod).rgb
+    ? textureLod(sceneColor, sampleCoordinate, sourceLod).rgb * surfaceBaseColor.rgb
     : linear;
 #else
-  vec3 transmitted = textureLod(sceneColor, sourceCoordinate, sourceLod).rgb;
+  vec3 transmitted = textureLod(sceneColor, sourceCoordinate, sourceLod).rgb
+    * surfaceBaseColor.rgb;
 #endif
 #ifdef VOLUME_MATERIAL
-  if (attenuationColor.a > 0.0) {
+  if (sourceAvailable && attenuationColor.a > 0.0) {
     transmitted *= pow(
       max(attenuationColor.rgb, vec3(0.000001)),
       vec3(transmissionDistance * attenuationColor.a)
