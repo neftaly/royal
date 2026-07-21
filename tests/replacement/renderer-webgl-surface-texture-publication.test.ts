@@ -5,6 +5,7 @@ import {
   perspectiveCamera,
   planeGeometry,
   scene,
+  triangleGeometry,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
@@ -25,6 +26,112 @@ import { fakeGl } from "./support/canvas-root-harness";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 describe("retained surface texture publication", () => {
+  it("preserves exact GPU bindings across randomized progressive batches", () => {
+    forEachFuzzCase({
+      cases: 16,
+      envName: "ROYAL_TEXTURE_BINDING_FUZZ_CASES",
+      seed: 0xb1ad_1d5,
+    }, ({ random }) => {
+      let activeUnit = 0;
+      const bound: Array<WebGLTexture | null | undefined> = [];
+      const uploadedAssetByTexture = new Map<WebGLTexture, number>();
+      const draws: Array<readonly [count: number, texture: WebGLTexture | null | undefined]> = [];
+      const gl = fakeGl();
+      vi.mocked(gl.createTexture).mockImplementation(() => ({} as WebGLTexture));
+      vi.mocked(gl.activeTexture).mockImplementation((unit: number) => {
+        activeUnit = unit - gl.TEXTURE0;
+      });
+      vi.mocked(gl.bindTexture).mockImplementation((target: number, texture: WebGLTexture | null) => {
+        if (target === gl.TEXTURE_2D) bound[activeUnit] = texture;
+      });
+      vi.mocked(gl.texSubImage2D).mockImplementation((...args: unknown[]) => {
+        const source = args.at(-1) as { readonly assetIndex?: number };
+        const texture = bound[activeUnit];
+        if (texture !== null && texture !== undefined && source.assetIndex !== undefined) {
+          uploadedAssetByTexture.set(texture, source.assetIndex);
+        }
+      });
+      gl.drawElements.mockImplementation((_mode, count) => {
+        draws.push([count, bound[0]]);
+      });
+
+      const assets = Array.from({ length: 16 }, (_value, index) => imageTexture({
+        src: `/gpu-publication-${index}.avif`,
+        version: `revision-${index}`,
+      }));
+      const authored = scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: assets.map((texture, index) => {
+          const vertexCount = (index + 1) * 3;
+          const positions = Array<number>(vertexCount * 3);
+          const textureCoordinates = Array<number>(vertexCount * 2);
+          for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+            const corner = vertex % 3;
+            positions[vertex * 3] = corner === 1 ? 1 : 0;
+            positions[vertex * 3 + 1] = corner === 2 ? 1 : 0;
+            positions[vertex * 3 + 2] = 0;
+            textureCoordinates[vertex * 2] = corner === 1 ? 1 : 0;
+            textureCoordinates[vertex * 2 + 1] = corner === 2 ? 1 : 0;
+          }
+          return mesh({
+            geometry: triangleGeometry({ positions, textureCoordinates }),
+            material: unlitMaterial({ texture }),
+          });
+        }),
+      });
+      const decoded = new Map<string, DecodedTextureSource>();
+      const resolve = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
+        decoded.get(decodedTextureKey(asset));
+      let prepared = prepareCanonicalSurfaceScene(authored, undefined, undefined, resolve);
+      const owner = new SurfaceGpuOwner(gl);
+      const state = new WebGlStateOwner(gl);
+      const views = [{
+        view: identityMat4(),
+        viewProjection: identityMat4(),
+        viewport: { height: 100, width: 100, x: 0, y: 0 },
+      }];
+      const remaining = assets.map((_asset, index) => index);
+      owner.setScene(prepared);
+
+      try {
+        while (remaining.length > 0) {
+          const batch: string[] = [];
+          const count = Math.min(remaining.length, random.int(1, 6));
+          for (let offset = 0; offset < count; offset += 1) {
+            const selected = random.int(0, remaining.length);
+            const assetIndex = remaining.splice(selected, 1)[0]!;
+            const asset = assets[assetIndex]!;
+            const key = decodedTextureKey(asset);
+            decoded.set(key, {
+              height: 2,
+              source: { assetIndex } as unknown as ImageBitmap,
+              width: 2,
+            });
+            batch.push(key);
+          }
+          prepared = refreshCanonicalSurfaceTextures(prepared, batch, resolve);
+          owner.publishTextureBatch(prepared, batch);
+          draws.length = 0;
+          owner.beginFrame();
+          owner.drawViews(views, null, state, [0, 0, 0, 1]);
+
+          for (const [indexCount, texture] of draws) {
+            const assetIndex = indexCount / 3 - 1;
+            if (!decoded.has(decodedTextureKey(assets[assetIndex]!))) continue;
+            assertFuzz(
+              texture !== null
+                && texture !== undefined
+                && uploadedAssetByTexture.get(texture) === assetIndex,
+              `surface ${assetIndex} drew another asset's resident texture`,
+            );
+          }
+        }
+      } finally {
+        owner.dispose();
+      }
+    });
+  });
+
   it("fuzzes out-of-order publication without crossing authored identities", () => {
     const geometry = planeGeometry(1);
     const assets = Array.from(
