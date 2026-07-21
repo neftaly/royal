@@ -34,11 +34,13 @@ Every normalization proposal is evaluated against:
 
 ### Textures
 
-All sources lower to one prepared upload-plan contract. The contract permits a
-small semantic set of compressed/uncompressed/HDR storage classes. Source
-format never reaches material binding or drawing. Texture content/allocation
-identity is separate from sampling state so the architecture can use WebGL
-sampler objects and avoid duplicating image storage for different glTF samplers.
+All complete texture sources lower to one prepared upload-plan contract. VT
+pages retain a narrower independently scheduled transport record but share the
+same storage-class and GPU-format authority. The contracts permit a small
+semantic set of compressed/uncompressed/HDR storage classes. Source format
+never reaches material binding or drawing. Texture content/allocation identity
+is separate from sampling state so the architecture can use WebGL sampler
+objects and avoid duplicating image storage for different glTF samplers.
 
 The portable compressed baseline is ETC2/EAC. A better native compressed target
 may be selected once during preparation when it uses the same upload and binding

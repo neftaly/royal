@@ -6,8 +6,7 @@ import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import {
   completeKtx2MipLevelCount,
-  ETC2_RGBA8_WEBGL_FORMAT,
-  ETC2_SRGB8_ALPHA8_WEBGL_FORMAT,
+  etc2RgbaWebGlFormat,
   ktx2Etc2StorageBytes,
 } from "./etc2-storage";
 import { ordinaryTextureStorageBytes } from "./storage";
@@ -318,9 +317,7 @@ export class TextureGpuOwner {
         if (decoded.colorSpace !== binding.colorSpace) {
           throw new TypeError("Royal ETC2 KTX2 storage color space does not match its binding");
         }
-        const format = binding.colorSpace === "srgb"
-          ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT
-          : ETC2_RGBA8_WEBGL_FORMAT;
+        const format = etc2RgbaWebGlFormat(binding.colorSpace);
         for (let levelIndex = 0; levelIndex < decoded.levels.length; levelIndex += 1) {
           const level = decoded.levels[levelIndex]!;
           gl.compressedTexImage2D(

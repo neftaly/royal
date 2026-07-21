@@ -19,14 +19,21 @@ boundaries, including non-power-of-two dimensions.
 
 ## Canonical prepared representation
 
-Source format is cold-path ingestion data. Every accepted source format—whether
-browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline ETC2 KTX2, a buffer view, a data URI,
-or a future decoder—MUST lower to one prepared texture upload contract containing
-semantic storage class, dimensions, mip slices, row/block layout, color/alpha
-interpretation, and reconstruction identity. This sentence does not add a
-format to glTF or promise that every browser decodes it. Resource reconciliation
-consumes the contract; material binding and draw submission MUST NOT branch on
-source file format.
+Source format is cold-path ingestion data. Every accepted complete texture
+source—whether browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline ETC2 KTX2, a
+buffer view, a data URI, or a future decoder—MUST lower to one prepared texture
+upload contract containing semantic storage class, dimensions, mip slices,
+row/block layout, color/alpha interpretation, and reconstruction identity. This
+sentence does not add a format to glTF or promise that every browser decodes it.
+Resource reconciliation consumes the contract; material binding and draw
+submission MUST NOT branch on source file format.
+
+A VT page is an independently scheduled region, not a complete texture or mip
+chain. It therefore lowers to the narrower page-transport contract, while
+sharing the same storage-class, color-space, orientation, ETC2 parser, block
+layout, and WebGL-format authorities. Forcing page identity/residency into the
+complete-texture union would couple two lifecycles without simplifying binding
+or drawing and is rejected.
 
 Royal standardizes on the portable ETC2/EAC family for retained GPU-compressed
 WebGL2 data. It does not force every texture into one physical format. The

@@ -16,6 +16,10 @@ export type Ktx2Etc2Texture = Readonly<{
 export const ETC2_RGBA8_WEBGL_FORMAT = 0x9278;
 export const ETC2_SRGB8_ALPHA8_WEBGL_FORMAT = 0x9279;
 
+/** One format authority shared by complete ordinary textures and VT page uploads. */
+export const etc2RgbaWebGlFormat = (colorSpace: TextureColorSpace): number =>
+  colorSpace === "srgb" ? ETC2_SRGB8_ALPHA8_WEBGL_FORMAT : ETC2_RGBA8_WEBGL_FORMAT;
+
 export const completeKtx2MipLevelCount = (width: number, height: number): number =>
   Math.floor(Math.log2(Math.max(width, height))) + 1;
 
