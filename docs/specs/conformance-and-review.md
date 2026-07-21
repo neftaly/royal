@@ -154,7 +154,12 @@ Resolution: texture-level `{ source }` mirrors established image-format
 extensions; optional core fallback and required failure are distinct; buffer
 views require MIME; content is self-contained; viewport is finite; VT is a
 post-ingestion representation; unknown optional extension properties remain
-forward compatible. Data-texture color portability remains open.
+forward compatible. The reviewed v1 profile accepts positive `viewBox` alone,
+restricts SVG to sRGB color slots, leaves equivalence metadata outside glTF,
+and permits consumer-owned fallback scheduling. Royal chooses preferred-first
+recovery so optional compatibility does not impose unconditional duplicate
+fetch/decode/memory work. Implementation remains gated on one logical fallback
+lifecycle and one parsed SVG handoff shared by ordinary and automatic-VT paths.
 
 ### 15. React DX and identity pass
 

@@ -38,6 +38,10 @@ const captureCanvas = optionValue(
   'capture-canvas',
   process.env.IPAD_BENCH_CAPTURE_CANVAS ?? 'false',
 ) === 'true';
+const captureCurrentPage = optionValue(
+  'capture-current-page',
+  process.env.IPAD_BENCH_CAPTURE_CURRENT_PAGE ?? 'false',
+) === 'true';
 const waitForPhysicalOrientation = optionValue(
   'wait-for-orientation',
   process.env.IPAD_BENCH_WAIT_FOR_ORIENTATION ?? 'false',
@@ -577,6 +581,67 @@ const incompleteRendererEvidence = (report) => {
   return failures;
 };
 
+const preserveCurrentPage = async (client, targetId, diagnostics) => {
+  let page;
+  let canvasCapture;
+  try {
+    const value = await evaluate(
+      client,
+      targetId,
+      `JSON.stringify({
+        benchmarkError: globalThis.__royalBrowserBenchmarkError ?? null,
+        benchmarkReport: globalThis.__royalBrowserBenchmarkReport ?? null,
+        bodyText: document.body?.innerText?.slice(0, 4000) ?? null,
+        readyState: document.readyState,
+        renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,
+        title: document.title,
+        url: location.href
+      })`,
+      5_000,
+    );
+    page = typeof value === 'string' ? JSON.parse(value) : value;
+  } catch (error) {
+    page = { captureError: error instanceof Error ? error.message : String(error) };
+  }
+  try {
+    const dataUrl = await evaluate(
+      client,
+      targetId,
+      'globalThis.__royalExamplesRenderNow?.(); document.querySelector("canvas")?.toDataURL("image/png") ?? null;',
+      30_000,
+    );
+    const prefix = 'data:image/png;base64,';
+    if (typeof dataUrl === 'string' && dataUrl.startsWith(prefix)) {
+      canvasCapture = Buffer.from(dataUrl.slice(prefix.length), 'base64');
+    }
+  } catch (error) {
+    page = {
+      ...page,
+      canvasCaptureError: error instanceof Error ? error.message : String(error),
+    };
+  }
+  const generatedAt = new Date().toISOString();
+  const stem = `${generatedAt.replace(/[:.]/gu, '-')}-current-${safeSegment(page?.url)}`;
+  await mkdir(outputDir, { recursive: true });
+  const canvasCaptureFilename = canvasCapture === undefined ? undefined : `${stem}.png`;
+  if (canvasCaptureFilename !== undefined) {
+    await writeFile(path.join(outputDir, canvasCaptureFilename), canvasCapture);
+  }
+  const outputPath = path.join(outputDir, `${stem}.json`);
+  await writeFile(outputPath, `${JSON.stringify({
+    browserDiagnostics: diagnostics.snapshot(),
+    ...(canvasCapture === undefined ? {} : {
+      canvasCapture: {
+        byteLength: canvasCapture.byteLength,
+        filename: canvasCaptureFilename,
+      },
+    }),
+    generatedAt,
+    page,
+  }, null, 2)}\n`);
+  console.log(`Preserved current iPad page at ${outputPath}`);
+};
+
 const run = async () => {
   const expectedSource = await expectedBenchmarkSource();
   const page = await findPage();
@@ -597,6 +662,7 @@ const run = async () => {
     await targetCommand(client, targetId, 'Network.setResourceCachingDisabled', {
       disabled: coldCache,
     });
+    if (captureCurrentPage) await preserveCurrentPage(client, targetId, browserDiagnostics);
     const url = benchmarkUrl();
     console.log(`Navigating iPad Safari to ${url}`);
     await evaluate(

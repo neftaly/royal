@@ -1,6 +1,6 @@
 # `GS_texture_svg` glTF extension proposal
 
-Status: design proposal; unregistered and not currently implemented by Royal
+Status: reviewed design proposal; unregistered and not currently implemented by Royal
 
 Vendor prefix owner: Garbo Succus / future registered successor
 
@@ -93,20 +93,29 @@ independent material layers.
 
 The SVG MUST be self-contained. Scripts, event-handler behavior, navigation,
 network subresources, external stylesheets/fonts, external `<use>` references,
-and nested external raster/SVG images are outside this extension profile.
-Producers MUST flatten or embed dependencies.
+and nested raster/SVG images are outside this version of the extension profile.
+Producers MUST flatten those dependencies into ordinary SVG graphics.
 
 This profile is a producer/consumer interoperability rule, not a sanitizer.
-Consumers MUST treat SVG as untrusted active-format input and choose an
-execution boundary appropriate to their platform. A consumer MAY reject SVG it
-cannot prove or decode as self-contained. It MUST NOT advertise a security
-guarantee based on regex rewriting.
+Consumers MUST treat SVG as untrusted input and choose an image-decoding
+boundary appropriate to their platform. Royal's web implementation requires
+the browser's SVG secure-static image processing mode: script, interaction,
+animation, navigation, and external resource fetches cannot execute through the
+texture decode. DOM parsing is used only for bounded structural validation and
+viewport extraction; it is not a sanitizer. The decoded result must also pass
+an origin-clean canvas readback probe before it can become VT page input. A
+consumer MAY reject SVG it cannot process through an equivalent boundary. It
+MUST NOT advertise a security guarantee based on regex rewriting. See the
+[SVG 2 processing modes](https://www.w3.org/TR/SVG2/conform.html#processing-modes)
+and [secure-static embedded-image rule](https://svgwg.org/svg2-draft/embedded.html).
 
 ## Dimensions and viewport
 
 The SVG root MUST define a finite non-empty intrinsic viewport through either
-positive `width`/`height` or a valid positive `viewBox`. Percentage-only or
-otherwise context-dependent intrinsic dimensions are invalid for this
+positive unitless/`px` `width` and `height`, or a valid positive `viewBox`.
+A `viewBox` alone is sufficient and its width/height become the logical texture
+aspect and dimensions; it does not force that raster resolution. Percentage-only
+or otherwise context-dependent intrinsic dimensions are invalid for this
 extension. If both forms exist, ordinary SVG viewport/viewBox mapping applies.
 
 Dimensions define aspect and logical sampling, not a mandatory raster
@@ -118,8 +127,12 @@ complete SVG viewport; cropping or adding padding is not a legal decode fix.
 
 SVG paint is composited according to the consumer's SVG implementation, then
 used with the same glTF material-slot color interpretation as the raster
-fallback. Base-color/emissive uses undergo their normal sRGB-to-linear handling;
-data-texture uses follow the same rules as an equivalent raster texture.
+fallback. Version 1 permits only sRGB color-texture uses: base color, emissive,
+and other future slots explicitly defined as color data. A texture selected by
+a linear/data slot such as normal, occlusion, metallic-roughness, transmission,
+or thickness is invalid for this extension. This deliberate restriction avoids
+claiming portable numeric texels from browser SVG paint and keeps the first
+implementation out of material-data authoring policy.
 
 Transparent SVG regions remain transparent and reveal the underlying material
 factor or scene according to normal glTF texture multiplication/blending. A
@@ -133,20 +146,29 @@ pixels before progressive replacement.
 
 ## Loading and errors
 
-Consumers SHOULD begin with the core raster source when it becomes drawable
-earlier, then replace it atomically with the SVG representation when ready.
-This progressive behavior MUST preserve orientation, alpha, aspect, sampler,
-and logical texture identity.
+The SVG is the preferred representation. Consumers MAY fetch the raster and SVG
+in parallel, publish an already-available raster first, or attempt SVG first and
+request the raster only if SVG fails. They MUST NOT be required to spend network,
+decode, or retained-memory budget on both representations merely to implement
+the extension. If a consumer progressively replaces a published raster with
+SVG, the replacement is atomic and preserves orientation, alpha, aspect,
+sampler, and logical texture identity.
+
+Royal's planned policy is preferred-first: pending geometry uses the ordinary
+neutral texture presentation, SVG success publishes once, and optional SVG
+failure starts the core fallback through the same logical texture lifecycle.
+It does not race both sources by default. This avoids a second simultaneous
+decode and makes fallback a recovery path rather than a permanent tax.
 
 For an optional extension, SVG transport/decode/profile failure produces one
 bounded diagnostic and settles on the core fallback. It MUST NOT retry every
 frame. For a required extension, the same condition is a required texture
 failure.
 
-Resource budgets and cancellation apply independently to the two representation
-jobs, but once SVG wins, an unclaimed decoded fallback SHOULD be releasable. A
-late SVG completion from a stale asset generation MUST NOT replace current
-content.
+Resource budgets and cancellation apply to whichever representation jobs a
+consumer actually starts. Once one representation wins, an unclaimed decoded
+alternate MUST be releasable. A late completion from a stale asset generation
+MUST NOT replace current content.
 
 ## Relationship to virtual texturing
 
@@ -179,19 +201,28 @@ Before proposing registration, the extension needs:
 - at least one fallback and one required sample asset;
 - two independent consumer/producer experiments if requested by Khronos;
 - documented security considerations and SVG profile;
-- a decision on whether SVG data-texture use is permitted or should be
-  restricted because browser color-management makes it non-portable.
+- evidence that secure-static decoding, fallback, orientation, transparency,
+  and close-view vector paging agree in the target browsers.
 
 Registration mechanics and naming may require changing `GS_texture_svg`. The
 semantic contract should survive that rename.
 
-## Open decisions
+## Reviewed decisions and implementation gate
 
-- Should the profile require explicit pixel or CSS absolute units on
-  `width`/`height`, or is a positive `viewBox` alone sufficient?
-- Should data-texture material slots be forbidden to avoid browser SVG color
-  ambiguity?
-- Should consumers be required to fetch the raster fallback first, or may they
-  race representations under their own scheduling policy?
-- Should a future extension define content-equivalence metadata, or should that
-  remain an engine/asset-manifest concern outside glTF?
+- Positive `viewBox` alone is sufficient; unitless/`px` intrinsic sizes remain
+  the only accepted alternative.
+- Version 1 is restricted to sRGB color slots. Data-texture use can be proposed
+  later only with cross-browser numeric-pixel oracles.
+- Fallback scheduling is consumer policy. Royal chooses preferred-first rather
+  than unconditional duplicate work.
+- Pixel/content equivalence metadata remains an authoring or asset-manifest
+  concern outside glTF. The extension declares alternate intent, not a checksum
+  proof of visual equivalence.
+
+Royal will not implement the proposal by disguising two sources as unrelated
+textures or by adding an SVG-specific shader/cache. Implementation requires one
+canonical logical-source recipe whose decoder can publish the preferred SVG or
+recover to the core source, report which representation won, and hand the SVG
+document to automatic VT without refetching it. Until that focused lifecycle,
+schema/sample oracles, and vendor-prefix work exist together, plain Royal SVG
+ingestion remains the only supported path and this name remains a non-claim.

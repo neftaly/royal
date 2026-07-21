@@ -106,8 +106,12 @@ runtime memory.
 
 Diagnostics and error formatting treat source strings and remote messages as
 data. They MUST NOT inject HTML or execute source content. Royal does not claim
-that browser-decoding an SVG sanitizes it; applications requiring hostile SVG
-isolation must establish that boundary before Royal.
+that browser-decoding an SVG sanitizes it. SVG texture work must use the
+browser's secure-static image mode, where script, interaction, animation and
+external fetches are disabled, and VT additionally requires origin-clean pixel
+readback. DOM inspection does not grant content authority. Applications that do
+not trust the browser image decoder for hostile image input must preprocess that
+input before Royal, as they would for other browser-decoded image formats.
 
 Network failures preserve useful status without exposing response bodies by
 default. Cancellation caused by scene/root supersession is not reported as a
