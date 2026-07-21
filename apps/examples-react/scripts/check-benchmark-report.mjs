@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  isIpadSafariBenchmarkEnvelope,
+  validateIpadSafariBenchmarkEnvelope,
+} from './ipad-benchmark-report-check.mjs';
+
 const reportPathInput = process.argv[2] ?? process.env.EXAMPLES_BENCH_OUTPUT;
 
 if (reportPathInput === undefined || reportPathInput.trim() === '') {
@@ -833,7 +838,11 @@ const parseReport = async () => {
 const report = await parseReport();
 
 if (requireObject(report, 'report')) {
-  if (isGltfLoadReport(report)) {
+  if (isIpadSafariBenchmarkEnvelope(report)) {
+    const result = validateIpadSafariBenchmarkEnvelope(report);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  } else if (isGltfLoadReport(report)) {
     checkGltfLoadReport(report);
   } else {
     checkBenchmarkEnvelope(report);
