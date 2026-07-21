@@ -7,7 +7,9 @@ import {
   OrbitControls,
   resolveRendererRootOptions,
   useCanvasSize,
+  useCanvasPick,
   useGltfAssetStatus,
+  useInvalidate,
   usePrefilteredEnvironmentStatus,
   useRendererLifecycle,
   useRendererSnapshot,
@@ -15,6 +17,7 @@ import {
   useVirtualTextureAssetStatus,
   type RendererContextSnapshot,
   type GltfDocumentScene,
+  type RendererHookOptions,
   type RendererResourceSnapshot,
   type RendererRoot,
   type ScenePointerEvent,
@@ -168,6 +171,21 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
   );
 };
 
+const ExternalControls = ({ root }: RendererHookOptions): ReactNode => {
+  const invalidate = useInvalidate({ root });
+  const pick = useCanvasPick({ root });
+  return (
+    <button
+      onClick={() => {
+        invalidate();
+        console.log(pick({ clientX: 0, clientY: 0 }));
+      }}
+    >
+      Pick and redraw
+    </button>
+  );
+};
+
 const XrControl = (): ReactNode => {
   const xr = useXrSession({
     mode: 'immersive-vr',
@@ -199,6 +217,7 @@ export const App = (): ReactNode => {
         <XrControl />
       </Canvas>
       <Status root={root} />
+      <ExternalControls root={root} />
     </>
   );
 };
