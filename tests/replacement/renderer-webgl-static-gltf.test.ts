@@ -647,6 +647,71 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets).toHaveLength(1);
   });
 
+  it("routes every accepted material texture transform through one canonical affine plan", () => {
+    const transformed = () => ({
+      extensions: {
+        KHR_texture_transform: {
+          offset: [0.25, -0.5],
+          rotation: Math.PI / 2,
+          scale: [2, 3],
+        },
+      },
+      index: 0,
+    });
+    const asset = staticTexturedTriangleGlb(undefined, "shared.png", (document) => {
+      requireExtensions(
+        document,
+        "KHR_materials_specular",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "KHR_texture_transform",
+      );
+      document.materials = [{
+        emissiveTexture: transformed(),
+        extensions: {
+          KHR_materials_specular: {
+            specularColorTexture: transformed(),
+            specularTexture: transformed(),
+          },
+          KHR_materials_transmission: {
+            transmissionFactor: 1,
+            transmissionTexture: transformed(),
+          },
+          KHR_materials_volume: {
+            thicknessFactor: 1,
+            thicknessTexture: transformed(),
+          },
+        },
+        normalTexture: transformed(),
+        occlusionTexture: transformed(),
+        pbrMetallicRoughness: {
+          baseColorTexture: transformed(),
+          metallicRoughnessTexture: transformed(),
+        },
+      }];
+    });
+    const material = prepareStaticGlb(asset, "all-texture-transform-placements")
+      .primitives[0]!.material;
+    if (material.kind !== "standard") throw new Error("expected a standard material");
+    const coordinateFields = [
+      "baseColorTextureCoordinates",
+      "emissiveTextureCoordinates",
+      "metallicRoughnessTextureCoordinates",
+      "normalTextureCoordinates",
+      "occlusionTextureCoordinates",
+      "specularColorTextureCoordinates",
+      "specularTextureCoordinates",
+      "thicknessTextureCoordinates",
+      "transmissionTextureCoordinates",
+    ] as const;
+    for (const field of coordinateFields) {
+      expect(material[field]).toEqual({
+        row0: [expect.closeTo(0), -3, 0.25, 0],
+        row1: [2, expect.closeTo(0), -0.5, 0],
+      });
+    }
+  });
+
   it("does not prepare or reject textures unreachable from the selected scene", () => {
     const document = staticTriangleDocument();
     document.images = [{ bufferView: 99, mimeType: "image/png" }];
