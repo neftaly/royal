@@ -225,20 +225,41 @@ const createFrameSlot = (): MutableXrFrameSlot => {
   };
 };
 
-const copyMatrix = (target: MutableMat4, source: ArrayLike<number>, label: string): void => {
-  if (source.length !== 16) throw new TypeError(`${label} must contain 16 components`);
-  for (let index = 0; index < 16; index += 1) {
-    const component = source[index];
-    if (component === undefined || !Number.isFinite(component)) {
-      throw new TypeError(`${label}[${index}] must be finite`);
-    }
+const copyViewMatrix = (
+  target: MutableMat4,
+  source: ArrayLike<number>,
+  viewIndex: number,
+  field: "projection" | "view",
+): void => {
+  if (source.length !== 16) {
+    throw new TypeError(`Royal XR views[${viewIndex}].${field} must contain 16 components`);
   }
-  for (let index = 0; index < 16; index += 1) target[index] = source[index]!;
+  for (let componentIndex = 0; componentIndex < 16; componentIndex += 1) {
+    const component = source[componentIndex];
+    if (component === undefined || !Number.isFinite(component)) {
+      throw new TypeError(
+        `Royal XR views[${viewIndex}].${field}[${componentIndex}] must be finite`,
+      );
+    }
+    target[componentIndex] = component;
+  }
 };
 
 const requirePositiveInteger = (value: number, label: string): void => {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new RangeError(`${label} must be a positive safe integer`);
+  }
+};
+
+const requirePositiveViewportInteger = (
+  value: number,
+  viewIndex: number,
+  field: "height" | "width",
+): void => {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new RangeError(
+      `Royal XR views[${viewIndex}].viewport.${field} must be a positive safe integer`,
+    );
   }
 };
 
@@ -368,11 +389,11 @@ export const createWebXrSessionRendererWithPlatform = async (
             slot = createFrameSlot();
             slots[index] = slot;
           }
-          copyMatrix(slot.projection, source.projectionMatrix, `Royal XR views[${index}].projection`);
-          copyMatrix(slot.view, source.transform.inverse.matrix, `Royal XR views[${index}].view`);
+          copyViewMatrix(slot.projection, source.projectionMatrix, index, "projection");
+          copyViewMatrix(slot.view, source.transform.inverse.matrix, index, "view");
           multiplyMat4Into(slot.viewProjection, slot.projection, slot.view);
-          requirePositiveInteger(sourceViewport.width, `Royal XR views[${index}].viewport.width`);
-          requirePositiveInteger(sourceViewport.height, `Royal XR views[${index}].viewport.height`);
+          requirePositiveViewportInteger(sourceViewport.width, index, "width");
+          requirePositiveViewportInteger(sourceViewport.height, index, "height");
           if (!Number.isSafeInteger(sourceViewport.x) || sourceViewport.x < 0
             || !Number.isSafeInteger(sourceViewport.y) || sourceViewport.y < 0
             || sourceViewport.x + sourceViewport.width > layer.framebufferWidth

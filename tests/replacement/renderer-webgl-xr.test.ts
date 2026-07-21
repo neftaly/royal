@@ -140,4 +140,26 @@ describe("WebXR session renderer", () => {
     session.dispatchEvent(new Event("end"));
     expect(renderer.disposed).toBe(true);
   });
+
+  it("constructs indexed matrix diagnostics only for invalid browser frame data", async () => {
+    const { canvas, root } = canvasRootHarness();
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      new FakeSession(),
+      {},
+      { layerConstructor: () => FakeLayer },
+    );
+    const projection = identityMat4();
+    projection[7] = Number.NaN;
+    const invalid: XrView = {
+      projectionMatrix: projection,
+      transform: LEFT_VIEW.transform,
+    };
+
+    expect(() => renderer.renderFrame({ getViewerPose: () => ({ views: [invalid] }) }))
+      .toThrow("Royal XR views[0].projection[7] must be finite");
+    expect(canvas.gl.clear).not.toHaveBeenCalled();
+    renderer.dispose();
+  });
 });
