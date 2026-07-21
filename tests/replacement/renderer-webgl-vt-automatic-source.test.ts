@@ -1,11 +1,84 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   automaticVirtualTextureEligible,
+  automaticVirtualTextureIsSvg,
   createAutomaticRasterPageSource,
+  createAutomaticSvgPageSource,
   planAutomaticVirtualTextureAxis,
 } from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("automatic virtual texture page source", () => {
+  it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {
+    expect(automaticVirtualTextureIsSvg({
+      encodedSvg: { blob: new Blob(["<svg/>"]), byteLength: 6 },
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 16,
+    })).toBe(true);
+    expect(automaticVirtualTextureIsSvg({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 16,
+    })).toBe(false);
+  });
+
+  it("parses one retained SVG blob without fetching a second source", async () => {
+    const root = {
+      cloneNode: () => ({ setAttribute: vi.fn() }),
+      getAttribute: (name: string) => name === "viewBox" ? "0 0 16 8" : null,
+      localName: "svg",
+      querySelector: () => null,
+    };
+    const context = { drawImage: vi.fn(), getImageData: vi.fn() };
+    const blob = new Blob(['<svg viewBox="0 0 16 8"/>'], { type: "image/svg+xml" });
+    const text = vi.spyOn(blob, "text");
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("DOMParser", class {
+      parseFromString = (): object => ({ documentElement: root });
+    });
+    vi.stubGlobal("XMLSerializer", class {
+      serializeToString = (): string => "<svg/>";
+    });
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({
+      close: vi.fn(),
+      height: 132,
+      width: 132,
+    })));
+    vi.stubGlobal("document", {
+      createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
+    });
+    const source = createAutomaticSvgPageSource(
+      { blob, byteLength: blob.size },
+      16,
+      8,
+      {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
+      "srgb",
+    );
+
+    const first = await source.read({ mip: 0, x: 1, y: 1 }, new AbortController().signal);
+    first.close();
+    const second = await source.read({ mip: 0, x: 2, y: 2 }, new AbortController().signal);
+    second.close();
+
+    expect(text).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    source.close?.();
+    await expect(source.read(
+      { mip: 0, x: 1, y: 1 },
+      new AbortController().signal,
+    )).rejects.toThrow("closed");
+  });
+
   it("selects only sufficiently large browser raster sources", () => {
     expect(automaticVirtualTextureEligible({
       height: 128,

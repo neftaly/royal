@@ -1,7 +1,7 @@
 import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { CanonicalTextureSampler } from "../surface/canonical-material";
 import type { DecodedImageTextureSource, DecodedTextureSource } from "../texture/asset-owner";
-import type { TextureSourceRef } from "../texture/asset-owner";
+import type { EncodedSvgTextureSource } from "../texture/asset-owner";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import {
   createGeneratedVirtualTextureManifest,
@@ -139,9 +139,9 @@ export const automaticVirtualTextureEligible = (
   && source.width * source.height > AUTOMATIC_VT_MIN_SOURCE_TEXELS;
 
 export const automaticVirtualTextureIsSvg = (
-  asset: TextureSourceRef,
-): asset is Extract<TextureSourceRef, { readonly kind: "asset" }> =>
-  asset.kind === "asset" && /\.svg(?:[?#]|$)/iu.test(asset.src);
+  source: DecodedTextureSource,
+): source is DecodedImageTextureSource & Readonly<{ encodedSvg: EncodedSvgTextureSource }> =>
+  source.kind !== "ktx2-etc2" && source.encodedSvg !== undefined;
 
 const renderAutomaticPage = (
   manifest: ReturnType<typeof createGeneratedVirtualTextureManifest>,
@@ -266,12 +266,13 @@ const parseSvgSource = (source: string): ParsedSvgSource => {
 };
 
 const loadSvgSource = async (
-  uri: string,
+  blob: Blob,
   signal: AbortSignal,
 ): Promise<ParsedSvgSource> => {
-  const response = await fetch(uri, { signal });
-  if (!response.ok) throw new Error(`Royal automatic SVG VT request failed with HTTP ${response.status}`);
-  return parseSvgSource(await response.text());
+  if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+  const source = await blob.text();
+  if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+  return parseSvgSource(source);
 };
 
 const rasterizeSvgRegion = async (
@@ -367,7 +368,7 @@ const proveOriginClean = (
 
 /** Vector-backed automatic source: logical detail grows without a full-resolution bitmap. */
 export const createAutomaticSvgPageSource = (
-  uri: string,
+  encodedSource: EncodedSvgTextureSource,
   intrinsicWidth: number,
   intrinsicHeight: number,
   sampler: CanonicalTextureSampler,
@@ -384,16 +385,19 @@ export const createAutomaticSvgPageSource = (
     width,
   });
   let opened: Promise<ParsedSvgSource> | undefined;
+  let encoded: Blob | undefined = encodedSource.blob;
   let closed = false;
   let originClean = false;
   return {
     close: () => {
       closed = true;
+      encoded = undefined;
+      opened = undefined;
     },
     manifest,
     read: async (page, signal) => {
       if (closed) throw new Error("Royal automatic SVG VT page source is closed");
-      opened ??= loadSvgSource(uri, signal);
+      opened ??= loadSvgSource(encoded!, signal);
       const source = await opened;
       const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
       const sourceTexelsPerMipTexel = 2 ** page.mip;

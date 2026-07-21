@@ -256,11 +256,12 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 
 const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
+  retainSvgSource: boolean,
 ): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
   return async (asset, signal, maxStorageBytes, retainAlpha) => {
     decoder ??= import("../texture/browser-decode")
-      .then((module) => module.createBrowserTextureDecoder(4, 8, etc2Available));
+      .then((module) => module.createBrowserTextureDecoder(4, 8, etc2Available, retainSvgSource));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
 };
@@ -505,7 +506,10 @@ export class CanvasRoot implements RendererRoot {
       schedule: this.#asyncPreparation.runForeground,
     });
     this.#textureAssets = new TextureAssetOwner({
-      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(this.#etc2Available),
+      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(
+        this.#etc2Available,
+        this.#automaticVirtualTexturing,
+      ),
       onAssetChanged: (key) => this.#refreshPreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),

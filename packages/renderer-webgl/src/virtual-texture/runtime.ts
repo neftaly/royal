@@ -589,7 +589,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           this.#automaticWaiting += 1;
           continue;
         }
-        const svg = automaticVirtualTextureIsSvg(asset);
+        const svg = automaticVirtualTextureIsSvg(decoded);
         if (
           decoded.kind === "ktx2-etc2"
           || (!svg && !automaticVirtualTextureEligible(decoded))
@@ -607,7 +607,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         let source: VirtualTexturePageSource;
         if (svg) {
           source = createAutomaticSvgPageSource(
-            asset.src,
+            decoded.encodedSvg,
             decoded.width,
             decoded.height,
             sampler,

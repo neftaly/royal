@@ -223,6 +223,7 @@ Royal will not implement the proposal by disguising two sources as unrelated
 textures or by adding an SVG-specific shader/cache. Implementation requires one
 canonical logical-source recipe whose decoder can publish the preferred SVG or
 recover to the core source, report which representation won, and hand the SVG
-document to automatic VT without refetching it. Until that focused lifecycle,
+encoded authority to automatic VT for one parse without refetching it. Plain
+SVG ingestion now proves that handoff; until the winner/fallback lifecycle,
 schema/sample oracles, and vendor-prefix work exist together, plain Royal SVG
 ingestion remains the only supported path and this name remains a non-claim.

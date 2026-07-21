@@ -159,6 +159,8 @@ export const BenchmarkRendererSnapshot = ({
           pendingOrdinaryTextureStorageRepresentations:
             current.resources.ordinaryTexturePreparation.pendingStorageRepresentations,
           pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
+          retainedEncodedTextureSourceBytes:
+            current.resources.ordinaryTexturePreparation.retainedEncodedSourceBytes,
         },
         textureResidency: benchmarkTextureResidency(current.resources.ordinaryTextures),
         virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)

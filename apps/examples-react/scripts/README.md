@@ -309,8 +309,9 @@ the JSON report. This is useful for texture-corruption and fidelity regressions:
 the image is captured only after readiness, warmup, and measured motion complete.
 Add `--capture-current-page=true` when investigating an already-visible issue.
 Before navigation, the collector writes the existing URL, benchmark/renderer
-state, console/runtime diagnostics, and a canvas PNG when the canvas is
-origin-clean. Because WebGL may discard the presented back buffer, the capture
+state, query-stripped resource timing entries, console/runtime diagnostics, and
+a canvas PNG when the canvas is origin-clean. Because WebGL may discard the
+presented back buffer, the capture
 explicitly draws the retained current scene once before reading pixels; it does
 not navigate or reload. Capture failure is recorded without preventing the
 requested fresh benchmark, so stale-build and current-build evidence remain

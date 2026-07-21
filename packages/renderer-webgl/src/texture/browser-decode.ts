@@ -73,12 +73,17 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
   return `texture ${JSON.stringify(source)}`;
 };
 
-type TextureBlob = Readonly<{ blob: Blob; ktx2: boolean }>;
+type TextureBlob = Readonly<{ blob: Blob; ktx2: boolean; svg: boolean }>;
 
 const isKtx2MimeType = (mimeType: string): boolean =>
   mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/ktx2";
 
 const isKtx2Uri = (uri: string): boolean => /\.ktx2(?:[?#]|$)/i.test(uri);
+
+const isSvgMimeType = (mimeType: string): boolean =>
+  mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/svg+xml";
+
+const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const declaresKtx2 = (asset: TextureSourceRef): boolean =>
   asset.sourceEncoding === "ktx2-etc2"
@@ -93,6 +98,7 @@ const readTextureBlob = async (
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2MimeType(asset.mimeType),
+      svg: isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
       const response = await fetch(asset.src, { signal });
@@ -105,6 +111,7 @@ const readTextureBlob = async (
         ktx2: asset.sourceEncoding === "ktx2-etc2"
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
+        svg: isSvgUri(asset.src) || isSvgMimeType(blob.type),
       };
     })();
 
@@ -346,6 +353,7 @@ export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
   maxParallelJobs = 8,
   etc2Available = true,
+  retainSvgSource = false,
 ): BrowserTextureDecoder => {
   if (maxParallelJobs < maxParallelDecodes) {
     throw new RangeError("Royal browser texture jobs must not be fewer than decodes");
@@ -356,16 +364,21 @@ export const createBrowserTextureDecoder = (
     if (!etc2Available && declaresKtx2(asset)) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
-    const { blob, ktx2 } = await readTextureBlob(asset, signal);
+    const { blob, ktx2, svg } = await readTextureBlob(asset, signal);
     if (ktx2 && !etc2Available) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
-    return decodes.run(
+    const decoded = await decodes.run(
       signal,
       () => ktx2
         ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha)
         : decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha),
     );
+    if (!retainSvgSource || !svg || decoded.kind === "ktx2-etc2") return decoded;
+    return {
+      ...decoded,
+      encodedSvg: { blob, byteLength: blob.size },
+    };
   });
 };
 

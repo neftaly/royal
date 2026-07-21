@@ -594,6 +594,18 @@ const preserveCurrentPage = async (client, targetId, diagnostics) => {
         bodyText: document.body?.innerText?.slice(0, 4000) ?? null,
         readyState: document.readyState,
         renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,
+        resources: performance.getEntriesByType("resource").map((entry) => ({
+          decodedBodySize: entry.decodedBodySize,
+          duration: entry.duration,
+          initiatorType: entry.initiatorType,
+          name: (() => {
+            const url = new URL(entry.name);
+            return url.protocol === "data:" || url.protocol === "blob:"
+              ? url.protocol
+              : url.origin + url.pathname;
+          })(),
+          transferSize: entry.transferSize
+        })),
         title: document.title,
         url: location.href
       })`,

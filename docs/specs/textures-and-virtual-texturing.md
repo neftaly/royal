@@ -71,8 +71,10 @@ no occlusion, no emissive contribution, and factor-preserving metallic/roughness
 Failure placeholders MUST be stable and non-flashing; conspicuous debug colors
 belong in explicit diagnostics, not ordinary presentation.
 
-Decoded sources MAY be retained for context restoration only within CPU budget.
-Eviction MUST leave a reconstruction recipe or legal refetch path.
+Decoded raster sources MAY be retained for context restoration or an active
+automatic-VT representation only within CPU budget. Encoded SVG authority MAY
+be retained for an active vector-backed representation and MUST be diagnosed
+separately. Eviction MUST leave a reconstruction recipe or legal refetch path.
 
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative
@@ -248,6 +250,14 @@ retaining a full-resolution bitmap. Its current maximum raster long edge is
 16,384 texels; this is a quality/capability ceiling, not the SVG's logical
 dimension. Browser feature decisions MUST follow successful decode and
 origin-clean canvas readback capabilities rather than user-agent strings.
+
+When automatic VT is enabled, ordinary SVG decode MUST retain the already-read
+encoded SVG as the vector authority. The automatic page source parses that
+authority once and MUST NOT refetch the URI or maintain a second source cache.
+The ordinary decoded bitmap may close after GPU upload; retained encoded bytes
+are reported separately from decoded handoff bytes and are released when the
+source is no longer claimed. Roots without automatic VT MUST NOT retain the
+encoded SVG after ordinary decode.
 
 A page source owns fetch/decode/raster only. It MUST NOT own atlas slots, page
 tables, shader bindings, demand selection, or render scheduling.

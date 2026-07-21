@@ -115,6 +115,34 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
   });
 
+  it("reports retained encoded vector authority independently of decoded handoff bytes", async () => {
+    const source = {
+      ...decoded(),
+      encodedSvg: { blob: new Blob(["<svg/>"]), byteLength: 6 },
+    };
+    const owner = new TextureAssetOwner({
+      decode: vi.fn(async () => source),
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/vector.svg");
+    owner.reconcile([asset]);
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+
+    expect(owner.snapshot()).toMatchObject({
+      decodedHandoffBytes: 64 * 32 * 4,
+      retainedEncodedSourceBytes: 6,
+    });
+    owner.releaseUploaded([textureStorageKey(asset)]);
+    expect(owner.snapshot()).toMatchObject({
+      decodedHandoffBytes: 0,
+      retainedEncodedSourceBytes: 6,
+    });
+    owner.reconcile([]);
+    expect(owner.snapshot().retainedEncodedSourceBytes).toBe(0);
+  });
+
   it("transfers decoded pixel lifetime through explicit representation leases", async () => {
     const close = vi.fn();
     const source = decoded(close);

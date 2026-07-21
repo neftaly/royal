@@ -12,12 +12,19 @@ import { KeyedRetainedListeners } from "../resource/retained-listeners";
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
+  /** Encoded vector authority retained only when another representation needs it. */
+  encodedSvg?: EncodedSvgTextureSource;
   height: number;
   kind?: never;
   source: TexImageSource;
   sourceHeight?: number;
   sourceWidth?: number;
   width: number;
+}>;
+
+export type EncodedSvgTextureSource = Readonly<{
+  blob: Blob;
+  byteLength: number;
 }>;
 
 export type DecodedKtx2Etc2TextureSource = Readonly<{
@@ -95,6 +102,8 @@ export type TexturePreparationSnapshot = Readonly<{
   decodedHandoffThresholdBytes: number;
   /** Claimed color-space/sampler storage representations not yet GPU-resident. */
   pendingStorageRepresentations: number;
+  /** Encoded SVG bytes retained for an optional vector-backed representation. */
+  retainedEncodedSourceBytes: number;
 }>;
 
 export type TextureAssetOwnerPlatform = Readonly<{
@@ -314,7 +323,11 @@ export class TextureAssetOwner {
 
   snapshot(): TexturePreparationSnapshot {
     let pendingStorageRepresentations = 0;
+    let retainedEncodedSourceBytes = 0;
     for (const entry of this.#entries.values()) {
+      retainedEncodedSourceBytes += entry.decoded?.kind === "ktx2-etc2"
+        ? 0
+        : entry.decoded?.encodedSvg?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
@@ -326,6 +339,7 @@ export class TextureAssetOwner {
       decodedHandoffBytes: this.#decodedHandoffBytes,
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
       pendingStorageRepresentations,
+      retainedEncodedSourceBytes,
     };
   }
 

@@ -13,6 +13,34 @@ afterEach(() => {
 });
 
 describe("browser texture decode shell", () => {
+  it("retains SVG authority only for roots that request the vector handoff", async () => {
+    const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 8"/>';
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      blob: async () => new Blob([svg], { type: "image/svg+xml" }),
+      ok: true,
+    })));
+    const asset = {
+      kind: "asset" as const,
+      src: "/opaque-image?id=vector",
+    };
+
+    const ordinary = await createBrowserTextureDecoder()(asset, new AbortController().signal);
+    const retained = await createBrowserTextureDecoder(4, 8, true, true)(
+      asset,
+      new AbortController().signal,
+    );
+
+    expect(ordinary).not.toHaveProperty("encodedSvg");
+    expect(retained).toMatchObject({
+      encodedSvg: {
+        byteLength: new Blob([svg]).size,
+        blob: { size: new Blob([svg]).size, type: "image/svg+xml" },
+      },
+    });
+  });
+
   it("decodes embedded bytes without inventing a URL or network request", async () => {
     const NativeBlob = Blob;
     let blobPart: BlobPart | undefined;
