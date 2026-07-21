@@ -2268,7 +2268,7 @@ const prepareVirtualTextureCloseView = async (session, route) => {
     await evaluate(session, `
 (() => {
   const button = [...document.querySelectorAll('button')]
-    .find((candidate) => candidate.textContent?.trim() === 'NW');
+    .find((candidate) => candidate.textContent?.trim() === 'Ground plane');
   button?.click();
 })()
 `);

@@ -36,6 +36,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Examples
 
+- Added an authored ground-plane preset to the VT stress example and made the
+  automated close-view oracle exercise it at 10 cm, including physical Safari
+  17.14 evidence at DPR 2.
 - Added compositor screenshots to opt-in performance traces and expanded GPU
   draw labels to identify transmission, volume, environment, lighting, alpha,
   and specular shader variants.
@@ -48,6 +51,9 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ### Renderer
 
+- Localized VT mip demand across large perspective-varying triangles with four
+  bounded allocation-free subdivision levels, preserving close ground-plane
+  detail without tessellating rendered geometry.
 - Made unsupported optional glTF extension payloads opaque to required-placement
   validation while recursively validating extension payloads Royal executes,
   preserving core `KHR_texture_transform` behavior in the official mixed

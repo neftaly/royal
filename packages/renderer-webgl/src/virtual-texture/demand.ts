@@ -45,12 +45,14 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   modelViewProjection: MutableMat4;
   overflow: { value: boolean };
   screen: Float64Array;
+  subdivision: Float64Array;
   xs: Uint32Array;
   ys: Uint32Array;
 }> & { count: number };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
+const MAX_DEMAND_SUBDIVISION_DEPTH = 4;
 
 export const createVirtualTextureDemandWorkspace = (
   maxPages: number,
@@ -70,6 +72,9 @@ export const createVirtualTextureDemandWorkspace = (
     modelViewProjection: identityMat4(),
     overflow: { value: false },
     screen: new Float64Array(15),
+    subdivision: new Float64Array(
+      MAX_DEMAND_SUBDIVISION_DEPTH * 3 * CLIP_VERTEX_COMPONENTS,
+    ),
     xs: new Uint32Array(maxPages),
     ys: new Uint32Array(maxPages),
   };
@@ -207,6 +212,20 @@ const interpolateVertex = (
     const from = start[startOffset + component]!;
     target[targetOffset + component] = from
       + (end[endOffset + component]! - from) * amount;
+  }
+};
+
+const midpointVertex = (
+  target: Float64Array,
+  targetOffset: number,
+  source: Float64Array,
+  firstOffset: number,
+  secondOffset: number,
+): void => {
+  for (let component = 0; component < CLIP_VERTEX_COMPONENTS; component += 1) {
+    target[targetOffset + component] = (
+      source[firstOffset + component]! + source[secondOffset + component]!
+    ) * 0.5;
   }
 };
 
@@ -422,6 +441,7 @@ const addClippedTriangleDemand = (
   third: number,
   viewport: FrameViewport,
   sampler: CanonicalTextureSampler,
+  subdivisionDepth = 0,
 ): void => {
   const screen = workspace.screen;
   for (let index = 0; index < 3; index += 1) {
@@ -456,7 +476,9 @@ const addClippedTriangleDemand = (
   const vqDy = (vq2 * dx1 - vq1 * dx2) * inverse;
   const qDx = (q1 * dy2 - q2 * dy1) * inverse;
   const qDy = (q2 * dx1 - q1 * dx2) * inverse;
-  let rho = 0;
+  let minimumMip = manifest.mipCount - 1;
+  let maximumMip = 0;
+  let sampled = false;
   for (let sample = 0; sample < 4; sample += 1) {
     const uq = sample === 3
       ? (screen[2]! + screen[7]! + screen[12]!) / 3
@@ -473,20 +495,87 @@ const addClippedTriangleDemand = (
     const dvDx = (vqDx * q - vq * qDx) * inverseQSquared;
     const duDy = (uqDy * q - uq * qDy) * inverseQSquared;
     const dvDy = (vqDy * q - vq * qDy) * inverseQSquared;
-    rho = Math.max(
-      rho,
+    const rho = Math.max(
       Math.hypot(duDx * manifest.width, dvDx * manifest.height),
       Math.hypot(duDy * manifest.width, dvDy * manifest.height),
     );
+    const mip = Math.max(0, Math.min(
+      manifest.mipCount - 1,
+      Math.floor(Math.log2(Math.max(1, rho))),
+    ));
+    minimumMip = Math.min(minimumMip, mip);
+    maximumMip = Math.max(maximumMip, mip);
+    sampled = true;
   }
-  const mip = Math.max(0, Math.min(
-    manifest.mipCount - 1,
-    Math.floor(Math.log2(Math.max(1, rho))),
-  ));
+  if (!sampled) return;
+  if (
+    minimumMip < maximumMip
+    && subdivisionDepth < MAX_DEMAND_SUBDIVISION_DEPTH
+  ) {
+    const target = workspace.subdivision;
+    const targetOffset = subdivisionDepth * 3 * CLIP_VERTEX_COMPONENTS;
+    const firstOffset = first * CLIP_VERTEX_COMPONENTS;
+    const secondOffset = second * CLIP_VERTEX_COMPONENTS;
+    const thirdOffset = third * CLIP_VERTEX_COMPONENTS;
+    const targetFirst = targetOffset / CLIP_VERTEX_COMPONENTS;
+    for (let child = 0; child < 4; child += 1) {
+      let childFirstStart = firstOffset; let childFirstEnd = firstOffset;
+      let childSecondStart = firstOffset; let childSecondEnd = secondOffset;
+      let childThirdStart = thirdOffset; let childThirdEnd = firstOffset;
+      if (child === 1) {
+        childFirstEnd = secondOffset;
+        childSecondStart = secondOffset;
+        childThirdStart = secondOffset;
+        childThirdEnd = thirdOffset;
+      } else if (child === 2) {
+        childFirstStart = thirdOffset;
+        childSecondStart = secondOffset;
+        childSecondEnd = thirdOffset;
+        childThirdEnd = thirdOffset;
+      } else if (child === 3) {
+        childFirstEnd = secondOffset;
+        childSecondStart = secondOffset;
+        childSecondEnd = thirdOffset;
+      }
+      midpointVertex(
+        target,
+        targetOffset,
+        vertices,
+        childFirstStart,
+        childFirstEnd,
+      );
+      midpointVertex(
+        target,
+        targetOffset + CLIP_VERTEX_COMPONENTS,
+        vertices,
+        childSecondStart,
+        childSecondEnd,
+      );
+      midpointVertex(
+        target,
+        targetOffset + CLIP_VERTEX_COMPONENTS * 2,
+        vertices,
+        childThirdStart,
+        childThirdEnd,
+      );
+      addClippedTriangleDemand(
+        workspace,
+        manifest,
+        target,
+        targetFirst,
+        targetFirst + 1,
+        targetFirst + 2,
+        viewport,
+        sampler,
+        subdivisionDepth + 1,
+      );
+    }
+    return;
+  }
   addWrappedRange(
     workspace,
     manifest,
-    mip,
+    minimumMip,
     Math.min(
       screen[2]! / screen[4]!,
       screen[7]! / screen[9]!,

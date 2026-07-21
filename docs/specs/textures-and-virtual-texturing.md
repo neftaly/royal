@@ -172,6 +172,14 @@ policy; it MUST NOT request the whole virtual texture merely because one draw is
 visible. Degenerate or non-finite projections must fall back safely without
 unbounded demand.
 
+Perspective-varying triangles use bounded demand-only subdivision when sampled
+mip requirements differ. Each leaf requests its finest observed requirement;
+the subdivision never mutates or tessellates rendered geometry. Four fixed
+levels and caller-owned numeric scratch bound CPU, memory, and stack work while
+preventing a far corner of a two-triangle ground plane from forcing its close
+region to an unnecessarily coarse mip. Near-plane clipping happens before this
+analysis and uses the same path.
+
 The coarsest usable ancestor SHOULD be requested first. A finer page MUST NOT be
 published to the page table until its atlas upload is complete. Missing fine
 pages sample the closest resident ancestor. Sparse-addressing holes use the

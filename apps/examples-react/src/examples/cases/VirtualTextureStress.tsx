@@ -13,7 +13,7 @@ import {
   unlitMaterial,
   virtualTexture,
 } from '@royal/react/scene';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
@@ -40,9 +40,11 @@ const views = {
   NW: { distance: 4.8, pitch: 0, target: [-2, 2, 0] as const, yaw: 0 },
   SE: { distance: 4.8, pitch: 0, target: [2, -2, 0] as const, yaw: 0 },
   SW: { distance: 4.8, pitch: 0, target: [-2, -2, 0] as const, yaw: 0 },
+  Ground: { distance: 6, pitch: 0.65, target: [-2, 0, 2] as const, yaw: 0 },
 } as const;
 
 type ViewName = keyof typeof views;
+const groundCloseView = { ...views.Ground, distance: 0.1 } as const;
 
 const VirtualTextureStatusLabel = (): ReactNode => {
   const status = useVirtualTextureAssetStatus(mapTexture);
@@ -57,25 +59,47 @@ const VirtualTextureStatusLabel = (): ReactNode => {
 };
 
 export const VirtualTextureStress = (): ReactNode => {
-  const orbit = useOrbitCamera({ initial: views.Both, far: 80, near: 0.01 });
+  const groundCloseRequested = new URLSearchParams(globalThis.location.search)
+    .get('view') === 'ground-close';
+  const orbit = useOrbitCamera({
+    initial: groundCloseRequested ? groundCloseView : views.Both,
+    far: 80,
+    near: 0.01,
+  });
   const orbitView = useOrbitCameraView(orbit);
+  const [surface, setSurface] = useState<'ground' | 'wall'>(
+    groundCloseRequested ? 'ground' : 'wall',
+  );
+  const ground = surface === 'ground';
   const renderScene = useMemo(() => scene({
     camera: orbit.camera,
     clearColor: [0.018, 0.024, 0.036, 1],
     nodes: [
-      mesh({ geometry: mapGeometry, material: mapMaterial }),
+      mesh({
+        geometry: mapGeometry,
+        material: mapMaterial,
+        ...(ground ? { transform: { rotation: [-Math.PI / 2, 0, 0] as const } } : {}),
+      }),
       mesh({
         geometry: residencyMarkerGeometry,
         material: residencyMarkerMaterial,
-        transform: { position: [0, 0, 0.01] },
+        transform: ground
+          ? { position: [0, 0.01, 0], rotation: [-Math.PI / 2, 0, 0] }
+          : { position: [0, 0, 0.01] },
       }),
     ],
-  }), [orbit.camera]);
+  }), [ground, orbit.camera]);
   const activeView = (name: ViewName): boolean => {
     const view = views[name];
-    return Math.abs(orbitView.target[0] - view.target[0]) < 0.01
+    return ground === (name === 'Ground')
+      && Math.abs(orbitView.target[0] - view.target[0]) < 0.01
       && Math.abs(orbitView.target[1] - view.target[1]) < 0.01
+      && Math.abs(orbitView.target[2] - view.target[2]) < 0.01
       && Math.abs(orbitView.distance - view.distance) < 0.01;
+  };
+  const chooseView = (name: ViewName): void => {
+    setSurface(name === 'Ground' ? 'ground' : 'wall');
+    orbit.setView(views[name]);
   };
 
   return (
@@ -89,14 +113,14 @@ export const VirtualTextureStress = (): ReactNode => {
           </div>
         </div>
         <div className="vt-stress-actions" aria-label="Map camera presets" role="group">
-          {(['Both', 'NW', 'NE', 'SW', 'SE'] as const).map((name) => (
+          {(['Both', 'NW', 'NE', 'SW', 'SE', 'Ground'] as const).map((name) => (
             <button
               aria-pressed={activeView(name)}
               key={name}
               type="button"
-              onClick={() => orbit.setView(views[name])}
+              onClick={() => chooseView(name)}
             >
-              {name === 'Both' ? 'Overview' : name}
+              {name === 'Both' ? 'Overview' : name === 'Ground' ? 'Ground plane' : name}
             </button>
           ))}
         </div>
@@ -108,6 +132,7 @@ export const VirtualTextureStress = (): ReactNode => {
           data-map-target-x={orbitView.target[0].toFixed(3)}
           data-map-target-y={orbitView.target[1].toFixed(3)}
           data-vt-distance={orbitView.distance.toFixed(3)}
+          data-vt-surface={surface}
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >

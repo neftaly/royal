@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { perspectiveCamera } from "../../packages/renderer-core/src/camera";
 import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/gltf/texture-coordinates";
-import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import {
+  identityMat4,
+  projectionMat4,
+} from "../../packages/renderer-webgl/src/math/mat4";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
@@ -88,6 +92,82 @@ describe("VT2 clipped projected demand", () => {
     expect(workspace.count).toBe(3);
     expect(workspace.overflow.value).toBe(true);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+  });
+
+  it("localizes fine demand on a large oblique ground plane", () => {
+    const groundManifest = parseVirtualTextureManifest({
+      borderTexels: 1,
+      contractVersion: 2,
+      mipCount: 4,
+      pageSize: 256,
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" },
+      virtualSize: [2048, 2048],
+    });
+    const geometry = {
+      bounds: { max: [0.4, 0.4, -1] as const, min: [-0.4, -0.4, -8] as const },
+      indices: new Uint8Array([0, 1, 2, 0, 2, 3]),
+      key: "oblique-ground",
+      positions: new Float32Array([
+        -0.4, -0.4, -1,
+        0.4, -0.4, -1,
+        0.4, 0.4, -8,
+        -0.4, 0.4, -8,
+      ]),
+      textureCoordinates0: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
+    };
+    const model = identityMat4();
+    const camera = perspectiveCamera({
+      far: 100,
+      fovY: Math.PI / 3,
+      near: 0.05,
+    });
+    const projection = projectionMat4(camera, 4096, 4096);
+    const workspace = createVirtualTextureDemandWorkspace(128);
+    collectVirtualTextureDemand(workspace, groundManifest, [{
+      geometry,
+      model,
+      textureCoordinates: IDENTITY_TEXTURE_COORDINATES,
+      worldBounds: transformedWorldBounds(geometry.bounds, model),
+    }], [{
+      viewProjection: projection,
+      viewport: { height: 4096, width: 4096, x: 0, y: 0 },
+    }], sampler);
+
+    const requestedMips = Array.from(workspace.mips.slice(0, workspace.count));
+    expect(requestedMips).toContain(0);
+    expect(requestedMips).toContain(groundManifest.mipCount - 1);
+    expect(requestedMips.filter((mip) => mip === 0).length).toBeLessThan(32);
+    expect(workspace.count).toBeLessThan(48);
+  });
+
+  it("clips an oblique surface through the near plane without losing close demand", () => {
+    const camera = perspectiveCamera({ far: 20, near: 0.05 });
+    const geometry = {
+      bounds: { max: [0.4, 0.4, -0.01] as const, min: [-0.4, -0.4, -2] as const },
+      indices: new Uint8Array([0, 1, 2, 0, 2, 3]),
+      key: "near-plane-ground",
+      positions: new Float32Array([
+        -0.02, -0.02, -0.01,
+        0.02, -0.02, -0.01,
+        0.4, 0.4, -2,
+        -0.4, 0.4, -2,
+      ]),
+      textureCoordinates0: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]),
+    };
+    const workspace = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(workspace, manifest, [{
+      geometry,
+      model: identityMat4(),
+      textureCoordinates: IDENTITY_TEXTURE_COORDINATES,
+      worldBounds: geometry.bounds,
+    }], [{
+      viewProjection: projectionMat4(camera, 1024, 1024),
+      viewport: { height: 1024, width: 1024, x: 0, y: 0 },
+    }], sampler);
+
+    expect(workspace.count).toBeGreaterThan(1);
+    expect(Array.from(workspace.mips.slice(0, workspace.count))).toContain(0);
+    expect(workspace.overflow.value).toBe(false);
   });
 
   it("fits protection by dropping complete fine levels", () => {

@@ -13,10 +13,12 @@ Unknown optional extensions do not participate in selection and may use valid
 core fallback. Direct Royal features do not imply support for a similarly
 shaped glTF extension.
 
-The declaration graph is validated before semantic readers run:
+The executable declaration graph is validated before semantic readers run:
 `extensionsUsed` contains unique non-empty names, every required name also
-appears there, and every encountered extension payload is declared. Unknown
-declared optional names remain legal when core fallback is valid.
+appears there, and every executable extension payload is declared. Payloads of
+unsupported optional extensions are opaque core-fallback branches; payloads of
+supported extensions remain recursively validated. Unknown declared optional
+names remain legal when core fallback is valid.
 
 The glTF Lab distinguishes a `supported-oracle` from a
 `core-fallback-oracle`. The latter proves that an optional extension's authored
