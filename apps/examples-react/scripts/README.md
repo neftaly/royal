@@ -64,12 +64,14 @@ For visual review of one selected hardware-rendered route, set
 `EXAMPLES_BENCH_SCREENSHOT=/tmp/royal-route.png`. The harness captures the
 settled first canvas after measurement and rejects a multi-route screenshot run.
 
-For a one-frame, draw-by-draw GPU breakdown, add
+For a one-frame GPU command breakdown, add
 `EXAMPLES_BENCH_GPU_DRAW_PROFILE=1` to a camera-drag run. The opt-in profile
 records timer-query duration, element/vertex count, instance count, and stable
-program/VAO identities for each draw, sorted slowest first under
+program/VAO identities for each draw, plus scene-color copy and mip-generation
+commands, sorted slowest first under
 `cameraDrag.frameStats.gpuDrawProfile.records`. Per-draw timer queries perturb
-that profiled frame, so use it to locate expensive coverage or shader variants;
+that profiled frame, so use it to locate expensive coverage, shader variants,
+or transmission preparation;
 use the ordinary drag GPU p95 from a separate run for regression comparisons.
 It profiles drag frame 1 by default; set the 1-based
 `EXAMPLES_BENCH_GPU_DRAW_PROFILE_FRAME` to inspect a later camera view.

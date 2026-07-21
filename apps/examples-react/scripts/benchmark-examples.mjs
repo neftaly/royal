@@ -1121,7 +1121,13 @@ const installBenchmarkHooks = async (session) => {
     Object.defineProperty(wrapped, '__royalBenchPatched', { value: true });
     prototype[name] = wrapped;
   };
-  const profileDraw = (kind, count, instances, gl) => {
+  const profileGpuCommand = (
+    kind,
+    count,
+    instances,
+    gl,
+    programLabel = glProgramLabels.get(drawState.program) ?? 'unknown',
+  ) => {
     if (!gpuDrawProfile.active) return undefined;
     gpuDrawProfile.attempted = true;
     const timer = beginGpuTimerForGl(gl);
@@ -1133,13 +1139,17 @@ const installBenchmarkHooks = async (session) => {
       kind,
       ordinal: gpuDrawProfile.records.length,
       programId: glObjectId(drawState.program),
-      programLabel: glProgramLabels.get(drawState.program) ?? 'unknown',
+      programLabel,
       vertexArrayId: glObjectId(drawState.vertexArray),
     };
     gpuDrawProfile.records.push(record);
     timer.drawRecord = record;
     return () => endGpuTimer(timer, false);
   };
+  const profileDraw = (kind, count, instances, gl) =>
+    profileGpuCommand(kind, count, instances, gl);
+  const profileTransfer = (kind, gl) =>
+    profileGpuCommand(kind, 0, 0, gl, 'gpu-command:' + kind);
   const multiDrawElementCount = (counts, offset, drawCount) => {
     let total = 0;
     const start = Math.max(0, Math.floor(Number(offset) || 0));
@@ -1292,16 +1302,6 @@ const installBenchmarkHooks = async (session) => {
         counters.bufferSubDataBytes += bufferSubDataByteLength(args);
       });
       patch(prototype, 'compressedTexSubImage2D', () => { counters.compressedTexSubImage2D += 1; });
-      patch(prototype, 'copyTexImage2D', () => { counters.copyTexImage2D += 1; });
-      patch(prototype, 'copyTexSubImage2D', (args) => {
-        counters.copyTexSubImage2D += 1;
-        const width = Number(args[6]);
-        const height = Number(args[7]);
-        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-          counters.copyTexSubImage2DPixels += width * height;
-        }
-      });
-      patch(prototype, 'generateMipmap', () => { counters.generateMipmap += 1; });
       patch(prototype, 'linkProgram', () => { counters.linkProgram += 1; });
       patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
       patch(prototype, 'texStorage2D', () => { counters.texStorage2D += 1; });
@@ -1312,6 +1312,27 @@ const installBenchmarkHooks = async (session) => {
           if (name.startsWith('uniformMatrix')) counters.uniformMatrixCalls += 1;
         });
       }
+    }
+    if (config.glCountersEnabled || config.gpuDrawProfileEnabled) {
+      patch(prototype, 'copyTexImage2D', (_args, gl) => {
+        if (config.glCountersEnabled) counters.copyTexImage2D += 1;
+        return profileTransfer('copyTexImage2D', gl);
+      });
+      patch(prototype, 'copyTexSubImage2D', (args, gl) => {
+        if (config.glCountersEnabled) {
+          counters.copyTexSubImage2D += 1;
+          const width = Number(args[6]);
+          const height = Number(args[7]);
+          if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+            counters.copyTexSubImage2DPixels += width * height;
+          }
+        }
+        return profileTransfer('copyTexSubImage2D', gl);
+      });
+      patch(prototype, 'generateMipmap', (_args, gl) => {
+        if (config.glCountersEnabled) counters.generateMipmap += 1;
+        return profileTransfer('generateMipmap', gl);
+      });
     }
     if (config.glCountersEnabled || config.gpuDrawProfileEnabled) {
       patch(prototype, 'useProgram', (args) => {
