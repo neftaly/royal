@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
 import {
   createBrowserTextureDecoder,
-  decodeTextureWithBrowser,
 } from "../../packages/renderer-webgl/src/texture/browser-decode";
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { createAvifHeader } from "./support/avif-header";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
+
+const decodeTextureWithBrowser = createBrowserTextureDecoder();
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -66,7 +67,7 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("fetch", fetch);
 
-    const decoded = await createBrowserTextureDecoder(4, 8, true, true)({
+    const decoded = await createBrowserTextureDecoder(4, true, true)({
       fallback: { kind: "asset", src: "/fallback.png" },
       kind: "asset",
       sourceEncoding: "svg",
@@ -111,7 +112,7 @@ describe("browser texture decode shell", () => {
     };
 
     const ordinary = await createBrowserTextureDecoder()(asset, new AbortController().signal);
-    const retained = await createBrowserTextureDecoder(4, 8, true, true)(
+    const retained = await createBrowserTextureDecoder(4, true, true)(
       asset,
       new AbortController().signal,
     );
@@ -302,7 +303,7 @@ describe("browser texture decode shell", () => {
   it("rejects explicit ETC2 before transport when the WebGL capability is absent", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(1, 1, false);
+    const decode = createBrowserTextureDecoder(1, false);
     await expect(decode({
       kind: "asset",
       sourceEncoding: "ktx2-etc2",
@@ -580,7 +581,7 @@ describe("browser texture decode shell", () => {
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
-  it("bounds complete jobs and browser bitmap decode as one pipeline", async () => {
+  it("leaves lifecycle bounds to the owner while bounding browser bitmap decode", async () => {
     const releases: Array<(bitmap: ImageBitmap) => void> = [];
     const createImageBitmap = vi.fn(() => new Promise<ImageBitmap>((resolve) => {
       releases.push(resolve);
@@ -592,16 +593,15 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(2, 2);
+    const decode = createBrowserTextureDecoder(2);
     const signal = new AbortController().signal;
     const requests = ["/a.avif", "/b.avif", "/c.avif"].map((src) => decode({
       kind: "asset",
       src,
     }, signal));
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(2));
     releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(3));
     for (const release of releases) {
       release({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);

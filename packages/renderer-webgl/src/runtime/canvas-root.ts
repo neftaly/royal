@@ -261,7 +261,7 @@ const lazyBrowserTextureDecoder = (
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
   return async (asset, signal, maxStorageBytes, retainAlpha) => {
     decoder ??= import("../texture/browser-decode")
-      .then((module) => module.createBrowserTextureDecoder(4, 8, etc2Available, retainSvgSource));
+      .then((module) => module.createBrowserTextureDecoder(4, etc2Available, retainSvgSource));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
 };

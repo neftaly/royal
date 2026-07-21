@@ -368,19 +368,14 @@ const retainTextureAlpha = (
 };
 
 /**
- * Creates one root-local browser decoder. Complete jobs and CPU-heavy bitmap
- * decodes have separate bounds so response blobs cannot pile up behind decode.
+ * Creates one root-local browser decoder. The texture owner bounds complete
+ * source lifecycles; this cold adapter bounds only CPU-heavy bitmap decoding.
  */
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
-  maxParallelJobs = 8,
   etc2Available = true,
   retainSvgSource = false,
 ): BrowserTextureDecoder => {
-  if (maxParallelJobs < maxParallelDecodes) {
-    throw new RangeError("Royal browser texture jobs must not be fewer than decodes");
-  }
-  const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
@@ -415,7 +410,7 @@ export const createBrowserTextureDecoder = (
       encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
     };
   };
-  return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
+  return async (asset, signal, maxStorageBytes, retainAlpha) => {
     try {
       return await decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
     } catch (error) {
@@ -425,8 +420,5 @@ export const createBrowserTextureDecoder = (
       const decoded = await decodeLeaf(asset.fallback, signal, maxStorageBytes, retainAlpha, true);
       return { ...decoded, fallbackReason };
     }
-  });
+  };
 };
-
-/** Standalone adapter; renderer roots create their own queue through the factory. */
-export const decodeTextureWithBrowser = createBrowserTextureDecoder();
