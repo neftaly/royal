@@ -55,7 +55,7 @@ describe("VT2 clipped projected demand", () => {
     collectVirtualTextureDemand(workspace, manifest, [surface], [view(close)], sampler);
     expect(workspace.count).toBeGreaterThan(ordinaryCount);
     expect(Array.from(workspace.mips.slice(0, workspace.count))).toContain(0);
-    expect(workspace.overflow.value).toBe(false);
+    expect(workspace.overflow).toBe(false);
   });
 
   it("unions stereo demand and keeps every capacity prefix ancestor-first", () => {
@@ -90,7 +90,7 @@ describe("VT2 clipped projected demand", () => {
       repeating,
     );
     expect(workspace.count).toBe(3);
-    expect(workspace.overflow.value).toBe(true);
+    expect(workspace.overflow).toBe(true);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
   });
 
@@ -167,7 +167,7 @@ describe("VT2 clipped projected demand", () => {
 
     expect(workspace.count).toBeGreaterThan(1);
     expect(Array.from(workspace.mips.slice(0, workspace.count))).toContain(0);
-    expect(workspace.overflow.value).toBe(false);
+    expect(workspace.overflow).toBe(false);
   });
 
   it("fits protection by dropping complete fine levels", () => {
@@ -181,10 +181,9 @@ describe("VT2 clipped projected demand", () => {
     truncateVirtualTextureDemand(workspace, 4);
     expect(workspace.count).toBeLessThanOrEqual(4);
     expect(workspace.keys.size).toBe(workspace.count);
-    expect([...workspace.keys.values()].every((index) => index < workspace.count)).toBe(true);
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([2]));
-    expect(workspace.overflow.value).toBe(true);
+    expect(workspace.overflow).toBe(true);
   });
 
   it("falls back to the coarsest page for non-finite authored coverage", () => {
@@ -261,7 +260,7 @@ describe("VT2 clipped projected demand", () => {
       [view()],
       sampler,
     );
-    expect([...mixed.keys.keys()]).toEqual([...inside.keys.keys()]);
+    expect([...mixed.keys]).toEqual([...inside.keys]);
   });
 
   it("keeps instanced demand identical when the extra instances are offscreen", () => {
@@ -280,6 +279,6 @@ describe("VT2 clipped projected demand", () => {
       [view()],
       sampler,
     );
-    expect([...instanced.keys.keys()]).toEqual([...visibleOnly.keys.keys()]);
+    expect([...instanced.keys]).toEqual([...visibleOnly.keys]);
   });
 });

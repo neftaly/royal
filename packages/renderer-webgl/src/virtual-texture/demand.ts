@@ -39,16 +39,15 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   clipB: Float64Array;
   frustumPlanes: Float32Array;
   instanceBounds: MutableWorldBounds;
-  keys: Map<number | string, number>;
+  keys: Set<number | string>;
   mips: Uint16Array;
   model: MutableMat4;
   modelViewProjection: MutableMat4;
-  overflow: { value: boolean };
   screen: Float64Array;
   subdivision: Float64Array;
   xs: Uint32Array;
   ys: Uint32Array;
-}> & { count: number };
+}> & { count: number; overflow: boolean };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
@@ -66,11 +65,11 @@ export const createVirtualTextureDemandWorkspace = (
     count: 0,
     frustumPlanes: new Float32Array(24),
     instanceBounds: emptyWorldBounds(),
-    keys: new Map(),
+    keys: new Set(),
     mips: new Uint16Array(maxPages),
     model: identityMat4(),
     modelViewProjection: identityMat4(),
-    overflow: { value: false },
+    overflow: false,
     screen: new Float64Array(15),
     subdivision: new Float64Array(
       MAX_DEMAND_SUBDIVISION_DEPTH * 3 * CLIP_VERTEX_COMPONENTS,
@@ -83,7 +82,7 @@ export const createVirtualTextureDemandWorkspace = (
 export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspace): void => {
   workspace.count = 0;
   workspace.keys.clear();
-  workspace.overflow.value = false;
+  workspace.overflow = false;
 };
 
 /**
@@ -121,11 +120,11 @@ export const truncateVirtualTextureDemand = (
     workspace.mips[target] = mip;
     workspace.xs[target] = x;
     workspace.ys[target] = y;
-    workspace.keys.set(virtualTexturePageKeyParts(mip, x, y), target);
+    workspace.keys.add(virtualTexturePageKeyParts(mip, x, y));
     target += 1;
   }
   workspace.count = target;
-  workspace.overflow.value = true;
+  workspace.overflow = true;
 };
 
 const addPage = (
@@ -137,11 +136,11 @@ const addPage = (
   const key = virtualTexturePageKeyParts(mip, x, y);
   if (workspace.keys.has(key)) return;
   if (workspace.count >= workspace.mips.length) {
-    workspace.overflow.value = true;
+    workspace.overflow = true;
     return;
   }
   const index = workspace.count;
-  workspace.keys.set(key, index);
+  workspace.keys.add(key);
   workspace.mips[index] = mip;
   workspace.xs[index] = x;
   workspace.ys[index] = y;
