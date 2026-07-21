@@ -5,7 +5,6 @@ import type {
   TextureVersion,
 } from "@royal/renderer-core";
 import type { Ktx2Etc2Level } from "./etc2-storage";
-import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { RetainedFifo } from "../resource/retained-fifo";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import type { ParsedSvgTextureSource } from "./svg-source";
@@ -104,12 +103,8 @@ export type TextureAssetSnapshot =
   | Readonly<{ error: string; status: "error" }>;
 
 export type TexturePreparationSnapshot = Readonly<{
-  /** Browser texture decodes currently executing. */
-  activeDecodes: number;
-  /** Maximum simultaneous active-decode and decoded-handoff source reservations. */
-  decodeReservationLimit: number;
-  /** Active decodes plus decoded sources currently retaining a handoff reservation. */
-  decodeReservations: number;
+  /** Texture source lifecycles currently executing transport or decode work. */
+  activePreparations: number;
   /** Estimated CPU bytes currently retained for decoded GPU handoff. */
   decodedHandoffBytes: number;
   /** Soft decoded-handoff byte ceiling; one source may exceed it alone. */
@@ -118,6 +113,10 @@ export type TexturePreparationSnapshot = Readonly<{
   pendingStorageRepresentations: number;
   /** Encoded SVG bytes retained for an optional vector-backed representation. */
   retainedEncodedSourceBytes: number;
+  /** Maximum simultaneous active-preparation and decoded-handoff reservations. */
+  sourceReservationLimit: number;
+  /** Active preparations plus decoded sources retaining a handoff reservation. */
+  sourceReservations: number;
 }>;
 
 export type TextureAssetOwnerPlatform = Readonly<{
@@ -130,7 +129,6 @@ export type TextureAssetOwnerPlatform = Readonly<{
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
-  schedule?: AsyncPreparationScheduler;
 }>;
 
 type AssetEntry = {
@@ -138,14 +136,14 @@ type AssetEntry = {
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
   controller: AbortController | undefined;
-  decodeActive: boolean;
-  decodeDeferred: boolean;
+  preparationActive: boolean;
+  preparationDeferred: boolean;
   decodedReservationBytes: number;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedClaims: number;
   decodedReleased: boolean;
-  decodeRetainsAlpha: boolean;
+  preparationRetainsAlpha: boolean;
   queued: boolean;
   readonly residentStorageKeys: Set<string>;
   retainAlpha: boolean;
@@ -153,7 +151,7 @@ type AssetEntry = {
 };
 
 const IDLE: TextureAssetSnapshot = { status: "idle" };
-const ACTIVE_TEXTURE_DECODE_LIMIT = 8;
+const ACTIVE_TEXTURE_PREPARATION_LIMIT = 16;
 const DECODED_HANDOFF_BYTE_THRESHOLD = 64 * 1024 * 1024;
 const DECODED_HANDOFF_SOURCE_LIMIT = 32;
 
@@ -280,11 +278,11 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 
 /** Owns exact decoded-content claims, asynchronous decode, and focused status publication. */
 export class TextureAssetOwner {
-  #activeDecodes = 0;
-  #decodeReservations = 0;
+  #activePreparations = 0;
+  #sourceReservations = 0;
   #decodedHandoffBytes = 0;
   #disposed = false;
-  readonly #decodeQueue = new RetainedFifo<AssetEntry>();
+  readonly #preparationQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new KeyedRetainedListeners<string>();
@@ -309,7 +307,7 @@ export class TextureAssetOwner {
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
     }
-    this.#decodeQueue.clear();
+    this.#preparationQueue.clear();
     this.#entries.clear();
     this.#listeners.clear();
     this.#storageEntries.clear();
@@ -331,7 +329,7 @@ export class TextureAssetOwner {
     entry.decodedClaims += 1;
     // The optional representation now charges the retained source; this slot
     // only bounds decode handoff and must not starve unrelated asset decoding.
-    this.#releaseDecodeReservation(entry);
+    this.#releaseSourceReservation(entry);
     let active = true;
     return {
       release: () => {
@@ -339,9 +337,9 @@ export class TextureAssetOwner {
         active = false;
         if (this.#disposed) return;
         entry.decodedClaims -= 1;
-        if (entry.decodedClaims === 0 && entry.decodeDeferred) {
-          entry.decodeDeferred = false;
-          this.#queueDecode(entry);
+        if (entry.decodedClaims === 0 && entry.preparationDeferred) {
+          entry.preparationDeferred = false;
+          this.#queuePreparation(entry);
           return;
         }
         this.#releaseDecodedIfUnused(entry);
@@ -378,13 +376,13 @@ export class TextureAssetOwner {
       }
     }
     return {
-      activeDecodes: this.#activeDecodes,
-      decodeReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
-      decodeReservations: this.#decodeReservations,
+      activePreparations: this.#activePreparations,
       decodedHandoffBytes: this.#decodedHandoffBytes,
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
       pendingStorageRepresentations,
       retainedEncodedSourceBytes,
+      sourceReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
+      sourceReservations: this.#sourceReservations,
     };
   }
 
@@ -431,19 +429,19 @@ export class TextureAssetOwner {
         if (!retainAlpha) {
           entry.alpha = undefined;
         } else if (entry.alpha === undefined && entry.snapshot.status !== "error") {
-          if (entry.controller !== undefined && !entry.decodeRetainsAlpha) {
+          if (entry.controller !== undefined && !entry.preparationRetainsAlpha) {
             entry.controller.abort();
             entry.controller = undefined;
-            this.#releaseDecodeReservation(entry);
+            this.#releaseSourceReservation(entry);
           }
-          this.#queueDecode(entry);
+          this.#queuePreparation(entry);
         }
       }
       if (
         entry.decodedReleased
         && entry.snapshot.status !== "error"
         && storageIncomplete(claim.storageKeys, entry.residentStorageKeys)
-      ) this.#queueDecode(entry);
+      ) this.#queuePreparation(entry);
     }
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key)!;
@@ -457,7 +455,7 @@ export class TextureAssetOwner {
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.decodedReleased = true;
       entry.queued = false;
-      this.#releaseDecodeReservation(entry);
+      this.#releaseSourceReservation(entry);
       this.#publish(key);
     }
   }
@@ -477,8 +475,8 @@ export class TextureAssetOwner {
       if (
         entry.retainAlpha
         && entry.alpha === undefined
-        && !entry.decodeRetainsAlpha
-      ) this.#queueDecode(entry);
+        && !entry.preparationRetainsAlpha
+      ) this.#queuePreparation(entry);
     }
   }
 
@@ -493,10 +491,10 @@ export class TextureAssetOwner {
     for (const entry of rejected) {
       entry.alpha = undefined;
       entry.claimedStorageKeys.clear();
-      entry.decodeDeferred = false;
+      entry.preparationDeferred = false;
       if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
       entry.decodedReleased = entry.decodedClaims === 0;
-      if (entry.decodedClaims === 0) this.#releaseDecodeReservation(entry);
+      if (entry.decodedClaims === 0) this.#releaseSourceReservation(entry);
       this.#platform.onAssetChanged(entry.key);
     }
   }
@@ -512,11 +510,11 @@ export class TextureAssetOwner {
       if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
       entry.decodedReleased = entry.decodedClaims === 0;
       entry.queued = false;
-      entry.decodeDeferred = false;
+      entry.preparationDeferred = false;
       if (entry.decodedClaims === 0) {
-        this.#releaseDecodeReservation(entry);
+        this.#releaseSourceReservation(entry);
         entry.snapshot = { status: "loading" };
-        this.#queueDecode(entry);
+        this.#queuePreparation(entry);
       }
       this.#platform.onAssetChanged(entry.key);
       this.#platform.onSnapshotChanged(entry.key);
@@ -554,13 +552,13 @@ export class TextureAssetOwner {
       asset,
       claimedStorageKeys: new Set(storageKeys),
       controller: undefined,
-      decodeActive: false,
-      decodeDeferred: false,
+      preparationActive: false,
+      preparationDeferred: false,
       decodedReservationBytes: 0,
       decoded: undefined,
       decodedClaims: 0,
       decodedReleased: false,
-      decodeRetainsAlpha: false,
+      preparationRetainsAlpha: false,
       key,
       queued: false,
       residentStorageKeys: new Set(),
@@ -569,51 +567,51 @@ export class TextureAssetOwner {
     };
     this.#entries.set(key, entry);
     this.#publish(key);
-    this.#queueDecode(entry);
+    this.#queuePreparation(entry);
   }
 
-  #queueDecode(entry: AssetEntry): void {
-    if (entry.decodeActive || entry.decodedReservationBytes !== 0) return;
+  #queuePreparation(entry: AssetEntry): void {
+    if (entry.preparationActive || entry.decodedReservationBytes !== 0) return;
     if (entry.decodedClaims > 0) {
-      entry.decodeDeferred = true;
+      entry.preparationDeferred = true;
       return;
     }
     if (entry.queued) return;
     entry.queued = true;
-    this.#decodeQueue.enqueue(entry);
-    this.#drainDecodeQueue();
+    this.#preparationQueue.enqueue(entry);
+    this.#drainPreparationQueue();
   }
 
-  #drainDecodeQueue(): void {
+  #drainPreparationQueue(): void {
     while (
       !this.#disposed
-      && this.#activeDecodes < ACTIVE_TEXTURE_DECODE_LIMIT
-      && this.#decodeReservations < DECODED_HANDOFF_SOURCE_LIMIT
+      && this.#activePreparations < ACTIVE_TEXTURE_PREPARATION_LIMIT
+      && this.#sourceReservations < DECODED_HANDOFF_SOURCE_LIMIT
       && (
-        this.#decodeReservations === this.#activeDecodes
+        this.#sourceReservations === this.#activePreparations
         || this.#decodedHandoffBytes < DECODED_HANDOFF_BYTE_THRESHOLD
       )
     ) {
-      const entry = this.#decodeQueue.dequeue();
+      const entry = this.#preparationQueue.dequeue();
       if (entry === undefined) return;
       if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;
-      entry.decodeActive = true;
-      this.#activeDecodes += 1;
-      this.#decodeReservations += 1;
-      this.#decode(entry);
+      entry.preparationActive = true;
+      this.#activePreparations += 1;
+      this.#sourceReservations += 1;
+      this.#prepare(entry);
     }
   }
 
-  #releaseDecodeReservation(entry: AssetEntry): void {
+  #releaseSourceReservation(entry: AssetEntry): void {
     const bytes = entry.decodedReservationBytes;
-    if (!entry.decodeActive && bytes === 0) return;
-    if (entry.decodeActive) this.#activeDecodes -= 1;
+    if (!entry.preparationActive && bytes === 0) return;
+    if (entry.preparationActive) this.#activePreparations -= 1;
     else this.#decodedHandoffBytes -= bytes;
-    entry.decodeActive = false;
+    entry.preparationActive = false;
     entry.decodedReservationBytes = 0;
-    this.#decodeReservations -= 1;
-    this.#drainDecodeQueue();
+    this.#sourceReservations -= 1;
+    this.#drainPreparationQueue();
   }
 
   #retainDecodedHandoff(
@@ -621,13 +619,13 @@ export class TextureAssetOwner {
     decoded: DecodedTextureSource,
     alpha: DecodedTextureAlpha | undefined,
   ): void {
-    if (!entry.decodeActive) {
+    if (!entry.preparationActive) {
       throw new Error("Royal decoded texture completed without an active reservation");
     }
     const bytes = decodedTextureHandoffBytes(decoded, alpha);
-    entry.decodeActive = false;
+    entry.preparationActive = false;
     entry.decodedReservationBytes = bytes;
-    this.#activeDecodes -= 1;
+    this.#activePreparations -= 1;
     this.#decodedHandoffBytes += bytes;
   }
 
@@ -640,22 +638,19 @@ export class TextureAssetOwner {
     ) return;
     entry.decoded.close?.();
     entry.decodedReleased = true;
-    this.#releaseDecodeReservation(entry);
+    this.#releaseSourceReservation(entry);
   }
 
-  #decode(entry: AssetEntry): void {
+  #prepare(entry: AssetEntry): void {
     const controller = new AbortController();
     entry.controller = controller;
     const asset = entry.asset;
     const key = entry.key;
     const retainAlpha = entry.retainAlpha;
-    entry.decodeRetainsAlpha = retainAlpha;
-    const decode = (): Promise<DecodedTextureSource> => retainAlpha
+    entry.preparationRetainsAlpha = retainAlpha;
+    const decoding: Promise<DecodedTextureSource> = retainAlpha
       ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
       : this.#platform.decode(asset, controller.signal, this.#maxStorageBytes);
-    const decoding = this.#platform.schedule === undefined
-      ? decode()
-      : this.#platform.schedule(controller.signal, decode);
     void decoding.then((decoded) => {
       if (
         this.#disposed
@@ -725,8 +720,8 @@ export class TextureAssetOwner {
       if (!storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)) {
         decodedSource.close?.();
         entry.decodedReleased = true;
-        this.#releaseDecodeReservation(entry);
-      } else this.#drainDecodeQueue();
+        this.#releaseSourceReservation(entry);
+      } else this.#drainPreparationQueue();
     }).catch((error: unknown) => {
       if (
         this.#disposed
@@ -735,7 +730,7 @@ export class TextureAssetOwner {
         || controller.signal.aborted
       ) return;
       entry.controller = undefined;
-      this.#releaseDecodeReservation(entry);
+      this.#releaseSourceReservation(entry);
       if (entry.residentStorageKeys.size === 0) {
         entry.decoded = undefined;
         entry.decodedReleased = false;

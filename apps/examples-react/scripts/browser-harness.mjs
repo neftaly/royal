@@ -13,13 +13,13 @@ export const gltfRendererSnapshotSettled = (snapshot, minImagesLoaded = 0) => {
   if (!assetSettled) return false;
   return ![
     'activePreparationJobs',
-    'activeTextureDecodes',
-    'decodeReservations',
+    'activeTexturePreparations',
     'deferredGeometryUploads',
     'deferredOrdinaryTextureUploads',
     'pendingOrdinaryTextureStorageRepresentations',
     'pendingSurfaceUploads',
     'queuedPreparationJobs',
+    'sourceReservations',
   ].some((field) => (snapshot.resourcePressure?.[field] ?? 0) > 0);
 };
 

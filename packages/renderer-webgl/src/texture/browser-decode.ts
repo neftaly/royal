@@ -12,6 +12,7 @@ import {
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import { RetainedFifo } from "../resource/retained-fifo";
 import { createTextureAlphaMipChain } from "./alpha-mipmap-generation";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
@@ -22,8 +23,8 @@ export type BrowserTextureDecoder = (
 
 type PendingWork = {
   readonly reject: (error: unknown) => void;
-  readonly resolve: (decoded: DecodedTextureSource) => void;
-  readonly run: () => Promise<DecodedTextureSource>;
+  readonly resolve: (value: unknown) => void;
+  readonly run: () => Promise<unknown>;
   readonly signal: AbortSignal;
 };
 
@@ -41,13 +42,18 @@ class BrowserWorkQueue {
     this.#limit = limit;
   }
 
-  run(
+  run<Value>(
     signal: AbortSignal,
-    decode: () => Promise<DecodedTextureSource>,
-  ): Promise<DecodedTextureSource> {
+    work: () => Promise<Value>,
+  ): Promise<Value> {
     if (signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
-      this.#pending.enqueue({ reject, resolve, run: decode, signal });
+      this.#pending.enqueue({
+        reject,
+        resolve: (value) => resolve(value as Value),
+        run: work,
+        signal,
+      });
       this.#drain();
     });
   }
@@ -368,15 +374,28 @@ const retainTextureAlpha = (
 };
 
 /**
- * Creates one root-local browser decoder. The texture owner bounds complete
- * source lifecycles; this cold adapter bounds only CPU-heavy bitmap decoding.
+ * Creates one root-local browser pipeline. The texture owner bounds complete
+ * source lifecycles; this cold adapter separately bounds transport and
+ * CPU-heavy bitmap decoding. An injected root scheduler governs transport
+ * only, so fetched blobs do not occupy shared preparation slots while waiting
+ * for browser decode.
  */
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
   etc2Available = true,
   retainSvgSource = false,
+  scheduleTransport?: AsyncPreparationScheduler,
 ): BrowserTextureDecoder => {
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
+  const transports = new BrowserWorkQueue(8);
+  const read = (
+    asset: TextureLeafSourceRef,
+    signal: AbortSignal,
+  ): Promise<TextureBlob> => asset.kind === "embedded-asset"
+    ? readTextureBlob(asset, signal)
+    : transports.run(signal, () => scheduleTransport === undefined
+      ? readTextureBlob(asset, signal)
+      : scheduleTransport(signal, () => readTextureBlob(asset, signal)));
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
@@ -387,7 +406,7 @@ export const createBrowserTextureDecoder = (
     if (!etc2Available && declaresKtx2(asset)) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
-    const { blob, ktx2, svg } = await readTextureBlob(asset, signal);
+    const { blob, ktx2, svg } = await read(asset, signal);
     if (fallback && svg) {
       throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
     }

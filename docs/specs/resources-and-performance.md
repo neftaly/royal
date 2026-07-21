@@ -43,25 +43,31 @@ depend on them. This keeps later phase separation and browser-specific work
 attribution from becoming breaking API changes.
 
 The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
-authority shared by glTF asset pipelines, ordinary texture decode, authored-VT
-transport/decode, and prefiltered-environment work. Newly claimed scene,
+authority shared by glTF asset pipelines, ordinary-texture transport,
+authored-VT transport/decode, and prefiltered-environment work. Newly claimed scene,
 environment, and visible-VT work uses the foreground lane, so an existing image
-detail backlog cannot delay first usable geometry. Ordinary texture decode uses
+detail backlog cannot delay first usable geometry. Ordinary-texture transport uses
 the detail lane. FIFO order is preserved within each lane; after at most four
 foreground starts while detail remains queued, one detail job starts. Active
 work is never preempted.
 
-A job is an admitted asset-preparation lifecycle, not a promise that a browser
-created a worker or only one underlying request. A queued claim can be aborted
-without starting; active claims retain their slot until their promise settles.
-Root diagnostics expose the current limit plus active, total queued,
-foreground queued, and detail queued counts without polling or waking rendering.
+A job is one admitted preparation phase, not necessarily a complete asset
+lifecycle or a promise that a browser created a worker. An ordinary-texture
+transport claim releases its shared slot as soon as the encoded `Blob` is
+available; it does not retain that slot while waiting for bitmap decode. A
+queued claim can be aborted without starting, and active phase work retains its
+slot until that phase settles. Root diagnostics expose the current limit plus
+active, total queued, foreground queued, and detail queued counts without
+polling or waking rendering.
 
 Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
 ceiling. Browser image decode allocations and worker scratch peaks are not
-reliably observable or predictable before work starts. Ordinary texture decode
-instead has explicit source-count, reservation-count, and decoded-handoff byte
-bounds; Draco workers, VT reads, environment artifacts, and GPU/upload domains
+reliably observable or predictable before work starts. Ordinary textures
+instead admit at most 16 active preparations within 32 total active-or-handoff
+source reservations, run at most eight transports and four bitmap decodes concurrently,
+and stop new work once completed decoded handoff exceeds 64 MiB. This allows
+bounded encoded read-ahead without serializing a 200-image scene behind browser
+decode. Draco workers, VT reads, environment artifacts, and GPU/upload domains
 retain their own exact limits. A future cross-domain byte admission policy
 requires measured peak evidence and an accurate reservation contract rather
 than estimates attached to heterogeneous promises.

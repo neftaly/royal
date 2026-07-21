@@ -92,13 +92,13 @@ export const rendererBenchmarkSnapshotReady = (
   const pressure = snapshot.resourcePressure;
   const unsettled = pressure !== null && [
     'activePreparationJobs',
-    'activeTextureDecodes',
-    'decodeReservations',
+    'activeTexturePreparations',
     'deferredGeometryUploads',
     'deferredOrdinaryTextureUploads',
     'pendingOrdinaryTextureStorageRepresentations',
     'pendingSurfaceUploads',
     'queuedPreparationJobs',
+    'sourceReservations',
   ].some((field) => (pressure[field] ?? 0) > 0);
   return !unsettled && assets.every((asset) => asset.status !== 'loading' && (
     asset.status === 'error'

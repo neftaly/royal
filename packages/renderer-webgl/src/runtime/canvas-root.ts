@@ -105,6 +105,7 @@ import type { PreparedRoyalEnvironment } from "../environment/royal-environment-
 import {
   AsyncPreparationOwner,
   DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
+  type AsyncPreparationScheduler,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import {
@@ -269,11 +270,17 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
   retainSvgSource: boolean,
+  scheduleTransport: AsyncPreparationScheduler,
 ): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
   return async (asset, signal, maxStorageBytes, retainAlpha) => {
     decoder ??= import("../texture/browser-decode")
-      .then((module) => module.createBrowserTextureDecoder(4, etc2Available, retainSvgSource));
+      .then((module) => module.createBrowserTextureDecoder(
+        4,
+        etc2Available,
+        retainSvgSource,
+        scheduleTransport,
+      ));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
 };
@@ -523,11 +530,11 @@ export class CanvasRoot implements RendererRoot {
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(
         this.#etc2Available,
         this.#automaticVirtualTexturing,
+        this.#asyncPreparation.run,
       ),
       onAssetChanged: (key) => this.#queuePreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
-      schedule: this.#asyncPreparation.run,
     }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75));
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());

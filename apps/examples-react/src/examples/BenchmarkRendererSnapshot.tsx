@@ -132,15 +132,15 @@ export const BenchmarkRendererSnapshot = ({
         },
         resourcePressure: {
           activePreparationJobs: current.resources.asyncPreparation.activeJobs,
-          activeTextureDecodes:
-            current.resources.ordinaryTexturePreparation.activeDecodes,
+          activeTexturePreparations:
+            current.resources.ordinaryTexturePreparation.activePreparations,
           admittedGeometryUploadBytes: current.resources.geometryUploads.admittedBytes,
           admittedOrdinaryTextureUploadBytes:
             current.resources.ordinaryTextureUploads.admittedBytes,
-          decodeReservationLimit:
-            current.resources.ordinaryTexturePreparation.decodeReservationLimit,
-          decodeReservations:
-            current.resources.ordinaryTexturePreparation.decodeReservations,
+          sourceReservationLimit:
+            current.resources.ordinaryTexturePreparation.sourceReservationLimit,
+          sourceReservations:
+            current.resources.ordinaryTexturePreparation.sourceReservations,
           decodedTextureHandoffBytes:
             current.resources.ordinaryTexturePreparation.decodedHandoffBytes,
           decodedTextureHandoffThresholdBytes:

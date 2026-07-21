@@ -165,7 +165,7 @@ describe("canvas root asset publication", () => {
     expect(root.getSnapshot().lastFrameFailure).toMatch(/prefiltered environment/u);
   });
 
-  it("shares one immutable preparation limit across environment and texture work", async () => {
+  it("keeps texture decode outside the shared transport and scene-work slots", async () => {
     let finishEnvironment: ((source: ArrayBuffer) => void) | undefined;
     const environmentRead = new Promise<ArrayBuffer>((resolve) => {
       finishEnvironment = resolve;
@@ -195,14 +195,14 @@ describe("canvas root asset publication", () => {
     expect(root.getSnapshot().resources.asyncPreparation).toEqual({
       activeJobs: 1,
       jobLimit: 1,
-      queuedDetailJobs: 1,
+      queuedDetailJobs: 0,
       queuedForegroundJobs: 0,
-      queuedJobs: 1,
+      queuedJobs: 0,
     });
-    expect(decodeTexture).not.toHaveBeenCalled();
-    finishEnvironment?.(environmentKtx1Fixture(2).source);
-    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    expect(decodeTexture).toHaveBeenCalledOnce();
     await waitFor(() => expect(root.getTextureAssetSnapshot(texture).status).toBe("ready"));
+    finishEnvironment?.(environmentKtx1Fixture(2).source);
+    await waitFor(() => expect(root.getSnapshot().resources.asyncPreparation.activeJobs).toBe(0));
     expect(root.getSnapshot().resources.asyncPreparation).toEqual({
       activeJobs: 0,
       jobLimit: 1,
@@ -366,10 +366,10 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(20);
     expect(root.getSnapshot().resources.geometryUploads.pendingSurfaces).toBe(0);
     expect(root.getSnapshot().resources.ordinaryTexturePreparation).toMatchObject({
-      activeDecodes: 0,
-      decodeReservations: 0,
+      activePreparations: 0,
       decodedHandoffBytes: 0,
       pendingStorageRepresentations: 0,
+      sourceReservations: 0,
     });
     expect(callbacks).toHaveLength(0);
     root.dispose();

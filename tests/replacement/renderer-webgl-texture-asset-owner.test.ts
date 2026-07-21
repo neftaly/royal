@@ -320,7 +320,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledOnce();
   });
 
-  it("bounds active unknown-size decodes without waiting for small completed handoffs", async () => {
+  it("bounds read-ahead lifecycles without waiting for small completed handoffs", async () => {
     const completions: Array<(source: DecodedTextureSource) => void> = [];
     const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(() => new Promise((resolve) => {
       completions.push(resolve);
@@ -332,21 +332,21 @@ describe("ordinary texture asset lifecycle owner", () => {
       onSnapshotChanged: vi.fn(),
     });
     const assets = Array.from(
-      { length: 10 },
+      { length: 18 },
       (_value, index) => imageTexture(`/streamed-${index}.avif`),
     );
 
     owner.reconcile(assets);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(16));
     await Promise.resolve();
-    expect(decode).toHaveBeenCalledTimes(8);
+    expect(decode).toHaveBeenCalledTimes(16);
 
     completions[0]!(decoded());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(17));
     expect(owner.getSnapshot(assets[0]!).status).toBe("ready");
 
     completions[1]!(decoded());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(18));
     expect(owner.getSnapshot(assets[1]!).status).toBe("ready");
     owner.dispose();
   });
@@ -363,7 +363,7 @@ describe("ordinary texture asset lifecycle owner", () => {
       onSnapshotChanged: vi.fn(),
     });
     const assets = Array.from(
-      { length: 10 },
+      { length: 18 },
       (_value, index) => imageTexture(`/large-handoff-${index}.avif`),
     );
     const large = (): DecodedTextureSource => ({
@@ -373,15 +373,15 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
 
     owner.reconcile(assets);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(8));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(16));
     completions[0]!(large());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(9));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(17));
     completions[1]!(large());
     await waitFor(() => expect(owner.getSnapshot(assets[1]!).status).toBe("ready"));
-    expect(decode).toHaveBeenCalledTimes(9);
+    expect(decode).toHaveBeenCalledTimes(17);
 
     owner.releaseUploaded([textureStorageKey(assets[0]!)]);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(18));
     owner.dispose();
   });
 
