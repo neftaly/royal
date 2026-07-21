@@ -15,6 +15,9 @@ describe("static glTF selected-scene inventory", () => {
       scenes: [{ nodes: [0] }, { nodes: [3] }],
     };
     expect(selectedStaticMeshIndices(document, "selected.gltf")).toEqual([0, 1, 2]);
+    expect(selectedStaticMeshIndices(document, "selected.gltf", 1)).toEqual([3]);
+    expect(() => selectedStaticMeshIndices(document, "selected.gltf", 2))
+      .toThrow("sceneIndex: index 2 is out of range");
   });
 
   it("fails a selected child/LOD cycle instead of recursing indefinitely", () => {

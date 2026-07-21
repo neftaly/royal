@@ -136,13 +136,13 @@ describe("static Draco adapter", () => {
       nodes: [{ mesh: 0 }, { mesh: 1 }],
       scene: 0,
       scenes: [{ nodes: [0] }, { nodes: [1] }],
-    }, new Uint8Array([7]), "selected.gltf", execute);
+    }, new Uint8Array([7]), "selected.gltf", execute, 1);
 
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0]![0]).toHaveLength(1);
-    expect(decode(primitive, "meshes[0].primitives[0]").indices)
+    expect(decode(primitive, "meshes[1].primitives[0]").indices)
       .toEqual(new Uint16Array([0, 1, 2]));
-    expect(() => decode(primitive, "meshes[1].primitives[0]"))
+    expect(() => decode(primitive, "meshes[0].primitives[0]"))
       .toThrow("has no prepared Draco result");
   });
 });

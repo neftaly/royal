@@ -41,6 +41,7 @@ export const prepareStaticGltfInBrowser = async (
     ? defaultWorker
     : undefined,
   etc2Available = true,
+  sceneIndex?: number,
 ): Promise<PreparedStaticGltf> => {
   if (signal.aborted) throw abortFailure();
   if (createWorker === undefined || !shouldPrepareStaticGltfInWorker(bytes)) {
@@ -54,6 +55,7 @@ export const prepareStaticGltfInBrowser = async (
       readResource,
       undefined,
       etc2Available,
+      sceneIndex,
     );
   }
   return new Promise<PreparedStaticGltf>((resolve, reject) => {
@@ -122,7 +124,7 @@ export const prepareStaticGltfInBrowser = async (
     worker.addEventListener("messageerror", onMessageError);
     try {
       worker.postMessage(
-        { bytes, contentKey, etc2Available, kind: "prepare", label, sourceUri },
+        { bytes, contentKey, etc2Available, kind: "prepare", label, sceneIndex, sourceUri },
         [bytes.buffer],
       );
     } catch (error) {

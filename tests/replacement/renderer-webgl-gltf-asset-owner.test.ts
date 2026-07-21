@@ -1,7 +1,10 @@
 import { gltf, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
-import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
+import {
+  GltfAssetOwner,
+  type GltfAssetOwnerPlatform,
+} from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
@@ -13,9 +16,48 @@ const prepareStatic = (
   sourceUri: string,
   _signal: AbortSignal,
   readResource: (uri: string) => Promise<Uint8Array>,
-) => prepareStaticGltfSource(bytes, contentKey, label, sourceUri, readResource);
+  sceneIndex?: number,
+) => prepareStaticGltfSource(
+  bytes,
+  contentKey,
+  label,
+  sourceUri,
+  readResource,
+  undefined,
+  true,
+  sceneIndex,
+);
 
 describe("glTF asset lifecycle owner", () => {
+  it("separates selected-scene lifecycle while preserving source content identity", async () => {
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
+      primitives: [],
+      textureAssets: [],
+      variantNames: [],
+    } as const;
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(async () => prepared);
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read: vi.fn(async () => new Uint8Array([1, 2, 3])),
+      readResource: vi.fn(),
+    });
+    const exterior = gltf({ sceneIndex: 0, src: "/bistro.gltf", version: "web-v5" });
+    const interior = gltf({ sceneIndex: 1, src: "/bistro.gltf", version: "web-v5" });
+
+    owner.reconcile([exterior, interior]);
+    await waitFor(() => expect(owner.getSnapshot(exterior.asset).status).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(interior.asset).status).toBe("ready"));
+
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(new Set(prepare.mock.calls.map((call) => call[1])).size).toBe(1);
+    expect(prepare.mock.calls.map((call) => call[6])).toEqual([0, 1]);
+  });
+
   it("routes preparation through one injected lifecycle without duplicating resource IO", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const prepared = {
@@ -41,7 +83,7 @@ describe("glTF asset lifecycle owner", () => {
       readResource,
       schedule,
     });
-    const node = gltf("/models/large.gltf");
+    const node = gltf({ sceneIndex: 2, src: "/models/large.gltf" });
     owner.reconcile([node]);
     await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     expect(prepare).toHaveBeenCalledWith(
@@ -51,6 +93,7 @@ describe("glTF asset lifecycle owner", () => {
       "/models/large.gltf",
       expect.any(AbortSignal),
       expect.any(Function),
+      2,
     );
     expect(readResource).not.toHaveBeenCalled();
     expect(scheduled).toHaveBeenCalledOnce();

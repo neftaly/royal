@@ -380,6 +380,8 @@ export interface GltfInstancesOptions {
   readonly pickingGeometry?: Geometry;
   /** Stable application identity returned with every picked instance. */
   readonly pickingId?: PickingId;
+  /** Zero-based glTF document scene to prepare; omit for the document default. */
+  readonly sceneIndex?: number;
   /** URI of the glTF asset repeated by the bulk-transform source. */
   readonly src: string;
   /** Exact `KHR_materials_variants` name selected from the asset. */
@@ -389,7 +391,7 @@ export interface GltfInstancesOptions {
 }
 
 const GLTF_INSTANCES_FIELDS = [
-  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'src', 'version',
+  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'version',
 ] as const;
 
 export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode => {

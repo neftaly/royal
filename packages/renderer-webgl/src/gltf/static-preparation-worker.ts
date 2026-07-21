@@ -13,6 +13,7 @@ type PreparationRequest = Readonly<{
   etc2Available: boolean;
   kind: "prepare";
   label: string;
+  sceneIndex?: number;
   sourceUri: string;
 }>;
 
@@ -102,6 +103,7 @@ workerScope.addEventListener("message", (event) => {
     readResource,
     executeDracoTasksInWorkers,
     request.etc2Available,
+    request.sceneIndex,
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },

@@ -49,7 +49,7 @@ import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selectio
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
 import { collectStaticTextureAssets } from "./static-texture-assets";
 import { readCanonicalStaticGltfSource } from "./static-source";
-import { staticNodeLodIds } from "./static-node-selection";
+import { selectedStaticSceneIndex, staticNodeLodIds } from "./static-node-selection";
 
 export type PreparedStaticLodMembership = Readonly<{
   group: LodGroupId;
@@ -256,6 +256,7 @@ const prepareStaticDocument = (
   preflight: StaticDocumentPreflight,
   etc2Available: boolean,
   decodeDraco?: StaticDracoDecoder,
+  selectedSceneIndex?: number,
 ): PreparedStaticGltf => {
   const { bufferByteLength } = preflight;
   const accessors = array(document.accessors, label, "accessors");
@@ -713,7 +714,7 @@ const prepareStaticDocument = (
     }
   };
 
-  const sceneIndex = document.scene === undefined ? 0 : index(document.scene, scenes, label, "scene");
+  const sceneIndex = selectedStaticSceneIndex(document, scenes, label, selectedSceneIndex);
   const selectedScene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(selectedScene.nodes, label, `scenes[${sceneIndex}].nodes`);
   const claimed = new Set<number>();
@@ -917,6 +918,7 @@ export const prepareStaticGlb = (
   label = "glTF asset",
   sourceUri = "asset.glb",
   etc2Available = true,
+  sceneIndex?: number,
 ): PreparedStaticGltf => {
   const parsed = parseGlb(bytes, label);
   const document = object(parsed.document, label, "document");
@@ -939,6 +941,8 @@ export const prepareStaticGlb = (
     sourceUri,
     preflight,
     etc2Available,
+    undefined,
+    sceneIndex,
   );
 };
 
@@ -951,6 +955,7 @@ const prepareDocumentWithCodecs = async (
   sourceUri: string,
   executeDracoTasks?: StaticDracoTaskExecutor,
   etc2Available = true,
+  sceneIndex?: number,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -963,7 +968,13 @@ const prepareDocumentWithCodecs = async (
   );
   const decodeDraco = preflight.usesDraco
     ? await import("./draco").then((module) =>
-      module.prepareSelectedStaticDracoDecoder(document, binary, label, executeDracoTasks))
+      module.prepareSelectedStaticDracoDecoder(
+        document,
+        binary,
+        label,
+        executeDracoTasks,
+        sceneIndex,
+      ))
     : undefined;
   return prepareStaticDocument(
     document,
@@ -974,6 +985,7 @@ const prepareDocumentWithCodecs = async (
     preflight,
     etc2Available,
     decodeDraco,
+    sceneIndex,
   );
 };
 
@@ -986,6 +998,7 @@ export const prepareStaticGltfSource = async (
   read: (uri: string) => Promise<Uint8Array>,
   executeDracoTasks?: StaticDracoTaskExecutor,
   etc2Available = true,
+  sceneIndex?: number,
 ): Promise<PreparedStaticGltf> => {
   const canonical = await readCanonicalStaticGltfSource(bytes, label, sourceUri, read);
   return prepareDocumentWithCodecs(
@@ -997,5 +1010,6 @@ export const prepareStaticGltfSource = async (
     sourceUri,
     executeDracoTasks,
     etc2Available,
+    sceneIndex,
   );
 };

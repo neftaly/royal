@@ -24,6 +24,33 @@ describe("static glTF preparation core", () => {
     document.extensionsUsed = declarations;
   };
 
+  it("prepares an explicit document scene through the same canonical lowering path", () => {
+    const document = staticTriangleDocument();
+    document.scenes = [{ nodes: [0] }, { nodes: [1] }];
+    const bytes = staticTriangleGlb(document);
+
+    const defaultScene = prepareStaticGlb(bytes, "scene-default");
+    const secondScene = prepareStaticGlb(
+      bytes,
+      "scene-second",
+      "two-scenes.glb",
+      "two-scenes.glb",
+      true,
+      1,
+    );
+
+    expect(defaultScene.bounds).toEqual({ max: [2, 3, 0], min: [0, 1, 0] });
+    expect(secondScene.bounds).toEqual({ max: [1, 3, 0], min: [-1, 1, 0] });
+    expect(() => prepareStaticGlb(
+      bytes,
+      "scene-invalid",
+      "two-scenes.glb",
+      "two-scenes.glb",
+      true,
+      2,
+    )).toThrow("sceneIndex: index 2 is out of range");
+  });
+
   it("loads a JSON glTF external buffer relative to the document", async () => {
     const fixture = staticTriangleGltf();
     const read = async (uri: string): Promise<Uint8Array> => {

@@ -602,7 +602,7 @@ describe("renderer-core descriptor contract", () => {
       .toThrow(/virtual texture version must be finite/);
   });
 
-  it("normalizes glTF source, version, and bounds into asset identity", () => {
+  it("normalizes glTF source, version, scene selection, and bounds into asset identity", () => {
     const bounds = {
       max: [2, 3, 4] as const,
       min: [-2, -3, -4] as const,
@@ -610,11 +610,13 @@ describe("renderer-core descriptor contract", () => {
 
     expect(gltf({
       bounds,
+      sceneIndex: 2,
       src: "/models/avatar.glb",
       version: 12,
     })).toEqual({
       asset: {
         bounds,
+        sceneIndex: 2,
         src: "/models/avatar.glb",
         version: 12,
       },
@@ -627,6 +629,12 @@ describe("renderer-core descriptor contract", () => {
       .toThrow(/glTF asset version must be a non-empty string/);
     expect(() => gltf({ src: 42 as unknown as string }))
       .toThrow(/glTF source must be a non-empty string/);
+    expect(() => gltf({ sceneIndex: Number.NaN, src: "/models/avatar.glb" }))
+      .toThrow(TypeError);
+    expect(() => gltf({ sceneIndex: -1, src: "/models/avatar.glb" }))
+      .toThrow(RangeError);
+    expect(() => gltf({ sceneIndex: 1.5, src: "/models/avatar.glb" }))
+      .toThrow(/sceneIndex must be a non-negative safe integer/);
     expect(() => textureAsset({
       contentKey: false as unknown as string,
       src: "/textures/a.png",

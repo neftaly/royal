@@ -118,6 +118,7 @@ unambiguously the same operation. Input and normalized output retain the same
 self-documenting field names:
 
 - `src` for glTF and ordinary image bytes;
+- `sceneIndex` for an exact zero-based glTF document scene, omitted for the document default;
 - `manifestUri` for an authored VT manifest;
 - `materialVariant` for an exact authored variant name;
 - `pickingId` for logical interaction identity;
@@ -207,7 +208,8 @@ enough for ordinary-texture and authored-VT observation respectively. Passing
 a complete valid descriptor variable remains supported.
 
 Status-hook object inputs expose only fields that participate in their retained
-identity. glTF and prefiltered-environment status use `src`/`version`; ordinary
+identity. glTF status uses `src`/`version`/`sceneIndex`, prefiltered-environment
+status uses `src`/`version`; ordinary
 decoded-texture status uses `src`/`contentKey`/`version`. Passing a complete
 scene descriptor remains structurally valid, but ignored presentation fields
 such as bounds, sampler, color space, intensity, and rotation are not falsely
@@ -271,9 +273,11 @@ Royal scene protocol.
 
 ## glTF and textures
 
-`gltf(src)` and `gltf({ src, ... })` are equivalent. A normalized node exposes
-its exact asset reference so versioned status observation does not reconstruct
-identity from strings.
+`gltf(src)` and `gltf({ src, ... })` are equivalent. `sceneIndex` selects one
+zero-based document scene before mesh/Draco inventory and canonical lowering;
+omission uses the document's declared default, or index zero when absent. A
+normalized node exposes its exact asset reference so status observation does
+not reconstruct version or scene identity from strings.
 
 `imageTexture(src)` defaults to sRGB color interpretation and the ordinary image
 sampler. `textureAsset` is the explicit form when `contentKey` is needed.

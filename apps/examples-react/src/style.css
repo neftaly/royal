@@ -82,6 +82,24 @@ a {
   font-size: 0.8rem;
 }
 
+.bistro-scene-selector {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  width: fit-content;
+  color: #dbeaff;
+  font-weight: 650;
+}
+
+.bistro-scene-selector select {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #ffffff2e;
+  border-radius: 0.45rem;
+  color: inherit;
+  background: #09111d;
+  font: inherit;
+}
+
 .status {
   position: absolute;
   right: 1rem;

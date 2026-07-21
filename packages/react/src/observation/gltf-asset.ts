@@ -1,4 +1,4 @@
-import type { GltfAssetRef } from "@royal/renderer-core";
+import { gltf, type GltfAssetRef } from "@royal/renderer-core";
 import type { GltfAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
@@ -9,7 +9,7 @@ import {
 } from "./select-root";
 
 /** Only fields that participate in glTF loading/status identity. */
-export type GltfAssetStatusIdentity = Readonly<Pick<GltfAssetRef, "src" | "version">>;
+export type GltfAssetStatusIdentity = Readonly<Pick<GltfAssetRef, "sceneIndex" | "src" | "version">>;
 /** Source string, compact identity, or complete glTF asset observed by `useGltfAssetStatus`. */
 export type GltfAssetStatusInput = string | GltfAssetStatusIdentity | GltfAssetRef;
 /** Focused lifecycle for one glTF asset; drawable states include bounds and texture progress. */
@@ -18,7 +18,7 @@ export type GltfAssetStatus = GltfAssetSnapshot;
 const IDLE: GltfAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): GltfAssetSnapshot => IDLE;
-const GLTF_STATUS_INPUT_FIELDS = ["bounds", "src", "version"] as const;
+const GLTF_STATUS_INPUT_FIELDS = ["bounds", "sceneIndex", "src", "version"] as const;
 
 const validateInputShape = (input: GltfAssetStatusInput): void => {
   if (typeof input === "string") return;
@@ -26,26 +26,15 @@ const validateInputShape = (input: GltfAssetStatusInput): void => {
 };
 
 const resolveInput = (input: GltfAssetStatusInput): GltfAssetRef => {
-  if (typeof input === "string") {
-    if (input.length === 0) throw new TypeError("useGltfAssetStatus source must not be empty");
-    return { src: input };
-  }
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new TypeError("useGltfAssetStatus input must be a source string or glTF asset identity");
-  }
-  if (typeof input.src !== "string" || input.src.length === 0) {
-    throw new TypeError("useGltfAssetStatus source must not be empty");
-  }
-  if (input.version !== undefined && (
-    (typeof input.version !== "string" || input.version.length === 0)
-    && (typeof input.version !== "number" || !Number.isFinite(input.version))
-  )) {
-    throw new TypeError("useGltfAssetStatus version must be a non-empty string or finite number");
-  }
-  return input;
+  if (typeof input === "string") return gltf(input).asset;
+  return gltf({
+    ...(input.sceneIndex === undefined ? {} : { sceneIndex: input.sceneIndex }),
+    src: input.src,
+    ...(input.version === undefined ? {} : { version: input.version }),
+  }).asset;
 };
 
-/** Observes one exact source/version without polling or waking for renderer frames. */
+/** Observes one exact source/version/scene selection without polling renderer frames. */
 export const useGltfAssetStatus = (
   input: GltfAssetStatusInput,
   options?: RendererObservationOptions,
@@ -54,9 +43,14 @@ export const useGltfAssetStatus = (
   validateInputShape(input);
   const source = typeof input === "string" ? input : input.src;
   const version = typeof input === "string" ? undefined : input.version;
+  const sceneIndex = typeof input === "string" ? undefined : input.sceneIndex;
   const asset = useMemo(() => resolveInput(
-    version === undefined ? source : { src: source, version },
-  ), [source, version]);
+    {
+      ...(sceneIndex === undefined ? {} : { sceneIndex }),
+      src: source,
+      ...(version === undefined ? {} : { version }),
+    },
+  ), [sceneIndex, source, version]);
   const subscribe = useCallback(
     (listener: () => void) => root?.subscribeGltfAsset(asset, listener) ?? subscribeIdle(),
     [asset, root],

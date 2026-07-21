@@ -78,6 +78,7 @@ export type GltfAssetOwnerPlatform = Readonly<{
     sourceUri: string,
     signal: AbortSignal,
     readResource: (uri: string) => Promise<Uint8Array>,
+    sceneIndex?: number,
   ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readResource(uri: string, signal: AbortSignal): Promise<Uint8Array>;
@@ -144,9 +145,18 @@ const validateAsset = (asset: GltfAssetRef): void => {
   )) {
     throw new TypeError("Royal glTF asset version must be a non-empty string or finite number");
   }
+  const { sceneIndex } = asset;
+  if (sceneIndex !== undefined) {
+    if (typeof sceneIndex !== "number" || !Number.isFinite(sceneIndex)) {
+      throw new TypeError("glTF sceneIndex must be a finite number");
+    }
+    if (!Number.isSafeInteger(sceneIndex) || sceneIndex < 0) {
+      throw new RangeError("glTF sceneIndex must be a non-negative safe integer");
+    }
+  }
 };
 
-export const gltfAssetKey = (asset: GltfAssetRef): string => {
+const gltfSourceKey = (asset: GltfAssetRef): string => {
   validateAsset(asset);
   const version = asset.version;
   return JSON.stringify([
@@ -155,6 +165,12 @@ export const gltfAssetKey = (asset: GltfAssetRef): string => {
     version ?? null,
   ]);
 };
+
+/** Exact prepared-view identity; source-derived resources deliberately exclude scene selection. */
+export const gltfAssetKey = (asset: GltfAssetRef): string => JSON.stringify([
+  gltfSourceKey(asset),
+  asset.sceneIndex ?? "default",
+]);
 
 const diagnosticLabel = (asset: GltfAssetRef): string => {
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
@@ -295,18 +311,22 @@ export class GltfAssetOwner {
         ? await preparation!.then((module) =>
           module.prepareStaticGltfSource(
             bytes,
-            key,
+            gltfSourceKey(asset),
             diagnosticLabel(asset),
             asset.src,
             readResource,
+            undefined,
+            true,
+            asset.sceneIndex,
           ))
         : await this.#platform.prepare(
           bytes,
-          key,
+          gltfSourceKey(asset),
           diagnosticLabel(asset),
           asset.src,
           entry.controller.signal,
           readResource,
+          asset.sceneIndex,
         );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const preparedAt = this.#now();

@@ -21,6 +21,7 @@ export type GltfLoadDiagnosticsAsset = {
   readonly nodeCount: number;
   readonly phaseMs: Record<string, number>;
   readonly primitiveCount: number;
+  readonly sceneIndex?: number;
   readonly status: 'degraded' | 'error' | 'idle' | 'loading' | 'ready' | 'streaming';
   readonly src: string;
   readonly variantNames: readonly string[];

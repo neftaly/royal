@@ -270,7 +270,7 @@ const lazyBrowserGltfPreparer = (
   etc2Available: boolean,
 ): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
   let modulePromise: Promise<typeof import("../gltf/browser-static-preparation")> | undefined;
-  return async (bytes, contentKey, label, sourceUri, signal, readResource) => {
+  return async (bytes, contentKey, label, sourceUri, signal, readResource, sceneIndex) => {
     modulePromise ??= import("../gltf/browser-static-preparation");
     return (await modulePromise).prepareStaticGltfInBrowser(
       bytes,
@@ -281,6 +281,7 @@ const lazyBrowserGltfPreparer = (
       readResource,
       undefined,
       etc2Available,
+      sceneIndex,
     );
   };
 };

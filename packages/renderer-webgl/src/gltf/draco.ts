@@ -317,11 +317,12 @@ export const prepareSelectedStaticDracoDecoder = async (
   binary: Uint8Array,
   label: string,
   execute: StaticDracoTaskExecutor = executeTasksSerially,
+  sceneIndex?: number,
 ): Promise<(primitive: JsonObject, path: string) => DecodedDracoPrimitive> => {
   const meshes = array(document.meshes, `${label} meshes`);
   const plan = createStaticDracoTaskPlanner(document, binary, label);
   const tasks: StaticDracoDecodeTask[] = [];
-  for (const meshIndex of selectedStaticMeshIndices(document, label)) {
+  for (const meshIndex of selectedStaticMeshIndices(document, label, sceneIndex)) {
     const meshPath = `meshes[${meshIndex}]`;
     const mesh = object(meshes[meshIndex], `${label} ${meshPath}`);
     const primitives = array(mesh.primitives, `${label} ${meshPath}.primitives`);

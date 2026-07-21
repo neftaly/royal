@@ -29,17 +29,29 @@ export const staticNodeLodIds = (
   ));
 };
 
+/** Resolves an explicit zero-based scene selection or the document default. */
+export const selectedStaticSceneIndex = (
+  document: JsonObject,
+  scenes: readonly unknown[],
+  label: string,
+  sceneIndex?: number,
+): number => index(
+  sceneIndex ?? document.scene ?? 0,
+  scenes,
+  label,
+  sceneIndex === undefined ? "scene" : "sceneIndex",
+);
+
 /** Collects only mesh definitions reachable through the selected scene and its LOD graph. */
 export const selectedStaticMeshIndices = (
   document: JsonObject,
   label: string,
+  selectedSceneIndex?: number,
 ): readonly number[] => {
   const meshes = array(document.meshes, label, "meshes");
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
-  const sceneIndex = document.scene === undefined
-    ? 0
-    : index(document.scene, scenes, label, "scene");
+  const sceneIndex = selectedStaticSceneIndex(document, scenes, label, selectedSceneIndex);
   const scene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(scene.nodes, label, `scenes[${sceneIndex}].nodes`);
   const selected = new Set<number>();

@@ -24,6 +24,8 @@ export interface GltfAssetBounds {
 export interface GltfAssetRef {
   /** Optional declared asset-space bounds available before source preparation completes. */
   readonly bounds?: GltfAssetBounds;
+  /** Zero-based glTF document scene to prepare; omit for the document default. */
+  readonly sceneIndex?: number;
   /** URI of the glTF asset, using the same field name as `gltf(...)`. */
   readonly src: string;
   /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
@@ -55,6 +57,8 @@ export interface GltfOptions {
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
+  /** Zero-based glTF document scene to prepare; omit for the document default. */
+  readonly sceneIndex?: number;
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
@@ -116,7 +120,7 @@ export const transformGltfAssetBounds = (
 };
 
 const GLTF_FIELDS = [
-  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'src', 'transform', 'version',
+  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'transform', 'version',
 ] as const;
 
 const gltfOptions = (input: GltfInput): GltfOptions =>
@@ -124,14 +128,24 @@ const gltfOptions = (input: GltfInput): GltfOptions =>
 
 export const resolveGltfAsset = (options: {
   readonly bounds?: GltfAssetBounds;
+  readonly sceneIndex?: number;
   readonly src: string;
   readonly version?: GltfAssetRef['version'];
 }): GltfAssetRef => {
+  if (options.sceneIndex !== undefined) {
+    if (typeof options.sceneIndex !== 'number' || !Number.isFinite(options.sceneIndex)) {
+      throw new TypeError('glTF sceneIndex must be a finite number');
+    }
+    if (!Number.isSafeInteger(options.sceneIndex) || options.sceneIndex < 0) {
+      throw new RangeError('glTF sceneIndex must be a non-negative safe integer');
+    }
+  }
   const version = options.version === undefined
     ? undefined
     : identityScalar(options.version, 'glTF asset version');
   return {
     ...(options.bounds === undefined ? {} : { bounds: resolveBounds3(options.bounds, 'glTF asset bounds') }),
+    ...(options.sceneIndex === undefined ? {} : { sceneIndex: options.sceneIndex }),
     src: nonEmptyString(options.src, 'glTF source'),
     ...(version === undefined ? {} : { version })
   };

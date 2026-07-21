@@ -66,8 +66,10 @@ describe("automatic virtual texture page source", () => {
     );
 
     const first = await source.read({ mip: 0, x: 1, y: 1 }, new AbortController().signal);
+    if (first === undefined) throw new Error("expected first SVG page");
     first.close();
     const second = await source.read({ mip: 0, x: 2, y: 2 }, new AbortController().signal);
+    if (second === undefined) throw new Error("expected second SVG page");
     second.close();
 
     expect(text).toHaveBeenCalledOnce();

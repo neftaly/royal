@@ -28,8 +28,14 @@ A retained glTF identity has these product states:
 
 Images not referenced by current prepared materials are dormant, not pending.
 Selecting a material variant MAY turn dormant images into requested images and
-move `ready` back to `streaming`. State is scoped to exact source plus version,
-not source text alone.
+move `ready` back to `streaming`. State is scoped to exact source, version, and
+selected document scene, not source text alone. An explicit zero-based
+`sceneIndex` overrides the document default before ordinary and compressed-mesh
+inventory; an out-of-range index is an asset preparation error. Scene selection
+participates in prepared/status identity but not source-derived mesh or image
+content identity. Shared mesh and image references therefore reach the same
+resource owners even though each selected scene keeps an independently
+cancellable preparation lifecycle.
 
 Geometry SHOULD become visible before independent texture work settles. Royal
 MUST NOT stall otherwise renderable geometry merely to avoid a minor texture or

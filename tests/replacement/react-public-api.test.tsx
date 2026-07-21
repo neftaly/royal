@@ -178,7 +178,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useRendererLifecycle).toBeFunction();
     expectTypeOf(useRendererSnapshot).toBeFunction();
-    expectTypeOf({ src: "/model.glb", version: 2 })
+    expectTypeOf({ sceneIndex: 1, src: "/model.glb", version: 2 })
       .toMatchTypeOf<GltfAssetStatusIdentity>();
     expectTypeOf({ src: "/texture.png", version: "v2" })
       .toMatchTypeOf<TextureAssetStatusIdentity>();
