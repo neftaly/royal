@@ -247,6 +247,28 @@ describe("canonical direct surface lowering", () => {
     expect(proxied.alphaMaskTextureAssets).toEqual([]);
   });
 
+  it("keeps glTF BLEND picking on triangles without retaining alpha-mask data", () => {
+    const asset = prepareStaticGlb(staticTexturedTriangleGlb(
+      undefined,
+      "transparent.png",
+      (document) => {
+        const materials = document.materials as Array<Record<string, unknown>>;
+        materials[0]!.alphaMode = "BLEND";
+        document.nodes = [{ mesh: 0 }];
+        document.scenes = [{ nodes: [0] }];
+      },
+    ), "transparent");
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [gltf("/transparent.glb")] }),
+      () => asset,
+    );
+
+    expect(prepared.surfaces[0]!.material.alphaBlend).toBe(true);
+    expect(prepared.pickSurfaces[0]).not.toHaveProperty("materialSource");
+    expect(prepared.pickSurfaces[0]).not.toHaveProperty("alphaMaskSampler");
+    expect(prepared.alphaMaskTextureAssets).toEqual([]);
+  });
+
   it("retains authored virtual textures as an optional canonical binding", () => {
     const texture = virtualTexture({
       manifestUri: "/map.vt.json",
