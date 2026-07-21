@@ -29,7 +29,8 @@ The friendly React vocabulary consists of:
 - `Canvas`, renderer lifecycle/status hooks, and explicit invalidation;
 - pure scene constructors exported by `@royal/react/scene`;
 - orbit-camera controls and camera fitting;
-- frame callbacks for explicitly time-driven application work;
+- explicit invalidation and imperative versioned resources for application-
+  scheduled, time-driven work;
 - stable picking and pointer-event bindings;
 - XR session lifecycle through `@royal/react/xr`.
 

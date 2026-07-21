@@ -72,9 +72,11 @@ it is not mislabeled as the device's physical DPR when an override is active.
 both defaulting to `false`, plus immutable resource policy. Opt into alpha for
 page compositing and antialias for browser multisampling. The default
 `persistentGpuByteBudget` is 256 MiB and `maxConcurrentPreparationJobs` is 8.
-The latter is a root-wide FIFO ceiling shared by glTF, ordinary texture, VT,
-and prefiltered-environment preparation; it is not a worker count. A semantic
-option change replaces both the root and canvas. `rendererRef`
+The latter is a root-wide concurrency ceiling shared by glTF, ordinary texture,
+VT, and prefiltered-environment preparation; it is not a worker count. Newly
+claimed visible scene work uses a bounded-priority lane, while FIFO order is
+preserved within visible-work and detail-work lanes so texture progress cannot
+starve. A semantic option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount/replacement
 lifecycle; a disposed root is never published for a newer canvas generation.
 `ordinaryTextureUploadByteBudgetPerFrame` defaults to 4 MiB and paces new ordinary-texture

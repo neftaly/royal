@@ -277,9 +277,11 @@ Large scenes should become useful progressively:
 4. optional fidelity such as finer VT pages streams by view demand.
 
 Requests SHOULD prioritize work that can make visible content renderable.
-Parallelism is bounded globally. FIFO admission prevents a later stream of one
-resource kind from overtaking already-demanded work from another kind; richer
-visibility priority remains a later scheduler refinement.
+Parallelism is bounded globally. Bounded-priority foreground/detail admission
+keeps a detail backlog from delaying first-visible scene work while forcing
+regular detail progress. FIFO order within each lane prevents later work from
+overtaking already-demanded work in that lane; richer visibility priority
+remains a later scheduler refinement.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 

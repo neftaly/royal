@@ -101,10 +101,10 @@ publish into, allocate for, or retain the superseded root.
 
 The root's asynchronous-preparation owner admits each claimed asset lifecycle
 against one immutable root-wide limit. Admission starts available work
-immediately, preserves FIFO order for queued work, removes an aborted queued
-claim before it starts, and releases an active slot before settling the
-consumer-facing promise. Disposal rejects queued work and prevents later active
-completion from publishing root diagnostics.
+immediately, preserves FIFO order within each bounded-fair preparation lane,
+removes an aborted queued claim before it starts, and releases an active slot
+before settling the consumer-facing promise. Disposal rejects queued work and
+prevents later active completion from publishing root diagnostics.
 
 Every submitted canvas or XR transaction begins one upload-admission frame.
 Deferred texture publication keeps its decoded-source claim and schedules a

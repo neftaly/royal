@@ -45,12 +45,14 @@ context-loss recovery, and WebGL state. `alpha` and `antialias` default to
 browser multisampling. They are immutable because browsers fix context attributes at context
 creation. Invalid values and unknown option fields fail synchronously.
 `persistentGpuByteBudget` defaults to 256 MiB.
-`maxConcurrentPreparationJobs` defaults to 8 and is one root-wide FIFO ceiling
-shared by glTF asset pipelines, ordinary texture decode, virtual-texture
-transport/decode, and prefiltered-environment preparation. It is neither a
-worker count nor a preallocation. Queued claims are cancellable, and
+`maxConcurrentPreparationJobs` defaults to 8 and is one root-wide concurrency
+ceiling shared by glTF asset pipelines, ordinary texture decode, virtual-texture
+transport/decode, and prefiltered-environment preparation. Newly claimed scene,
+environment, and visible-VT work has bounded priority over detail texture work;
+FIFO order is preserved within each lane and detail work cannot starve. The
+ceiling is neither a worker count nor a preallocation. Queued claims are cancellable, and
 `getSnapshot().resources.asyncPreparation` reports the immutable limit plus
-active and queued job counts.
+active, total queued, foreground queued, and detail queued job counts.
 `ordinaryTextureUploadByteBudgetPerFrame` defaults to 4 MiB. It bounds newly transferred
 ordinary-texture bytes per submitted canvas or XR frame; a larger individual
 texture is admitted alone so it cannot starve. Deferred storage remains a ready

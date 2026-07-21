@@ -12,7 +12,11 @@ export type RendererRootOptions = Readonly<{
   automaticVirtualTexturing?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
-  /** Root-wide concurrent asynchronous asset-preparation ceiling. @defaultValue `8` */
+  /**
+   * Root-wide concurrent asynchronous asset-preparation ceiling. Visible scene
+   * work has bounded priority over detail texture work; this is not a worker
+   * count. @defaultValue `8`
+   */
   maxConcurrentPreparationJobs?: number;
   /** Ordinary-texture upload traffic admitted per rendered frame. @defaultValue 4 MiB */
   ordinaryTextureUploadByteBudgetPerFrame?: number;
