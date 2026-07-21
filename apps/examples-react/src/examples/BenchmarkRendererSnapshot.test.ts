@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gltf } from '@royal/react/scene';
 import {
   benchmarkGltfDiagnostics,
+  benchmarkTextureResidency,
   benchmarkVirtualTextureDiagnostics,
 } from './BenchmarkRendererSnapshot';
 import { copyVirtualTexturingCounters } from './BenchmarkRendererSnapshotCounters';
@@ -122,6 +123,24 @@ describe('current benchmark VT adapter', () => {
       manifestsReady: 1,
       pendingPages: 3,
       residentPages: 17,
+    });
+  });
+});
+
+describe('current benchmark texture residency adapter', () => {
+  it('keeps resident and compressed bytes distinct', () => {
+    expect(benchmarkTextureResidency({
+      compressedBytes: 112,
+      compressedTextures: 1,
+      fittedTextures: 2,
+      residentBytes: 1_472,
+      residentTextures: 3,
+    })).toEqual({
+      bytes: 1_472,
+      compressedBytes: 112,
+      compressedResources: 1,
+      fitted: 2,
+      resources: 3,
     });
   });
 });

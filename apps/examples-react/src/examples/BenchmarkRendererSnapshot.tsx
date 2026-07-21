@@ -43,6 +43,17 @@ const benchmarkAutomaticVirtualTextureDiagnostics = (
   snapshot: RendererRootSnapshot['resources']['virtualTextures'],
 ): Record<string, number> | null => snapshot.automaticEnabled === 0 ? null : { ...snapshot };
 
+/** @internal Pure projection from the public cold snapshot to benchmark counters. */
+export const benchmarkTextureResidency = (
+  snapshot: RendererRootSnapshot['resources']['ordinaryTextures'],
+): Record<string, number> => ({
+  bytes: snapshot.residentBytes,
+  compressedBytes: snapshot.compressedBytes,
+  compressedResources: snapshot.compressedTextures,
+  fitted: snapshot.fittedTextures,
+  resources: snapshot.residentTextures,
+});
+
 /** @internal Pure adapter shared with the benchmark contract test. */
 export const benchmarkGltfDiagnostics = (
   asset: GltfAssetRef | undefined,
@@ -145,10 +156,7 @@ export const BenchmarkRendererSnapshot = ({
             current.resources.ordinaryTexturePreparation.pendingStorageRepresentations,
           pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
         },
-        textureResidency: {
-          fitted: current.resources.ordinaryTextures.fittedTextures,
-          resources: current.resources.ordinaryTextures.residentTextures,
-        },
+        textureResidency: benchmarkTextureResidency(current.resources.ordinaryTextures),
         virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)
           ?? benchmarkAutomaticVirtualTextureDiagnostics(current.resources.virtualTextures),
       };

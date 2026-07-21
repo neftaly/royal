@@ -249,6 +249,13 @@ describe("ordinary texture GPU owner", () => {
     expect(gl.generateMipmap).not.toHaveBeenCalled();
     expect(gl.pixelStorei).not.toHaveBeenCalled();
     expect(budget.snapshot()).toEqual({ budgetBytes: 112, deniedClaims: 0, retainedBytes: 112 });
+    expect(owner.snapshot()).toEqual({
+      compressedBytes: 112,
+      compressedTextures: 1,
+      fittedTextures: 0,
+      residentBytes: 112,
+      residentTextures: 1,
+    });
   });
 
   it("accepts a base-only ETC2 texture for non-mip sampling but rejects invented mipmaps", () => {

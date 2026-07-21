@@ -28,8 +28,14 @@ type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
 export type GpuTextureBinding = TextureUnitBinding;
 export type OrdinaryTextureGpuSnapshot = Readonly<{
+  /** Bytes retained by GPU-native compressed ordinary texture storage. */
+  compressedBytes: number;
+  /** Resident ordinary textures using GPU-native compressed storage. */
+  compressedTextures: number;
   /** Resident textures decoded below their encoded source dimensions. */
   fittedTextures: number;
+  /** Exact bytes retained by all ordinary texture storage objects. */
+  residentBytes: number;
   /** Unique ordinary texture storage objects resident in the current context. */
   residentTextures: number;
 }>;
@@ -242,11 +248,25 @@ export class TextureGpuOwner {
   }
 
   snapshot(): OrdinaryTextureGpuSnapshot {
+    let compressedBytes = 0;
+    let compressedTextures = 0;
     let fittedTextures = 0;
+    let residentBytes = 0;
     for (const texture of this.#textures.values()) {
+      residentBytes += texture.byteLength;
+      if (texture.compressed) {
+        compressedBytes += texture.byteLength;
+        compressedTextures += 1;
+      }
       if (texture.fitted) fittedTextures += 1;
     }
-    return { fittedTextures, residentTextures: this.#textures.size };
+    return {
+      compressedBytes,
+      compressedTextures,
+      fittedTextures,
+      residentBytes,
+      residentTextures: this.#textures.size,
+    };
   }
 
   isUploadDeferred(storageKey: string): boolean {
