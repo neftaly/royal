@@ -1119,6 +1119,31 @@
       }
     },
     {
+      "name": "RoyalSvgRequired",
+      "status": "supported-oracle",
+      "path": "fixtures/royal/GsTextureSvg/required-svg-quad.gltf",
+      "bytes": 2006,
+      "sha256": "b67a7093e0b324994ea7904f7197b3d729c3df9e7deeac806397252920be3251",
+      "provenance": "fixtures/royal/GsTextureSvg/README.md",
+      "features": [
+        "GS_texture_svg",
+        "KHR_materials_unlit",
+        "images"
+      ],
+      "extensionsRequired": [
+        "GS_texture_svg",
+        "KHR_materials_unlit"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
       "name": "SimpleInstancing",
       "status": "supported-oracle",
       "path": "fixtures/khronos/SimpleInstancing/glTF-Binary/SimpleInstancing.glb",

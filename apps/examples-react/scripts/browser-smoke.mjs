@@ -46,6 +46,7 @@ const cdpCommandTimeoutMs = envNumber(
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
 const embeddedTextureGate = process.env.EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE === '1';
+const svgFallbackSmoke = process.env.EXAMPLES_SMOKE_SVG_FALLBACK === '1';
 
 if (!new Set(['cdp', 'chromium']).has(browserMode)) {
   throw new Error(
@@ -1893,7 +1894,7 @@ const main = async () => {
         selectedCase.status !== 'normalized-ingestion') {
         throw new Error(`glTF lab success smoke cannot render ${selectedCase.name}: ${selectedCase.status}`);
       }
-      const effectiveRoute = selectedCase === undefined
+      const selectedEffectiveRoute = selectedCase === undefined
         ? { ...route, path: routeUrl.pathname + routeUrl.search }
         : {
           ...route,
@@ -1911,9 +1912,11 @@ const main = async () => {
             ? { stableReadyReads: 12 }
             : {}),
         };
+      const effectiveRoute = selectedEffectiveRoute;
       let textureFallbackPause;
       let textureFallbackKind;
       let textureFallbackCapture;
+      let svgFallbackIntercepted;
       const pausedTextureRequests = [];
       const pausedVirtualTextureRequests = [];
       if (route.id === 'texture-materials') {
@@ -2001,6 +2004,29 @@ const main = async () => {
           })();
         ` });
       }
+      if (svgFallbackSmoke) {
+        if (route.id !== 'gltf-ghostscript-tiger-svg') {
+          throw new Error('EXAMPLES_SMOKE_SVG_FALLBACK requires the Ghostscript Tiger route');
+        }
+        await session.call('Fetch.enable', {
+          patterns: [{
+            requestStage: 'Request',
+            urlPattern: '*ghostscript-tiger.svg*',
+          }],
+        });
+        session.on('Fetch.requestPaused', (request) => {
+          if (!request.request.url.includes('/ghostscript-tiger.svg')) return;
+          void session.call('Fetch.failRequest', {
+            errorReason: 'Failed',
+            requestId: request.requestId,
+          }).catch((error) => exceptions.push(`SVG fallback interception failed: ${error}`));
+        });
+        svgFallbackIntercepted = session.wait(
+          'Fetch.requestPaused',
+          ({ request }) => request.url.includes('/ghostscript-tiger.svg'),
+          { timeoutMs: 10_000 },
+        );
+      }
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });
       await Promise.race([
@@ -2087,6 +2113,16 @@ const main = async () => {
         await session.call('Fetch.disable');
       }
       let state = await waitForRouteState(session, effectiveRoute);
+      if (svgFallbackIntercepted !== undefined) {
+        if (await svgFallbackIntercepted === undefined) {
+          throw new Error('SVG fallback smoke did not intercept the preferred source');
+        }
+        await session.call('Fetch.disable');
+        const fallbackCount = state.renderer?.gltfLoadDiagnostics?.assets?.[0]?.imageFallbacks;
+        if (fallbackCount !== 1) {
+          throw new Error(`SVG fallback was not reported exactly once: ${JSON.stringify(state.renderer)}`);
+        }
+      }
       if ((state.canvas?.sample?.paintedPixels ?? 0) === 0) {
         const compositedSample = await compositedCanvasSample(session);
         if (compositedSample !== undefined && state.canvas !== undefined) {

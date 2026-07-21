@@ -152,6 +152,17 @@ EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
 pnpm --filter @royal/examples-react test:browser
 ```
 
+The same route can force the preferred extension SVG request to fail. The smoke
+then requires the exact glTF asset to settle `ready`, report one fallback, and
+render its ordinary core image rather than retaining a failed or duplicate
+texture lifecycle:
+
+```sh
+EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
+EXAMPLES_SMOKE_SVG_FALLBACK=1 \
+pnpm --filter @royal/examples-react test:browser
+```
+
 Fuller host report:
 
 ```sh

@@ -199,8 +199,10 @@ texture extension; Royal MUST NOT invent one under `KHR` or `EXT` naming.
 
 Direct Royal ordinary image sources may use any browser-decoded format that
 passes the normal image capability and failure boundary. That does not make the
-format valid in core glTF. `GS_texture_svg` remains an explicitly unregistered
-proposal until its vendor work is complete.
+format valid in core glTF. `GS_texture_svg` is an implemented but explicitly
+unregistered experiment until its vendor work is complete; optional assets
+retain a standards-compatible core fallback and required assets knowingly
+target aware Royal consumers.
 
 ## Vendor packing and rendering extensions
 

@@ -83,6 +83,7 @@ export const benchmarkGltfDiagnostics = (
   return {
     ...(status.status === 'error' ? { error: status.error } : {}),
     imageCandidates: usable ? status.textures.total : 0,
+    imageFallbacks: usable ? status.textures.fallback : 0,
     imageFailures: usable ? status.textures.failed : 0,
     imagesLoaded: usable ? status.textures.ready : 0,
     imageRequests: usable ? status.textures.total : 0,

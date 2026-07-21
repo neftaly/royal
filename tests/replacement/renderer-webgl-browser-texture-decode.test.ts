@@ -12,8 +12,92 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const stubValidSvgParser = (): void => {
+  const root = {
+    attributes: { length: 0 },
+    getAttribute: (name: string) => name === "viewBox" ? "0 0 16 8" : null,
+    localName: "svg",
+    querySelector: () => null,
+    querySelectorAll: () => ({ length: 0 }),
+  };
+  vi.stubGlobal("DOMParser", class {
+    parseFromString = (): object => ({ childNodes: { length: 0 }, doctype: null, documentElement: root });
+  });
+};
+
 describe("browser texture decode shell", () => {
+  it("tries an authored SVG first and fetches its raster fallback only after failure", async () => {
+    const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async () => bitmap);
+    const fetch = vi.fn(async (input: string | URL | Request) => String(input) === "/preferred.svg"
+      ? { ok: false, status: 503 }
+      : {
+          blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }),
+          ok: true,
+        });
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", fetch);
+
+    const decoded = await createBrowserTextureDecoder()({
+      fallback: { kind: "asset", src: "/fallback.png" },
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/preferred.svg",
+    }, new AbortController().signal);
+
+    expect(fetch.mock.calls.map(([input]) => input)).toEqual(["/preferred.svg", "/fallback.png"]);
+    expect(decoded).toMatchObject({
+      fallbackReason: expect.stringContaining("HTTP 503"),
+      height: 4,
+      source: bitmap,
+      width: 4,
+    });
+  });
+
+  it("does not request an SVG fallback after the preferred source succeeds", async () => {
+    stubValidSvgParser();
+    const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const fetch = vi.fn(async () => ({
+      blob: async () => new Blob([
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 8"/>',
+      ], { type: "application/octet-stream" }),
+      ok: true,
+    }));
+    vi.stubGlobal("fetch", fetch);
+
+    const decoded = await createBrowserTextureDecoder(4, 8, true, true)({
+      fallback: { kind: "asset", src: "/fallback.png" },
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/opaque?id=vector",
+    }, new AbortController().signal);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith("/opaque?id=vector", expect.any(Object));
+    expect(decoded).toMatchObject({ encodedSvg: { byteLength: expect.any(Number) } });
+    expect(decoded).not.toHaveProperty("fallbackReason");
+  });
+
+  it("rejects an SVG response masquerading as the raster fallback", async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => String(input) === "/preferred.svg"
+      ? { ok: false, status: 503 }
+      : {
+          blob: async () => new Blob(["<svg viewBox=\"0 0 1 1\"/>"], { type: "image/svg+xml" }),
+          ok: true,
+        });
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(createBrowserTextureDecoder()({
+      fallback: { kind: "asset", src: "/fallback.png" },
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/preferred.svg",
+    }, new AbortController().signal)).rejects.toThrow("fallback must be an ordinary raster");
+  });
+
   it("retains SVG authority only for roots that request the vector handoff", async () => {
+    stubValidSvgParser();
     const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
     vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 8"/>';

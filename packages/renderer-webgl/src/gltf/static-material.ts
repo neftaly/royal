@@ -2,6 +2,8 @@ import type { TextureSampler } from "@royal/renderer-core";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type {
   EmbeddedTextureAssetRef,
+  TextureLeafSourceRef,
+  TextureSourceEncoding,
   TextureSourceRef,
 } from "../texture/asset-owner";
 import {
@@ -124,6 +126,8 @@ export const createTextureAssetReader = (
   const textures = optionalArray(document.textures, label, "textures");
   const etc2Required = optionalArray(document.extensionsRequired, label, "extensionsRequired")
     .some((extension) => extension === "GS_texture_etc2");
+  const svgRequired = optionalArray(document.extensionsRequired, label, "extensionsRequired")
+    .some((extension) => extension === "GS_texture_svg");
   const prepared = new Map<string, TextureSourceRef>();
   return (value, path, colorSpace = "srgb") => {
     const textureIndex = index(value, textures, label, path);
@@ -143,6 +147,13 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.GS_texture_etc2`,
       );
+    const svgExtension = textureExtensions.GS_texture_svg === undefined
+      ? undefined
+      : object(
+        textureExtensions.GS_texture_svg,
+        label,
+        `${texturePath}.extensions.GS_texture_svg`,
+      );
     const webpExtension = textureExtensions.EXT_texture_webp === undefined
       ? undefined
       : object(
@@ -150,7 +161,7 @@ export const createTextureAssetReader = (
         label,
         `${texturePath}.extensions.EXT_texture_webp`,
       );
-    const selectedExtension = etc2Extension !== undefined && etc2Available
+    const fallbackExtension = etc2Extension !== undefined && etc2Available
       ? "GS_texture_etc2"
       : webpExtension === undefined ? undefined : "EXT_texture_webp";
     if (etc2Extension !== undefined && texture.source === undefined && !etc2Required) {
@@ -160,18 +171,19 @@ export const createTextureAssetReader = (
         "is required when optional GS_texture_etc2 needs a core fallback",
       );
     }
-    const sourceValue = selectedExtension === "GS_texture_etc2"
-      ? etc2Extension!.source
-      : selectedExtension === "EXT_texture_webp" ? webpExtension!.source : texture.source;
-    const sourcePath = selectedExtension === undefined
-      ? `${texturePath}.source`
-      : `${texturePath}.extensions.${selectedExtension}.source`;
-    const imageIndex = index(sourceValue, images, label, sourcePath);
-    const imagePath = `images[${imageIndex}]`;
-    const image = object(images[imageIndex], label, imagePath);
-    const etc2 = selectedExtension === "GS_texture_etc2";
-    if ((image.uri === undefined) === (image.bufferView === undefined)) {
-      fail(label, imagePath, "must contain exactly one of uri or bufferView");
+    if (svgExtension !== undefined && colorSpace !== "srgb") {
+      fail(
+        label,
+        `${texturePath}.extensions.GS_texture_svg`,
+        "is supported only for sRGB color texture slots",
+      );
+    }
+    if (svgExtension !== undefined && texture.source === undefined && !svgRequired) {
+      fail(
+        label,
+        `${texturePath}.source`,
+        "is required when optional GS_texture_svg needs a core raster fallback",
+      );
     }
     let sampler: TextureSampler;
     if (texture.sampler === undefined) {
@@ -185,36 +197,53 @@ export const createTextureAssetReader = (
         samplerPath,
       );
     }
-    let asset: TextureSourceRef;
-    if (image.bufferView === undefined) {
-      if (typeof image.uri !== "string" || image.uri.length === 0) {
-        fail(label, `${imagePath}.uri`, "must be a non-empty URI");
+    const readImage = (
+      sourceValue: unknown,
+      sourcePath: string,
+      sourceEncoding?: TextureSourceEncoding,
+    ): TextureLeafSourceRef => {
+      const imageIndex = index(sourceValue, images, label, sourcePath);
+      const imagePath = `images[${imageIndex}]`;
+      const image = object(images[imageIndex], label, imagePath);
+      if ((image.uri === undefined) === (image.bufferView === undefined)) {
+        fail(label, imagePath, "must contain exactly one of uri or bufferView");
       }
-      const resolvedUri = resolveAssetUri(sourceUri, image.uri as string);
-      if (etc2 && image.mimeType !== undefined && image.mimeType !== "image/ktx2") {
-        fail(label, `${imagePath}.mimeType`, "must be image/ktx2 for GS_texture_etc2");
+      const expectedMime = sourceEncoding === "ktx2-etc2"
+        ? "image/ktx2"
+        : sourceEncoding === "svg" ? "image/svg+xml" : undefined;
+      const mimeError = sourceEncoding === "ktx2-etc2"
+        ? "must be image/ktx2 for GS_texture_etc2"
+        : "must be image/svg+xml for GS_texture_svg";
+      if (image.bufferView === undefined) {
+        const uri = image.uri;
+        if (typeof uri !== "string" || uri.length === 0) {
+          fail(label, `${imagePath}.uri`, "must be a non-empty URI");
+        }
+        if (expectedMime !== undefined && image.mimeType !== undefined && image.mimeType !== expectedMime) {
+          fail(label, `${imagePath}.mimeType`, mimeError);
+        }
+        const resolvedUri = resolveAssetUri(sourceUri, uri as string);
+        return {
+          colorSpace,
+          contentKey: `${contentKey}:external:${resolvedUri}`,
+          kind: "asset",
+          sampler,
+          ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
+          src: resolvedUri,
+        };
       }
-      asset = {
-        colorSpace,
-        contentKey: `${contentKey}:external:${resolvedUri}`,
-        kind: "asset",
-        sampler,
-        ...(etc2 ? { sourceEncoding: "ktx2-etc2" as const } : {}),
-        src: resolvedUri,
-      };
-    } else {
-      if (etc2 ? image.mimeType !== "image/ktx2" : (
+      if (expectedMime === undefined ? (
         image.mimeType !== "image/avif"
         && image.mimeType !== "image/jpeg"
         && image.mimeType !== "image/png"
         && image.mimeType !== "image/webp"
-      )) {
+      ) : image.mimeType !== expectedMime) {
         fail(
           label,
           `${imagePath}.mimeType`,
-          etc2
-            ? "must be image/ktx2 for GS_texture_etc2"
-            : "must be image/avif, image/jpeg, image/png, or image/webp",
+          expectedMime === undefined
+            ? "must be image/avif, image/jpeg, image/png, or image/webp"
+            : mimeError,
         );
       }
       const mimeType = image.mimeType as EmbeddedTextureAssetRef["mimeType"];
@@ -229,21 +258,35 @@ export const createTextureAssetReader = (
       if (byteLength === 0 || byteOffset + byteLength > bufferByteLength) {
         fail(label, viewPath, "embedded image bytes exceed the declared GLB buffer");
       }
-      const bytes = new Uint8Array(
-        binary.buffer,
-        binary.byteOffset + byteOffset,
-        byteLength,
-      );
-      asset = {
-        bytes,
+      return {
+        bytes: new Uint8Array(binary.buffer, binary.byteOffset + byteOffset, byteLength),
         colorSpace,
         contentKey: `${contentKey}:bufferView:${viewIndex}`,
         kind: "embedded-asset",
         label: `${label} ${imagePath}`,
         mimeType,
         sampler,
-        ...(etc2 ? { sourceEncoding: "ktx2-etc2" as const } : {}),
-      } satisfies EmbeddedTextureAssetRef;
+        ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
+      };
+    };
+    const fallbackSource = (): TextureLeafSourceRef => fallbackExtension === "GS_texture_etc2"
+      ? readImage(
+        etc2Extension!.source,
+        `${texturePath}.extensions.GS_texture_etc2.source`,
+        "ktx2-etc2",
+      )
+      : fallbackExtension === "EXT_texture_webp"
+        ? readImage(webpExtension!.source, `${texturePath}.extensions.EXT_texture_webp.source`)
+        : readImage(texture.source, `${texturePath}.source`);
+    let asset: TextureSourceRef;
+    if (svgExtension === undefined) asset = fallbackSource();
+    else {
+      const preferred = readImage(
+        svgExtension.source,
+        `${texturePath}.extensions.GS_texture_svg.source`,
+        "svg",
+      );
+      asset = svgRequired ? preferred : { ...preferred, fallback: fallbackSource() };
     }
     prepared.set(preparedKey, asset);
     return asset;

@@ -25,8 +25,14 @@
     { "buffer": 0, "byteLength": 372, "byteOffset": 1280, "target": 34963 }
   ],
   "extensionsRequired": ["KHR_materials_unlit", "KHR_texture_transform"],
-  "extensionsUsed": ["KHR_materials_unlit", "KHR_texture_transform"],
-  "images": [{ "mimeType": "image/svg+xml", "name": "Ghostscript Tiger.svg", "uri": "ghostscript-tiger.svg" }],
+  "extensionsUsed": ["GS_texture_svg", "KHR_materials_unlit", "KHR_texture_transform"],
+  "images": [
+    {
+      "name": "Standards-compatible raster fallback",
+      "uri": "ghostscript-tiger-fallback.png"
+    },
+    { "mimeType": "image/svg+xml", "name": "Ghostscript Tiger.svg", "uri": "ghostscript-tiger.svg" }
+  ],
   "materials": [
     {
       "doubleSided": true,
@@ -69,5 +75,9 @@
   "samplers": [{ "magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071 }],
   "scene": 0,
   "scenes": [{ "nodes": [0] }],
-  "textures": [{ "sampler": 0, "source": 0 }]
+  "textures": [{
+    "extensions": { "GS_texture_svg": { "source": 1 } },
+    "sampler": 0,
+    "source": 0
+  }]
 }

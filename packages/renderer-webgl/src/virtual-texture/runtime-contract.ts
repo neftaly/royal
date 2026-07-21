@@ -1,5 +1,5 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
-import type { TextureSourceRef } from "../texture/asset-owner";
+import { decodedTextureKey, type TextureSourceRef } from "../texture/asset-owner";
 import type { SurfaceFrameView } from "../surface/surface-gpu-owner";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
@@ -15,8 +15,7 @@ export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string =>
 ]);
 
 export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
-  asset.kind === "embedded-asset" ? asset.contentKey : asset.contentKey ?? asset.src,
-  asset.kind === "embedded-asset" ? 0 : asset.version ?? 0,
+  decodedTextureKey(asset),
   asset.colorSpace ?? "srgb",
   asset.sampler?.magFilter ?? "",
   asset.sampler?.minFilter ?? "",

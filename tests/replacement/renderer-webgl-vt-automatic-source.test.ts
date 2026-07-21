@@ -14,7 +14,11 @@ afterEach(() => {
 describe("automatic virtual texture page source", () => {
   it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {
     expect(automaticVirtualTextureIsSvg({
-      encodedSvg: { blob: new Blob(["<svg/>"]), byteLength: 6 },
+      encodedSvg: {
+        blob: new Blob(["<svg/>"]),
+        byteLength: 6,
+        parsed: { document: {} as XMLDocument, viewBox: [0, 0, 1, 1] as const },
+      },
       height: 8,
       source: {} as ImageBitmap,
       width: 16,
@@ -26,7 +30,7 @@ describe("automatic virtual texture page source", () => {
     })).toBe(false);
   });
 
-  it("parses one retained SVG blob without fetching a second source", async () => {
+  it("reuses one parsed SVG authority without reading or fetching its source again", async () => {
     const root = {
       cloneNode: () => ({ setAttribute: vi.fn() }),
       getAttribute: (name: string) => name === "viewBox" ? "0 0 16 8" : null,
@@ -38,9 +42,6 @@ describe("automatic virtual texture page source", () => {
     const text = vi.spyOn(blob, "text");
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    vi.stubGlobal("DOMParser", class {
-      parseFromString = (): object => ({ documentElement: root });
-    });
     vi.stubGlobal("XMLSerializer", class {
       serializeToString = (): string => "<svg/>";
     });
@@ -53,7 +54,14 @@ describe("automatic virtual texture page source", () => {
       createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
     });
     const source = createAutomaticSvgPageSource(
-      { blob, byteLength: blob.size },
+      {
+        blob,
+        byteLength: blob.size,
+        parsed: {
+          document: { documentElement: root } as unknown as XMLDocument,
+          viewBox: [0, 0, 16, 8],
+        },
+      },
       16,
       8,
       {
@@ -72,7 +80,7 @@ describe("automatic virtual texture page source", () => {
     if (second === undefined) throw new Error("expected second SVG page");
     second.close();
 
-    expect(text).toHaveBeenCalledOnce();
+    expect(text).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
     source.close?.();
     await expect(source.read(

@@ -2,6 +2,7 @@ import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { CanonicalTextureSampler } from "../surface/canonical-material";
 import type { DecodedImageTextureSource, DecodedTextureSource } from "../texture/asset-owner";
 import type { EncodedSvgTextureSource } from "../texture/asset-owner";
+import type { ParsedSvgTextureSource } from "../texture/svg-source";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import {
   createGeneratedVirtualTextureManifest,
@@ -227,56 +228,8 @@ export const createAutomaticRasterPageSource = (
   };
 };
 
-type ParsedSvgSource = Readonly<{
-  document: XMLDocument;
-  viewBox: readonly [x: number, y: number, width: number, height: number];
-}>;
-
-const SVG_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:px)?$/iu;
-
-const svgLength = (value: string | null): number | undefined => {
-  if (value === null || !SVG_NUMBER.test(value.trim())) return undefined;
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-};
-
-const parseSvgSource = (source: string): ParsedSvgSource => {
-  const document = new DOMParser().parseFromString(source, "image/svg+xml");
-  const root = document.documentElement;
-  if (root.localName !== "svg" || root.querySelector("parsererror") !== null) {
-    throw new TypeError("Royal automatic SVG VT source is not valid SVG XML");
-  }
-  const viewBoxValues = root.getAttribute("viewBox")?.trim().split(/[\s,]+/u).map(Number);
-  let viewBox: readonly [number, number, number, number] | undefined;
-  if (
-    viewBoxValues?.length === 4
-    && viewBoxValues.every(Number.isFinite)
-    && viewBoxValues[2]! > 0
-    && viewBoxValues[3]! > 0
-  ) viewBox = [viewBoxValues[0]!, viewBoxValues[1]!, viewBoxValues[2]!, viewBoxValues[3]!];
-  if (viewBox === undefined) {
-    const width = svgLength(root.getAttribute("width"));
-    const height = svgLength(root.getAttribute("height"));
-    if (width === undefined || height === undefined) {
-      throw new TypeError("Royal automatic SVG VT requires a positive viewBox or intrinsic size");
-    }
-    viewBox = [0, 0, width, height];
-  }
-  return { document, viewBox };
-};
-
-const loadSvgSource = async (
-  blob: Blob,
-  signal: AbortSignal,
-): Promise<ParsedSvgSource> => {
-  if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-  const source = await blob.text();
-  if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-  return parseSvgSource(source);
-};
-
 const rasterizeSvgRegion = async (
-  source: ParsedSvgSource,
+  source: ParsedSvgTextureSource,
   logicalWidth: number,
   logicalHeight: number,
   x: AxisSegment,
@@ -384,21 +337,18 @@ export const createAutomaticSvgPageSource = (
     pageSize: AUTOMATIC_VT_PAGE_SIZE,
     width,
   });
-  let opened: Promise<ParsedSvgSource> | undefined;
-  let encoded: Blob | undefined = encodedSource.blob;
+  let parsed: ParsedSvgTextureSource | undefined = encodedSource.parsed;
   let closed = false;
   let originClean = false;
   return {
     close: () => {
       closed = true;
-      encoded = undefined;
-      opened = undefined;
+      parsed = undefined;
     },
     manifest,
     read: async (page, signal) => {
       if (closed) throw new Error("Royal automatic SVG VT page source is closed");
-      opened ??= loadSvgSource(encoded!, signal);
-      const source = await opened;
+      const source = parsed!;
       const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
       const sourceTexelsPerMipTexel = 2 ** page.mip;
       const sourceX = (page.x * manifest.pageSize - manifest.borderTexels)

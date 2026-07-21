@@ -239,6 +239,12 @@ buffer or typed-array view SHOULD be borrowed or transferred under explicit
 ownership. Repacking is justified when it enables lasting GPU compression,
 coalesced upload, shared storage, or a measurably cheaper repeated hot path.
 
+SVG source validation is cold, bounded to 16 MiB of encoded input, and produces
+one parsed authority retained only when automatic VT may need it. Ordinary SVG
+decode and generated VT consume that authority without a second fetch, text
+decode, or DOM parse. A raster fallback is fetched only after preferred SVG
+failure, so compatibility does not impose unconditional duplicate work.
+
 Potential future GPU culling, transform evaluation, or feedback MUST preserve
 logical identity and have a no-readback frame path. It is not justified until
 CPU traces show that canonical retained selection is a material bottleneck.

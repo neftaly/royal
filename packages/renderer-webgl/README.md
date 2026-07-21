@@ -88,7 +88,9 @@ focused `idle` / `loading` / `streaming` / `ready` / `degraded` / `error` state
 for one exact source, version, and selected document scene. `streaming`, `ready`, and `degraded` all mean geometry is usable and
 include `nodeCount`, `primitiveCount`, `lightCount`, document-declared
 `variantNames`, `bounds`, and
-`textures: { total, loading, ready, failed }`. `streaming` has outstanding
+`textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
+logical textures whose preferred representation failed and whose declared
+alternative won. `streaming` has outstanding
 images, `ready` has completed without image failures, and `degraded` remains
 drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
@@ -153,6 +155,14 @@ choice; Royal ships no runtime Basis/WASM transcoder. At runtime the root
 enables `WEBGL_compressed_texture_etc` once. Optional `GS_texture_etc2` uses its
 core fallback when unavailable, while required/direct compressed sources fail
 explicitly instead of issuing an invalid upload.
+
+Experimental `GS_texture_svg` prefers one bounded self-contained SVG source on
+sRGB material slots. Optional use requires an ordinary core fallback; Royal
+fetches it only after SVG transport, profile, or decode failure. Required use
+may omit the core source and fails if SVG cannot publish. Both outcomes retain
+one texture identity, sampler, material path and focused lifecycle. This is an
+unregistered Royal vendor experiment, not a registered glTF compatibility
+claim.
 
 The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
 `createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It

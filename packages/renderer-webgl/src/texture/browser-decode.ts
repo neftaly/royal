@@ -1,6 +1,7 @@
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,
+  TextureLeafSourceRef,
   TextureSourceRef,
 } from "./asset-owner";
 import { decodeBrowserImageElement } from "./browser-image-element";
@@ -67,7 +68,7 @@ class BrowserWorkQueue {
   }
 }
 
-const diagnosticLabel = (asset: TextureSourceRef): string => {
+const diagnosticLabel = (asset: TextureLeafSourceRef): string => {
   if (asset.kind === "embedded-asset") return asset.label;
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
   return `texture ${JSON.stringify(source)}`;
@@ -85,20 +86,20 @@ const isSvgMimeType = (mimeType: string): boolean =>
 
 const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
-const declaresKtx2 = (asset: TextureSourceRef): boolean =>
+const declaresKtx2 = (asset: TextureLeafSourceRef): boolean =>
   asset.sourceEncoding === "ktx2-etc2"
   || (asset.kind === "embedded-asset"
     ? isKtx2MimeType(asset.mimeType)
     : isKtx2Uri(asset.src));
 
 const readTextureBlob = async (
-  asset: TextureSourceRef,
+  asset: TextureLeafSourceRef,
   signal: AbortSignal,
 ): Promise<TextureBlob> => asset.kind === "embedded-asset"
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2MimeType(asset.mimeType),
-      svg: isSvgMimeType(asset.mimeType),
+      svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
       const response = await fetch(asset.src, { signal });
@@ -111,12 +112,12 @@ const readTextureBlob = async (
         ktx2: asset.sourceEncoding === "ktx2-etc2"
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
-        svg: isSvgUri(asset.src) || isSvgMimeType(blob.type),
+        svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src) || isSvgMimeType(blob.type),
       };
     })();
 
 const decodeKtx2Texture = async (
-  asset: TextureSourceRef,
+  asset: TextureLeafSourceRef,
   blob: Blob,
   signal: AbortSignal,
   maxStorageBytes?: number,
@@ -172,7 +173,7 @@ const decodeKtx2Texture = async (
 };
 
 const decodeTextureBlob = async (
-  asset: TextureSourceRef,
+  asset: TextureLeafSourceRef,
   blob: Blob,
   signal: AbortSignal,
   maxStorageBytes?: number,
@@ -360,14 +361,27 @@ export const createBrowserTextureDecoder = (
   }
   const jobs = new BrowserWorkQueue(maxParallelJobs);
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
-  return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
+  const decodeLeaf = async (
+    asset: TextureLeafSourceRef,
+    signal: AbortSignal,
+    maxStorageBytes: number | undefined,
+    retainAlpha: boolean | undefined,
+    fallback = false,
+  ): Promise<DecodedTextureSource> => {
     if (!etc2Available && declaresKtx2(asset)) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
     const { blob, ktx2, svg } = await readTextureBlob(asset, signal);
+    if (fallback && svg) {
+      throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
+    }
     if (ktx2 && !etc2Available) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
+    const parsedSvg = svg
+      ? await import("./svg-source").then(({ validateSvgTextureBlob }) =>
+          validateSvgTextureBlob(blob, signal))
+      : undefined;
     const decoded = await decodes.run(
       signal,
       () => ktx2
@@ -377,8 +391,19 @@ export const createBrowserTextureDecoder = (
     if (!retainSvgSource || !svg || decoded.kind === "ktx2-etc2") return decoded;
     return {
       ...decoded,
-      encodedSvg: { blob, byteLength: blob.size },
+      encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
     };
+  };
+  return (asset, signal, maxStorageBytes, retainAlpha) => jobs.run(signal, async () => {
+    try {
+      return await decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
+    } catch (error) {
+      if (signal.aborted || asset.fallback === undefined) throw error;
+      const value = error instanceof Error ? error.message : String(error);
+      const fallbackReason = value.length <= 400 ? value : `${value.slice(0, 399)}…`;
+      const decoded = await decodeLeaf(asset.fallback, signal, maxStorageBytes, retainAlpha, true);
+      return { ...decoded, fallbackReason };
+    }
   });
 };
 

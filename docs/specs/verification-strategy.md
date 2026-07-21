@@ -144,7 +144,7 @@ expresses the invariant more completely.
 | Resources and performance | Admission/accounting properties, peak/retained measurements, upload and GC traces, bundle attribution and idle-settlement tests. |
 | Module graph and decoupling | Import-cycle/boundary checks, module-evaluation purity, minimal reachable chunks, owner/design-card review and deletion reachability. |
 | TypeScript and emitted JavaScript | Declaration consumer tests, exhaustive unions, `unknown` validation, runtime export checks, emitted helper/import inspection and target-engine smoke tests. |
-| GS SVG proposal | Schema/sample validation, aware/unaware fallback, required failure, viewport/orientation/color tests and hostile-content boundary review. |
+| Experimental GS SVG | Lowering/profile tests, optional and required samples, preferred/fallback transport oracles, viewport/orientation/color checks, one-parse VT handoff and hostile-content boundary review. Registration remains external evidence. |
 
 ## Review independence
 

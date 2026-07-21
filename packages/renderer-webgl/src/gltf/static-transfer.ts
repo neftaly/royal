@@ -31,6 +31,9 @@ export const preparedStaticGltfTransferBuffers = (
   }
   for (const texture of prepared.textureAssets) {
     if (texture.kind === "embedded-asset") retainViewBuffer(buffers, texture.bytes);
+    if (texture.fallback?.kind === "embedded-asset") {
+      retainViewBuffer(buffers, texture.fallback.bytes);
+    }
   }
   return [...buffers];
 };

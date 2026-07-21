@@ -22,6 +22,7 @@ const supportedRequiredExtensions = new Set([
   'EXT_mesh_gpu_instancing',
   'EXT_texture_webp',
   'GS_texture_etc2',
+  'GS_texture_svg',
   'KHR_draco_mesh_compression',
   'KHR_lights_punctual',
   'KHR_materials_emissive_strength',

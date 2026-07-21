@@ -57,10 +57,11 @@ describe('current benchmark glTF adapter', () => {
         preparationDurationMs: 250,
         sourceReadDurationMs: 40,
       },
-      textures: { failed: 0, loading: 30, ready: 80, total: 110 },
+      textures: { failed: 0, fallback: 0, loading: 30, ready: 80, total: 110 },
       variantNames: ['Day', 'Night'],
     })).toMatchObject({
       imageFailures: 0,
+      imageFallbacks: 0,
       imagesLoaded: 80,
       imageRequests: 110,
       phaseMs: {
@@ -91,10 +92,11 @@ describe('current benchmark glTF adapter', () => {
         preparationDurationMs: 250,
         sourceReadDurationMs: 40,
       },
-      textures: { failed: 2, loading: 0, ready: 108, total: 110 },
+      textures: { failed: 2, fallback: 0, loading: 0, ready: 108, total: 110 },
       variantNames: ['Day', 'Night'],
     })).toMatchObject({
       imageFailures: 2,
+      imageFallbacks: 0,
       imagesLoaded: 108,
       phaseMs: { imagesComplete: 1_200 },
       status: 'degraded',

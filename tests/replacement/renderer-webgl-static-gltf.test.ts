@@ -933,6 +933,104 @@ describe("static glTF preparation core", () => {
     )).toThrow("textures[0].source: is required when optional GS_texture_etc2 needs a core fallback");
   });
 
+  it("lowers optional and required GS_texture_svg forms into one logical source recipe", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "svg.gltf");
+    const optionalDocument = parsed.document as Record<string, unknown>;
+    optionalDocument.extensionsUsed = ["KHR_materials_unlit", "GS_texture_svg"];
+    optionalDocument.images = [
+      { uri: "fallback.png" },
+      { mimeType: "image/svg+xml", uri: "vector?id=albedo" },
+    ];
+    optionalDocument.textures = [{
+      extensions: { GS_texture_svg: { source: 1 } },
+      source: 0,
+    }];
+    const optional = prepareStaticGlb(
+      glbFromDocument(optionalDocument, parsed.binaryChunk!),
+      "svg-optional",
+      "svg.gltf",
+      "/models/svg.gltf",
+    );
+    expect(optional.textureAssets).toMatchObject([{
+      fallback: { kind: "asset", src: "/models/fallback.png" },
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/models/vector?id=albedo",
+    }]);
+
+    const requiredDocument = structuredClone(optionalDocument);
+    requiredDocument.extensionsRequired = ["KHR_materials_unlit", "GS_texture_svg"];
+    requiredDocument.textures = [{ extensions: { GS_texture_svg: { source: 1 } } }];
+    const required = prepareStaticGlb(
+      glbFromDocument(requiredDocument, parsed.binaryChunk!),
+      "svg-required",
+      "svg.gltf",
+      "/models/svg.gltf",
+    );
+    expect(required.textureAssets[0]).toMatchObject({
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/models/vector?id=albedo",
+    });
+    expect(required.textureAssets[0]).not.toHaveProperty("fallback");
+  });
+
+  it("accepts embedded GS_texture_svg bytes through the same ordinary recipe", () => {
+    const encodedSvg = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 2"/>',
+    );
+    const svg = new Uint8Array(Math.ceil(encodedSvg.byteLength / 4) * 4);
+    svg.fill(0x20);
+    svg.set(encodedSvg);
+    const prepared = prepareStaticGlb(staticTexturedTriangleGlb(
+      svg,
+      "unused.png",
+      (document) => {
+        requireExtensions(document, "GS_texture_svg");
+        document.images = [{ bufferView: 3, mimeType: "image/svg+xml" }];
+        document.textures = [{ extensions: { GS_texture_svg: { source: 0 } } }];
+      },
+    ), "embedded-svg");
+    expect(prepared.textureAssets).toMatchObject([{
+      bytes: svg,
+      kind: "embedded-asset",
+      mimeType: "image/svg+xml",
+      sourceEncoding: "svg",
+    }]);
+  });
+
+  it("rejects invalid GS_texture_svg fallback, MIME, and data-slot use", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "bad-svg.gltf");
+    const optional = parsed.document as Record<string, unknown>;
+    optional.extensionsRequired = ["KHR_materials_unlit"];
+    optional.extensionsUsed = ["KHR_materials_unlit", "GS_texture_svg"];
+    optional.images = [{ mimeType: "image/svg+xml", uri: "albedo.svg" }];
+    optional.textures = [{ extensions: { GS_texture_svg: { source: 0 } } }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(optional, parsed.binaryChunk!),
+      "missing-svg-fallback",
+    )).toThrow("textures[0].source: is required when optional GS_texture_svg needs a core raster fallback");
+
+    const wrongMime = structuredClone(optional);
+    wrongMime.extensionsRequired = ["KHR_materials_unlit", "GS_texture_svg"];
+    wrongMime.images = [{ mimeType: "image/png", uri: "albedo.svg" }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(wrongMime, parsed.binaryChunk!),
+      "wrong-svg-mime",
+    )).toThrow("images[0].mimeType: must be image/svg+xml for GS_texture_svg");
+
+    const dataSlot = structuredClone(optional);
+    dataSlot.extensionsRequired = ["GS_texture_svg"];
+    dataSlot.extensionsUsed = ["GS_texture_svg"];
+    dataSlot.materials = [{
+      pbrMetallicRoughness: { metallicRoughnessTexture: { index: 0 } },
+    }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(dataSlot, parsed.binaryChunk!),
+      "linear-svg",
+    )).toThrow("GS_texture_svg: is supported only for sRGB color texture slots");
+  });
+
   it("converges core material texture channels on color-space-aware source recipes", () => {
     const parsed = parseGlb(staticTexturedTriangleGlb(), "material.glb");
     const document = parsed.document as Record<string, unknown>;

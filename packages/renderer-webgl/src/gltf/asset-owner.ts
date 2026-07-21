@@ -13,6 +13,8 @@ import type { AsyncPreparationScheduler } from "../resource/async-preparation-ow
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 
 export type GltfTextureProgress = Readonly<{
+  /** Ready images which recovered from a preferred representation to an authored fallback. */
+  fallback: number;
   /** Images whose transport or decode ended in failure. */
   failed: number;
   /** Images still awaiting transport or decode. */
@@ -99,14 +101,20 @@ const textureProgress = (
   assets: readonly TextureSourceRef[],
   snapshot: (asset: TextureSourceRef) => TextureAssetSnapshot,
 ): GltfTextureProgress => {
+  let fallback = 0;
   let failed = 0;
   let ready = 0;
   for (const asset of assets) {
-    const status = snapshot(asset).status;
-    if (status === "ready") ready += 1;
+    const state = snapshot(asset);
+    const status = state.status;
+    if (status === "ready") {
+      ready += 1;
+      if (state.fallbackReason !== undefined) fallback += 1;
+    }
     else if (status === "error") failed += 1;
   }
   return {
+    fallback,
     failed,
     loading: assets.length - ready - failed,
     ready,
@@ -118,6 +126,7 @@ const sameTextureProgress = (
   left: GltfTextureProgress,
   right: GltfTextureProgress,
 ): boolean => left.failed === right.failed
+  && left.fallback === right.fallback
   && left.loading === right.loading
   && left.ready === right.ready;
 
@@ -335,6 +344,7 @@ export class GltfAssetOwner {
         : Math.max(0, externalReadCompletedAt - externalReadStartedAt);
       entry.prepared = prepared;
       const textures = {
+        fallback: 0,
         failed: 0,
         loading: prepared.textureAssets.length,
         ready: 0,

@@ -487,7 +487,7 @@ describe("canvas root asset publication", () => {
           preparationDurationMs: expect.any(Number),
           sourceReadDurationMs: expect.any(Number),
         },
-        textures: { failed: 0, loading: 0, ready: 0, total: 0 },
+        textures: { failed: 0, fallback: 0, loading: 0, ready: 0, total: 0 },
         variantNames: [],
       });
     });
@@ -714,7 +714,7 @@ describe("canvas root asset publication", () => {
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("streaming"));
     expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       status: "streaming",
-      textures: { failed: 0, loading: 1, ready: 0, total: 1 },
+      textures: { failed: 0, fallback: 0, loading: 1, ready: 0, total: 1 },
     });
     expect(decodeTexture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "asset", src: "/models/albedo.png" }),
@@ -729,7 +729,7 @@ describe("canvas root asset publication", () => {
     await waitFor(() => expect(callbacks).toHaveLength(1));
     expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       status: "ready",
-      textures: { failed: 0, loading: 0, ready: 1, total: 1 },
+      textures: { failed: 0, fallback: 0, loading: 0, ready: 1, total: 1 },
     });
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
@@ -946,7 +946,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
       status: "degraded",
-      textures: { failed: 1, loading: 0, ready: 0, total: 1 },
+      textures: { failed: 1, fallback: 0, loading: 0, ready: 0, total: 1 },
     }));
     expect(callbacks).toHaveLength(1);
     callbacks.shift()!();

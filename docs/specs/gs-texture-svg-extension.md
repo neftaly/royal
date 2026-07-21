@@ -1,6 +1,6 @@
-# `GS_texture_svg` glTF extension proposal
+# `GS_texture_svg` experimental glTF extension
 
-Status: reviewed design proposal; unregistered and not currently implemented by Royal
+Status: implemented Royal experiment; unregistered and not an ecosystem compatibility claim
 
 Vendor prefix owner: Garbo Succus / future registered successor
 
@@ -12,9 +12,8 @@ not make SVG a glTF scene node, geometry format, animation system, external
 resource resolver, or virtual-texture format.
 
 Until the prefix and extension are registered through the Khronos process,
-assets MUST treat this as a private experimental extension. Royal MUST NOT list
-it as supported glTF compatibility in a release merely because this proposal
-exists.
+assets MUST treat this as a private experimental extension. Royal MUST describe
+it as an experimental Royal feature, not registered glTF compatibility.
 
 ## Extension location and shape
 
@@ -93,8 +92,13 @@ independent material layers.
 
 The SVG MUST be self-contained. Scripts, event-handler behavior, navigation,
 network subresources, external stylesheets/fonts, external `<use>` references,
+DTD declarations, `xml:base` URI rewriting, timed animation/discard behavior,
 and nested raster/SVG images are outside this version of the extension profile.
 Producers MUST flatten those dependencies into ordinary SVG graphics.
+
+Royal bounds the encoded SVG representation at 16 MiB before parsing. This is
+an implementation admission ceiling, not a format recommendation or permission
+to construct an unbounded decoded DOM.
 
 This profile is a producer/consumer interoperability rule, not a sanitizer.
 Consumers MUST treat SVG as untrusted input and choose an image-decoding
@@ -154,11 +158,15 @@ the extension. If a consumer progressively replaces a published raster with
 SVG, the replacement is atomic and preserves orientation, alpha, aspect,
 sampler, and logical texture identity.
 
-Royal's planned policy is preferred-first: pending geometry uses the ordinary
+Royal's policy is preferred-first: pending geometry uses the ordinary
 neutral texture presentation, SVG success publishes once, and optional SVG
 failure starts the core fallback through the same logical texture lifecycle.
 It does not race both sources by default. This avoids a second simultaneous
 decode and makes fallback a recovery path rather than a permanent tax.
+
+When an optional texture also declares Royal ETC2 or WebP alternatives, Royal's
+deferred fallback preference is ETC2 when supported, then WebP, then the core
+source. Only that selected fallback is fetched after SVG fails.
 
 For an optional extension, SVG transport/decode/profile failure produces one
 bounded diagnostic and settles on the core fallback. It MUST NOT retry every
@@ -183,14 +191,14 @@ not valid as `GS_texture_svg.source`.
 
 ## Relationship to plain SVG ingestion
 
-Royal currently accepts an SVG URI in a core glTF image as a Royal-specific
+Royal also accepts an SVG URI in a core glTF image as a Royal-specific
 ingestion convenience. That path is not standards-compatible because unaware
 glTF consumers need not accept SVG as a core image.
 
-If `GS_texture_svg` is implemented, both forms MUST lower to the same canonical
-SVG source after validation. The extension form is preferred for distributable
-assets because it can carry a raster fallback. Supporting the extension MUST
-not create a second rasterizer, VT path, cache identity, or shader variant.
+Both forms lower to the same canonical SVG source after validation. The
+extension form is preferred for distributable assets because it can carry a
+raster fallback. The extension does not create a second rasterizer, VT path,
+cache identity, sampler, material path, or shader variant.
 
 ## Registration work
 
@@ -219,11 +227,18 @@ semantic contract should survive that rename.
   concern outside glTF. The extension declares alternate intent, not a checksum
   proof of visual equivalence.
 
-Royal will not implement the proposal by disguising two sources as unrelated
-textures or by adding an SVG-specific shader/cache. Implementation requires one
-canonical logical-source recipe whose decoder can publish the preferred SVG or
-recover to the core source, report which representation won, and hand the SVG
-encoded authority to automatic VT for one parse without refetching it. Plain
-SVG ingestion now proves that handoff; until the winner/fallback lifecycle,
-schema/sample oracles, and vendor-prefix work exist together, plain Royal SVG
-ingestion remains the only supported path and this name remains a non-claim.
+Royal implements one canonical logical-source recipe whose decoder publishes
+the preferred SVG or recovers to one selected raster/ETC2 fallback. The winner
+keeps one texture identity, sampler, material binding, cancellation generation,
+and focused asset lifecycle. A successful SVG decode retains its already parsed
+encoded authority for automatic VT, so VT does not refetch or reparse it.
+
+Unit tests cover optional and required lowering, MIME/placement/data-slot
+rejection, preferred success without fallback fetch, preferred failure with one
+fallback fetch, worker transfer, identity, and status diagnostics. Exact-build
+hardware-browser oracles cover the original Ghostscript Tiger SVG, a required
+data-URI SVG, and a forced SVG transport failure that reaches `ready` through
+the raster fallback with one reported fallback. Remaining registration gates
+are the assigned vendor prefix, published JSON schema, independent consumer or
+producer evidence, and target-device close-view/orientation proof. Until those
+exist, `GS_texture_svg` remains an explicitly experimental Royal extension.

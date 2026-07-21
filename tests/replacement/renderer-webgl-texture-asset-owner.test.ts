@@ -62,7 +62,39 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(() => decodedTextureKey({
       ...ordinary,
       sourceEncoding: "basis" as "ktx2-etc2",
-    })).toThrow("sourceEncoding must be ktx2-etc2");
+    })).toThrow("sourceEncoding must be ktx2-etc2 or svg");
+  });
+
+  it("keeps a preferred SVG and fallback in one logical decoded identity", async () => {
+    const preferred = {
+      fallback: { kind: "asset" as const, src: "/fallback.png" },
+      kind: "asset" as const,
+      sourceEncoding: "svg" as const,
+      src: "/preferred.svg",
+    };
+    expect(decodedTextureKey(preferred)).not.toBe(decodedTextureKey({
+      ...preferred,
+      fallback: { kind: "asset", src: "/other.png" },
+    }));
+    expect(() => decodedTextureKey({
+      fallback: { kind: "asset", src: "/fallback.png" },
+      kind: "asset",
+      src: "/preferred.png",
+    })).toThrow("fallback requires a preferred svg source");
+
+    const owner = new TextureAssetOwner({
+      decode: vi.fn(async () => ({ ...decoded(), fallbackReason: "preferred SVG failed" })),
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    owner.reconcile([preferred]);
+    await waitFor(() => expect(owner.getSourceSnapshot(preferred)).toEqual({
+      fallbackReason: "preferred SVG failed",
+      height: 32,
+      status: "ready",
+      width: 64,
+    }));
   });
 
   it("keeps concurrent out-of-order decode results attached to their content identities", async () => {
@@ -118,7 +150,11 @@ describe("ordinary texture asset lifecycle owner", () => {
   it("reports retained encoded vector authority independently of decoded handoff bytes", async () => {
     const source = {
       ...decoded(),
-      encodedSvg: { blob: new Blob(["<svg/>"]), byteLength: 6 },
+      encodedSvg: {
+        blob: new Blob(["<svg/>"]),
+        byteLength: 6,
+        parsed: { document: {} as XMLDocument, viewBox: [0, 0, 1, 1] as const },
+      },
     };
     const owner = new TextureAssetOwner({
       decode: vi.fn(async () => source),
