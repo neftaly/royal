@@ -121,6 +121,18 @@ is true and `warnings` is empty or understood.
   The accepted rerun reports first usable at 4.0 seconds and texture completion
   at 41.7 seconds, so startup remains a real workload limit rather than a
   benchmark-harness or stale-page artifact.
+- `ipad-safari/2026-07-21T18-39-39-608Z-gltf-bistro-web.json` is the exact clean
+  `b4b62d75` cold-cache attribution run after isolating each measured document
+  through `about:blank`. It records all 891 WebKit request lifecycles, including
+  exactly 202 unique AVIF assets and 404 internal blob reads, with zero failed or
+  pending requests and no browser errors. Safari's page Resource Timing API
+  still stops at 150 entries despite accepting a 10,000-entry buffer, so the
+  inspector Network trace is the authority. The 202 AVIF fetch starts span 38.3
+  seconds (9.3 to 47.6 seconds after navigation), while individual fetches are
+  mostly short (`152ms` median, `406ms` p95). This attributes the 46.5-second
+  texture settlement primarily to the bounded fetch/decode job pipeline rather
+  than 41 MB of network transfer. The adjacent PNG matches the prior physical
+  Exterior capture; 12/12 moving frames complete at `33ms` p95.
 
 2026-07-14 Quest 2 Browser pass:
 
