@@ -105,6 +105,23 @@ is true and `warnings` is empty or understood.
   12/12 frames at `18ms` p95. VT settles with five resident pages and zero
   pending pages, page failures, manifest failures, diagnostics, or GPU denials.
 
+2026-07-22 iPad Safari Bistro document-scene pass:
+
+- Exact clean commit `700e3ad0` exercises all three glTF document scenes through
+  the public example selector at a `1404x1418` backing size. Exterior (scene 0)
+  completes 30/30 moving frames at `37ms` p95 with 146 primitives and 202/202
+  textures; Interior (scene 1) completes at `35ms` with 74 primitives and
+  111/111 textures; Interior Wine (scene 2) completes at `25ms` with 381
+  primitives and 110/110 textures. Every run has zero image failure, GPU
+  admission denial, or lifecycle interruption. The three adjacent PNG captures
+  retain the final physical pixels for fidelity comparison.
+- The bounded 30-second cold Exterior attempt is retained as
+  `2026-07-21T17-26-37-474Z-gltf-bistro-web-scene-exterior.failure.json`: it
+  reached first usable content but only 139/202 textures before the deadline.
+  The accepted rerun reports first usable at 4.0 seconds and texture completion
+  at 41.7 seconds, so startup remains a real workload limit rather than a
+  benchmark-harness or stale-page artifact.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at
