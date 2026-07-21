@@ -38,6 +38,11 @@ import {
   packCanonicalTransmissionUniformsInto,
 } from "./material-uniform-packing";
 import {
+  createCanonicalSceneUniformStorage,
+  packCanonicalEnvironmentUniformsInto,
+  packCanonicalPresentationUniformsInto,
+} from "./scene-uniform-packing";
+import {
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
   SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
@@ -260,9 +265,8 @@ export class SurfaceGpuOwner {
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #lightUniforms = createCanonicalLightUniformStorage();
-  readonly #environmentSettings = new Float32Array(4);
+  readonly #sceneUniforms = createCanonicalSceneUniformStorage();
   readonly #fallbackBaseColor = new Float32Array(4);
-  readonly #presentation = new Float32Array(4);
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
   #scene: CanonicalSurfaceScene | null = null;
@@ -933,12 +937,18 @@ export class SurfaceGpuOwner {
               if (program.environmentRotation !== null) {
                 gl.uniformMatrix4fv(program.environmentRotation, false, environment.rotation);
               }
-              this.#environmentSettings[0] = environment.radianceScaleNits;
               const prefiltered = program.environmentCoefficients === null
                 ? undefined
                 : this.#environmentGpu?.binding;
-              this.#environmentSettings[1] = (prefiltered?.mipCount ?? 1) - 1;
-              gl.uniform4fv(program.environmentSettings, this.#environmentSettings);
+              packCanonicalEnvironmentUniformsInto(
+                environment,
+                prefiltered?.mipCount,
+                this.#sceneUniforms,
+              );
+              gl.uniform4fv(
+                program.environmentSettings,
+                this.#sceneUniforms.environmentSettings,
+              );
               if (program.environmentCoefficients !== null) {
                 if (prefiltered === undefined) {
                   throw new Error("Royal prefiltered environment GPU state is missing");
@@ -946,10 +956,9 @@ export class SurfaceGpuOwner {
                 gl.uniform4fv(program.environmentCoefficients, prefiltered.coefficients);
               }
             }
-            this.#presentation[0] = scene.exposure;
-            this.#presentation[1] = scene.toneMapping === "pbr-neutral" ? 1 : 0;
             if (program.presentation !== null) {
-              gl.uniform4fv(program.presentation, this.#presentation);
+              packCanonicalPresentationUniformsInto(scene, this.#sceneUniforms);
+              gl.uniform4fv(program.presentation, this.#sceneUniforms.presentation);
             }
             this.#standardProgramSceneGlobals.set(
               program.program,
