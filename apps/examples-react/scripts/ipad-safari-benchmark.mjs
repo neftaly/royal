@@ -5,6 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isExpectedIpadDevTransportDiagnostic } from './ipad-benchmark-report-check.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../..');
@@ -32,6 +33,10 @@ const coldCache = optionValue(
 const cameraDrag = optionValue(
   'camera-drag',
   process.env.IPAD_BENCH_CAMERA_DRAG ?? 'false',
+) === 'true';
+const captureCanvas = optionValue(
+  'capture-canvas',
+  process.env.IPAD_BENCH_CAPTURE_CANVAS ?? 'false',
 ) === 'true';
 const waitForPhysicalOrientation = optionValue(
   'wait-for-orientation',
@@ -572,23 +577,6 @@ const incompleteRendererEvidence = (report) => {
   return failures;
 };
 
-const isExpectedDevTransportDiagnostic = (entry, entries) => {
-  if (
-    entry.kind !== 'console'
-    || entry.level !== 'error'
-    || !/^WebSocket connection to 'ws:\/\/[^/]+\/\?token=[^']+' failed: WebSocket is closed due to suspension\.$/u
-      .test(entry.text)
-  ) return false;
-  return entries.some((candidate) =>
-    candidate.kind === 'console'
-    && candidate.level === 'debug'
-    && candidate.text === '[vite] connecting...'
-    && /\/@vite\/client(?:\?|$)/u.test(candidate.url)
-    && candidate.timestamp >= entry.timestamp
-    && candidate.timestamp - entry.timestamp < 2
-  );
-};
-
 const run = async () => {
   const expectedSource = await expectedBenchmarkSource();
   const page = await findPage();
@@ -600,6 +588,7 @@ const run = async () => {
   const browserDiagnostics = captureWebKitDiagnostics(client, targetId);
   let report;
   let physicalOrientation;
+  let canvasCapture;
 
   try {
     await targetCommand(client, targetId, 'Console.enable');
@@ -651,10 +640,23 @@ const run = async () => {
     if (waitForPhysicalOrientation) {
       physicalOrientation = await waitForPhysicalOrientationChange(client, targetId);
     }
+    if (captureCanvas) {
+      const dataUrl = await evaluate(
+        client,
+        targetId,
+        'globalThis.__royalExamplesRenderNow?.(); document.querySelector("canvas")?.toDataURL("image/png");',
+        30_000,
+      );
+      const prefix = 'data:image/png;base64,';
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith(prefix)) {
+        throw new Error('iPad canvas capture did not produce a PNG data URL');
+      }
+      canvasCapture = Buffer.from(dataUrl.slice(prefix.length), 'base64');
+    }
     const diagnosticSnapshot = browserDiagnostics.snapshot();
     const browserErrors = diagnosticSnapshot.entries.filter((entry) =>
       (entry.kind === 'exception' || entry.level === 'error')
-      && !isExpectedDevTransportDiagnostic(entry, diagnosticSnapshot.entries)
+      && !isExpectedIpadDevTransportDiagnostic(entry, diagnosticSnapshot.entries)
     );
     if (browserErrors.length > 0) {
       throw new Error(
@@ -662,12 +664,23 @@ const run = async () => {
       );
     }
     const generatedAt = typeof report.generatedAt === 'string' ? report.generatedAt : new Date().toISOString();
-    const filename = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(report.example?.id)}.json`;
+    const stem = `${generatedAt.replace(/[:.]/gu, '-')}-${safeSegment(report.example?.id)}`;
+    const filename = `${stem}.json`;
     await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, filename);
+    const canvasCaptureFilename = canvasCapture === undefined ? undefined : `${stem}.png`;
+    if (canvasCaptureFilename !== undefined) {
+      await writeFile(path.join(outputDir, canvasCaptureFilename), canvasCapture);
+    }
     await writeFile(outputPath, `${JSON.stringify({
       browserDiagnostics: diagnosticSnapshot,
       cameraDrag,
+      ...(canvasCapture === undefined ? {} : {
+        canvasCapture: {
+          byteLength: canvasCapture.byteLength,
+          filename: canvasCaptureFilename,
+        },
+      }),
       coldCache,
       physicalOrientation,
       receivedAt: new Date().toISOString(),

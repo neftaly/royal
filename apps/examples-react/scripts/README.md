@@ -304,6 +304,9 @@ Add `--camera-drag=true` to make every measured frame follow one synthetic
 one-pixel orbit step through the ordinary React pointer path. The resulting p95
 is input-to-presenting-RAF latency, and renderer/GL deltas prove that the sample
 drew rather than measuring an idle display clock.
+Add `--capture-canvas=true` to retain a PNG of the final physical canvas beside
+the JSON report. This is useful for texture-corruption and fidelity regressions:
+the image is captured only after readiness, warmup, and measured motion complete.
 
 Kitchen sink:
 

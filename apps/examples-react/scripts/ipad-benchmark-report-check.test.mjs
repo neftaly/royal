@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isIpadSafariBenchmarkEnvelope,
+  isExpectedIpadDevTransportDiagnostic,
   validateIpadEtc2BenchmarkEnvelope,
   validateIpadSafariBenchmarkEnvelope,
 } from './ipad-benchmark-report-check.mjs';
@@ -81,6 +82,32 @@ describe('iPad Safari benchmark report validation', () => {
       expect.stringContaining('sampleCount must match'),
       expect.stringContaining('pendingPages must be 0'),
     ]));
+  });
+
+  it('shares the narrow Safari dev-navigation exception with live collection', () => {
+    const report = validEnvelope();
+    const suspension = {
+      kind: 'console',
+      level: 'error',
+      text: "WebSocket connection to 'ws://example.test/?token=abc' failed: WebSocket is closed due to suspension.",
+      timestamp: 10,
+      url: '',
+    };
+    const reconnect = {
+      kind: 'console',
+      level: 'debug',
+      text: '[vite] connecting...',
+      timestamp: 10.1,
+      url: 'http://example.test/@vite/client',
+    };
+    report.browserDiagnostics.entries.push(suspension, reconnect);
+    report.canvasCapture = { byteLength: 123, filename: 'physical.png' };
+
+    expect(isExpectedIpadDevTransportDiagnostic(
+      suspension,
+      report.browserDiagnostics.entries,
+    )).toBe(true);
+    expect(validateIpadSafariBenchmarkEnvelope(report)).toEqual({ errors: [], warnings: [] });
   });
 
   it('validates the exact clean physical ETC2 residency oracle', () => {

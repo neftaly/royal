@@ -85,6 +85,7 @@ const smokeExpectations = {
   },
   'texture-materials': {
     minPaintedRatio: 0.01,
+    resourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
   },
   'virtual-texture-stress': {
     resourceSubstrings: [
@@ -418,6 +419,66 @@ const compositedCanvasSample = async (session) => {
       );
     })()
   `);
+};
+
+const compositedCanvasColorAt = async (session, x = 0.5, y = 0.5) => {
+  const capture = await captureCompositedCanvas(session);
+  if (capture === undefined) return undefined;
+  return evaluate(session, `
+    (async () => {
+      const response = await fetch('data:image/png;base64,${capture}');
+      const bitmap = await createImageBitmap(await response.blob());
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (context === null) return undefined;
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const centerX = Math.floor(canvas.width * ${x});
+      const centerY = Math.floor(canvas.height * ${y});
+      const radius = 2;
+      const pixels = context.getImageData(
+        centerX - radius,
+        centerY - radius,
+        radius * 2 + 1,
+        radius * 2 + 1,
+      ).data;
+      const rgb = [0, 0, 0];
+      for (let index = 0; index < pixels.length; index += 4) {
+        rgb[0] += pixels[index];
+        rgb[1] += pixels[index + 1];
+        rgb[2] += pixels[index + 2];
+      }
+      const count = pixels.length / 4;
+      return rgb.map((value) => value / count / 255);
+    })()
+  `);
+};
+
+const assertNeutralTextureTransition = (fallback, authored) => {
+  if (!Array.isArray(fallback) || !Array.isArray(authored)) {
+    throw new Error(`texture fallback smoke could not sample both states: ${JSON.stringify({ authored, fallback })}`);
+  }
+  const fallbackMaximum = Math.max(...fallback);
+  const fallbackMinimum = Math.min(...fallback);
+  if (fallbackMinimum <= 0.05 || fallbackMaximum >= 0.8 || fallbackMaximum - fallbackMinimum >= 0.15) {
+    throw new Error(`texture fallback was not a bounded neutral presentation: ${JSON.stringify(fallback)}`);
+  }
+  const distance = Math.hypot(
+    authored[0] - fallback[0],
+    authored[1] - fallback[1],
+    authored[2] - fallback[2],
+  );
+  if (distance <= 0.02) {
+    throw new Error(`authored texture did not visibly replace its neutral fallback: ${JSON.stringify({ authored, fallback })}`);
+  }
+  const authoredLooksDebugMagenta = authored[0] > 0.7
+    && authored[1] < 0.3
+    && authored[2] > 0.7;
+  if (authoredLooksDebugMagenta) {
+    throw new Error(`authored texture resolved to a debug-magenta presentation: ${JSON.stringify(authored)}`);
+  }
 };
 
 const assertRoute = (expected, state) => {
@@ -1690,9 +1751,85 @@ const main = async () => {
             ? { stableReadyReads: 12 }
             : {}),
         };
+      let textureFallbackPause;
+      const pausedVirtualTextureRequests = [];
+      if (route.id === 'texture-materials') {
+        await session.call('Fetch.enable', {
+          patterns: [{
+            requestStage: 'Request',
+            urlPattern: '*Default_albedo.jpg*',
+          }],
+        });
+        textureFallbackPause = session.wait(
+          'Fetch.requestPaused',
+          ({ request }) => request.url.includes('/DamagedHelmet/Default_albedo.jpg'),
+          { timeoutMs: 10_000 },
+        );
+      } else if (route.id === 'virtual-texture-stress') {
+        await session.call('Fetch.enable', {
+          patterns: [{
+            requestStage: 'Request',
+            urlPattern: '*map-pages/*',
+          }],
+        });
+        session.on('Fetch.requestPaused', (request) => {
+          if (request.request.url.includes('/fixtures/virtual-texture-stress/map-pages/')) {
+            pausedVirtualTextureRequests.push(request);
+          }
+        });
+        textureFallbackPause = session.wait(
+          'Fetch.requestPaused',
+          ({ request }) => request.url.includes('/fixtures/virtual-texture-stress/map-pages/'),
+          { timeoutMs: 10_000 },
+        );
+      }
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });
       await Promise.race([routeLoaded, sleep(5_000)]);
+      let textureFallbackColor;
+      if (textureFallbackPause !== undefined) {
+        const paused = await textureFallbackPause;
+        if (paused === undefined) {
+          await session.call('Fetch.disable');
+          throw new Error('texture fallback smoke did not intercept the authored image request');
+        }
+        const virtualTextureFallback = route.id === 'virtual-texture-stress';
+        const fallbackRoute = virtualTextureFallback
+          ? {
+              ...effectiveRoute,
+              absentResourceSubstrings: ['/fixtures/virtual-texture-stress/map-pages/'],
+              minColorBuckets: undefined,
+              resourceSubstrings: ['/fixtures/virtual-texture-stress/map.vt.json'],
+            }
+          : {
+              ...effectiveRoute,
+              absentResourceSubstrings: ['/DamagedHelmet/Default_albedo.jpg'],
+              resourceSubstrings: [],
+            };
+        const fallbackState = await waitForRouteState(session, fallbackRoute);
+        if (!routeCanvasReady(fallbackRoute, fallbackState)) {
+          for (const request of pausedVirtualTextureRequests) {
+            await session.call('Fetch.continueRequest', { requestId: request.requestId });
+          }
+          if (!virtualTextureFallback) {
+            await session.call('Fetch.continueRequest', { requestId: paused.requestId });
+          }
+          await session.call('Fetch.disable');
+          throw new Error(`texture fallback did not become presentable: ${JSON.stringify(fallbackState)}`);
+        }
+        textureFallbackColor = await compositedCanvasColorAt(
+          session,
+          virtualTextureFallback ? 0.35 : 0.5,
+          0.5,
+        );
+        for (const request of pausedVirtualTextureRequests) {
+          await session.call('Fetch.continueRequest', { requestId: request.requestId });
+        }
+        if (!virtualTextureFallback) {
+          await session.call('Fetch.continueRequest', { requestId: paused.requestId });
+        }
+        await session.call('Fetch.disable');
+      }
       let state = await waitForRouteState(session, effectiveRoute);
       if ((state.canvas?.sample?.paintedPixels ?? 0) === 0) {
         const compositedSample = await compositedCanvasSample(session);
@@ -1737,6 +1874,19 @@ const main = async () => {
           virtualTextureInteraction,
         };
       }
+      if (route.id === 'texture-materials' || route.id === 'virtual-texture-stress') {
+        state = {
+          ...state,
+          textureTransition: {
+            authored: await compositedCanvasColorAt(
+              session,
+              route.id === 'virtual-texture-stress' ? 0.35 : 0.5,
+              0.5,
+            ),
+            fallback: textureFallbackColor,
+          },
+        };
+      }
       try {
         const routeExceptions = exceptions.slice(routeExceptionStart);
         if (routeExceptions.length > 0) {
@@ -1753,6 +1903,16 @@ const main = async () => {
           throw new Error(`${route.id}: native GPU errors: ${nativeErrors.join('; ')}`);
         }
         assertRoute(effectiveRoute, state);
+        if (state.textureTransition !== undefined) {
+          assertNeutralTextureTransition(
+            state.textureTransition.fallback,
+            state.textureTransition.authored,
+          );
+          console.log(
+            `ok texture-transition fallback=${state.textureTransition.fallback.map((value) => value.toFixed(3)).join(',')}`
+            + ` authored=${state.textureTransition.authored.map((value) => value.toFixed(3)).join(',')}`,
+          );
+        }
       } catch (error) {
         const recentConsole = consoleMessages.slice(-8).join('; ');
         const recentResources = (state.resources ?? [])

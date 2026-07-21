@@ -4,6 +4,24 @@ const isRecord = (value) => typeof value === 'object'
 
 const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
+/** Pure classification shared by live collection and offline report validation. */
+export const isExpectedIpadDevTransportDiagnostic = (entry, entries) => {
+  if (
+    entry.kind !== 'console'
+    || entry.level !== 'error'
+    || !/^WebSocket connection to 'ws:\/\/[^/]+\/\?token=[^']+' failed: WebSocket is closed due to suspension\.$/u
+      .test(entry.text)
+  ) return false;
+  return entries.some((candidate) =>
+    candidate.kind === 'console'
+    && candidate.level === 'debug'
+    && candidate.text === '[vite] connecting...'
+    && /\/@vite\/client(?:\?|$)/u.test(candidate.url)
+    && candidate.timestamp >= entry.timestamp
+    && candidate.timestamp - entry.timestamp < 2
+  );
+};
+
 export const isIpadSafariBenchmarkEnvelope = (value) => isRecord(value)
   && isRecord(value.report)
   && typeof value.receivedAt === 'string'
@@ -62,12 +80,27 @@ export const validateIpadSafariBenchmarkEnvelope = (envelope) => {
         expectString(entry.kind, `${label}.kind`);
         expectString(entry.level, `${label}.level`);
         if (typeof entry.text !== 'string') errors.push(`${label}.text must be a string`);
-        if (entry.kind === 'exception' || entry.level === 'error') {
+        if (
+          (entry.kind === 'exception' || entry.level === 'error')
+          && !isExpectedIpadDevTransportDiagnostic(entry, envelope.browserDiagnostics.entries)
+        ) {
           errors.push(`${label} contains a browser error: ${String(entry.text)}`);
         } else if (entry.level === 'warning') {
           warnings.push(`${label} contains a browser warning: ${String(entry.text)}`);
         }
       });
+    }
+  }
+
+  if (envelope.canvasCapture !== undefined) {
+    if (expectRecord(envelope.canvasCapture, 'report.canvasCapture')) {
+      expectNumber(envelope.canvasCapture.byteLength, 'report.canvasCapture.byteLength', {
+        positive: true,
+      });
+      if (
+        !expectString(envelope.canvasCapture.filename, 'report.canvasCapture.filename')
+        || !envelope.canvasCapture.filename.endsWith('.png')
+      ) errors.push('report.canvasCapture.filename must end with .png');
     }
   }
 
