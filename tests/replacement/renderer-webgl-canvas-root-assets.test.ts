@@ -308,7 +308,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(1);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
-    expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
+    expect(root.getSnapshot().resources.imageTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
       deferredUploads: 2,
@@ -317,7 +317,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(3);
-    expect(root.getSnapshot().resources.ordinaryTextureUploads).toEqual({
+    expect(root.getSnapshot().resources.imageTextureUploads).toEqual({
       admittedBytes: 16,
       budgetBytes: 16,
       deferredUploads: 1,
@@ -325,7 +325,7 @@ describe("canvas root asset publication", () => {
     callbacks.shift()!();
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(3);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(6);
-    expect(root.getSnapshot().resources.ordinaryTextureUploads.deferredUploads).toBe(0);
+    expect(root.getSnapshot().resources.imageTextureUploads.deferredUploads).toBe(0);
     expect(presentationDelays).toContain(250);
     root.dispose();
   });
@@ -365,7 +365,7 @@ describe("canvas root asset publication", () => {
 
     expect(canvas.gl.texSubImage2D).toHaveBeenCalledTimes(20);
     expect(root.getSnapshot().resources.geometryUploads.pendingSurfaces).toBe(0);
-    expect(root.getSnapshot().resources.ordinaryTexturePreparation).toMatchObject({
+    expect(root.getSnapshot().resources.imageTexturePreparation).toMatchObject({
       activePreparations: 0,
       decodedHandoffBytes: 0,
       pendingStorageRepresentations: 0,

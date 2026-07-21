@@ -17,6 +17,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as reactApi from "../../packages/react/src/index";
 import * as sceneApi from "../../packages/react/src/scene";
 import * as xrApi from "../../packages/react/src/xr";
+import * as webglApi from "../../packages/renderer-webgl/src/index";
 import {
   Canvas,
   createOrbitCameraController,
@@ -132,6 +133,10 @@ describe("replacement React public API", () => {
     expect(Object.keys(xrApi).sort()).toEqual([
       "createXrSessionController",
       "useXrSession",
+    ]);
+    expect(Object.keys(webglApi).sort()).toEqual([
+      "createRendererRoot",
+      "resolveRendererRootOptions",
     ]);
   });
 

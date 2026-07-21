@@ -17,7 +17,5 @@ export type {
 export type { GltfDocumentScene } from "./gltf/static-node-selection";
 export type { TextureAssetSnapshot } from "./texture/asset-owner";
 export type { PrefilteredEnvironmentAssetSnapshot } from "./environment/asset-owner";
-export type { AsyncPreparationSnapshot } from "./resource/async-preparation-owner";
-export type { FrameUploadBudgetSnapshot } from "./resource/frame-upload-budget";
 export type { VirtualTextureAssetSnapshot } from "./virtual-texture/runtime-contract";
 export type { PickInput, PickResult } from "@royal/renderer-core";

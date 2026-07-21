@@ -56,7 +56,7 @@ Ordinary-texture uploads are likewise paced internally across submitted canvas
 and XR frames. A larger individual texture is admitted alone so it cannot
 starve. Deferred storage remains a ready asset with its neutral/current
 representation and retries on the next frame.
-`getSnapshot().resources.ordinaryTextureUploads` reports admitted bytes, the
+`getSnapshot().resources.imageTextureUploads` reports admitted bytes, the
 current internal budget, and unique deferrals for the latest submitted frame.
 
 `automaticVirtualTexturing` defaults to `false`. Enabling it lets eligible

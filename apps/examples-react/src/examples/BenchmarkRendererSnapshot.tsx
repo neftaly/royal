@@ -49,7 +49,7 @@ const benchmarkAutomaticVirtualTextureDiagnostics = (
 
 /** @internal Pure projection from the public cold snapshot to benchmark counters. */
 export const benchmarkTextureResidency = (
-  snapshot: RendererRootSnapshot['resources']['ordinaryTextures'],
+  snapshot: RendererRootSnapshot['resources']['imageTextures'],
 ): Record<string, number> => ({
   bytes: snapshot.residentBytes,
   compressedBytes: snapshot.compressedBytes,
@@ -133,23 +133,23 @@ export const BenchmarkRendererSnapshot = ({
         resourcePressure: {
           activePreparationJobs: current.resources.asyncPreparation.activeJobs,
           activeTexturePreparations:
-            current.resources.ordinaryTexturePreparation.activePreparations,
+            current.resources.imageTexturePreparation.activePreparations,
           admittedGeometryUploadBytes: current.resources.geometryUploads.admittedBytes,
           admittedOrdinaryTextureUploadBytes:
-            current.resources.ordinaryTextureUploads.admittedBytes,
+            current.resources.imageTextureUploads.admittedBytes,
           sourceReservationLimit:
-            current.resources.ordinaryTexturePreparation.sourceReservationLimit,
+            current.resources.imageTexturePreparation.sourceReservationLimit,
           sourceReservations:
-            current.resources.ordinaryTexturePreparation.sourceReservations,
+            current.resources.imageTexturePreparation.sourceReservations,
           decodedTextureHandoffBytes:
-            current.resources.ordinaryTexturePreparation.decodedHandoffBytes,
+            current.resources.imageTexturePreparation.decodedHandoffBytes,
           decodedTextureHandoffThresholdBytes:
-            current.resources.ordinaryTexturePreparation.decodedHandoffThresholdBytes,
+            current.resources.imageTexturePreparation.decodedHandoffThresholdBytes,
           deferredGeometryUploads: current.resources.geometryUploads.deferredUploads,
           deferredOrdinaryTextureUploads:
-            current.resources.ordinaryTextureUploads.deferredUploads,
+            current.resources.imageTextureUploads.deferredUploads,
           ordinaryTextureUploadBudgetBytes:
-            current.resources.ordinaryTextureUploads.budgetBytes,
+            current.resources.imageTextureUploads.budgetBytes,
           preparationJobLimit: current.resources.asyncPreparation.jobLimit,
           queuedDetailPreparationJobs:
             current.resources.asyncPreparation.queuedDetailJobs,
@@ -160,12 +160,12 @@ export const BenchmarkRendererSnapshot = ({
           persistentGpuDeniedClaims: current.resources.persistentGpu.deniedClaims,
           persistentGpuRetainedBytes: current.resources.persistentGpu.retainedBytes,
           pendingOrdinaryTextureStorageRepresentations:
-            current.resources.ordinaryTexturePreparation.pendingStorageRepresentations,
+            current.resources.imageTexturePreparation.pendingStorageRepresentations,
           pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
           retainedEncodedTextureSourceBytes:
-            current.resources.ordinaryTexturePreparation.retainedEncodedSourceBytes,
+            current.resources.imageTexturePreparation.retainedEncodedSourceBytes,
         },
-        textureResidency: benchmarkTextureResidency(current.resources.ordinaryTextures),
+        textureResidency: benchmarkTextureResidency(current.resources.imageTextures),
         virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)
           ?? benchmarkAutomaticVirtualTextureDiagnostics(current.resources.virtualTextures),
       };

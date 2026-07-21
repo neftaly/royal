@@ -145,6 +145,7 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
   const size = useCanvasSize(options);
   const lifecycle = useRendererLifecycle(options);
   const rendererSnapshot = useRendererSnapshot(options);
+  const residentImageTextureCount = rendererSnapshot?.resources.imageTextures.residentTextures ?? 0;
   const modelStatus = useGltfAssetStatus(model.asset, options);
   const textureStatus = useTextureAssetStatus(albedo, options);
   const environmentStatus = usePrefilteredEnvironmentStatus(environment, options);
@@ -162,7 +163,8 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
     : [];
   return (
     <output>
-      {renderer}: frame {rendererSnapshot?.frame ?? 0}; {size?.cssWidth ?? 0} by{' '}
+      {renderer}: frame {rendererSnapshot?.frame ?? 0}; {residentImageTextureCount} image textures;{' '}
+      {size?.cssWidth ?? 0} by{' '}
       {size?.cssHeight ?? 0}; model {modelStatus.status} ({documentScenes.length} scenes,{' '}
       {variants}); texture{' '}
       {textureStatus.status}; environment {environmentStatus.status}; VT{' '}

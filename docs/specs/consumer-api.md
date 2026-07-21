@@ -236,18 +236,20 @@ summaries. Reporting the inventory does not prepare or fetch unselected scene
 content.
 
 Royal owns a bounded asynchronous preparation scheduler shared across glTF,
-ordinary textures, authored VT, and prefiltered environments. Its limit and
-lane policy are renderer implementation details rather than consumer creation
-options. Broad renderer diagnostics expose
+external image-texture transport, authored VT, and prefiltered environments.
+Image-texture decode and decoded handoff have a separate bounded source
+lifecycle. These limits and policies are renderer implementation details rather
+than consumer creation options. Broad renderer diagnostics expose
 `resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs,
 queuedForegroundJobs, queuedDetailJobs }` for operational inspection. The two
 queued lane counts sum to `queuedJobs`; they diagnose scheduling and are not
-separate consumer lifecycles. Focused asset status remains the product
-lifecycle.
+separate consumer lifecycles. `resources.imageTexturePreparation` distinguishes
+active source preparations from retained handoff reservations without calling
+both browser phases decodes. Focused asset status remains the product lifecycle.
 
 Royal also owns the bounded ordinary-texture upload pacing policy. Broad
 diagnostics expose
-`resources.ordinaryTextureUploads: { admittedBytes, budgetBytes, deferredUploads }` for
+`resources.imageTextureUploads: { admittedBytes, budgetBytes, deferredUploads }` for
 the latest submitted frame. Deferral is renderer scheduling, not an asset
 failure or a separate consumer lifecycle. Neither scheduler policy is a public
 tuning knob; future implementations may change their strategy without breaking

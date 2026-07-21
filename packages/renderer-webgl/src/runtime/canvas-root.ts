@@ -130,12 +130,12 @@ export type RendererResourceSnapshot = Readonly<{
   asyncPreparation: AsyncPreparationSnapshot;
   /** Geometry bytes uploaded or deferred during the latest submitted frame. */
   geometryUploads: SurfaceGeometryUploadSnapshot;
-  /** Decoded ordinary-texture handoff pressure. */
-  ordinaryTexturePreparation: TexturePreparationSnapshot;
-  /** Ordinary-texture bytes uploaded or deferred during the latest frame. */
-  ordinaryTextureUploads: FrameUploadBudgetSnapshot;
-  /** Current ordinary-texture GPU residency and compression totals. */
-  ordinaryTextures: OrdinaryTextureGpuSnapshot;
+  /** Image-texture source preparation and decoded-handoff pressure. */
+  imageTexturePreparation: TexturePreparationSnapshot;
+  /** Image-texture bytes uploaded or deferred during the latest frame. */
+  imageTextureUploads: FrameUploadBudgetSnapshot;
+  /** Current image-texture GPU residency and compression totals. */
+  imageTextures: OrdinaryTextureGpuSnapshot;
   /** Root-wide persistent GPU admission and retained-byte totals. */
   persistentGpu: PersistentGpuBudgetSnapshot;
   /** Authored and automatic virtual-texture demand, residency, and policy. */
@@ -651,9 +651,9 @@ export class CanvasRoot implements RendererRoot {
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
           geometryUploads: this.#surfaceGpu.geometryUploadSnapshot(),
-          ordinaryTexturePreparation: this.#textureAssets.snapshot(),
-          ordinaryTextureUploads: this.#frameUploadBudget.snapshot(),
-          ordinaryTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
+          imageTexturePreparation: this.#textureAssets.snapshot(),
+          imageTextureUploads: this.#frameUploadBudget.snapshot(),
+          imageTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
           virtualTextures: this.#virtualTextureRuntime?.runtimeSnapshot()
             ?? this.#idleVirtualTextureRuntimeSnapshot,
