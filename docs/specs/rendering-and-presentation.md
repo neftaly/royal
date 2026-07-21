@@ -94,6 +94,12 @@ samples rather than regressing under the extra vertex work. Sponza therefore
 reaches a 60 Hz mean cadence on that physical iPad, though its 19 ms p95 is not
 a claim of sustained 60 Hz and Quest remains separately unproven.
 
+Exact clean commit `cc9a749e` confirms the invariant-position correction on
+physical Safari 17.14 after the original self-occlusion was reproduced. The
+restored depth path retained all 69 Sponza images without failures, completed
+120/120 moving samples at 17.125 ms average / 20 ms p95, and remained visually
+clean after motion (`2026-07-21T10-18-35-517Z-gltf-scenes.json`).
+
 ## Geometry and materials
 
 Royal's simple public materials are standard PBR, unlit, and wireframe. glTF
