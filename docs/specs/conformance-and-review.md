@@ -303,6 +303,16 @@ about 0.6 kB gzip to the initial and deployed graph, with no lazy or worker
 increase. Only the three affected rounded initial ceilings rise by 100 bytes;
 declarations and source maps move the packed renderer ceiling from 484 to
 488 KiB.
+
+Selected-scene embedded-image demand now shares material structure and
+capability-aware texture-source selection with canonical preparation. Direct
+planner tests cover scene isolation, recursive material LOD, variants, and
+ETC2/core choice; the complete suite covers SVG and material preparation through
+the shared path. This removes the former all-images range overfetch without a
+second texture interpretation path. Lazy, worker, and deployed-byte ceilings do
+not rise. Three initial fixtures from the preceding shared-I/O packet exceeded
+their rounded ceilings by 5--18 gzip bytes, so only those ceilings rise by 50
+bytes.
 Single-consumer transport remains zero-copy; protective copies and retained
 LRU bytes exist only after a read is genuinely shared.
 

@@ -1021,6 +1021,7 @@ export const prepareStaticGltfSource = async (
     sourceUri,
     read,
     sceneIndex,
+    etc2Available,
   );
   return prepareDocumentWithCodecs(
     canonical.document,

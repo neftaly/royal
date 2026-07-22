@@ -3,7 +3,6 @@ import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type {
   EmbeddedTextureAssetRef,
   TextureLeafSourceRef,
-  TextureSourceEncoding,
   TextureSourceRef,
 } from "../texture/source";
 import {
@@ -21,6 +20,11 @@ import {
   prepareTextureCoordinates,
   type CanonicalTextureCoordinates,
 } from "./texture-coordinates";
+import { readStaticMaterialInputs } from "./static-material-inputs";
+import {
+  createStaticTextureImagePlanner,
+  type StaticTextureImageSource,
+} from "./static-texture-image-plan";
 
 type MaterialTextureUse = Readonly<{
   asset: TextureSourceRef;
@@ -124,67 +128,20 @@ export const createTextureAssetReader = (
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
   const textures = optionalArray(document.textures, label, "textures");
-  const etc2Required = optionalArray(document.extensionsRequired, label, "extensionsRequired")
-    .some((extension) => extension === "GS_texture_etc2");
-  const svgRequired = optionalArray(document.extensionsRequired, label, "extensionsRequired")
-    .some((extension) => extension === "GS_texture_svg");
+  const planTextureImages = createStaticTextureImagePlanner(
+    document,
+    label,
+    etc2Available,
+  );
   const prepared = new Map<string, TextureSourceRef>();
   return (value, path, colorSpace = "srgb") => {
     const textureIndex = index(value, textures, label, path);
     const preparedKey = `${textureIndex}:${colorSpace}`;
     const retained = prepared.get(preparedKey);
     if (retained !== undefined) return retained;
-    const textureValue = textures[textureIndex];
+    const imagePlan = planTextureImages(textureIndex, colorSpace);
     const texturePath = `textures[${textureIndex}]`;
-    const texture = object(textureValue, label, texturePath);
-    const textureExtensions = texture.extensions === undefined
-      ? {}
-      : object(texture.extensions, label, `${texturePath}.extensions`);
-    const etc2Extension = textureExtensions.GS_texture_etc2 === undefined
-      ? undefined
-      : object(
-        textureExtensions.GS_texture_etc2,
-        label,
-        `${texturePath}.extensions.GS_texture_etc2`,
-      );
-    const svgExtension = textureExtensions.GS_texture_svg === undefined
-      ? undefined
-      : object(
-        textureExtensions.GS_texture_svg,
-        label,
-        `${texturePath}.extensions.GS_texture_svg`,
-      );
-    const webpExtension = textureExtensions.EXT_texture_webp === undefined
-      ? undefined
-      : object(
-        textureExtensions.EXT_texture_webp,
-        label,
-        `${texturePath}.extensions.EXT_texture_webp`,
-      );
-    const fallbackExtension = etc2Extension !== undefined && etc2Available
-      ? "GS_texture_etc2"
-      : webpExtension === undefined ? undefined : "EXT_texture_webp";
-    if (etc2Extension !== undefined && texture.source === undefined && !etc2Required) {
-      fail(
-        label,
-        `${texturePath}.source`,
-        "is required when optional GS_texture_etc2 needs a core fallback",
-      );
-    }
-    if (svgExtension !== undefined && colorSpace !== "srgb") {
-      fail(
-        label,
-        `${texturePath}.extensions.GS_texture_svg`,
-        "is supported only for sRGB color texture slots",
-      );
-    }
-    if (svgExtension !== undefined && texture.source === undefined && !svgRequired) {
-      fail(
-        label,
-        `${texturePath}.source`,
-        "is required when optional GS_texture_svg needs a core raster fallback",
-      );
-    }
+    const texture = imagePlan.texture;
     let sampler: TextureSampler;
     if (texture.sampler === undefined) {
       sampler = gltfSampler({}, label, `${texturePath}.sampler`);
@@ -198,11 +155,9 @@ export const createTextureAssetReader = (
       );
     }
     const readImage = (
-      sourceValue: unknown,
-      sourcePath: string,
-      sourceEncoding?: TextureSourceEncoding,
+      source: StaticTextureImageSource,
     ): TextureLeafSourceRef => {
-      const imageIndex = index(sourceValue, images, label, sourcePath);
+      const { imageIndex, sourceEncoding } = source;
       const imagePath = `images[${imageIndex}]`;
       const image = object(images[imageIndex], label, imagePath);
       if ((image.uri === undefined) === (image.bufferView === undefined)) {
@@ -269,25 +224,10 @@ export const createTextureAssetReader = (
         ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
       };
     };
-    const fallbackSource = (): TextureLeafSourceRef => fallbackExtension === "GS_texture_etc2"
-      ? readImage(
-        etc2Extension!.source,
-        `${texturePath}.extensions.GS_texture_etc2.source`,
-        "ktx2-etc2",
-      )
-      : fallbackExtension === "EXT_texture_webp"
-        ? readImage(webpExtension!.source, `${texturePath}.extensions.EXT_texture_webp.source`)
-        : readImage(texture.source, `${texturePath}.source`);
-    let asset: TextureSourceRef;
-    if (svgExtension === undefined) asset = fallbackSource();
-    else {
-      const preferred = readImage(
-        svgExtension.source,
-        `${texturePath}.extensions.GS_texture_svg.source`,
-        "svg",
-      );
-      asset = svgRequired ? preferred : { ...preferred, fallback: fallbackSource() };
-    }
+    const primary = readImage(imagePlan.primary);
+    const asset: TextureSourceRef = imagePlan.fallback === undefined
+      ? primary
+      : { ...primary, fallback: readImage(imagePlan.fallback) };
     prepared.set(preparedKey, asset);
     return asset;
   };
@@ -319,49 +259,26 @@ export const prepareMaterial = (
   const resolvedIndex = index(materialIndex, materials, label, `${path}.material`);
   const material = object(materials[resolvedIndex], label, `materials[${resolvedIndex}]`);
   const materialPath = `materials[${resolvedIndex}]`;
-  const extensions = material.extensions === undefined
-    ? {}
-    : object(material.extensions, label, `${materialPath}.extensions`);
+  const {
+    extensions,
+    iorExtension,
+    pbr,
+    specularExtension,
+    transmissionExtension,
+    volumeExtension,
+  } = readStaticMaterialInputs(material, label, materialPath);
   const unlit = extensions.KHR_materials_unlit !== undefined;
   if (unlit) object(
     extensions.KHR_materials_unlit,
     label,
     `${materialPath}.extensions.KHR_materials_unlit`,
   );
-  const iorExtension = extensions.KHR_materials_ior === undefined
-    ? undefined
-    : object(
-      extensions.KHR_materials_ior,
-      label,
-      `${materialPath}.extensions.KHR_materials_ior`,
-    );
   if (unlit && iorExtension !== undefined) {
     fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_ior with KHR_materials_unlit");
   }
-  const specularExtension = extensions.KHR_materials_specular === undefined
-    ? undefined
-    : object(
-      extensions.KHR_materials_specular,
-      label,
-      `${materialPath}.extensions.KHR_materials_specular`,
-    );
   if (unlit && specularExtension !== undefined) {
     fail(label, `${materialPath}.extensions`, "must not combine KHR_materials_specular with KHR_materials_unlit");
   }
-  const transmissionExtension = extensions.KHR_materials_transmission === undefined
-    ? undefined
-    : object(
-      extensions.KHR_materials_transmission,
-      label,
-      `${materialPath}.extensions.KHR_materials_transmission`,
-    );
-  const volumeExtension = extensions.KHR_materials_volume === undefined
-    ? undefined
-    : object(
-      extensions.KHR_materials_volume,
-      label,
-      `${materialPath}.extensions.KHR_materials_volume`,
-    );
   if (volumeExtension !== undefined && transmissionExtension === undefined) {
     fail(
       label,
@@ -399,9 +316,6 @@ export const prepareMaterial = (
   const alphaCutoff = material.alphaMode === "MASK"
     ? factor01(material.alphaCutoff, 0.5, label, `${materialPath}.alphaCutoff`)
     : undefined;
-  const pbr = material.pbrMetallicRoughness === undefined
-    ? {}
-    : object(material.pbrMetallicRoughness, label, `${materialPath}.pbrMetallicRoughness`);
   const materialTexture = (
     value: unknown,
     textureInfoPath: string,

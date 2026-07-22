@@ -8,6 +8,7 @@ import {
   type JsonObject,
 } from "./gltf-values";
 import { selectedStaticNodeIndices } from "./static-node-selection";
+import { createStaticPrimitiveImageDemand } from "./static-image-demand";
 
 export type StaticGltfByteRange = Readonly<{
   byteLength: number;
@@ -108,16 +109,30 @@ export const planStaticGltfBufferRequests = (
   document: JsonObject,
   label: string,
   sceneIndex?: number,
+  etc2Available = true,
 ): readonly (StaticGltfResourceRequest | undefined)[] => {
   const accessors = array(document.accessors, label, "accessors");
   const buffers = array(document.buffers, label, "buffers");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
   const nodes = array(document.nodes, label, "nodes");
+  const images = optionalArray(document.images, label, "images");
   const claimedViews = new Set<number>();
   const claimAccessorValue = (value: unknown, path: string): void => {
     claimAccessor(value, accessors, bufferViews, claimedViews, label, path);
   };
+  const claimPrimitiveImages = createStaticPrimitiveImageDemand(
+    document,
+    label,
+    etc2Available,
+    (imageIndex) => {
+      const imagePath = `images[${imageIndex}]`;
+      const image = object(images[imageIndex], label, imagePath);
+      if (image.bufferView !== undefined) {
+        claimView(image.bufferView, bufferViews, claimedViews, label, `${imagePath}.bufferView`);
+      }
+    },
+  );
 
   for (const nodeIndex of selectedStaticNodeIndices(document, label, sceneIndex)) {
     const nodePath = `nodes[${nodeIndex}]`;
@@ -141,6 +156,7 @@ export const planStaticGltfBufferRequests = (
     for (let primitiveIndex = 0; primitiveIndex < primitives.length; primitiveIndex += 1) {
       const primitivePath = `${meshPath}.primitives[${primitiveIndex}]`;
       const primitive = object(primitives[primitiveIndex], label, primitivePath);
+      claimPrimitiveImages(primitive, primitivePath);
       const attributes = object(primitive.attributes, label, `${primitivePath}.attributes`);
       for (const [semantic, accessor] of Object.entries(attributes)) {
         claimAccessorValue(accessor, `${primitivePath}.attributes.${semantic}`);
@@ -160,17 +176,6 @@ export const planStaticGltfBufferRequests = (
         label,
         `${extensionPath}.bufferView`,
       );
-    }
-  }
-
-  // Embedded images may be selected through material variants or material LOD.
-  // Keeping this conservative avoids duplicating material-extension traversal.
-  const images = optionalArray(document.images, label, "images");
-  for (let imageIndex = 0; imageIndex < images.length; imageIndex += 1) {
-    const path = `images[${imageIndex}]`;
-    const image = object(images[imageIndex], label, path);
-    if (image.bufferView !== undefined) {
-      claimView(image.bufferView, bufferViews, claimedViews, label, `${path}.bufferView`);
     }
   }
 

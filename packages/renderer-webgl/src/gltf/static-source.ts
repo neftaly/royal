@@ -65,6 +65,7 @@ export const readCanonicalStaticGltfSource = async (
   sourceUri: string,
   read: StaticGltfResourceReader,
   sceneIndex?: number,
+  etc2Available = true,
 ): Promise<CanonicalStaticGltfSource> => {
   if (isGlb(bytes)) {
     const parsed = parseGlb(bytes, label);
@@ -86,7 +87,7 @@ export const readCanonicalStaticGltfSource = async (
     if (padding < 0 || padding > 3) {
       fail(label, "buffers[0].byteLength", "does not match the padded GLB BIN chunk");
     }
-    const requests = planStaticGltfBufferRequests(document, label, sceneIndex);
+    const requests = planStaticGltfBufferRequests(document, label, sceneIndex, etc2Available);
     const external = await Promise.all(buffers.slice(1).map((value, offset) =>
       readExternalBuffer(
         value,
@@ -107,7 +108,7 @@ export const readCanonicalStaticGltfSource = async (
   const document = parseJsonDocument(bytes, label);
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length === 0) fail(label, "buffers", "must not be empty");
-  const requests = planStaticGltfBufferRequests(document, label, sceneIndex);
+  const requests = planStaticGltfBufferRequests(document, label, sceneIndex, etc2Available);
   const sources = await Promise.all(buffers.map((value, bufferIndex) =>
     readExternalBuffer(
       value,

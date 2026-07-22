@@ -323,6 +323,11 @@ shell owns HTTP negotiation, cancellation, response validation, and full-read
 fallback. Plans with too many intervals or at least 80% byte coverage choose a
 complete read. This avoids request fan-out that costs more than it saves and
 keeps servers without range support correct without a parallel parser path.
+The pure walk shares material structure and texture-source selection with
+canonical preparation. It therefore includes selected material variants and
+LOD fallbacks without conservatively transferring embedded images owned only by
+another scene, and capability fallback cannot diverge between transport and
+rendering.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 

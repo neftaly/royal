@@ -40,8 +40,10 @@ describe("static glTF selected-buffer demand", () => {
       accessors: Array<Record<string, unknown>>;
       bufferViews: Array<Record<string, unknown>>;
       images?: unknown[];
+      materials?: unknown[];
       meshes: Array<{ primitives: Array<Record<string, unknown>> }>;
       nodes: Array<Record<string, unknown>>;
+      textures?: unknown[];
     };
     document.bufferViews.push(
       { buffer: 0, byteLength: 10, byteOffset: 300 },
@@ -66,6 +68,9 @@ describe("static glTF selected-buffer demand", () => {
       KHR_draco_mesh_compression: { attributes: { POSITION: 0 }, bufferView: 5 },
     };
     document.images = [{ bufferView: 6, mimeType: "image/png" }];
+    document.textures = [{ source: 0 }];
+    document.materials = [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }];
+    document.meshes[0]!.primitives[0]!.material = 0;
 
     expect(planStaticGltfBufferRequests(document, "demanded features", 0)).toEqual([{
       byteLength: 1_000,
@@ -74,6 +79,129 @@ describe("static glTF selected-buffer demand", () => {
         { byteLength: 20, byteOffset: 300 },
         { byteLength: 20, byteOffset: 500 },
         { byteLength: 30, byteOffset: 600 },
+      ],
+    }]);
+  });
+
+  it("claims only embedded images reachable through the selected scene's materials", () => {
+    const document = twoSceneDocument() as {
+      bufferViews: Array<Record<string, unknown>>;
+      images?: unknown[];
+      materials?: unknown[];
+      meshes: Array<{ primitives: Array<Record<string, unknown>> }>;
+      textures?: unknown[];
+    };
+    document.bufferViews.push(
+      { buffer: 0, byteLength: 30, byteOffset: 600 },
+      { buffer: 0, byteLength: 40, byteOffset: 700 },
+    );
+    document.images = [
+      { bufferView: 3, mimeType: "image/png" },
+      { bufferView: 4, mimeType: "image/png" },
+    ];
+    document.textures = [{ source: 0 }, { source: 1 }];
+    document.materials = [
+      { pbrMetallicRoughness: { baseColorTexture: { index: 0 } } },
+      { pbrMetallicRoughness: { baseColorTexture: { index: 1 } } },
+    ];
+    document.meshes[0]!.primitives[0]!.material = 0;
+    document.meshes[1]!.primitives[0]!.material = 1;
+
+    expect(planStaticGltfBufferRequests(document, "scene image demand", 0)).toEqual([{
+      byteLength: 1_000,
+      ranges: [
+        { byteLength: 150, byteOffset: 0 },
+        { byteLength: 30, byteOffset: 600 },
+      ],
+    }]);
+    expect(planStaticGltfBufferRequests(document, "scene image demand", 1)).toEqual([{
+      byteLength: 1_000,
+      ranges: [
+        { byteLength: 40, byteOffset: 700 },
+        { byteLength: 100, byteOffset: 800 },
+      ],
+    }]);
+  });
+
+  it("includes selected material variants and recursive material LOD images", () => {
+    const document = twoSceneDocument() as {
+      bufferViews: Array<Record<string, unknown>>;
+      images?: unknown[];
+      materials?: unknown[];
+      meshes: Array<{ primitives: Array<Record<string, unknown>> }>;
+      textures?: unknown[];
+    };
+    document.bufferViews.push(
+      { buffer: 0, byteLength: 20, byteOffset: 400 },
+      { buffer: 0, byteLength: 20, byteOffset: 500 },
+      { buffer: 0, byteLength: 20, byteOffset: 600 },
+      { buffer: 0, byteLength: 20, byteOffset: 700 },
+    );
+    document.images = [0, 1, 2, 3].map((bufferView) => ({
+      bufferView: bufferView + 3,
+      mimeType: "image/png",
+    }));
+    document.textures = [0, 1, 2, 3].map((source) => ({ source }));
+    document.materials = [
+      {
+        extensions: { MSFT_lod: { ids: [1] } },
+        pbrMetallicRoughness: { baseColorTexture: { index: 0 } },
+      },
+      { emissiveTexture: { index: 1 } },
+      { normalTexture: { index: 2 } },
+      { occlusionTexture: { index: 3 } },
+    ];
+    document.meshes[0]!.primitives[0]!.material = 0;
+    document.meshes[0]!.primitives[0]!.extensions = {
+      KHR_materials_variants: { mappings: [{ material: 2, variants: [0] }] },
+    };
+
+    expect(planStaticGltfBufferRequests(document, "variant image demand", 0)).toEqual([{
+      byteLength: 1_000,
+      ranges: [
+        { byteLength: 150, byteOffset: 0 },
+        { byteLength: 20, byteOffset: 400 },
+        { byteLength: 20, byteOffset: 500 },
+        { byteLength: 20, byteOffset: 600 },
+      ],
+    }]);
+  });
+
+  it("uses the same capability-aware ETC2 image choice as material preparation", () => {
+    const document = twoSceneDocument() as {
+      bufferViews: Array<Record<string, unknown>>;
+      images?: unknown[];
+      materials?: unknown[];
+      meshes: Array<{ primitives: Array<Record<string, unknown>> }>;
+      textures?: unknown[];
+    };
+    document.bufferViews.push(
+      { buffer: 0, byteLength: 20, byteOffset: 400 },
+      { buffer: 0, byteLength: 20, byteOffset: 500 },
+    );
+    document.images = [
+      { bufferView: 3, mimeType: "image/png" },
+      { bufferView: 4, mimeType: "image/ktx2" },
+    ];
+    document.textures = [{
+      extensions: { GS_texture_etc2: { source: 1 } },
+      source: 0,
+    }];
+    document.materials = [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }];
+    document.meshes[0]!.primitives[0]!.material = 0;
+
+    expect(planStaticGltfBufferRequests(document, "ETC2 demand", 0, true)).toEqual([{
+      byteLength: 1_000,
+      ranges: [
+        { byteLength: 150, byteOffset: 0 },
+        { byteLength: 20, byteOffset: 500 },
+      ],
+    }]);
+    expect(planStaticGltfBufferRequests(document, "ETC2 demand", 0, false)).toEqual([{
+      byteLength: 1_000,
+      ranges: [
+        { byteLength: 150, byteOffset: 0 },
+        { byteLength: 20, byteOffset: 400 },
       ],
     }]);
   });
