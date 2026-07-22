@@ -16,6 +16,7 @@ import {
   materialFillLight,
   materialKeyLight,
   materialPass,
+  transparentViewportClearColor,
 } from "../presentation";
 
 const bistroScenes = [
@@ -97,7 +98,7 @@ export const GltfBistroWeb = (): ReactNode => {
   const renderScene = useMemo(() => scene({
     camera: orbit.camera,
     environment: materialEnvironment,
-    clearColor: [0.018, 0.022, 0.029, 1],
+    clearColor: transparentViewportClearColor,
     exposureEv100: materialPass.exposureEv100,
     nodes: [
       directionalLight(materialKeyLight),

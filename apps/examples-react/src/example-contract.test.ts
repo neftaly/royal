@@ -8,8 +8,27 @@ import {
   type RendererBenchmarkSnapshot,
 } from './example-contract';
 import { examples } from './examples';
+import { exampleCanvasRendererOptions } from './examples/example-renderer-options';
+import {
+  colorAccuratePass,
+  materialPass,
+  productPass,
+  showcasePass,
+  transparentViewportClearColor,
+} from './examples/presentation';
 
 describe('examples contract', () => {
+  it('leaves canvas backdrop ownership to CSS for every shared pass', () => {
+    expect(exampleCanvasRendererOptions.alpha).toBe(true);
+    expect(transparentViewportClearColor).toEqual([0, 0, 0, 0]);
+    expect([
+      showcasePass,
+      productPass,
+      materialPass,
+      colorAccuratePass,
+    ].every((pass) => pass.clearColor === transparentViewportClearColor)).toBe(true);
+  });
+
   it('is a versioned serializable source of route metadata', () => {
     expect(JSON.parse(JSON.stringify(exampleContract))).toEqual(exampleContract);
     expect(exampleContract.schema).toBe('royal-examples-contract');

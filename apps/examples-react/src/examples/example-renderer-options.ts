@@ -1,7 +1,7 @@
 import { type RendererRootOptions } from '@royal/react';
 
 const defaultExampleCanvasRendererOptions = {
-  alpha: false,
+  alpha: true,
   antialias: false,
 } as const satisfies RendererRootOptions;
 

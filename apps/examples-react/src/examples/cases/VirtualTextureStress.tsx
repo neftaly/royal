@@ -15,6 +15,8 @@ import {
 } from '@royal/react/scene';
 import { useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { transparentViewportClearColor } from '../presentation';
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
 const mapTexture = virtualTexture({
@@ -73,7 +75,7 @@ export const VirtualTextureStress = (): ReactNode => {
   const ground = surface === 'ground';
   const renderScene = useMemo(() => scene({
     camera: orbit.camera,
-    clearColor: [0.018, 0.024, 0.036, 1],
+    clearColor: transparentViewportClearColor,
     nodes: [
       mesh({
         geometry: mapGeometry,
@@ -134,6 +136,7 @@ export const VirtualTextureStress = (): ReactNode => {
           data-map-target-y={orbitView.target[1].toFixed(3)}
           data-vt-distance={orbitView.distance.toFixed(3)}
           data-vt-surface={surface}
+          rendererOptions={exampleCanvasRendererOptions}
           scene={renderScene}
           style={{ cursor: 'grab', touchAction: 'none' }}
         >

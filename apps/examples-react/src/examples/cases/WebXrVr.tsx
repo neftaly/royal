@@ -13,6 +13,8 @@ import {
 import { useXrSession } from "@royal/react/xr";
 import { type ReactNode } from "react";
 import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
+import { exampleCanvasRendererOptions } from "../example-renderer-options";
+import { transparentViewportClearColor } from "../presentation";
 
 const xrTiger = gltf({
   src: `${import.meta.env.BASE_URL}fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf`,
@@ -26,7 +28,7 @@ const renderScene = scene({
     near: 0.05,
     position: [0, 1.6, 4],
   }),
-  clearColor: [0.015, 0.025, 0.055, 1],
+  clearColor: transparentViewportClearColor,
   environment: studioEnvironment({ radianceScaleNits: 1.5 }),
   nodes: [
     directionalLight({ direction: [0.35, -0.8, -0.45], illuminanceLux: 6 }),
@@ -91,7 +93,12 @@ export const WebXrVr = (): ReactNode => (
       <p>The browser session borrows the canvas context and owns the only active frame clock.</p>
     </header>
     <section className="viewport" aria-label="WebXR renderer example">
-      <Canvas aria-label="Royal WebXR scene" className="webxr-vr-canvas" scene={renderScene}>
+      <Canvas
+        aria-label="Royal WebXR scene"
+        className="webxr-vr-canvas"
+        rendererOptions={exampleCanvasRendererOptions}
+        scene={renderScene}
+      >
         <XrBenchmark />
         <XrControls />
       </Canvas>
