@@ -1,0 +1,1139 @@
+{
+  "schema": "royal-renderer-benchmark",
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-22T00:49:46.670Z",
+  "source": {
+    "architecture": "x64",
+    "dirty": false,
+    "node": "v24.12.0",
+    "platform": "linux",
+    "revision": "278cbdc77f0b7e4ec10b34c513e3265718affb0e",
+    "buildId": "278cbdc77f0b-clean-mrvd5w8v",
+    "builtAt": "2026-07-22T00:48:14.703Z"
+  },
+  "browser": {
+    "deviceMemoryGiB": null,
+    "hardwareConcurrency": 3,
+    "language": "en-GB",
+    "platform": "Linux aarch64",
+    "screen": {
+      "colorDepth": 24,
+      "height": 800,
+      "width": 1280
+    },
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/149.0.0.24.3.1013217646 Chrome/149.0.7827.197 VR Safari/537.36"
+  },
+  "options": {
+    "frameSampleCount": 90,
+    "frameWarmupCount": 30,
+    "frameSampleTimeoutMs": 10000,
+    "baseUrl": "http://127.0.0.1:4673",
+    "browserMode": "cdp",
+    "gpuMode": "hardware-headless",
+    "cameraDragEnabled": false,
+    "clearCachePerRoute": true,
+    "debugHost": "127.0.0.1",
+    "debugPort": 9222,
+    "fakeXrEnabled": false,
+    "fakeXrHz": 72,
+    "fakeXrPrepareTimeoutMs": 5000,
+    "fakeXrSampleTimeoutMs": 10000,
+    "fakeXrViews": 2,
+    "gpuTimersEnabled": true,
+    "glCountersEnabled": false,
+    "heapGcEnabled": true,
+    "realXrEnabled": false,
+    "virtualTextureCloseEnabled": true,
+    "virtualTextureCloseTarget": 0.12,
+    "benchmarkMode": "quick",
+    "cpuProfileEnabled": false,
+    "instancingFuzzEnabled": false,
+    "instancingFuzzCases": 4,
+    "instancingSeed": 27621905,
+    "instancingSweepMode": "quick",
+    "managePreview": false,
+    "resourceTimingBufferSize": 10000
+  },
+  "analysis": {
+    "slowestRoutesByP95": [
+      {
+        "id": "virtual-texture-stress",
+        "path": "/virtual-texture-stress",
+        "p95Ms": 33.7,
+        "p99Ms": 33.9,
+        "maxMs": 34,
+        "readyMs": 847.18,
+        "jitterP95MinusP50Ms": 0.3,
+        "drawCallsPerFrame": 0,
+        "submissionCallsPerFrame": 0,
+        "instancedDrawCallsPerFrame": 0,
+        "stateChangesPerFrame": 0,
+        "useProgramPerFrame": 0,
+        "bindBufferPerFrame": 0,
+        "bindTexturePerFrame": 0,
+        "bindVertexArrayPerFrame": 0,
+        "copyTexImage2DPerFrame": 0,
+        "copyTexSubImage2DPerFrame": 0,
+        "copyTexSubImage2DPixelsPerFrame": 0,
+        "uniformCallsPerFrame": 0,
+        "uniformMatrixCallsPerFrame": 0,
+        "virtualTextureCloseDurationMs": 683.35,
+        "virtualTextureCloseFinalDistance": 0.1,
+        "virtualTextureCloseP95Ms": 11.2,
+        "virtualTextureClosePageUploadCalls": 0,
+        "virtualTextureCloseResidentPageDelta": 6,
+        "setupDrawCalls": 32,
+        "setupInstancedDrawCalls": 0,
+        "setupStateChanges": 0,
+        "setupUseProgram": 0,
+        "setupBindBuffer": 0,
+        "setupBindTexture": 0,
+        "setupBindVertexArray": 0,
+        "setupUniformCalls": 0,
+        "setupUniformMatrixCalls": 0,
+        "setupBufferDataBytes": 0,
+        "setupBufferSubDataBytes": 0,
+        "bufferSubDataBytesPerFrame": 0,
+        "retainedGrowthBytes": 20372,
+        "resourceTransferBytes": 180558
+      }
+    ],
+    "heaviestDrawRoutes": [
+      {
+        "id": "virtual-texture-stress",
+        "path": "/virtual-texture-stress",
+        "p95Ms": 33.7,
+        "p99Ms": 33.9,
+        "maxMs": 34,
+        "readyMs": 847.18,
+        "jitterP95MinusP50Ms": 0.3,
+        "drawCallsPerFrame": 0,
+        "submissionCallsPerFrame": 0,
+        "instancedDrawCallsPerFrame": 0,
+        "stateChangesPerFrame": 0,
+        "useProgramPerFrame": 0,
+        "bindBufferPerFrame": 0,
+        "bindTexturePerFrame": 0,
+        "bindVertexArrayPerFrame": 0,
+        "copyTexImage2DPerFrame": 0,
+        "copyTexSubImage2DPerFrame": 0,
+        "copyTexSubImage2DPixelsPerFrame": 0,
+        "uniformCallsPerFrame": 0,
+        "uniformMatrixCallsPerFrame": 0,
+        "virtualTextureCloseDurationMs": 683.35,
+        "virtualTextureCloseFinalDistance": 0.1,
+        "virtualTextureCloseP95Ms": 11.2,
+        "virtualTextureClosePageUploadCalls": 0,
+        "virtualTextureCloseResidentPageDelta": 6,
+        "setupDrawCalls": 32,
+        "setupInstancedDrawCalls": 0,
+        "setupStateChanges": 0,
+        "setupUseProgram": 0,
+        "setupBindBuffer": 0,
+        "setupBindTexture": 0,
+        "setupBindVertexArray": 0,
+        "setupUniformCalls": 0,
+        "setupUniformMatrixCalls": 0,
+        "setupBufferDataBytes": 0,
+        "setupBufferSubDataBytes": 0,
+        "bufferSubDataBytesPerFrame": 0,
+        "retainedGrowthBytes": 20372,
+        "resourceTransferBytes": 180558
+      }
+    ],
+    "heaviestGlStateRoutes": [
+      {
+        "id": "virtual-texture-stress",
+        "path": "/virtual-texture-stress",
+        "p95Ms": 33.7,
+        "p99Ms": 33.9,
+        "maxMs": 34,
+        "readyMs": 847.18,
+        "jitterP95MinusP50Ms": 0.3,
+        "drawCallsPerFrame": 0,
+        "submissionCallsPerFrame": 0,
+        "instancedDrawCallsPerFrame": 0,
+        "stateChangesPerFrame": 0,
+        "useProgramPerFrame": 0,
+        "bindBufferPerFrame": 0,
+        "bindTexturePerFrame": 0,
+        "bindVertexArrayPerFrame": 0,
+        "copyTexImage2DPerFrame": 0,
+        "copyTexSubImage2DPerFrame": 0,
+        "copyTexSubImage2DPixelsPerFrame": 0,
+        "uniformCallsPerFrame": 0,
+        "uniformMatrixCallsPerFrame": 0,
+        "virtualTextureCloseDurationMs": 683.35,
+        "virtualTextureCloseFinalDistance": 0.1,
+        "virtualTextureCloseP95Ms": 11.2,
+        "virtualTextureClosePageUploadCalls": 0,
+        "virtualTextureCloseResidentPageDelta": 6,
+        "setupDrawCalls": 32,
+        "setupInstancedDrawCalls": 0,
+        "setupStateChanges": 0,
+        "setupUseProgram": 0,
+        "setupBindBuffer": 0,
+        "setupBindTexture": 0,
+        "setupBindVertexArray": 0,
+        "setupUniformCalls": 0,
+        "setupUniformMatrixCalls": 0,
+        "setupBufferDataBytes": 0,
+        "setupBufferSubDataBytes": 0,
+        "bufferSubDataBytesPerFrame": 0,
+        "retainedGrowthBytes": 20372,
+        "resourceTransferBytes": 180558
+      }
+    ],
+    "heaviestUniformRoutes": [
+      {
+        "id": "virtual-texture-stress",
+        "path": "/virtual-texture-stress",
+        "p95Ms": 33.7,
+        "p99Ms": 33.9,
+        "maxMs": 34,
+        "readyMs": 847.18,
+        "jitterP95MinusP50Ms": 0.3,
+        "drawCallsPerFrame": 0,
+        "submissionCallsPerFrame": 0,
+        "instancedDrawCallsPerFrame": 0,
+        "stateChangesPerFrame": 0,
+        "useProgramPerFrame": 0,
+        "bindBufferPerFrame": 0,
+        "bindTexturePerFrame": 0,
+        "bindVertexArrayPerFrame": 0,
+        "copyTexImage2DPerFrame": 0,
+        "copyTexSubImage2DPerFrame": 0,
+        "copyTexSubImage2DPixelsPerFrame": 0,
+        "uniformCallsPerFrame": 0,
+        "uniformMatrixCallsPerFrame": 0,
+        "virtualTextureCloseDurationMs": 683.35,
+        "virtualTextureCloseFinalDistance": 0.1,
+        "virtualTextureCloseP95Ms": 11.2,
+        "virtualTextureClosePageUploadCalls": 0,
+        "virtualTextureCloseResidentPageDelta": 6,
+        "setupDrawCalls": 32,
+        "setupInstancedDrawCalls": 0,
+        "setupStateChanges": 0,
+        "setupUseProgram": 0,
+        "setupBindBuffer": 0,
+        "setupBindTexture": 0,
+        "setupBindVertexArray": 0,
+        "setupUniformCalls": 0,
+        "setupUniformMatrixCalls": 0,
+        "setupBufferDataBytes": 0,
+        "setupBufferSubDataBytes": 0,
+        "bufferSubDataBytesPerFrame": 0,
+        "retainedGrowthBytes": 20372,
+        "resourceTransferBytes": 180558
+      }
+    ],
+    "heaviestCpuRoutes": [],
+    "heaviestGpuRoutes": [],
+    "instancing": {
+      "comparisons": [],
+      "highestP95": [],
+      "highestDrawCallsPer1000Instances": [],
+      "highestGltfModelUploadBytesPerFrame": [],
+      "highestSetupInstancedDrawCallsPer1000Instances": []
+    },
+    "xrFrameFailures": []
+  },
+  "deployment": {
+    "byExtension": {
+      ".bin": {
+        "bytes": 35696354,
+        "count": 7,
+        "gzipBytes": 28966480
+      },
+      ".gltf": {
+        "bytes": 881036,
+        "count": 15,
+        "gzipBytes": 86677
+      },
+      "<none>": {
+        "bytes": 19632,
+        "count": 1,
+        "gzipBytes": 6200
+      },
+      ".avif": {
+        "bytes": 50251590,
+        "count": 276,
+        "gzipBytes": 50262996
+      },
+      ".md": {
+        "bytes": 173653,
+        "count": 80,
+        "gzipBytes": 78265
+      },
+      ".jpg": {
+        "bytes": 41472991,
+        "count": 70,
+        "gzipBytes": 41070450
+      },
+      ".json": {
+        "bytes": 68250,
+        "count": 13,
+        "gzipBytes": 14472
+      },
+      ".js": {
+        "bytes": 977982,
+        "count": 64,
+        "gzipBytes": 302504
+      },
+      ".css": {
+        "bytes": 1676,
+        "count": 1,
+        "gzipBytes": 742
+      },
+      ".svg": {
+        "bytes": 431968,
+        "count": 88,
+        "gzipBytes": 130694
+      },
+      ".png": {
+        "bytes": 4820129,
+        "count": 6,
+        "gzipBytes": 4686838
+      },
+      ".glb": {
+        "bytes": 68876000,
+        "count": 64,
+        "gzipBytes": 49664261
+      },
+      ".txt": {
+        "bytes": 2189,
+        "count": 2,
+        "gzipBytes": 1159
+      },
+      ".webp": {
+        "bytes": 15904,
+        "count": 1,
+        "gzipBytes": 15927
+      },
+      ".html": {
+        "bytes": 470,
+        "count": 1,
+        "gzipBytes": 292
+      }
+    },
+    "fileCount": 689,
+    "gzipBytes": 175287957,
+    "topFiles": [
+      {
+        "bytes": 42977928,
+        "gzipBytes": 31581645,
+        "path": "fixtures/scenes/ABeautifulGame/glTF-Binary/ABeautifulGame.glb"
+      },
+      {
+        "bytes": 25565000,
+        "gzipBytes": 23313351,
+        "path": "BistroWeb/Bistro.bin"
+      },
+      {
+        "bytes": 9528220,
+        "gzipBytes": 5310717,
+        "path": "fixtures/scenes/Sponza/glTF/Sponza.bin"
+      },
+      {
+        "bytes": 3085416,
+        "gzipBytes": 1756319,
+        "path": "fixtures/scenes/VirtualCity/glTF-Binary/VirtualCity.glb"
+      },
+      {
+        "bytes": 2978812,
+        "gzipBytes": 2942717,
+        "path": "fixtures/khronos/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb"
+      },
+      {
+        "bytes": 2427921,
+        "gzipBytes": 2362880,
+        "path": "fixtures/scenes/Sponza/glTF/5061699253647017043.png"
+      },
+      {
+        "bytes": 1796996,
+        "gzipBytes": 1676954,
+        "path": "fixtures/khronos/NormalTangentTest/glTF-Binary/NormalTangentTest.glb"
+      },
+      {
+        "bytes": 1611314,
+        "gzipBytes": 1611606,
+        "path": "fixtures/scenes/Sponza/glTF/14118779221266351425.jpg"
+      },
+      {
+        "bytes": 1507816,
+        "gzipBytes": 670185,
+        "path": "fixtures/khronos/CompareBaseColor/glTF-Binary/CompareBaseColor.glb"
+      },
+      {
+        "bytes": 1473792,
+        "gzipBytes": 892238,
+        "path": "fixtures/khronos/TransmissionTest/glTF-Binary/TransmissionTest.glb"
+      },
+      {
+        "bytes": 1408364,
+        "gzipBytes": 1317625,
+        "path": "fixtures/khronos/CompareSpecular/glTF-Binary/CompareSpecular.glb"
+      },
+      {
+        "bytes": 1319652,
+        "gzipBytes": 973937,
+        "path": "fixtures/khronos/USDShaderBallForGltf/glTF-Binary/USDShaderBallForGltf.glb"
+      }
+    ],
+    "totalBytes": 203689824
+  },
+  "gpu": {
+    "extensions": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_float_blend",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_norm16",
+      "OCULUS_multiview",
+      "OES_texture_float_linear",
+      "OVR_multiview2",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_multisampled_render_to_texture"
+    ],
+    "renderer": "Adreno (TM) 650",
+    "vendor": "Qualcomm",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  },
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "routes": [
+    {
+      "expectsGltf": false,
+      "id": "virtual-texture-stress",
+      "path": "/virtual-texture-stress",
+      "virtualTextureClose": {
+        "durationMs": 683.3525759999993,
+        "finalDistance": 0.1,
+        "frameStats": {
+          "averageMs": 11.844680851063831,
+          "failed": false,
+          "jitterP95MinusP50Ms": 0.09999999999990905,
+          "maxMs": 33.40000000000009,
+          "minMs": 11,
+          "p50Ms": 11.100000000000136,
+          "p95Ms": 11.200000000000045,
+          "p99Ms": 22.200000000000045,
+          "requestedSampleCount": 47,
+          "sampleCount": 47,
+          "samplesMissing": 0,
+          "timedOut": false,
+          "timeoutMs": 0
+        },
+        "gl": {
+          "bindBuffer": 0,
+          "bindTexture": 0,
+          "bindVertexArray": 0,
+          "bufferDataBytes": 0,
+          "bufferDataCalls": 0,
+          "bufferSubDataBytes": 0,
+          "bufferSubDataCalls": 0,
+          "compileShader": 0,
+          "compressedTexSubImage2D": 0,
+          "copyTexImage2D": 0,
+          "copyTexSubImage2D": 0,
+          "copyTexSubImage2DPixels": 0,
+          "drawArrays": 0,
+          "drawArraysInstanced": 0,
+          "drawCalls": 14,
+          "drawElements": 14,
+          "drawElementsInstanced": 0,
+          "generateMipmap": 0,
+          "instancedDrawCalls": 0,
+          "linkProgram": 0,
+          "multiDrawCalls": 0,
+          "multiDrawElements": 0,
+          "stateChanges": 0,
+          "submissionCalls": 14,
+          "texImage2D": 0,
+          "texStorage2D": 0,
+          "texSubImage2D": 0,
+          "uniformCalls": 0,
+          "uniformMatrixCalls": 0,
+          "useProgram": 0
+        },
+        "initialDistance": 6,
+        "inputMode": "trusted-cdp",
+        "renderer": {
+          "after": {
+            "frame": 22,
+            "gltfInstancing": null,
+            "gltfLoadDiagnostics": {
+              "assets": []
+            },
+            "lifecycle": {
+              "generation": 1,
+              "interruptions": 0,
+              "recoveries": 0,
+              "state": "available"
+            },
+            "resourcePressure": {
+              "activePreparationJobs": 0,
+              "activeTexturePreparations": 0,
+              "admittedGeometryUploadBytes": 0,
+              "admittedOrdinaryTextureUploadBytes": 0,
+              "sourceReservationLimit": 32,
+              "sourceReservations": 0,
+              "decodedTextureHandoffBytes": 0,
+              "decodedTextureHandoffThresholdBytes": 67108864,
+              "deferredGeometryUploads": 0,
+              "deferredOrdinaryTextureUploads": 0,
+              "ordinaryTextureUploadBudgetBytes": 4194304,
+              "preparationJobLimit": 8,
+              "queuedDetailPreparationJobs": 0,
+              "queuedForegroundPreparationJobs": 0,
+              "queuedPreparationJobs": 0,
+              "persistentGpuBudgetBytes": 268435456,
+              "persistentGpuDeniedClaims": 0,
+              "persistentGpuRetainedBytes": 26420116,
+              "pendingOrdinaryTextureStorageRepresentations": 0,
+              "pendingSurfaceUploads": 0,
+              "retainedEncodedTextureSourceBytes": 0
+            },
+            "textureResidency": {
+              "bytes": 4,
+              "compressedBytes": 0,
+              "compressedResources": 0,
+              "fitted": 0,
+              "resources": 1
+            },
+            "virtualTexturing": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 11
+            }
+          },
+          "before": {
+            "frame": 9,
+            "gltfInstancing": null,
+            "gltfLoadDiagnostics": {
+              "assets": []
+            },
+            "lifecycle": {
+              "generation": 1,
+              "interruptions": 0,
+              "recoveries": 0,
+              "state": "available"
+            },
+            "resourcePressure": {
+              "activePreparationJobs": 0,
+              "activeTexturePreparations": 0,
+              "admittedGeometryUploadBytes": 0,
+              "admittedOrdinaryTextureUploadBytes": 1057124,
+              "sourceReservationLimit": 32,
+              "sourceReservations": 0,
+              "decodedTextureHandoffBytes": 0,
+              "decodedTextureHandoffThresholdBytes": 67108864,
+              "deferredGeometryUploads": 0,
+              "deferredOrdinaryTextureUploads": 0,
+              "ordinaryTextureUploadBudgetBytes": 4194304,
+              "preparationJobLimit": 8,
+              "queuedDetailPreparationJobs": 0,
+              "queuedForegroundPreparationJobs": 0,
+              "queuedPreparationJobs": 0,
+              "persistentGpuBudgetBytes": 268435456,
+              "persistentGpuDeniedClaims": 0,
+              "persistentGpuRetainedBytes": 26420116,
+              "pendingOrdinaryTextureStorageRepresentations": 0,
+              "pendingSurfaceUploads": 0,
+              "retainedEncodedTextureSourceBytes": 0
+            },
+            "textureResidency": {
+              "bytes": 4,
+              "compressedBytes": 0,
+              "compressedResources": 0,
+              "fitted": 0,
+              "resources": 1
+            },
+            "virtualTexturing": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 5
+            }
+          },
+          "virtualTexturing": {
+            "after": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 11
+            },
+            "available": true,
+            "before": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 5
+            },
+            "delta": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 0,
+              "manifestsReady": 0,
+              "pendingPages": 0,
+              "residentPages": 6
+            }
+          }
+        },
+        "screenshot": {
+          "height": 576,
+          "outputPath": "/tmp/royal-quest-278cbdc7/virtual-texture-close.vt-close.png",
+          "width": 1152
+        },
+        "targetDistance": 0.12,
+        "wheelEvents": 3
+      },
+      "navigationSynchronizationMs": 151.99592299999858,
+      "display": {
+        "canvas": {
+          "backingHeight": 576,
+          "backingWidth": 1152,
+          "cssHeight": 576,
+          "cssWidth": 1152
+        },
+        "devicePixelRatio": 1,
+        "viewport": {
+          "height": 670,
+          "width": 1280
+        }
+      },
+      "ready": true,
+      "wallNavigationAndReadyMs": 847.1780469999994,
+      "frameStats": {
+        "averageMs": 32.81888888809416,
+        "jitterP95MinusP50Ms": 0.30000007152557373,
+        "maxMs": 34,
+        "minMs": 0.5,
+        "p50Ms": 33.39999997615814,
+        "p95Ms": 33.700000047683716,
+        "p99Ms": 33.90000009536743,
+        "requestedSampleCount": 90,
+        "sampleCount": 90,
+        "timedOut": false,
+        "timeoutMs": 10000
+      },
+      "frameWork": {
+        "gpuDurationMs": {
+          "enabled": true,
+          "supported": false
+        },
+        "idle": true,
+        "renderCallbackDurationMs": {
+          "averageMs": 0,
+          "failed": true,
+          "jitterP95MinusP50Ms": 0,
+          "maxMs": 0,
+          "minMs": 0,
+          "p50Ms": 0,
+          "p95Ms": 0,
+          "p99Ms": 0,
+          "requestedSampleCount": 90,
+          "sampleCount": 0,
+          "samplesMissing": 90,
+          "timedOut": true,
+          "timeoutMs": 10000
+        }
+      },
+      "glFrameCount": 90,
+      "gl": {
+        "bindBuffer": 0,
+        "bindTexture": 0,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 0,
+        "bufferSubDataCalls": 0,
+        "compileShader": 0,
+        "compressedTexSubImage2D": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "copyTexSubImage2DPixels": 0,
+        "generateMipmap": 0,
+        "linkProgram": 0,
+        "multiDrawCalls": 0,
+        "multiDrawElements": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawElements": 0,
+        "drawElementsInstanced": 0,
+        "texImage2D": 0,
+        "texStorage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 0,
+        "uniformMatrixCalls": 0,
+        "useProgram": 0,
+        "drawCalls": 0,
+        "instancedDrawCalls": 0,
+        "submissionCalls": 0,
+        "stateChanges": 0,
+        "setup": {
+          "bindBuffer": 0,
+          "bindTexture": 0,
+          "bindVertexArray": 0,
+          "bufferDataBytes": 0,
+          "bufferDataCalls": 0,
+          "bufferSubDataBytes": 0,
+          "bufferSubDataCalls": 0,
+          "compileShader": 0,
+          "compressedTexSubImage2D": 0,
+          "copyTexImage2D": 0,
+          "copyTexSubImage2D": 0,
+          "copyTexSubImage2DPixels": 0,
+          "generateMipmap": 0,
+          "linkProgram": 0,
+          "multiDrawCalls": 0,
+          "multiDrawElements": 0,
+          "drawArrays": 0,
+          "drawArraysInstanced": 0,
+          "drawElements": 32,
+          "drawElementsInstanced": 0,
+          "texImage2D": 0,
+          "texStorage2D": 0,
+          "texSubImage2D": 0,
+          "uniformCalls": 0,
+          "uniformMatrixCalls": 0,
+          "useProgram": 0,
+          "drawCalls": 32,
+          "instancedDrawCalls": 0,
+          "submissionCalls": 32,
+          "stateChanges": 0
+        }
+      },
+      "renderer": {
+        "gltfInstancing": {
+          "available": false,
+          "delta": {
+            "batchInstancesTotal": 0,
+            "batchPlansBuilt": 0,
+            "drawCalls": 0,
+            "instancesDrawn": 0,
+            "modelUploadBytes": 0,
+            "modelUploadCalls": 0
+          },
+          "perFrame": {
+            "batchInstancesTotal": 0,
+            "batchPlansBuilt": 0,
+            "drawCalls": 0,
+            "instancesDrawn": 0,
+            "modelUploadBytes": 0,
+            "modelUploadCalls": 0
+          },
+          "rendererFrames": 0,
+          "sampleFrames": 90
+        },
+        "snapshots": {
+          "afterFrames": {
+            "frame": 22,
+            "gltfInstancing": null,
+            "gltfLoadDiagnostics": {
+              "assets": []
+            },
+            "lifecycle": {
+              "generation": 1,
+              "interruptions": 0,
+              "recoveries": 0,
+              "state": "available"
+            },
+            "resourcePressure": {
+              "activePreparationJobs": 0,
+              "activeTexturePreparations": 0,
+              "admittedGeometryUploadBytes": 0,
+              "admittedOrdinaryTextureUploadBytes": 0,
+              "sourceReservationLimit": 32,
+              "sourceReservations": 0,
+              "decodedTextureHandoffBytes": 0,
+              "decodedTextureHandoffThresholdBytes": 67108864,
+              "deferredGeometryUploads": 0,
+              "deferredOrdinaryTextureUploads": 0,
+              "ordinaryTextureUploadBudgetBytes": 4194304,
+              "preparationJobLimit": 8,
+              "queuedDetailPreparationJobs": 0,
+              "queuedForegroundPreparationJobs": 0,
+              "queuedPreparationJobs": 0,
+              "persistentGpuBudgetBytes": 268435456,
+              "persistentGpuDeniedClaims": 0,
+              "persistentGpuRetainedBytes": 26420116,
+              "pendingOrdinaryTextureStorageRepresentations": 0,
+              "pendingSurfaceUploads": 0,
+              "retainedEncodedTextureSourceBytes": 0
+            },
+            "textureResidency": {
+              "bytes": 4,
+              "compressedBytes": 0,
+              "compressedResources": 0,
+              "fitted": 0,
+              "resources": 1
+            },
+            "virtualTexturing": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 11
+            }
+          },
+          "beforeFrames": {
+            "frame": 22,
+            "gltfInstancing": null,
+            "gltfLoadDiagnostics": {
+              "assets": []
+            },
+            "lifecycle": {
+              "generation": 1,
+              "interruptions": 0,
+              "recoveries": 0,
+              "state": "available"
+            },
+            "resourcePressure": {
+              "activePreparationJobs": 0,
+              "activeTexturePreparations": 0,
+              "admittedGeometryUploadBytes": 0,
+              "admittedOrdinaryTextureUploadBytes": 0,
+              "sourceReservationLimit": 32,
+              "sourceReservations": 0,
+              "decodedTextureHandoffBytes": 0,
+              "decodedTextureHandoffThresholdBytes": 67108864,
+              "deferredGeometryUploads": 0,
+              "deferredOrdinaryTextureUploads": 0,
+              "ordinaryTextureUploadBudgetBytes": 4194304,
+              "preparationJobLimit": 8,
+              "queuedDetailPreparationJobs": 0,
+              "queuedForegroundPreparationJobs": 0,
+              "queuedPreparationJobs": 0,
+              "persistentGpuBudgetBytes": 268435456,
+              "persistentGpuDeniedClaims": 0,
+              "persistentGpuRetainedBytes": 26420116,
+              "pendingOrdinaryTextureStorageRepresentations": 0,
+              "pendingSurfaceUploads": 0,
+              "retainedEncodedTextureSourceBytes": 0
+            },
+            "textureResidency": {
+              "bytes": 4,
+              "compressedBytes": 0,
+              "compressedResources": 0,
+              "fitted": 0,
+              "resources": 1
+            },
+            "virtualTexturing": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 11
+            }
+          },
+          "setup": {
+            "frame": 22,
+            "gltfInstancing": null,
+            "gltfLoadDiagnostics": {
+              "assets": []
+            },
+            "lifecycle": {
+              "generation": 1,
+              "interruptions": 0,
+              "recoveries": 0,
+              "state": "available"
+            },
+            "resourcePressure": {
+              "activePreparationJobs": 0,
+              "activeTexturePreparations": 0,
+              "admittedGeometryUploadBytes": 0,
+              "admittedOrdinaryTextureUploadBytes": 0,
+              "sourceReservationLimit": 32,
+              "sourceReservations": 0,
+              "decodedTextureHandoffBytes": 0,
+              "decodedTextureHandoffThresholdBytes": 67108864,
+              "deferredGeometryUploads": 0,
+              "deferredOrdinaryTextureUploads": 0,
+              "ordinaryTextureUploadBudgetBytes": 4194304,
+              "preparationJobLimit": 8,
+              "queuedDetailPreparationJobs": 0,
+              "queuedForegroundPreparationJobs": 0,
+              "queuedPreparationJobs": 0,
+              "persistentGpuBudgetBytes": 268435456,
+              "persistentGpuDeniedClaims": 0,
+              "persistentGpuRetainedBytes": 26420116,
+              "pendingOrdinaryTextureStorageRepresentations": 0,
+              "pendingSurfaceUploads": 0,
+              "retainedEncodedTextureSourceBytes": 0
+            },
+            "textureResidency": {
+              "bytes": 4,
+              "compressedBytes": 0,
+              "compressedResources": 0,
+              "fitted": 0,
+              "resources": 1
+            },
+            "virtualTexturing": {
+              "failedPages": 0,
+              "manifestFailures": 0,
+              "manifestRequests": 1,
+              "manifestsReady": 1,
+              "pendingPages": 0,
+              "residentPages": 11
+            }
+          }
+        },
+        "setup": {
+          "gltfInstancing": {
+            "available": false,
+            "counters": {
+              "batchInstancesTotal": 0,
+              "batchPlansBuilt": 0,
+              "drawCalls": 0,
+              "instancesDrawn": 0,
+              "modelUploadBytes": 0,
+              "modelUploadCalls": 0
+            },
+            "rendererFrame": 22
+          }
+        },
+        "virtualTexturing": {
+          "after": {
+            "failedPages": 0,
+            "manifestFailures": 0,
+            "manifestRequests": 1,
+            "manifestsReady": 1,
+            "pendingPages": 0,
+            "residentPages": 11
+          },
+          "available": true,
+          "before": {
+            "failedPages": 0,
+            "manifestFailures": 0,
+            "manifestRequests": 1,
+            "manifestsReady": 1,
+            "pendingPages": 0,
+            "residentPages": 11
+          },
+          "delta": {
+            "failedPages": 0,
+            "manifestFailures": 0,
+            "manifestRequests": 0,
+            "manifestsReady": 0,
+            "pendingPages": 0,
+            "residentPages": 0
+          }
+        }
+      },
+      "heap": {
+        "afterFinalGc": {
+          "usedSize": 3074632,
+          "totalSize": 3670016,
+          "embedderHeapUsedSize": 844120,
+          "backingStorageSize": 520688
+        },
+        "afterFrameGc": {
+          "usedSize": 3210812,
+          "totalSize": 3932160,
+          "embedderHeapUsedSize": 1481664,
+          "backingStorageSize": 521720
+        },
+        "afterGc": {
+          "usedSize": 3054260,
+          "totalSize": 3407872,
+          "embedderHeapUsedSize": 843512,
+          "backingStorageSize": 520657
+        },
+        "beforeGc": {
+          "usedSize": 3141340,
+          "totalSize": 9699328,
+          "embedderHeapUsedSize": 9451160,
+          "backingStorageSize": 523620
+        },
+        "forcedGc": true,
+        "retainedGrowthBytes": 20372,
+        "transientGrowthBytes": 156552
+      },
+      "latency": {
+        "eventToNextDrawMs": null,
+        "eventToNextWindowRafMs": 20.90000002384204,
+        "eventToNextXrFrameMs": null,
+        "measurement": "synthetic-pointer-event-to-next-observed-frame-or-draw",
+        "note": "These are event-to-next-frame/draw timings, not true motion-to-photon latency."
+      },
+      "warmupComplete": true,
+      "performance": {
+        "navigation": {
+          "domInteractive": 49.799999952316284,
+          "duration": 142.79999995231628,
+          "loadEventEnd": 142.79999995231628,
+          "requestStart": 15.5,
+          "responseEnd": 19.399999976158142,
+          "startTime": 0,
+          "transferSize": 770
+        },
+        "paints": {
+          "first-paint": 224,
+          "first-contentful-paint": 224
+        },
+        "resources": {
+          "byType": {
+            "script": {
+              "count": 17,
+              "decodedBodySize": 494455,
+              "duration": 700.3000000715256,
+              "encodedBodySize": 155190,
+              "transferSize": 160290
+            },
+            "link": {
+              "count": 1,
+              "decodedBodySize": 1676,
+              "duration": 26.700000047683716,
+              "encodedBodySize": 742,
+              "transferSize": 1042
+            },
+            "other": {
+              "count": 1,
+              "decodedBodySize": 284,
+              "duration": 45.299999952316284,
+              "encodedBodySize": 284,
+              "transferSize": 584
+            },
+            "img": {
+              "count": 1,
+              "decodedBodySize": 1077,
+              "duration": 45.5,
+              "encodedBodySize": 498,
+              "transferSize": 798
+            },
+            "fetch": {
+              "count": 12,
+              "decodedBodySize": 47133,
+              "duration": 268.2999999523163,
+              "encodedBodySize": 14244,
+              "transferSize": 17844
+            }
+          },
+          "count": 32,
+          "totalDuration": 1086.1000000238419,
+          "totalEncodedBodySize": 170958,
+          "totalTransferSize": 180558,
+          "slowest": [
+            {
+              "decodedBodySize": 1728,
+              "duration": 76,
+              "encodedBodySize": 662,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/presentation-I12F-NSX.js",
+              "startTime": 167.10000002384186,
+              "transferSize": 962
+            },
+            {
+              "decodedBodySize": 1343,
+              "duration": 74.39999997615814,
+              "encodedBodySize": 681,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/virtual-texture-asset-CpUPGlPv.js",
+              "startTime": 167.39999997615814,
+              "transferSize": 981
+            },
+            {
+              "decodedBodySize": 3783,
+              "duration": 73.89999997615814,
+              "encodedBodySize": 1271,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/mesh-DIwOlwtU.js",
+              "startTime": 166.60000002384186,
+              "transferSize": 1571
+            },
+            {
+              "decodedBodySize": 5745,
+              "duration": 71.30000007152557,
+              "encodedBodySize": 2011,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/VirtualTextureStress-BMYewTKL.js",
+              "startTime": 169.79999995231628,
+              "transferSize": 2311
+            },
+            {
+              "decodedBodySize": 16560,
+              "duration": 67.80000007152557,
+              "encodedBodySize": 5392,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/controls-BAxkyqes.js",
+              "startTime": 166.19999992847443,
+              "transferSize": 5692
+            },
+            {
+              "decodedBodySize": 204060,
+              "duration": 64.80000007152557,
+              "encodedBodySize": 63901,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/assets/index-Drg6UJmn.js",
+              "startTime": 33.699999928474426,
+              "transferSize": 64201
+            },
+            {
+              "decodedBodySize": 4257,
+              "duration": 46.39999997615814,
+              "encodedBodySize": 1268,
+              "initiatorType": "fetch",
+              "name": "http://127.0.0.1:4673/fixtures/virtual-texture-stress/map-pages/m0-1-5.svg",
+              "startTime": 1151.7999999523163,
+              "transferSize": 1568
+            },
+            {
+              "decodedBodySize": 4259,
+              "duration": 45.700000047683716,
+              "encodedBodySize": 1272,
+              "initiatorType": "fetch",
+              "name": "http://127.0.0.1:4673/fixtures/virtual-texture-stress/map-pages/m3-0-0.svg",
+              "startTime": 341.89999997615814,
+              "transferSize": 1572
+            }
+          ]
+        }
+      },
+      "xr": {
+        "active": false,
+        "canUpdateTargetFrameRate": false,
+        "framebufferHeight": null,
+        "framebufferWidth": null,
+        "frameRate": null,
+        "frameCount": 0,
+        "gpuTimers": {
+          "attempted": true,
+          "disjointSamples": 0,
+          "errors": 0,
+          "sampleCount": 0,
+          "supported": false
+        },
+        "hz": 72,
+        "sessions": 0,
+        "supportedFrameRates": [],
+        "viewCount": 2,
+        "frameStats": null
+      }
+    }
+  ]
+}
