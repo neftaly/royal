@@ -34,7 +34,9 @@ jobs:
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
         with:
-          chrome-version: stable
+          # Keep the deterministic software oracle aligned with the physical
+          # Quest browser major. Upgrade deliberately with a full smoke run.
+          chrome-version: 149
           install-dependencies: true
 
       - name: Add Chromium command
@@ -75,7 +77,7 @@ jobs:
         run: pnpm check:bundle-size
 
       - name: Examples browser smoke
-        timeout-minutes: 5
+        timeout-minutes: 8
         env:
           # Headless runners have no physical Vulkan surface. CI proves browser
           # behavior; checked-in iPad/Quest reports remain the hardware oracle.

@@ -1904,6 +1904,7 @@ const main = async () => {
       preview,
       timeoutMs: 15_000,
     });
+    console.log('connecting browser smoke CDP session');
     session = await connectPage();
     console.log('connected browser smoke CDP session');
     session.on('Runtime.exceptionThrown', (event) => {
