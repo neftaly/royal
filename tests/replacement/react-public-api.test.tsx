@@ -72,21 +72,18 @@ const emptyScene = {
   nodes: [],
 } as unknown as Scene;
 
-// Focused hook inputs deliberately advertise retained identity rather than
-// presentation fields that observation ignores. Descriptor variables remain
-// structurally compatible and are exercised below.
+// Focused hook inputs accept either exact identity or a complete authored ref.
 const gltfStatusWithBounds: GltfAssetStatusInput = {
-  // @ts-expect-error Bounds do not participate in glTF status identity.
   bounds: { max: [1, 1, 1], min: [0, 0, 0] },
   src: "/scene.glb",
 };
+// @ts-expect-error Color space requires a complete constructor-shaped asset ref.
 const textureStatusWithColorSpace: TextureAssetStatusInput = {
-  // @ts-expect-error Color space does not participate in decoded texture status identity.
   colorSpace: "srgb",
   src: "/albedo.png",
 };
+// @ts-expect-error Rotation requires a complete constructor-shaped environment ref.
 const environmentStatusWithRotation: PrefilteredEnvironmentStatusInput = {
-  // @ts-expect-error Rotation does not participate in environment loading status identity.
   rotation: [0, 0, 0],
   src: "/studio.ktx",
 };
@@ -344,6 +341,24 @@ describe("replacement React public API", () => {
     ))).toThrow('useGltfAssetStatus input contains unsupported field "verison"');
   });
 
+  it("accepts full constructor-produced refs for focused status", () => {
+    const model = gltf({
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      src: "/model.glb",
+    });
+    const Status = () => createElement(
+      "output",
+      null,
+      useGltfAssetStatus(model.asset).status,
+    );
+    const html = renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(Status),
+    ));
+    expect(html).toContain("<output>idle</output>");
+  });
+
   it("rejects symbol fields in focused-status identities", () => {
     const invalid = { src: "/model.glb", [Symbol("hidden")]: true };
     const Status = () => createElement(
@@ -385,6 +400,34 @@ describe("replacement React public API", () => {
       createElement(Status),
     ));
     expect(html).toContain("<output>idle</output>");
+  });
+
+  it("rejects partial presentation descriptors passed as focused identities", () => {
+    const TextureStatus = () => createElement("output", null, useTextureAssetStatus({
+      colorSpace: "srgb",
+      src: "/texture.png",
+    } as unknown as TextureAssetStatusInput).status);
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(TextureStatus),
+    ))).toThrow("useTextureAssetStatus input must be a source string or texture asset identity");
+
+    const EnvironmentStatus = () => createElement(
+      "output",
+      null,
+      usePrefilteredEnvironmentStatus({
+        rotation: [0, 0, 0],
+        src: "/studio.ktx",
+      } as unknown as PrefilteredEnvironmentStatusInput).status,
+    );
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(EnvironmentStatus),
+    ))).toThrow(
+      "usePrefilteredEnvironmentStatus presentation fields require a prefiltered environment ref",
+    );
   });
 
   it("rejects invalid observed texture identity before a renderer mounts", () => {

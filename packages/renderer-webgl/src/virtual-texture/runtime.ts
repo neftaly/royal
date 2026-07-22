@@ -1,6 +1,6 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
-import { IDENTITY_TEXTURE_COORDINATES } from "../gltf/texture-coordinates";
+import { IDENTITY_TEXTURE_COORDINATES } from "../surface/texture-coordinates";
 import {
   canonicalTextureSampler,
   type CanonicalTextureSampler,

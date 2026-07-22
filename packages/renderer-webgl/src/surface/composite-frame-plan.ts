@@ -68,20 +68,24 @@ export const planCompositeFrameInto = (
   output.visibilityStride = visibilityStride;
   output.transmissionRequested = false;
   output.sceneColorMaxRoughness = 0;
-  for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
-    const view = views[viewIndex]!;
-    frustumPlanesInto(output.frustumPlanes, view.viewProjection);
-    const visibilityOffset = viewIndex * visibilityStride;
-    for (let slot = 0; slot < visibilityStride; slot += 1) {
-      const surface = surfaces[transmissionCandidateIndices[slot]!]!;
-      const visible = worldBoundsVisible(surface.worldBounds, output.frustumPlanes);
-      output.visibility[visibilityOffset + slot] = visible ? 1 : 0;
-      if (!visible) continue;
-      output.transmissionRequested = true;
-      output.sceneColorMaxRoughness = Math.max(
-        output.sceneColorMaxRoughness,
-        canonicalTransmissionSceneColorRoughness(surface.material),
-      );
+  // Opaque-only frames do not consult this visibility workspace. Their draw
+  // pass owns the one required frustum extraction for each view.
+  if (visibilityStride !== 0) {
+    for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
+      const view = views[viewIndex]!;
+      frustumPlanesInto(output.frustumPlanes, view.viewProjection);
+      const visibilityOffset = viewIndex * visibilityStride;
+      for (let slot = 0; slot < visibilityStride; slot += 1) {
+        const surface = surfaces[transmissionCandidateIndices[slot]!]!;
+        const visible = worldBoundsVisible(surface.worldBounds, output.frustumPlanes);
+        output.visibility[visibilityOffset + slot] = visible ? 1 : 0;
+        if (!visible) continue;
+        output.transmissionRequested = true;
+        output.sceneColorMaxRoughness = Math.max(
+          output.sceneColorMaxRoughness,
+          canonicalTransmissionSceneColorRoughness(surface.material),
+        );
+      }
     }
   }
   output.terminalPresentation = terminalPresentationRequested(

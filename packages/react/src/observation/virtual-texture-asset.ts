@@ -13,10 +13,11 @@ export type VirtualTextureAssetStatusIdentity = Readonly<Pick<
   VirtualTextureAssetRef,
   "colorSpace" | "contentKey" | "manifestUri" | "sampler" | "version"
 >>;
-/** Manifest URI or exact authored-VT representation identity observed by the hook. */
+/** Manifest URI, exact representation identity, or full constructor-produced VT ref. */
 export type VirtualTextureAssetStatusInput =
   | string
-  | VirtualTextureAssetStatusIdentity;
+  | VirtualTextureAssetStatusIdentity
+  | VirtualTextureAssetRef;
 /** Focused manifest lifecycle and current bounded page residency for one authored VT asset. */
 export type VirtualTextureAssetStatus = VirtualTextureAssetSnapshot;
 

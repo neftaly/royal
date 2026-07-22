@@ -12,9 +12,13 @@ import {
 export type TextureAssetStatusIdentity = Readonly<Pick<
   TextureAssetRef,
   "contentKey" | "src" | "version"
->>;
-/** Source string or exact decoded-content identity observed by `useTextureAssetStatus`. */
-export type TextureAssetStatusInput = string | TextureAssetStatusIdentity;
+>> & {
+  readonly colorSpace?: never;
+  readonly kind?: never;
+  readonly sampler?: never;
+};
+/** Source string, exact decoded identity, or full constructor-produced asset reference. */
+export type TextureAssetStatusInput = string | TextureAssetStatusIdentity | TextureAssetRef;
 /** Focused decode lifecycle for one ordinary texture asset. */
 export type TextureAssetStatus = TextureAssetSnapshot;
 
@@ -32,6 +36,7 @@ const validateInput = (input: TextureAssetStatusInput): void => {
     || input === null
     || Array.isArray(input)
     || ("kind" in input && input.kind !== "asset")
+    || (("colorSpace" in input || "sampler" in input) && input.kind !== "asset")
   ) {
     throw new TypeError("useTextureAssetStatus input must be a source string or texture asset identity");
   }

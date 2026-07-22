@@ -18,13 +18,12 @@ import type { AsyncPreparationSnapshot } from '@royal/renderer-webgl';
 // @ts-expect-error FrameUploadBudgetSnapshot is renderer implementation vocabulary.
 import type { FrameUploadBudgetSnapshot } from '@royal/renderer-webgl';
 
-// Focused observation advertises content identity, not ignored scene presentation.
-// A descriptor variable remains structurally compatible, as exercised by app.tsx.
-// @ts-expect-error Bounds do not participate in glTF status identity.
+// Focused observation accepts complete constructor-shaped refs as well as
+// minimal semantic identities. glTF bounds are valid but do not key loading.
 const gltfStatusWithBounds: GltfAssetStatusInput = { bounds: { max: [1, 1, 1], min: [0, 0, 0] }, src: '/scene.glb' };
-// @ts-expect-error Color space does not participate in decoded texture status identity.
+// @ts-expect-error Color space requires a complete constructor-shaped asset ref.
 const textureStatusWithColorSpace: TextureAssetStatusInput = { colorSpace: 'srgb', src: '/albedo.png' };
-// @ts-expect-error Rotation does not participate in environment loading status identity.
+// @ts-expect-error Rotation requires a complete constructor-shaped environment ref.
 const environmentStatusWithRotation: PrefilteredEnvironmentStatusInput = { rotation: [0, 0, 0], src: '/studio.ktx' };
 void gltfStatusWithBounds;
 void textureStatusWithColorSpace;

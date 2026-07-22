@@ -66,7 +66,7 @@ import {
 import {
   IDENTITY_TEXTURE_COORDINATES,
   type CanonicalTextureCoordinates,
-} from "../gltf/texture-coordinates";
+} from "./texture-coordinates";
 import {
   SurfaceGeometryGpuOwner,
   type GpuGeometry,

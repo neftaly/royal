@@ -213,12 +213,24 @@ describe("source architecture fitness", () => {
     expect(owners.map(relative)).toEqual([relative(expectedOwner)]);
   });
 
+  it("keeps canonical texture coordinates below glTF ingestion", () => {
+    const rendererRoot = path.join(packagesRoot, "renderer-webgl", "src");
+    const gltfCoordinates = path.join(rendererRoot, "gltf", "texture-coordinates.ts");
+    const allowedOwner = path.join(rendererRoot, "gltf", "static-material.ts");
+    const consumers = packageSourceFiles.filter((file) =>
+      staticGraph.get(file)?.includes(gltfCoordinates) === true);
+    expect(consumers.map(relative)).toEqual([relative(allowedOwner)]);
+  });
+
   it("keeps optional renderer implementations out of the main static graph", () => {
     const rendererRoot = path.join(packagesRoot, "renderer-webgl", "src");
     const reached = [...reachableFrom(path.join(rendererRoot, "index.ts"))].map(relative);
     const forbidden = [
       "/gltf/browser-static-preparation.ts",
+      "/gltf/gltf-values.ts",
       "/gltf/static-asset.ts",
+      "/gltf/static-node-selection.ts",
+      "/gltf/texture-coordinates.ts",
       "/surface/surface-depth-prepass-owner.ts",
       "/virtual-texture/automatic-page-source.ts",
       "/virtual-texture/browser-page-source.ts",

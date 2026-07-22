@@ -1,5 +1,9 @@
 import type { TextureSampler, TextureVersion } from "@royal/renderer-core";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
+import {
+  IDENTITY_TEXTURE_COORDINATES,
+  type CanonicalTextureCoordinates,
+} from "../surface/texture-coordinates";
 import type {
   EmbeddedTextureAssetRef,
   TextureLeafSourceRef,
@@ -15,11 +19,7 @@ import {
   optionalArray,
   type JsonObject,
 } from "./gltf-values";
-import {
-  IDENTITY_TEXTURE_COORDINATES,
-  prepareTextureCoordinates,
-  type CanonicalTextureCoordinates,
-} from "./texture-coordinates";
+import { prepareTextureCoordinates } from "./texture-coordinates";
 import { readStaticMaterialInputs } from "./static-material-inputs";
 import {
   createStaticTextureImagePlanner,

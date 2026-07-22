@@ -37,6 +37,16 @@ export const validateStaticGltfDeclarations = (
     meshoptAvailable,
     etc2Available,
   );
+  if (
+    usedExtensions.includes("KHR_mesh_quantization")
+    && !requiredExtensions.includes("KHR_mesh_quantization")
+  ) {
+    fail(
+      label,
+      "extensionsRequired",
+      'must include "KHR_mesh_quantization" when that extension is used',
+    );
+  }
   return {
     usesDraco: usedExtensions.includes("KHR_draco_mesh_compression")
       || requiredExtensions.includes("KHR_draco_mesh_compression"),

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  IDENTITY_TEXTURE_COORDINATES,
   prepareTextureCoordinates,
-  transformTextureCoordinates,
 } from "../../packages/renderer-webgl/src/gltf/texture-coordinates";
+import {
+  IDENTITY_TEXTURE_COORDINATES,
+  transformTextureCoordinates,
+} from "../../packages/renderer-webgl/src/surface/texture-coordinates";
 import { applyTextureCoordinates } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 
 describe("glTF texture coordinate preparation", () => {

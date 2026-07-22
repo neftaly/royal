@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { perspectiveCamera } from "../../packages/renderer-core/src/camera";
-import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/gltf/texture-coordinates";
+import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/surface/texture-coordinates";
 import {
   identityMat4,
   projectionMat4,

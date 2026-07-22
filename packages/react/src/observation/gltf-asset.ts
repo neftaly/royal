@@ -10,8 +10,8 @@ import {
 
 /** Only fields that participate in glTF loading/status identity. */
 export type GltfAssetStatusIdentity = Readonly<Pick<GltfAssetRef, "sceneIndex" | "src" | "version">>;
-/** Source string or exact loading identity observed by `useGltfAssetStatus`. */
-export type GltfAssetStatusInput = string | GltfAssetStatusIdentity;
+/** Source string, exact loading identity, or full constructor-produced asset reference. */
+export type GltfAssetStatusInput = string | GltfAssetStatusIdentity | GltfAssetRef;
 /** Focused lifecycle for one glTF asset; drawable states include bounds and texture progress. */
 export type GltfAssetStatus = GltfAssetSnapshot;
 

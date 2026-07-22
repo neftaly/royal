@@ -5,7 +5,7 @@ import type { GltfTextureAssetRef } from "../texture/source";
 export type GltfResourceRead = Readonly<{
   /** Semantic role of these bytes in the supported static glTF profile. */
   kind: "buffer" | "image" | "root";
-  /** Absolute URI after glTF-relative resolution. */
+  /** Root `src` as supplied, or a referenced buffer/image URI resolved against that source. */
   uri: string;
   /** Caller-declared byte revision inherited from the root glTF asset. */
   version?: GltfAssetRef["version"];

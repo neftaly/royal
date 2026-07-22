@@ -215,6 +215,27 @@ describe("EXT_meshopt_compression ingestion", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
+  it("requires the quantization declaration before resource or codec work", async () => {
+    const fixture = await encodedFixture(true);
+    const document = JSON.parse(new TextDecoder().decode(fixture.document)) as {
+      extensionsRequired: string[];
+    };
+    document.extensionsRequired = document.extensionsRequired.filter(
+      (name) => name !== "KHR_mesh_quantization",
+    );
+    const read = vi.fn(async () => fixture.compressed);
+    await expect(prepareStaticGltfSource(
+      new TextEncoder().encode(JSON.stringify(document)),
+      "meshopt-missing-quantization-requirement",
+      "meshopt-missing-quantization-requirement.gltf",
+      "/models/meshopt-missing-quantization-requirement.gltf",
+      read,
+    )).rejects.toThrow(
+      'extensionsRequired: must include "KHR_mesh_quantization" when that extension is used',
+    );
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("rejects required meshopt on the deliberately synchronous GLB helper", () => {
     const document = staticTriangleDocument();
     document.extensionsRequired = ["KHR_materials_unlit", "EXT_meshopt_compression"];

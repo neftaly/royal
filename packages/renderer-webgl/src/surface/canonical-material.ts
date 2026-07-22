@@ -13,7 +13,7 @@ import {
   textureStorageKey,
   type TextureSourceRef,
 } from "../texture/source";
-import type { CanonicalTextureCoordinates } from "../gltf/texture-coordinates";
+import type { CanonicalTextureCoordinates } from "./texture-coordinates";
 
 export type CanonicalTextureSampler = Readonly<{
   magFilter: "linear" | "nearest";

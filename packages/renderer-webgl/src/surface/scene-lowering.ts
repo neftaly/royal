@@ -403,18 +403,18 @@ export const prepareCanonicalSurfaceScene = (
   const presentedGltfMaterial = (
     material: CanonicalSurfaceMaterial,
     tint: LinearRgba | undefined,
+    tintKey: string | undefined,
   ): CanonicalSurfaceMaterial => {
-    if (tint === undefined) return material;
+    if (tint === undefined || tintKey === undefined) return material;
     let variants = tintedGltfMaterials.get(material);
     if (variants === undefined) {
       variants = new Map();
       tintedGltfMaterials.set(material, variants);
     }
-    const key = JSON.stringify(tint);
-    let presented = variants.get(key);
+    let presented = variants.get(tintKey);
     if (presented === undefined) {
       presented = tintCanonicalMaterial(material, tint);
-      variants.set(key, presented);
+      variants.set(tintKey, presented);
     }
     return presented;
   };
@@ -454,6 +454,7 @@ export const prepareCanonicalSurfaceScene = (
     if (node.kind === "gltf" || node.kind === "gltf-instances") {
       gltfNodes.push(node);
       const mountIndex = gltfNodes.length - 1;
+      const tintKey = node.tint === undefined ? undefined : JSON.stringify(node.tint);
       const rootModel = node.kind === "gltf" ? transformMat4(node.transform) : identityMat4();
       const proxyGeometry = node.pickingGeometry === undefined
         ? undefined
@@ -620,7 +621,7 @@ export const prepareCanonicalSurfaceScene = (
           : nextLodGroupId++;
         for (let materialLevel = 0; materialLevel < materialLevelCount; materialLevel += 1) {
           const levelMaterial = materialLod?.levels[materialLevel] ?? materialSource;
-          const presentedMaterial = presentedGltfMaterial(levelMaterial, node.tint);
+          const presentedMaterial = presentedGltfMaterial(levelMaterial, node.tint, tintKey);
           let lods = geometryLods;
           if (materialLod !== undefined && materialGroup !== undefined) {
             const materialMembership: LodMembership = {

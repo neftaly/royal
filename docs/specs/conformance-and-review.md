@@ -337,6 +337,16 @@ packed renderer delta includes declarations and source maps. The
 baseline cost owns one fallback-aware texture identity and public lifecycle
 diagnostics rather than another rasterizer, sampler, material or draw path.
 
+Canonical texture coordinates now live below glTF ingestion. Direct surfaces,
+VT demand, and the ordinary React initial path share the pure transform without
+retaining the glTF JSON interpreter; architecture fitness prevents that parser
+and the other cold scene selectors from re-entering the initial graph. The
+measured result is 114.7 kB initial, 137.4 kB lazy, and 252.1 kB across all
+deployed JavaScript. This deliberately transfers about 1.2 kB from the initial
+graph to lazy glTF preparation while reducing the complete graph by about
+0.5 kB. The affected initial and total ceilings are ratcheted down; only the
+lazy and glTF-authoring ceilings rise to describe their new ownership.
+
 ## Accepted architecture work order
 
 Implementation follows the [clean implementation strategy](implementation-strategy.md):

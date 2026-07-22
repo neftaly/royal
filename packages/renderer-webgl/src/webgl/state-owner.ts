@@ -78,7 +78,14 @@ export class WebGlStateOwner {
       if (transition.scissorRectangle && intent.scissor !== null) {
         gl.scissor(intent.scissor.x, intent.scissor.y, intent.scissor.width, intent.scissor.height);
       }
-      if (transition.clearColor) gl.clearColor(...intent.clearColor);
+      if (transition.clearColor) {
+        gl.clearColor(
+          intent.clearColor[0],
+          intent.clearColor[1],
+          intent.clearColor[2],
+          intent.clearColor[3],
+        );
+      }
       if (transition.clearDepth) gl.clearDepth(intent.clearDepth);
       if (transition.colorMask) gl.colorMask(true, true, true, true);
       if (transition.colorMask || this.#state.depthWrite !== true) gl.depthMask(true);

@@ -17,11 +17,17 @@ export type PrefilteredEnvironmentStatus = PrefilteredEnvironmentAssetSnapshot;
 export type PrefilteredEnvironmentStatusIdentity = Readonly<Pick<
   PrefilteredEnvironmentLight,
   "src" | "version"
->>;
-/** Source string or exact offline-environment loading identity observed by the hook. */
+>> & {
+  readonly kind?: never;
+  readonly radianceScaleNits?: never;
+  readonly rotation?: never;
+  readonly source?: never;
+};
+/** Source string, exact loading identity, or full constructor-produced environment ref. */
 export type PrefilteredEnvironmentStatusInput =
   | string
-  | PrefilteredEnvironmentStatusIdentity;
+  | PrefilteredEnvironmentStatusIdentity
+  | PrefilteredEnvironmentLight;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { status: "idle" };
 const subscribeIdle = (): (() => void) => () => undefined;
@@ -37,12 +43,14 @@ const validateInput = (input: PrefilteredEnvironmentStatusInput): void => {
     PREFILTERED_ENVIRONMENT_STATUS_INPUT_FIELDS,
     "usePrefilteredEnvironmentStatus input",
   );
-  if ("kind" in input && input.kind !== "environment-light") {
-    throw new TypeError("usePrefilteredEnvironmentStatus input kind must be environment-light");
-  }
-  if ("source" in input && input.source !== "royal-prefiltered-v1") {
+  const hasFullRefField = "kind" in input
+    || "radianceScaleNits" in input
+    || "rotation" in input
+    || "source" in input;
+  if (hasFullRefField
+    && (input.kind !== "environment-light" || input.source !== "royal-prefiltered-v1")) {
     throw new TypeError(
-      "usePrefilteredEnvironmentStatus input source must be royal-prefiltered-v1",
+      "usePrefilteredEnvironmentStatus presentation fields require a prefiltered environment ref",
     );
   }
 };

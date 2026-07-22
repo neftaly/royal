@@ -62,6 +62,9 @@ versions identify source-level prerelease checkpoints in this repository.
 - Added `tint` to glTF and bulk glTF-instance nodes as a scene-linear
   presentation multiplier, reusing prepared geometry, textures, variants, and
   equal canonical materials without rewriting source assets.
+- Made focused asset-status hooks explicitly accept complete constructor refs as
+  well as minimal identities, while retaining semantic identity as their only
+  subscription key.
 
 ### Examples
 
@@ -132,6 +135,12 @@ versions identify source-level prerelease checkpoints in this repository.
 - Compacted prepared glTF binary storage to selected final buffer views after
   codec work, dropping compressed source ranges, fallback holes, and
   unselected-scene bytes before semantic lowering.
+- Moved canonical texture-coordinate transforms below glTF ingestion so direct
+  surfaces and VT do not pull the glTF parser into the initial graph.
+- Rejected `KHR_mesh_quantization` use that omits its required document
+  declaration before reads or codec work begin.
+- Removed avoidable opaque-frame frustum work, clear-color iteration, and
+  repeated per-primitive glTF tint-key construction from retained hot paths.
 
 ## 0.0.1 - 2026-07-14
 

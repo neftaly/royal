@@ -1,6 +1,6 @@
 import type { CanonicalTextureSampler } from "../surface/canonical-material";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
-import type { CanonicalTextureCoordinates } from "../gltf/texture-coordinates";
+import type { CanonicalTextureCoordinates } from "../surface/texture-coordinates";
 import {
   identityMat4,
   multiplyMat4Into,

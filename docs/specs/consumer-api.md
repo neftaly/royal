@@ -234,14 +234,16 @@ fields. For example, `{ src, version }` and `{ manifestUri, version }` are
 enough for ordinary-texture and authored-VT observation respectively. Passing
 a complete valid descriptor variable remains supported.
 
-Status-hook object inputs expose only fields that participate in their retained
-identity. glTF status uses `src`/`version`/`sceneIndex`, prefiltered-environment
-status uses `src`/`version`; ordinary decoded-texture status uses
-`src`/`contentKey`/`version`. A complete descriptor stored in a variable remains
-structurally compatible, but the input union does not explicitly advertise its
-ignored presentation fields such as bounds, intensity, and rotation. Authored
-VT is the exception where color space and sampler are representation identity,
-so its focused input names them deliberately.
+Status-hook inputs explicitly accept either their minimal retained identity or
+the complete reference returned by the matching constructor. This makes
+`useGltfAssetStatus(model.asset)` and the equivalent texture/environment forms
+editor-visible rather than relying on structural excess-property rules. glTF
+status keys only `src`/`version`/`sceneIndex`, prefiltered-environment status
+keys `src`/`version`, and ordinary decoded-texture status keys
+`src`/`contentKey`/`version`; accepted presentation fields such as bounds,
+intensity, rotation, color space, and sampler do not silently become loading
+identity. Authored VT is the exception where color space and sampler are
+representation identity.
 
 `error` exists only in the corresponding failure state. Readiness definitions
 match the asset and texture specifications. Ordinary-texture `ready` means
@@ -343,8 +345,9 @@ observation, bounded diagnostics, snapshot, and idempotent dispose operations.
 The optional stable dependency `gltfResourceReader(resource, signal)` reads
 complete bytes for glTF root documents, referenced buffers, and external
 images. `resource.kind` distinguishes `root`, `buffer`, and `image`; `uri` is
-absolute after glTF-relative resolution and `version` is the root asset's
-declared byte revision. Equal URI/version identities within one renderer root
+the supplied root `src` for `root` and the root-resolved URI for referenced
+buffers/images. `version` is the root asset's declared byte revision. Equal
+URI/version identities within one renderer root
 MUST produce equal bytes. Royal, rather than the callback, owns in-flight claim
 deduplication, bounded retention, last-claim cancellation, decode reuse, and
 error publication. This is the supported path for authenticated, verified, or
