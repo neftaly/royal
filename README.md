@@ -70,10 +70,10 @@ pnpm bench:vt-pages
 The default example exercises the replacement root under React StrictMode.
 `/gltf-bistro-web` is the approximate 100 MB Draco + AVIF integration workload;
 its selected scene fetches only the texture sources it actually references.
-The Royal bundle baseline tracks total initial gzip and the incremental
-Royal cost separately. glTF, VT, IBL, codecs, and XR receive their own reachable
-and lazy-byte gates when their actual slices land; unused features are not
-counted as working merely because legacy source still exists.
+The Royal bundle baseline tracks total initial gzip and the incremental Royal
+cost separately. glTF, VT, IBL, codecs, and XR have distinct reachable and
+lazy-byte gates; unused or deferred features are not counted as working merely
+because a type or research implementation exists.
 
 `check:vt-pages-build` verifies that the VT2 page-generation and page-table
 benchmark still compiles against the current source graph. `bench:vt-pages`

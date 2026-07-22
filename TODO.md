@@ -5,7 +5,7 @@ slices, not release blockers for the current branch.
 
 ## Root decomposition
 
-Reduce `packages/renderer-webgl/src/root.ts` only along ownership boundaries
+Reduce `packages/renderer-webgl/src/runtime/canvas-root.ts` only along ownership boundaries
 that delete orchestration or state. Do not create callback wrappers around the
 root.
 
@@ -73,12 +73,14 @@ remain explicit imperative ownership.
 
 ## Package release
 
-Royal is ready for application development inside this workspace, but the
-packages remain private. The initial pre-release version is `0.0.1`. Before
-registry publication:
+Royal is ready for application development inside this workspace. The three
+scoped packages are public-configured at the initial pre-release version
+`0.0.1`; the repository root deliberately remains private because it is only a
+workspace shell. The root AGPL-3.0-only text and package license metadata are
+present. Before registry publication:
 
-1. Add the root AGPL license text, remove `private`, and add an explicit publish
-   workflow.
+1. Add an explicit reviewed publish workflow with registry provenance. Do not
+   publish the root workspace package.
 
 `pnpm check:package-consumer` now packs all three packages, rejects source and
 build-metadata leakage, installs the tarballs into a clean React app,
@@ -87,24 +89,9 @@ CI runs both the built-entrypoint and packed-consumer gates.
 
 ## Validation
 
-1. Keep the physical iPad Safari and Quest 2 evidence current; it does not
-   block desktop work. The July 14 pass covers iPad VT convergence,
-   animated instancing, and the SVG ordinary-texture fallback, plus Quest VT,
-   instancing, SVG generated VT, camera drag, and real immersive WebXR. The XR
-   report gate requires successful activation and physical session frames rather
-   than accepting window RAFs; Quest XR currently measures `47.5ms` p95 and logs
-   one framebuffer-attachment `GL_INVALID_OPERATION` warning during setup. A
-   July 15 physical A/B with XR-layer antialiasing disabled, then with both the
-   WebGL context and XR layer disabled, retained one warning: the command changed
-   from `glFramebufferTexture2DMultisample` to `glFramebufferTexture2D` only when
-   the browser changed its XR-layer attachment path. Royal does not call the
-   multisample entry point, sessions activated normally, and all sampled XR
-   frames rendered, so this remains browser/Adreno evidence rather than a Royal
-   fallback or failure condition.
-   The July 15 Quest follow-up covers context restoration, camera pan,
-   native-DPR CSS resize, and generated-VT/ordinary SVG raster parity through
-   the shared browser smoke harness. A July 15 physical iPad pass now covers an
-   in-place landscape-to-portrait resize on one retained renderer root, including
-   DPR-correct backing dimensions and VT reconvergence. A foreground physical
-   Quest pass also covers bounded page-slot eviction under a fixed VT allocation,
-   governor parity, zero quarantine, and protection of an ordinary texture.
+Keep physical iPad Safari and Quest 2 evidence current; it does not block
+desktop work. Do not duplicate volatile device measurements here. The
+[conformance ledger](docs/specs/conformance-and-review.md) owns the accepted
+device claims and limitations, while
+[`research/examples-benchmarks`](research/examples-benchmarks/README.md) owns
+the reproducible reports and comparison history.
