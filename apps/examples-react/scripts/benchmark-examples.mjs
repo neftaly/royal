@@ -25,6 +25,7 @@ import {
   selectBenchmarkRouteFilter,
 } from './benchmark-route-selection.mjs';
 import { summarizeCpuProfile } from './cpu-profile-summary.mjs';
+import { classifyXrActivation } from './xr-activation-state.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const repoRoot = path.resolve(appRoot, '../..');
@@ -2136,6 +2137,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 const waitForXrActivation = (session, clicked) => evaluate(session, `
 (async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const classify = ${classifyXrActivation.toString()};
   const deadline = performance.now() + ${fakeXrPrepareTimeoutMs};
   while (performance.now() < deadline) {
     const control = document.querySelector('[data-royal-xr-status]');
@@ -2143,33 +2145,26 @@ const waitForXrActivation = (session, clicked) => evaluate(session, `
       .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
     const instrumented = globalThis.__royalBench?.xrSnapshot?.().active === true;
     const status = control?.getAttribute('data-royal-xr-status');
-    if (
-      instrumented &&
-      (control?.getAttribute('data-royal-xr-status') === 'active' || button?.textContent?.includes('Exit XR'))
-    ) {
+    const statusText = control?.textContent ?? status;
+    const classification = classify({
+      instrumented,
+      showsExit: button?.textContent?.includes('Exit XR') === true,
+      status,
+      statusText,
+    });
+    if (classification.kind === 'active') {
       return {
         active: true,
         clicked: ${clicked ? 'true' : 'false'},
-        status: control?.getAttribute('data-royal-xr-status') ?? 'immersive',
+        status: classification.status,
       };
     }
-    if (typeof status === 'string' && /already an active, immersive XRSession/iu.test(status)) {
+    if (classification.kind === 'failure') {
       return {
         active: false,
         clicked: ${clicked ? 'true' : 'false'},
-        reason: 'immersive-session-already-active',
-        status,
-      };
-    }
-    if (
-      typeof status === 'string'
-      && !['idle', 'ready', 'starting', 'ending', 'immersive', 'unavailable'].includes(status)
-    ) {
-      return {
-        active: false,
-        clicked: ${clicked ? 'true' : 'false'},
-        reason: 'xr-status-error',
-        status,
+        reason: classification.reason,
+        status: classification.status,
       };
     }
     await sleep(25);
@@ -2198,6 +2193,8 @@ const prepareRouteForBenchmark = async (session, route) => {
     const button = [...document.querySelectorAll('button')]
       .find((entry) => entry.textContent?.includes('Enter XR'));
     if (button !== undefined && !button.disabled) {
+      button.scrollIntoView({ block: 'center', inline: 'center' });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const rect = button.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     }
