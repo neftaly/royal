@@ -1,0 +1,659 @@
+{
+  "schema": "royal-quest-telemetry",
+  "version": 1,
+  "available": true,
+  "run": {
+    "startedAt": "2026-07-22T13:45:06.844Z",
+    "endedAt": "2026-07-22T13:45:28.338Z",
+    "durationMs": 21494,
+    "commandExitCode": 0,
+    "commandSignal": null
+  },
+  "device": {
+    "androidRelease": "14",
+    "androidSdk": 34,
+    "buildFingerprint": "oculus/hollywood/hollywood:14/UP1A.231005.007.A1/52202280028100150:user/abl_signing_keys:release,amss_signing_keys:release,release-keys",
+    "buildIncremental": "52202280028100150",
+    "device": "hollywood",
+    "manufacturer": "Oculus",
+    "model": "Quest 2"
+  },
+  "before": {
+    "battery": {
+      "charging": true,
+      "levelPct": 82,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 25.7
+    },
+    "capturedAt": "2026-07-22T13:45:06.588Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 118750,
+        "rssKiB": 285495,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 2592096,
+        "cachedKiB": 1914876,
+        "freeKiB": 867972,
+        "swapFreeKiB": 3670008,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "cpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 48.944004
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 47.282
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 26.5
+        },
+        {
+          "name": "soc-iio-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 44.63
+        }
+      ]
+    }
+  },
+  "after": {
+    "battery": {
+      "charging": true,
+      "levelPct": 82,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 26
+    },
+    "capturedAt": "2026-07-22T13:45:28.424Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 119997,
+        "rssKiB": 286987,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 2571244,
+        "cachedKiB": 1915972,
+        "freeKiB": 864816,
+        "swapFreeKiB": 3670008,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "apc-1-max-step",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 50.520004
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 47.822002
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 26.7
+        },
+        {
+          "name": "soc-iio-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 44.952003
+        }
+      ]
+    }
+  },
+  "events": {
+    "dropped": 29,
+    "entries": [
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1555MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.30ms,App=2.16ms,GD=0.00ms,CPU&GPU=7.77ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.17(W0.19),CFL=12.85/17.44,ICFLp95=15.47,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=503,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727907.067,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "Explicit concurrent copying GC freed 17939(543KB) AllocSpace objects, 10(200KB) LOS objects, 49% free, 3897KB/7794KB, paused 36us,27us total 21.647ms",
+        "pid": 5991,
+        "tag": ".oculus.browser",
+        "timestamp": 1784727907.171,
+        "tid": 8782
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1555MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.31ms,App=2.10ms,GD=0.00ms,CPU&GPU=7.83ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.20(W0.22),CFL=12.89/17.60,ICFLp95=15.48,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=502,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727908.067,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.29ms,App=2.11ms,GD=0.00ms,CPU&GPU=8.63ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.21(W0.24),CFL=12.91/17.67,ICFLp95=15.54,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=495,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727909.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.29ms,App=2.18ms,GD=0.00ms,CPU&GPU=7.43ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.18(W0.27),CFL=12.92/17.45,ICFLp95=15.47,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=490,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727910.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.30ms,App=2.14ms,GD=0.00ms,CPU&GPU=8.36ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.14(W0.20),CFL=12.92/17.45,ICFLp95=15.47,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=490,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727911.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.29ms,App=2.10ms,GD=0.00ms,CPU&GPU=7.46ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.16(W0.17),CFL=12.93/17.66,ICFLp95=15.50,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=483,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727912.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "executeAnchorQueries: split anchor query enabled",
+        "pid": 4277,
+        "tag": "OpenXR_Anchor",
+        "timestamp": 1784727912.985,
+        "tid": 4563
+      },
+      {
+        "level": "info",
+        "message": "SP:AP:AnchorPersistence: loadAvailableAnchorsLocal: appId: com.oculus.guardian, queryMultipleRoomsEnabledAppId: , queryMultipleRoomsEnabledByOpenXrVersion: true, applyEffectiveSingleRoomFilter: false",
+        "pid": 3476,
+        "tag": "[CT]",
+        "timestamp": 1784727912.986,
+        "tid": 5048
+      },
+      {
+        "level": "info",
+        "message": "SP:SceneAnchorFilterUtil: filterOutEntitiesAndComponents : Guardian:true, App OpenXR Version patch:53 (vs. min patch without filtering 45), appIdInOverrideString:false, ocKillswitch:false, fsKillswitch:false",
+        "pid": 3476,
+        "tag": "[CT]",
+        "timestamp": 1784727912.995,
+        "tid": 5048
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2531MB,PLS=0,Temp=25.7C/0.0C,TW=4.30ms,App=2.11ms,GD=0.00ms,CPU&GPU=7.71ms,LCnt=6(DR0,LM0),GPU%=0.60,CPU%=0.16(W0.20),CFL=12.88/17.40,ICFLp95=15.48,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=507,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727913.068,
+        "tid": 4821
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.191,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.191,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.192,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.192,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.193,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.193,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.194,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.195,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.195,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.195,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.196,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.197,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.197,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.197,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.197,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000553000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.197,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.198,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.198,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.198,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 3",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 3",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.199,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 3",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.2,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.2,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000553000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.2,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 4",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.2,
+        "tid": 4563
+      },
+      {
+        "level": "warning",
+        "message": "[OpenXR_Anchor] component enabled cannot be changed; 1000269000",
+        "pid": 4277,
+        "tag": "RuntimeTelemetryThread",
+        "timestamp": 1784727913.2,
+        "tid": 4563
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2530MB,PLS=0,Temp=25.7C/0.0C,TW=4.30ms,App=2.11ms,GD=0.00ms,CPU&GPU=7.78ms,LCnt=6(DR0,LM0),GPU%=0.60,CPU%=0.16(W0.19),CFL=12.85/17.59,ICFLp95=15.45,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=498,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727914.083,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.30ms,App=2.07ms,GD=0.00ms,CPU&GPU=8.36ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.22(W0.30),CFL=12.82/17.51,ICFLp95=15.48,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=507,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727915.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.31ms,App=2.10ms,GD=0.00ms,CPU&GPU=7.85ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.18(W0.23),CFL=12.90/17.50,ICFLp95=15.52,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=496,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727916.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.31ms,App=2.11ms,GD=0.00ms,CPU&GPU=7.57ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.18(W0.23),CFL=12.93/17.51,ICFLp95=15.52,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=505,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727917.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.32ms,App=2.15ms,GD=0.00ms,CPU&GPU=7.92ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.15(W0.20),CFL=12.96/17.44,ICFLp95=15.56,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=508,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727918.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=27ms,Tear=0,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.31ms,App=2.08ms,GD=0.00ms,CPU&GPU=8.51ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.17(W0.20),CFL=12.92/17.65,ICFLp95=15.52,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=492,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727919.068,
+        "tid": 4821
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2530MB,PLS=0,Temp=26.0C/0.0C,TW=4.31ms,App=2.11ms,GD=0.00ms,CPU&GPU=7.98ms,LCnt=6(DR0,LM0),GPU%=0.61,CPU%=0.15(W0.23),CFL=13.01/17.48,ICFLp95=15.61,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=3,ShrpR=0.000,SSLCnt=3/6,Preempt=500,PoseAgeP95=0.00",
+        "pid": 3010,
+        "tag": "VrApi",
+        "timestamp": 1784727920.068,
+        "tid": 4821
+      }
+    ]
+  },
+  "probeFailures": []
+}

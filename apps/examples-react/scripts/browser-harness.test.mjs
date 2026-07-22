@@ -149,6 +149,26 @@ describe('browser harness', () => {
       .rejects.toThrow('http://example.test/status returned 503');
   });
 
+  it('bounds a fetch that connects without ever producing a response', async () => {
+    const fetchImpl = (_url, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+
+    await expect(waitForHttp('http://example.test/hung', 20, fetchImpl))
+      .rejects.toThrow('Timed out fetching http://example.test/hung');
+  });
+
+  it('bounds a response whose body never finishes', async () => {
+    const fetchImpl = async () => ({
+      json: () => new Promise(() => undefined),
+      ok: true,
+      status: 200,
+    });
+
+    await expect(waitForJson('http://example.test/hung-body', 20, fetchImpl))
+      .rejects.toThrow('Timed out fetching http://example.test/hung-body');
+  });
+
   it('requires the server to expose the exact current build identity', async () => {
     const expected = {
       buildId: 'current-build',

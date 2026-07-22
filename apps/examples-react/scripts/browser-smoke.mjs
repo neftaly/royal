@@ -47,6 +47,7 @@ const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
 const embeddedTextureGate = process.env.EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE === '1';
 const svgFallbackSmoke = process.env.EXAMPLES_SMOKE_SVG_FALLBACK === '1';
+const allowSoftwareGpu = process.env.EXAMPLES_SMOKE_ALLOW_SOFTWARE_GPU === '1';
 
 if (!new Set(['cdp', 'chromium']).has(browserMode)) {
   throw new Error(
@@ -1876,10 +1877,10 @@ const main = async () => {
       '--no-sandbox',
       '--disable-dev-shm-usage',
       '--use-gl=angle',
-      '--use-angle=vulkan',
-      '--ignore-gpu-blocklist',
-      '--disable-software-rasterizer',
-      '--use-gpu-in-tests',
+      `--use-angle=${allowSoftwareGpu ? 'swiftshader' : 'vulkan'}`,
+      ...(allowSoftwareGpu
+        ? ['--enable-unsafe-swiftshader']
+        : ['--ignore-gpu-blocklist', '--disable-software-rasterizer', '--use-gpu-in-tests']),
       '--window-size=1200,800',
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${profileDir}`,
@@ -1928,10 +1929,13 @@ const main = async () => {
         return debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
       })()
     `);
-    if (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
-      throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
+    if (gpu === null) {
+      throw new Error('Browser smoke could not create a WebGL2 context');
     }
-    console.log(`gpu ${gpu ?? 'renderer unavailable'}`);
+    if (!allowSoftwareGpu && /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
+      throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu}`);
+    }
+    console.log(`gpu ${gpu}${allowSoftwareGpu ? ' (software behavior oracle)' : ''}`);
 
     const filteredRoutes = routeFilter === ''
       ? smokeRoutes

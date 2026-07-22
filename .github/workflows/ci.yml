@@ -75,6 +75,11 @@ jobs:
         run: pnpm check:bundle-size
 
       - name: Examples browser smoke
+        timeout-minutes: 5
+        env:
+          # Headless runners have no physical Vulkan surface. CI proves browser
+          # behavior; checked-in iPad/Quest reports remain the hardware oracle.
+          EXAMPLES_SMOKE_ALLOW_SOFTWARE_GPU: "1"
         run: |
           if ! command -v chromium >/dev/null 2>&1; then
             echo "::error::Chromium is not available after setup-chrome."

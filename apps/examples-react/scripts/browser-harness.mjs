@@ -23,14 +23,46 @@ export const gltfRendererSnapshotSettled = (snapshot, minImagesLoaded = 0) => {
   ].some((field) => (snapshot.resourcePressure?.[field] ?? 0) > 0);
 };
 
+const fetchWithTimeout = async (url, timeoutMs, read, fetchImpl) => {
+  const controller = new AbortController();
+  let timeout;
+  const timedOut = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      const error = new Error(`Timed out fetching ${url}`);
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetchImpl(url, { signal: controller.signal });
+        return {
+          response,
+          value: response.ok ? await read(response) : undefined,
+        };
+      })(),
+      timedOut,
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const waitForResponse = async (url, timeoutMs, read, fetchImpl = fetch) => {
   const deadline = Date.now() + timeoutMs;
   let lastError;
 
   while (Date.now() < deadline) {
     try {
-      const response = await fetchImpl(url);
-      if (response.ok) return await read(response);
+      const remainingMs = Math.max(1, deadline - Date.now());
+      const { response, value } = await fetchWithTimeout(
+        url,
+        Math.min(1_000, remainingMs),
+        read,
+        fetchImpl,
+      );
+      if (response.ok) return value;
       lastError = new Error(`${url} returned ${response.status}`);
     } catch (error) {
       lastError = error;
