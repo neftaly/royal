@@ -34,9 +34,7 @@ jobs:
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
         with:
-          # Keep the deterministic software oracle aligned with the physical
-          # Quest browser major. Upgrade deliberately with a full smoke run.
-          chrome-version: 149
+          chrome-version: stable
           install-dependencies: true
 
       - name: Add Chromium command

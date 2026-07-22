@@ -9,6 +9,7 @@ import {
   replaceWebSocketAuthority,
   selectCdpPage,
   startPerformanceTrace,
+  stripTerminalControlSequences,
   waitForExactSourceIdentity,
   waitForHttp,
   waitForJson,
@@ -237,6 +238,28 @@ describe('browser harness', () => {
       preview,
       timeoutMs: 1_000,
     })).rejects.toThrow('preview port is occupied');
+  });
+
+  it('bounds a managed preview signal that never settles', async () => {
+    const expected = {
+      buildId: 'current-build',
+      builtAt: '2026-07-22T00:00:00.000Z',
+      dirty: false,
+      revision: 'abc123',
+    };
+    await expect(waitForPreviewBuild({
+      baseUrl: 'http://example.test:4673',
+      expected,
+      fetchImpl: async () => ({ json: async () => expected, ok: true, status: 200 }),
+      preview: { royalReady: new Promise(() => undefined) },
+      timeoutMs: 20,
+    })).rejects.toThrow('Timed out waiting for Royal managed preview readiness after 20ms');
+  });
+
+  it('normalizes colored Vite readiness output before matching it', () => {
+    expect(stripTerminalControlSequences(
+      '\u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m: http://127.0.0.1:4573/',
+    )).toBe('➜  Local: http://127.0.0.1:4573/');
   });
 
   it('retains one CDP page and closes surplus page targets only', async () => {

@@ -80,6 +80,23 @@ export const waitForHttp = async (url, timeoutMs, fetchImpl) => {
 export const waitForJson = (url, timeoutMs, fetchImpl) =>
   waitForResponse(url, timeoutMs, (response) => response.json(), fetchImpl);
 
+const waitForPromise = (promise, timeoutMs, description) => new Promise((resolve, reject) => {
+  const timeout = setTimeout(
+    () => reject(new Error(`Timed out waiting for ${description} after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  promise.then(
+    (value) => {
+      clearTimeout(timeout);
+      resolve(value);
+    },
+    (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    },
+  );
+});
+
 const sourceIdentityFields = ['buildId', 'builtAt', 'dirty', 'revision'];
 
 /** Requires the server to expose the exact immutable identity emitted by the current build. */
@@ -119,7 +136,7 @@ export const waitForPreviewBuild = async ({
   }
   const [identity] = await Promise.all([
     waitForExactSourceIdentity(baseUrl, expected, timeoutMs, fetchImpl),
-    preview.royalReady,
+    waitForPromise(preview.royalReady, timeoutMs, 'Royal managed preview readiness'),
   ]);
   return identity;
 };
@@ -505,6 +522,11 @@ export const spawnLogged = (command, args, options = {}) => {
   return child;
 };
 
+const ansiControlSequence = /\u001b\[[0-?]*[ -/]*[@-~]/gu;
+
+export const stripTerminalControlSequences = (value) =>
+  String(value).replace(ansiControlSequence, '');
+
 export const startVitePreview = ({ appRoot, host, port }) => {
   let readyOutput = '';
   let resolveReady;
@@ -528,7 +550,9 @@ export const startVitePreview = ({ appRoot, host, port }) => {
   ], {
     cwd: appRoot,
     onStdout: (chunk) => {
-      readyOutput = (readyOutput + String(chunk)).slice(-2_000);
+      readyOutput = (
+        readyOutput + stripTerminalControlSequences(chunk)
+      ).slice(-2_000);
       if (/\bLocal:\s+https?:\/\//u.test(readyOutput)) resolveReady();
     },
   });
