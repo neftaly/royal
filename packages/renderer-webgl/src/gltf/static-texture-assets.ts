@@ -1,6 +1,5 @@
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
-import type { TextureSourceRef } from "../texture/asset-owner";
-import { textureStorageKey } from "../texture/asset-owner";
+import { textureStorageKey, type TextureSourceRef } from "../texture/source";
 
 type StaticMaterialLod = Readonly<{
   levels: readonly CanonicalSurfaceMaterial[];

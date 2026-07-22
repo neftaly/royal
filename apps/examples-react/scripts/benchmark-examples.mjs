@@ -741,6 +741,29 @@ const installBenchmarkHooks = async (session) => {
     sessions: 0,
     waiters: [],
   };
+  let xrExitWatchdog = null;
+  const cancelXrExitWatchdog = () => {
+    if (xrExitWatchdog === null) return false;
+    clearTimeout(xrExitWatchdog);
+    xrExitWatchdog = null;
+    return true;
+  };
+  const endXrSession = async () => {
+    cancelXrExitWatchdog();
+    const session = xr.activeSession;
+    if (session === null) return false;
+    await session.end();
+    return true;
+  };
+  const armXrExitWatchdog = (timeoutMs) => {
+    const delayMs = Math.max(1, Math.floor(Number(timeoutMs) || 0));
+    cancelXrExitWatchdog();
+    xrExitWatchdog = setTimeout(() => {
+      xrExitWatchdog = null;
+      void xr.activeSession?.end().catch(() => undefined);
+    }, delayMs);
+    return delayMs;
+  };
   const gpuTimers = {
     attempted: false,
     contexts: new WeakMap(),
@@ -1708,15 +1731,12 @@ const installBenchmarkHooks = async (session) => {
     });
   }
   globalThis.__royalBench = {
+    armXrExitWatchdog,
+    cancelXrExitWatchdog,
     counters,
     cameraDragSample,
+    endXrSession,
     latencyPulse,
-    async endXrSession() {
-      const session = xr.activeSession;
-      if (session === null) return false;
-      await session.end();
-      return true;
-    },
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
       drawSequence = 0;
@@ -2218,6 +2238,11 @@ const prepareRouteForBenchmark = async (session, route) => {
       if (target === null) {
         return { active: false, clicked: false, reason: 'enter-button-unavailable' };
       }
+      await evaluate(session, `
+globalThis.__royalBench?.armXrExitWatchdog?.(${
+  fakeXrPrepareTimeoutMs + fakeXrSampleTimeoutMs * 2 + 15_000
+})
+`);
       await session.call('Input.dispatchMouseEvent', {
         type: 'mouseMoved',
         x: target.x,

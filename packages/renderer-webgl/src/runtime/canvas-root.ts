@@ -66,12 +66,11 @@ import {
 } from "../surface/instance-scene-update";
 import {
   TextureAssetOwner,
-  type DecodedTextureAlpha,
-  type DecodedTextureSource,
   type TextureAssetSnapshot,
   type TexturePreparationSnapshot,
-  type TextureSourceRef,
 } from "../texture/asset-owner";
+import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
+import type { DecodedTextureSource, TextureSourceRef } from "../texture/source";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
   resolveRendererRootOptions,

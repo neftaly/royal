@@ -49,7 +49,7 @@ import {
   textureStorageKey,
   type DecodedTextureSource,
   type TextureSourceRef,
-} from "../texture/asset-owner";
+} from "../texture/source";
 import {
   emptyWorldBounds,
   includeTransformedBounds,

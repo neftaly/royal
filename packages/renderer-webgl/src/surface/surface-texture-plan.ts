@@ -3,7 +3,7 @@ import type { GpuTextureBinding } from "../texture/gpu-owner";
 import {
   textureStorageKey,
   type TextureSourceRef,
-} from "../texture/asset-owner";
+} from "../texture/source";
 import type { VirtualTextureGpuBinding } from "../virtual-texture/runtime-contract";
 import {
   canonicalMaterialHasTransmission,

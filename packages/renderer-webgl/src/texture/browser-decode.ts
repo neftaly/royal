@@ -3,7 +3,7 @@ import type {
   DecodedTextureSource,
   TextureLeafSourceRef,
   TextureSourceRef,
-} from "./asset-owner";
+} from "./source";
 import { decodeBrowserImageElement } from "./browser-image-element";
 import {
   encodedImageDimensionPrefixByteLength,

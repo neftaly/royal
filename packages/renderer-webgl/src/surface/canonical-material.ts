@@ -12,7 +12,7 @@ import {
   type DecodedTextureSource,
   textureStorageKey,
   type TextureSourceRef,
-} from "../texture/asset-owner";
+} from "../texture/source";
 import type { CanonicalTextureCoordinates } from "../gltf/texture-coordinates";
 
 export type CanonicalTextureSampler = Readonly<{

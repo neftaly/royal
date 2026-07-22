@@ -1,7 +1,10 @@
 import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { CanonicalTextureSampler } from "../surface/canonical-material";
-import type { DecodedImageTextureSource, DecodedTextureSource } from "../texture/asset-owner";
-import type { EncodedSvgTextureSource } from "../texture/asset-owner";
+import type {
+  DecodedImageTextureSource,
+  DecodedTextureSource,
+  EncodedSvgTextureSource,
+} from "../texture/source";
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import {

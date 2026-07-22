@@ -57,7 +57,7 @@ import type {
   DecodedTextureSource,
   DecodedTextureLease,
   TextureSourceRef,
-} from "../texture/asset-owner";
+} from "../texture/source";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;

@@ -204,6 +204,15 @@ describe("source architecture fitness", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps immutable texture consumers below the texture lifecycle owner", () => {
+    const rendererRoot = path.join(packagesRoot, "renderer-webgl", "src");
+    const assetOwner = path.join(rendererRoot, "texture", "asset-owner.ts");
+    const expectedOwner = path.join(rendererRoot, "runtime", "canvas-root.ts");
+    const owners = packageSourceFiles.filter((file) =>
+      staticGraph.get(file)?.includes(assetOwner) === true);
+    expect(owners.map(relative)).toEqual([relative(expectedOwner)]);
+  });
+
   it("keeps optional renderer implementations out of the main static graph", () => {
     const rendererRoot = path.join(packagesRoot, "renderer-webgl", "src");
     const reached = [...reachableFrom(path.join(rendererRoot, "index.ts"))].map(relative);

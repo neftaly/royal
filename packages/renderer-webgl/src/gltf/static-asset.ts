@@ -6,7 +6,7 @@ import {
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type { GltfAssetBounds } from "@royal/renderer-core";
-import type { TextureSourceRef } from "../texture/asset-owner";
+import type { TextureSourceRef } from "../texture/source";
 import type { DecodedDracoPrimitive } from "./draco";
 import type { StaticDracoTaskExecutor } from "./draco";
 import { parseGlb } from "./glb";

@@ -1,6 +1,7 @@
 import type { PickInput, PickResult } from "@royal/renderer-core";
 import { identityMat4, inverseMat4Into, type Mat4 } from "../math/mat4";
-import type { DecodedTextureAlpha, TextureSourceRef } from "../texture/asset-owner";
+import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
+import type { TextureSourceRef } from "../texture/source";
 import {
   canonicalAlphaMaskAcceptsTrianglePoint,
   createCanonicalAlphaMaskSamplingScratch,

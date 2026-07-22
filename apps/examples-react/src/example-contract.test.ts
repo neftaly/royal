@@ -33,7 +33,7 @@ describe('examples contract', () => {
   });
 
   it('makes the resolution-independent texture policy explicit', () => {
-    expect(exampleCanvasRendererOptions.automaticVirtualTexturing).toBeUndefined();
+    expect('automaticVirtualTexturing' in exampleCanvasRendererOptions).toBe(false);
     expect(automaticVirtualTextureExampleRendererOptions).toEqual({
       alpha: true,
       antialias: false,

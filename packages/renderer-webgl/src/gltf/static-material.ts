@@ -5,7 +5,7 @@ import type {
   TextureLeafSourceRef,
   TextureSourceEncoding,
   TextureSourceRef,
-} from "../texture/asset-owner";
+} from "../texture/source";
 import {
   fail,
   finiteTuple,

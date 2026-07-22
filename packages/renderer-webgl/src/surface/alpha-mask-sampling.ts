@@ -2,8 +2,7 @@ import {
   IDENTITY_TEXTURE_COORDINATES,
   type CanonicalTextureCoordinates,
 } from "../gltf/texture-coordinates";
-import type { DecodedTextureAlpha } from "../texture/asset-owner";
-import type { TextureAlphaLevel } from "../texture/alpha-mipmap";
+import type { DecodedTextureAlpha, TextureAlphaLevel } from "../texture/alpha-mipmap";
 import type { CanonicalTriangleGeometry } from "./canonical-geometry";
 import type { CanonicalSurfaceMaterial, CanonicalTextureSampler } from "./canonical-material";
 import type {

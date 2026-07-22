@@ -8,8 +8,8 @@ import type { PreparedStaticGltf } from "./static-asset";
 import type { GltfDocumentScene } from "./static-node-selection";
 import type {
   TextureAssetSnapshot,
-  TextureSourceRef,
 } from "../texture/asset-owner";
+import type { TextureSourceRef } from "../texture/source";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
