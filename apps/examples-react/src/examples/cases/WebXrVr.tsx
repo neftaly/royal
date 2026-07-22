@@ -13,7 +13,7 @@ import {
 import { useXrSession } from "@royal/react/xr";
 import { type ReactNode } from "react";
 import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
-import { exampleCanvasRendererOptions } from "../example-renderer-options";
+import { automaticVirtualTextureExampleRendererOptions } from "../example-renderer-options";
 import { transparentViewportClearColor } from "../presentation";
 
 const xrTiger = gltf({
@@ -96,7 +96,7 @@ export const WebXrVr = (): ReactNode => (
       <Canvas
         aria-label="Royal WebXR scene"
         className="webxr-vr-canvas"
-        rendererOptions={exampleCanvasRendererOptions}
+        rendererOptions={automaticVirtualTextureExampleRendererOptions}
         scene={renderScene}
       >
         <XrBenchmark />

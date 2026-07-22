@@ -6,3 +6,9 @@ const defaultExampleCanvasRendererOptions = {
 } as const satisfies RendererRootOptions;
 
 export const exampleCanvasRendererOptions = defaultExampleCanvasRendererOptions;
+
+/** Example policy for resolution-independent image sources rendered through automatic VT. */
+export const automaticVirtualTextureExampleRendererOptions = {
+  ...defaultExampleCanvasRendererOptions,
+  automaticVirtualTexturing: true,
+} as const satisfies RendererRootOptions;

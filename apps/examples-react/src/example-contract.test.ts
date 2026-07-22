@@ -8,7 +8,10 @@ import {
   type RendererBenchmarkSnapshot,
 } from './example-contract';
 import { examples } from './examples';
-import { exampleCanvasRendererOptions } from './examples/example-renderer-options';
+import {
+  automaticVirtualTextureExampleRendererOptions,
+  exampleCanvasRendererOptions,
+} from './examples/example-renderer-options';
 import {
   colorAccuratePass,
   materialPass,
@@ -27,6 +30,15 @@ describe('examples contract', () => {
       materialPass,
       colorAccuratePass,
     ].every((pass) => pass.clearColor === transparentViewportClearColor)).toBe(true);
+  });
+
+  it('makes the resolution-independent texture policy explicit', () => {
+    expect(exampleCanvasRendererOptions.automaticVirtualTexturing).toBeUndefined();
+    expect(automaticVirtualTextureExampleRendererOptions).toEqual({
+      alpha: true,
+      antialias: false,
+      automaticVirtualTexturing: true,
+    });
   });
 
   it('is a versioned serializable source of route metadata', () => {
