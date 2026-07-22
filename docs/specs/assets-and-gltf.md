@@ -185,16 +185,20 @@ not turn otherwise-valid core fallback into an asset failure. Extension objects
 on the executable graph still MUST be declared in `extensionsUsed`, and every
 required occurrence there MUST use an implemented placement.
 
-The Draco adapter loads only when demanded. Codec output is validated as
-strictly as uncompressed input. Codec or worker absence for a required path
-produces an explicit asset failure; it MUST NOT hang. Meshopt and glTF Basis
-remain unsupported until they have equivalently owned ingestion paths.
+Draco and Meshopt adapters load only when demanded. Codec output is validated
+as strictly as uncompressed input. Codec or worker absence for a required path
+produces an explicit asset failure; it MUST NOT hang. glTF Basis remains
+unsupported until it has an equivalently owned ingestion path.
 
 ## Variants, lights, LOD, and instances
 
 `KHR_materials_variants` exposes stable authored names, not declaration-order
 indices. An unknown requested name renders the base material and emits a bounded
 diagnostic. Variant selection preserves node and picking identity.
+An optional Royal glTF `tint` is a presentation-level scene-linear RGBA
+multiplier applied after base/variant/LOD selection. It does not participate in
+asset identity, source preparation, geometry ownership, or texture ownership;
+equal source-material/tint values share one canonical material identity.
 
 Authored punctual lights lower to Royal light records. Asset-scoped
 `EXT_lights_image_based` is fallback illumination only; an explicit Royal scene

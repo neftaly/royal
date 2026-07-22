@@ -1,15 +1,17 @@
 import {
   resolveTransform,
+  type LinearRgba,
   type Transform,
-  type TransformOptions
+  type TransformOptions,
+  type WorldPosition3,
 } from './primitives';
 import {
   resolveBounds3,
+  resolveRgba,
   identityScalar,
   nonEmptyString,
   objectWithAllowedFields,
 } from './descriptor-values';
-import type { WorldPosition3 } from './primitives';
 import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 import { validateGeometry, type Geometry } from './geometry';
@@ -44,6 +46,8 @@ export interface GltfNode {
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
   readonly transform?: Transform;
+  /** Scene-linear RGBA multiplier applied to every selected base color. */
+  readonly tint?: LinearRgba;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
 }
@@ -62,6 +66,8 @@ export interface GltfOptions {
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
+  /** Scene-linear RGBA multiplier applied to every selected base color. */
+  readonly tint?: LinearRgba;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
   /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
@@ -120,7 +126,7 @@ export const transformGltfAssetBounds = (
 };
 
 const GLTF_FIELDS = [
-  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'transform', 'version',
+  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'tint', 'transform', 'version',
 ] as const;
 
 const gltfOptions = (input: GltfInput): GltfOptions =>
@@ -169,13 +175,15 @@ export function gltf(input: GltfInput): GltfNode {
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
+  const tint = options.tint === undefined ? undefined : resolveRgba(options.tint, 'glTF tint');
   const node = {
     kind: 'gltf',
     asset,
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
-    ...(materialVariant === undefined ? {} : { materialVariant })
+    ...(materialVariant === undefined ? {} : { materialVariant }),
+    ...(tint === undefined ? {} : { tint }),
   } satisfies Omit<GltfNode, 'transform'>;
 
   return options.transform === undefined

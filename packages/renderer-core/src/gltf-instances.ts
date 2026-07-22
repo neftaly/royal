@@ -7,7 +7,8 @@ import {
 } from './gltf';
 import { resolvePickingId, type PickingId } from './picking';
 import { validateGeometry, type Geometry } from './geometry';
-import { objectWithAllowedFields } from './descriptor-values';
+import { objectWithAllowedFields, resolveRgba } from './descriptor-values';
+import type { LinearRgba } from './primitives';
 
 /**
  * Mutable packed-transform protocol consumed by `gltfInstances`.
@@ -370,6 +371,8 @@ export interface GltfInstancesNode {
   readonly pickingId?: PickingId;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
+  /** Scene-linear RGBA multiplier applied to every selected base color. */
+  readonly tint?: LinearRgba;
 }
 
 export interface GltfInstancesOptions {
@@ -387,12 +390,14 @@ export interface GltfInstancesOptions {
   readonly src: string;
   /** Exact `KHR_materials_variants` name selected from the asset. */
   readonly materialVariant?: GltfMaterialVariantName;
+  /** Scene-linear RGBA multiplier applied to every selected base color. */
+  readonly tint?: LinearRgba;
   /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: GltfAssetRef['version'];
 }
 
 const GLTF_INSTANCES_FIELDS = [
-  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'version',
+  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'tint', 'version',
 ] as const;
 
 /** Creates one instanced glTF node using the canonical glTF material and picking path. */
@@ -405,6 +410,9 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
+  const tint = options.tint === undefined
+    ? undefined
+    : resolveRgba(options.tint, 'glTF instances tint');
   return {
     asset,
     instances,
@@ -412,5 +420,6 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(materialVariant === undefined ? {} : { materialVariant }),
+    ...(tint === undefined ? {} : { tint }),
   };
 };

@@ -36,6 +36,7 @@ import {
   canonicalTextureSampler,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
+  tintCanonicalMaterial,
   type CanonicalSurfaceMaterial,
 } from "./canonical-material";
 import {
@@ -395,6 +396,28 @@ export const prepareCanonicalSurfaceScene = (
   const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directWireframeGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
+  const tintedGltfMaterials = new WeakMap<
+    CanonicalSurfaceMaterial,
+    Map<string, CanonicalSurfaceMaterial>
+  >();
+  const presentedGltfMaterial = (
+    material: CanonicalSurfaceMaterial,
+    tint: LinearRgba | undefined,
+  ): CanonicalSurfaceMaterial => {
+    if (tint === undefined) return material;
+    let variants = tintedGltfMaterials.get(material);
+    if (variants === undefined) {
+      variants = new Map();
+      tintedGltfMaterials.set(material, variants);
+    }
+    const key = JSON.stringify(tint);
+    let presented = variants.get(key);
+    if (presented === undefined) {
+      presented = tintCanonicalMaterial(material, tint);
+      variants.set(key, presented);
+    }
+    return presented;
+  };
   let authoredGeometryIndex = 0;
   const directGeometry = (
     geometry: Geometry,
@@ -597,6 +620,7 @@ export const prepareCanonicalSurfaceScene = (
           : nextLodGroupId++;
         for (let materialLevel = 0; materialLevel < materialLevelCount; materialLevel += 1) {
           const levelMaterial = materialLod?.levels[materialLevel] ?? materialSource;
+          const presentedMaterial = presentedGltfMaterial(levelMaterial, node.tint);
           let lods = geometryLods;
           if (materialLod !== undefined && materialGroup !== undefined) {
             const materialMembership: LodMembership = {
@@ -631,20 +655,24 @@ export const prepareCanonicalSurfaceScene = (
               ...(sourceIndices === undefined ? {} : { sourceIndices }),
               },
             }),
-            material: resolveCanonicalMaterialTexture(levelMaterial, decodedTexture, texturePending),
-            materialSource: levelMaterial,
+            material: resolveCanonicalMaterialTexture(
+              presentedMaterial,
+              decodedTexture,
+              texturePending,
+            ),
+            materialSource: presentedMaterial,
             ...(lods === undefined ? {} : { lods }),
             model,
             modelHandedness: handedness,
             node,
             normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
-            textureKeys: canonicalMaterialTextureKeys(levelMaterial),
+            textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
             worldBounds,
           });
           if (proxyGeometry === undefined) {
             if (instanceBatch === undefined) {
               pickSurfaces.push({
-                ...canonicalPickMaterial(levelMaterial),
+                ...canonicalPickMaterial(presentedMaterial),
                 inverseModel: inverseMat4(model),
                 modelHandedness: handedness,
                 node,
@@ -660,7 +688,7 @@ export const prepareCanonicalSurfaceScene = (
                   mat4At(localModels, offset),
                 );
                 pickSurfaces.push({
-                  ...canonicalPickMaterial(levelMaterial),
+                  ...canonicalPickMaterial(presentedMaterial),
                   inverseModel: inverseMat4(instanceModel),
                   ...(sourceIndices === undefined
                     ? {}

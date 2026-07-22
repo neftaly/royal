@@ -651,6 +651,25 @@ describe("renderer-core descriptor contract", () => {
     expect(() => gltf({ materialVariant: "", src })).toThrow(/materialVariant must be a non-empty string/);
   });
 
+  it("normalizes glTF presentation tint outside asset identity", () => {
+    const tint = [0.2, 0.4, 0.8, 0.75] as const;
+    expect(gltf({ src: "/models/team.glb", tint })).toEqual({
+      asset: { src: "/models/team.glb" },
+      kind: "gltf",
+      tint,
+    });
+    const instances = createGltfInstanceTransforms({ count: 2 });
+    expect(gltfInstances({ instances, src: "/models/team.glb", tint })).toMatchObject({
+      asset: { src: "/models/team.glb" },
+      kind: "gltf-instances",
+      tint,
+    });
+    expect(() => gltf({
+      src: "/models/team.glb",
+      tint: [1, Number.NaN, 1, 1],
+    })).toThrow(/glTF tint\[1\] must be finite/);
+  });
+
   it("preserves directional light descriptor fields", () => {
     expect(directionalLight({
       color: [1, 0.95, 0.84, 1],

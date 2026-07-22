@@ -90,6 +90,7 @@ const model = gltf({
   pickingId: 'hero',
   sceneIndex: 2,
   src: '/model.gltf',
+  tint: [0.8, 0.25, 0.2, 1],
   version: 'model-sha256',
 });
 const albedo = imageTexture({ src: '/albedo.webp', version: 2 });
@@ -122,6 +123,7 @@ const renderScene: Scene = scene({
       pickingId: 'trees',
       sceneIndex: 1,
       src: '/tree.glb',
+      tint: [0.7, 1, 0.7, 1],
     }),
     mesh({
       geometry: pickingGeometry,

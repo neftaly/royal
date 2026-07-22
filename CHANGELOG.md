@@ -59,6 +59,9 @@ versions identify source-level prerelease checkpoints in this repository.
 - Added a cold borrowed prepared-glTF geometry visitor so spatial tools can
   reuse selected canonical triangles and transforms without another read,
   decode, or renderer-owned physics policy.
+- Added `tint` to glTF and bulk glTF-instance nodes as a scene-linear
+  presentation multiplier, reusing prepared geometry, textures, variants, and
+  equal canonical materials without rewriting source assets.
 
 ### Examples
 

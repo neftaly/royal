@@ -47,6 +47,10 @@ omitting `sceneIndex` uses the glTF document default. The selected scene is part
 of asset/status identity, while shared source-derived mesh and image identities
 remain stable across selections.
 
+`gltf({ src, tint })` and `gltfInstances({ src, tint, ... })` apply one
+scene-linear RGBA presentation multiplier to every selected base color without
+rewriting the asset or changing its source/preparation identity.
+
 Textured standard and unlit materials accept an optional scene-linear `tint`
 multiplier. The name is deliberately distinct from the mutually exclusive
 solid `color` form. An authored `color` or `tint` alpha below one selects the

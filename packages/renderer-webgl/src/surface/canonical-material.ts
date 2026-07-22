@@ -107,6 +107,28 @@ export const canonicalMaterialHasVolume = (
 ): material is CanonicalStandardMaterial => canonicalMaterialHasTransmission(material)
   && (material.thicknessFactor ?? 0) > 0;
 
+/** Applies one presentation multiplier without changing texture or geometry identity. */
+export const tintCanonicalMaterial = (
+  material: CanonicalSurfaceMaterial,
+  tint: LinearRgba,
+): CanonicalSurfaceMaterial => {
+  if (tint[0] === 1 && tint[1] === 1 && tint[2] === 1 && tint[3] === 1) return material;
+  const baseColor: LinearRgba = [
+    material.baseColor[0] * tint[0],
+    material.baseColor[1] * tint[1],
+    material.baseColor[2] * tint[2],
+    material.baseColor[3] * tint[3],
+  ];
+  return {
+    ...material,
+    ...(material.alphaBlend === true
+      || (material.alphaCutoff === undefined && baseColor[3] < 1)
+      ? { alphaBlend: true as const }
+      : {}),
+    baseColor,
+  };
+};
+
 /** Pure glTF dielectric Fresnel-at-normal-incidence rule, including IOR 0 compatibility. */
 export const dielectricF0FromIndexOfRefraction = (indexOfRefraction: number): number => {
   if (indexOfRefraction === 0) return 1;

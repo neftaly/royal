@@ -464,7 +464,11 @@ describe("canonical direct surface lowering", () => {
       KHR_materials_variants: { mappings: [{ material: 1, variants: [0] }] },
     };
     const asset = prepareStaticGlb(staticTriangleGlb(document), "variant-asset");
-    const ruby = gltf({ materialVariant: "Ruby", src: "/variant.glb" });
+    const ruby = gltf({
+      materialVariant: "Ruby",
+      src: "/variant.glb",
+      tint: [0.5, 1, 1, 1],
+    });
     const unknown = gltf({ materialVariant: "Unknown", src: "/variant.glb" });
     const render = (node: typeof ruby) => prepareCanonicalSurfaceScene(
       scene({
@@ -475,10 +479,29 @@ describe("canonical direct surface lowering", () => {
       () => asset,
     );
 
-    expect(render(ruby).surfaces[0]!.material.baseColor).toEqual([0.9, 0.01, 0.03, 1]);
+    expect(render(ruby).surfaces[0]!.material.baseColor).toEqual([0.45, 0.01, 0.03, 1]);
     expect(render(ruby).environment).toBeUndefined();
     expect(render(unknown).surfaces[0]!.material.baseColor).toEqual([0.2, 0.4, 0.8, 1]);
     expect(render(unknown).environment).toBeDefined();
+  });
+
+  it("applies equal glTF presentation tints through one shared material path", () => {
+    const asset = prepareStaticGlb(staticTriangleGlb(), "tinted-asset");
+    const first = gltf({ src: "/tinted.glb", tint: [0.5, 0.25, 2, 0.5] });
+    const second = gltf({ src: "/tinted.glb", tint: [0.5, 0.25, 2, 0.5] });
+    const prepared = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: [first, second] }),
+      () => asset,
+    );
+
+    expect(first.asset).toEqual(second.asset);
+    expect(prepared.surfaces).toHaveLength(2);
+    expect(prepared.surfaces[0]!.material).toMatchObject({
+      alphaBlend: true,
+      baseColor: [0.1, 0.1, 1.6, 0.5],
+    });
+    expect(prepared.surfaces[0]!.materialSource)
+      .toBe(prepared.surfaces[1]!.materialSource);
   });
 
   it("shares one world-space LOD selection bound across authored levels", () => {

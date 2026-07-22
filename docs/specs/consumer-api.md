@@ -130,7 +130,8 @@ self-documenting field names:
 - `version` when bytes behind one source identity change;
 - `contentKey` only when the caller asserts decoded-content equivalence.
 - `tint` for an optional scene-linear RGBA multiplier on a textured direct
-  material; `color` remains the unambiguous solid-material form.
+  material or every selected glTF base color; `color` remains the unambiguous
+  solid-material form.
 
 Unknown fields, invalid unions, non-finite values, invalid ranges, contradictory
 options, and empty identity/source strings fail synchronously with the operation
@@ -316,6 +317,12 @@ zero-based document scene before mesh/Draco inventory and canonical lowering;
 omission uses the document's declared default, or index zero when absent. A
 normalized node exposes its exact asset reference so status observation does
 not reconstruct version or scene identity from strings.
+
+`materialVariant` selects one authored `KHR_materials_variants` name. `tint`
+is a presentation multiplier applied after base/variant/LOD selection; it does
+not rewrite the glTF, change asset identity, duplicate prepared geometry or
+textures, or create an application-owned material cache. Equal tint values over
+one prepared material share Royal's canonical material identity.
 
 `imageTexture(src)` defaults to sRGB color interpretation and the ordinary image
 sampler. `textureAsset` is the explicit form when `contentKey` is needed.
