@@ -36,6 +36,7 @@ oracle.
 | Required extension | Accepted placements | Canonical result |
 | --- | --- | --- |
 | `EXT_mesh_gpu_instancing` | node | validated instance transform batches sharing ordinary geometry/materials |
+| `EXT_meshopt_compression` | buffer view and optional fallback-buffer marker; async preparation with available decoder | demanded decoded buffer-view bytes enter the ordinary canonical accessor path |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
 | `GS_texture_etc2` | texture | explicitly marked offline ETC2 KTX2 recipe using the ordinary texture lifecycle |
 | `GS_texture_svg` | texture | experimental preferred SVG recipe with required failure or one deferred ordinary fallback |
@@ -48,7 +49,7 @@ oracle.
 | `KHR_materials_unlit` | material | canonical unlit material |
 | `KHR_materials_variants` | document and mesh primitive | named canonical material choices preserving node/pick identity |
 | `KHR_materials_volume` | material, with active transmission | thickness/attenuation inputs on the transmission composite path |
-| `KHR_mesh_quantization` | document declaration; current profile is Draco-decoded canonical attributes | normalized integer attributes lower to canonical float streams |
+| `KHR_mesh_quantization` | required document declaration; no payload object | legal integer mesh attributes lower once to canonical float streams |
 | `KHR_texture_transform` | texture-info fields consumed by the supported material slots | selected UV set and two canonical affine rows |
 | `MSFT_lod` | node and material | ordered geometry/material memberships and normalized coverage thresholds |
 
@@ -84,9 +85,18 @@ transform math is generic.
   then WebP, then core, and fetches only that fallback. Required use may omit the
   core source and fails rather than silently changing representations. The
   chosen representation lowers through one texture identity and lifecycle.
-- Mesh quantization currently accepts the normalized integer attribute forms
-  decoded by the Draco adapter. Uncompressed quantized attributes still fail
-  at their semantic reader instead of being interpreted as floats.
+- Meshopt validates the ratified buffer-view schema, lazily loads its decoder,
+  requests only compressed ranges reachable from the selected scene, skips
+  marked or implicit URI-less fallback buffers, and decodes into the ordinary
+  buffer-view storage before one-buffer canonicalization. ATTRIBUTES,
+  TRIANGLES, INDICES, and the standard NONE/OCTAHEDRAL/QUATERNION/EXPONENTIAL
+  filters are accepted. The synchronous `prepareStaticGlb` test/helper boundary
+  rejects required meshopt; normal root and React ingestion use async local or
+  preparation-worker execution.
+- Mesh quantization accepts BYTE/UNSIGNED_BYTE/SHORT/UNSIGNED_SHORT positions,
+  normalized signed normals and tangents, and signed or unsigned integer UVs
+  with their authored normalized flag. Values become canonical float streams;
+  node and texture transforms remain the standard dequantization mechanism.
 - Variants accept named root definitions and primitive mappings.
 - `MSFT_lod` accepts node/material ID chains and the
   `MSFT_screencoverage` extras convention. It does not claim progressive
@@ -99,8 +109,7 @@ device proof.
 
 ## Explicit non-claims
 
-Royal currently rejects required `KHR_texture_basisu`,
-`EXT_meshopt_compression`, image-based-light
+Royal currently rejects required `KHR_texture_basisu`, image-based-light
 extensions, the remaining PBR extension family, and all draft or imaginary
 texture extensions. Browser AVIF remains valid as a direct ordinary Royal
 texture source; `EXT_texture_avif` is not a registered glTF extension and is

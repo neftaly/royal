@@ -9,6 +9,7 @@ import {
 } from "./gltf-values";
 import { selectedStaticNodeIndices } from "./static-node-selection";
 import { createStaticPrimitiveImageDemand } from "./static-image-demand";
+import { planMeshoptBufferViews } from "./meshopt";
 
 export type StaticGltfByteRange = Readonly<{
   byteLength: number;
@@ -100,19 +101,14 @@ const mergeRanges = (
   return merged;
 };
 
-/**
- * Pure selected-scene byte demand. Sparse full-sized buffers preserve the
- * canonical downstream ABI; the browser shell decides whether HTTP ranges are
- * available and falls back to a complete response when they are not.
- */
-export const planStaticGltfBufferRequests = (
+/** Selected downstream bufferViews, shared by range planning and demanded codecs. */
+export const selectedStaticGltfBufferViewIndices = (
   document: JsonObject,
   label: string,
   sceneIndex?: number,
   etc2Available = true,
-): readonly (StaticGltfResourceRequest | undefined)[] => {
+): ReadonlySet<number> => {
   const accessors = array(document.accessors, label, "accessors");
-  const buffers = array(document.buffers, label, "buffers");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
   const meshes = array(document.meshes, label, "meshes");
   const nodes = array(document.nodes, label, "nodes");
@@ -178,12 +174,36 @@ export const planStaticGltfBufferRequests = (
       );
     }
   }
+  return claimedViews;
+};
+
+/** Builds byte ranges from one already-computed selected-view set. */
+export const planStaticGltfBufferRequestsForViews = (
+  document: JsonObject,
+  label: string,
+  claimedViews: ReadonlySet<number>,
+): readonly (StaticGltfResourceRequest | undefined)[] => {
+  const buffers = array(document.buffers, label, "buffers");
+  const bufferViews = array(document.bufferViews, label, "bufferViews");
+  const meshoptByView = new Map(
+    planMeshoptBufferViews(document, label).map((plan) => [plan.viewIndex, plan]),
+  );
 
   const rangesByBuffer = Array.from(
     { length: buffers.length },
     () => [] as StaticGltfByteRange[],
   );
   for (const viewIndex of claimedViews) {
+    const meshopt = meshoptByView.get(viewIndex);
+    if (meshopt !== undefined) {
+      if (meshopt.sourceLength !== 0) {
+        rangesByBuffer[meshopt.sourceBuffer]!.push({
+          byteLength: meshopt.sourceLength,
+          byteOffset: meshopt.sourceOffset,
+        });
+      }
+      continue;
+    }
     const path = `bufferViews[${viewIndex}]`;
     const view = object(bufferViews[viewIndex], label, path);
     const bufferIndex = index(view.buffer, buffers, label, `${path}.buffer`);
@@ -216,3 +236,20 @@ export const planStaticGltfBufferRequests = (
       : { byteLength, ranges };
   });
 };
+
+/**
+ * Pure selected-scene byte demand. Sparse full-sized buffers preserve the
+ * canonical downstream ABI; the browser shell decides whether HTTP ranges are
+ * available and falls back to a complete response when they are not.
+ */
+export const planStaticGltfBufferRequests = (
+  document: JsonObject,
+  label: string,
+  sceneIndex?: number,
+  etc2Available = true,
+): readonly (StaticGltfResourceRequest | undefined)[] =>
+  planStaticGltfBufferRequestsForViews(
+    document,
+    label,
+    selectedStaticGltfBufferViewIndices(document, label, sceneIndex, etc2Available),
+  );

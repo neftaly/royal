@@ -262,7 +262,7 @@ describe("static glTF preparation core", () => {
     expect(() => prepareStaticGlb(
       staticTriangleGlb(uncompressedQuantized),
       "uncompressed-quantized",
-    )).toThrow("accessors[2].normalized: is invalid for this accessor");
+    )).toThrow("accessors[2]: vertex attribute elements must be 4-byte aligned");
     const misplaced = staticTriangleDocument();
     requireExtensions(misplaced, "KHR_materials_ior");
     const misplacedNodes = misplaced.nodes as Array<Record<string, unknown>>;

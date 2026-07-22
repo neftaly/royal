@@ -7,6 +7,7 @@ const material = new RegExp(`^${item("materials")}$`);
 const node = new RegExp(`^${item("nodes")}$`);
 const primitive = new RegExp(`^${item("meshes")}\\.primitives\\[\\d+\\]$`);
 const texture = new RegExp(`^${item("textures")}$`);
+const meshoptStorage = new RegExp(`^(?:${item("buffers")}|${item("bufferViews")})$`);
 const textureInfo = new RegExp(
   `^${item("materials")}\\.(?:`
   + "pbrMetallicRoughness\\.(?:baseColorTexture|metallicRoughnessTexture)"
@@ -22,6 +23,7 @@ const materialOnly: PlacementProfile = (path) => material.test(path);
 /** Required names and every object placement implemented by the replacement profile. */
 const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> = {
   EXT_mesh_gpu_instancing: (path) => node.test(path),
+  EXT_meshopt_compression: (path) => meshoptStorage.test(path),
   EXT_texture_webp: (path) => texture.test(path),
   GS_texture_etc2: (path) => texture.test(path),
   GS_texture_svg: (path) => texture.test(path),
@@ -34,6 +36,8 @@ const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> 
   KHR_materials_unlit: materialOnly,
   KHR_materials_variants: (path) => path === "" || primitive.test(path),
   KHR_materials_volume: materialOnly,
+  // Declaration-only extension: it expands accessor component types but has
+  // no JSON payload placement of its own.
   KHR_mesh_quantization: () => false,
   KHR_texture_transform: (path) => textureInfo.test(path),
   MSFT_lod: (path) => material.test(path) || node.test(path),
@@ -52,6 +56,7 @@ export const validateRequiredExtensionProfile = (
   usedExtensions: readonly unknown[],
   label: string,
   dracoAvailable: boolean,
+  meshoptAvailable: boolean,
   etc2Available = true,
 ): void => {
   const used = new Set<string>();
@@ -75,6 +80,7 @@ export const validateRequiredExtensionProfile = (
     if (
       profile === undefined
       || (extensionName === "KHR_draco_mesh_compression" && !dracoAvailable)
+      || (extensionName === "EXT_meshopt_compression" && !meshoptAvailable)
       || (extensionName === "GS_texture_etc2" && !etc2Available)
     ) {
       fail(

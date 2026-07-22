@@ -5,17 +5,28 @@ import {
   fail,
   nonNegativeInteger,
   object,
+  optionalArray,
   type JsonObject,
 } from "./gltf-values";
 import { resolveAssetUri } from "./static-material";
 import {
-  planStaticGltfBufferRequests,
+  planStaticGltfBufferRequestsForViews,
+  selectedStaticGltfBufferViewIndices,
   type StaticGltfResourceRequest,
 } from "./static-buffer-demand";
+import {
+  decodeSelectedMeshoptBufferViews,
+  meshoptFallbackBufferIndices,
+} from "./meshopt";
+import {
+  validateStaticGltfDeclarations,
+  type StaticGltfDeclarations,
+} from "./static-declarations";
 
 export type CanonicalStaticGltfSource = Readonly<{
   binary: Uint8Array;
   container: "glb" | "gltf";
+  declarations: StaticGltfDeclarations;
   document: JsonObject;
 }>;
 
@@ -45,10 +56,30 @@ const readExternalBuffer = async (
   label: string,
   sourceUri: string,
   read: StaticGltfResourceReader,
+  fallbackBuffers: ReadonlySet<number>,
+  meshoptRequired: boolean,
   request?: StaticGltfResourceRequest,
 ): Promise<Uint8Array> => {
   const path = `buffers[${bufferIndex}]`;
   const buffer = object(value, label, path);
+  if (fallbackBuffers.has(bufferIndex)) {
+    if (
+      (typeof buffer.uri !== "string" || buffer.uri.length === 0)
+      && !meshoptRequired
+    ) {
+      return fail(
+        label,
+        `${path}.uri`,
+        "may be omitted for a meshopt fallback only when the extension is required",
+      );
+    }
+    const byteLength = nonNegativeInteger(buffer.byteLength, label, `${path}.byteLength`);
+    try {
+      return new Uint8Array(byteLength);
+    } catch {
+      return fail(label, `${path}.byteLength`, "cannot allocate meshopt output buffer");
+    }
+  }
   if (typeof buffer.uri !== "string" || buffer.uri.length === 0) {
     return fail(label, `${path}.uri`, "must be a non-empty external or data URI");
   }
@@ -70,6 +101,13 @@ export const readCanonicalStaticGltfSource = async (
   if (isGlb(bytes)) {
     const parsed = parseGlb(bytes, label);
     const document = object(parsed.document, label, "document");
+    const declarations = validateStaticGltfDeclarations(
+      document,
+      label,
+      true,
+      true,
+      etc2Available,
+    );
     const binaryChunk = parsed.binaryChunk
       ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
     const buffers = array(document.buffers, label, "buffers");
@@ -87,7 +125,19 @@ export const readCanonicalStaticGltfSource = async (
     if (padding < 0 || padding > 3) {
       fail(label, "buffers[0].byteLength", "does not match the padded GLB BIN chunk");
     }
-    const requests = planStaticGltfBufferRequests(document, label, sceneIndex, etc2Available);
+    const selectedViews = selectedStaticGltfBufferViewIndices(
+      document,
+      label,
+      sceneIndex,
+      etc2Available,
+    );
+    const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
+    const meshoptRequired = optionalArray(
+      document.extensionsRequired,
+      label,
+      "extensionsRequired",
+    ).includes("EXT_meshopt_compression");
+    const fallbackBuffers = meshoptFallbackBufferIndices(document, label, 0);
     const external = await Promise.all(buffers.slice(1).map((value, offset) =>
       readExternalBuffer(
         value,
@@ -95,20 +145,44 @@ export const readCanonicalStaticGltfSource = async (
         label,
         sourceUri,
         read,
+        fallbackBuffers,
+        meshoptRequired,
         requests[offset + 1],
       )));
+    const sources = [binaryChunk.subarray(0, firstLength), ...external];
+    await decodeSelectedMeshoptBufferViews(document, sources, selectedViews, label);
     const canonical = canonicalizeGltfBuffers(
       document,
-      [binaryChunk.subarray(0, firstLength), ...external],
+      sources,
       label,
+      selectedViews,
     );
-    return { ...canonical, container: "glb" };
+    return { ...canonical, container: "glb", declarations };
   }
 
   const document = parseJsonDocument(bytes, label);
+  const declarations = validateStaticGltfDeclarations(
+    document,
+    label,
+    true,
+    true,
+    etc2Available,
+  );
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length === 0) fail(label, "buffers", "must not be empty");
-  const requests = planStaticGltfBufferRequests(document, label, sceneIndex, etc2Available);
+  const selectedViews = selectedStaticGltfBufferViewIndices(
+    document,
+    label,
+    sceneIndex,
+    etc2Available,
+  );
+  const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
+  const meshoptRequired = optionalArray(
+    document.extensionsRequired,
+    label,
+    "extensionsRequired",
+  ).includes("EXT_meshopt_compression");
+  const fallbackBuffers = meshoptFallbackBufferIndices(document, label);
   const sources = await Promise.all(buffers.map((value, bufferIndex) =>
     readExternalBuffer(
       value,
@@ -116,10 +190,14 @@ export const readCanonicalStaticGltfSource = async (
       label,
       sourceUri,
       read,
+      fallbackBuffers,
+      meshoptRequired,
       requests[bufferIndex],
     )));
+  await decodeSelectedMeshoptBufferViews(document, sources, selectedViews, label);
   return {
-    ...canonicalizeGltfBuffers(document, sources, label),
+    ...canonicalizeGltfBuffers(document, sources, label, selectedViews),
     container: "gltf",
+    declarations,
   };
 };

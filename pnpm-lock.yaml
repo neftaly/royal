@@ -175,6 +175,9 @@ importers:
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
+      meshoptimizer:
+        specifier: 1.2.0
+        version: 1.2.0
       minidraco:
         specifier: 'catalog:'
         version: 0.3.0
@@ -693,6 +696,9 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  meshoptimizer@1.2.0:
+    resolution: {integrity: sha512-davRZeIJbxJrE24cwQle7ZDsxjdk/OphNOV83oX+efQinyoHY9Jcyz3MHbaoG0qySZajldGztNZ1RN/T19PZsg==}
 
   minidraco@0.3.0:
     resolution: {integrity: sha512-Xq2jRdht22I4RCAagtE835ogtsNks7GIFHgVPg1SXLbS0u7k9shVxYNtl4QsfaZOcvG22W7RbsGX2lckf6waJg==}
@@ -1272,6 +1278,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  meshoptimizer@1.2.0: {}
 
   minidraco@0.3.0: {}
 

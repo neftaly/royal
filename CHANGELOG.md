@@ -53,6 +53,12 @@ versions identify source-level prerelease checkpoints in this repository.
 - Standardized authoring failures on `TypeError` for malformed values and
   `RangeError` for invalid finite ranges, and stopped silently clamping invalid
   normalized sRGB input.
+- Exposed one root-scoped `gltfResourceReader` dependency on imperative and
+  React canvases, with source kind, URI/version identity, abort propagation,
+  and Royal-owned shared-read claims instead of per-node loader callbacks.
+- Added a cold borrowed prepared-glTF geometry visitor so spatial tools can
+  reuse selected canonical triangles and transforms without another read,
+  decode, or renderer-owned physics policy.
 
 ### Examples
 
@@ -116,6 +122,13 @@ versions identify source-level prerelease checkpoints in this repository.
 - Made incremental texture publication compare retained GPU bindings as well as
   shader features, so replacing a resident image cannot leave an old texture
   handle in an otherwise compatible draw packet.
+- Added required `EXT_meshopt_compression` and ordinary
+  `KHR_mesh_quantization` ingestion through demanded async preparation. Meshopt
+  source ranges decode before the existing canonical accessor path and the
+  decoder remains outside the initial bundle.
+- Compacted prepared glTF binary storage to selected final buffer views after
+  codec work, dropping compressed source ranges, fallback holes, and
+  unselected-scene bytes before semantic lowering.
 
 ## 0.0.1 - 2026-07-14
 

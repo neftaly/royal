@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@royal/renderer-core": "workspace:*",
+    "meshoptimizer": "1.2.0",
     "minidraco": "catalog:"
   },
   "devDependencies": {

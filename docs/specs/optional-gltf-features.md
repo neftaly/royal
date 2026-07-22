@@ -221,8 +221,8 @@ support. Vendor registry presence alone is insufficient.
 
 Royal's replacement currently has a useful but deliberately narrower static
 profile: baseline metallic-roughness/unlit, emissive strength, IOR, specular,
-transmission/volume, Draco, WebP, texture transforms, GPU instancing, variants,
-punctual lights, and vendor LOD. Basis-in-glTF, Meshopt, mesh quantization,
+transmission/volume, Draco, Meshopt, mesh quantization, WebP, texture transforms,
+GPU instancing, variants, punctual lights, and vendor LOD. Basis-in-glTF,
 image-based-light extensions, and the rest of the ratified static PBR family
 remain candidates rather than claims. The highest-value work is still
 correctness, visual oracles, preparation/resource efficiency, and canonical hot

@@ -46,7 +46,10 @@ import {
 } from "./static-material";
 import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
 import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selection";
-import { validateRequiredExtensionProfile } from "./required-extension-profile";
+import {
+  validateStaticGltfDeclarations,
+  type StaticGltfDeclarations,
+} from "./static-declarations";
 import { collectStaticTextureAssets } from "./static-texture-assets";
 import {
   readCanonicalStaticGltfSource,
@@ -113,6 +116,7 @@ type StaticDracoDecoder = (
 
 type StaticDocumentPreflight = Readonly<{
   bufferByteLength: number;
+  usesMeshQuantization: boolean;
   usesDraco: boolean;
 }>;
 
@@ -209,53 +213,53 @@ const preflightStaticDocument = (
   contentKey: string,
   label: string,
   dracoAvailable: boolean,
+  meshoptAvailable: boolean,
   etc2Available: boolean,
+  validatedDeclarations?: StaticGltfDeclarations,
 ): StaticDocumentPreflight => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
-  const asset = object(document.asset, label, "asset");
-  if (asset.version !== "2.0") fail(label, "asset.version", "must be 2.0");
-  // Static ingestion intentionally ignores animation declarations. The current
-  // node transforms are the bind/default pose; animation support can layer over
-  // this canonical result without making otherwise renderable assets fail.
-  optionalArray(document.animations, label, "animations");
-  if (optionalArray(document.skins, label, "skins").length > 0) {
-    fail(label, "skins", "are not supported yet");
-  }
-  const requiredExtensions = optionalArray(
-    document.extensionsRequired, label, "extensionsRequired",
-  );
-  const usedExtensions = optionalArray(document.extensionsUsed, label, "extensionsUsed");
-  validateRequiredExtensionProfile(
+  const declarations = validatedDeclarations ?? validateStaticGltfDeclarations(
     document,
-    requiredExtensions,
-    usedExtensions,
     label,
     dracoAvailable,
+    meshoptAvailable,
     etc2Available,
   );
 
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length !== 1) fail(label, "buffers", "must contain exactly one buffer");
   const buffer = object(buffers[0], label, "buffers[0]");
-  if (container === "glb" && buffer.uri !== undefined) {
+  if (validatedDeclarations === undefined && container === "glb" && buffer.uri !== undefined) {
     fail(label, "buffers[0].uri", "must be omitted for a GLB BIN chunk");
   }
-  if (container === "gltf" && (typeof buffer.uri !== "string" || buffer.uri.length === 0)) {
+  if (
+    validatedDeclarations === undefined
+    && container === "gltf"
+    && (typeof buffer.uri !== "string" || buffer.uri.length === 0)
+  ) {
     fail(label, "buffers[0].uri", "must be a non-empty external or data URI");
   }
   const bufferByteLength = nonNegativeInteger(buffer.byteLength, label, "buffers[0].byteLength");
   const padding = binary.byteLength - bufferByteLength;
-  if (padding < 0 || (container === "glb" ? padding > 3 : padding !== 0)) {
+  if (
+    padding < 0
+    || (validatedDeclarations === undefined
+      ? container === "glb" ? padding > 3 : padding !== 0
+      : padding !== 0)
+  ) {
     fail(
       label,
       "buffers[0].byteLength",
-      container === "glb" ? "does not match the padded GLB BIN chunk" : "does not match the external buffer",
+      validatedDeclarations !== undefined
+        ? "does not match the canonical buffer"
+        : container === "glb"
+          ? "does not match the padded GLB BIN chunk"
+          : "does not match the external buffer",
     );
   }
   return {
     bufferByteLength,
-    usesDraco: usedExtensions.includes("KHR_draco_mesh_compression")
-      || requiredExtensions.includes("KHR_draco_mesh_compression"),
+    ...declarations,
   };
 };
 
@@ -333,6 +337,7 @@ const prepareStaticDocument = (
     bufferByteLength,
     bufferViews,
     label,
+    meshQuantization: preflight.usesMeshQuantization,
   };
   let defaultMaterial: CanonicalSurfaceMaterial | undefined;
   const preparedMaterials = new Map<number, CanonicalSurfaceMaterial>();
@@ -949,6 +954,7 @@ export const prepareStaticGlb = (
     contentKey,
     label,
     false,
+    false,
     etc2Available,
   );
   return prepareStaticDocument(
@@ -976,6 +982,7 @@ const prepareDocumentWithCodecs = async (
   etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
+  validatedDeclarations?: StaticGltfDeclarations,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -984,7 +991,9 @@ const prepareDocumentWithCodecs = async (
     contentKey,
     label,
     true,
+    true,
     etc2Available,
+    validatedDeclarations,
   );
   const decodeDraco = preflight.usesDraco
     ? await import("./draco").then((module) =>
@@ -1041,5 +1050,6 @@ export const prepareStaticGltfSource = async (
     etc2Available,
     sceneIndex,
     resourceVersion,
+    canonical.declarations,
   );
 };

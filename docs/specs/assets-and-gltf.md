@@ -89,7 +89,10 @@ validate each returned interval, and fall back once to a complete response when
 the origin ignores or rejects range transport. The reader returns the existing
 full-offset canonical buffer shape, so transport selection cannot leak into
 accessor, codec, material, or rendering paths. Unselected scenes MUST NOT force
-their geometry or embedded-image bytes over the network.
+their geometry or embedded-image bytes over the network. After demanded codecs
+finish, one canonicalization pass packs only selected final buffer views;
+compressed source ranges, fallback-buffer holes, and unselected-scene storage
+do not survive into the retained preparation binary.
 
 A prepared scene publishes atomically: traversable nodes, primitive records,
 bounds, lights, selected index, lightweight scene inventory, variant names, and
@@ -149,20 +152,20 @@ The current replacement implementation accepts these required declarations:
 
 - `EXT_mesh_gpu_instancing`, `EXT_texture_webp`, and experimental
   `GS_texture_etc2`;
+- `EXT_meshopt_compression` through selected-view async codec preparation;
 - `KHR_draco_mesh_compression` through demanded async codec preparation;
 - `KHR_lights_punctual`;
 - `KHR_materials_emissive_strength`, `KHR_materials_ior`,
   `KHR_materials_specular`, `KHR_materials_transmission`,
   `KHR_materials_unlit`, `KHR_materials_variants`, and
   `KHR_materials_volume`;
-- `KHR_mesh_quantization` for normalized integer attributes decoded through
-  the Draco adapter;
+- `KHR_mesh_quantization` for its ordinary legal integer position, normal,
+  tangent, and texture-coordinate representations;
 - `KHR_texture_transform`;
 - `MSFT_lod` plus its `MSFT_screencoverage` convention.
 
 This is an implementation ledger, not the desired eventual static profile.
-Notably, glTF `KHR_texture_basisu`, `EXT_meshopt_compression`,
-image-based-light extensions, and the remaining PBR
+Notably, glTF `KHR_texture_basisu`, image-based-light extensions, and the remaining PBR
 family are not yet accepted as required. Direct Royal offline ETC2 KTX2
 ingestion is not Basis ingestion. Only the explicitly unregistered
 `GS_texture_etc2` vendor extension selects that storage from glTF; it does not

@@ -16,6 +16,7 @@ export type AccessorContext = Readonly<{
   bufferByteLength: number;
   bufferViews: unknown[];
   label: string;
+  meshQuantization?: boolean;
 }>;
 
 type AccessorLayout = Readonly<{
@@ -116,6 +117,31 @@ const validateVertexAlignment = (
   if (layout.hasBase && (layout.absoluteOffset % 4 !== 0 || layout.stride % 4 !== 0)) {
     fail(label, path, "vertex attribute elements must be 4-byte aligned");
   }
+};
+
+type QuantizedComponentType = 5120 | 5121 | 5122 | 5123;
+
+const quantizedComponentBytes = (componentType: QuantizedComponentType): 1 | 2 =>
+  componentType === 5120 || componentType === 5121 ? 1 : 2;
+
+const readQuantizedComponent = (
+  dataView: DataView,
+  offset: number,
+  componentType: QuantizedComponentType,
+  normalized: boolean,
+): number => {
+  const raw = componentType === 5120
+    ? dataView.getInt8(offset)
+    : componentType === 5121
+      ? dataView.getUint8(offset)
+      : componentType === 5122
+        ? dataView.getInt16(offset, true)
+        : dataView.getUint16(offset, true);
+  if (!normalized) return raw;
+  if (componentType === 5120) return Math.max(raw / 127, -1);
+  if (componentType === 5121) return raw / 255;
+  if (componentType === 5122) return Math.max(raw / 32_767, -1);
+  return raw / 65_535;
 };
 
 const sparseRange = (
@@ -302,29 +328,54 @@ export const readPositions = (
   context: AccessorContext,
   accessorIndex: number,
 ): Pick<CanonicalTriangleGeometry, "bounds" | "positions"> => {
-  const layout = accessorLayout(context, accessorIndex, "VEC3", 4, 3);
-  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
-  if (layout.componentType !== 5126) {
-    fail(context.label, `accessors[${accessorIndex}].componentType`, "must be FLOAT");
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  const componentType = integer(accessor.componentType, context.label, `${path}.componentType`);
+  const quantized = context.meshQuantization === true
+    && (componentType === 5120
+      || componentType === 5121
+      || componentType === 5122
+      || componentType === 5123);
+  if (componentType !== 5126 && !quantized) {
+    fail(
+      context.label,
+      `${path}.componentType`,
+      context.meshQuantization === true
+        ? "must be FLOAT, BYTE, UNSIGNED_BYTE, SHORT, or UNSIGNED_SHORT"
+        : "must be FLOAT",
+    );
   }
-  const positions = layout.hasBase && !layout.hasSparse && layout.stride === 12
+  const componentBytes = quantized
+    ? quantizedComponentBytes(componentType as QuantizedComponentType)
+    : 4;
+  const layout = accessorLayout(context, accessorIndex, "VEC3", componentBytes, 3, quantized);
+  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
+  const positions = !quantized && layout.hasBase && !layout.hasSparse && layout.stride === 12
     ? new Float32Array(
       context.binary.buffer,
       context.binary.byteOffset + layout.absoluteOffset,
       layout.count * 3,
     )
     : new Float32Array(layout.count * 3);
-  if (layout.hasBase && (layout.hasSparse || layout.stride !== 12)) {
+  const readComponent = (dataView: DataView, offset: number): number => quantized
+    ? readQuantizedComponent(
+      dataView,
+      offset,
+      componentType as QuantizedComponentType,
+      accessor.normalized === true,
+    )
+    : dataView.getFloat32(offset, true);
+  if (layout.hasBase && (quantized || layout.hasSparse || layout.stride !== 12)) {
     for (let vertex = 0; vertex < layout.count; vertex += 1) {
       const source = layout.absoluteOffset + vertex * layout.stride;
       const target = vertex * 3;
-      positions[target] = layout.dataView.getFloat32(source, true);
-      positions[target + 1] = layout.dataView.getFloat32(source + 4, true);
-      positions[target + 2] = layout.dataView.getFloat32(source + 8, true);
+      positions[target] = readComponent(layout.dataView, source);
+      positions[target + 1] = readComponent(layout.dataView, source + componentBytes);
+      positions[target + 2] = readComponent(layout.dataView, source + componentBytes * 2);
     }
   }
-  visitSparseComponents(context, accessorIndex, 4, 3, (item, component, source, dataView) => {
-    positions[item * 3 + component] = dataView.getFloat32(source, true);
+  visitSparseComponents(context, accessorIndex, componentBytes, 3, (item, component, source, dataView) => {
+    positions[item * 3 + component] = readComponent(dataView, source);
   });
   let minX = Infinity; let minY = Infinity; let minZ = Infinity;
   let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
@@ -394,38 +445,71 @@ export const readFloatVectors = (
   componentCount: 2 | 3 | 4,
   semantic: string,
 ): Float32Array => {
-  const layout = accessorLayout(context, accessorIndex, expectedType, 4, componentCount);
-  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
-  if (layout.componentType !== 5126) {
-    fail(context.label, `accessors[${accessorIndex}].componentType`, `${semantic} must use FLOAT`);
+  const path = `accessors[${accessorIndex}]`;
+  const accessor = object(context.accessors[accessorIndex], context.label, path);
+  const componentType = integer(accessor.componentType, context.label, `${path}.componentType`);
+  const quantized = context.meshQuantization === true
+    && accessor.normalized === true
+    && (componentType === 5120 || componentType === 5122);
+  if (componentType !== 5126 && !quantized) {
+    fail(
+      context.label,
+      `${path}.componentType`,
+      context.meshQuantization === true
+        ? `${semantic} must use FLOAT or normalized BYTE/SHORT`
+        : `${semantic} must use FLOAT`,
+    );
   }
+  const componentBytes = quantized
+    ? quantizedComponentBytes(componentType as QuantizedComponentType)
+    : 4;
+  const layout = accessorLayout(
+    context,
+    accessorIndex,
+    expectedType,
+    componentBytes,
+    componentCount,
+    quantized,
+  );
+  validateVertexAlignment(layout, context.label, `accessors[${accessorIndex}]`);
   if (layout.count === 0) {
     fail(context.label, `accessors[${accessorIndex}].count`, "must be positive");
   }
-  const elementBytes = componentCount * 4;
-  const values = layout.hasBase && !layout.hasSparse && layout.stride === elementBytes
+  const elementBytes = componentCount * componentBytes;
+  const values = !quantized && layout.hasBase && !layout.hasSparse && layout.stride === elementBytes
     ? new Float32Array(
       context.binary.buffer,
       context.binary.byteOffset + layout.absoluteOffset,
       layout.count * componentCount,
     )
     : new Float32Array(layout.count * componentCount);
-  if (layout.hasBase && (layout.hasSparse || layout.stride !== elementBytes)) {
+  const readComponent = (dataView: DataView, offset: number): number => quantized
+    ? readQuantizedComponent(
+      dataView,
+      offset,
+      componentType as QuantizedComponentType,
+      true,
+    )
+    : dataView.getFloat32(offset, true);
+  if (layout.hasBase && (quantized || layout.hasSparse || layout.stride !== elementBytes)) {
     for (let item = 0; item < layout.count; item += 1) {
       const source = layout.absoluteOffset + item * layout.stride;
       const target = item * componentCount;
       for (let component = 0; component < componentCount; component += 1) {
-        values[target + component] = layout.dataView.getFloat32(source + component * 4, true);
+        values[target + component] = readComponent(
+          layout.dataView,
+          source + component * componentBytes,
+        );
       }
     }
   }
-  visitSparseComponents(context, accessorIndex, 4, componentCount, (
+  visitSparseComponents(context, accessorIndex, componentBytes, componentCount, (
     item,
     component,
     source,
     dataView,
   ) => {
-    values[item * componentCount + component] = dataView.getFloat32(source, true);
+    values[item * componentCount + component] = readComponent(dataView, source);
   });
   for (let item = 0; item < layout.count; item += 1) {
     for (let component = 0; component < componentCount; component += 1) {
@@ -437,7 +521,7 @@ export const readFloatVectors = (
   return values;
 };
 
-/** Normalizes the three legal core TEXCOORD_n representations to float UVs. */
+/** Normalizes legal core and KHR_mesh_quantization TEXCOORD_n values to float UVs. */
 export const readTextureCoordinates = (
   context: AccessorContext,
   accessorIndex: number,
@@ -452,24 +536,34 @@ export const readTextureCoordinates = (
     }
     return readFloatVectors(context, accessorIndex, "VEC2", 2, semantic);
   }
-  if ((componentType !== 5121 && componentType !== 5123) || accessor.normalized !== true) {
+  const coreInteger = (componentType === 5121 || componentType === 5123)
+    && accessor.normalized === true;
+  const quantizedInteger = context.meshQuantization === true
+    && (componentType === 5120
+      || componentType === 5121
+      || componentType === 5122
+      || componentType === 5123);
+  if (!coreInteger && !quantizedInteger) {
     fail(
       context.label,
       path,
-      `${semantic} must use FLOAT or normalized UNSIGNED_BYTE/UNSIGNED_SHORT`,
+      context.meshQuantization === true
+        ? `${semantic} must use FLOAT, BYTE, UNSIGNED_BYTE, SHORT, or UNSIGNED_SHORT`
+        : `${semantic} must use FLOAT or normalized UNSIGNED_BYTE/UNSIGNED_SHORT`,
     );
   }
-  const componentBytes = componentType === 5121 ? 1 : 2;
+  const componentBytes = quantizedComponentBytes(componentType as QuantizedComponentType);
   const layout = accessorLayout(context, accessorIndex, "VEC2", componentBytes, 2, true);
   validateVertexAlignment(layout, context.label, path);
   if (layout.count === 0) fail(context.label, `${path}.count`, "must be positive");
   const values = new Float32Array(layout.count * 2);
-  const divisor = componentType === 5121 ? 255 : 65_535;
-  const readComponent = (dataView: DataView, source: number): number => (
-    componentType === 5121
-      ? dataView.getUint8(source) / divisor
-      : dataView.getUint16(source, true) / divisor
-  );
+  const readComponent = (dataView: DataView, source: number): number =>
+    readQuantizedComponent(
+      dataView,
+      source,
+      componentType as QuantizedComponentType,
+      accessor.normalized === true,
+    );
   if (layout.hasBase) {
     for (let item = 0; item < layout.count; item += 1) {
       const source = layout.absoluteOffset + item * layout.stride;

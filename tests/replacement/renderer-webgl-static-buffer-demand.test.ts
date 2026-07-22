@@ -214,6 +214,60 @@ describe("static glTF selected-buffer demand", () => {
     expect(planStaticGltfBufferRequests(document, "dense scene", 0)).toEqual([undefined]);
   });
 
+  it("requests compressed meshopt bytes instead of uncompressed fallback ranges", () => {
+    const document = twoSceneDocument() as {
+      buffers: unknown[];
+      bufferViews: Array<Record<string, unknown>>;
+    };
+    document.buffers = [
+      { byteLength: 1_000, uri: "compressed.bin" },
+      {
+        byteLength: 1_000,
+        extensions: { EXT_meshopt_compression: { fallback: true } },
+      },
+    ];
+    document.bufferViews[0] = {
+      buffer: 1,
+      byteLength: 100,
+      byteStride: 4,
+      extensions: {
+        EXT_meshopt_compression: {
+          buffer: 0,
+          byteLength: 40,
+          byteOffset: 700,
+          byteStride: 4,
+          count: 25,
+          mode: "ATTRIBUTES",
+        },
+      },
+    };
+    document.bufferViews[1] = {
+      buffer: 1,
+      byteLength: 50,
+      extensions: {
+        EXT_meshopt_compression: {
+          buffer: 0,
+          byteLength: 20,
+          byteOffset: 800,
+          byteStride: 2,
+          count: 25,
+          mode: "INDICES",
+        },
+      },
+    };
+
+    expect(planStaticGltfBufferRequests(document, "meshopt demand", 0)).toEqual([
+      {
+        byteLength: 1_000,
+        ranges: [
+          { byteLength: 40, byteOffset: 700 },
+          { byteLength: 20, byteOffset: 800 },
+        ],
+      },
+      { byteLength: 1_000, ranges: [] },
+    ]);
+  });
+
   it("rejects a selected range outside its declared source buffer", () => {
     const document = twoSceneDocument() as {
       bufferViews: Array<Record<string, unknown>>;
