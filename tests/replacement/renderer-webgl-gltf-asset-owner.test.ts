@@ -61,10 +61,56 @@ describe("glTF asset lifecycle owner", () => {
     await waitFor(() => expect(owner.getSnapshot(interior.asset).status).toBe("ready"));
 
     expect(prepare).toHaveBeenCalledTimes(2);
+    expect(owner.getSnapshot(exterior.asset).status).toBe("ready");
     expect(new Set(prepare.mock.calls.map((call) => call[1])).size).toBe(1);
     expect(prepare.mock.calls.map((call) => call[6])).toEqual([0, 1]);
     expect(owner.getSnapshot(exterior.asset)).toMatchObject({ sceneIndex: 0 });
     expect(owner.getSnapshot(interior.asset)).toMatchObject({ sceneIndex: 1 });
+  });
+
+  it("shares exact root and referenced-resource reads across selected assets", async () => {
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
+      primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
+      textureAssets: [],
+      variantNames: [],
+    } as const;
+    const read = vi.fn(async () => new Uint8Array([1, 2, 3]));
+    const readResource = vi.fn(async () => new Uint8Array([4, 5, 6]));
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
+      async (_bytes, _key, _label, _uri, _signal, resource, sceneIndex) => {
+        const bytes = await resource("/models/shared.bin");
+        bytes[0] = sceneIndex ?? 0;
+        return { ...prepared, sceneIndex: sceneIndex ?? 0 };
+      },
+    );
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read,
+      readResource,
+    });
+    const first = gltf({ sceneIndex: 0, src: "/models/shared.gltf", version: 1 });
+    const second = gltf({ sceneIndex: 1, src: "/models/shared.gltf", version: 1 });
+
+    owner.reconcile([first, second]);
+    await waitFor(() => expect(owner.getSnapshot(first.asset).status).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(second.asset).status).toBe("ready"));
+
+    expect(read).toHaveBeenCalledOnce();
+    expect(readResource).toHaveBeenCalledOnce();
+
+    const changedVersion = gltf({ sceneIndex: 0, src: "/models/shared.gltf", version: 2 });
+    owner.reconcile([first, changedVersion]);
+    await waitFor(() => expect(owner.getSnapshot(changedVersion.asset).status).toBe("ready"));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(readResource).toHaveBeenCalledTimes(2);
+    owner.dispose();
   });
 
   it("routes preparation through one injected lifecycle without duplicating resource IO", async () => {

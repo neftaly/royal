@@ -15,6 +15,7 @@ import {
   useRendererSnapshot,
   useTextureAssetStatus,
   useVirtualTextureAssetStatus,
+  useVisitGltfAssetGeometry,
   type RendererContextSnapshot,
   type GltfDocumentScene,
   type RendererHookOptions,
@@ -176,11 +177,15 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
 const ExternalControls = ({ root }: RendererHookOptions): ReactNode => {
   const invalidate = useInvalidate({ root });
   const pick = useCanvasPick({ root });
+  const visitGeometry = useVisitGltfAssetGeometry({ root });
   return (
     <button
       onClick={() => {
         invalidate();
         console.log(pick({ clientX: 0, clientY: 0 }));
+        console.log("prepared geometry batches", visitGeometry(model.asset, (batch) => {
+          console.log(batch.geometry.positions.length, batch.transformCount);
+        }));
       }}
     >
       Pick and redraw

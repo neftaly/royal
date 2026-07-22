@@ -282,6 +282,15 @@ root's injected resource-I/O port, even when a worker requests them, so custom
 authentication, caching, cancellation, and diagnostics cannot be bypassed by
 the chosen executor.
 
+glTF root and referenced-resource transport deduplicates exact identities in a
+single claim-aware owner. Its retained successful-byte ceiling is 32 MiB across
+both domains; eviction and last-claim release retire settled bytes, while
+oversized results receive in-flight deduplication without becoming retained
+cache entries. Genuinely shared preparation inputs are copies because browser
+workers transfer their buffers; a single consumer keeps zero-copy delivery.
+This bounded cold allocation is preferred to either duplicate network and
+ArrayBuffer materialization or accidental detachment of a shared authority.
+
 Parsing/preparation SHOULD yield or chunk only where it measurably improves
 input responsiveness. Lifecycle complexity is not justified solely to make a
 synthetic progress counter move.

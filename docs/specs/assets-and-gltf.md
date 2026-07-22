@@ -56,6 +56,17 @@ port whether preparation is local or worker-executed. Executor choice cannot
 silently replace consumer authentication, caching, or URI policy with a direct
 worker fetch.
 
+Exact root-source and referenced-resource identities share one root-owned byte
+transport. Each preparation receives caller-owned storage because a worker may
+transfer it; genuinely shared deliveries receive caller-owned storage so no
+preparation can detach or mutate the retained shared result. A single delivery
+preserves the prior zero-copy ownership path.
+Cancellation releases only that asset's claim and aborts pending transport only
+after the last claimant leaves. Successfully shared results are retained under
+one 32 MiB root-wide LRU ceiling. A result larger than the ceiling is shared
+only while in flight and retires immediately after settlement. Rejections are
+never sticky cache entries.
+
 For external `.gltf` buffers, the cold pure planner derives byte demand from
 the selected scene's child/LOD graph, accessors, sparse payloads, instancing,
 Draco payloads, and embedded images. The browser port MAY satisfy that plan
@@ -71,6 +82,14 @@ bounds, lights, selected index, lightweight scene inventory, variant names, and
 image demands either form one coherent revision or do not replace the previous
 revision. Individual image outcomes may publish later into material-owned
 slots. A failed image MUST NOT invalidate unrelated images or geometry.
+
+Prepared geometry is not part of ordinary status. One explicit cold visitor may
+borrow highest-detail selected-scene indexed positions and packed asset-space
+transforms from the retained canonical artifact. It MUST NOT fetch, decode, or
+copy mesh data merely to expose it. Repeated meshes retain referential identity,
+instances remain transform batches, and overlapping lower node-LOD levels are
+excluded. Callback values are borrowed; retained derived indexes or merged
+geometry are caller-owned copies and leave with that consumer's lifecycle.
 
 ## Supported vertex and primitive profile
 

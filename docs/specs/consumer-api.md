@@ -208,6 +208,26 @@ status:
   `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
+## Borrowed prepared glTF geometry
+
+`RendererRoot.visitGltfAssetGeometry(asset, visitor)` is the cold spatial-tool
+boundary for a glTF already claimed by the scene. The React equivalent is
+`useVisitGltfAssetGeometry()`. It returns `undefined` until the exact
+source/version/scene identity is prepared, otherwise the number of batches
+visited (including zero for an empty selected scene).
+
+Each callback receives one shared indexed-position geometry identity and one or
+more packed column-major asset-space transforms. Royal visits only the
+highest-detail geometry of an authored node LOD set, so spatial consumers do
+not accidentally union overlapping visual levels. Instancing remains a packed
+batch instead of becoming copied per-occurrence geometry.
+
+Geometry channels and transforms are borrowed and valid only during that
+callback. A consumer which retains, merges, simplifies, or indexes them must
+copy the required values and owns that result. Calling the visitor performs no
+source read or codec decode, and consumers which never call it receive no
+geometry publication in ordinary status.
+
 Focused status identity objects do not require scene-descriptor discriminator
 fields. For example, `{ src, version }` and `{ manifestUri, version }` are
 enough for ordinary-texture and authored-VT observation respectively. Passing

@@ -10,6 +10,7 @@ import {
   type RendererContextSnapshot,
   type RendererResourceSnapshot,
   type RendererRoot,
+  type BorrowedGltfGeometry,
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -43,6 +44,7 @@ import {
   type VirtualTextureAssetStatusIdentity,
   type VirtualTextureAssetStatusInput,
   useVirtualTextureAssetStatus,
+  useVisitGltfAssetGeometry,
   useOrbitCamera,
   useOrbitCameraView,
   usePrefilteredEnvironmentStatus,
@@ -89,6 +91,11 @@ const environmentStatusWithRotation: PrefilteredEnvironmentStatusInput = {
 void gltfStatusWithBounds;
 void textureStatusWithColorSpace;
 void environmentStatusWithRotation;
+declare const borrowedGeometry: BorrowedGltfGeometry;
+if (false) {
+  // @ts-expect-error Borrowed geometry exposes readonly array-like channels, not typed-array mutation.
+  borrowedGeometry.positions.set([0], 0);
+}
 
 describe("replacement React public API", () => {
   it("keeps runtime entrypoints narrow and ownership-oriented", () => {
@@ -113,6 +120,7 @@ describe("replacement React public API", () => {
       "useRendererSnapshot",
       "useTextureAssetStatus",
       "useVirtualTextureAssetStatus",
+      "useVisitGltfAssetGeometry",
     ]);
     expect(Object.keys(sceneApi).sort()).toEqual([
       "boxGeometry",
@@ -207,6 +215,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useOrbitCameraView).toBeFunction();
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useInvalidate).toBeFunction();
+    expectTypeOf(useVisitGltfAssetGeometry).toBeFunction();
     expectTypeOf({ root: null }).toMatchTypeOf<RendererHookOptions>();
     expectTypeOf(useRendererLifecycle).toBeFunction();
     expectTypeOf(useRendererSnapshot).toBeFunction();
@@ -493,6 +502,21 @@ describe("replacement React public API", () => {
 
     expect(invalidate).toHaveBeenCalledOnce();
     expect(pick).toHaveBeenCalledWith({ clientX: 12, clientY: 34 });
+  });
+
+  it("lets a parent visit borrowed prepared geometry through the explicit root option", () => {
+    const visitGltfAssetGeometry = vi.fn(() => 2);
+    const root = { visitGltfAssetGeometry } as unknown as RendererRoot;
+    const asset = gltf("/model.glb").asset;
+    const visitor = vi.fn();
+    const Inspector = () => {
+      const visit = useVisitGltfAssetGeometry({ root });
+      expect(visit(asset, visitor)).toBe(2);
+      return null;
+    };
+
+    renderToStaticMarkup(createElement(Inspector));
+    expect(visitGltfAssetGeometry).toHaveBeenCalledWith(asset, visitor);
   });
 
   it("observes canvas size without forcing layout and reuses it for DPR changes", () => {

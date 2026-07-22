@@ -97,6 +97,15 @@ drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
 they are not reported as scheduled-frame failures.
 
+`visitGltfAssetGeometry(asset, visitor)` is an explicit cold path to the
+highest-detail selected-scene triangles Royal already prepared. It returns
+`undefined` while that exact asset identity is unavailable, or the visited
+batch count once prepared. Each batch preserves shared geometry identity and
+packs one or more column-major asset-space transforms, so instancing does not
+become duplicated mesh data. The arrays are borrowed only for the callback;
+copy values that an application deliberately retains. This path performs no
+second source read or decode and does not publish geometry through status.
+
 `getPrefilteredEnvironmentSnapshot(environment)` and
 `subscribePrefilteredEnvironment(environment, listener)` expose the focused
 `idle` / `loading` / `ready` / `error` lifecycle for one exact offline

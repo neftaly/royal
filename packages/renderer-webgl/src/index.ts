@@ -15,6 +15,11 @@ export type {
   GltfTextureProgress,
 } from "./gltf/asset-owner";
 export type { GltfDocumentScene } from "./gltf/static-node-selection";
+export type {
+  BorrowedGltfGeometry,
+  BorrowedGltfGeometryBatch,
+  GltfAssetGeometryVisitor,
+} from "./gltf/prepared-geometry";
 export type { TextureAssetSnapshot } from "./texture/asset-owner";
 export type { PrefilteredEnvironmentAssetSnapshot } from "./environment/asset-owner";
 export type { VirtualTextureAssetSnapshot } from "./virtual-texture/runtime-contract";

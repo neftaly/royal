@@ -12,6 +12,7 @@ import type {
 import type { TextureSourceRef } from "../texture/source";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
+import { SharedByteReadOwner } from "../resource/shared-byte-read-owner";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 
 export type GltfTextureProgress = Readonly<{
@@ -188,6 +189,16 @@ const gltfSourceKey = (asset: GltfAssetRef): string => {
   ]);
 };
 
+const resourceReadKey = (
+  asset: GltfAssetRef,
+  uri: string,
+  request: StaticGltfResourceRequest | undefined,
+): string => JSON.stringify([
+  uri,
+  request ?? null,
+  asset.version === undefined ? null : [typeof asset.version, asset.version],
+]);
+
 /** Exact prepared-view identity; source-derived resources deliberately exclude scene selection. */
 export const gltfAssetKey = (asset: GltfAssetRef): string => JSON.stringify([
   gltfSourceKey(asset),
@@ -233,6 +244,7 @@ export class GltfAssetOwner {
   readonly #listeners = new KeyedRetainedListeners<string>();
   readonly #now: () => number;
   readonly #platform: GltfAssetOwnerPlatform;
+  readonly #sharedReads = new SharedByteReadOwner<string>();
 
   constructor(platform: GltfAssetOwnerPlatform) {
     this.#platform = platform;
@@ -244,6 +256,7 @@ export class GltfAssetOwner {
     this.#disposed = true;
     for (const entry of this.#entries.values()) entry.controller.abort();
     this.#entries.clear();
+    this.#sharedReads.dispose();
     this.#listeners.clear();
   }
 
@@ -294,6 +307,7 @@ export class GltfAssetOwner {
       if (claimed.has(key)) continue;
       entry.controller.abort();
       this.#entries.delete(key);
+      this.#sharedReads.release(key);
       this.#publish(key);
     }
   }
@@ -323,7 +337,11 @@ export class GltfAssetOwner {
       : undefined;
     const load = async (): Promise<void> => {
       const startedReadingAt = this.#now();
-      const bytes = await this.#platform.read(asset, entry.controller.signal);
+      const bytes = await this.#sharedReads.read(
+        `root:${gltfSourceKey(asset)}`,
+        key,
+        (signal) => this.#platform.read(asset, signal),
+      );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const readCompletedAt = this.#now();
       let externalReadCompletedAt = readCompletedAt;
@@ -334,9 +352,13 @@ export class GltfAssetOwner {
       ): Promise<Uint8Array> => {
         externalReadStartedAt ??= this.#now();
         try {
-          return await (request === undefined
-            ? this.#platform.readResource(uri, entry.controller.signal)
-            : this.#platform.readResource(uri, entry.controller.signal, request));
+          return await this.#sharedReads.read(
+            `resource:${resourceReadKey(asset, uri, request)}`,
+            key,
+            (signal) => request === undefined
+              ? this.#platform.readResource(uri, signal)
+              : this.#platform.readResource(uri, signal, request),
+          );
         } finally {
           externalReadCompletedAt = Math.max(externalReadCompletedAt, this.#now());
         }

@@ -30,6 +30,36 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("visits prepared selected-scene geometry without a second asset path", async () => {
+    const model = gltf("/prepared-view.glb");
+    const { root } = harness({ readGltf: async () => staticTriangleGlb() });
+    try {
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [model],
+      }));
+      expect(root.visitGltfAssetGeometry(model.asset, vi.fn())).toBeUndefined();
+      expect(() => root.visitGltfAssetGeometry(
+        model.asset,
+        null as unknown as Parameters<typeof root.visitGltfAssetGeometry>[1],
+      )).toThrow("visitor must be a function");
+      await waitFor(() => expect(root.getGltfAssetSnapshot(model.asset).status).toBe("ready"));
+      const visitor = vi.fn();
+
+      expect(root.visitGltfAssetGeometry(model.asset, visitor)).toBe(1);
+      expect(visitor).toHaveBeenCalledOnce();
+      expect(visitor.mock.calls[0]![0]).toMatchObject({
+        transformCount: 1,
+        transforms: expect.objectContaining({ length: 16 }),
+      });
+      expect(visitor.mock.calls[0]![0].geometry.positions).toEqual(
+        new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]),
+      );
+    } finally {
+      root.dispose();
+    }
+  });
+
   it("publishes texture completions as one frame-coalesced scene batch", async () => {
     const first = imageTexture("/batched-first.png");
     const second = imageTexture("/batched-second.png");

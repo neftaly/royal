@@ -89,7 +89,10 @@ pre-mount. `useRendererLifecycle()` and `useCanvasSize()` do not poll or wake fo
 unrelated frames. `useInvalidate()` requests one coalesced frame.
 `useRendererSnapshot()` observes the broad root snapshot for diagnostics and
 tooling; it updates for submitted frames and resource changes, so product UI
-should prefer the focused lifecycle, size, and asset-status hooks.
+should prefer the focused lifecycle, size, and asset-status hooks. Spatial tools
+which explicitly need already-prepared selected-scene triangles can use
+`useVisitGltfAssetGeometry`; its typed arrays and packed transforms are borrowed
+only for each callback, so copy only data the application intentionally retains.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact source, version, and

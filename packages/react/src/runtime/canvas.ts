@@ -1,10 +1,11 @@
-import type { PickInput, PickResult, Scene } from "@royal/renderer-core";
+import type { GltfAssetRef, PickInput, PickResult, Scene } from "@royal/renderer-core";
 import {
   createRendererRoot,
   resolveRendererRootOptions,
   type RendererRootOptions,
   type ResolvedRendererRootOptions,
   type RendererRoot,
+  type GltfAssetGeometryVisitor,
 } from "@royal/renderer-webgl";
 import {
   createElement,
@@ -186,6 +187,21 @@ export const useCanvasPick = (
 ): ((input: PickInput) => PickResult | undefined) => {
   const root = selectObservedRoot(useOptionalCanvasRoot(), options, "useCanvasPick");
   return useCallback((input: PickInput) => root?.pick(input), [root]);
+};
+
+/** Returns the selected root's cold, borrowed prepared-glTF geometry visitor. */
+export const useVisitGltfAssetGeometry = (
+  options?: RendererHookOptions,
+): ((asset: GltfAssetRef, visitor: GltfAssetGeometryVisitor) => number | undefined) => {
+  const root = selectObservedRoot(
+    useOptionalCanvasRoot(),
+    options,
+    "useVisitGltfAssetGeometry",
+  );
+  return useCallback(
+    (asset, visitor) => root?.visitGltfAssetGeometry(asset, visitor),
+    [root],
+  );
 };
 
 /** Renders one pure Royal scene into one ordinary, CSS-sized canvas. */

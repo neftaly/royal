@@ -43,6 +43,10 @@ import {
 } from "../gltf/asset-owner";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import {
+  visitPreparedGltfGeometry,
+  type GltfAssetGeometryVisitor,
+} from "../gltf/prepared-geometry";
+import {
   identityMat4,
   multiplyMat4Into,
   projectionMat4Into,
@@ -183,6 +187,11 @@ export interface RendererRoot {
   readonly getVirtualTextureAssetSnapshot: (
     asset: VirtualTextureAssetRef,
   ) => VirtualTextureAssetSnapshot;
+  /**
+   * Visits borrowed highest-detail selected-scene triangles without another decode.
+   * Returns the visited batch count, or `undefined` until that asset is prepared.
+   */
+  visitGltfAssetGeometry(asset: GltfAssetRef, visitor: GltfAssetGeometryVisitor): number | undefined;
   /** Requests one coalesced presentation frame without replacing scene intent. */
   invalidate(): void;
   /** Returns the nearest visible hit at one browser-viewport CSS-pixel position. */
@@ -673,6 +682,18 @@ export class CanvasRoot implements RendererRoot {
   /** Focused readiness for one exact glTF source/version/selected-scene identity. */
   getGltfAssetSnapshot = (asset: GltfAssetRef): GltfAssetSnapshot =>
     this.#gltfAssets.getSnapshot(asset);
+
+  visitGltfAssetGeometry(
+    asset: GltfAssetRef,
+    visitor: GltfAssetGeometryVisitor,
+  ): number | undefined {
+    this.#assertLive("visit glTF asset geometry");
+    if (typeof visitor !== "function") {
+      throw new TypeError("Royal glTF asset geometry visitor must be a function");
+    }
+    const prepared = this.#gltfAssets.prepared(asset);
+    return prepared === undefined ? undefined : visitPreparedGltfGeometry(prepared, visitor);
+  }
 
   /** Focused readiness for one exact offline environment source/version identity. */
   getPrefilteredEnvironmentSnapshot = (

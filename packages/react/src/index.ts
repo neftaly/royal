@@ -3,6 +3,7 @@ export {
   useCanvasElement,
   useCanvasPick,
   useCanvasRoot,
+  useVisitGltfAssetGeometry,
   useInvalidate,
 } from "./runtime/canvas";
 export type { CanvasProps } from "./runtime/canvas";
@@ -66,6 +67,9 @@ export type {
 } from "./orbit/controls";
 export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
 export type {
+  BorrowedGltfGeometry,
+  BorrowedGltfGeometryBatch,
+  GltfAssetGeometryVisitor,
   GltfDocumentScene,
   GltfTextureProgress,
   RendererContextSnapshot,
