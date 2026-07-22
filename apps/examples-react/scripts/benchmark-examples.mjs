@@ -450,14 +450,26 @@ const readWebGlGpu = async (session) => evaluate(session, `
   const gl = canvas.getContext('webgl2');
   if (gl === null) return null;
   const debug = gl.getExtension('WEBGL_debug_renderer_info');
-  return {
+  const result = {
     extensions: gl.getSupportedExtensions()?.slice().sort() ?? [],
     renderer: debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)),
     vendor: debug === null ? null : String(gl.getParameter(debug.UNMASKED_VENDOR_WEBGL)),
     version: String(gl.getParameter(gl.VERSION)),
   };
+  gl.getExtension('WEBGL_lose_context')?.loseContext();
+  return result;
 })()
 `);
+
+const waitForWebGlGpu = async (session, timeoutMs = 5_000) => {
+  const deadline = performance.now() + timeoutMs;
+  do {
+    const gpu = await readWebGlGpu(session);
+    if (gpu !== null) return gpu;
+    await sleep(250);
+  } while (performance.now() < deadline);
+  return null;
+};
 
 const assertRequestedGpu = (gpu, requireHardware) => {
   if (gpu === null) throw new Error('Examples benchmark could not create a WebGL2 context');
@@ -3072,7 +3084,7 @@ const main = async () => {
     await blankLoaded;
     browserDiagnostics.reset();
     await installBenchmarkHooks(session);
-    const gpu = await readWebGlGpu(session);
+    const gpu = await waitForWebGlGpu(session);
     const browserEnvironment = await readBrowserEnvironment(session);
     assertRequestedGpu(gpu, gpuMode !== 'software-headless');
     console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
