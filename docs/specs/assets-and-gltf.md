@@ -56,6 +56,16 @@ port whether preparation is local or worker-executed. Executor choice cannot
 silently replace consumer authentication, caching, or URI policy with a direct
 worker fetch.
 
+For external `.gltf` buffers, the cold pure planner derives byte demand from
+the selected scene's child/LOD graph, accessors, sparse payloads, instancing,
+Draco payloads, and embedded images. The browser port MAY satisfy that plan
+with single HTTP byte-range requests. It MUST probe range behavior before
+issuing remaining ranges concurrently, validate each returned interval, and
+fall back once to a complete response when the origin ignores or rejects range
+transport. The reader returns the existing full-offset canonical buffer shape,
+so transport selection cannot leak into accessor, codec, or rendering paths.
+Unselected scenes MUST NOT force their geometry bytes over the network.
+
 A prepared scene publishes atomically: traversable nodes, primitive records,
 bounds, lights, selected index, lightweight scene inventory, variant names, and
 image demands either form one coherent revision or do not replace the previous

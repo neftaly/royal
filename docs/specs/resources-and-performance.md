@@ -307,6 +307,13 @@ keeps a detail backlog from delaying first-visible scene work while forcing
 regular detail progress. FIFO order within each lane prevents later work from
 overtaking already-demanded work in that lane; richer visibility priority
 remains a later scheduler refinement.
+
+Selected-scene external-buffer transport is a functional-core/imperative-shell
+boundary: a pure document walk produces bounded byte ranges, while the browser
+shell owns HTTP negotiation, cancellation, response validation, and full-read
+fallback. Plans with too many intervals or at least 80% byte coverage choose a
+complete read. This avoids request fan-out that costs more than it saves and
+keeps servers without range support correct without a parallel parser path.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
