@@ -1905,6 +1905,7 @@ const main = async () => {
       timeoutMs: 15_000,
     });
     session = await connectPage();
+    console.log('connected browser smoke CDP session');
     session.on('Runtime.exceptionThrown', (event) => {
       const details = event.exceptionDetails;
       const location = details?.url === undefined
@@ -1922,21 +1923,28 @@ const main = async () => {
     await session.call('Page.enable');
     await session.call('Runtime.enable');
 
-    const gpu = await evaluate(session, `
-      (() => {
-        const gl = document.createElement('canvas').getContext('webgl2');
-        if (gl === null) return null;
-        const debug = gl.getExtension('WEBGL_debug_renderer_info');
-        return debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
-      })()
-    `);
-    if (gpu === null) {
-      throw new Error('Browser smoke could not create a WebGL2 context');
+    if (allowSoftwareGpu) {
+      // Each route's canvas and pixel oracle prove that its owned WebGL2
+      // context rendered. A throwaway probe context is redundant here and can
+      // trigger minutes of unrelated headless GPU/Dawn discovery in Chrome.
+      console.log('gpu software behavior oracle (verified by rendered routes)');
+    } else {
+      const gpu = await evaluate(session, `
+        (() => {
+          const gl = document.createElement('canvas').getContext('webgl2');
+          if (gl === null) return null;
+          const debug = gl.getExtension('WEBGL_debug_renderer_info');
+          return debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
+        })()
+      `);
+      if (gpu === null) {
+        throw new Error('Browser smoke could not create a WebGL2 context');
+      }
+      if (/SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
+        throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu}`);
+      }
+      console.log(`gpu ${gpu}`);
     }
-    if (!allowSoftwareGpu && /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
-      throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu}`);
-    }
-    console.log(`gpu ${gpu}${allowSoftwareGpu ? ' (software behavior oracle)' : ''}`);
 
     const filteredRoutes = routeFilter === ''
       ? smokeRoutes
