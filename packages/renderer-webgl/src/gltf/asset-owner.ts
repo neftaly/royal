@@ -12,6 +12,7 @@ import type {
 } from "../texture/asset-owner";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
+import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 
 export type GltfTextureProgress = Readonly<{
   /** Ready images which recovered from a preferred representation to an authored fallback. */
@@ -84,11 +85,18 @@ export type GltfAssetOwnerPlatform = Readonly<{
     label: string,
     sourceUri: string,
     signal: AbortSignal,
-    readResource: (uri: string) => Promise<Uint8Array>,
+    readResource: (
+      uri: string,
+      request?: StaticGltfResourceRequest,
+    ) => Promise<Uint8Array>,
     sceneIndex?: number,
   ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
-  readResource(uri: string, signal: AbortSignal): Promise<Uint8Array>;
+  readResource(
+    uri: string,
+    signal: AbortSignal,
+    request?: StaticGltfResourceRequest,
+  ): Promise<Uint8Array>;
   schedule?: AsyncPreparationScheduler;
 }>;
 
@@ -205,10 +213,17 @@ export const readGltfWithFetch = async (
 export const readGltfResourceWithFetch = async (
   uri: string,
   signal: AbortSignal,
+  request?: StaticGltfResourceRequest,
 ): Promise<Uint8Array> => {
-  const response = await fetch(uri, { signal });
-  if (!response.ok) throw new Error(`glTF resource ${JSON.stringify(uri)} failed with HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  if (request === undefined) {
+    const response = await fetch(uri, { signal });
+    if (!response.ok) {
+      throw new Error(`glTF resource ${JSON.stringify(uri)} failed with HTTP ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  const { readGltfResourceRangesWithFetch } = await import("./browser-static-preparation");
+  return readGltfResourceRangesWithFetch(uri, signal, request);
 };
 
 /** Owns exact asset claims, asynchronous IO, preparation, and focused status publication. */
@@ -313,10 +328,15 @@ export class GltfAssetOwner {
       const readCompletedAt = this.#now();
       let externalReadCompletedAt = readCompletedAt;
       let externalReadStartedAt: number | undefined;
-      const readResource = async (uri: string): Promise<Uint8Array> => {
+      const readResource = async (
+        uri: string,
+        request?: StaticGltfResourceRequest,
+      ): Promise<Uint8Array> => {
         externalReadStartedAt ??= this.#now();
         try {
-          return await this.#platform.readResource(uri, entry.controller.signal);
+          return await (request === undefined
+            ? this.#platform.readResource(uri, entry.controller.signal)
+            : this.#platform.readResource(uri, entry.controller.signal, request));
         } finally {
           externalReadCompletedAt = Math.max(externalReadCompletedAt, this.#now());
         }

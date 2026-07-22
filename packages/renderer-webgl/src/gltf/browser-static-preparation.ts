@@ -1,8 +1,17 @@
 import type { PreparedStaticGltf } from "./static-asset";
+import type { StaticGltfResourceRequest } from "./static-buffer-demand";
+import type { StaticGltfResourceReader } from "./static-source";
+
+export { readGltfResourceRangesWithFetch } from "./browser-range-read";
 
 type PreparationResultMessage =
   | Readonly<{ error: string; kind: "error" }>
-  | Readonly<{ id: number; kind: "read-resource"; uri: string }>
+  | Readonly<{
+    id: number;
+    kind: "read-resource";
+    request?: StaticGltfResourceRequest;
+    uri: string;
+  }>
   | Readonly<{ kind: "ready"; prepared: PreparedStaticGltf }>;
 
 const WORKER_GLTF_BYTE_THRESHOLD = 256 * 1024;
@@ -36,7 +45,7 @@ export const prepareStaticGltfInBrowser = async (
   label: string,
   sourceUri: string,
   signal: AbortSignal,
-  readResource: (uri: string) => Promise<Uint8Array>,
+  readResource: StaticGltfResourceReader,
   createWorker: (() => Worker) | undefined = typeof Worker === "function"
     ? defaultWorker
     : undefined,
@@ -90,7 +99,10 @@ export const prepareStaticGltfInBrowser = async (
     const onMessage = (event: MessageEvent<PreparationResultMessage>): void => {
       const message = event.data;
       if (message.kind === "read-resource") {
-        void readResource(message.uri).then((bytes) => {
+        const reading = message.request === undefined
+          ? readResource(message.uri)
+          : readResource(message.uri, message.request);
+        void reading.then((bytes) => {
           if (settled) return;
           try {
             worker.postMessage(

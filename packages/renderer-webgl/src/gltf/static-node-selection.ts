@@ -66,29 +66,26 @@ export const selectedStaticSceneIndex = (
   sceneIndex === undefined ? "scene" : "sceneIndex",
 );
 
-/** Collects only mesh definitions reachable through the selected scene and its LOD graph. */
-export const selectedStaticMeshIndices = (
+/** Collects nodes reachable through the selected scene and its authored LOD graph. */
+export const selectedStaticNodeIndices = (
   document: JsonObject,
   label: string,
   selectedSceneIndex?: number,
 ): readonly number[] => {
-  const meshes = array(document.meshes, label, "meshes");
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
   const sceneIndex = selectedStaticSceneIndex(document, scenes, label, selectedSceneIndex);
   const scene = object(scenes[sceneIndex], label, `scenes[${sceneIndex}]`);
   const roots = array(scene.nodes, label, `scenes[${sceneIndex}].nodes`);
-  const selected = new Set<number>();
+  const selected: number[] = [];
   const state = new Uint8Array(nodes.length);
   const visit = (nodeIndex: number): void => {
     if (state[nodeIndex] === 1) fail(label, `nodes[${nodeIndex}]`, "is part of a child/MSFT_lod cycle");
     if (state[nodeIndex] === 2) return;
     state[nodeIndex] = 1;
+    selected.push(nodeIndex);
     const path = `nodes[${nodeIndex}]`;
     const node = object(nodes[nodeIndex], label, path);
-    if (node.mesh !== undefined) {
-      selected.add(index(node.mesh, meshes, label, `${path}.mesh`));
-    }
     const children = optionalArray(node.children, label, `${path}.children`);
     for (let child = 0; child < children.length; child += 1) {
       visit(index(children[child], nodes, label, `${path}.children[${child}]`));
@@ -98,6 +95,25 @@ export const selectedStaticMeshIndices = (
   };
   for (let root = 0; root < roots.length; root += 1) {
     visit(index(roots[root], nodes, label, `scenes[${sceneIndex}].nodes[${root}]`));
+  }
+  return selected;
+};
+
+/** Collects only mesh definitions reachable through the selected scene and its LOD graph. */
+export const selectedStaticMeshIndices = (
+  document: JsonObject,
+  label: string,
+  selectedSceneIndex?: number,
+): readonly number[] => {
+  const meshes = array(document.meshes, label, "meshes");
+  const nodes = array(document.nodes, label, "nodes");
+  const selected = new Set<number>();
+  for (const nodeIndex of selectedStaticNodeIndices(document, label, selectedSceneIndex)) {
+    const path = `nodes[${nodeIndex}]`;
+    const node = object(nodes[nodeIndex], label, path);
+    if (node.mesh !== undefined) {
+      selected.add(index(node.mesh, meshes, label, `${path}.mesh`));
+    }
   }
   return [...selected];
 };

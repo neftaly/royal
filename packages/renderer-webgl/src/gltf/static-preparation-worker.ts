@@ -6,6 +6,7 @@ import {
   executeDracoTasksInWorkers,
   executeDracoTasksSerially,
 } from "./static-draco-executor";
+import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
@@ -52,12 +53,20 @@ const resourceReads = new Map<number, ResourceRead>();
 let nextResourceReadId = 1;
 let preparing = false;
 
-const readResource = (uri: string): Promise<Uint8Array> =>
+const readResource = (
+  uri: string,
+  request?: StaticGltfResourceRequest,
+): Promise<Uint8Array> =>
   new Promise((resolve, reject) => {
     const id = nextResourceReadId;
     nextResourceReadId += 1;
     resourceReads.set(id, { reject, resolve });
-    workerScope.postMessage({ id, kind: "read-resource", uri });
+    workerScope.postMessage({
+      id,
+      kind: "read-resource",
+      ...(request === undefined ? {} : { request }),
+      uri,
+    });
   });
 
 workerScope.addEventListener("message", (event) => {

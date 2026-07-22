@@ -48,7 +48,10 @@ import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-
 import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selection";
 import { validateRequiredExtensionProfile } from "./required-extension-profile";
 import { collectStaticTextureAssets } from "./static-texture-assets";
-import { readCanonicalStaticGltfSource } from "./static-source";
+import {
+  readCanonicalStaticGltfSource,
+  type StaticGltfResourceReader,
+} from "./static-source";
 import {
   selectedStaticSceneIndex,
   staticDocumentScenes,
@@ -1007,12 +1010,18 @@ export const prepareStaticGltfSource = async (
   contentKey: string,
   label: string,
   sourceUri: string,
-  read: (uri: string) => Promise<Uint8Array>,
+  read: StaticGltfResourceReader,
   executeDracoTasks?: StaticDracoTaskExecutor,
   etc2Available = true,
   sceneIndex?: number,
 ): Promise<PreparedStaticGltf> => {
-  const canonical = await readCanonicalStaticGltfSource(bytes, label, sourceUri, read);
+  const canonical = await readCanonicalStaticGltfSource(
+    bytes,
+    label,
+    sourceUri,
+    read,
+    sceneIndex,
+  );
   return prepareDocumentWithCodecs(
     canonical.document,
     canonical.binary,
