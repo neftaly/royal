@@ -167,6 +167,7 @@ try {
   const gltf = await buildFixture('gltf');
   const incrementalGzipBytes = royal.initialGzipBytes - react.initialGzipBytes;
   const gltfIncrementalGzipBytes = gltf.initialGzipBytes - royal.initialGzipBytes;
+  const totalIncrementalGzipBytes = royal.totalGzipBytes - react.initialGzipBytes;
 
   console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
   console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
@@ -176,6 +177,7 @@ try {
   console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
   console.log(`Royal worker assets:  ${formatBytes(royal.workerGzipBytes)} gzip`);
   console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
+  console.log(`Royal-only graph:     ${formatBytes(totalIncrementalGzipBytes)} gzip`);
   if (showDetails) {
     console.log('Royal JavaScript files by gzip bytes:');
     for (const [file, bytes] of Object.entries(royal.gzipByFile)
@@ -237,6 +239,11 @@ try {
   if (royal.totalGzipBytes > budget.royalTotalGzipBytes) {
     failures.push(
       `Royal deployed JS gzip ${royal.totalGzipBytes} exceeds ${budget.royalTotalGzipBytes}`,
+    );
+  }
+  if (totalIncrementalGzipBytes > budget.royalTotalIncrementalGzipBytes) {
+    failures.push(
+      `Royal-only main graph gzip ${totalIncrementalGzipBytes} exceeds ${budget.royalTotalIncrementalGzipBytes}`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));

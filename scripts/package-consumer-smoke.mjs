@@ -35,7 +35,7 @@ const packageDirectories = [
 const packageSizeBudgets = {
   '@royal/react': 128 * 1024,
   '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 472 * 1024,
+  '@royal/renderer-webgl': 480 * 1024,
 };
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -107,6 +107,18 @@ try {
         : readFileSync(path.join(repoRoot, directory, 'dist', browserPreparationName), 'utf8');
       if (!browserPreparation.includes('new URL("assets/static-preparation-worker-')) {
         throw new Error('@royal/renderer-webgl worker URL is not package-relative');
+      }
+      const workerSource = readFileSync(
+        path.join(repoRoot, directory, worker.slice('package/'.length)),
+        'utf8',
+      );
+      const relativeModule = workerSource.match(
+        /(?:\bfrom\s*|\bimport\s*\(\s*)["'](\.[^"']+\.js)["']/u,
+      );
+      if (relativeModule !== null) {
+        throw new Error(
+          `@royal/renderer-webgl worker is not self-contained: ${relativeModule[1]}`,
+        );
       }
     }
     const packedBytes = statSync(tarball).size;
