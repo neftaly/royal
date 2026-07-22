@@ -65,7 +65,15 @@ export type {
   OrbitControlsProps,
   OrbitControlsSetViewOptions,
 } from "./orbit/controls";
-export { createRendererRoot, resolveRendererRootOptions } from "@royal/renderer-webgl";
+export {
+  createRendererRoot,
+  resolveRendererRootOptions,
+} from "@royal/renderer-webgl";
+export type {
+  GltfResourceRead,
+  GltfResourceReader,
+  RendererRootDependencies,
+} from "@royal/renderer-webgl";
 export type {
   BorrowedGltfGeometry,
   BorrowedGltfGeometryBatch,

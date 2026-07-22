@@ -53,6 +53,12 @@ export type DecodedTextureLease = Readonly<{
 
 export type TextureSourceEncoding = "ktx2-etc2" | "svg";
 
+export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
+  /** @internal Routes this source through the root's glTF resource reader. */
+  gltfResource: true;
+  sourceEncoding?: TextureSourceEncoding;
+}>;
+
 export type EmbeddedTextureAssetRef = Readonly<{
   bytes: Uint8Array;
   colorSpace?: "linear" | "srgb";
@@ -65,7 +71,10 @@ export type EmbeddedTextureAssetRef = Readonly<{
 }>;
 
 export type TextureLeafSourceRef =
-  | (TextureAssetRef & Readonly<{ sourceEncoding?: TextureSourceEncoding }>)
+  | (TextureAssetRef & Readonly<{
+    gltfResource?: true;
+    sourceEncoding?: TextureSourceEncoding;
+  }>)
   | EmbeddedTextureAssetRef;
 
 /** Cold logical source recipe; a preferred SVG may recover to one ordinary leaf. */

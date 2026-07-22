@@ -56,7 +56,7 @@ port whether preparation is local or worker-executed. Executor choice cannot
 silently replace consumer authentication, caching, or URI policy with a direct
 worker fetch.
 
-Exact root-source and referenced-resource identities share one root-owned byte
+Exact root-source and referenced-buffer identities share one root-owned byte
 transport. Each preparation receives caller-owned storage because a worker may
 transfer it; genuinely shared deliveries receive caller-owned storage so no
 preparation can detach or mutate the retained shared result. A single delivery
@@ -66,6 +66,14 @@ after the last claimant leaves. Successfully shared results are retained under
 one 32 MiB root-wide LRU ceiling. A result larger than the ceiling is shared
 only while in flight and retires immediately after settlement. Rejections are
 never sticky cache entries.
+
+A root MAY replace default fetch transport with one stable complete-byte glTF
+resource reader. The same reader handles root documents, referenced buffers,
+and external images and receives the root's URI/version identity plus an abort
+signal. Royal still owns claims, deduplication, decode ownership, and bounded
+retention. Equal external image URI/version identities share decode ownership
+across different glTF documents; parent-document identity MUST NOT force a
+duplicate image transport or decode.
 
 For external `.gltf` buffers, the cold pure planner derives byte demand from
 the selected scene's child/LOD graph, accessors, sparse payloads, instancing,

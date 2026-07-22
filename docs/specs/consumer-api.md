@@ -328,10 +328,25 @@ orientation and color/alpha contract.
 
 ## Lower-level root
 
-`createRendererRoot(canvas, options)` accepts the same pure scene descriptors as
-`Canvas`. It owns one canvas renderer lifetime and exposes render, invalidate,
-pick, focused asset/texture observation, lifecycle/frame observation, bounded
-diagnostics, snapshot, and idempotent dispose operations.
+`createRendererRoot(canvas, options, dependencies)` accepts the same pure scene
+descriptors as `Canvas`. It owns one canvas renderer lifetime and exposes
+render, invalidate, pick, focused asset/texture observation, lifecycle/frame
+observation, bounded diagnostics, snapshot, and idempotent dispose operations.
+
+The optional stable dependency `gltfResourceReader(resource, signal)` reads
+complete bytes for glTF root documents, referenced buffers, and external
+images. `resource.kind` distinguishes `root`, `buffer`, and `image`; `uri` is
+absolute after glTF-relative resolution and `version` is the root asset's
+declared byte revision. Equal URI/version identities within one renderer root
+MUST produce equal bytes. Royal, rather than the callback, owns in-flight claim
+deduplication, bounded retention, last-claim cancellation, decode reuse, and
+error publication. This is the supported path for authenticated, verified, or
+application-cached bytes and does not require Blob URLs. A custom reader returns
+complete bytes whose view becomes Royal-owned and may be transferred to a
+worker. A host that retains its source storage returns an owned copy; a host
+that hands off an unretained view preserves the zero-copy path. HTTP range
+negotiation remains an optimization of Royal's default fetch transport, not a
+second public storage protocol.
 
 `root.setSize({ cssWidth, cssHeight, pixelRatio })` uses the same backing-pixel
 policy name as React. `pixelRatio` is a requested ratio, not necessarily the
@@ -342,8 +357,11 @@ additional capability-driven `renderScale`.
 fully explicit immutable values. It is intended for host wrappers that need to
 compare or report effective policy without reconstructing Royal's defaults.
 
-Creation options are immutable for a root. In React, changing a creation option
-replaces the root and canvas; changing `scene` does not. The replacement mount
+Creation options and dependencies are immutable for a root. In React,
+`Canvas` accepts the reader directly as `gltfResourceReader`; changing its
+identity replaces the root, while changing `scene` does not. Applications
+SHOULD retain one stable function for the intended root lifetime. Changing a
+creation option also replaces the root and canvas. The replacement mount
 publishes `null` rather than a stale disposed root until the new canvas-owned
 root is live. Backend-only scheduling classes, GL handles, extension objects,
 and internal resource policies are not product options.

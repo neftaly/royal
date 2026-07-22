@@ -83,7 +83,10 @@ describe("glTF asset lifecycle owner", () => {
     const readResource = vi.fn(async () => new Uint8Array([4, 5, 6]));
     const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
       async (_bytes, _key, _label, _uri, _signal, resource, sceneIndex) => {
-        const bytes = await resource("/models/shared.bin");
+        const bytes = await resource("/models/shared.bin", {
+          byteLength: 3,
+          ranges: [{ byteLength: 1, byteOffset: sceneIndex ?? 0 }],
+        });
         bytes[0] = sceneIndex ?? 0;
         return { ...prepared, sceneIndex: sceneIndex ?? 0 };
       },
@@ -94,6 +97,7 @@ describe("glTF asset lifecycle owner", () => {
       prepare,
       read,
       readResource,
+      readResourceRanges: false,
     });
     const first = gltf({ sceneIndex: 0, src: "/models/shared.gltf", version: 1 });
     const second = gltf({ sceneIndex: 1, src: "/models/shared.gltf", version: 1 });
@@ -104,6 +108,11 @@ describe("glTF asset lifecycle owner", () => {
 
     expect(read).toHaveBeenCalledOnce();
     expect(readResource).toHaveBeenCalledOnce();
+    expect(readResource).toHaveBeenCalledWith(
+      first.asset,
+      "/models/shared.bin",
+      expect.any(AbortSignal),
+    );
 
     const changedVersion = gltf({ sceneIndex: 0, src: "/models/shared.gltf", version: 2 });
     owner.reconcile([first, changedVersion]);
@@ -151,6 +160,7 @@ describe("glTF asset lifecycle owner", () => {
       expect.any(AbortSignal),
       expect.any(Function),
       2,
+      undefined,
     );
     expect(readResource).not.toHaveBeenCalled();
     expect(scheduled).toHaveBeenCalledOnce();
@@ -170,6 +180,7 @@ describe("glTF asset lifecycle owner", () => {
     owner.reconcile([node]);
     await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     expect(readResource).toHaveBeenCalledWith(
+      node.asset,
       "/models/triangle.bin",
       expect.any(AbortSignal),
     );
@@ -216,7 +227,7 @@ describe("glTF asset lifecycle owner", () => {
         now = 5;
         return new Uint8Array([1]);
       }),
-      readResource: vi.fn((uri) => new Promise<Uint8Array>((resolve) => {
+      readResource: vi.fn((_asset, uri) => new Promise<Uint8Array>((resolve) => {
         if (uri === "/first.bin") resolveFirst = resolve;
         else resolveSecond = resolve;
       })),

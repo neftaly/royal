@@ -42,6 +42,7 @@ import {
   type GltfAssetOwnerPlatform,
 } from "../gltf/asset-owner";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
+import type { StaticGltfResourceRequest } from "../gltf/static-buffer-demand";
 import {
   visitPreparedGltfGeometry,
   type GltfAssetGeometryVisitor,
@@ -74,7 +75,11 @@ import {
   type TexturePreparationSnapshot,
 } from "../texture/asset-owner";
 import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
-import type { DecodedTextureSource, TextureSourceRef } from "../texture/source";
+import type {
+  DecodedTextureSource,
+  GltfTextureAssetRef,
+  TextureSourceRef,
+} from "../texture/source";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
   resolveRendererRootOptions,
@@ -121,6 +126,10 @@ import {
   RetainedListeners,
   requireRetainedListener,
 } from "../resource/retained-listeners";
+import {
+  createGltfResourceReaderPlatform,
+  type RendererRootDependencies,
+} from "./gltf-resource-reader";
 
 export type { RendererRootOptions, ResolvedRendererRootOptions } from "./root-options";
 
@@ -243,7 +252,17 @@ export type CanvasRootPlatform = Readonly<{
     retainAlpha?: boolean,
   ): Promise<DecodedTextureSource>;
   readGltf?(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
-  readGltfResource?(uri: string, signal: AbortSignal): Promise<Uint8Array>;
+  readGltfResource?(
+    asset: GltfAssetRef,
+    uri: string,
+    signal: AbortSignal,
+    request?: StaticGltfResourceRequest,
+  ): Promise<Uint8Array>;
+  readGltfResourceRanges?: boolean;
+  readGltfTextureResource?(
+    asset: GltfTextureAssetRef,
+    signal: AbortSignal,
+  ): Promise<Uint8Array>;
   preparePrefilteredEnvironment?(source: ArrayBuffer): Promise<PreparedRoyalEnvironment>;
   readPrefilteredEnvironment?(src: string, signal: AbortSignal): Promise<ArrayBuffer>;
 }>;
@@ -279,6 +298,7 @@ const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
   retainSvgSource: boolean,
   scheduleTransport: AsyncPreparationScheduler,
+  readGltfTexture?: NonNullable<CanvasRootPlatform["readGltfTextureResource"]>,
 ): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
   return async (asset, signal, maxStorageBytes, retainAlpha) => {
@@ -288,6 +308,7 @@ const lazyBrowserTextureDecoder = (
         etc2Available,
         retainSvgSource,
         scheduleTransport,
+        readGltfTexture,
       ));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
   };
@@ -297,7 +318,16 @@ const lazyBrowserGltfPreparer = (
   etc2Available: boolean,
 ): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
   let modulePromise: Promise<typeof import("../gltf/browser-static-preparation")> | undefined;
-  return async (bytes, contentKey, label, sourceUri, signal, readResource, sceneIndex) => {
+  return async (
+    bytes,
+    contentKey,
+    label,
+    sourceUri,
+    signal,
+    readResource,
+    sceneIndex,
+    resourceVersion,
+  ) => {
     modulePromise ??= import("../gltf/browser-static-preparation");
     return (await modulePromise).prepareStaticGltfInBrowser(
       bytes,
@@ -309,6 +339,7 @@ const lazyBrowserGltfPreparer = (
       undefined,
       etc2Available,
       sceneIndex,
+      resourceVersion,
     );
   };
 };
@@ -531,7 +562,11 @@ export class CanvasRoot implements RendererRoot {
       onListenerError: (error) => platform.onListenerError(error),
       prepare: lazyBrowserGltfPreparer(this.#etc2Available),
       read: platform.readGltf ?? readGltfWithFetch,
-      readResource: platform.readGltfResource ?? readGltfResourceWithFetch,
+      readResource: platform.readGltfResource
+        ?? ((_asset, uri, signal, request) => readGltfResourceWithFetch(uri, signal, request)),
+      ...(platform.readGltfResourceRanges === undefined
+        ? {}
+        : { readResourceRanges: platform.readGltfResourceRanges }),
       schedule: this.#asyncPreparation.runForeground,
     });
     this.#textureAssets = new TextureAssetOwner({
@@ -539,6 +574,7 @@ export class CanvasRoot implements RendererRoot {
         this.#etc2Available,
         this.#automaticVirtualTexturing,
         this.#asyncPreparation.run,
+        platform.readGltfTextureResource,
       ),
       onAssetChanged: (key) => this.#queuePreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
@@ -1327,4 +1363,14 @@ export class CanvasRoot implements RendererRoot {
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options: RendererRootOptions = {},
-): RendererRoot => new CanvasRoot(canvas, options);
+  dependencies: RendererRootDependencies = {},
+): RendererRoot => {
+  const resourcePlatform = createGltfResourceReaderPlatform(dependencies);
+  return new CanvasRoot(
+    canvas,
+    options,
+    resourcePlatform === undefined
+      ? defaultPlatform()
+      : { ...defaultPlatform(), ...resourcePlatform },
+  );
+};

@@ -13,6 +13,7 @@ import {
   staticTexturedTriangleGlb,
 } from "./support/static-glb";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
+import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 describe("static glTF preparation core", () => {
   const requireExtensions = (
@@ -599,10 +600,13 @@ describe("static glTF preparation core", () => {
       "asset-v2",
       "textured.glb",
       "/models/textured.glb",
+      true,
+      undefined,
+      "v2",
     );
     expect(prepared.textureAssets).toEqual([{
       colorSpace: "srgb",
-      contentKey: "asset-v2:external:/models/albedo.png",
+      gltfResource: true,
       kind: "asset",
       sampler: {
         magFilter: "linear",
@@ -611,12 +615,27 @@ describe("static glTF preparation core", () => {
         wrapT: "repeat",
       },
       src: "/models/albedo.png",
+      version: "v2",
     }]);
     expect(prepared.primitives[0]!.material).toMatchObject({
       baseColor: [0.25, 0.5, 1, 1],
       baseColorAsset: prepared.textureAssets[0],
       requiresTextureCoordinates: true,
     });
+    const sharedFromAnotherRoot = prepareStaticGlb(
+      staticTexturedTriangleGlb(),
+      "unrelated-parent-content",
+      "other.glb",
+      "/models/other.glb",
+      true,
+      undefined,
+      "v2",
+    ).textureAssets[0]!;
+    expect(decodedTextureKey(sharedFromAnotherRoot))
+      .toBe(decodedTextureKey(prepared.textureAssets[0]!));
+    if (sharedFromAnotherRoot.kind !== "asset") throw new Error("expected external image");
+    expect(decodedTextureKey({ ...sharedFromAnotherRoot, version: "v3" }))
+      .not.toBe(decodedTextureKey(prepared.textureAssets[0]!));
   });
 
   it.each([

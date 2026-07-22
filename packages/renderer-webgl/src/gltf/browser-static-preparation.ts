@@ -1,4 +1,5 @@
 import type { PreparedStaticGltf } from "./static-asset";
+import type { TextureVersion } from "@royal/renderer-core";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 import type { StaticGltfResourceReader } from "./static-source";
 
@@ -51,6 +52,7 @@ export const prepareStaticGltfInBrowser = async (
     : undefined,
   etc2Available = true,
   sceneIndex?: number,
+  resourceVersion?: TextureVersion,
 ): Promise<PreparedStaticGltf> => {
   if (signal.aborted) throw abortFailure();
   if (createWorker === undefined || !shouldPrepareStaticGltfInWorker(bytes)) {
@@ -65,6 +67,7 @@ export const prepareStaticGltfInBrowser = async (
       undefined,
       etc2Available,
       sceneIndex,
+      resourceVersion,
     );
   }
   return new Promise<PreparedStaticGltf>((resolve, reject) => {
@@ -136,7 +139,16 @@ export const prepareStaticGltfInBrowser = async (
     worker.addEventListener("messageerror", onMessageError);
     try {
       worker.postMessage(
-        { bytes, contentKey, etc2Available, kind: "prepare", label, sceneIndex, sourceUri },
+        {
+          bytes,
+          contentKey,
+          etc2Available,
+          kind: "prepare",
+          label,
+          resourceVersion,
+          sceneIndex,
+          sourceUri,
+        },
         [bytes.buffer],
       );
     } catch (error) {

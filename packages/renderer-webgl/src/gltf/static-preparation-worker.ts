@@ -1,4 +1,5 @@
 import { prepareStaticGltfSource } from "./static-asset";
+import type { TextureVersion } from "@royal/renderer-core";
 import { preparedStaticGltfTransferBuffers } from "./static-transfer";
 import type { StaticDracoDecodeTask } from "./draco";
 import {
@@ -14,6 +15,7 @@ type PreparationRequest = Readonly<{
   etc2Available: boolean;
   kind: "prepare";
   label: string;
+  resourceVersion?: TextureVersion;
   sceneIndex?: number;
   sourceUri: string;
 }>;
@@ -113,6 +115,7 @@ workerScope.addEventListener("message", (event) => {
     executeDracoTasksInWorkers,
     request.etc2Available,
     request.sceneIndex,
+    request.resourceVersion,
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },

@@ -6,6 +6,7 @@ import {
   type ResolvedRendererRootOptions,
   type RendererRoot,
   type GltfAssetGeometryVisitor,
+  type GltfResourceReader,
 } from "@royal/renderer-webgl";
 import {
   createElement,
@@ -51,6 +52,8 @@ export interface CanvasProps
   readonly ref?: Ref<HTMLCanvasElement>;
   /** Backing pixels per CSS pixel. Defaults to the browser device pixel ratio. */
   readonly pixelRatio?: number;
+  /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
+  readonly gltfResourceReader?: GltfResourceReader;
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */
   readonly rendererOptions?: RendererRootOptions;
   /** Active root, or `null` before mount and after release. */
@@ -69,6 +72,7 @@ type CanvasRuntime = Readonly<{
 
 type CanvasAttachment = Readonly<{
   canvas: HTMLCanvasElement;
+  gltfResourceReader: GltfResourceReader | undefined;
   options: ResolvedRendererRootOptions;
   optionsKey: string;
 }>;
@@ -207,6 +211,7 @@ export const useVisitGltfAssetGeometry = (
 /** Renders one pure Royal scene into one ordinary, CSS-sized canvas. */
 export const Canvas = ({
   children,
+  gltfResourceReader,
   pixelRatio,
   ref,
   rendererOptions,
@@ -243,6 +248,7 @@ export const Canvas = ({
     canvasRef.current = element;
     setAttachment(element === null ? null : {
       canvas: element,
+      gltfResourceReader,
       options: resolvedOptions,
       optionsKey,
     });
@@ -253,14 +259,18 @@ export const Canvas = ({
       if (releaseExternalRef === undefined) assignRef(ref, null);
       else releaseExternalRef();
     };
-  }, [optionsKey, ref]);
+  }, [gltfResourceReader, optionsKey, ref]);
 
   useLayoutEffect(() => {
     if (activeAttachment === null) return undefined;
-    const { canvas: ownedCanvas, options } = activeAttachment;
+    const { canvas: ownedCanvas, gltfResourceReader: reader, options } = activeAttachment;
     let root: RendererRoot;
     try {
-      root = createRendererRoot(ownedCanvas, options);
+      root = createRendererRoot(
+        ownedCanvas,
+        options,
+        reader === undefined ? {} : { gltfResourceReader: reader },
+      );
     } catch (error) {
       setRuntime({ canvas: ownedCanvas, error, root: null });
       return undefined;

@@ -59,6 +59,27 @@ representation and retries on the next frame.
 `getSnapshot().resources.imageTextureUploads` reports admitted bytes, the
 current internal budget, and unique deferrals for the latest submitted frame.
 
+Authenticated or already-verified glTF bytes can use one stable root dependency
+instead of Blob URLs:
+
+```ts
+const root = createRendererRoot(canvas, {}, {
+  gltfResourceReader: async ({ uri, version, kind }, signal) => {
+    const bytes = await assetStore.read(uri, { signal, version });
+    console.debug(kind, uri);
+    return bytes;
+  },
+});
+```
+
+The reader returns complete `Uint8Array` bytes for root documents, referenced
+buffers, and external images. Royal owns root-wide in-flight deduplication,
+bounded retention, last-claim cancellation, and shared image decode. Equal
+URI/version requests must identify equal bytes. The returned view becomes
+Royal-owned and may be transferred to a worker; return a copy if application
+storage must remain attached. React exposes the same stable dependency as
+`<Canvas gltfResourceReader={reader} />`.
+
 `automaticVirtualTexturing` defaults to `false`. Enabling it lets eligible
 base-color raster images and SVG images move onto Royal's shared VT demand,
 residency, and shader path after usable ancestor coverage exists. SVG pages are

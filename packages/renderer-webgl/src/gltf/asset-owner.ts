@@ -91,13 +91,17 @@ export type GltfAssetOwnerPlatform = Readonly<{
       request?: StaticGltfResourceRequest,
     ) => Promise<Uint8Array>,
     sceneIndex?: number,
+    resourceVersion?: GltfAssetRef["version"],
   ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readResource(
+    asset: GltfAssetRef,
     uri: string,
     signal: AbortSignal,
     request?: StaticGltfResourceRequest,
   ): Promise<Uint8Array>;
+  /** Whether `readResource` consumes sparse selected-range requests. @defaultValue `true` */
+  readResourceRanges?: boolean;
   schedule?: AsyncPreparationScheduler;
 }>;
 
@@ -351,13 +355,16 @@ export class GltfAssetOwner {
         request?: StaticGltfResourceRequest,
       ): Promise<Uint8Array> => {
         externalReadStartedAt ??= this.#now();
+        const effectiveRequest = this.#platform.readResourceRanges === false
+          ? undefined
+          : request;
         try {
           return await this.#sharedReads.read(
-            `resource:${resourceReadKey(asset, uri, request)}`,
+            `resource:${resourceReadKey(asset, uri, effectiveRequest)}`,
             key,
-            (signal) => request === undefined
-              ? this.#platform.readResource(uri, signal)
-              : this.#platform.readResource(uri, signal, request),
+            (signal) => effectiveRequest === undefined
+              ? this.#platform.readResource(asset, uri, signal)
+              : this.#platform.readResource(asset, uri, signal, effectiveRequest),
           );
         } finally {
           externalReadCompletedAt = Math.max(externalReadCompletedAt, this.#now());
@@ -374,6 +381,7 @@ export class GltfAssetOwner {
             undefined,
             true,
             asset.sceneIndex,
+            asset.version,
           ))
         : await this.#platform.prepare(
           bytes,
@@ -383,6 +391,7 @@ export class GltfAssetOwner {
           entry.controller.signal,
           readResource,
           asset.sceneIndex,
+          asset.version,
         );
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const preparedAt = this.#now();

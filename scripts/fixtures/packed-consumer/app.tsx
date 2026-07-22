@@ -18,6 +18,7 @@ import {
   useVisitGltfAssetGeometry,
   type RendererContextSnapshot,
   type GltfDocumentScene,
+  type GltfResourceReader,
   type RendererHookOptions,
   type RendererResourceSnapshot,
   type RendererRoot,
@@ -68,6 +69,11 @@ const rendererOptions = resolveRendererRootOptions({
   antialias: true,
   automaticVirtualTexturing: true,
 });
+const gltfResourceReader: GltfResourceReader = async ({ uri }, signal) => {
+  const response = await fetch(uri, { signal });
+  if (!response.ok) throw new Error(`asset read failed with HTTP ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
+};
 const pureOrbitCamera = orbitPerspectiveCamera({
   view: clampOrbitCameraView({ distance: 0.01 }, { minDistance: 0.1 }),
 });
@@ -214,6 +220,7 @@ export const App = (): ReactNode => {
       <Canvas
         aria-label="Royal preview"
         data-testid="royal-canvas"
+        gltfResourceReader={gltfResourceReader}
         rendererOptions={rendererOptions}
         rendererRef={setRoot}
         scene={renderScene}
@@ -232,7 +239,7 @@ export const App = (): ReactNode => {
 
 /** Minimal non-React host proving the same scene and controls vocabulary. */
 export const mountImperativeRoyal = (canvas: HTMLCanvasElement): (() => void) => {
-  const root = createRendererRoot(canvas, rendererOptions);
+  const root = createRendererRoot(canvas, rendererOptions, { gltfResourceReader });
   root.setSize({ cssHeight: 450, cssWidth: 800, pixelRatio: 1 });
   root.setScene(renderScene);
   const controls = createOrbitControls(canvas, {

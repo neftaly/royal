@@ -8,6 +8,11 @@ export type {
   ResolvedRendererRootOptions,
   RendererRoot,
 } from "./runtime/canvas-root";
+export type {
+  GltfResourceRead,
+  GltfResourceReader,
+  RendererRootDependencies,
+} from "./runtime/gltf-resource-reader";
 export type { CanvasSizeInput, ResolvedCanvasSize } from "./frame/canvas-size";
 export type {
   GltfAssetSnapshot,

@@ -11,6 +11,8 @@ import {
   type RendererResourceSnapshot,
   type RendererRoot,
   type BorrowedGltfGeometry,
+  type GltfResourceReader,
+  type RendererRootDependencies,
 } from "@royal/renderer-webgl";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -172,14 +174,16 @@ describe("replacement React public API", () => {
 
   it("server-renders an ordinary canvas with stable pre-mount observation", () => {
     const Status = () => createElement("output", null, useRendererLifecycle().status);
+    const gltfResourceReader: GltfResourceReader = async () => new Uint8Array();
     const html = renderToStaticMarkup(createElement(
       Canvas,
-      { "aria-label": "preview", scene: emptyScene },
+      { "aria-label": "preview", gltfResourceReader, scene: emptyScene },
       createElement(Status),
     ));
     expect(html).toContain(
       '<canvas aria-label="preview" style="display:block;width:100%"></canvas>',
     );
+    expect(html).not.toContain("gltfResourceReader");
     expect(html).toContain("<output>unavailable</output>");
   });
 
@@ -195,11 +199,16 @@ describe("replacement React public API", () => {
     expect(createElement(Canvas, props).props).toMatchObject(props);
     expectTypeOf(createRendererRoot).toBeFunction();
     expectTypeOf(createRendererRoot).returns.toEqualTypeOf<RendererRoot>();
+    expectTypeOf(createRendererRoot).parameter(2).toEqualTypeOf<RendererRootDependencies | undefined>();
     expectTypeOf<RendererContextSnapshot>()
       .toEqualTypeOf<ReturnType<RendererRoot["getLifecycleSnapshot"]>>();
     expectTypeOf<RendererResourceSnapshot>()
       .toEqualTypeOf<ReturnType<RendererRoot["getSnapshot"]>["resources"]>();
     expectTypeOf<CanvasProps["scene"]>().toEqualTypeOf<Scene>();
+    expectTypeOf<CanvasProps["gltfResourceReader"]>()
+      .toEqualTypeOf<GltfResourceReader | undefined>();
+    expectTypeOf<{ gltfResourceReader: GltfResourceReader }>()
+      .toMatchTypeOf<RendererRootDependencies>();
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();

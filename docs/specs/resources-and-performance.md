@@ -331,6 +331,14 @@ rendering.
 Cache hits still publish asynchronously but SHOULD avoid duplicate parsing,
 decoding, copying, and GPU uploads.
 
+One optional root-scoped complete-byte reader replaces default glTF transport
+without replacing ownership. It handles roots, buffers, and external images;
+Royal retains claim-based cancellation and bounded sharing. External images use
+resolved URI plus inherited root version as decode identity, not the parent
+document identity, so separate glTF roots can converge on one transport/decode
+chain. Direct image-texture assets remain on their ordinary transport unless an
+equal decoded identity is already shared by the root.
+
 Focused glTF status exposes monotonic timings for root-source reading,
 referenced-resource reading, canonical preparation, derived first usable data,
 and terminal image completion. Concurrent referenced reads report one wall span

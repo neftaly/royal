@@ -1,4 +1,4 @@
-import type { TextureSampler } from "@royal/renderer-core";
+import type { TextureSampler, TextureVersion } from "@royal/renderer-core";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type {
   EmbeddedTextureAssetRef,
@@ -120,6 +120,7 @@ export const createTextureAssetReader = (
   sourceUri: string,
   label: string,
   etc2Available = true,
+  resourceVersion?: TextureVersion,
 ): ((
   value: unknown,
   path: string,
@@ -180,11 +181,12 @@ export const createTextureAssetReader = (
         const resolvedUri = resolveAssetUri(sourceUri, uri as string);
         return {
           colorSpace,
-          contentKey: `${contentKey}:external:${resolvedUri}`,
+          gltfResource: true,
           kind: "asset",
           sampler,
           ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
           src: resolvedUri,
+          ...(resourceVersion === undefined ? {} : { version: resourceVersion }),
         };
       }
       if (expectedMime === undefined ? (

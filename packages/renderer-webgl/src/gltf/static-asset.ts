@@ -5,7 +5,7 @@ import {
 } from "../math/mat4";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
-import type { GltfAssetBounds } from "@royal/renderer-core";
+import type { GltfAssetBounds, TextureVersion } from "@royal/renderer-core";
 import type { TextureSourceRef } from "../texture/source";
 import type { DecodedDracoPrimitive } from "./draco";
 import type { StaticDracoTaskExecutor } from "./draco";
@@ -269,6 +269,7 @@ const prepareStaticDocument = (
   etc2Available: boolean,
   decodeDraco?: StaticDracoDecoder,
   selectedSceneIndex?: number,
+  resourceVersion?: TextureVersion,
 ): PreparedStaticGltf => {
   const { bufferByteLength } = preflight;
   const accessors = array(document.accessors, label, "accessors");
@@ -322,6 +323,7 @@ const prepareStaticDocument = (
     sourceUri,
     label,
     etc2Available,
+    resourceVersion,
   );
   const nodes = array(document.nodes, label, "nodes");
   const scenes = array(document.scenes, label, "scenes");
@@ -934,6 +936,7 @@ export const prepareStaticGlb = (
   sourceUri = "asset.glb",
   etc2Available = true,
   sceneIndex?: number,
+  resourceVersion?: TextureVersion,
 ): PreparedStaticGltf => {
   const parsed = parseGlb(bytes, label);
   const document = object(parsed.document, label, "document");
@@ -958,6 +961,7 @@ export const prepareStaticGlb = (
     etc2Available,
     undefined,
     sceneIndex,
+    resourceVersion,
   );
 };
 
@@ -971,6 +975,7 @@ const prepareDocumentWithCodecs = async (
   executeDracoTasks?: StaticDracoTaskExecutor,
   etc2Available = true,
   sceneIndex?: number,
+  resourceVersion?: TextureVersion,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -1001,6 +1006,7 @@ const prepareDocumentWithCodecs = async (
     etc2Available,
     decodeDraco,
     sceneIndex,
+    resourceVersion,
   );
 };
 
@@ -1014,6 +1020,7 @@ export const prepareStaticGltfSource = async (
   executeDracoTasks?: StaticDracoTaskExecutor,
   etc2Available = true,
   sceneIndex?: number,
+  resourceVersion?: TextureVersion,
 ): Promise<PreparedStaticGltf> => {
   const canonical = await readCanonicalStaticGltfSource(
     bytes,
@@ -1033,5 +1040,6 @@ export const prepareStaticGltfSource = async (
     executeDracoTasks,
     etc2Available,
     sceneIndex,
+    resourceVersion,
   );
 };

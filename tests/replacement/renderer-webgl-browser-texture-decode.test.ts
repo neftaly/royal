@@ -28,6 +28,34 @@ const stubValidSvgParser = (): void => {
 };
 
 describe("browser texture decode shell", () => {
+  it("routes only glTF-owned external images through the injected byte reader", async () => {
+    const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
+    const fetch = vi.fn(async () => ({
+      blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }),
+      ok: true,
+    }));
+    const readGltfTexture = vi.fn(async () => new Uint8Array([137, 80, 78, 71]));
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    vi.stubGlobal("fetch", fetch);
+    const decode = createBrowserTextureDecoder(4, true, false, undefined, readGltfTexture);
+
+    await decode({
+      gltfResource: true,
+      kind: "asset",
+      src: "/shared.png",
+      version: "release-4",
+    }, new AbortController().signal);
+    await decode({ kind: "asset", src: "/direct.png" }, new AbortController().signal);
+
+    expect(readGltfTexture).toHaveBeenCalledOnce();
+    expect(readGltfTexture).toHaveBeenCalledWith(
+      expect.objectContaining({ src: "/shared.png", version: "release-4" }),
+      expect.any(AbortSignal),
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith("/direct.png", expect.any(Object));
+  });
+
   it("tries an authored SVG first and fetches its raster fallback only after failure", async () => {
     const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async () => bitmap);

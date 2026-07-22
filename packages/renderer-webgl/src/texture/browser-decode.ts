@@ -1,6 +1,7 @@
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,
+  GltfTextureAssetRef,
   TextureLeafSourceRef,
   TextureSourceRef,
 } from "./source";
@@ -83,6 +84,11 @@ const diagnosticLabel = (asset: TextureLeafSourceRef): string => {
 
 type TextureBlob = Readonly<{ blob: Blob; ktx2: boolean; svg: boolean }>;
 
+export type BrowserGltfTextureReader = (
+  asset: GltfTextureAssetRef,
+  signal: AbortSignal,
+) => Promise<Uint8Array>;
+
 const isKtx2MimeType = (mimeType: string): boolean =>
   mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/ktx2";
 
@@ -92,6 +98,16 @@ const isSvgMimeType = (mimeType: string): boolean =>
   mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/svg+xml";
 
 const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
+
+const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
+  if (asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src)) return "image/ktx2";
+  if (asset.sourceEncoding === "svg" || isSvgUri(asset.src)) return "image/svg+xml";
+  if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";
+  if (/\.jpe?g(?:[?#]|$)/i.test(asset.src)) return "image/jpeg";
+  if (/\.png(?:[?#]|$)/i.test(asset.src)) return "image/png";
+  if (/\.webp(?:[?#]|$)/i.test(asset.src)) return "image/webp";
+  return "";
+};
 
 const declaresKtx2 = (asset: TextureLeafSourceRef): boolean =>
   asset.sourceEncoding === "ktx2-etc2"
@@ -105,6 +121,7 @@ const alphaMipmapsRequired = (asset: TextureLeafSourceRef): boolean =>
 const readTextureBlob = async (
   asset: TextureLeafSourceRef,
   signal: AbortSignal,
+  readGltfTexture?: BrowserGltfTextureReader,
 ): Promise<TextureBlob> => asset.kind === "embedded-asset"
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
@@ -112,6 +129,14 @@ const readTextureBlob = async (
       svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
+      if (asset.gltfResource === true && readGltfTexture !== undefined) {
+        const bytes = await readGltfTexture(asset as GltfTextureAssetRef, signal);
+        return {
+          blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
+          ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src),
+          svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src),
+        };
+      }
       const response = await fetch(asset.src, { signal });
       if (!response.ok) {
         throw new Error(`${diagnosticLabel(asset)} fetch failed with HTTP ${response.status}`);
@@ -385,6 +410,7 @@ export const createBrowserTextureDecoder = (
   etc2Available = true,
   retainSvgSource = false,
   scheduleTransport?: AsyncPreparationScheduler,
+  readGltfTexture?: BrowserGltfTextureReader,
 ): BrowserTextureDecoder => {
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
   const transports = new BrowserWorkQueue(8);
@@ -392,10 +418,10 @@ export const createBrowserTextureDecoder = (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
   ): Promise<TextureBlob> => asset.kind === "embedded-asset"
-    ? readTextureBlob(asset, signal)
+    ? readTextureBlob(asset, signal, readGltfTexture)
     : transports.run(signal, () => scheduleTransport === undefined
-      ? readTextureBlob(asset, signal)
-      : scheduleTransport(signal, () => readTextureBlob(asset, signal)));
+      ? readTextureBlob(asset, signal, readGltfTexture)
+      : scheduleTransport(signal, () => readTextureBlob(asset, signal, readGltfTexture)));
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,

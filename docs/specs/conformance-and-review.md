@@ -313,6 +313,19 @@ second texture interpretation path. Lazy, worker, and deployed-byte ceilings do
 not rise. Three initial fixtures from the preceding shared-I/O packet exceeded
 their rounded ceilings by 5--18 gzip bytes, so only those ceilings rise by 50
 bytes.
+
+The supported root/React `gltfResourceReader` captures one stable complete-byte
+dependency for root documents, buffers, and external images. Tests cover its
+closed dependency shape, root/buffer/image URI+version identity, cancellation
+signal, full-read range opt-out, invalid runtime output, worker version
+propagation, glTF-only browser-image routing, and direct-image isolation.
+External glTF images now deduplicate by resolved URI/version rather than parent
+document. Against the preceding selected-image build this adds about 0.3 kB
+initial, 0.7 kB lazy, 0.5 kB worker, and 1.5 kB across the complete deployed
+graph. The source-map/declaration-bearing renderer tarball moves from 488 to a
+494 KiB ceiling; its measured size is 505,727 bytes. The callback's transfer
+ownership is explicit so the zero-copy path is opt-in by returned-view lifetime
+rather than an accidental cache detachment.
 Single-consumer transport remains zero-copy; protective copies and retained
 LRU bytes exist only after a read is genuinely shared.
 
