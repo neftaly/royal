@@ -265,6 +265,41 @@ export class CdpSession {
   }
 }
 
+export const openCdpSocket = (url, {
+  timeoutMs = 10_000,
+  WebSocketImpl = WebSocket,
+} = {}) => new Promise((resolve, reject) => {
+  const socket = new WebSocketImpl(url);
+  const cleanup = () => {
+    clearTimeout(timeout);
+    socket.removeEventListener('close', onClose);
+    socket.removeEventListener('error', onError);
+    socket.removeEventListener('open', onOpen);
+  };
+  const fail = (error) => {
+    cleanup();
+    try {
+      socket.close();
+    } catch {
+      // A failed connection may not have reached a closable state.
+    }
+    reject(error);
+  };
+  const onClose = () => fail(new Error(`CDP socket closed before opening: ${url}`));
+  const onError = () => fail(new Error(`CDP socket failed before opening: ${url}`));
+  const onOpen = () => {
+    cleanup();
+    resolve(socket);
+  };
+  const timeout = setTimeout(
+    () => fail(new Error(`Timed out opening CDP socket after ${timeoutMs}ms: ${url}`)),
+    timeoutMs,
+  );
+  socket.addEventListener('close', onClose, { once: true });
+  socket.addEventListener('error', onError, { once: true });
+  socket.addEventListener('open', onOpen, { once: true });
+});
+
 export const connectCdpPage = async ({
   closeExtraPages = false,
   commandTimeoutMs,
@@ -278,8 +313,7 @@ export const connectCdpPage = async ({
   const webSocketUrl = rewriteWebSocketAuthority
     ? replaceWebSocketAuthority(page.webSocketDebuggerUrl, debugHost, debugPort)
     : page.webSocketDebuggerUrl;
-  const socket = new WebSocket(webSocketUrl);
-  await once(socket, 'open');
+  const socket = await openCdpSocket(webSocketUrl);
   return new CdpSession(socket, { commandTimeoutMs });
 };
 

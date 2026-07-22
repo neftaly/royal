@@ -1877,11 +1877,12 @@ const main = async () => {
       '--no-sandbox',
       '--disable-dev-shm-usage',
       '--use-gl=angle',
-      `--use-angle=${allowSoftwareGpu ? 'swiftshader' : 'vulkan'}`,
+      `--use-angle=${allowSoftwareGpu ? 'swiftshader-webgl' : 'vulkan'}`,
       ...(allowSoftwareGpu
-        ? ['--enable-unsafe-swiftshader']
+        ? ['--enable-unsafe-swiftshader', '--disable-features=WebGPU']
         : ['--ignore-gpu-blocklist', '--disable-software-rasterizer', '--use-gpu-in-tests']),
       '--window-size=1200,800',
+      '--remote-allow-origins=*',
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${profileDir}`,
       'about:blank',

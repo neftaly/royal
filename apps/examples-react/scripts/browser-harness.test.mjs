@@ -5,6 +5,7 @@ import {
   captureBrowserDiagnostics,
   createBoundedProcessDiagnostics,
   gltfRendererSnapshotSettled,
+  openCdpSocket,
   replaceWebSocketAuthority,
   selectCdpPage,
   startPerformanceTrace,
@@ -123,6 +124,26 @@ describe('browser harness', () => {
       'quest.local',
       4774,
     )).toBe('ws://quest.local:4774/devtools/page/abc?token=123');
+  });
+
+  it('bounds a CDP socket that never opens', async () => {
+    let socket;
+    class SilentSocket extends EventTarget {
+      constructor() {
+        super();
+        socket = this;
+      }
+
+      close() {
+        this.closed = true;
+      }
+    }
+
+    await expect(openCdpSocket('ws://example.test/devtools/page/1', {
+      timeoutMs: 20,
+      WebSocketImpl: SilentSocket,
+    })).rejects.toThrow('Timed out opening CDP socket after 20ms');
+    expect(socket.closed).toBe(true);
   });
 
   it('retries HTTP readiness checks and parses the successful JSON response', async () => {
