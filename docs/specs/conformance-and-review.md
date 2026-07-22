@@ -347,6 +347,15 @@ graph to lazy glTF preparation while reducing the complete graph by about
 0.5 kB. The affected initial and total ceilings are ratcheted down; only the
 lazy and glTF-authoring ceilings rise to describe their new ownership.
 
+Immediate queued cancellation and abandoned-closure release add 27 initial,
+118 lazy, and 145 total deployed gzip bytes. The cost is cold lifecycle policy,
+not frame work: a removed asset rejects before an older browser decode settles,
+and its captured work becomes collectible even while the inert FIFO cell waits
+to reach the head. A hardware decode stub proves that canceled work never
+starts; the shared FIFO now runs seeded command sequences against a readable
+queue oracle across its compaction boundary. Only lazy and total ceilings rise
+by the corresponding rounded 100--150 byte increments.
+
 ## Accepted architecture work order
 
 Implementation follows the [clean implementation strategy](implementation-strategy.md):

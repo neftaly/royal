@@ -638,6 +638,34 @@ describe("browser texture decode shell", () => {
     await expect(Promise.all(requests)).resolves.toHaveLength(3);
   });
 
+  it("rejects queued decode work immediately when its asset is abandoned", async () => {
+    let releaseFirst: ((bitmap: ImageBitmap) => void) | undefined;
+    const createImageBitmap = vi.fn()
+      .mockImplementationOnce(() => new Promise<ImageBitmap>((resolve) => {
+        releaseFirst = resolve;
+      }))
+      .mockResolvedValue({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      blob: async () => new Blob([new Uint8Array([1])]),
+      ok: true,
+      status: 200,
+    })));
+    const decode = createBrowserTextureDecoder(1);
+    const first = decode({ kind: "asset", src: "/first.avif" }, new AbortController().signal);
+    const secondController = new AbortController();
+    const second = decode({ kind: "asset", src: "/abandoned.avif" }, secondController.signal);
+    await waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce());
+
+    secondController.abort();
+    await expect(second).rejects.toMatchObject({ name: "AbortError" });
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+
+    releaseFirst?.({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
+    await expect(first).resolves.toMatchObject({ height: 1, width: 1 });
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+  });
+
   it("releases shared preparation slots after transport while decode remains bounded", async () => {
     const releases: Array<(bitmap: ImageBitmap) => void> = [];
     vi.stubGlobal("createImageBitmap", vi.fn(() => new Promise<ImageBitmap>((resolve) => {

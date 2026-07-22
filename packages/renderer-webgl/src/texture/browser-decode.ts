@@ -23,9 +23,11 @@ export type BrowserTextureDecoder = (
 ) => Promise<DecodedTextureSource>;
 
 type PendingWork = {
+  cancel: () => void;
+  cancelled: boolean;
   readonly reject: (error: unknown) => void;
   readonly resolve: (value: unknown) => void;
-  readonly run: () => Promise<unknown>;
+  run: (() => Promise<unknown>) | undefined;
   readonly signal: AbortSignal;
 };
 
@@ -49,12 +51,23 @@ class BrowserWorkQueue {
   ): Promise<Value> {
     if (signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
-      this.#pending.enqueue({
+      const pending: PendingWork = {
+        cancel: () => undefined,
+        cancelled: false,
         reject,
         resolve: (value) => resolve(value as Value),
         run: work,
         signal,
-      });
+      };
+      const cancel = (): void => {
+        if (pending.cancelled || pending.run === undefined) return;
+        pending.cancelled = true;
+        pending.run = undefined;
+        reject(aborted());
+      };
+      pending.cancel = cancel;
+      signal.addEventListener("abort", cancel, { once: true });
+      this.#pending.enqueue(pending);
       this.#drain();
     });
   }
@@ -63,12 +76,21 @@ class BrowserWorkQueue {
     while (this.#active < this.#limit) {
       const pending = this.#pending.dequeue();
       if (pending === undefined) return;
-      if (pending.signal.aborted) {
+      if (pending.cancelled) {
+        pending.signal.removeEventListener("abort", pending.cancel);
+        continue;
+      }
+      if (pending.signal.aborted || pending.run === undefined) {
+        pending.run = undefined;
+        pending.signal.removeEventListener("abort", pending.cancel);
         pending.reject(aborted());
         continue;
       }
+      const run = pending.run;
+      pending.run = undefined;
+      pending.signal.removeEventListener("abort", pending.cancel);
       this.#active += 1;
-      void pending.run().then(pending.resolve, pending.reject).finally(() => {
+      void run().then(pending.resolve, pending.reject).finally(() => {
         this.#active -= 1;
         this.#drain();
       });

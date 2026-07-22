@@ -60,6 +60,12 @@ slot until that phase settles. Root diagnostics expose the current limit plus
 active, total queued, foreground queued, and detail queued counts without
 polling or waking rendering.
 
+Cancellation is terminal at every queued admission boundary, including the
+separate browser transport and bitmap-decode queues. It rejects the abandoned
+claim immediately and drops its captured work closure even when an earlier
+browser operation is still active; the inert queue cell may remain until FIFO
+drain, but it cannot retain asset bytes or begin work later.
+
 Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
 ceiling. Browser image decode allocations and worker scratch peaks are not
 reliably observable or predictable before work starts. Ordinary textures

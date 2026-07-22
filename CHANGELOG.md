@@ -141,6 +141,9 @@ versions identify source-level prerelease checkpoints in this repository.
   declaration before reads or codec work begin.
 - Removed avoidable opaque-frame frustum work, clear-color iteration, and
   repeated per-primitive glTF tint-key construction from retained hot paths.
+- Made queued browser texture work reject immediately on cancellation and
+  release abandoned decode/preparation closures before earlier active work
+  settles.
 
 ## 0.0.1 - 2026-07-14
 

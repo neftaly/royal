@@ -50,7 +50,7 @@ export type AsyncPreparationScheduler = <Value>(
 type PendingPreparation<Value = unknown> = {
   cancel: () => void;
   cancelled: boolean;
-  readonly prepare: () => Promise<Value>;
+  prepare: (() => Promise<Value>) | undefined;
   readonly lane: AsyncPreparationLane;
   readonly reject: (error: unknown) => void;
   readonly resolve: (value: Value) => void;
@@ -135,6 +135,7 @@ export class AsyncPreparationOwner {
       const cancel = (): void => {
         if (pending.started || pending.cancelled) return;
         pending.cancelled = true;
+        pending.prepare = undefined;
         this.#decrementQueued(lane);
         reject(aborted());
         this.#drain();
@@ -182,7 +183,10 @@ export class AsyncPreparationOwner {
       this.#activeJobs += 1;
       let preparation: Promise<unknown>;
       try {
-        preparation = pending.prepare();
+        const prepare = pending.prepare;
+        pending.prepare = undefined;
+        if (prepare === undefined) throw aborted();
+        preparation = prepare();
       } catch (error) {
         this.#settle(pending, { error, ok: false });
         continue;
@@ -217,6 +221,7 @@ export class AsyncPreparationOwner {
       if (pending === undefined) return;
       if (pending.started || pending.cancelled) continue;
       pending.cancelled = true;
+      pending.prepare = undefined;
       pending.signal.removeEventListener("abort", pending.cancel);
       pending.reject(aborted());
     }
