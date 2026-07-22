@@ -191,6 +191,7 @@ const ExternalControls = ({ root }: RendererHookOptions): ReactNode => {
 const XrControl = (): ReactNode => {
   const xr = useXrSession({
     mode: 'immersive-vr',
+    renderer: { preferredFrameRate: 'highest' },
     session: { optionalFeatures: ['local-floor'] },
   });
   const live = xr.status === 'active' || xr.status === 'suspended';

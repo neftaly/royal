@@ -3,6 +3,10 @@ export {
 } from "./xr/session-renderer";
 
 export type {
+  XrPreferredFrameRate,
+} from "./xr/frame-rate";
+
+export type {
   XrFrame,
   XrReferenceSpace,
   XrReferenceSpaceType,

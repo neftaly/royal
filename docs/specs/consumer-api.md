@@ -27,6 +27,7 @@ The canonical React XR composition is a control under the same `Canvas`:
 ```tsx
 const xr = useXrSession({
   mode: "immersive-vr",
+  renderer: { preferredFrameRate: "highest" },
   session: { optionalFeatures: ["local-floor"] },
 });
 
@@ -39,6 +40,9 @@ const xr = useXrSession({
 snapshot uses one `status` authority; `enter`, `exit`, and
 `refreshAvailability` are explicit controls. `suspended` retains a browser-
 hidden live session, while `blocked` and `error` retain an actionable message.
+`renderer.preferredFrameRate` accepts `"highest"` or a positive number and is a
+best-effort preference: unsupported browsers retain their selected rate rather
+than failing session acquisition.
 
 ## Entrypoints
 

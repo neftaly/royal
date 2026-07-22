@@ -160,6 +160,7 @@ import { useXrSession } from "@royal/react/xr";
 function XrButton() {
   const xr = useXrSession({
     mode: "immersive-vr",
+    renderer: { preferredFrameRate: "highest" },
     session: { optionalFeatures: ["local-floor"] },
   });
   const live = xr.status === "active" || xr.status === "suspended";
@@ -179,4 +180,6 @@ and cleanup. `suspended` is a live hidden session, not a failure. An `exit()`
 rejection restores that live state and retains its message in `error`.
 Inline sessions default to the `viewer` reference space. Immersive sessions
 try `local-floor`, then `local`; pass `renderer.referenceSpacePreference` to
-replace that ordered fallback explicitly.
+replace that ordered fallback explicitly. Pass
+`renderer.preferredFrameRate: "highest"` (or a positive numeric preference) to
+request an advertised session rate without making unsupported browsers fail.

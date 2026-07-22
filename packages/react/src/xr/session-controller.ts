@@ -152,13 +152,23 @@ const normalizeOptions = (
   if (options.renderer !== undefined) {
     recordWithAllowedFields(
       options.renderer,
-      ["onFrameSnapshot", "referenceSpacePreference", "webGlLayer"],
+      ["onFrameSnapshot", "preferredFrameRate", "referenceSpacePreference", "webGlLayer"],
       "XR renderer options",
       "option",
     );
     if (options.renderer.onFrameSnapshot !== undefined
       && typeof options.renderer.onFrameSnapshot !== "function") {
       throw new TypeError("XR renderer onFrameSnapshot must be a function");
+    }
+    const preferredFrameRate = options.renderer.preferredFrameRate;
+    if (preferredFrameRate !== undefined && preferredFrameRate !== "highest" && (
+      typeof preferredFrameRate !== "number"
+      || !Number.isFinite(preferredFrameRate)
+      || preferredFrameRate <= 0
+    )) {
+      throw new RangeError(
+        "Royal XR preferredFrameRate must be highest or a positive finite number",
+      );
     }
     const referenceSpacePreference = stringArray(
       options.renderer.referenceSpacePreference,
@@ -193,6 +203,9 @@ const normalizeOptions = (
       ...(options.renderer.onFrameSnapshot === undefined
         ? {}
         : { onFrameSnapshot: options.renderer.onFrameSnapshot }),
+      ...(preferredFrameRate === undefined
+        ? {}
+        : { preferredFrameRate }),
       ...(referenceSpacePreference === undefined
         ? {}
         : {

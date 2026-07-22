@@ -140,6 +140,14 @@ state returns from `ending` to `active` or `suspended` with the error retained.
 Immediate `dispose()` releases Royal resources even while the browser end
 request remains unresolved.
 
+Frame-rate selection is explicit session-renderer policy. With no preference,
+Royal preserves the browser default. `preferredFrameRate: "highest"` selects
+the greatest valid advertised rate; a numeric preference selects the nearest
+advertised rate, with ties choosing the lower rate. When the browser exposes an
+update method without an advertised list, Royal forwards a numeric preference
+directly. Unsupported or rejected preferences retain the usable session rather
+than turning an optional performance request into acquisition failure.
+
 ## XR performance
 
 XR uses the session RAF and is continuously rendered while active. It MUST NOT

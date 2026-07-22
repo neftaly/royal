@@ -10,14 +10,17 @@ import {
   type XrWebGlLayer,
   type XrWebGlLayerOptions,
 } from "../../packages/renderer-webgl/src/xr/session-renderer";
+import { selectXrPreferredFrameRate } from "../../packages/renderer-webgl/src/xr/frame-rate";
 import { canvasRootHarness } from "./support/canvas-root-harness";
 
 class FakeSession extends EventTarget implements XrSession {
+  readonly supportedFrameRates = new Float32Array([72, 90, 120]);
   readonly requestReferenceSpace = vi.fn(async (type: string) => {
     if (type === "local-floor") throw new Error("floor unavailable");
     return {} as XrReferenceSpace;
   });
   readonly updateRenderState = vi.fn();
+  readonly updateTargetFrameRate = vi.fn(async () => undefined);
 }
 
 class FakeLayer implements XrWebGlLayer {
@@ -51,10 +54,21 @@ const RIGHT_VIEW: XrView = {
 };
 
 describe("WebXR session renderer", () => {
+  it("selects a supported frame-rate preference without allocating policy state", () => {
+    expect(selectXrPreferredFrameRate("highest", new Float32Array([72, 90, 120]))).toBe(120);
+    expect(selectXrPreferredFrameRate(100, new Float32Array([72, 90, 110]))).toBe(90);
+    expect(selectXrPreferredFrameRate(120, undefined)).toBe(120);
+    expect(selectXrPreferredFrameRate("highest", undefined)).toBeUndefined();
+    expect(() => selectXrPreferredFrameRate(0, [])).toThrow("positive finite number");
+  });
+
   it("rejects hidden renderer option fields", () => {
     expect(() => validateXrSessionRendererOptions({
       [Symbol("hidden")]: true,
     })).toThrow("Royal XR renderer options has unsupported field Symbol(hidden)");
+    expect(() => validateXrSessionRendererOptions({
+      preferredFrameRate: 0,
+    })).toThrow("preferredFrameRate must be highest or a positive finite number");
   });
 
   it("borrows one root context and submits both eyes in one frame transaction", async () => {
@@ -73,11 +87,15 @@ describe("WebXR session renderer", () => {
     const renderer = await createWebXrSessionRendererWithPlatform(
       root,
       session,
-      { onFrameSnapshot: (snapshot) => snapshots.push(snapshot) },
+      {
+        onFrameSnapshot: (snapshot) => snapshots.push(snapshot),
+        preferredFrameRate: "highest",
+      },
       { layerConstructor: () => FakeLayer },
     );
 
     expect(makeXRCompatible).toHaveBeenCalledTimes(1);
+    expect(session.updateTargetFrameRate).toHaveBeenCalledWith(120);
     expect(FakeLayer.options).toEqual({ antialias: false });
     expect(session.requestReferenceSpace.mock.calls.map(([type]) => type))
       .toEqual(["local-floor", "local"]);

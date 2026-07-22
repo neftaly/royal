@@ -57,6 +57,7 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
   const referenceSpaces = useStableXrStringList(options.renderer?.referenceSpacePreference);
   const antialias = options.renderer?.webGlLayer?.antialias;
   const framebufferScaleFactor = options.renderer?.webGlLayer?.framebufferScaleFactor;
+  const preferredFrameRate = options.renderer?.preferredFrameRate;
   const onFrameSnapshot = options.renderer?.onFrameSnapshot;
   const frameSnapshotRef = useRef(onFrameSnapshot);
   frameSnapshotRef.current = onFrameSnapshot;
@@ -69,6 +70,7 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
     mode,
     ...(options.renderer === undefined ? {} : { renderer: {
       ...(telemetry ? { onFrameSnapshot: stableFrameSnapshot } : {}),
+      ...(preferredFrameRate === undefined ? {} : { preferredFrameRate }),
       ...(options.renderer.referenceSpacePreference === undefined
         ? {}
         : { referenceSpacePreference: referenceSpaces }),
@@ -89,6 +91,7 @@ export const useXrSession = (options: UseXrSessionOptions = {}): UseXrSessionRes
     framebufferScaleFactor,
     mode,
     optionalFeatures,
+    preferredFrameRate,
     referenceSpaces,
     requiredFeatures,
     root,

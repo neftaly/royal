@@ -90,6 +90,16 @@ describe("XR session state", () => {
 });
 
 describe("XR session controller", () => {
+  it("validates the frame-rate preference at the public controller boundary", () => {
+    const { root } = canvasRootHarness();
+    expect(() => createXrSessionControllerWithPlatform(root, {
+      renderer: { preferredFrameRate: Number.NaN },
+    }, {
+      createRenderer: async () => fakeRenderer(),
+      xrSystem: () => undefined,
+    })).toThrow("preferredFrameRate must be highest or a positive finite number");
+  });
+
   it("uses the guaranteed viewer reference space for inline sessions by default", async () => {
     const { root } = canvasRootHarness();
     const session = new FakeBrowserSession();

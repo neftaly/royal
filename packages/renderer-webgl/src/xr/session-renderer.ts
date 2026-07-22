@@ -12,6 +12,11 @@ import {
   multiplyMat4Into,
   type MutableMat4,
 } from "../math/mat4";
+import {
+  selectXrPreferredFrameRate,
+  validateXrPreferredFrameRate,
+  type XrPreferredFrameRate,
+} from "./frame-rate";
 
 export type XrReferenceSpaceType =
   | "viewer"
@@ -38,6 +43,7 @@ export interface XrFrame {
 }
 
 export interface XrSession {
+  readonly supportedFrameRates?: ArrayLike<number>;
   addEventListener(
     type: "end",
     listener: EventListenerOrEventListenerObject,
@@ -49,6 +55,7 @@ export interface XrSession {
     options?: EventListenerOptions | boolean,
   ): void;
   requestReferenceSpace(type: XrReferenceSpaceType): Promise<XrReferenceSpace>;
+  updateTargetFrameRate?(frameRate: number): Promise<void>;
   updateRenderState(state: { readonly baseLayer: XrWebGlLayer }): void | Promise<void>;
 }
 
@@ -91,6 +98,8 @@ export type XrSessionRendererFrameSnapshot = Readonly<{
 export type XrSessionRendererOptions = Readonly<{
   /** Allocating diagnostic callback; omit it from production frame paths. */
   onFrameSnapshot?: (snapshot: XrSessionRendererFrameSnapshot) => void;
+  /** Best-effort browser frame-rate preference; omitted preserves the browser default. */
+  preferredFrameRate?: XrPreferredFrameRate;
   /** Ordered fallback list. Defaults to `local-floor`, then `local`. */
   referenceSpacePreference?: readonly XrReferenceSpaceType[];
   webGlLayer?: XrWebGlLayerOptions;
@@ -123,7 +132,12 @@ const REFERENCE_SPACE_TYPES: readonly XrReferenceSpaceType[] = [
   "unbounded",
 ];
 const DEFAULT_REFERENCE_SPACES = ["local-floor", "local"] as const;
-const OPTION_FIELDS = new Set(["onFrameSnapshot", "referenceSpacePreference", "webGlLayer"]);
+const OPTION_FIELDS = new Set([
+  "onFrameSnapshot",
+  "preferredFrameRate",
+  "referenceSpacePreference",
+  "webGlLayer",
+]);
 const LAYER_OPTION_FIELDS = new Set(["antialias", "framebufferScaleFactor"]);
 
 const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
@@ -152,6 +166,9 @@ export const validateXrSessionRendererOptions = (
   rejectUnknownFields(record, OPTION_FIELDS, "Royal XR renderer options");
   if (options.onFrameSnapshot !== undefined && typeof options.onFrameSnapshot !== "function") {
     throw new TypeError("Royal XR onFrameSnapshot must be a function");
+  }
+  if (options.preferredFrameRate !== undefined) {
+    validateXrPreferredFrameRate(options.preferredFrameRate);
   }
   if (options.referenceSpacePreference !== undefined) {
     if (!Array.isArray(options.referenceSpacePreference)) {
@@ -303,6 +320,23 @@ export const createWebXrSessionRendererWithPlatform = async (
     }
     await gl.makeXRCompatible();
     assertSetupActive();
+    if (
+      options.preferredFrameRate !== undefined
+      && typeof session.updateTargetFrameRate === "function"
+    ) {
+      const frameRate = selectXrPreferredFrameRate(
+        options.preferredFrameRate,
+        session.supportedFrameRates,
+      );
+      if (frameRate !== undefined) {
+        try {
+          await session.updateTargetFrameRate(frameRate);
+        } catch {
+          // A preference cannot make an otherwise usable XR session fail.
+        }
+        assertSetupActive();
+      }
+    }
     const Layer = platform.layerConstructor();
     if (Layer === undefined) throw new Error("Royal XR requires XRWebGLLayer support");
     const layer = new Layer(session, gl, {
