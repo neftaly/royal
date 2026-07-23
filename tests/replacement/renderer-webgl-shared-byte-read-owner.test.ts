@@ -12,6 +12,18 @@ describe("shared byte read owner", () => {
     owner.dispose();
   });
 
+  it("rereads a settled single-consumer identity instead of retaining transferable storage", async () => {
+    const start = vi.fn(async () => new Uint8Array([1, 2, 3]));
+    const owner = new SharedByteReadOwner<string>();
+
+    const first = await owner.read("sequential", "first", start);
+    const second = await owner.read("sequential", "second", start);
+
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(first).not.toBe(second);
+    owner.dispose();
+  });
+
   it("shares transport while returning caller-owned storage", async () => {
     const start = vi.fn(async () => new Uint8Array([1, 2, 3]));
     const owner = new SharedByteReadOwner<string>();

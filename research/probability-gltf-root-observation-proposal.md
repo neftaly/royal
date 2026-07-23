@@ -89,6 +89,29 @@ immutable cache hit. Revisit the policy with the two-root fixture in acceptance
 item 5 and report avoided transport/decode time against copy cost and retained
 bytes.
 
+Royal follow-up adds that deterministic two-root fixture. With the current
+policy, two non-overlapping claims for one external URI perform two reads; the
+shared-read owner copies zero transport bytes and retains zero settled source
+bytes. A
+copy-on-settlement policy would avoid the second read only by copying and
+retaining the complete first result, then copying again for every later
+caller-owned delivery.
+
+A seven-trial Node 24.12 host microbenchmark measured representative
+`Uint8Array.slice()` medians of 2.3 microseconds for 1,672 bytes, 11.9
+microseconds for 64 KiB, and 44.2 microseconds for 256 KiB. Those CPU costs are
+small, but they do not establish a product benefit: removing 46 duplicate root
+requests in the host-cache experiment did not improve LCP, and the duplicate
+external request was an immutable browser-cache hit. Retaining even a small
+window would impose copies and live bytes on every qualifying unique resource
+to optimize one observed repeat.
+
+Decision: keep zero-copy single-consumer delivery and concurrent-only sharing.
+This is now a measured rejection rather than a denial of the duplicate. Reopen
+it if a trace shows sequential transport or decode on the critical path, then
+select explicit per-entry and total byte limits from that workload rather than
+turning the existing 32 MiB concurrent-sharing bound into a general cache.
+
 ## Suggested acceptance evidence
 
 1. A renderer using ordinary `fetch` observes root extras without another read

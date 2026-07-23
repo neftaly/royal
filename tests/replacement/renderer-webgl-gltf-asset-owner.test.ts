@@ -80,7 +80,9 @@ describe("glTF asset lifecycle owner", () => {
       variantNames: [],
     } as const;
     const read = vi.fn(async () => new Uint8Array([1, 2, 3]));
-    const readResource = vi.fn(async () => new Uint8Array([4, 5, 6]));
+    const readResource = vi.fn<GltfAssetOwnerPlatform["readResource"]>(
+      async () => new Uint8Array([4, 5, 6]),
+    );
     const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
       async (_bytes, _key, _label, _uri, _signal, resource, sceneIndex) => {
         const bytes = await resource("/models/shared.bin", {
@@ -119,6 +121,56 @@ describe("glTF asset lifecycle owner", () => {
     await waitFor(() => expect(owner.getSnapshot(changedVersion.asset).status).toBe("ready"));
     expect(read).toHaveBeenCalledTimes(2);
     expect(readResource).toHaveBeenCalledTimes(2);
+    owner.dispose();
+  });
+
+  it("records the zero-copy reread tradeoff for sequential roots sharing one external URI", async () => {
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
+      primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
+      textureAssets: [],
+      variantNames: [],
+    } as const;
+    let resolveSecondRoot: ((bytes: Uint8Array) => void) | undefined;
+    const read = vi.fn((asset: { readonly src: string }) => asset.src === "/first.gltf"
+      ? Promise.resolve(new Uint8Array([1]))
+      : new Promise<Uint8Array>((resolve) => {
+          resolveSecondRoot = resolve;
+        }));
+    const readResource = vi.fn<GltfAssetOwnerPlatform["readResource"]>(
+      async () => new Uint8Array([4, 5, 6]),
+    );
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
+      async (_bytes, _key, _label, _uri, _signal, resource) => {
+        await resource("/shared.bin");
+        return prepared;
+      },
+    );
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read,
+      readResource,
+    });
+    const first = gltf("/first.gltf");
+    const second = gltf("/second.gltf");
+
+    owner.reconcile([first, second]);
+    await waitFor(() => expect(owner.getSnapshot(first.asset).status).toBe("ready"));
+    expect(readResource).toHaveBeenCalledOnce();
+
+    resolveSecondRoot?.(new Uint8Array([2]));
+    await waitFor(() => expect(owner.getSnapshot(second.asset).status).toBe("ready"));
+    expect(readResource).toHaveBeenCalledTimes(2);
+    expect(readResource.mock.calls.map((call) => call[1])).toEqual([
+      "/shared.bin",
+      "/shared.bin",
+    ]);
     owner.dispose();
   });
 
