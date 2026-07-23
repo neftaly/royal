@@ -14,6 +14,8 @@ import {
 } from "./support/static-glb";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/asset-owner";
+import { createStaticTextureImagePlanner } from "../../packages/renderer-webgl/src/gltf/static-texture-image-plan";
+import type { JsonObject } from "../../packages/renderer-webgl/src/gltf/gltf-values";
 
 describe("static glTF preparation core", () => {
   const requireExtensions = (
@@ -828,31 +830,112 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets[0]).toMatchObject({ kind: "asset", src: uri });
   });
 
-  it("rejects imaginary required AVIF extensions and ignores optional occurrences", () => {
-    const parsed = parseGlb(staticTexturedTriangleGlb(), "imaginary-avif.glb");
-    const required = parsed.document as Record<string, unknown>;
-    required.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
-    required.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
-    required.textures = [{
-      extensions: { EXT_texture_avif: { source: 99 } },
+  it("selects required external and embedded EXT_texture_avif sources", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "avif.glb");
+    const external = parsed.document as Record<string, unknown>;
+    requireExtensions(external, "EXT_texture_avif");
+    external.images = [{ uri: "albedo.avif" }];
+    external.textures = [{ extensions: { EXT_texture_avif: { source: 0 } } }];
+
+    expect(prepareStaticGlb(
+      glbFromDocument(external, parsed.binaryChunk!),
+      "external-avif",
+      "avif.glb",
+      "/models/avif.glb",
+    ).textureAssets).toMatchObject([{
+      kind: "asset",
+      mimeType: "image/avif",
+      src: "/models/albedo.avif",
+    }]);
+
+    const embedded = prepareStaticGlb(staticTexturedTriangleGlb(
+      new Uint8Array([1, 2, 3, 4]),
+      "unused",
+      (document) => {
+        requireExtensions(document, "EXT_texture_avif");
+        document.images = [{ bufferView: 3, mimeType: "image/avif" }];
+        document.textures = [{ extensions: { EXT_texture_avif: { source: 0 } } }];
+      },
+    ), "embedded-avif");
+    expect(embedded.textureAssets).toMatchObject([{
+      contentKey: "embedded-avif:bufferView:3",
+      kind: "embedded-asset",
+      mimeType: "image/avif",
+    }]);
+  });
+
+  it("selects one EXT_texture_avif source without a retry recipe", () => {
+    const document = staticTriangleDocument() as JsonObject;
+    document.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
+    document.images = [{ uri: "fallback.png" }, { uri: "preferred.avif" }];
+    const texture = {
+      extensions: { EXT_texture_avif: { source: 1 } },
+      source: 0,
+    };
+    document.textures = [texture];
+
+    expect(createStaticTextureImagePlanner(document, "optional-avif", true)(
+      0,
+      "srgb",
+    )).toEqual({
+      primary: { expectedMimeType: "image/avif", imageIndex: 1 },
+      texture,
+    });
+  });
+
+  it("rejects malformed EXT_texture_avif declarations, placement, indices, and MIME", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "invalid-avif.glb");
+    const undeclared = parsed.document as Record<string, unknown>;
+    undeclared.textures = [{
+      extensions: { EXT_texture_avif: { source: 0 } },
       source: 0,
     }];
     expect(() => prepareStaticGlb(
-      glbFromDocument(required, parsed.binaryChunk!),
-      "imaginary-required",
-    )).toThrow("extensionsRequired[1]: is unsupported");
+      glbFromDocument(undeclared, parsed.binaryChunk!),
+      "undeclared-avif",
+    )).toThrow("must be declared in extensionsUsed");
 
-    delete required.extensionsRequired;
-    const optional = prepareStaticGlb(
-      glbFromDocument(required, parsed.binaryChunk!),
-      "imaginary-optional",
-      "asset.glb",
-      "/models/asset.glb",
+    const wrongPlacement = structuredClone(undeclared);
+    wrongPlacement.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
+    const nodes = wrongPlacement.nodes as Array<Record<string, unknown>>;
+    nodes[0]!.extensions = { EXT_texture_avif: { source: 0 } };
+    expect(() => prepareStaticGlb(
+      glbFromDocument(wrongPlacement, parsed.binaryChunk!),
+      "misplaced-avif",
+    )).toThrow("is outside Royal's supported placement profile");
+
+    const invalidSource = structuredClone(undeclared);
+    requireExtensions(invalidSource, "EXT_texture_avif");
+    invalidSource.textures = [{
+      extensions: { EXT_texture_avif: { source: 99 } },
+    }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(invalidSource, parsed.binaryChunk!),
+      "invalid-avif-source",
+    )).toThrow("textures[0].extensions.EXT_texture_avif.source");
+
+    expect(() => prepareStaticGlb(staticTexturedTriangleGlb(
+      new Uint8Array([1, 2, 3, 4]),
+      "unused",
+      (document) => {
+        requireExtensions(document, "EXT_texture_avif");
+        document.textures = [{ extensions: { EXT_texture_avif: { source: 0 } } }];
+      },
+    ), "wrong-avif-mime")).toThrow(
+      "images[0].mimeType: must be image/avif for EXT_texture_avif",
     );
-    expect(optional.textureAssets[0]).toMatchObject({
-      kind: "asset",
-      src: "/models/albedo.png",
-    });
+
+    const optionalWithoutFallback = structuredClone(undeclared);
+    optionalWithoutFallback.extensionsUsed = ["KHR_materials_unlit", "EXT_texture_avif"];
+    optionalWithoutFallback.textures = [{
+      extensions: { EXT_texture_avif: { source: 0 } },
+    }];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(optionalWithoutFallback, parsed.binaryChunk!),
+      "optional-avif-without-fallback",
+    )).toThrow(
+      "textures[0].source: is required when optional EXT_texture_avif needs a core fallback",
+    );
   });
 
   it("selects EXT_texture_webp through the same ordinary texture lifecycle", () => {

@@ -158,7 +158,7 @@ export const createTextureAssetReader = (
     const readImage = (
       source: StaticTextureImageSource,
     ): TextureLeafSourceRef => {
-      const { imageIndex, sourceEncoding } = source;
+      const { expectedMimeType, imageIndex, sourceEncoding } = source;
       const imagePath = `images[${imageIndex}]`;
       const image = object(images[imageIndex], label, imagePath);
       if ((image.uri === undefined) === (image.bufferView === undefined)) {
@@ -166,10 +166,14 @@ export const createTextureAssetReader = (
       }
       const expectedMime = sourceEncoding === "ktx2-etc2"
         ? "image/ktx2"
-        : sourceEncoding === "svg" ? "image/svg+xml" : undefined;
+        : sourceEncoding === "svg" ? "image/svg+xml" : expectedMimeType;
       const mimeError = sourceEncoding === "ktx2-etc2"
         ? "must be image/ktx2 for GS_texture_etc2"
-        : "must be image/svg+xml for GS_texture_svg";
+        : sourceEncoding === "svg"
+          ? "must be image/svg+xml for GS_texture_svg"
+          : `must be ${expectedMimeType} for ${
+            expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
+          }`;
       if (image.bufferView === undefined) {
         const uri = image.uri;
         if (typeof uri !== "string" || uri.length === 0) {
@@ -183,6 +187,7 @@ export const createTextureAssetReader = (
           colorSpace,
           gltfResource: true,
           kind: "asset",
+          ...(expectedMimeType === undefined ? {} : { mimeType: expectedMimeType }),
           sampler,
           ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
           src: resolvedUri,

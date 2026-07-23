@@ -8,6 +8,7 @@ import {
 } from "./gltf-values";
 
 export type StaticTextureImageSource = Readonly<{
+  expectedMimeType?: "image/avif" | "image/webp";
   imageIndex: number;
   sourceEncoding?: TextureSourceEncoding;
 }>;
@@ -46,6 +47,9 @@ export const createStaticTextureImagePlanner = (
     const webp = extensions.EXT_texture_webp === undefined
       ? undefined
       : object(extensions.EXT_texture_webp, label, `${texturePath}.extensions.EXT_texture_webp`);
+    const avif = extensions.EXT_texture_avif === undefined
+      ? undefined
+      : object(extensions.EXT_texture_avif, label, `${texturePath}.extensions.EXT_texture_avif`);
     if (etc2 !== undefined && texture.source === undefined && !required.has("GS_texture_etc2")) {
       fail(
         label,
@@ -67,11 +71,24 @@ export const createStaticTextureImagePlanner = (
         "is required when optional GS_texture_svg needs a core raster fallback",
       );
     }
+    if (
+      avif !== undefined
+      && texture.source === undefined
+      && !required.has("EXT_texture_avif")
+    ) {
+      fail(
+        label,
+        `${texturePath}.source`,
+        "is required when optional EXT_texture_avif needs a core fallback",
+      );
+    }
     const source = (
       value: unknown,
       path: string,
       sourceEncoding?: TextureSourceEncoding,
+      expectedMimeType?: StaticTextureImageSource["expectedMimeType"],
     ): StaticTextureImageSource => ({
+      ...(expectedMimeType === undefined ? {} : { expectedMimeType }),
       imageIndex: index(value, images, label, path),
       ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
     });
@@ -81,9 +98,21 @@ export const createStaticTextureImagePlanner = (
         `${texturePath}.extensions.GS_texture_etc2.source`,
         "ktx2-etc2",
       )
-      : webp === undefined
-        ? source(texture.source, `${texturePath}.source`)
-        : source(webp.source, `${texturePath}.extensions.EXT_texture_webp.source`);
+      : avif !== undefined
+        ? source(
+          avif.source,
+          `${texturePath}.extensions.EXT_texture_avif.source`,
+          undefined,
+          "image/avif",
+        )
+        : webp === undefined
+          ? source(texture.source, `${texturePath}.source`)
+          : source(
+            webp.source,
+            `${texturePath}.extensions.EXT_texture_webp.source`,
+            undefined,
+            "image/webp",
+          );
     if (svg === undefined) return { primary: fallback(), texture };
     const primary = source(
       svg.source,

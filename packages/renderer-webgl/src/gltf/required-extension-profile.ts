@@ -24,6 +24,7 @@ const materialOnly: PlacementProfile = (path) => material.test(path);
 const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> = {
   EXT_mesh_gpu_instancing: (path) => node.test(path),
   EXT_meshopt_compression: (path) => meshoptStorage.test(path),
+  EXT_texture_avif: (path) => texture.test(path),
   EXT_texture_webp: (path) => texture.test(path),
   GS_texture_etc2: (path) => texture.test(path),
   GS_texture_svg: (path) => texture.test(path),
@@ -127,6 +128,17 @@ export const validateRequiredExtensionProfile = (
           fail(label, extensionPath(path, extension), "must be declared in extensionsUsed");
         }
         const profile = REQUIRED_EXTENSION_PLACEMENTS[extension];
+        if (
+          extension === "EXT_texture_avif"
+          && profile !== undefined
+          && !profile(path)
+        ) {
+          fail(
+            label,
+            extensionPath(path, extension),
+            "is outside Royal's supported placement profile",
+          );
+        }
         if (required.has(extension) && !profile!(path)) {
           fail(label, extensionPath(path, extension), "is outside Royal's supported placement profile");
         }

@@ -175,7 +175,7 @@ diagnosed once.
 
 The current replacement implementation accepts these required declarations:
 
-- `EXT_mesh_gpu_instancing`, `EXT_texture_webp`, and experimental
+- `EXT_mesh_gpu_instancing`, draft `EXT_texture_avif`, `EXT_texture_webp`, and experimental
   `GS_texture_etc2`;
 - `EXT_meshopt_compression` through selected-view async codec preparation;
 - `KHR_draco_mesh_compression` through demanded async codec preparation;

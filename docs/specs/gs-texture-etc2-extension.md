@@ -107,11 +107,11 @@ Royal otherwise accepts the extension as required only at its documented
 texture placement and after validating the payload through the ordinary cold
 texture reader.
 
-The extension and `EXT_texture_webp` may both occur on one texture. Royal's
-deterministic preference is ETC2, then WebP, then the core source. Only the
-selected source enters preparation; alternates are not fetched. Producers
-MUST author equivalent color, alpha, orientation, and dimensions because
-Royal does not compare alternate pixels.
+The extension, draft `EXT_texture_avif`, and `EXT_texture_webp` may occur on one
+texture. Royal's deterministic preference is ETC2, then AVIF, then WebP, then
+the core source. Only the selected source enters preparation; alternates are
+not fetched. Producers MUST author equivalent color, alpha, orientation, and
+dimensions because Royal does not compare alternate pixels.
 
 ## Canonical lowering and ownership
 

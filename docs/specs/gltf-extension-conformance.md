@@ -1,6 +1,6 @@
 # glTF required-extension conformance ledger
 
-Status: executable replacement profile; reviewed 2026-07-20
+Status: executable replacement profile; reviewed 2026-07-23
 
 This ledger records what Royal may truthfully accept in `extensionsRequired`.
 It is narrower than the optional-feature possibility space. A name is accepted
@@ -37,6 +37,7 @@ oracle.
 | --- | --- | --- |
 | `EXT_mesh_gpu_instancing` | node | validated instance transform batches sharing ordinary geometry/materials |
 | `EXT_meshopt_compression` | buffer view and optional fallback-buffer marker; async preparation with available decoder | demanded decoded buffer-view bytes enter the ordinary canonical accessor path |
+| `EXT_texture_avif` (open draft) | texture | ordinary cold texture recipe using the draft extension image source |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
 | `GS_texture_etc2` | texture | explicitly marked offline ETC2 KTX2 recipe using the ordinary texture lifecycle |
 | `GS_texture_svg` | texture | experimental preferred SVG recipe with required failure or one deferred ordinary fallback |
@@ -76,9 +77,16 @@ transform math is generic.
   canonical decode; sampler, material, budget, upload, draw and picking remain
   ordinary paths. The root first enables `WEBGL_compressed_texture_etc` and
   passes that capability into cold/worker preparation. When available,
-  selection is ETC2, then WebP, then core; when absent, optional selection is
-  WebP then core and a required declaration fails preflight. Only the selected
-  source is fetched.
+  selection is ETC2, then AVIF, then WebP, then core; when absent, optional
+  selection is AVIF, then WebP, then core and a required declaration fails
+  preflight. Only the selected source is fetched.
+- Draft `EXT_texture_avif` accepts the texture-level `{ source }` shape from
+  open Khronos glTF PR #2235. Optional use requires a core PNG/JPEG source;
+  required use may omit it. The selected external or embedded image must be
+  AVIF, enters the ordinary browser-image lifecycle, and does not retain a
+  corrupt-data retry recipe. Royal's supported browser floor has AVIF decode;
+  Royal therefore adds no user-agent branch or startup codec probe. Browsers
+  below that floor cross the ordinary bounded decode-failure boundary.
 - `GS_texture_svg` accepts one self-contained, bounded SVG image source for
   sRGB color slots. Optional use requires a core source and attempts SVG first;
   on SVG transport, profile, or decode failure it selects ETC2 when supported,
@@ -110,10 +118,11 @@ device proof.
 ## Explicit non-claims
 
 Royal currently rejects required `KHR_texture_basisu`, image-based-light
-extensions, the remaining PBR extension family, and all draft or imaginary
-texture extensions. Browser AVIF remains valid as a direct ordinary Royal
-texture source; `EXT_texture_avif` is not a registered glTF extension and is
-never interpreted. `GS_texture_etc2` is an explicitly unregistered experimental
-vendor extension rather than an ecosystem compatibility claim.
+extensions, the remaining PBR extension family, and unimplemented draft or
+imaginary texture extensions. Browser AVIF remains valid as a direct ordinary
+Royal texture source; `EXT_texture_avif` is implemented narrowly as an open
+draft and is not represented as registered or ratified compatibility.
+`GS_texture_etc2` is an explicitly unregistered experimental vendor extension
+rather than an ecosystem compatibility claim.
 `GS_texture_svg` is likewise an implemented but unregistered Royal experiment,
 not a registered ecosystem compatibility claim.

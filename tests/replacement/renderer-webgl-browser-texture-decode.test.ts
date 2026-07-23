@@ -56,6 +56,23 @@ describe("browser texture decode shell", () => {
     expect(fetch).toHaveBeenCalledWith("/direct.png", expect.any(Object));
   });
 
+  it("retains a selected glTF texture-extension MIME for opaque resource URLs", async () => {
+    const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async (_blob: Blob) => bitmap);
+    const readGltfTexture = vi.fn(async () => createAvifHeader(4, 4));
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+
+    await createBrowserTextureDecoder(4, true, false, undefined, readGltfTexture)({
+      gltfResource: true,
+      kind: "asset",
+      mimeType: "image/avif",
+      src: "/opaque-image?id=albedo",
+    }, new AbortController().signal);
+
+    expect(readGltfTexture).toHaveBeenCalledOnce();
+    expect(createImageBitmap.mock.calls[0]![0]).toMatchObject({ type: "image/avif" });
+  });
+
   it("tries an authored SVG first and fetches its raster fallback only after failure", async () => {
     const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async () => bitmap);

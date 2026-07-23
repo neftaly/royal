@@ -122,6 +122,7 @@ const isSvgMimeType = (mimeType: string): boolean =>
 const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
+  if (asset.mimeType !== undefined) return asset.mimeType;
   if (asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src)) return "image/ktx2";
   if (asset.sourceEncoding === "svg" || isSvgUri(asset.src)) return "image/svg+xml";
   if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";

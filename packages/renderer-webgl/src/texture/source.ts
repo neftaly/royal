@@ -56,6 +56,8 @@ export type TextureSourceEncoding = "ktx2-etc2" | "svg";
 export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
   /** @internal Routes this source through the root's glTF resource reader. */
   gltfResource: true;
+  /** @internal Exact format selected by a glTF texture-source extension. */
+  mimeType?: "image/avif" | "image/webp";
   sourceEncoding?: TextureSourceEncoding;
 }>;
 
@@ -73,6 +75,7 @@ export type EmbeddedTextureAssetRef = Readonly<{
 export type TextureLeafSourceRef =
   | (TextureAssetRef & Readonly<{
     gltfResource?: true;
+    mimeType?: "image/avif" | "image/webp";
     sourceEncoding?: TextureSourceEncoding;
   }>)
   | EmbeddedTextureAssetRef;
