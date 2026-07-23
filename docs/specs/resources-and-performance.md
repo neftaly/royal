@@ -56,8 +56,18 @@ not create a parallel preload cache, scheduler, or retention policy. Image
 sources remain dormant until a visible prepared material claims them, avoiding
 decode, handoff, and GPU work for metadata- or geometry-only use.
 
-A job is one admitted preparation phase, not necessarily a complete asset
-lifecycle or a promise that a browser created a worker. An ordinary-texture
+A job is one admitted CPU/decode preparation phase, not necessarily a complete
+asset lifecycle or a promise that a browser created a worker. glTF root
+transport has a separate root-owned staging owner: at most 16 reads execute,
+at most 64 active-or-staged sources hold reservations, and new reads pause once
+completed source storage reaches 32 MiB. One oversize source progresses alone.
+Its completed bytes retain their reservation until the existing foreground
+preparation scheduler actually begins consuming them. Root transport therefore
+does not occupy scarce CPU preparation slots, while source memory cannot scale
+unboundedly with claims. `resources.gltfSourceReads` reports the exact queue,
+reservation, and completed-byte pressure.
+
+An ordinary-texture
 transport claim releases its shared slot as soon as the encoded `Blob` is
 available; it does not retain that slot while waiting for bitmap decode. A
 queued claim can be aborted without starting, and active phase work retains its
@@ -103,6 +113,10 @@ diagnostic snapshot reports admitted—not necessarily driver-completed—bytes
 and unique deferrals for each domain in the most recently submitted frame.
 
 Geometry admission governs source transfer separately from arena storage.
+There is no independent surface-count cursor. The exact per-frame byte owner
+stops before the first surface whose new geometry or instance transfer does not
+fit; every following surface which reuses already admitted resources and costs
+zero upload bytes may publish in the same transaction.
 Compatible geometry is greedily partitioned into at-most-4-MiB arena chunks,
 except that one indivisible primitive may be larger. A chunk claims persistent
 budget and creates its stable buffers/VAO only when its first surface transaction
@@ -358,15 +372,16 @@ document identity, so separate glTF roots can converge on one transport/decode
 chain. Direct image-texture assets remain on their ordinary transport unless an
 equal decoded identity is already shared by the root.
 
-Focused glTF status exposes monotonic timings for root-source reading,
-referenced-resource reading, canonical preparation, derived first usable data,
-and terminal image completion. Concurrent referenced reads report one wall span
-from the first read start through the final completion, rather than a sum of
-overlapping requests. Root read, referenced-resource span, and preparation are
-disjoint durations whose sum is the first usable milestone;
-image completion is elapsed from the exact source/version claim. The values are
-diagnostics, not scheduling inputs, and observing them does not poll or wake the
-frame loop.
+Focused glTF status exposes monotonic timings for claim-to-source-start,
+root-source reading, preparation-queue wait, referenced-resource reading,
+canonical preparation, first drawable geometry, and terminal image completion.
+Concurrent referenced reads report one wall span from the first read start
+through the final completion, rather than a sum of overlapping requests. Root
+read, queue wait, referenced-resource span, and preparation are disjoint;
+`firstDrawableAfterMs` is the direct elapsed milestone rather than a
+reconstructed sum. Image completion is likewise elapsed from the exact
+source/version claim. The values are diagnostics, not scheduling inputs, and
+observing them does not poll or wake the frame loop.
 
 Ordinary image preparation has two explicit bounds. At most eight unknown-size
 fetch/decode jobs run at once. After decode selects an exact browser-image or

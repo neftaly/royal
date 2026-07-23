@@ -325,7 +325,7 @@ describe("canvas root asset publication", () => {
     });
   });
 
-  it("keeps texture publication incremental while a large scene is still admitting", async () => {
+  it("keeps texture publication incremental after a large shared-geometry scene", async () => {
     let resolveDecode: ((source: {
       height: number;
       source: TexImageSource;
@@ -357,10 +357,6 @@ describe("canvas root asset publication", () => {
 
       resolveDecode?.({ height: 32, source: {} as ImageBitmap, width: 32 });
       await waitFor(() => expect(root.getTextureAssetSnapshot(texture).status).toBe("ready"));
-      callbacks.shift()!();
-      expect(reconcile).toHaveBeenCalledTimes(1);
-      expect(retain).toHaveBeenCalledTimes(16 * 9);
-      expect(callbacks).toHaveLength(1);
       callbacks.shift()!();
       expect(reconcile).toHaveBeenCalledTimes(1);
       expect(retain).toHaveBeenCalledTimes(20 * 9);
@@ -603,8 +599,11 @@ describe("canvas root asset publication", () => {
         status: "ready",
         timings: {
           externalResourceReadDurationMs: 0,
+          firstDrawableAfterMs: expect.any(Number),
+          preparationQueueDurationMs: expect.any(Number),
           preparationDurationMs: expect.any(Number),
           sourceReadDurationMs: expect.any(Number),
+          sourceReadStartedAfterMs: expect.any(Number),
         },
         textures: { failed: 0, fallback: 0, loading: 0, ready: 0, total: 0 },
         variantNames: [],

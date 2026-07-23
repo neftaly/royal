@@ -73,7 +73,6 @@ import {
   type GpuGeometrySurface,
 } from "./surface-geometry-gpu-owner";
 import {
-  nextSurfaceAdmissionCount,
   retainedSurfaceAdmissionCount,
 } from "./gpu-admission";
 import { frustumPlanesInto, worldBoundsVisible } from "./surface-visibility";
@@ -168,7 +167,6 @@ type GpuSurface = {
   readonly virtualTexture?: VirtualTextureGpuBinding;
 };
 
-const SURFACE_UPLOADS_PER_FRAME = 16;
 const EMPTY_RUN_ENDS: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 const EMPTY_TEXTURE_BINDINGS: readonly GpuTextureBinding[] = [];
 
@@ -1410,18 +1408,13 @@ export class SurfaceGpuOwner {
   #reconcile(): void {
     const scene = this.#scene;
     const surfaces = scene?.surfaces ?? [];
-    const requestedSurfaceCount = nextSurfaceAdmissionCount(
-      this.#admittedSurfaceCount,
-      surfaces.length,
-      SURFACE_UPLOADS_PER_FRAME,
-    );
     const retainedSurfaceCount = !this.#fullReconcileRequired
       && this.#gpuScene === scene
       ? this.#admittedSurfaceCount
       : 0;
     const geometryPlan = this.#geometryGpu.prepare(
       surfaces,
-      requestedSurfaceCount,
+      surfaces.length,
       retainedSurfaceCount,
     );
     const admittedSurfaceCount = geometryPlan.offset + geometryPlan.surfaces.length;

@@ -1,6 +1,7 @@
 # Proposal: make many-root progressive loading byte- and work-bound
 
-Status: proposed from measured Probability Settlers traces.
+Status: root-transport and zero-upload admission slices accepted and
+implemented; shared CPU geometry preparation and the texture tail remain open.
 
 ## Workload
 
@@ -94,6 +95,38 @@ and residency. For a cold many-root trace, please retain or report:
 5. A one-root scene does not regress startup, copies, or peak memory.
 6. The Probability Settlers trace improves first geometry and complete geometry
    causally; texture changes separately improve fully textured presentation.
+
+## Implemented decision and measured result
+
+Royal now begins glTF root transport under a dedicated staging owner rather
+than occupying the CPU-preparation scheduler. It permits 16 active reads and 64
+active-or-staged source reservations, pauses new reads at 32 MiB of completed
+root bytes, and releases one idempotent lease when foreground preparation
+actually begins. Active cancellation continues to occupy transport capacity
+until the underlying read settles. The one-root handoff remains zero-copy.
+
+Geometry publication no longer has an independent 16-surface cursor. The
+existing exact per-frame geometry/instance upload byte owner processes the
+complete surface suffix and stops at the first non-admitted transfer. A focused
+719-surface fixture over one geometry publishes every surface with one 54-byte
+upload transaction; distinct geometry remains byte-bounded and one oversize
+primitive still progresses.
+
+Current production Probability trace
+`/tmp/probability-many-root-after.json.gz` records all 46 glTF root requests
+starting within 294 ms and exactly eight preparation-worker starts. The earlier
+post-worker-reuse trace recorded only 23 roots within its five-second window,
+spread across 2.726 seconds. A separate draw-call probe reached 719 submitted
+draws at 5.945 seconds, close to the proposal experiment's 5.70 seconds despite
+instrumentation; draw count alone is not claimed as proof that every placeholder
+or texture had resolved.
+
+The long trace `/tmp/probability-many-root-long-after.json.gz` shows the
+remaining boundary clearly: the 45 image requests were still discovered over
+24.878 seconds. Raising decode concurrency remains rejected. This tail follows
+canonical root preparation/material discovery and requires the shared-geometry
+protocol or a separately measured texture-phase change, not more transport
+fan-out.
 
 ## Adversarial review
 

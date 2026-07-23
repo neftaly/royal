@@ -218,7 +218,7 @@ describe("clear-only canvas root", () => {
     );
   });
 
-  it("admits intermediate surface batches without redrawing unchanged content", () => {
+  it("publishes every surface sharing one uploaded geometry in one transaction", () => {
     const { callbacks, canvas, root } = harness();
     const geometry = planeGeometry([2, 1]);
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
@@ -231,17 +231,7 @@ describe("clear-only canvas root", () => {
       })),
     }));
     callbacks.shift()!();
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(16);
-    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
-    expect(callbacks).toHaveLength(1);
-
-    callbacks.shift()!();
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(16);
-    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
-    expect(callbacks).toHaveLength(1);
-
-    callbacks.shift()!();
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(56);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(40);
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(callbacks).toHaveLength(0);
   });

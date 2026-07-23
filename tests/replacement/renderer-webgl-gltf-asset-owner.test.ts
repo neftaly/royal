@@ -6,7 +6,10 @@ import {
   type GltfAssetOwnerPlatform,
 } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
-import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
+import {
+  AsyncPreparationOwner,
+  type AsyncPreparationScheduler,
+} from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
 
 const prepareStatic = (
@@ -247,6 +250,94 @@ describe("glTF asset lifecycle owner", () => {
     expect(scheduled).toHaveBeenCalledOnce();
   });
 
+  it("overlaps many small root reads before bounded preparation admission", async () => {
+    const prepared = {
+      bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
+      lights: [],
+      nodeCount: 0,
+      primitives: [],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
+      textureAssets: [],
+      variantNames: [],
+    } as const;
+    const prepare = vi.fn(async () => prepared);
+    const read = vi.fn(async () => new Uint8Array([1]));
+    const scheduled: Array<{
+      reject(error: unknown): void;
+      resolve(value: unknown): void;
+      work(): Promise<unknown>;
+    }> = [];
+    const schedule: AsyncPreparationScheduler = (_signal, work) =>
+      new Promise((resolve, reject) => scheduled.push({ reject, resolve, work }));
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read,
+      readResource: vi.fn(),
+      schedule,
+    });
+    const nodes = Array.from({ length: 46 }, (_, index) => gltf(`/many/${index}.gltf`));
+
+    owner.reconcile(nodes);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(46));
+    await waitFor(() => expect(scheduled).toHaveLength(46));
+    expect(prepare).not.toHaveBeenCalled();
+    expect(owner.sourceReadSnapshot()).toMatchObject({
+      activeReads: 0,
+      queuedReads: 0,
+      sourceReservations: 46,
+      stagedBytes: 46,
+    });
+
+    for (const pending of scheduled) {
+      void pending.work().then(pending.resolve, pending.reject);
+    }
+    await waitFor(() => expect(owner.getSnapshot(nodes[45]!.asset).status).toBe("ready"));
+    expect(prepare).toHaveBeenCalledTimes(46);
+    expect(owner.sourceReadSnapshot()).toMatchObject({
+      sourceReservations: 0,
+      stagedBytes: 0,
+    });
+    owner.dispose();
+  });
+
+  it("releases staged root bytes when queued preparation is cancelled", async () => {
+    const scheduler = new AsyncPreparationOwner(1);
+    const blocker = new AbortController();
+    let releaseBlocker: (() => void) | undefined;
+    const blocking = scheduler.runForeground(
+      blocker.signal,
+      () => new Promise<void>((resolve) => { releaseBlocker = resolve; }),
+    );
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare: vi.fn(prepareStatic),
+      read: vi.fn(async () => new Uint8Array([1, 2, 3])),
+      readResource: vi.fn(),
+      schedule: scheduler.runForeground,
+    });
+    const node = gltf("/queued.gltf");
+
+    owner.reconcile([node]);
+    await waitFor(() => expect(owner.sourceReadSnapshot()).toMatchObject({
+      sourceReservations: 1,
+      stagedBytes: 3,
+    }));
+    owner.reconcile([]);
+    await waitFor(() => expect(owner.sourceReadSnapshot()).toMatchObject({
+      sourceReservations: 0,
+      stagedBytes: 0,
+    }));
+
+    releaseBlocker?.();
+    await blocking;
+    scheduler.dispose();
+    owner.dispose();
+  });
+
   it("keeps external JSON buffer IO in the same cancellable asset lifecycle", async () => {
     const fixture = staticTriangleGltf();
     const document = JSON.parse(new TextDecoder().decode(fixture.document)) as
@@ -362,8 +453,11 @@ describe("glTF asset lifecycle owner", () => {
         status: "ready",
         timings: {
           externalResourceReadDurationMs: 0,
+          firstDrawableAfterMs: expect.any(Number),
+          preparationQueueDurationMs: expect.any(Number),
           preparationDurationMs: expect.any(Number),
           sourceReadDurationMs: expect.any(Number),
+          sourceReadStartedAfterMs: expect.any(Number),
         },
         textures: { failed: 0, fallback: 0, loading: 0, ready: 0, total: 0 },
         variantNames: [],

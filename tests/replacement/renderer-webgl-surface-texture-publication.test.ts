@@ -85,7 +85,7 @@ describe("retained surface texture publication", () => {
     }
   });
 
-  it("preserves complete-scene textures across bounded replacement geometry batches", () => {
+  it("preserves complete-scene textures across replacement geometry publication", () => {
     const assets = Array.from({ length: 20 }, (_value, index) => imageTexture({
       sampler: { minFilter: "nearest" },
       src: `/shared-scene-${index}.avif`,
@@ -95,16 +95,21 @@ describe("retained surface texture publication", () => {
       { height: 2, source: { index } as unknown as ImageBitmap, width: 2 },
     ]));
     const prepare = (
-      geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof boxGeometry>,
+      geometry: (index: number) =>
+        | ReturnType<typeof planeGeometry>
+        | ReturnType<typeof triangleGeometry>,
     ) => prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: assets.map((texture) => mesh({
-        geometry,
+      nodes: assets.map((texture, index) => mesh({
+        geometry: geometry(index),
         material: unlitMaterial({ texture }),
       })),
     }), undefined, undefined, (asset) => decoded.get(decodedTextureKey(asset)));
-    const first = prepare(planeGeometry(1));
-    const second = prepare(boxGeometry(1));
+    const first = prepare(() => planeGeometry(1));
+    const second = prepare((index) => triangleGeometry({
+      positions: [0, 0, 0, 1 + index / 100, 0, 0, 0, 1, 0],
+      textureCoordinates: [0, 0, 1, 0, 0, 1],
+    }));
     const gl = fakeGl();
     const owner = new SurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
@@ -121,9 +126,8 @@ describe("retained surface texture publication", () => {
 
       owner.setScene(second);
       draw();
-      expect(owner.surfacePublicationsPending()).toBe(true);
+      expect(owner.surfacePublicationsPending()).toBe(false);
       expect(gl.deleteTexture).not.toHaveBeenCalled();
-      while (owner.surfacePublicationsPending()) draw();
       expect(gl.createTexture).toHaveBeenCalledTimes(assets.length);
       expect(gl.deleteTexture).not.toHaveBeenCalled();
     } finally {

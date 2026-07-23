@@ -1,6 +1,7 @@
 # Proposal: source-derived geometry identity and shared preparation
 
-Status: proposed from a measured Probability workload.
+Status: accepted as an architecture target; deliberately not implemented as a
+cache bolted onto the current whole-asset worker protocol.
 
 ## Product trace
 
@@ -90,6 +91,38 @@ shared GPU storage.
 6. A cold Probability Settlers trace reports first usable geometry, last usable
    geometry, geometry worker-seconds, CPU retained bytes, uploaded geometry
    bytes, and final textured presentation before and after.
+
+## Architecture decision
+
+The current worker prepares one complete asset and transfers every canonical
+geometry buffer to the main thread. Transfer detaches worker storage. A
+worker-local cache would therefore retain detached arrays or copy every
+geometry before publication; a main-thread cache would still receive duplicated
+worker computation and could only remove GPU uploads. Routing a cached geometry
+back through another whole-asset worker would add two copies and another
+transfer. All three directions fail the proposal's CPU-worker target.
+
+Do not use URL-only identity, root-relative mesh indices, or a weak output hash
+to make the incremental GPU path appear shared. The canonical source step also
+rewrites selected buffer views and may decode meshopt or Draco, so equality must
+be established from the immutable resource/version identity plus the complete
+extraction declaration and then preserved through output ownership.
+
+The accepted implementation boundary is a two-stage preparation protocol:
+
+1. parse and validate one root into geometry work identities plus a
+   geometry-independent scene/material skeleton;
+2. let a root-owned claim-aware geometry owner join or execute exact geometry
+   tasks and publish canonical arrays once; and
+3. compose each root's independent materials, transforms, variants, lights,
+   bounds, picking, and status around borrowed canonical geometry on the main
+   side.
+
+That split must also separate buffer demand for geometry, embedded images, and
+instancing; support cancellation while another root retains a geometry claim;
+and transfer new geometry only once. It belongs with the planned replacement
+architecture rather than a transitional cache. GPU-only exact interning remains
+a valid later slice but is not reported as implementation of this proposal.
 
 ## Adversarial review
 

@@ -112,7 +112,10 @@ Those drawable states also
 report selected-scene `nodeCount`, `primitiveCount`, and `lightCount`, plus
 the resolved `sceneIndex`, lightweight document `scenes`, and declared
 `variantNames` for building scene/material-variant UI without parsing the
-source twice. Optional `rootExtras` exposes the uninterpreted, readonly JSON
+source twice. `status.timings` separates root-read admission/read duration,
+preparation queue/work, external-resource span, direct first-drawable elapsed
+time, and optional terminal image elapsed time. Optional `rootExtras` exposes
+the uninterpreted, readonly JSON
 value from that same root parse for application-owned schema validation. Its
 reference is stable across texture-progress updates; Royal does not interpret
 it or expose the rest of the parsed document. Scene inventory and extras do not

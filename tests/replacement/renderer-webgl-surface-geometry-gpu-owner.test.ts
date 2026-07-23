@@ -10,9 +10,11 @@ import { describe, expect, it, vi } from "vitest";
 import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
-import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import {
-  nextSurfaceAdmissionCount,
+  prepareCanonicalSurfaceScene,
+  type CanonicalDrawSurface,
+} from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import {
   retainedSurfaceAdmissionCount,
   surfaceGeometryResourceKey,
   surfaceGeometryUploadByteLength,
@@ -95,8 +97,6 @@ describe("surface geometry GPU owner", () => {
       ...withInstances[0]!,
       instances: { ...withInstances[0]!.instances, key: "instances-b" },
     }];
-    expect(nextSurfaceAdmissionCount(0, 381, 16)).toBe(16);
-    expect(nextSurfaceAdmissionCount(376, 381, 16)).toBe(381);
     expect(retainedSurfaceAdmissionCount(first, sameGeometry, 1)).toBe(1);
     expect(retainedSurfaceAdmissionCount(first, changedGeometry, 1)).toBe(0);
     expect(retainedSurfaceAdmissionCount(withInstances, withInstances, 1)).toBe(1);
@@ -147,6 +147,28 @@ describe("surface geometry GPU owner", () => {
     expect(oversizeFrame.surfaces).toHaveLength(1);
     expect(oversize.snapshot().admittedBytes).toBe(54);
     oversizeFrame.rollback();
+  });
+
+  it("admits every zero-upload surface which reuses one geometry transaction", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(
+      gl,
+      new PersistentGpuBudgetOwner(),
+      new FrameUploadBudgetOwner(60),
+    );
+    const shared = surface(planeGeometry(1))[0]!;
+    const surfaces = Array<CanonicalDrawSurface>(719).fill(shared);
+
+    const admission = owner.prepare(surfaces);
+
+    expect(admission.surfaces).toHaveLength(719);
+    expect(owner.snapshot()).toEqual({
+      admittedBytes: 54,
+      budgetBytes: 60,
+      deferredUploads: 0,
+    });
+    admission.commit();
+    expect(vi.mocked(gl.bufferSubData)).toHaveBeenCalledTimes(2);
   });
 
   it("does not collapse UV1-only and UV0-plus-UV1 geometry layouts", () => {

@@ -13,6 +13,10 @@ import type { TextureSourceRef } from "../texture/source";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import { SharedByteReadOwner } from "../resource/shared-byte-read-owner";
+import {
+  StagedByteReadOwner,
+  type StagedByteReadSnapshot,
+} from "../resource/staged-byte-read-owner";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 import type { GltfJsonValue } from "./gltf-values";
 
@@ -31,12 +35,18 @@ export type GltfTextureProgress = Readonly<{
 
 /** Monotonic load milestones for one exact source/version/selected-scene claim. */
 export type GltfAssetTimings = Readonly<{
+  /** Elapsed time from claim until Royal began the root source read. */
+  sourceReadStartedAfterMs: number;
   /** Wall time spent reading the root `.gltf` or `.glb` source. */
   sourceReadDurationMs: number;
+  /** Time the completed root source waited for canonical preparation admission. */
+  preparationQueueDurationMs: number;
   /** Wall span from the first referenced-resource read until the last completes. */
   externalResourceReadDurationMs: number;
   /** Remaining canonical preparation time outside the two resource-read spans. */
   preparationDurationMs: number;
+  /** Elapsed time from claim until drawable geometry became available. */
+  firstDrawableAfterMs: number;
   /** Elapsed time from claim until every requested image succeeded or failed. */
   imagesCompleteAfterMs?: number;
 }>;
@@ -89,6 +99,7 @@ export type GltfAssetOwnerPlatform = Readonly<{
   now?(): number;
   onAssetChanged(assetKey: string): void;
   onListenerError(error: unknown): void;
+  onSourceReadsChanged?(): void;
   prepare?(
     bytes: Uint8Array,
     contentKey: string,
@@ -123,6 +134,9 @@ type AssetEntry = {
 };
 
 const IDLE: GltfAssetSnapshot = { status: "idle" };
+const ACTIVE_ROOT_SOURCE_READ_LIMIT = 16;
+const ROOT_SOURCE_RESERVATION_LIMIT = 64;
+const STAGED_ROOT_SOURCE_BYTE_THRESHOLD = 32 * 1024 * 1024;
 
 const textureProgress = (
   assets: readonly TextureSourceRef[],
@@ -258,10 +272,17 @@ export class GltfAssetOwner {
   readonly #now: () => number;
   readonly #platform: GltfAssetOwnerPlatform;
   readonly #sharedReads = new SharedByteReadOwner<string>();
+  readonly #sourceReads: StagedByteReadOwner;
 
   constructor(platform: GltfAssetOwnerPlatform) {
     this.#platform = platform;
     this.#now = platform.now ?? (() => performance.now());
+    this.#sourceReads = new StagedByteReadOwner(
+      ACTIVE_ROOT_SOURCE_READ_LIMIT,
+      ROOT_SOURCE_RESERVATION_LIMIT,
+      STAGED_ROOT_SOURCE_BYTE_THRESHOLD,
+      platform.onSourceReadsChanged,
+    );
   }
 
   dispose(): void {
@@ -269,6 +290,7 @@ export class GltfAssetOwner {
     this.#disposed = true;
     for (const entry of this.#entries.values()) entry.controller.abort();
     this.#entries.clear();
+    this.#sourceReads.dispose();
     this.#sharedReads.dispose();
     this.#listeners.clear();
   }
@@ -279,6 +301,10 @@ export class GltfAssetOwner {
 
   prepared(asset: GltfAssetRef): PreparedStaticGltf | undefined {
     return this.#entries.get(gltfAssetKey(asset))?.prepared;
+  }
+
+  sourceReadSnapshot(): StagedByteReadSnapshot {
+    return this.#sourceReads.snapshot();
   }
 
   /** Recomputes focused image progress without changing geometry readiness. */
@@ -354,13 +380,27 @@ export class GltfAssetOwner {
       ? import("./static-asset")
       : undefined;
     const load = async (): Promise<void> => {
-      const startedReadingAt = this.#now();
-      const bytes = await this.#sharedReads.read(
-        `root:${gltfSourceKey(asset)}`,
-        key,
-        (signal) => this.#platform.read(asset, signal),
+      let sourceReadStartedAt = this.#now();
+      const source = await this.#sourceReads.read(
+        entry.controller.signal,
+        () => {
+          sourceReadStartedAt = this.#now();
+          return this.#sharedReads.read(
+            `root:${gltfSourceKey(asset)}`,
+            key,
+            (signal) => this.#platform.read(asset, signal),
+          );
+        },
       );
-      if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
+      if (
+        this.#disposed
+        || this.#entries.get(key) !== entry
+        || entry.controller.signal.aborted
+      ) {
+        source.release();
+        return;
+      }
+      const { bytes } = source;
       const readCompletedAt = this.#now();
       let externalReadCompletedAt = readCompletedAt;
       let externalReadStartedAt: number | undefined;
@@ -384,9 +424,12 @@ export class GltfAssetOwner {
           externalReadCompletedAt = Math.max(externalReadCompletedAt, this.#now());
         }
       };
-      const prepared = this.#platform.prepare === undefined
-        ? await preparation!.then((module) =>
-          module.prepareStaticGltfSource(
+      let preparationStartedAt = readCompletedAt;
+      const prepare = async (): Promise<PreparedStaticGltf> => {
+        preparationStartedAt = this.#now();
+        source.release();
+        return this.#platform.prepare === undefined
+          ? preparation!.then((module) => module.prepareStaticGltfSource(
             bytes,
             gltfSourceKey(asset),
             diagnosticLabel(asset),
@@ -397,16 +440,25 @@ export class GltfAssetOwner {
             asset.sceneIndex,
             asset.version,
           ))
-        : await this.#platform.prepare(
-          bytes,
-          gltfSourceKey(asset),
-          diagnosticLabel(asset),
-          asset.src,
-          entry.controller.signal,
-          readResource,
-          asset.sceneIndex,
-          asset.version,
-        );
+          : this.#platform.prepare(
+            bytes,
+            gltfSourceKey(asset),
+            diagnosticLabel(asset),
+            asset.src,
+            entry.controller.signal,
+            readResource,
+            asset.sceneIndex,
+            asset.version,
+          );
+      };
+      let prepared: PreparedStaticGltf;
+      try {
+        prepared = this.#platform.schedule === undefined
+          ? await prepare()
+          : await this.#platform.schedule(entry.controller.signal, prepare);
+      } finally {
+        source.release();
+      }
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       const preparedAt = this.#now();
       const externalResourceReadDurationMs = externalReadStartedAt === undefined
@@ -433,11 +485,17 @@ export class GltfAssetOwner {
         status: usableState(textures),
         timings: {
           externalResourceReadDurationMs,
+          firstDrawableAfterMs: preparedAt - entry.startedAt,
+          preparationQueueDurationMs: Math.max(
+            0,
+            preparationStartedAt - readCompletedAt,
+          ),
           preparationDurationMs: Math.max(
             0,
-            preparedAt - readCompletedAt - externalResourceReadDurationMs,
+            preparedAt - preparationStartedAt - externalResourceReadDurationMs,
           ),
-          sourceReadDurationMs: readCompletedAt - startedReadingAt,
+          sourceReadDurationMs: readCompletedAt - sourceReadStartedAt,
+          sourceReadStartedAfterMs: sourceReadStartedAt - entry.startedAt,
         },
         textures,
         variantNames: prepared.variantNames,
@@ -445,10 +503,7 @@ export class GltfAssetOwner {
       this.#platform.onAssetChanged(key);
       this.#publish(key);
     };
-    const loading = this.#platform.schedule === undefined
-      ? load()
-      : this.#platform.schedule(entry.controller.signal, load);
-    void loading.catch((error: unknown) => {
+    void load().catch((error: unknown) => {
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.snapshot = { error: formatFailure(error), status: "error" };
       this.#publish(key);

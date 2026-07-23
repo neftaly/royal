@@ -105,6 +105,9 @@ changes invalidate one frame and update retained camera storage without
 re-lowering the scene or rebuilding GPU resources.
 
 `getSnapshot()` and `subscribe()` expose the broad operational snapshot.
+`resources.gltfSourceReads` distinguishes active/queued root reads from
+completed source bytes waiting for CPU preparation; its internal count and byte
+ceilings are diagnostics rather than tuning controls.
 `getLifecycleSnapshot()` / `subscribeLifecycle()` and
 `getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
 unrelated frames.
@@ -118,7 +121,9 @@ include `nodeCount`, `primitiveCount`, `lightCount`, document-declared
 `textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
 logical textures whose preferred representation failed and whose declared
 alternative won. Scene inventory does not fetch or prepare unselected scene
-content. `streaming` has outstanding
+content. `timings` reports claim-to-read start, root read, preparation queue,
+external-resource span, canonical preparation, direct first-drawable elapsed
+time, and optional terminal image elapsed time. `streaming` has outstanding
 images, `ready` has completed without image failures, and `degraded` remains
 drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;

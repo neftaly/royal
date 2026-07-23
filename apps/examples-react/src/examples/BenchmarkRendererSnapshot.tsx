@@ -69,15 +69,15 @@ export const benchmarkGltfDiagnostics = (
     || status.status === 'degraded';
   const phaseMs = usable
     ? {
-        firstUsable: status.timings.sourceReadDurationMs
-          + status.timings.externalResourceReadDurationMs
-          + status.timings.preparationDurationMs,
+        firstUsable: status.timings.firstDrawableAfterMs,
         ...(status.timings.imagesCompleteAfterMs === undefined
           ? {}
           : { imagesComplete: status.timings.imagesCompleteAfterMs }),
         preparation: status.timings.preparationDurationMs,
+        preparationQueue: status.timings.preparationQueueDurationMs,
         externalResourceRead: status.timings.externalResourceReadDurationMs,
         sourceRead: status.timings.sourceReadDurationMs,
+        sourceReadStart: status.timings.sourceReadStartedAfterMs,
       }
     : {};
   const sceneIndex = usable ? status.sceneIndex : asset.sceneIndex;

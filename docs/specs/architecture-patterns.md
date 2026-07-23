@@ -343,6 +343,13 @@ set owns no second queue: it lends an idle worker or creates one within the
 ceiling, retires uncertain state after cancellation or channel failure, and
 expires healthy idle workers after a short measured grace.
 
+Transport whose wait time does not consume the constrained CPU resource uses a
+separate narrow staging owner, not the preparation scheduler. Bound its active
+I/O, total source reservations, and completed staged bytes; hand one idempotent
+lease to the downstream scheduler and release it exactly when preparation
+begins. This phase split is not permission for an unbounded fetch fan-out or a
+second queue deciding CPU priority.
+
 ### Explicit wake conditions
 
 Deferred/retryable work records why it stopped and the event that can wake it:

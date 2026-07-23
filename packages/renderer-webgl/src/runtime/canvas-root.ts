@@ -117,6 +117,7 @@ import {
   type AsyncPreparationScheduler,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
+import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
 import {
   DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
@@ -143,6 +144,8 @@ export type RendererResourceSnapshot = Readonly<{
   asyncPreparation: AsyncPreparationSnapshot;
   /** Geometry bytes uploaded or deferred during the latest submitted frame. */
   geometryUploads: SurfaceGeometryUploadSnapshot;
+  /** glTF root transport and completed-source staging pressure. */
+  gltfSourceReads: StagedByteReadSnapshot;
   /** Image-texture source preparation and decoded-handoff pressure. */
   imageTexturePreparation: TexturePreparationSnapshot;
   /** Image-texture bytes uploaded or deferred during the latest frame. */
@@ -620,6 +623,9 @@ export class CanvasRoot implements RendererRoot {
         if (this.#isVisualGltfAsset(key)) this.#refreshPreparedScene();
       },
       onListenerError: (error) => platform.onListenerError(error),
+      onSourceReadsChanged: () => {
+        if (!this.#disposed) this.#publish();
+      },
       prepare: this.#gltfPreparer.prepare,
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource
@@ -756,6 +762,7 @@ export class CanvasRoot implements RendererRoot {
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
           geometryUploads: this.#surfaceGpu.geometryUploadSnapshot(),
+          gltfSourceReads: this.#gltfAssets.sourceReadSnapshot(),
           imageTexturePreparation: this.#textureAssets.snapshot(),
           imageTextureUploads: this.#frameUploadBudget.snapshot(),
           imageTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),

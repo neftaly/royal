@@ -83,10 +83,3 @@ export const retainedSurfaceAdmissionCount = (
   }
   return retained;
 };
-
-/** Advances a cold GPU-admission cursor without making frame or WebGL decisions. */
-export const nextSurfaceAdmissionCount = (
-  admitted: number,
-  total: number,
-  budget: number,
-): number => Math.min(total, admitted + budget);

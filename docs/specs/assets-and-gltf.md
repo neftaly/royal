@@ -48,8 +48,11 @@ available value, and later publication invalidates one coalesced frame.
 ## Preparation and publication
 
 Document fetch, buffer fetch/decode, scene preparation, and image preparation
-are distinct phases. Their jobs share a root-wide scheduler and budgets.
-Preparation MUST be generation-safe and deduplicate equal work.
+are distinct phases. Root document transport uses a count- and byte-bounded
+staging owner; CPU preparation, buffer decode, and image work use their
+specialized root-wide schedulers and budgets. Waiting on root transport MUST
+NOT occupy a CPU-preparation slot. Preparation MUST be generation-safe and
+deduplicate equal work.
 
 Referenced buffer reads MUST use the same injected, cancellable resource-I/O
 port whether preparation is local or worker-executed. Executor choice cannot
@@ -66,6 +69,11 @@ after the last claimant leaves. Successfully shared results are retained under
 one 32 MiB root-wide LRU ceiling. A result larger than the ceiling is shared
 only while in flight and retires immediately after settlement. Rejections are
 never sticky cache entries.
+
+Completed root documents retain a separate staging reservation until canonical
+preparation starts. Cancellation releases queued or staged ownership; an active
+transport continues to count against its limit until the underlying read
+actually settles, even when a consumer promise has already rejected.
 
 A root MAY replace default fetch transport with one stable complete-byte glTF
 resource reader. The same reader handles root documents, referenced buffers,
