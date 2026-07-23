@@ -51,7 +51,10 @@ import {
   validateStaticGltfDeclarations,
   type StaticGltfDeclarations,
 } from "./static-declarations";
-import { collectStaticTextureAssets } from "./static-texture-assets";
+import {
+  collectStaticAlphaMaskTextureAssets,
+  collectStaticTextureAssets,
+} from "./static-texture-assets";
 import {
   readCanonicalStaticGltfSource,
   type StaticGltfResourceReader,
@@ -85,6 +88,8 @@ export type PreparedStaticGltfPrimitive = Readonly<{
 }>;
 
 export type PreparedStaticGltf = Readonly<{
+  /** Base-color images whose MASK materials require retained CPU alpha. */
+  alphaMaskTextureAssets: readonly TextureSourceRef[];
   bounds: GltfAssetBounds;
   lights: readonly PreparedStaticGltfLight[];
   /** Authored nodes reachable from the selected scene, including authored LOD members. */
@@ -924,6 +929,7 @@ const prepareStaticDocument = (
   if (primitives.length === 0) fail(label, `scenes[${sceneIndex}]`, "has no renderable primitives");
   const batchedPrimitives = batchRepeatedStaticPrimitives(primitives);
   return {
+    alphaMaskTextureAssets: collectStaticAlphaMaskTextureAssets(batchedPrimitives),
     bounds: staticGltfBounds(batchedPrimitives),
     lights,
     nodeCount: claimed.size,

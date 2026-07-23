@@ -483,6 +483,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #gltfAssets: GltfAssetOwner;
   readonly #gltfPreparer: ReturnType<typeof lazyBrowserGltfPreparer>;
   #gltfAssetClaims: readonly GltfAssetRef[] = EMPTY_GLTF_ASSET_CLAIMS;
+  #gltfSceneDirty = false;
   readonly #frameUploadBudget: FrameUploadBudgetOwner;
   readonly #idleVirtualTextureRuntimeSnapshot: VirtualTextureRuntimeSnapshot;
   readonly #getDecodedAlpha = (asset: TextureSourceRef): DecodedTextureAlpha | undefined =>
@@ -503,6 +504,8 @@ export class CanvasRoot implements RendererRoot {
   #instanceSceneDirty = false;
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
   readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
+  readonly #pendingGltfAlphaMaskTextureAssets: TextureSourceRef[] = [];
+  readonly #pendingGltfTextureAssets: TextureSourceRef[] = [];
   readonly #pendingTexturePublicationKeys = new Set<string>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
@@ -620,7 +623,8 @@ export class CanvasRoot implements RendererRoot {
     });
     this.#gltfAssets = new GltfAssetOwner({
       onAssetChanged: (key) => {
-        if (this.#isVisualGltfAsset(key)) this.#refreshPreparedScene();
+        const asset = this.#visualGltfAsset(key);
+        if (asset !== undefined) this.#queuePreparedGltfScene(asset);
       },
       onListenerError: (error) => platform.onListenerError(error),
       onSourceReadsChanged: () => {
@@ -690,6 +694,8 @@ export class CanvasRoot implements RendererRoot {
   [rendererSubmitExternalFrame](frame: ExternalSurfaceFrame): boolean {
     this.#assertLive("submit an external frame");
     if (this.#context.getSnapshot().phase !== "active" || frame.views.length === 0) return false;
+    this.#flushPreparedGltfScene(true);
+    this.#flushPreparedTextures();
     this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
     const intent = this.#externalClearIntent;
@@ -828,6 +834,7 @@ export class CanvasRoot implements RendererRoot {
     this.#assertLive("pick");
     validatePickInput(input);
     if (this.#context.getSnapshot().phase !== "active") return undefined;
+    this.#flushPreparedGltfScene();
     this.#flushInstanceScene(true);
     const scene = this.#surfaceScene;
     const size = this.#size;
@@ -869,6 +876,8 @@ export class CanvasRoot implements RendererRoot {
       this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
       return;
     }
+    this.#gltfSceneDirty = false;
+    this.#resetPendingGltfTextureAssets();
     this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
@@ -923,7 +932,10 @@ export class CanvasRoot implements RendererRoot {
     if (!semanticChanged) return;
     this.#sizeInput = { ...input };
     this.#size = resolved;
-    if (this.#surfaceScene !== null) this.#reconcileTextureAssets(this.#surfaceScene);
+    if (this.#surfaceScene !== null) {
+      if (this.#gltfSceneDirty) this.#reconcilePreparedGltfTextures();
+      else this.#reconcileTextureAssets(this.#surfaceScene);
+    }
     if (!previous || backingChanged) this.#rebuildFrameIntent();
     if (backingChanged) this.#state.invalidate();
     this.#publishSize();
@@ -1019,10 +1031,10 @@ export class CanvasRoot implements RendererRoot {
     this.#sizeListeners.publish(this.#platform.onListenerError);
   }
 
-  #isVisualGltfAsset(key: string): boolean {
-    return this.#surfaceScene?.gltfNodes.some(
+  #visualGltfAsset(key: string): GltfAssetRef | undefined {
+    return this.#surfaceScene?.gltfNodes.find(
       (node) => gltfAssetKey(node.asset) === key,
-    ) ?? false;
+    )?.asset;
   }
 
   #rebuildFrameIntent(): void {
@@ -1125,8 +1137,12 @@ export class CanvasRoot implements RendererRoot {
     this.#virtualTextureRuntime?.invalidateSceneGeometry();
   }
 
-  #refreshPreparedScene(instanceOnly = false): void {
+  #refreshPreparedScene(
+    instanceOnly = false,
+    presentInCurrentFrame = false,
+  ): void {
     if (this.#disposed || this.#surfaceSceneInput === null) return;
+    this.#gltfSceneDirty = false;
     this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(this.#surfaceSceneInput.camera);
     const prepared = prepareCanonicalSurfaceScene(
@@ -1137,6 +1153,7 @@ export class CanvasRoot implements RendererRoot {
       this.#isTexturePending,
     );
     this.#surfaceScene = prepared;
+    this.#resetPendingGltfTextureAssets();
     if (!instanceOnly) {
       this.#progressivePresentation.reset();
       this.#surfaceResourcesPending = false;
@@ -1152,11 +1169,22 @@ export class CanvasRoot implements RendererRoot {
     this.#instancePickingDirty = false;
     if (!instanceOnly) {
       this.#clock.retry();
-      this.#invalidatePresentation();
+      if (presentInCurrentFrame) this.#presentationRequired = true;
+      else this.#invalidatePresentation();
     }
   }
 
   #reconcileTextureAssets(scene: CanonicalSurfaceScene): void {
+    this.#reconcileTextureAssetClaims(
+      scene.textureAssets,
+      scene.alphaMaskTextureAssets,
+    );
+  }
+
+  #reconcileTextureAssetClaims(
+    assets: readonly TextureSourceRef[],
+    alphaMaskAssets: readonly TextureSourceRef[],
+  ): void {
     const size = this.#size;
     const storageBudgetBytes = this.#surfaceGpu.ordinaryTextureStorageBudget(
       this.#persistentGpuBudget.budgetBytes,
@@ -1164,9 +1192,18 @@ export class CanvasRoot implements RendererRoot {
       size?.backingHeight ?? 1,
     );
     this.#textureAssets.reconcile(
-      scene.textureAssets,
-      scene.alphaMaskTextureAssets,
+      assets,
+      alphaMaskAssets,
       storageBudgetBytes,
+    );
+  }
+
+  #reconcilePreparedGltfTextures(): void {
+    const scene = this.#surfaceScene;
+    if (scene === null) return;
+    this.#reconcileTextureAssetClaims(
+      [...scene.textureAssets, ...this.#pendingGltfTextureAssets],
+      [...scene.alphaMaskTextureAssets, ...this.#pendingGltfAlphaMaskTextureAssets],
     );
   }
 
@@ -1174,6 +1211,27 @@ export class CanvasRoot implements RendererRoot {
     if (this.#disposed) return;
     this.#pendingTexturePublicationKeys.add(key);
     this.#clock.invalidate();
+  }
+
+  #queuePreparedGltfScene(asset: GltfAssetRef): void {
+    if (this.#disposed) return;
+    const prepared = this.#gltfAssets.prepared(asset);
+    if (prepared === undefined) return;
+    this.#pendingGltfTextureAssets.push(...prepared.textureAssets);
+    this.#pendingGltfAlphaMaskTextureAssets.push(...prepared.alphaMaskTextureAssets);
+    this.#reconcilePreparedGltfTextures();
+    this.#gltfSceneDirty = true;
+    this.#clock.invalidate();
+  }
+
+  #resetPendingGltfTextureAssets(): void {
+    this.#pendingGltfTextureAssets.length = 0;
+    this.#pendingGltfAlphaMaskTextureAssets.length = 0;
+  }
+
+  #flushPreparedGltfScene(presentInCurrentFrame = false): void {
+    if (!this.#gltfSceneDirty) return;
+    this.#refreshPreparedScene(false, presentInCurrentFrame);
   }
 
   #flushPreparedTextures(): void {
@@ -1309,6 +1367,7 @@ export class CanvasRoot implements RendererRoot {
   #renderFrame(): void {
     const intent = this.#frameIntent;
     if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+    this.#flushPreparedGltfScene(true);
     this.#flushPreparedTextures();
     this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();

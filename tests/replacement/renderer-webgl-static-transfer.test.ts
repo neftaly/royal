@@ -27,6 +27,7 @@ describe("prepared static glTF transfer ownership", () => {
     const fallbackStorage = new ArrayBuffer(16);
     const fallbackBytes = new Uint8Array(fallbackStorage, 4, 8);
     const prepared: PreparedStaticGltf = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [{
         color: [1, 1, 1],
@@ -88,6 +89,7 @@ describe("prepared static glTF transfer ownership", () => {
 
   it("does not invent transfer storage for external texture recipes", () => {
     const prepared: PreparedStaticGltf = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,

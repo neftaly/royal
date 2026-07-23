@@ -140,3 +140,68 @@ fan-out.
   budget already owns upload safety.
 - Do not report a decode-queue microbenchmark as a product win without an
   end-to-end rendered-frame improvement.
+
+## Probability follow-up after the accepted loading slices
+
+The current Probability build against Royal `8edcd1e7` was traced after adding
+exact support derived from Royal's borrowed prepared geometry. The unthrottled
+local Chromium trace is
+`/tmp/probability-settlers-long.json.gz`.
+
+- LCP was 800 ms.
+- The last of 149 resource completions was at 5.964 seconds.
+- The last Royal-scheduled animation frame ended at 6.790 seconds.
+- The final long renderer commit ended at 6.923 seconds.
+- Renderer-main `Commit` events totalled 3.101 seconds across the trace.
+- 27 renderer-main tasks exceeded 50 ms and totalled 3.824 seconds.
+
+Those frame/commit boundaries are reported as operational evidence, not proof
+of a particular internal cause or of the last content-changing pixel.
+
+Probability also tested an all-ready consumer barrier for renderer status and
+support-shape publication. Adjacent five-second traces changed from 20 tasks
+over 50 ms totalling 2.693 seconds to 22 totalling 3.002 seconds, while delaying
+interaction readiness. The experiment was reverted. Play now continues to
+submit ordinary claims and publish each prepared model independently.
+
+This rejects consumer batching as the next direction. Preserve progressive
+first geometry while pursuing the open source-derived shared preparation and
+texture/publication tail; do not require Probability to discover shared glTF
+roots or hold a whole game behind an all-ready protocol.
+
+## Royal follow-up decision: frame-bound structural publication
+
+The reported `Commit` spans are Chromium
+`disabled-by-default-devtools.timeline` compositor events. They contain no
+Royal or React JavaScript stack; the long examples overlap only their enclosing
+renderer `RunTask`. They are therefore evidence of expensive progressive
+presentation, not 3.101 seconds of an identified Royal commit function. The
+same trace records about 75 ms of minor-GC events and 59 ms of major-GC events
+before accounting for nested phases, so a GC-specific rewrite is not supported
+by this evidence either.
+
+Royal did have one independently provable publication problem: every visual
+glTF completion synchronously lowered and reconciled the complete growing
+scene, even when many workers settled before the browser could present another
+frame. The accepted split is:
+
+- focused asset status and selected texture claims publish immediately;
+- selected textures begin the ordinary bounded transport/decode lifecycle
+  without waiting for structural scene publication;
+- visual glTF structural changes set one root-owned dirty bit and lower through
+  one coherent scene/GPU transaction at the next renderer frame;
+- canvas, external XR, and imperative picking flush that same pending
+  transaction; XR also flushes ordinary texture publication before drawing; and
+- no timer, consumer manifest, all-ready barrier, concurrency knob, or parallel
+  scene path is added.
+
+A focused 24-root oracle settles every independent preparation before one
+scheduled frame and observes one GPU `setScene` transaction rather than 24.
+Existing external/embedded/MASK texture oracles prove decode still begins
+before that frame, and an XR oracle proves a texture which settles under
+external frame authority uploads on the following XR submission. The complete
+Probability trace must be repeated before claiming a product-time win.
+
+Source-derived cross-root CPU geometry preparation remains open. This slice
+removes redundant scene/GPU publication; it does not misreport a frame batch as
+canonical geometry reuse or weaken the accepted two-stage preparation target.

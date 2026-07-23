@@ -35,6 +35,7 @@ describe("prepared glTF geometry visitor", () => {
       1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1,
     ]);
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [0, 0, 0] },
       lights: [],
       nodeCount: 3,

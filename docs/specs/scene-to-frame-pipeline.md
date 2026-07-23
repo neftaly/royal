@@ -60,6 +60,15 @@ The production path MUST be retained and incremental: camera motion does not
 reparse assets or rebuild scene topology; one transform patch does not scan all
 instances; one texture completion does not recompile unrelated assets.
 
+Independent prepared glTF roots publish focused readiness and begin their
+selected texture lifecycles immediately. Their structural scene/GPU changes
+coalesce at the existing frame authority: every root which settles before one
+canvas or XR frame enters one coherent scene transaction. This is not an
+all-ready barrier; the first prepared root remains eligible at the next frame.
+Imperative picking MUST flush a pending structural transaction before querying
+the shared scene, and external frames MUST flush the same glTF and texture
+publication paths rather than maintaining XR-specific state.
+
 A slower pure full computation SHOULD exist where useful as a differential
 oracle for fuzzing. It MUST NOT become a silent production fallback.
 

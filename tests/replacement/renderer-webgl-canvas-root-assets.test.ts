@@ -176,6 +176,52 @@ describe("canvas root asset publication", () => {
     }
   });
 
+  it("publishes independently prepared glTF roots as one progressive frame batch", async () => {
+    const reads = new Map<string, (bytes: Uint8Array) => void>();
+    const readGltf = vi.fn((asset: { src: string }) =>
+      new Promise<Uint8Array>((resolve) => reads.set(asset.src, resolve)));
+    const setGpuScene = vi.spyOn(SurfaceGpuOwner.prototype, "setScene");
+    const nodes = Array.from(
+      { length: 24 },
+      (_, index) => gltf(`/progressive-${index}.glb`),
+    );
+    const { callbacks, root } = harness({ readGltf });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes,
+      }));
+      callbacks.shift()!();
+      setGpuScene.mockClear();
+
+      const bytes = staticTriangleGlb();
+      const resolved = new Set<string>();
+      await waitFor(() => expect(reads.size).toBe(16));
+      for (const [src, resolve] of reads) {
+        resolved.add(src);
+        resolve(bytes);
+      }
+      await waitFor(() => expect(reads.size).toBe(nodes.length));
+      for (const [src, resolve] of reads) {
+        if (!resolved.has(src)) resolve(bytes);
+      }
+      await waitFor(() => {
+        expect(nodes.every(
+          (node) => root.getGltfAssetSnapshot(node.asset).status === "ready",
+        )).toBe(true);
+      });
+
+      expect(setGpuScene).not.toHaveBeenCalled();
+      expect(callbacks).toHaveLength(1);
+      callbacks.shift()!();
+      expect(setGpuScene).toHaveBeenCalledOnce();
+    } finally {
+      root.dispose();
+      setGpuScene.mockRestore();
+    }
+  });
+
   it("keeps decode readiness distinct from terminal GPU texture denial", async () => {
     const texture = imageTexture("/over-budget.png");
     const reconciledTextures = vi.spyOn(TextureGpuOwner.prototype, "reconcileClaimedBatch");

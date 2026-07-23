@@ -63,6 +63,7 @@ describe("glTF asset lifecycle owner", () => {
 
   it("separates selected-scene lifecycle while preserving source content identity", async () => {
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -102,6 +103,7 @@ describe("glTF asset lifecycle owner", () => {
 
   it("shares exact root and referenced-resource reads across selected assets", async () => {
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -158,6 +160,7 @@ describe("glTF asset lifecycle owner", () => {
 
   it("records the zero-copy reread tradeoff for sequential roots sharing one external URI", async () => {
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -209,6 +212,7 @@ describe("glTF asset lifecycle owner", () => {
   it("routes preparation through one injected lifecycle without duplicating resource IO", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -252,6 +256,7 @@ describe("glTF asset lifecycle owner", () => {
 
   it("overlaps many small root reads before bounded preparation admission", async () => {
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -375,6 +380,7 @@ describe("glTF asset lifecycle owner", () => {
     let resolveFirst: ((bytes: Uint8Array) => void) | undefined;
     let resolveSecond: ((bytes: Uint8Array) => void) | undefined;
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
@@ -516,6 +522,7 @@ describe("glTF asset lifecycle owner", () => {
       },
     } as const;
     const prepared = {
+      alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,

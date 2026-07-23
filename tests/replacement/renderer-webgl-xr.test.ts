@@ -1,5 +1,13 @@
-import { mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
+import {
+  imageTexture,
+  mesh,
+  perspectiveCamera,
+  planeGeometry,
+  scene,
+  unlitMaterial,
+} from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { waitFor } from "./support/wait-for";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
   createWebXrSessionRendererWithPlatform,
@@ -121,6 +129,45 @@ describe("WebXR session renderer", () => {
     expect(canvas.gl.clear).toHaveBeenCalledTimes(1);
     renderer.dispose();
     expect(renderer.disposed).toBe(true);
+  });
+
+  it("publishes textures which settle under external XR frame authority", async () => {
+    let resolveDecode: ((source: {
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }) => void) | undefined;
+    const decodeTexture = vi.fn(() => new Promise<{
+      height: number;
+      source: TexImageSource;
+      width: number;
+    }>((resolve) => { resolveDecode = resolve; }));
+    const texture = imageTexture("/xr-progressive.png");
+    const { canvas, root } = canvasRootHarness({ decodeTexture });
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ texture }),
+      })],
+    }));
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      new FakeSession(),
+      {},
+      { layerConstructor: () => FakeLayer },
+    );
+    const frame = { getViewerPose: () => ({ views: [LEFT_VIEW, RIGHT_VIEW] }) };
+    renderer.renderFrame(frame);
+    vi.mocked(canvas.gl.texSubImage2D).mockClear();
+
+    resolveDecode?.({ height: 8, source: {} as ImageBitmap, width: 8 });
+    await waitFor(() => expect(root.getTextureAssetSnapshot(texture).status).toBe("ready"));
+    renderer.renderFrame(frame);
+
+    expect(canvas.gl.texSubImage2D).toHaveBeenCalledOnce();
+    renderer.dispose();
   });
 
   it("re-establishes Royal state after external runtime work and releases on context loss", async () => {
