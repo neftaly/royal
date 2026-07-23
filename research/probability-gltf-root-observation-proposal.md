@@ -72,17 +72,22 @@ preparation so identical pending URI claims overlap. Any solution should retain
 Royal's cancellation and memory bounds and prove that copies cost less than the
 avoided transport/decode work. It is independent of the root-extras API.
 
-Decision after inspection: retain the existing policy pending contrary measured
-evidence. Concurrent exact reads already share transport and receive
+Decision after inspection: retain the existing policy pending a focused
+benchmark. Concurrent exact reads already share transport and receive
 caller-owned storage under a 32 MiB LRU bound. A settled single-consumer read is
 deliberately zero-copy and therefore cannot also be retained after its storage
 may be mutated or transferred. Retaining every such read would add a full byte
-copy and potentially 32 MiB of live CPU storage to optimize the trace's small
-immutable cache hits; the host-cache experiment did not improve LCP. The
-current post-proposal trace contains one request apiece for its external
-buffers, so it does not supply the sequential duplicate needed to overturn that
-tradeoff. Revisit only with a reproducible duplicate whose avoided
-transport/decode cost exceeds the added copy and retention.
+copy and potentially 32 MiB of live CPU storage.
+
+Correction: the reduced host-sharing trace does contain the same
+`buffer-65f85b6318cd0fbe.bin` request twice. Both requests are Royal external
+resource reads; Probability's resource projection reads roots, not their
+external buffers. This confirms the sequential-reuse gap described above. It
+does not show that copying and retaining every settled read is faster: the
+host-cache experiment still did not improve LCP, and this buffer is a small
+immutable cache hit. Revisit the policy with the two-root fixture in acceptance
+item 5 and report avoided transport/decode time against copy cost and retained
+bytes.
 
 ## Suggested acceptance evidence
 
