@@ -14,6 +14,7 @@ import type { AsyncPreparationScheduler } from "../resource/async-preparation-ow
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import { SharedByteReadOwner } from "../resource/shared-byte-read-owner";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
+import type { GltfJsonValue } from "./gltf-values";
 
 export type GltfTextureProgress = Readonly<{
   /** Ready images which recovered from a preferred representation to an authored fallback. */
@@ -62,6 +63,11 @@ export type GltfAssetSnapshot =
     sceneIndex: number;
     /** Complete document scene inventory without preparing unselected content. */
     scenes: readonly GltfDocumentScene[];
+    /**
+     * Uninterpreted glTF root `extras` for this exact asset identity.
+     * The reference remains stable while texture progress changes.
+     */
+    rootExtras?: GltfJsonValue;
     status: "degraded" | "ready" | "streaming";
     timings: GltfAssetTimings;
     textures: GltfTextureProgress;
@@ -411,6 +417,9 @@ export class GltfAssetOwner {
         lightCount: prepared.lights.length,
         nodeCount: prepared.nodeCount,
         primitiveCount: prepared.primitives.length,
+        ...(prepared.rootExtras === undefined
+          ? {}
+          : { rootExtras: structuredClone(prepared.rootExtras) }),
         sceneIndex: prepared.sceneIndex,
         scenes: prepared.scenes,
         status: usableState(textures),

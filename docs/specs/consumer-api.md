@@ -255,13 +255,18 @@ the only way to drive normal loading, variants, fitting, retries, or lifecycle U
 Drawable glTF status includes selected-scene node, primitive, and punctual-light
 counts, the actual resolved `sceneIndex`, the complete lightweight
 `scenes: { index, name? }[]` document inventory, document-declared
-material-variant names, and
+material-variant names, optional uninterpreted `rootExtras`, and
 `textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
 logical textures whose preferred representation failed and whose declared
 alternative won; it is not a second texture or an asset failure. Consumers do
 not parse a second copy of the glTF merely to populate scene/variant controls or
-summaries. Reporting the inventory does not prepare or fetch unselected scene
-content.
+application metadata. `rootExtras` is the JSON value from the same canonical
+root parse, scoped to the exact source/version/selected-scene identity and
+reference-stable while texture progress changes. It is absent when unauthored,
+readonly by contract, copied once at the public ownership boundary, and never
+interpreted by Royal. Consumers own schema validation and MUST NOT treat it as
+mutable renderer state. Reporting the inventory or extras does not prepare or
+fetch unselected scene content.
 
 Royal owns a bounded asynchronous preparation scheduler shared across glTF,
 external image-texture transport, authored VT, and prefiltered environments.

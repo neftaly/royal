@@ -26,6 +26,7 @@ import {
   nonNegativeInteger,
   object,
   optionalArray,
+  type GltfJsonValue,
   type JsonObject,
 } from "./gltf-values";
 import {
@@ -61,7 +62,6 @@ import {
   staticNodeLodIds,
   type GltfDocumentScene,
 } from "./static-node-selection";
-
 export type PreparedStaticLodMembership = Readonly<{
   group: LodGroupId;
   level: number;
@@ -94,6 +94,8 @@ export type PreparedStaticGltf = Readonly<{
   sceneIndex: number;
   /** Complete lightweight scene inventory; unselected content is not prepared. */
   scenes: readonly GltfDocumentScene[];
+  /** Uninterpreted glTF root `extras`, retained from the canonical document parse. */
+  rootExtras?: GltfJsonValue;
   textureAssets: readonly TextureSourceRef[];
   /** Unique document-declared material variant names in authored order. */
   variantNames: readonly string[];
@@ -926,6 +928,9 @@ const prepareStaticDocument = (
     lights,
     nodeCount: claimed.size,
     primitives: batchedPrimitives,
+    ...(document.extras === undefined
+      ? {}
+      : { rootExtras: document.extras as GltfJsonValue }),
     sceneIndex,
     scenes: documentScenes,
     textureAssets: collectStaticTextureAssets(batchedPrimitives),

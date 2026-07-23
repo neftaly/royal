@@ -1,5 +1,14 @@
 import type { Mat4 } from "../math/mat4";
 
+/** A JSON value as authored in a glTF document, exposed without renderer interpretation. */
+export type GltfJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | readonly GltfJsonValue[]
+  | Readonly<{ [key: string]: GltfJsonValue }>;
+
 export type JsonObject = Record<string, unknown>;
 export const fail = (label: string, path: string, detail: string): never => {
   throw new Error(`${label} ${path}: ${detail}`);

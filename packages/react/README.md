@@ -104,7 +104,11 @@ Those drawable states also
 report selected-scene `nodeCount`, `primitiveCount`, and `lightCount`, plus
 the resolved `sceneIndex`, lightweight document `scenes`, and declared
 `variantNames` for building scene/material-variant UI without parsing the
-source twice. Scene inventory does not fetch or prepare unselected content.
+source twice. Optional `rootExtras` exposes the uninterpreted, readonly JSON
+value from that same root parse for application-owned schema validation. Its
+reference is stable across texture-progress updates; Royal does not interpret
+it or expose the rest of the parsed document. Scene inventory and extras do not
+fetch or prepare unselected content.
 Focused asset hooks accept either a minimal identity object or the complete
 reference returned by the corresponding Royal constructor; presentation-only
 fields on a complete reference do not broaden loading identity.

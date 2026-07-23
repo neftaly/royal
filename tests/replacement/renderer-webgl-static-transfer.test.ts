@@ -92,6 +92,7 @@ describe("prepared static glTF transfer ownership", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      rootExtras: { application: { revision: 3 } },
       sceneIndex: 0,
       scenes: [{ index: 0 }],
       textureAssets: [{ kind: "asset", src: "/texture.avif" }],

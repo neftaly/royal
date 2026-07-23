@@ -51,6 +51,7 @@ describe("browser static glTF preparation", () => {
       lights: [],
       nodeCount: 0,
       primitives: [],
+      rootExtras: { application: { revision: 3 } },
       textureAssets: [],
       variantNames: [],
     } as const;
@@ -58,6 +59,9 @@ describe("browser static glTF preparation", () => {
       data: { kind: "ready", prepared },
     }));
     await expect(result).resolves.toBe(prepared);
+    await expect(result).resolves.toMatchObject({
+      rootExtras: { application: { revision: 3 } },
+    });
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 

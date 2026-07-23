@@ -25,6 +25,24 @@ describe("static glTF preparation core", () => {
     document.extensionsUsed = declarations;
   };
 
+  it("retains optional root extras from the canonical document parse without interpretation", () => {
+    const document = staticTriangleDocument();
+    document.extras = {
+      application: {
+        capabilities: ["stacked-layout", "selection"],
+        revision: 3,
+      },
+      enabled: true,
+      nullable: null,
+    };
+
+    const prepared = prepareStaticGlb(staticTriangleGlb(document), "root-extras");
+    const withoutExtras = prepareStaticGlb(staticTriangleGlb(), "without-root-extras");
+
+    expect(prepared.rootExtras).toEqual(document.extras);
+    expect(withoutExtras).not.toHaveProperty("rootExtras");
+  });
+
   it("prepares an explicit document scene through the same canonical lowering path", () => {
     const document = staticTriangleDocument();
     document.scenes = [{ name: "Complete", nodes: [0] }, { nodes: [1] }];

@@ -1,5 +1,11 @@
 # Proposal: observable glTF root extras without a second parser
 
+Status: accepted and implemented. Royal publishes optional typed `rootExtras`
+on drawable glTF snapshots from its existing canonical parse. The public value
+takes one cold ownership copy, remains reference-stable across texture-progress
+publication, and is not interpreted by the renderer. The normative contract is
+in `docs/specs/consumer-api.md`; this file retains the motivating measurements.
+
 ## Consumer need
 
 Probability puts optional application capabilities in standard glTF root
@@ -65,6 +71,18 @@ keeping immutable source storage and copying delivery views, or scheduling
 preparation so identical pending URI claims overlap. Any solution should retain
 Royal's cancellation and memory bounds and prove that copies cost less than the
 avoided transport/decode work. It is independent of the root-extras API.
+
+Decision after inspection: retain the existing policy pending contrary measured
+evidence. Concurrent exact reads already share transport and receive
+caller-owned storage under a 32 MiB LRU bound. A settled single-consumer read is
+deliberately zero-copy and therefore cannot also be retained after its storage
+may be mutated or transferred. Retaining every such read would add a full byte
+copy and potentially 32 MiB of live CPU storage to optimize the trace's small
+immutable cache hits; the host-cache experiment did not improve LCP. The
+current post-proposal trace contains one request apiece for its external
+buffers, so it does not supply the sequential duplicate needed to overturn that
+tradeoff. Revisit only with a reproducible duplicate whose avoided
+transport/decode cost exceeds the added copy and retention.
 
 ## Suggested acceptance evidence
 

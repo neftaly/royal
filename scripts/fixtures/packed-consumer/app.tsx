@@ -18,6 +18,7 @@ import {
   useVisitGltfAssetGeometry,
   type RendererContextSnapshot,
   type GltfDocumentScene,
+  type GltfJsonValue,
   type GltfResourceReader,
   type RendererHookOptions,
   type RendererResourceSnapshot,
@@ -170,6 +171,12 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
     || modelStatus.status === 'degraded'
     ? modelStatus.scenes
     : [];
+  const rootExtras: GltfJsonValue | undefined = modelStatus.status === 'ready'
+    || modelStatus.status === 'streaming'
+    || modelStatus.status === 'degraded'
+    ? modelStatus.rootExtras
+    : undefined;
+  void rootExtras;
   return (
     <output>
       {renderer}: frame {rendererSnapshot?.frame ?? 0}; {residentImageTextureCount} image textures;{' '}

@@ -19,6 +19,7 @@ export type {
   GltfAssetTimings,
   GltfTextureProgress,
 } from "./gltf/asset-owner";
+export type { GltfJsonValue } from "./gltf/gltf-values";
 export type { GltfDocumentScene } from "./gltf/static-node-selection";
 export type {
   BorrowedGltfGeometry,

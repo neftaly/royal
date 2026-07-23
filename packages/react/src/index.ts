@@ -79,6 +79,7 @@ export type {
   BorrowedGltfGeometryBatch,
   GltfAssetGeometryVisitor,
   GltfDocumentScene,
+  GltfJsonValue,
   GltfTextureProgress,
   RendererContextSnapshot,
   RendererResourceSnapshot,

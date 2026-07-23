@@ -168,12 +168,17 @@ describe("glTF asset lifecycle owner", () => {
 
   it("keeps external JSON buffer IO in the same cancellable asset lifecycle", async () => {
     const fixture = staticTriangleGltf();
+    const document = JSON.parse(new TextDecoder().decode(fixture.document)) as
+      Record<string, unknown>;
+    document.extras = { application: { revision: 3 } };
+    const rootBytes = new TextEncoder().encode(JSON.stringify(document));
+    const read = vi.fn(async () => rootBytes);
     const readResource = vi.fn(async () => fixture.binary);
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
       prepare: prepareStatic,
-      read: vi.fn(async () => fixture.document),
+      read,
       readResource,
     });
     const node = gltf("/models/triangle.gltf");
@@ -187,8 +192,10 @@ describe("glTF asset lifecycle owner", () => {
     const ready = owner.getSnapshot(node.asset);
     expect(ready.status).toBe("ready");
     if (ready.status === "ready") {
+      expect(ready.rootExtras).toEqual({ application: { revision: 3 } });
       expect(ready.timings.externalResourceReadDurationMs).toBeGreaterThanOrEqual(0);
     }
+    expect(read).toHaveBeenCalledOnce();
   });
 
   it("reports concurrent external reads as one disjoint wall-clock span", async () => {
@@ -327,11 +334,18 @@ describe("glTF asset lifecycle owner", () => {
 
   it("separates usable geometry from streaming and degraded texture progress", async () => {
     const texture = imageTexture("/albedo.avif");
+    const rootExtras = {
+      application: {
+        capabilities: ["stacked-layout"],
+        revision: 3,
+      },
+    } as const;
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
       lights: [],
       nodeCount: 0,
       primitives: [],
+      rootExtras,
       sceneIndex: 0,
       scenes: [{ index: 0 }],
       textureAssets: [texture],
@@ -347,6 +361,13 @@ describe("glTF asset lifecycle owner", () => {
     const node = gltf("/textured.gltf");
     owner.reconcile([node]);
     await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("streaming"));
+    const streaming = owner.getSnapshot(node.asset);
+    expect(streaming).toMatchObject({ rootExtras });
+    expect(streaming.status).toBe("streaming");
+    if (streaming.status !== "streaming") throw new Error("expected drawable streaming status");
+    expect(streaming.rootExtras).not.toBe(rootExtras);
+    const publishedRootExtras = streaming.rootExtras;
+
     owner.refreshTextureProgress(() => ({ error: "decode failed", status: "error" }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       status: "degraded",
@@ -360,6 +381,9 @@ describe("glTF asset lifecycle owner", () => {
     });
     const degraded = owner.getSnapshot(node.asset);
     expect(degraded.status).toBe("degraded");
+    if (degraded.status === "degraded") {
+      expect(degraded.rootExtras).toBe(publishedRootExtras);
+    }
     const completionMs = degraded.status === "degraded"
       ? degraded.timings.imagesCompleteAfterMs
       : undefined;
@@ -381,6 +405,15 @@ describe("glTF asset lifecycle owner", () => {
       timings: { imagesCompleteAfterMs: completionMs },
       textures: { failed: 0, fallback: 1, loading: 0, ready: 1, total: 1 },
     });
+    const ready = owner.getSnapshot(node.asset);
+    if (ready.status === "ready") expect(ready.rootExtras).toBe(publishedRootExtras);
+
+    const publishedApplication = (
+      publishedRootExtras as { application: { revision: number } }
+    ).application;
+    publishedApplication.revision = 4;
+    expect(prepared.rootExtras.application.revision).toBe(3);
+    expect(owner.prepared(node.asset)?.rootExtras).toBe(rootExtras);
   });
 
   it("retains bounded content failures without retrying on reconciliation", async () => {
