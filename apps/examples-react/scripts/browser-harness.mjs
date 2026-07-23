@@ -53,7 +53,7 @@ const waitForResponse = async (url, timeoutMs, read, fetchImpl = fetch) => {
   const deadline = Date.now() + timeoutMs;
   let lastError;
 
-  while (Date.now() < deadline) {
+  do {
     try {
       const remainingMs = Math.max(1, deadline - Date.now());
       const { response, value } = await fetchWithTimeout(
@@ -67,8 +67,9 @@ const waitForResponse = async (url, timeoutMs, read, fetchImpl = fetch) => {
     } catch (error) {
       lastError = error;
     }
-    await sleep(100);
-  }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) await sleep(Math.min(100, remainingMs));
+  } while (Date.now() < deadline);
 
   throw lastError ?? new Error(`Timed out waiting for ${url}`);
 };

@@ -164,10 +164,10 @@ describe('browser harness', () => {
     expect(attempts).toBe(2);
   });
 
-  it('reports the final unsuccessful HTTP status', async () => {
+  it('reports the first unsuccessful HTTP status even when retries are out of time', async () => {
     const fetchImpl = async () => ({ ok: false, status: 503 });
 
-    await expect(waitForHttp('http://example.test/status', 1, fetchImpl))
+    await expect(waitForHttp('http://example.test/status', 0, fetchImpl))
       .rejects.toThrow('http://example.test/status returned 503');
   });
 
