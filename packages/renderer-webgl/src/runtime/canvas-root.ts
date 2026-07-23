@@ -326,31 +326,48 @@ const lazyBrowserTextureDecoder = (
 
 const lazyBrowserGltfPreparer = (
   etc2Available: boolean,
-): NonNullable<GltfAssetOwnerPlatform["prepare"]> => {
-  let modulePromise: Promise<typeof import("../gltf/browser-static-preparation")> | undefined;
-  return async (
-    bytes,
-    contentKey,
-    label,
-    sourceUri,
-    signal,
-    readResource,
-    sceneIndex,
-    resourceVersion,
-  ) => {
-    modulePromise ??= import("../gltf/browser-static-preparation");
-    return (await modulePromise).prepareStaticGltfInBrowser(
+  workerLimit: number,
+): Readonly<{
+  dispose(): void;
+  prepare: NonNullable<GltfAssetOwnerPlatform["prepare"]>;
+}> => {
+  let ownerPromise: Promise<
+    import("../gltf/browser-static-preparation").BrowserStaticGltfPreparationOwner
+  > | undefined;
+  const owner = (): NonNullable<typeof ownerPromise> => {
+    ownerPromise ??= import("../gltf/browser-static-preparation")
+      .then((module) => new module.BrowserStaticGltfPreparationOwner({ workerLimit }));
+    return ownerPromise;
+  };
+  return {
+    dispose: () => {
+      if (ownerPromise !== undefined) {
+        void ownerPromise.then(
+          (activeOwner) => activeOwner.dispose(),
+          () => undefined,
+        );
+      }
+    },
+    prepare: async (
       bytes,
       contentKey,
       label,
       sourceUri,
       signal,
       readResource,
-      undefined,
+      sceneIndex,
+      resourceVersion,
+    ) => (await owner()).prepare(
+      bytes,
+      contentKey,
+      label,
+      sourceUri,
+      signal,
+      readResource,
       etc2Available,
       sceneIndex,
       resourceVersion,
-    );
+    ),
   };
 };
 
@@ -461,6 +478,7 @@ export class CanvasRoot implements RendererRoot {
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
+  readonly #gltfPreparer: ReturnType<typeof lazyBrowserGltfPreparer>;
   #gltfAssetClaims: readonly GltfAssetRef[] = EMPTY_GLTF_ASSET_CLAIMS;
   readonly #frameUploadBudget: FrameUploadBudgetOwner;
   readonly #idleVirtualTextureRuntimeSnapshot: VirtualTextureRuntimeSnapshot;
@@ -561,6 +579,10 @@ export class CanvasRoot implements RendererRoot {
         if (!this.#disposed) this.#publish();
       },
     );
+    this.#gltfPreparer = lazyBrowserGltfPreparer(
+      this.#etc2Available,
+      asyncPreparationJobLimit,
+    );
     this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);
     this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
       resolvedOptions.automaticVirtualTexturing,
@@ -598,7 +620,7 @@ export class CanvasRoot implements RendererRoot {
         if (this.#isVisualGltfAsset(key)) this.#refreshPreparedScene();
       },
       onListenerError: (error) => platform.onListenerError(error),
-      prepare: lazyBrowserGltfPreparer(this.#etc2Available),
+      prepare: this.#gltfPreparer.prepare,
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource
         ?? ((_asset, uri, signal, request) => readGltfResourceWithFetch(uri, signal, request)),
@@ -703,6 +725,7 @@ export class CanvasRoot implements RendererRoot {
     this.#cameraSource.dispose();
     this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
+    this.#gltfPreparer.dispose();
     this.#surfaceGpu.dispose();
     this.#textureAssets.dispose();
     this.#asyncPreparation.dispose();

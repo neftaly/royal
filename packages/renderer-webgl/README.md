@@ -80,6 +80,12 @@ Royal-owned and may be transferred to a worker; return a copy if application
 storage must remain attached. React exposes the same stable dependency as
 `<Canvas gltfResourceReader={reader} />`.
 
+Worker-worthy glTF preparation reuses a lazy, root-owned worker set bounded by
+the same preparation-job ceiling. Completed workers expire after a short idle
+grace; cancellation, worker failure, and root disposal terminate them
+immediately. Reuse adds no second task queue and no defensive byte or geometry
+copy.
+
 `automaticVirtualTexturing` defaults to `false`. Enabling it lets eligible
 base-color raster images and SVG images move onto Royal's shared VT demand,
 residency, and shader path after usable ancestor coverage exists. SVG pages are

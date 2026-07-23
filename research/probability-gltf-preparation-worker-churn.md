@@ -1,7 +1,13 @@
 # Observation: one preparation worker lifecycle per glTF
 
-Status: measured consumer criticism; Royal should choose the remedy only after
-isolating startup cost from useful preparation work.
+Status: accepted and implemented with a root-owned amortized worker set.
+
+Royal retains no more preparation workers than the root's existing asynchronous
+job ceiling. A completed worker remains reusable for a one-second idle grace,
+then terminates. Root disposal terminates the set immediately. Cancellation,
+worker errors, unreadable messages, and failed transfers retire the affected
+worker; an ordinary invalid-asset result rejects only that task and leaves the
+worker reusable. The scheduler remains the sole queue and admission authority.
 
 ## Product trace
 
@@ -17,6 +23,11 @@ Chromium reload recorded:
 The complete page made 189 requests for 144 unique URLs. The worker module was
 the only repeated URL. The trace is retained at
 `/tmp/probability-claims-after.json.gz`.
+
+Adversarial trace inspection refines the request-row observation: that raw trace
+contains 32 actual `DedicatedWorkerHost` starts and 32 worker-module
+`v8.compileModule` events. The 46 module request rows therefore overstate worker
+lifecycle count, but the 32 real lifecycles still confirm the unbounded churn.
 
 Royal correctly admits no more than eight preparation jobs concurrently, but
 `prepareStaticGltfInBrowser` creates and terminates a worker for every admitted
@@ -70,3 +81,24 @@ continue to submit ordinary complete asset claims.
   evaluation, GC, or scheduling cost on the Safari A10 and Chromium floors.
 - Do not move external-resource fetching back into Probability. Royal already
   owns preparation, reads, cancellation, and asset identity.
+
+## Accepted evidence
+
+Focused tests schedule five worker-worthy assets through a two-job root-style
+scheduler, observe exactly two worker objects, reuse them after settlement, and
+prove disposal terminates both. Separate cases prove asset failure reuse,
+active cancellation, injected resource reads, transfer ownership, and one-shot
+compatibility.
+
+The exact current Probability Settlers build claims 46 distinct glTF roots.
+Cold Chromium trace
+`/tmp/probability-worker-reuse-after.json.gz` records eight actual worker-host
+starts and eight worker-module compilations, matching Royal's job ceiling.
+Observed LCP was 1.107 seconds. Probability changed between the original
+1.386-second trace and this one, so the LCP difference is not attributed to
+worker reuse; the bounded lifecycle count is the causal evidence.
+
+A five-second idle-grace experiment retained the same eight starts and measured
+1.110-second LCP. It was rejected and removed: the extra worker memory lifetime
+and policy state bought no observed startup benefit. The accepted one-second
+grace keeps the one-root cost transient while covering the measured burst.

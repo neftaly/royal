@@ -337,6 +337,12 @@ Do not adopt a generic actor system, unbounded task queue, one worker per asset,
 or worker-owned renderer. Workers are lazy leaf executors for heavy independent
 decode/preparation whose transfer cost pays.
 
+When several admitted jobs use the same worker implementation, amortize a
+root-owned executor set under that scheduler's existing ceiling. The executor
+set owns no second queue: it lends an idle worker or creates one within the
+ceiling, retires uncertain state after cancellation or channel failure, and
+expires healthy idle workers after a short measured grace.
+
 ### Explicit wake conditions
 
 Deferred/retryable work records why it stopped and the event that can wake it:

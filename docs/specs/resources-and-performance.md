@@ -65,6 +65,14 @@ slot until that phase settles. Root diagnostics expose the current limit plus
 active, total queued, foreground queued, and detail queued counts without
 polling or waking rendering.
 
+Worker-worthy glTF jobs use a root-owned amortized worker set bounded by this
+same job ceiling. The set is not another scheduler: admitted jobs borrow an
+idle worker or create one below the ceiling. Successful and ordinary
+asset-failure completions leave that worker reusable for a one-second idle
+grace. Cancellation, worker/channel failure, root disposal, or idle expiry
+terminates it. Root bytes and prepared results continue to cross by transfer;
+reuse adds no defensive source or geometry copy.
+
 Cancellation is terminal at every queued admission boundary, including the
 separate browser transport and bitmap-decode queues. It rejects the abandoned
 claim immediately and drops its captured work closure even when an earlier
