@@ -1,5 +1,25 @@
 # Proposal: explicit non-visual glTF asset claims
 
+Status: accepted and implemented.
+
+Royal exposes the validated `gltfAsset(...)` identity constructor,
+`<Canvas gltfAssetClaims={...}>`, and
+`RendererRoot.setGltfAssetClaims(...)`. These are complete ownership lists,
+not observation, invisible nodes, or an immortal preload cache. Visual and
+non-visual use shares one keyed preparation entry and can hand off before or
+after settlement without another read. React uses the root's atomic
+scene-and-claim commit; imperative hosts either use that commit or install the
+incoming owner before removing the outgoing one.
+
+The original motivating placement description used prepared AABB extrema. That
+is intentionally not the long-term contact contract. Royal's bounds are
+conservative framing/coarse-layout/broad-phase data. Probability should use
+`visitGltfAssetGeometry` / `useVisitGltfAssetGeometry` to build and own the
+minimal support representation its placement model needs. That cold visitor
+borrows Royal's already-prepared highest-detail indexed positions and packed
+asset-space transforms without another source read, mesh copy, or retained
+renderer representation.
+
 ## Consumer need
 
 Royal now exposes authoritative prepared bounds and uninterpreted root extras
@@ -58,3 +78,23 @@ resource intent, not Probability gameplay state or a document protocol.
 5. A browser frame captured while only the claim exists contains no asset
    geometry, punctual lights or picking target.
 
+## Adversarial resolution
+
+- Status subscribers remain non-owning; otherwise mounting an observer would
+  silently alter transport and retention.
+- A general hidden-node flag is rejected because it enlarges scene, picking,
+  lighting, and culling contracts.
+- A permanent preload cache is rejected because it obscures cancellation and
+  memory lifetime.
+- Per-component retain/release is not the React surface because effect cleanup
+  and Strict Mode remounts can cause avoidable abort/restart churn. `Canvas`
+  instead reconciles one complete declarative list.
+- Equivalent regenerated React descriptors compare by exact loading identity,
+  so they do not restart preparation.
+- Non-visual completion does not lower or invalidate the scene.
+- Image decode remains visible-material demand. A textured non-visual claim can
+  remain `streaming` with usable geometry and metadata until it becomes
+  visible.
+- The geometry visitor is deliberately cold and borrowed. Consumers pay only
+  for the specialized compact structure they choose to retain; Royal does not
+  add a second collision/support mesh or per-frame allocation.

@@ -36,6 +36,7 @@ import {
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import {
   GltfAssetOwner,
+  gltfAssetKey,
   readGltfResourceWithFetch,
   readGltfWithFetch,
   type GltfAssetSnapshot,
@@ -205,8 +206,17 @@ export interface RendererRoot {
   invalidate(): void;
   /** Returns the nearest visible hit at one browser-viewport CSS-pixel position. */
   pick(input: PickInput): PickResult | undefined;
-  /** Installs complete scene intent and requests one coalesced presentation frame. */
-  setScene(scene: Scene): void;
+  /**
+   * Installs complete scene intent and requests one coalesced presentation frame.
+   * Supplying claims commits visual and non-visual glTF ownership atomically.
+   */
+  setScene(scene: Scene, gltfAssetClaims?: readonly GltfAssetRef[]): void;
+  /**
+   * Replaces the complete non-visual glTF preparation claim.
+   * Claimed assets use focused status and borrowed geometry but create no scene work.
+   * Install an incoming owner before removing the outgoing owner during a handoff.
+   */
+  setGltfAssetClaims(assets: readonly GltfAssetRef[]): void;
   /** Sets CSS size and requested backing pixels per CSS pixel. */
   setSize(input: CanvasSizeInput): void;
   /** Stable subscription function for broad operational snapshot changes. */
@@ -411,6 +421,31 @@ type InstanceSubscription = {
   unsubscribe: () => void;
 };
 
+const EMPTY_GLTF_ASSET_CLAIMS: readonly GltfAssetRef[] = [];
+
+const normalizedGltfAssetClaims = (
+  assets: readonly GltfAssetRef[],
+): readonly GltfAssetRef[] => {
+  if (!Array.isArray(assets)) {
+    throw new TypeError("Royal glTF asset claims must be an array");
+  }
+  const keys = new Set<string>();
+  const result: GltfAssetRef[] = [];
+  for (const asset of assets) {
+    const key = gltfAssetKey(asset);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    result.push(asset);
+  }
+  return result.length === 0 ? EMPTY_GLTF_ASSET_CLAIMS : result;
+};
+
+const sameGltfAssetClaims = (
+  left: readonly GltfAssetRef[],
+  right: readonly GltfAssetRef[],
+): boolean => left.length === right.length
+  && left.every((asset, index) => gltfAssetKey(asset) === gltfAssetKey(right[index]!));
+
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot implements RendererRoot {
   readonly #asyncPreparation: AsyncPreparationOwner;
@@ -426,6 +461,7 @@ export class CanvasRoot implements RendererRoot {
   #frameIntent: ClearFrameIntent | null = null;
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
+  #gltfAssetClaims: readonly GltfAssetRef[] = EMPTY_GLTF_ASSET_CLAIMS;
   readonly #frameUploadBudget: FrameUploadBudgetOwner;
   readonly #idleVirtualTextureRuntimeSnapshot: VirtualTextureRuntimeSnapshot;
   readonly #getDecodedAlpha = (asset: TextureSourceRef): DecodedTextureAlpha | undefined =>
@@ -558,7 +594,9 @@ export class CanvasRoot implements RendererRoot {
       schedule: this.#asyncPreparation.runForeground,
     });
     this.#gltfAssets = new GltfAssetOwner({
-      onAssetChanged: () => this.#refreshPreparedScene(),
+      onAssetChanged: (key) => {
+        if (this.#isVisualGltfAsset(key)) this.#refreshPreparedScene();
+      },
       onListenerError: (error) => platform.onListenerError(error),
       prepare: lazyBrowserGltfPreparer(this.#etc2Available),
       read: platform.readGltf ?? readGltfWithFetch,
@@ -781,7 +819,7 @@ export class CanvasRoot implements RendererRoot {
   }
 
   /** Installs complete scene intent and requests a coalesced presentation frame. */
-  setScene(scene: Scene): void {
+  setScene(scene: Scene, gltfAssetClaims?: readonly GltfAssetRef[]): void {
     this.#assertLive("set a scene");
     if (
       typeof scene !== "object"
@@ -791,7 +829,16 @@ export class CanvasRoot implements RendererRoot {
     ) {
       throw new TypeError("Royal render requires a validated scene");
     }
-    if (scene === this.#surfaceSceneInput) return;
+    const claims = gltfAssetClaims === undefined
+      ? this.#gltfAssetClaims
+      : normalizedGltfAssetClaims(gltfAssetClaims);
+    const claimsChanged = !sameGltfAssetClaims(this.#gltfAssetClaims, claims);
+    if (scene === this.#surfaceSceneInput) {
+      if (!claimsChanged) return;
+      this.#gltfAssetClaims = claims;
+      this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
+      return;
+    }
     this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
@@ -804,6 +851,7 @@ export class CanvasRoot implements RendererRoot {
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
     this.#surfaceSceneInput = scene;
+    this.#gltfAssetClaims = claims;
     this.#instancePickingDirty = false;
     this.#progressivePresentation.reset();
     this.#surfaceResourcesPending = false;
@@ -812,13 +860,21 @@ export class CanvasRoot implements RendererRoot {
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
-    this.#gltfAssets.reconcile(prepared.gltfNodes);
+    this.#gltfAssets.reconcile(prepared.gltfNodes, this.#gltfAssetClaims);
     this.#reconcileInstanceSources(scene);
     this.#resetInstanceUpdates();
     this.#reconcileTextureAssets(prepared);
     this.#refreshGltfTextureProgress();
     this.#clock.retry();
     this.#invalidatePresentation();
+  }
+
+  setGltfAssetClaims(assets: readonly GltfAssetRef[]): void {
+    this.#assertLive("set glTF asset claims");
+    const claims = normalizedGltfAssetClaims(assets);
+    if (sameGltfAssetClaims(this.#gltfAssetClaims, claims)) return;
+    this.#gltfAssetClaims = claims;
+    this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
   }
 
   setSize(input: CanvasSizeInput): void {
@@ -931,6 +987,12 @@ export class CanvasRoot implements RendererRoot {
 
   #publishSize(): void {
     this.#sizeListeners.publish(this.#platform.onListenerError);
+  }
+
+  #isVisualGltfAsset(key: string): boolean {
+    return this.#surfaceScene?.gltfNodes.some(
+      (node) => gltfAssetKey(node.asset) === key,
+    ) ?? false;
   }
 
   #rebuildFrameIntent(): void {

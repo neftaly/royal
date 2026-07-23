@@ -1,4 +1,11 @@
-import type { GltfAssetRef, PickInput, PickResult, Scene } from "@royal/renderer-core";
+import {
+  gltfAsset,
+  type GltfAssetInput,
+  type GltfAssetRef,
+  type PickInput,
+  type PickResult,
+  type Scene,
+} from "@royal/renderer-core";
 import {
   createRendererRoot,
   resolveRendererRootOptions,
@@ -54,6 +61,11 @@ export interface CanvasProps
   readonly pixelRatio?: number;
   /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
   readonly gltfResourceReader?: GltfResourceReader;
+  /**
+   * Complete non-visual glTF preparation claim.
+   * Claimed assets expose status and borrowed geometry without joining the scene.
+   */
+  readonly gltfAssetClaims?: readonly GltfAssetInput[];
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */
   readonly rendererOptions?: RendererRootOptions;
   /** Active root, or `null` before mount and after release. */
@@ -78,6 +90,7 @@ type CanvasAttachment = Readonly<{
 }>;
 
 const EMPTY_RUNTIME: CanvasRuntime = { canvas: null, error: null, root: null };
+const EMPTY_GLTF_ASSET_CLAIMS: readonly GltfAssetRef[] = [];
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
@@ -211,6 +224,7 @@ export const useVisitGltfAssetGeometry = (
 /** Renders one pure Royal scene into one ordinary, CSS-sized canvas. */
 export const Canvas = ({
   children,
+  gltfAssetClaims,
   gltfResourceReader,
   pixelRatio,
   ref,
@@ -224,6 +238,12 @@ export const Canvas = ({
   const resolvedOptions = resolveRendererRootOptions(rendererOptions);
   const optionsKey = rendererRootOptionsKey(resolvedOptions);
   const scenePickingIndex = useMemo(() => createScenePickingIndex(scene), [scene]);
+  const resolvedGltfAssetClaims = useMemo(
+    () => gltfAssetClaims === undefined
+      ? EMPTY_GLTF_ASSET_CLAIMS
+      : gltfAssetClaims.map((asset) => gltfAsset(asset)),
+    [gltfAssetClaims],
+  );
   const sceneInteractions = useMemo(
     () => createScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
     [scenePickingIndex, scenePointerEvents],
@@ -298,8 +318,10 @@ export const Canvas = ({
   }, [activeRoot, resolvedPixelRatio]);
 
   useLayoutEffect(() => {
-    if (activeRoot !== null && liveRootRef.current === activeRoot) activeRoot.setScene(scene);
-  }, [activeRoot, scene]);
+    if (activeRoot !== null && liveRootRef.current === activeRoot) {
+      activeRoot.setScene(scene, resolvedGltfAssetClaims);
+    }
+  }, [activeRoot, resolvedGltfAssetClaims, scene]);
 
   useLayoutEffect(() => {
     reconcileCanvasPointerInteractionScene({

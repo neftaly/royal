@@ -30,6 +30,7 @@ import {
   clampOrbitCameraView,
   createGltfInstanceTransforms,
   gltf,
+  gltfAsset,
   gltfInstances,
   imageTexture,
   mesh,
@@ -94,6 +95,12 @@ const model = gltf({
   tint: [0.8, 0.25, 0.2, 1],
   version: 'model-sha256',
 });
+const metadataAsset = gltfAsset({
+  sceneIndex: 1,
+  src: '/metadata.glb',
+  version: 'metadata-sha256',
+});
+const gltfAssetClaims = [metadataAsset] as const;
 const albedo = imageTexture({ src: '/albedo.webp', version: 2 });
 const authoredVirtualTexture = virtualTexture({
   manifestUri: '/terrain.vt.json',
@@ -229,6 +236,7 @@ export const App = (): ReactNode => {
       <Canvas
         aria-label="Royal preview"
         data-testid="royal-canvas"
+        gltfAssetClaims={gltfAssetClaims}
         gltfResourceReader={gltfResourceReader}
         rendererOptions={rendererOptions}
         rendererRef={setRoot}

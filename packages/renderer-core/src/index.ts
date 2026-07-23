@@ -51,13 +51,15 @@ export type {
 export { boxGeometry, planeGeometry, triangleGeometry } from './geometry';
 export type {
   GltfAssetBounds,
+  GltfAssetInput,
+  GltfAssetOptions,
   GltfAssetRef,
   GltfInput,
   GltfMaterialVariantName,
   GltfNode,
   GltfOptions
 } from './gltf';
-export { gltf, transformGltfAssetBounds } from './gltf';
+export { gltf, gltfAsset, transformGltfAssetBounds } from './gltf';
 export {
   createGltfInstanceTransforms,
   gltfInstances,

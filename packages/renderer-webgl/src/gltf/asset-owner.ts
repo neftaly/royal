@@ -51,7 +51,10 @@ export type GltfAssetSnapshot =
   | Readonly<{ status: "idle" }>
   | Readonly<{ status: "loading" }>
   | Readonly<{
-    /** Prepared bounds in Royal world-axis convention, before node transform. */
+    /**
+     * Conservative prepared asset-space AABB before node transform.
+     * It is not contact, collision, resting-height, or support geometry.
+     */
     bounds: GltfAssetBounds;
     /** Number of punctual lights reachable from the selected scene. */
     lightCount: number;
@@ -84,7 +87,7 @@ export type GltfAssetNode = GltfNode | GltfInstancesNode;
 
 export type GltfAssetOwnerPlatform = Readonly<{
   now?(): number;
-  onAssetChanged(): void;
+  onAssetChanged(assetKey: string): void;
   onListenerError(error: unknown): void;
   prepare?(
     bytes: Uint8Array,
@@ -305,14 +308,19 @@ export class GltfAssetOwner {
     }
   }
 
-  reconcile(nodes: readonly GltfAssetNode[]): void {
+  reconcile(
+    nodes: readonly GltfAssetNode[],
+    nonVisualAssets: readonly GltfAssetRef[] = [],
+  ): void {
     if (this.#disposed) return;
     const claimed = new Set<string>();
-    for (const node of nodes) {
-      const key = gltfAssetKey(node.asset);
+    const claim = (asset: GltfAssetRef): void => {
+      const key = gltfAssetKey(asset);
       claimed.add(key);
-      if (!this.#entries.has(key)) this.#start(node.asset, key);
-    }
+      if (!this.#entries.has(key)) this.#start(asset, key);
+    };
+    for (const node of nodes) claim(node.asset);
+    for (const asset of nonVisualAssets) claim(asset);
     for (const [key, entry] of this.#entries) {
       if (claimed.has(key)) continue;
       entry.controller.abort();
@@ -434,7 +442,7 @@ export class GltfAssetOwner {
         textures,
         variantNames: prepared.variantNames,
       };
-      this.#platform.onAssetChanged();
+      this.#platform.onAssetChanged(key);
       this.#publish(key);
     };
     const loading = this.#platform.schedule === undefined

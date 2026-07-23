@@ -3,6 +3,7 @@ import {
   createGltfInstanceTransforms,
   directionalLight,
   gltf,
+  gltfAsset,
   gltfInstances,
   imageTexture,
   mesh,
@@ -30,6 +31,88 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("prepares non-visual claims without scene work and reuses them when made visible", async () => {
+    const document = staticTriangleDocument();
+    document.extras = { application: { supportGeometry: true } };
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, flushScheduledFrames, root } = harness({ readGltf });
+    const asset = gltfAsset({ src: "/claimed.glb", version: "v1" });
+    const node = gltf({ src: asset.src, version: asset.version });
+    const emptyScene = scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [],
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(emptyScene);
+    flushScheduledFrames();
+    const frameBeforeClaim = root.getSnapshot().frame;
+    vi.mocked(canvas.gl.bufferData).mockClear();
+    vi.mocked(canvas.gl.drawElements).mockClear();
+
+    root.setScene(emptyScene, [asset, asset]);
+    expect(root.getGltfAssetSnapshot(asset).status).toBe("loading");
+    root.setScene(emptyScene, [
+      gltfAsset({ src: "/claimed.glb", version: "v1" }),
+    ]);
+    await waitFor(() => expect(root.getGltfAssetSnapshot(asset).status).toBe("ready"));
+
+    expect(root.getGltfAssetSnapshot(asset)).toMatchObject({
+      bounds: { max: [2, 3, 0], min: [0, 1, 0] },
+      rootExtras: { application: { supportGeometry: true } },
+      status: "ready",
+    });
+    expect(root.getSnapshot().frame).toBe(frameBeforeClaim);
+    expect(callbacks).toHaveLength(0);
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+    expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+    expect(root.visitGltfAssetGeometry(asset, vi.fn())).toBe(1);
+    expect(readGltf).toHaveBeenCalledOnce();
+
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }), []);
+    flushScheduledFrames();
+    expect(readGltf).toHaveBeenCalledOnce();
+    expect(canvas.gl.bufferData).toHaveBeenCalled();
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+
+    root.setScene(emptyScene, [asset]);
+    expect(root.getGltfAssetSnapshot(asset).status).toBe("ready");
+    expect(root.visitGltfAssetGeometry(asset, vi.fn())).toBe(1);
+    expect(readGltf).toHaveBeenCalledOnce();
+
+    root.setScene(emptyScene, []);
+    expect(root.getGltfAssetSnapshot(asset)).toEqual({ status: "idle" });
+    expect(root.visitGltfAssetGeometry(asset, vi.fn())).toBeUndefined();
+    root.dispose();
+  });
+
+  it("does not decode non-visual material textures until a visible node claims them", async () => {
+    const decodeTexture = vi.fn(async () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb());
+    const { root } = harness({ decodeTexture, readGltf });
+    const asset = gltfAsset("/textured-claim.glb");
+    root.setGltfAssetClaims([asset]);
+
+    await waitFor(() => expect(root.getGltfAssetSnapshot(asset).status).toBe("streaming"));
+    expect(decodeTexture).not.toHaveBeenCalled();
+
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [gltf(asset)],
+    }));
+    root.setGltfAssetClaims([]);
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    expect(readGltf).toHaveBeenCalledOnce();
+    root.dispose();
+  });
+
   it("visits prepared selected-scene geometry without a second asset path", async () => {
     const model = gltf("/prepared-view.glb");
     const { root } = harness({ readGltf: async () => staticTriangleGlb() });

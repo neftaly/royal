@@ -29,6 +29,35 @@ const prepareStatic = (
 );
 
 describe("glTF asset lifecycle owner", () => {
+  it("deduplicates one non-visual claim with a later visual claim and releases the last owner", async () => {
+    const prepare = vi.fn(prepareStatic);
+    const read = vi.fn(async () => staticTriangleGlb());
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read,
+      readResource: vi.fn(),
+    });
+    const node = gltf("/claimed.glb");
+
+    owner.reconcile([], [node.asset, node.asset]);
+    expect(owner.getSnapshot(node.asset).status).toBe("loading");
+    owner.reconcile([node]);
+    await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
+    expect(read).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledOnce();
+
+    owner.reconcile([], [node.asset]);
+    expect(owner.getSnapshot(node.asset).status).toBe("ready");
+    expect(read).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledOnce();
+
+    owner.reconcile([]);
+    expect(owner.getSnapshot(node.asset)).toEqual({ status: "idle" });
+    owner.dispose();
+  });
+
   it("separates selected-scene lifecycle while preserving source content identity", async () => {
     const prepared = {
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
@@ -372,7 +401,7 @@ describe("glTF asset lifecycle owner", () => {
     });
     const node = gltf("/slow.glb");
     owner.subscribe(node.asset, listener);
-    owner.reconcile([node]);
+    owner.reconcile([], [node.asset]);
     owner.reconcile([]);
     expect(signal?.aborted).toBe(true);
     expect(owner.getSnapshot(node.asset)).toEqual({ status: "idle" });

@@ -212,10 +212,11 @@ status:
 ## Borrowed prepared glTF geometry
 
 `RendererRoot.visitGltfAssetGeometry(asset, visitor)` is the cold spatial-tool
-boundary for a glTF already claimed by the scene. The React equivalent is
-`useVisitGltfAssetGeometry()`. It returns `undefined` until the exact
-source/version/scene identity is prepared, otherwise the number of batches
-visited (including zero for an empty selected scene).
+boundary for a glTF claimed by either the scene or the explicit non-visual
+asset claim. The React equivalent is `useVisitGltfAssetGeometry()`. It returns
+`undefined` until the exact source/version/scene identity is prepared,
+otherwise the number of batches visited (including zero for an empty selected
+scene).
 
 Each callback receives one shared indexed-position geometry identity and one or
 more packed column-major asset-space transforms. Royal visits only the
@@ -228,6 +229,11 @@ callback. A consumer which retains, merges, simplifies, or indexes them must
 copy the required values and owns that result. Calling the visitor performs no
 source read or codec decode, and consumers which never call it receive no
 geometry publication in ordinary status.
+
+Prepared `bounds` are a conservative asset-space AABB for framing, coarse
+layout, and broad phases. They are not contact, collision, resting, or support
+geometry. Consumers which need those semantics derive an owned fit-for-purpose
+representation through the borrowed geometry visitor.
 
 Focused status identity objects do not require scene-descriptor discriminator
 fields. For example, `{ src, version }` and `{ manifestUri, version }` are
@@ -319,11 +325,28 @@ Royal scene protocol.
 
 ## glTF and textures
 
-`gltf(src)` and `gltf({ src, ... })` are equivalent. `sceneIndex` selects one
+`gltfAsset(src)` creates a validated source/version/scene loading identity
+without creating a scene node. `gltf(src)` and `gltf({ src, ... })` create a
+visible node with that same asset identity. `sceneIndex` selects one
 zero-based document scene before mesh/Draco inventory and canonical lowering;
 omission uses the document's declared default, or index zero when absent. A
 normalized node exposes its exact asset reference so status observation does
 not reconstruct version or scene identity from strings.
+
+`Canvas.gltfAssetClaims` is the complete declarative non-visual preparation
+claim; the imperative equivalent is
+`RendererRoot.setGltfAssetClaims(assets)`. Claimed assets use the ordinary
+bounded preparation, custom transport, cancellation, deduplication, focused
+status, and borrowed geometry paths. They create no surfaces, GPU geometry,
+lights, picking targets, transform work, or presentation frame. A textured
+non-visual asset may remain `streaming`: images are not decoded until a visible
+material claims them, while geometry, bounds, and root extras are already
+usable. Moving the same identity between the claim and scene does not read or
+prepare it again. `Canvas` bridges both handoff directions; imperative callers
+can commit both sides atomically with
+`RendererRoot.setScene(scene, gltfAssetClaims)`. When using separate setters,
+install the incoming visual or non-visual owner before removing the outgoing
+one. Observation alone never creates a claim.
 
 `materialVariant` selects one authored `KHR_materials_variants` name. `tint`
 is a presentation multiplier applied after base/variant/LOD selection; it does
@@ -344,8 +367,9 @@ orientation and color/alpha contract.
 
 `createRendererRoot(canvas, options, dependencies)` accepts the same pure scene
 descriptors as `Canvas`. It owns one canvas renderer lifetime and exposes
-render, invalidate, pick, focused asset/texture observation, lifecycle/frame
-observation, bounded diagnostics, snapshot, and idempotent dispose operations.
+render, non-visual glTF claims, invalidate, pick, focused asset/texture
+observation, lifecycle/frame observation, bounded diagnostics, snapshot, and
+idempotent dispose operations.
 
 The optional stable dependency `gltfResourceReader(resource, signal)` reads
 complete bytes for glTF root documents, referenced buffers, and external

@@ -16,6 +16,10 @@ import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 import { validateGeometry, type Geometry } from './geometry';
 
+/**
+ * Conservative asset-space AABB for framing, coarse layout, and broad phases.
+ * This is not contact, collision, resting-height, or support geometry.
+ */
 export interface GltfAssetBounds {
   /** Asset-space maximum in metres, following glTF's metre unit. */
   readonly max: WorldPosition3;
@@ -24,7 +28,10 @@ export interface GltfAssetBounds {
 }
 
 export interface GltfAssetRef {
-  /** Optional declared asset-space bounds available before source preparation completes. */
+  /**
+   * Optional coarse asset-space bounds available before source preparation.
+   * They are not contact, collision, or support geometry.
+   */
   readonly bounds?: GltfAssetBounds;
   /** Zero-based glTF document scene to prepare; omit for the document default. */
   readonly sceneIndex?: number;
@@ -33,6 +40,22 @@ export interface GltfAssetRef {
   /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
   readonly version?: number | string;
 }
+
+export interface GltfAssetOptions {
+  /**
+   * Optional coarse asset-space bounds available before source preparation.
+   * They are not contact, collision, or support geometry.
+   */
+  readonly bounds?: GltfAssetBounds;
+  /** Zero-based glTF document scene to prepare; omit for the document default. */
+  readonly sceneIndex?: number;
+  /** URI of the glTF asset. */
+  readonly src: string;
+  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
+  readonly version?: GltfAssetRef['version'];
+}
+
+export type GltfAssetInput = GltfAssetOptions | GltfAssetOptions['src'];
 
 /** Exact `KHR_materials_variants` name selected from an asset. */
 export type GltfMaterialVariantName = string;
@@ -52,26 +75,19 @@ export interface GltfNode {
   readonly materialVariant?: GltfMaterialVariantName;
 }
 
-export interface GltfOptions {
-  /** Optional declared asset-space bounds available before source preparation completes. */
-  readonly bounds?: GltfAssetBounds;
+export interface GltfOptions extends GltfAssetOptions {
   /** Exact triangle proxy in this node's local space, available before the asset loads. */
   readonly pickingGeometry?: Geometry;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
-  /** Zero-based glTF document scene to prepare; omit for the document default. */
-  readonly sceneIndex?: number;
-  readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
   /** Scene-linear RGBA multiplier applied to every selected base color. */
   readonly tint?: LinearRgba;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
-  /** Revision of bytes at `src`; change it when the same URI serves different bytes. */
-  readonly version?: GltfAssetRef['version'];
 }
 
 export type GltfInput = GltfOptions | GltfOptions['src'];
@@ -128,16 +144,12 @@ export const transformGltfAssetBounds = (
 const GLTF_FIELDS = [
   'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'tint', 'transform', 'version',
 ] as const;
+const GLTF_ASSET_FIELDS = ['bounds', 'sceneIndex', 'src', 'version'] as const;
 
 const gltfOptions = (input: GltfInput): GltfOptions =>
   typeof input === 'string' ? { src: input } : input;
 
-export const resolveGltfAsset = (options: {
-  readonly bounds?: GltfAssetBounds;
-  readonly sceneIndex?: number;
-  readonly src: string;
-  readonly version?: GltfAssetRef['version'];
-}): GltfAssetRef => {
+export const resolveGltfAsset = (options: GltfAssetOptions): GltfAssetRef => {
   if (options.sceneIndex !== undefined) {
     if (typeof options.sceneIndex !== 'number' || !Number.isFinite(options.sceneIndex)) {
       throw new TypeError('glTF sceneIndex must be a finite number');
@@ -156,6 +168,16 @@ export const resolveGltfAsset = (options: {
     ...(version === undefined ? {} : { version })
   };
 };
+
+/** Creates a validated glTF loading identity without creating a visible scene node. */
+export function gltfAsset(src: string): GltfAssetRef;
+export function gltfAsset(options: GltfAssetOptions): GltfAssetRef;
+export function gltfAsset(input: GltfAssetInput): GltfAssetRef;
+export function gltfAsset(input: GltfAssetInput): GltfAssetRef {
+  const options = typeof input === 'string' ? { src: input } : input;
+  objectWithAllowedFields(options, GLTF_ASSET_FIELDS, 'glTF asset');
+  return resolveGltfAsset(options);
+}
 
 export const validateGltfMaterialVariantName = (
   materialVariant: GltfMaterialVariantName | undefined,

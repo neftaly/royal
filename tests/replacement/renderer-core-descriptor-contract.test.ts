@@ -4,6 +4,7 @@ import {
   createGltfInstanceTransforms,
   directionalLight,
   gltf,
+  gltfAsset,
   gltfInstances,
   imageTexture,
   linearRgbaFromSrgb,
@@ -622,6 +623,22 @@ describe("renderer-core descriptor contract", () => {
       },
       kind: "gltf",
     });
+    expect(gltfAsset({
+      sceneIndex: 2,
+      src: "/models/avatar.glb",
+      version: 12,
+    })).toEqual({
+      sceneIndex: 2,
+      src: "/models/avatar.glb",
+      version: 12,
+    });
+    expect(gltfAsset("/models/avatar.glb")).toEqual({ src: "/models/avatar.glb" });
+    expect(() => gltfAsset({
+      src: "/models/avatar.glb",
+      visible: false,
+    } as unknown as Parameters<typeof gltfAsset>[0])).toThrow(
+      'glTF asset options contain unsupported option "visible"',
+    );
 
     expect(() => gltf({ src: "/models/avatar.glb", version: Number.NaN }))
       .toThrow(/glTF asset version must be finite/);

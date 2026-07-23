@@ -376,7 +376,10 @@ export interface GltfInstancesNode {
 }
 
 export interface GltfInstancesOptions {
-  /** Optional declared asset-space bounds available before source preparation completes. */
+  /**
+   * Optional coarse asset-space bounds available before source preparation.
+   * They are not contact, collision, or support geometry.
+   */
   readonly bounds?: GltfAssetBounds;
   /** Versioned bulk-transform source retained by renderer roots. */
   readonly instances: GltfInstanceTransforms;

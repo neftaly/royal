@@ -108,6 +108,23 @@ instances remain transform batches, and overlapping lower node-LOD levels are
 excluded. Callback values are borrowed; retained derived indexes or merged
 geometry are caller-owned copies and leave with that consumer's lifecycle.
 
+Prepared bounds are a conservative asset-space AABB for framing, coarse layout,
+and broad phases. They MUST NOT be interpreted as contact, collision,
+resting-height, or support geometry. A consumer needing those semantics derives
+and owns an appropriately compact structure from the borrowed canonical
+geometry.
+
+A root may retain an exact glTF identity through an explicit non-visual claim.
+That claim MUST use the ordinary bounded preparation, transport,
+deduplication, cancellation, focused status, and borrowed-geometry lifecycle.
+It MUST NOT create scene nodes, transforms, surfaces, lights, picking records,
+GPU resources, texture-image demand, or frame invalidation. Visual and
+non-visual claims reconcile as one complete ownership set, so moving an
+identity between them with overlapping incoming ownership neither rereads nor
+reprepares it. Declarative hosts MUST use the root's atomic scene-and-claim
+commit or otherwise bridge both handoff directions. Status observation remains
+non-owning.
+
 ## Supported vertex and primitive profile
 
 Royal ingests POSITION, NORMAL, TANGENT, TEXCOORD_0, TEXCOORD_1, and COLOR_0.

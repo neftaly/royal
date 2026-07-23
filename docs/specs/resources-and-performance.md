@@ -51,6 +51,11 @@ the detail lane. FIFO order is preserved within each lane; after at most four
 foreground starts while detail remains queued, one detail job starts. Active
 work is never preempted.
 
+A non-visual glTF claim enters this same foreground preparation lane. It does
+not create a parallel preload cache, scheduler, or retention policy. Image
+sources remain dormant until a visible prepared material claims them, avoiding
+decode, handoff, and GPU work for metadata- or geometry-only use.
+
 A job is one admitted preparation phase, not necessarily a complete asset
 lifecycle or a promise that a browser created a worker. An ordinary-texture
 transport claim releases its shared slot as soon as the encoded `Blob` is

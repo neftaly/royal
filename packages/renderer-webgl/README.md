@@ -118,6 +118,16 @@ drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
 they are not reported as scheduled-frame failures.
 
+`setGltfAssetClaims(assets)` supplies the root's complete non-visual glTF
+claim set. Claims use the same bounded preparation, cancellation, exact
+identity, status, and deduplication as visible glTF nodes, but create no
+surfaces, lights, picking records, GPU resources, or frame work. Moving an
+identity between the non-visual list and a visible node reuses its preparation
+when committed atomically through `setScene(scene, claims)`, or when the
+incoming owner is installed before the outgoing one is removed.
+Image decode remains driven by visible material demand, so a textured
+non-visual asset may correctly remain `streaming` while its geometry is usable.
+
 `visitGltfAssetGeometry(asset, visitor)` is an explicit cold path to the
 highest-detail selected-scene triangles Royal already prepared. It returns
 `undefined` while that exact asset identity is unavailable, or the visited
@@ -126,6 +136,10 @@ packs one or more column-major asset-space transforms, so instancing does not
 become duplicated mesh data. The arrays are borrowed only for the callback;
 copy values that an application deliberately retains. This path performs no
 second source read or decode and does not publish geometry through status.
+Snapshot bounds remain a conservative asset-space AABB for framing, coarse
+layout, and broad phases. They are not contact, collision, resting-height, or
+support geometry; applications needing those semantics derive and own a
+specialized structure from the borrowed geometry path.
 
 `getPrefilteredEnvironmentSnapshot(environment)` and
 `subscribePrefilteredEnvironment(environment, listener)` expose the focused

@@ -93,6 +93,14 @@ should prefer the focused lifecycle, size, and asset-status hooks. Spatial tools
 which explicitly need already-prepared selected-scene triangles can use
 `useVisitGltfAssetGeometry`; its typed arrays and packed transforms are borrowed
 only for each callback, so copy only data the application intentionally retains.
+Pass `gltfAssetClaims={[gltfAsset(...)]}` to `Canvas` when status or
+spatial tools must prepare an asset before it joins the visible scene. This is a
+complete lifetime claim, not a preload cache: removing its last visual and
+non-visual owner releases it. Claims do not create surfaces, lights, picking,
+GPU geometry, or frames, and do not decode material images until a visible
+surface needs them. Prepared bounds remain a conservative AABB for framing and
+broad phases; derive contact/support data from borrowed geometry rather than
+treating bounds as a physics oracle.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact source, version, and

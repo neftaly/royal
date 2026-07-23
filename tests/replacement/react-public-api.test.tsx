@@ -1,8 +1,10 @@
 import {
   gltf,
+  gltfAsset,
   prefilteredEnvironment,
   textureAsset,
   virtualTexture,
+  type GltfAssetInput,
   type Scene,
 } from "@royal/renderer-core";
 import {
@@ -129,6 +131,7 @@ describe("replacement React public API", () => {
       "directionalLight",
       "fitOrbitCameraView",
       "gltf",
+      "gltfAsset",
       "gltfInstances",
       "imageTexture",
       "linearRgbaFromSrgb",
@@ -174,12 +177,18 @@ describe("replacement React public API", () => {
     const gltfResourceReader: GltfResourceReader = async () => new Uint8Array();
     const html = renderToStaticMarkup(createElement(
       Canvas,
-      { "aria-label": "preview", gltfResourceReader, scene: emptyScene },
+      {
+        "aria-label": "preview",
+        gltfAssetClaims: ["/metadata.glb"],
+        gltfResourceReader,
+        scene: emptyScene,
+      },
       createElement(Status),
     ));
     expect(html).toContain(
       '<canvas aria-label="preview" style="display:block;width:100%"></canvas>',
     );
+    expect(html).not.toContain("gltfAssetClaims");
     expect(html).not.toContain("gltfResourceReader");
     expect(html).toContain("<output>unavailable</output>");
   });
@@ -189,6 +198,7 @@ describe("replacement React public API", () => {
       "aria-label": "preview",
       "data-testid": "royal",
       className: "viewport",
+      gltfAssetClaims: [gltfAsset("/metadata.glb")],
       pixelRatio: 1,
       rendererOptions: { alpha: false, antialias: true },
       scene: emptyScene,
@@ -202,6 +212,8 @@ describe("replacement React public API", () => {
     expectTypeOf<RendererResourceSnapshot>()
       .toEqualTypeOf<ReturnType<RendererRoot["getSnapshot"]>["resources"]>();
     expectTypeOf<CanvasProps["scene"]>().toEqualTypeOf<Scene>();
+    expectTypeOf<NonNullable<CanvasProps["gltfAssetClaims"]>[number]>()
+      .toEqualTypeOf<GltfAssetInput>();
     expectTypeOf<CanvasProps["gltfResourceReader"]>()
       .toEqualTypeOf<GltfResourceReader | undefined>();
     expectTypeOf<{ gltfResourceReader: GltfResourceReader }>()
@@ -222,6 +234,7 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasPick).toBeFunction();
     expectTypeOf(useInvalidate).toBeFunction();
     expectTypeOf(useVisitGltfAssetGeometry).toBeFunction();
+    expectTypeOf<RendererRoot["setGltfAssetClaims"]>().toBeFunction();
     expectTypeOf({ root: null }).toMatchTypeOf<RendererHookOptions>();
     expectTypeOf(useRendererLifecycle).toBeFunction();
     expectTypeOf(useRendererSnapshot).toBeFunction();
