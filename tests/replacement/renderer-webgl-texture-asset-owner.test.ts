@@ -18,6 +18,36 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 });
 
 describe("ordinary texture asset lifecycle owner", () => {
+  it("preloads every claimed source independently of complete preparation admission", () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(
+      () => new Promise<DecodedTextureSource>(() => undefined),
+    );
+    const preloadedSignals: AbortSignal[] = [];
+    const preload = vi.fn<NonNullable<TextureAssetOwnerPlatform["preload"]>>(
+      (_asset, signal) => {
+        preloadedSignals.push(signal);
+      },
+    );
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+      preload,
+    });
+    const assets = Array.from({ length: 70 }, (_value, index) =>
+      imageTexture(`/texture-${index}.avif`));
+
+    owner.reconcile(assets);
+
+    expect(preload).toHaveBeenCalledTimes(70);
+    expect(decode).toHaveBeenCalledTimes(32);
+    expect(preloadedSignals.every((signal) => !signal.aborted)).toBe(true);
+
+    owner.reconcile([]);
+    expect(preloadedSignals.every((signal) => signal.aborted)).toBe(true);
+  });
+
   it("attributes built-in transport and decode stages without timing custom decoders", async () => {
     let now = 0;
     const owner = new TextureAssetOwner({
@@ -378,21 +408,21 @@ describe("ordinary texture asset lifecycle owner", () => {
       onSnapshotChanged: vi.fn(),
     });
     const assets = Array.from(
-      { length: 18 },
+      { length: 34 },
       (_value, index) => imageTexture(`/streamed-${index}.avif`),
     );
 
     owner.reconcile(assets);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(16));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(32));
     await Promise.resolve();
-    expect(decode).toHaveBeenCalledTimes(16);
+    expect(decode).toHaveBeenCalledTimes(32);
 
     completions[0]!(decoded());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(17));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(33));
     expect(owner.getSnapshot(assets[0]!).status).toBe("ready");
 
     completions[1]!(decoded());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(18));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(34));
     expect(owner.getSnapshot(assets[1]!).status).toBe("ready");
     owner.dispose();
   });
@@ -409,7 +439,7 @@ describe("ordinary texture asset lifecycle owner", () => {
       onSnapshotChanged: vi.fn(),
     });
     const assets = Array.from(
-      { length: 18 },
+      { length: 34 },
       (_value, index) => imageTexture(`/large-handoff-${index}.avif`),
     );
     const large = (): DecodedTextureSource => ({
@@ -419,15 +449,15 @@ describe("ordinary texture asset lifecycle owner", () => {
     });
 
     owner.reconcile(assets);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(16));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(32));
     completions[0]!(large());
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(17));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(33));
     completions[1]!(large());
     await waitFor(() => expect(owner.getSnapshot(assets[1]!).status).toBe("ready"));
-    expect(decode).toHaveBeenCalledTimes(17);
+    expect(decode).toHaveBeenCalledTimes(33);
 
     owner.releaseUploaded([textureStorageKey(assets[0]!)]);
-    await waitFor(() => expect(decode).toHaveBeenCalledTimes(18));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(34));
     owner.dispose();
   });
 
@@ -474,6 +504,60 @@ describe("ordinary texture asset lifecycle owner", () => {
 
     expect(decode.mock.calls[0]![2]).toBe(512);
     expect(decode.mock.calls[1]![2]).toBe(512);
+  });
+
+  it("preserves retained CPU pixels while invalidating only GPU residency", async () => {
+    const source = decoded();
+    const decode = vi.fn(async () => source);
+    const changed = vi.fn();
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: changed,
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/retained-restorable.avif");
+    owner.reconcile([asset]);
+    await waitFor(() => expect(owner.decoded(asset)).toBe(source));
+    changed.mockClear();
+
+    owner.invalidateResidency();
+
+    expect(owner.decoded(asset)).toBe(source);
+    expect(owner.getSnapshot(asset).status).toBe("ready");
+    expect(decode).toHaveBeenCalledOnce();
+    expect(changed).toHaveBeenCalledOnce();
+    expect(changed).toHaveBeenCalledWith(decodedTextureKey(asset));
+  });
+
+  it("does not restart active transport or decode when GPU residency is invalidated", async () => {
+    let complete: ((source: DecodedTextureSource) => void) | undefined;
+    let decodeSignal: AbortSignal | undefined;
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(
+      (_asset, signal) => {
+        decodeSignal = signal;
+        return new Promise((resolve) => {
+          complete = resolve;
+        });
+      },
+    );
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/active-restorable.avif");
+    owner.reconcile([asset]);
+
+    owner.invalidateResidency();
+
+    expect(decodeSignal?.aborted).toBe(false);
+    expect(decode).toHaveBeenCalledOnce();
+    const source = decoded();
+    complete?.(source);
+    await waitFor(() => expect(owner.decoded(asset)).toBe(source));
+    expect(decode).toHaveBeenCalledOnce();
   });
 
   it("re-decodes released pixels when GPU residency is invalidated", async () => {

@@ -62,8 +62,8 @@ export interface CanvasProps
   /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
   readonly gltfResourceReader?: GltfResourceReader;
   /**
-   * Complete non-visual glTF preparation claim.
-   * Claimed assets expose status and borrowed geometry without joining the scene.
+   * Complete render-ready glTF preload claim without scene membership.
+   * Geometry, metadata, and material images prepare through the ordinary lifecycle.
    */
   readonly gltfAssetClaims?: readonly GltfAssetInput[];
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */

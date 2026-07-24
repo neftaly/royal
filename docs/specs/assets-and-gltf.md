@@ -146,19 +146,18 @@ resting-height, or support geometry. A consumer needing those semantics derives
 and owns an appropriately compact structure from the borrowed canonical
 geometry.
 
-A root may retain an exact glTF identity through an explicit non-visual claim.
-That claim MUST use the ordinary bounded preparation, transport,
-deduplication, cancellation, focused status, and borrowed-geometry lifecycle.
-It MUST NOT create scene nodes, transforms, surfaces, lights, picking records,
-GPU resources, texture-image demand, or frame invalidation. Visual and
+A root may retain and render-ready preload an exact glTF identity through an
+explicit non-visual claim. That claim MUST use the ordinary bounded
+preparation, transport, deduplication, cancellation, focused status,
+borrowed-geometry, and material-image lifecycle. It MUST NOT create scene
+nodes, transforms, surfaces, lights, picking records, GPU resources, or frame
+invalidation. Visual and
 non-visual claims reconcile as one complete ownership set, so moving an
 identity between them with overlapping incoming ownership neither rereads nor
-reprepares it. A non-visual claim alone MUST NOT eagerly decode material
-images. Once a visible owner has established image demand, however, an
-overlapping root claim MAY retain those already-demanded canonical texture
-identities across a temporary visual-composition gap. The last root and visual
-owner releases them; there is no grace timer or detached cache. Declarative
-hosts MUST use the root's atomic scene-and-claim
+reprepares it. A non-visual claim MUST prepare selected material images through
+the same bounded source lifecycle, but MUST NOT allocate their WebGL storage.
+The last root and visual owner releases them; there is no grace timer or
+detached cache. Declarative hosts MUST use the root's atomic scene-and-claim
 commit or otherwise bridge both handoff directions. Status observation remains
 non-owning.
 

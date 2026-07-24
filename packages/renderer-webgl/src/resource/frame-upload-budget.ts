@@ -1,4 +1,5 @@
 export const DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME = 4 * 1024 * 1024;
+export const DEFAULT_TEXTURE_UPLOAD_BYTE_BUDGET_PER_FRAME = 32 * 1024 * 1024;
 
 export type FrameUploadBudgetSnapshot = Readonly<{
   /** Upload bytes admitted during the most recent frame handled by this owner. */

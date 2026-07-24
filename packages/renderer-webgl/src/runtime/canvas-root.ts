@@ -80,14 +80,16 @@ import {
 import { RenderObjectRefOwner } from "../surface/render-object-ref-owner";
 import {
   TextureAssetOwner,
+  type TextureAssetOwnerPlatform,
   type TextureAssetSnapshot,
   type TexturePreparationSnapshot,
 } from "../texture/asset-owner";
 import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
-import type {
-  DecodedTextureSource,
-  GltfTextureAssetRef,
-  TextureSourceRef,
+import {
+  decodedTextureKey,
+  type DecodedTextureSource,
+  type GltfTextureAssetRef,
+  type TextureSourceRef,
 } from "../texture/source";
 import { WebGlStateOwner } from "../webgl/state-owner";
 import {
@@ -127,7 +129,7 @@ import {
 import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
 import type { SharedStaticGeometrySnapshot } from "../gltf/shared-geometry-owner";
 import {
-  DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
+  DEFAULT_TEXTURE_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
@@ -225,8 +227,8 @@ export interface RendererRoot {
    */
   setScene(scene: Scene, gltfAssetClaims?: readonly GltfAssetRef[]): void;
   /**
-   * Replaces the complete non-visual glTF preparation claim.
-   * Claimed assets use focused status and borrowed geometry but create no scene work.
+   * Replaces the complete render-ready glTF preload claim.
+   * Claimed assets prepare geometry, metadata, and images but create no scene work.
    * Install an incoming owner before removing the outgoing owner during a handoff.
    */
   setGltfAssetClaims(assets: readonly GltfAssetRef[]): void;
@@ -321,17 +323,36 @@ const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
   retainSvgSource: boolean,
   readGltfTexture?: NonNullable<CanvasRootPlatform["readGltfTextureResource"]>,
-): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
-  let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
-  return async (asset, signal, maxStorageBytes, retainAlpha) => {
+  onReadAheadChanged: () => void = () => undefined,
+): Pick<TextureAssetOwnerPlatform, "decode" | "preload" | "readAheadSnapshot"> => {
+  let decoder:
+    | Promise<import("../texture/browser-decode").BrowserTextureDecoder>
+    | undefined;
+  let loadedDecoder: import("../texture/browser-decode").BrowserTextureDecoder | undefined;
+  const load = (): NonNullable<typeof decoder> => {
     decoder ??= import("../texture/browser-decode")
-      .then((module) => module.createBrowserTextureDecoder(
-        4,
-        etc2Available,
-        retainSvgSource,
-        readGltfTexture,
-      ));
-    return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
+      .then((module) => {
+        const value = module.createBrowserTextureDecoder(
+          32,
+          etc2Available,
+          retainSvgSource,
+          readGltfTexture,
+          onReadAheadChanged,
+        );
+        loadedDecoder = value;
+        return value;
+      });
+    return decoder;
+  };
+  return {
+    decode: async (asset, signal, maxStorageBytes, retainAlpha) =>
+      (await load()).decode(asset, signal, maxStorageBytes, retainAlpha),
+    preload: (asset, signal) => {
+      void load().then((value) => {
+        if (!signal.aborted) value.preload(asset, signal);
+      }).catch(() => undefined);
+    },
+    readAheadSnapshot: () => loadedDecoder?.readAheadSnapshot(),
   };
 };
 
@@ -590,7 +611,7 @@ export class CanvasRoot implements RendererRoot {
     const asyncPreparationJobLimit = platform.asyncPreparationJobLimit
       ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT;
     const frameUploadByteBudget = platform.frameUploadByteBudget
-      ?? DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME;
+      ?? DEFAULT_TEXTURE_UPLOAD_BYTE_BUDGET_PER_FRAME;
     this.#canvas = canvas;
     this.#platform = platform;
     this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
@@ -645,6 +666,9 @@ export class CanvasRoot implements RendererRoot {
       onAssetChanged: (key) => {
         const asset = this.#visualGltfAsset(key);
         if (asset !== undefined) this.#queuePreparedGltfScene(asset);
+        else if (
+          this.#gltfAssetClaims.some((claim) => gltfAssetKey(claim) === key)
+        ) this.#reconcileTextureAssets(this.#surfaceScene);
       },
       onListenerError: (error) => platform.onListenerError(error),
       onSourceReadsChanged: () => {
@@ -661,12 +685,24 @@ export class CanvasRoot implements RendererRoot {
       schedule: this.#asyncPreparation.runForeground,
       sharedGeometryPreparation: true,
     });
-    this.#textureAssets = new TextureAssetOwner({
-      decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(
+    const browserTextureDecoder = platform.decodeTexture === undefined
+      ? lazyBrowserTextureDecoder(
         this.#etc2Available,
         this.#automaticVirtualTexturing,
         platform.readGltfTextureResource,
-      ),
+        () => {
+          if (!this.#disposed) this.#publish();
+        },
+      )
+      : undefined;
+    this.#textureAssets = new TextureAssetOwner({
+      decode: platform.decodeTexture ?? browserTextureDecoder!.decode,
+      ...(browserTextureDecoder === undefined
+        ? {}
+        : {
+          preload: browserTextureDecoder.preload,
+          readAheadSnapshot: browserTextureDecoder.readAheadSnapshot,
+        }),
       onAssetChanged: (key) => this.#queuePreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
@@ -944,7 +980,7 @@ export class CanvasRoot implements RendererRoot {
     if (sameGltfAssetClaims(this.#gltfAssetClaims, claims)) return;
     this.#gltfAssetClaims = claims;
     this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
-    if (this.#surfaceScene !== null) this.#reconcileTextureAssets(this.#surfaceScene);
+    this.#reconcileTextureAssets(this.#surfaceScene);
   }
 
   setSize(input: CanvasSizeInput): void {
@@ -1246,22 +1282,23 @@ export class CanvasRoot implements RendererRoot {
     }
   }
 
-  #reconcileTextureAssets(scene: CanonicalSurfaceScene): void {
+  #reconcileTextureAssets(scene: CanonicalSurfaceScene | null): void {
     const retainedKeys = new Set<string>();
-    for (const node of scene.gltfNodes) {
-      const key = gltfAssetKey(node.asset);
+    const retain = (asset: GltfAssetRef): void => {
+      const key = gltfAssetKey(asset);
       retainedKeys.add(key);
-      const claims = this.#gltfAssets.textureClaims(node.asset);
+      const claims = this.#gltfAssets.textureClaims(asset);
       if (claims.textureAssets.length !== 0) {
         this.#retainedGltfTextureClaims.set(key, claims);
       }
-    }
-    for (const asset of this.#gltfAssetClaims) retainedKeys.add(gltfAssetKey(asset));
+    };
+    for (const node of scene?.gltfNodes ?? []) retain(node.asset);
+    for (const asset of this.#gltfAssetClaims) retain(asset);
     for (const key of this.#retainedGltfTextureClaims.keys()) {
       if (!retainedKeys.has(key)) this.#retainedGltfTextureClaims.delete(key);
     }
-    const assets = [...scene.textureAssets];
-    const alphaMaskAssets = [...scene.alphaMaskTextureAssets];
+    const assets = [...(scene?.textureAssets ?? [])];
+    const alphaMaskAssets = [...(scene?.alphaMaskTextureAssets ?? [])];
     for (const claims of this.#retainedGltfTextureClaims.values()) {
       assets.push(...claims.textureAssets);
       alphaMaskAssets.push(...claims.alphaMaskTextureAssets);
@@ -1297,6 +1334,11 @@ export class CanvasRoot implements RendererRoot {
 
   #queuePreparedTexture(key: string): void {
     if (this.#disposed) return;
+    const scene = this.#surfaceScene;
+    if (
+      scene === null
+      || !scene.textureAssets.some((asset) => decodedTextureKey(asset) === key)
+    ) return;
     this.#pendingTexturePublicationKeys.add(key);
     this.#clock.invalidate();
   }

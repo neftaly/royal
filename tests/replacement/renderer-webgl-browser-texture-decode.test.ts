@@ -7,7 +7,7 @@ import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/tex
 import { createAvifHeader } from "./support/avif-header";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
 
-const decodeTextureWithBrowser = createBrowserTextureDecoder();
+const decodeTextureWithBrowser = createBrowserTextureDecoder().decode;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -27,6 +27,153 @@ const stubValidSvgParser = (): void => {
 };
 
 describe("browser texture decode shell", () => {
+  it("transports known external sources ahead of bitmap decode without refetching", async () => {
+    const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
+    const createImageBitmap = vi.fn(async () => bitmap);
+    const fetch = vi.fn(async (_input: string | URL | Request) =>
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+      headers: { "content-type": "image/avif" },
+      }));
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("fetch", fetch);
+    const decoder = createBrowserTextureDecoder();
+    const controllers = Array.from({ length: 40 }, () => new AbortController());
+    const assets = controllers.map((_controller, index) => ({
+      kind: "asset" as const,
+      src: `/texture-${index}.avif`,
+    }));
+
+    assets.forEach((asset, index) => {
+      decoder.preload(asset, controllers[index]!.signal);
+    });
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(40));
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    const decoded = await decoder.decode(assets[0]!, new AbortController().signal);
+
+    expect(fetch).toHaveBeenCalledTimes(40);
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    decoded.close?.();
+    controllers.forEach((controller) => controller.abort());
+  });
+
+  it("reports bounded encoded transport and releases each staged blob at decode handoff", async () => {
+    const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+        headers: { "content-type": "image/avif" },
+      })));
+    const changed = vi.fn();
+    const decoder = createBrowserTextureDecoder(4, true, false, undefined, changed);
+    const controllers = Array.from({ length: 20 }, () => new AbortController());
+    const assets = controllers.map((_controller, index) => ({
+      kind: "asset" as const,
+      src: `/observed-${index}.avif`,
+    }));
+
+    assets.forEach((asset, index) => {
+      decoder.preload(asset, controllers[index]!.signal);
+    });
+    await waitFor(() => expect(decoder.readAheadSnapshot()).toMatchObject({
+      activeReads: 0,
+      queuedReads: 0,
+      sourceReservations: 20,
+      stagedBytes: 80,
+    }));
+
+    const decoded = await decoder.decode(assets[0]!, controllers[0]!.signal);
+
+    expect(decoder.readAheadSnapshot()).toMatchObject({
+      sourceReservationLimit: 128,
+      sourceReservations: 19,
+      stagedBytes: 76,
+      stagedByteThreshold: 32 * 1024 * 1024,
+    });
+    expect(changed).toHaveBeenCalled();
+    decoded.close?.();
+    controllers.forEach((controller) => controller.abort());
+  });
+
+  it("reuses a fast read-ahead failure instead of issuing a second demand read", async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const decoder = createBrowserTextureDecoder();
+    const controller = new AbortController();
+    const asset = { kind: "asset" as const, src: "/failed-read-ahead.avif" };
+
+    decoder.preload(asset, controller.signal);
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await expect(decoder.decode(asset, controller.signal)).rejects.toThrow("offline");
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(decoder.readAheadSnapshot()).toMatchObject({
+      activeReads: 0,
+      sourceReservations: 0,
+      stagedBytes: 0,
+    });
+  });
+
+  it("keeps active read-ahead transport attached to cancellation after demand takes it", async () => {
+    let transportSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      transportSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        transportSignal?.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        }, { once: true });
+      });
+    }));
+    const decoder = createBrowserTextureDecoder();
+    const controller = new AbortController();
+    const asset = { kind: "asset" as const, src: "/cancelled-read-ahead.avif" };
+
+    decoder.preload(asset, controller.signal);
+    await waitFor(() => expect(transportSignal).toBeDefined());
+    const demanded = decoder.decode(asset, controller.signal);
+    controller.abort();
+
+    await expect(demanded).rejects.toMatchObject({ name: "AbortError" });
+    expect(transportSignal?.aborted).toBe(true);
+    expect(decoder.readAheadSnapshot()).toMatchObject({
+      activeReads: 0,
+      sourceReservations: 0,
+      stagedBytes: 0,
+    });
+  });
+
+  it("bounds encoded read-ahead count while demanded work bypasses its pending queue", async () => {
+    const bitmap = { close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const fetch = vi.fn(async (_input: string | URL | Request) =>
+      new Response(new Uint8Array([1]), {
+      headers: { "content-type": "image/avif" },
+      }));
+    vi.stubGlobal("fetch", fetch);
+    const decoder = createBrowserTextureDecoder();
+    const controllers = Array.from({ length: 129 }, () => new AbortController());
+    const assets = controllers.map((_controller, index) => ({
+      kind: "asset" as const,
+      src: `/bounded-${index}.avif`,
+    }));
+    assets.forEach((asset, index) => {
+      decoder.preload(asset, controllers[index]!.signal);
+    });
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(128));
+    const decoded = await decoder.decode(assets[128]!, new AbortController().signal);
+
+    expect(fetch).toHaveBeenCalledTimes(129);
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe("/bounded-128.avif");
+    decoded.close?.();
+    controllers.forEach((controller) => controller.abort());
+  });
+
   it("routes only glTF-owned external images through the injected byte reader", async () => {
     const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
     const fetch = vi.fn(async () => ({
@@ -36,7 +183,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => new Uint8Array([137, 80, 78, 71]));
     vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(4, true, false, readGltfTexture);
+    const decode = createBrowserTextureDecoder(4, true, false, readGltfTexture).decode;
 
     const decoded = await decode({
       gltfResource: true,
@@ -67,7 +214,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => createAvifHeader(4, 4));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
 
-    await createBrowserTextureDecoder(4, true, false, readGltfTexture)({
+    await createBrowserTextureDecoder(4, true, false, readGltfTexture).decode({
       gltfResource: true,
       kind: "asset",
       mimeType: "image/avif",
@@ -90,7 +237,7 @@ describe("browser texture decode shell", () => {
     vi.stubGlobal("createImageBitmap", createImageBitmap);
     vi.stubGlobal("fetch", fetch);
 
-    const decoded = await createBrowserTextureDecoder()({
+    const decoded = await createBrowserTextureDecoder().decode({
       fallback: { kind: "asset", src: "/fallback.png" },
       kind: "asset",
       sourceEncoding: "svg",
@@ -118,7 +265,7 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("fetch", fetch);
 
-    const decoded = await createBrowserTextureDecoder(4, true, true)({
+    const decoded = await createBrowserTextureDecoder(4, true, true).decode({
       fallback: { kind: "asset", src: "/fallback.png" },
       kind: "asset",
       sourceEncoding: "svg",
@@ -140,7 +287,7 @@ describe("browser texture decode shell", () => {
         });
     vi.stubGlobal("fetch", fetch);
 
-    await expect(createBrowserTextureDecoder()({
+    await expect(createBrowserTextureDecoder().decode({
       fallback: { kind: "asset", src: "/fallback.png" },
       kind: "asset",
       sourceEncoding: "svg",
@@ -162,8 +309,11 @@ describe("browser texture decode shell", () => {
       src: "/opaque-image?id=vector",
     };
 
-    const ordinary = await createBrowserTextureDecoder()(asset, new AbortController().signal);
-    const retained = await createBrowserTextureDecoder(4, true, true)(
+    const ordinary = await createBrowserTextureDecoder().decode(
+      asset,
+      new AbortController().signal,
+    );
+    const retained = await createBrowserTextureDecoder(4, true, true).decode(
       asset,
       new AbortController().signal,
     );
@@ -243,9 +393,11 @@ describe("browser texture decode shell", () => {
       onload: null,
       src: "",
     };
+    let imageSrc = "";
     Object.defineProperty(image, "src", {
-      get: () => "",
+      get: () => imageSrc,
       set: (value: string) => {
+        imageSrc = value;
         if (value !== "") queueMicrotask(() => image.onload?.());
       },
     });
@@ -275,6 +427,48 @@ describe("browser texture decode shell", () => {
     expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, fitted.width, fitted.height);
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-fallback");
+  });
+
+  it("hands full-size AVIF pixels from the image-element compatibility fallback to WebGL", async () => {
+    let imageSrc = "";
+    const image = {
+      naturalHeight: 880,
+      naturalWidth: 630,
+      onerror: null as (() => void) | null,
+      onload: null as (() => void) | null,
+      src: "",
+    };
+    Object.defineProperty(image, "src", {
+      get: () => imageSrc,
+      set: (value: string) => {
+        imageSrc = value;
+        if (value !== "") queueMicrotask(() => image.onload?.());
+      },
+    });
+    const createImageBitmap = vi.fn(async () => {
+      throw new Error("unsupported AVIF bitmap decode");
+    });
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("document", { createElement: vi.fn(() => image) });
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:royal-avif"),
+      revokeObjectURL,
+    });
+
+    const result = await decodeTextureWithBrowser({
+      bytes: createAvifHeader(630, 880),
+      contentKey: "direct-avif",
+      kind: "embedded-asset",
+      label: "direct AVIF",
+      mimeType: "image/avif",
+    }, new AbortController().signal);
+
+    expect(result).toMatchObject({ height: 880, source: image, width: 630 });
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-avif");
+    result.close?.();
+    expect(image.src).toBe("");
   });
 
   it("keeps direct KTX2 ETC2 levels compressed and extracts alpha only on demand", async () => {
@@ -354,7 +548,7 @@ describe("browser texture decode shell", () => {
   it("rejects explicit ETC2 before transport when the WebGL capability is absent", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(1, false);
+    const decode = createBrowserTextureDecoder(1, false).decode;
     await expect(decode({
       kind: "asset",
       sourceEncoding: "ktx2-etc2",
@@ -644,7 +838,7 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(2);
+    const decode = createBrowserTextureDecoder(2).decode;
     const signal = new AbortController().signal;
     const requests = ["/a.avif", "/b.avif", "/c.avif"].map((src) => decode({
       kind: "asset",
@@ -673,7 +867,7 @@ describe("browser texture decode shell", () => {
       ok: true,
       status: 200,
     })));
-    const decode = createBrowserTextureDecoder(1);
+    const decode = createBrowserTextureDecoder(1).decode;
     const first = decode({ kind: "asset", src: "/first.avif" }, new AbortController().signal);
     const secondController = new AbortController();
     const second = decode({ kind: "asset", src: "/abandoned.avif" }, secondController.signal);

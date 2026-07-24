@@ -5,6 +5,7 @@ import type {
   TextureLeafSourceRef,
   TextureSourceRef,
 } from "./source";
+import { decodedTextureKey } from "./source";
 import { decodeBrowserImageElement } from "./browser-image-element";
 import {
   encodedImageDimensionPrefixByteLength,
@@ -12,14 +13,23 @@ import {
 } from "./encoded-image-dimensions";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import { RetainedFifo } from "../resource/retained-fifo";
+import {
+  StagedByteReadOwner,
+  type StagedByteReadLease,
+  type StagedByteReadSnapshot,
+} from "../resource/staged-byte-read-owner";
 import { createTextureAlphaMipChain } from "./alpha-mipmap-generation";
 
-export type BrowserTextureDecoder = (
-  asset: TextureSourceRef,
-  signal: AbortSignal,
-  maxStorageBytes?: number,
-  retainAlpha?: boolean,
-) => Promise<DecodedTextureSource>;
+export type BrowserTextureDecoder = Readonly<{
+  decode(
+    asset: TextureSourceRef,
+    signal: AbortSignal,
+    maxStorageBytes?: number,
+    retainAlpha?: boolean,
+  ): Promise<DecodedTextureSource>;
+  preload(asset: TextureSourceRef, signal: AbortSignal): void;
+  readAheadSnapshot(): StagedByteReadSnapshot;
+}>;
 
 type PendingWork = {
   cancel: () => void;
@@ -105,11 +115,111 @@ const diagnosticLabel = (asset: TextureLeafSourceRef): string => {
 
 type TextureBlob = Readonly<{
   blob: Blob;
+  byteLength: number;
   ktx2: boolean;
   svg: boolean;
   transportDurationMs?: number;
   transportQueueDurationMs?: number;
 }>;
+
+type ReadAheadEntry = {
+  readonly cancel: () => void;
+  lease: StagedByteReadLease<TextureBlob> | undefined;
+  readonly signal: AbortSignal;
+  started: boolean;
+  value: Promise<StagedByteReadLease<TextureBlob>> | undefined;
+};
+
+const ENCODED_READ_ACTIVE_LIMIT = 16;
+const ENCODED_READ_SOURCE_LIMIT = 128;
+const ENCODED_READ_STAGED_BYTE_THRESHOLD = 32 * 1024 * 1024;
+
+/**
+ * Lets encoded browser transport run ahead of bitmap decode without allowing
+ * decoded pixels or GPU handoff to escape their independent owners.
+ */
+class BrowserTextureReadAhead {
+  readonly #entries = new Map<string, ReadAheadEntry>();
+  readonly #reads: StagedByteReadOwner<TextureBlob>;
+  readonly #transport: (asset: TextureLeafSourceRef, signal: AbortSignal) => Promise<TextureBlob>;
+
+  constructor(
+    transport: (
+      asset: TextureLeafSourceRef,
+      signal: AbortSignal,
+    ) => Promise<TextureBlob>,
+    onChanged: () => void,
+  ) {
+    this.#transport = transport;
+    this.#reads = new StagedByteReadOwner<TextureBlob>(
+      ENCODED_READ_ACTIVE_LIMIT,
+      ENCODED_READ_SOURCE_LIMIT,
+      ENCODED_READ_STAGED_BYTE_THRESHOLD,
+      onChanged,
+    );
+  }
+
+  preload(asset: TextureSourceRef, signal: AbortSignal): void {
+    if (signal.aborted || asset.kind === "embedded-asset") return;
+    const key = decodedTextureKey(asset);
+    if (this.#entries.has(key)) return;
+    const controller = new AbortController();
+    let entry!: ReadAheadEntry;
+    const cancel = (): void => {
+      signal.removeEventListener("abort", cancel);
+      controller.abort();
+      entry.lease?.release();
+      if (this.#entries.get(key) === entry) this.#entries.delete(key);
+    };
+    entry = {
+      cancel,
+      lease: undefined,
+      signal,
+      started: false,
+      value: undefined,
+    };
+    entry.value = this.#reads.read(controller.signal, () => {
+      entry.started = true;
+      return this.#transport(asset, controller.signal);
+    }).then((lease) => {
+      entry.lease = lease;
+      if (signal.aborted) lease.release();
+      return lease;
+    });
+    signal.addEventListener("abort", cancel, { once: true });
+    this.#entries.set(key, entry);
+    // Retain a settled failure until demand consumes it so a fast transport
+    // failure cannot turn preload plus decode into two observable reads.
+    void entry.value.catch(() => undefined);
+  }
+
+  take(asset: TextureLeafSourceRef): Promise<TextureBlob> | undefined {
+    if (asset.kind === "embedded-asset") return undefined;
+    const key = decodedTextureKey(asset);
+    const entry = this.#entries.get(key);
+    if (entry === undefined) return undefined;
+    if (!entry.started) {
+      entry.cancel();
+      return undefined;
+    }
+    this.#entries.delete(key);
+    return entry.value!.then(
+      (lease) => {
+        entry.signal.removeEventListener("abort", entry.cancel);
+        lease.release();
+        return lease.bytes;
+      },
+      (error: unknown) => {
+        entry.signal.removeEventListener("abort", entry.cancel);
+        throw error;
+      },
+    );
+  }
+
+  snapshot(): StagedByteReadSnapshot {
+    return this.#reads.snapshot();
+  }
+}
 
 export type BrowserGltfTextureReader = (
   asset: GltfTextureAssetRef,
@@ -153,6 +263,7 @@ const readTextureBlob = async (
 ): Promise<TextureBlob> => asset.kind === "embedded-asset"
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
+      byteLength: asset.bytes.byteLength,
       ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2MimeType(asset.mimeType),
       svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
@@ -161,6 +272,7 @@ const readTextureBlob = async (
         const bytes = await readGltfTexture(asset as GltfTextureAssetRef, signal);
         return {
           blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
+          byteLength: bytes.byteLength,
           ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src),
           svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src),
         };
@@ -172,6 +284,7 @@ const readTextureBlob = async (
       const blob = await response.blob();
       return {
         blob,
+        byteLength: blob.size,
         ktx2: asset.sourceEncoding === "ktx2-etc2"
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
@@ -437,15 +550,15 @@ export const createBrowserTextureDecoder = (
   etc2Available = true,
   retainSvgSource = false,
   readGltfTexture?: BrowserGltfTextureReader,
+  onReadAheadChanged: () => void = () => undefined,
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
-  const transports = new BrowserWorkQueue(8);
-  const read = async (
+  const transports = new BrowserWorkQueue(16);
+  const transport = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
   ): Promise<TextureBlob> => {
-    if (asset.kind === "embedded-asset") return readTextureBlob(asset, signal, readGltfTexture);
     const queuedAt = now();
     let startedAt = queuedAt;
     const result = await transports.run(signal, () => {
@@ -458,6 +571,17 @@ export const createBrowserTextureDecoder = (
       transportDurationMs: Math.max(0, completedAt - startedAt),
       transportQueueDurationMs: Math.max(0, startedAt - queuedAt),
     };
+  };
+  const readAhead = new BrowserTextureReadAhead(transport, onReadAheadChanged);
+  const read = async (
+    asset: TextureLeafSourceRef,
+    signal: AbortSignal,
+  ): Promise<TextureBlob> => {
+    if (asset.kind === "embedded-asset") {
+      return readTextureBlob(asset, signal, readGltfTexture);
+    }
+    const prefetched = readAhead.take(asset);
+    return prefetched === undefined ? transport(asset, signal) : await prefetched;
   };
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
@@ -510,7 +634,12 @@ export const createBrowserTextureDecoder = (
       encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
     };
   };
-  return async (asset, signal, maxStorageBytes, retainAlpha) => {
+  const decode = async (
+    asset: TextureSourceRef,
+    signal: AbortSignal,
+    maxStorageBytes?: number,
+    retainAlpha?: boolean,
+  ): Promise<DecodedTextureSource> => {
     try {
       return await decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
     } catch (error) {
@@ -520,5 +649,11 @@ export const createBrowserTextureDecoder = (
       const decoded = await decodeLeaf(asset.fallback, signal, maxStorageBytes, retainAlpha, true);
       return { ...decoded, fallbackReason };
     }
+  };
+  return {
+    decode,
+    preload: (asset: TextureSourceRef, signal: AbortSignal): void =>
+      readAhead.preload(asset, signal),
+    readAheadSnapshot: (): StagedByteReadSnapshot => readAhead.snapshot(),
   };
 };

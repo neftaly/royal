@@ -1,7 +1,7 @@
 export type BrowserImageElementSource = Readonly<{
   close(): void;
   height: number;
-  source: HTMLCanvasElement;
+  source: HTMLCanvasElement | HTMLImageElement;
   sourceHeight?: number;
   sourceWidth?: number;
   width: number;
@@ -47,6 +47,17 @@ export const decodeBrowserImageElement = async (
     const sourceHeight = image.naturalHeight;
     const fitted = fit?.(sourceWidth, sourceHeight)
       ?? { height: sourceHeight, width: sourceWidth };
+    if (fitted.width === sourceWidth && fitted.height === sourceHeight) {
+      URL.revokeObjectURL(objectUri);
+      return {
+        close: () => {
+          image.src = "";
+        },
+        height: sourceHeight,
+        source: image,
+        width: sourceWidth,
+      };
+    }
     const canvas = document.createElement("canvas");
     canvas.width = fitted.width;
     canvas.height = fitted.height;
@@ -62,9 +73,8 @@ export const decodeBrowserImageElement = async (
       },
       height: fitted.height,
       source: canvas,
-      ...(fitted.width === sourceWidth && fitted.height === sourceHeight
-        ? {}
-        : { sourceHeight, sourceWidth }),
+      sourceHeight,
+      sourceWidth,
       width: fitted.width,
     };
   } catch (error) {

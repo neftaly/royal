@@ -1,7 +1,7 @@
 import { RetainedFifo } from "./retained-fifo";
 
-export type StagedByteReadLease = Readonly<{
-  bytes: Uint8Array;
+export type StagedByteReadLease<Bytes extends { readonly byteLength: number } = Uint8Array> = Readonly<{
+  bytes: Bytes;
   release(): void;
 }>;
 
@@ -14,12 +14,12 @@ export type StagedByteReadSnapshot = Readonly<{
   stagedByteThreshold: number;
 }>;
 
-type PendingRead = {
+type PendingRead<Bytes extends { readonly byteLength: number }> = {
   readonly cancel: () => void;
   cancelled: boolean;
-  read: (() => Promise<Uint8Array>) | undefined;
+  read: (() => Promise<Bytes>) | undefined;
   readonly reject: (error: unknown) => void;
-  readonly resolve: (lease: StagedByteReadLease) => void;
+  readonly resolve: (lease: StagedByteReadLease<Bytes>) => void;
   readonly signal: AbortSignal;
   started: boolean;
 };
@@ -47,14 +47,16 @@ export const stagedByteReadCanStart = (
  * Completed bytes retain a reservation until the consumer begins preparation.
  * One oversize source can progress while later reads wait for its release.
  */
-export class StagedByteReadOwner {
+export class StagedByteReadOwner<
+  Bytes extends { readonly byteLength: number } = Uint8Array,
+> {
   #activeReads = 0;
   readonly #activeReadLimit: number;
-  readonly #active = new Set<PendingRead>();
+  readonly #active = new Set<PendingRead<Bytes>>();
   #changeQueued = false;
   #disposed = false;
   readonly #onChanged: () => void;
-  readonly #pending = new RetainedFifo<PendingRead>();
+  readonly #pending = new RetainedFifo<PendingRead<Bytes>>();
   #queuedReads = 0;
   readonly #sourceReservationLimit: number;
   #sourceReservations = 0;
@@ -106,11 +108,11 @@ export class StagedByteReadOwner {
 
   read(
     signal: AbortSignal,
-    read: () => Promise<Uint8Array>,
-  ): Promise<StagedByteReadLease> {
+    read: () => Promise<Bytes>,
+  ): Promise<StagedByteReadLease<Bytes>> {
     if (this.#disposed || signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
-      const pending: PendingRead = {
+      const pending: PendingRead<Bytes> = {
         cancel: () => {
           if (pending.cancelled) return;
           pending.cancelled = true;
@@ -148,7 +150,7 @@ export class StagedByteReadOwner {
     };
   }
 
-  #complete(pending: PendingRead, bytes: Uint8Array): void {
+  #complete(pending: PendingRead<Bytes>, bytes: Bytes): void {
     this.#active.delete(pending);
     this.#activeReads -= 1;
     pending.signal.removeEventListener("abort", pending.cancel);
@@ -196,7 +198,7 @@ export class StagedByteReadOwner {
       this.#queuedReads -= 1;
       this.#activeReads += 1;
       this.#sourceReservations += 1;
-      let reading: Promise<Uint8Array>;
+      let reading: Promise<Bytes>;
       try {
         const read = pending.read;
         pending.read = undefined;
@@ -213,7 +215,7 @@ export class StagedByteReadOwner {
     }
   }
 
-  #fail(pending: PendingRead, error: unknown): void {
+  #fail(pending: PendingRead<Bytes>, error: unknown): void {
     this.#active.delete(pending);
     this.#activeReads -= 1;
     this.#sourceReservations -= 1;

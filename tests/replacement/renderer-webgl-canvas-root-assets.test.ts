@@ -134,31 +134,36 @@ describe("canvas root asset publication", () => {
     root.dispose();
   });
 
-  it("does not decode non-visual material textures until a visible node claims them", async () => {
+  it("prepares material textures for claimed roots before they become visible", async () => {
     const decodeTexture = vi.fn(async () => ({
       height: 8,
       source: {} as ImageBitmap,
       width: 8,
     }));
     const readGltf = vi.fn(async () => staticTexturedTriangleGlb());
-    const { root } = harness({ decodeTexture, readGltf });
+    const { callbacks, canvas, root } = harness({ decodeTexture, readGltf });
     const asset = gltfAsset("/textured-claim.glb");
+    const frameBeforeClaim = root.getSnapshot().frame;
     root.setGltfAssetClaims([asset]);
 
-    await waitFor(() => expect(root.getGltfAssetSnapshot(asset).status).toBe("streaming"));
-    expect(decodeTexture).not.toHaveBeenCalled();
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(root.getSnapshot().frame).toBe(frameBeforeClaim);
+    expect(callbacks).toHaveLength(0);
+    expect(canvas.gl.createTexture).not.toHaveBeenCalled();
+    expect(canvas.gl.texImage2D).not.toHaveBeenCalled();
 
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
       nodes: [gltf(asset)],
     }));
     root.setGltfAssetClaims([]);
-    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    expect(decodeTexture).toHaveBeenCalledOnce();
     expect(readGltf).toHaveBeenCalledOnce();
     root.dispose();
   });
 
-  it("retains previously visible texture claims across overlapping root-owned assets", async () => {
+  it("shares claimed texture preparation across roots before either is visible", async () => {
     const decodeTexture = vi.fn(async () => ({
       height: 8,
       source: {} as ImageBitmap,
@@ -183,13 +188,12 @@ describe("canvas root asset publication", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(empty, [first, second]);
     await waitFor(() => {
-      expect(root.getGltfAssetSnapshot(first).status).toBe("streaming");
-      expect(root.getGltfAssetSnapshot(second).status).toBe("streaming");
+      expect(root.getGltfAssetSnapshot(first).status).toBe("ready");
+      expect(root.getGltfAssetSnapshot(second).status).toBe("ready");
+      expect(decodeTexture).toHaveBeenCalledOnce();
     });
-    expect(decodeTexture).not.toHaveBeenCalled();
 
     root.setScene(visible(first), [first, second]);
-    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
     flushScheduledFrames();
     root.setScene(empty, [first, second]);
     root.setScene(visible(second), [first, second]);

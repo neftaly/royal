@@ -36,8 +36,9 @@ exists, or target to fill. Hardware limits and subsystem-specific correctness
 constraints may be stricter. The option is immutable for the root lifetime.
 
 Ordinary-texture GPU upload traffic per frame and concurrent asynchronous
-preparation jobs also have bounded root-owned ceilings, currently 4 MiB and
-eight jobs respectively. Those limits and their scheduling strategies are
+preparation jobs also have bounded root-owned ceilings, currently 32 MiB and
+eight jobs respectively. Geometry and instance upload has a separate 4 MiB
+ceiling. Those limits and their scheduling strategies are
 implementation policy: diagnostics expose them, but consumers do not tune or
 depend on them. This keeps later phase separation and browser-specific work
 attribution from becoming breaking API changes.
@@ -54,11 +55,10 @@ preempted.
 
 A non-visual glTF claim enters this same foreground preparation lane. It does
 not create a parallel preload cache, scheduler, or retention policy. Image
-sources remain dormant until a visible prepared material claims them, avoiding
-decode, handoff, and GPU work for metadata- or geometry-only use. After visible
-demand exists, the same root claim may retain those already-demanded texture
-identities across a temporary visual-composition gap. This is continuous claim
-ownership, not speculative preload or time-based caching.
+sources selected by its prepared materials enter the ordinary bounded
+transport, decode, and CPU-handoff lifecycle before visibility, but do not
+allocate WebGL storage or request frames. This is continuous render-ready claim
+ownership, not a parallel cache, a time-based cache, or a metadata-only mode.
 
 A job is one admitted CPU/decode preparation phase, not necessarily a complete
 asset lifecycle or a promise that a browser created a worker. glTF root
@@ -81,7 +81,8 @@ transferred. A dedicated root-owned 16 MiB retry budget bounds those copies; at
 pressure, later joiners keep their original staged source and wait instead.
 Binary GLB and larger JSON roots retain ordinary preparation and post-transfer
 exact interning. Released or superseded assets cannot publish planned claims,
-and never-visible non-visual roots still perform no image transport or decode.
+and render-ready non-visual roots prepare selected images through the same
+bounded texture source lifecycle without allocating WebGL storage.
 This bounded cold parse is not a second asset loader, retained document cache,
 or higher decode-concurrency policy.
 The first glTF claim also begins the lazy root-planning and browser-preparation
@@ -89,14 +90,16 @@ module imports alongside root transport. It does not create or compile a worker
 until ordinary preparation admission, and it adds nothing to apps which never
 claim glTF.
 
-Ordinary-texture transport does not consume a glTF CPU-preparation slot. It is
-already bounded by its root-local eight-request queue, while the texture owner
-bounds complete source lifecycles and the bitmap queue admits four decodes.
-This keeps known image requests moving while glTF workers are occupied without
-raising decode or decoded-handoff concurrency. A queued claim can be aborted
-without starting, and active phase work retains its stage slot until that phase
-settles. Root diagnostics expose CPU-preparation pressure separately from
-texture source and browser-stage timings without polling or waking rendering.
+Ordinary-texture transport does not consume a glTF CPU-preparation slot. Its
+root-local queue admits 16 transports, while encoded read-ahead admits at most
+16 of those reads and the texture owner bounds complete source lifecycles. The
+bitmap queue admits up to 32 browser decode calls; the browser remains
+responsible for actual codec threading. This keeps known image requests moving
+while glTF workers are occupied without weakening decoded-handoff bounds. A
+queued claim can be aborted without starting, and active phase work retains
+its stage slot until that phase settles. Root diagnostics expose CPU-preparation
+pressure separately from encoded transport, complete texture-source, and
+browser-stage timings without polling or waking rendering.
 
 Worker-worthy glTF jobs use a root-owned amortized worker set bounded by this
 same job ceiling. The set is not another scheduler: admitted jobs borrow an
@@ -115,19 +118,23 @@ drain, but it cannot retain asset bytes or begin work later.
 Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
 ceiling. Browser image decode allocations and worker scratch peaks are not
 reliably observable or predictable before work starts. Ordinary textures
-instead admit at most 16 active preparations within 32 total active-or-handoff
-source reservations, run at most eight transports and four bitmap decodes concurrently,
-and stop new work once completed decoded handoff exceeds 64 MiB. This allows
-bounded encoded read-ahead without serializing a 200-image scene behind browser
-decode. Draco workers, VT reads, environment artifacts, and GPU/upload domains
-retain their own exact limits. A future cross-domain byte admission policy
-requires measured peak evidence and an accurate reservation contract rather
-than estimates attached to heterogeneous promises.
+instead admit at most 32 active preparations within 64 total active-or-handoff
+source reservations, run at most 16 transports and 32 browser decode calls
+concurrently, and stop new work once completed decoded handoff exceeds 64 MiB.
+The browser still owns its internal codec thread count; Royal admits known
+independent work rather than claiming one JS thread per image. Encoded
+read-ahead has its own 16-read, 128-source, 32 MiB staged-blob authority so
+transport can lead decode without unbounded retention. Draco workers, VT reads,
+environment artifacts, and GPU/upload domains retain their own exact limits. A
+future cross-domain byte admission policy requires measured peak evidence and
+an accurate reservation contract rather than estimates attached to
+heterogeneous promises.
 
 Upload-traffic ceilings are reset exactly once per submitted canvas or XR
-frame. New ordinary-texture base-level bytes consume the internal texture ceiling
-before GL allocation or transfer. Canonical geometry and packed instance bytes
-consume a separate internal 4 MiB ceiling so a texture-only resource commit
+frame. New ordinary-texture and VT bytes share a 32 MiB progressive ceiling
+because both improve texture fidelity after a usable frame. Canonical geometry
+and packed instance bytes consume a separate internal 4 MiB ceiling so a
+texture-only resource commit
 cannot starve a later scene draw. Work that does not fit retains its legal
 current representation and retries deterministically on a later demanded
 frame. One individually oversized texture or surface transaction is admitted
@@ -417,8 +424,8 @@ observing them does not poll or wake the frame loop.
 
 Ordinary image preparation has explicit nested bounds. At most sixteen complete
 source lifecycles hold active preparation slots, while its dedicated browser
-transport and bitmap decode queues are separately capped at eight and four
-active stages. Network transport is deliberately not admitted through the
+transport and decode queues are separately capped at 16 and 32 active stages.
+Network transport is deliberately not admitted through the
 glTF/VT/environment CPU scheduler: coupling the already-bounded fetch queue to
 eight occupied glTF worker slots delayed a measured 46-root workload's first
 known AVIF request by several seconds without reducing decode or retained-byte
@@ -427,7 +434,7 @@ decode selects an exact browser-image or
 ETC2 representation, the retained upload source is charged by its actual bytes,
 including retained picking alpha, until every claimed GPU representation
 consumes it, rejects it, or the claim is cancelled. New decodes pause when
-completed handoff storage reaches 64 MiB or the root holds 32 decode
+completed handoff storage reaches 64 MiB or the root holds 64 source
 reservations. Already-active jobs may complete beyond the byte threshold, but
 the active bounds make that overshoot finite. Deterministic source order is
 preserved. Bounding only active decoder calls is insufficient: fast decoders

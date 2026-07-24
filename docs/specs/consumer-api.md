@@ -288,6 +288,9 @@ active source preparations from retained handoff reservations without calling
 both browser phases decodes. When the built-in browser pipeline has ready
 sources, its optional `browserStageTimings` reports the retained source count
 and summed transport-wait, transport, decode-wait, and decode durations.
+Its optional `encodedSourceReads` reports active/queued encoded transport,
+completed staged blobs, and the exact source/byte authorities independently of
+decode and GPU handoff. Custom decoders may omit both built-in projections.
 Focused ready texture status carries the corresponding claim-to-ready and
 preparation attribution for one source. Custom decoders may omit these timing
 fields. Focused asset status remains the product lifecycle.
@@ -355,21 +358,17 @@ omission uses the document's declared default, or index zero when absent. A
 normalized node exposes its exact asset reference so status observation does
 not reconstruct version or scene identity from strings.
 
-`Canvas.gltfAssetClaims` is the complete declarative non-visual preparation
+`Canvas.gltfAssetClaims` is the complete declarative render-ready preload
 claim; the imperative equivalent is
 `RendererRoot.setGltfAssetClaims(assets)`. Claimed assets use the ordinary
 bounded preparation, custom transport, cancellation, deduplication, focused
-status, and borrowed geometry paths. They create no surfaces, GPU geometry,
-lights, picking targets, transform work, or presentation frame. A textured
-non-visual asset may remain `streaming`: images are not decoded until a visible
-material claims them, while geometry, bounds, and root extras are already
-usable. Once visible material demand has established a texture claim, an
-overlapping non-visual claim retains that exact prepared root and its already
-claimed texture identities across a temporary visual-composition gap. It does
-not eagerly discover or decode images for roots that have never been visible.
-This prevents a React publication boundary from turning one root lifetime into
-repeated browser reads or decodes. Moving the same identity between the claim
-and scene does not read or prepare it again. `Canvas` bridges both handoff directions; imperative callers
+status, borrowed geometry, and material-image paths. They create no surfaces,
+GPU geometry or textures, lights, picking targets, transform work, or
+presentation frame. Geometry and metadata publish progressively while selected
+material images prepare under the ordinary bounded texture lifecycle. This
+lets an imminent visible handoff reuse decoded sources without a second loader
+or consumer URL protocol. Moving the same identity between the claim and scene
+does not read or prepare it again. `Canvas` bridges both handoff directions; imperative callers
 can commit both sides atomically with
 `RendererRoot.setScene(scene, gltfAssetClaims)`. When using separate setters,
 install the incoming visual or non-visual owner before removing the outgoing

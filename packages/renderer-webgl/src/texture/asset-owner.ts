@@ -3,6 +3,7 @@ import type {
 } from "@royal/renderer-core";
 import { RetainedFifo } from "../resource/retained-fifo";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
+import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
 import {
   textureAlphaStorageBytes,
   validateTextureAlphaMipChain,
@@ -75,6 +76,8 @@ export type TexturePreparationSnapshot = Readonly<{
   decodedHandoffBytes: number;
   /** Soft decoded-handoff byte ceiling; one source may exceed it alone. */
   decodedHandoffThresholdBytes: number;
+  /** Built-in browser encoded transport and completed-blob staging pressure. */
+  encodedSourceReads?: StagedByteReadSnapshot;
   /** Claimed color-space/sampler storage representations not yet GPU-resident. */
   pendingStorageRepresentations: number;
   /** Encoded SVG bytes retained for an optional vector-backed representation. */
@@ -96,6 +99,8 @@ export type TextureAssetOwnerPlatform = Readonly<{
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
   now?(): number;
+  preload?(asset: TextureSourceRef, signal: AbortSignal): void;
+  readAheadSnapshot?(): StagedByteReadSnapshot | undefined;
 }>;
 
 type AssetEntry = {
@@ -121,9 +126,9 @@ type AssetEntry = {
 };
 
 const IDLE: TextureAssetSnapshot = { status: "idle" };
-const ACTIVE_TEXTURE_PREPARATION_LIMIT = 16;
+const ACTIVE_TEXTURE_PREPARATION_LIMIT = 32;
 const DECODED_HANDOFF_BYTE_THRESHOLD = 64 * 1024 * 1024;
-const DECODED_HANDOFF_SOURCE_LIMIT = 32;
+const DECODED_HANDOFF_SOURCE_LIMIT = 64;
 
 /** Exact retained CPU bytes after browser decode has selected a representation. */
 export const decodedTextureHandoffBytes = (
@@ -261,6 +266,7 @@ export class TextureAssetOwner {
       transportDurationMs: 0,
       transportQueueDurationMs: 0,
     };
+    const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
       retainedEncodedSourceBytes += entry.decoded?.kind === "ktx2-etc2"
         ? 0
@@ -286,6 +292,7 @@ export class TextureAssetOwner {
       }),
       decodedHandoffBytes: this.#decodedHandoffBytes,
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
+      ...(encodedSourceReads === undefined ? {} : { encodedSourceReads }),
       pendingStorageRepresentations,
       retainedEncodedSourceBytes,
       sourceReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
@@ -406,24 +413,22 @@ export class TextureAssetOwner {
     }
   }
 
-  /** Context restoration needs fresh upload sources, not retained decoded pixels. */
+  /** Invalidates GPU copies while preserving unrelated transport and CPU preparation. */
   invalidateResidency(): void {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
-      entry.alpha = undefined;
       entry.residentStorageKeys.clear();
-      entry.controller?.abort();
-      entry.controller = undefined;
-      if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
-      entry.decodedReleased = entry.decodedClaims === 0;
-      entry.queued = false;
-      entry.preparationDeferred = false;
-      if (entry.decodedClaims === 0) {
-        this.#releaseSourceReservation(entry);
+      if (entry.decoded !== undefined && !entry.decodedReleased) {
+        this.#platform.onAssetChanged(entry.key);
+      } else if (
+        !entry.preparationActive
+        && !entry.queued
+        && entry.snapshot.status !== "error"
+      ) {
+        entry.alpha = undefined;
         entry.snapshot = { status: "loading" };
         this.#queuePreparation(entry);
       }
-      this.#platform.onAssetChanged(entry.key);
       this.#platform.onSnapshotChanged(entry.key);
       this.#publish(entry.key);
     }
@@ -488,6 +493,8 @@ export class TextureAssetOwner {
       return;
     }
     if (entry.queued) return;
+    entry.controller ??= new AbortController();
+    this.#platform.preload?.(entry.asset, entry.controller.signal);
     entry.preparationQueuedAt = this.#now();
     entry.queued = true;
     this.#preparationQueue.enqueue(entry);
@@ -555,7 +562,7 @@ export class TextureAssetOwner {
   }
 
   #prepare(entry: AssetEntry): void {
-    const controller = new AbortController();
+    const controller = entry.controller ?? new AbortController();
     entry.controller = controller;
     const asset = entry.asset;
     const key = entry.key;

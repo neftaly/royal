@@ -144,20 +144,18 @@ drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
 they are not reported as scheduled-frame failures.
 
-`setGltfAssetClaims(assets)` supplies the root's complete non-visual glTF
-claim set. Claims use the same bounded preparation, cancellation, exact
-identity, status, and deduplication as visible glTF nodes, but create no
-surfaces, lights, picking records, GPU resources, or frame work. Moving an
+`setGltfAssetClaims(assets)` supplies the root's complete render-ready glTF
+preload set. Claims use the same bounded preparation, cancellation, exact
+identity, status, geometry, metadata, and material-image lifecycle as visible
+glTF nodes, but create no surfaces, lights, picking records, GPU resources, or
+frame work. Moving an
 identity between the non-visual list and a visible node reuses its preparation
 when committed atomically through `setScene(scene, claims)`, or when the
 incoming owner is installed before the outgoing one is removed.
-Image decode remains driven by visible material demand, so a textured
-non-visual asset may correctly remain `streaming` while its geometry is usable.
-If that root was already visible, an overlapping non-visual claim retains its
-already-demanded canonical texture identities across a temporary scene gap;
-roots that were never visible still perform no image work. This avoids repeated
-browser decode during React publication handoffs without adding a time-based
-cache.
+Material-image transport and decode run ahead of visibility so a later visible
+handoff can reuse the same canonical sources without a second loader or
+consumer URL protocol. Image preparation remains bounded and progressive; a
+claim does not create WebGL textures or block geometry/status publication.
 
 `visitGltfAssetGeometry(asset, visitor)` is an explicit cold path to the
 highest-detail selected-scene triangles Royal already prepared. It returns
