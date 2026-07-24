@@ -45,6 +45,16 @@ MUST NOT stall otherwise renderable geometry merely to avoid a minor texture or
 normal-map transition. Each material input uses the best semantically legal
 available value, and later publication invalidates one coalesced frame.
 
+For a small JSON `.gltf` root, selected external material images MAY enter the
+ordinary texture lifecycle as soon as the root document is available, before
+geometry resources and canonical preparation settle. This discovery MUST use
+the same selected-scene, material-LOD, variant, capability, sampler, fallback,
+version, alpha-mask, and canonical texture identities as final preparation.
+Visible base color leads emissive, ordinary detail, then transmission detail.
+Embedded images remain coupled to validated canonical buffer preparation.
+Early discovery is an optimization only: final preparation remains the
+validation authority and replaces the provisional claim set atomically.
+
 ## Preparation and publication
 
 Document fetch, buffer fetch/decode, scene preparation, and image preparation
@@ -107,6 +117,15 @@ bounds, lights, selected index, lightweight scene inventory, variant names, and
 image demands either form one coherent revision or do not replace the previous
 revision. Individual image outcomes may publish later into material-owned
 slots. A failed image MUST NOT invalidate unrelated images or geometry.
+
+Distinct prepared roots MAY borrow one retained canonical geometry object when
+immutable external resource/version identity and complete extraction
+declarations narrow them to a candidate and byte-exact canonical output proves
+equality. Materials, transforms, lights, status, cancellation, and texture
+claims remain root-specific. This post-preparation interning removes duplicate
+retained CPU arrays and GPU uploads; it does not count as shared worker
+preparation. Eliminating duplicate canonical worker work requires the specified
+two-stage geometry-task protocol rather than a detached whole-asset cache.
 
 Prepared geometry is not part of ordinary status. One explicit cold visitor may
 borrow highest-detail selected-scene indexed positions and packed asset-space

@@ -70,6 +70,15 @@ does not occupy scarce CPU preparation slots, while source memory cannot scale
 unboundedly with claims. `resources.gltfSourceReads` reports the exact queue,
 reservation, and completed-byte pressure.
 
+After a JSON glTF root read, Royal may stage one private copy of roots no larger
+than 256 KiB for lazy external-image discovery while the original bytes can be
+transferred to preparation. The 64-source reservation ceiling bounds this
+additional transient storage to 16 MiB. Binary GLB and larger JSON roots do not
+take this path. Released or superseded assets cannot publish discovered claims,
+and never-visible non-visual roots still perform no image transport or decode.
+This bounded copy buys earlier request discovery; it is not a second asset
+loader, retained document cache, or higher decode-concurrency policy.
+
 An ordinary-texture
 transport claim releases its shared slot as soon as the encoded `Blob` is
 available; it does not retain that slot while waiting for bitmap decode. A
@@ -127,6 +136,13 @@ is admitted. Later surfaces reuse that storage without buffer growth or copying.
 Arena allocation is not misreported as uploaded bytes, and the chunk boundary
 may end an otherwise legal multi-draw run rather than reserve a whole scene up
 front.
+
+Exact post-preparation glTF geometry interning is root-owned and claim-bound.
+`resources.gltfSharedGeometry` reports primitive claims, unique canonical
+geometries, reused claims, and retained canonical CPU bytes. Source-derived
+keys only narrow candidates; byte equality proves aliases. The last owning root
+releases the geometry, and the diagnostic does not imply that canonical worker
+computation was shared.
 
 Virtual-texture publication retains both a four-page count ceiling and a
 separate 4 MiB byte ceiling. A transaction accounts the exact compressed block

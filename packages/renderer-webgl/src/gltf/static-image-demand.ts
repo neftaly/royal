@@ -8,36 +8,39 @@ import {
 import { readStaticMaterialInputs } from "./static-material-inputs";
 import { createStaticTextureImagePlanner } from "./static-texture-image-plan";
 
-type ImageClaim = (imageIndex: number) => void;
+export type StaticTextureDemand = Readonly<{
+  colorSpace: "linear" | "srgb";
+  priority: 0 | 1 | 2 | 3;
+  retainAlpha: boolean;
+  textureIndex: number;
+}>;
+
+type TextureClaim = (demand: StaticTextureDemand) => void;
 
 /**
- * Builds one selected-primitive image-demand collector. Material LOD and
- * variant traversal is shared for every primitive while image selection uses
- * the same capability-aware plan as canonical material preparation.
+ * Builds one selected-primitive logical texture-demand collector. Material LOD
+ * and variant traversal is shared by early external discovery, selected buffer
+ * demand, and canonical material preparation.
  */
-export const createStaticPrimitiveImageDemand = (
+export const createStaticPrimitiveTextureDemand = (
   document: JsonObject,
   label: string,
-  etc2Available: boolean,
-  claimImage: ImageClaim,
+  claimTextureDemand: TextureClaim,
 ): ((primitive: JsonObject, path: string) => void) => {
   const materials = optionalArray(document.materials, label, "materials");
   const textures = optionalArray(document.textures, label, "textures");
-  const planTextureImages = createStaticTextureImagePlanner(document, label, etc2Available);
   const claimedMaterials = new Set<number>();
   const claimTexture = (
     value: unknown,
     colorSpace: "linear" | "srgb",
     path: string,
+    retainAlpha = false,
+    priority: StaticTextureDemand["priority"] = 2,
   ): void => {
     if (value === undefined) return;
     const textureInfo = object(value, label, path);
     const textureIndex = index(textureInfo.index, textures, label, `${path}.index`);
-    const plan = planTextureImages(textureIndex, colorSpace);
-    claimImage(plan.primary.imageIndex);
-    if (plan.fallback !== undefined) {
-      claimImage(plan.fallback.imageIndex);
-    }
+    claimTextureDemand({ colorSpace, priority, retainAlpha, textureIndex });
   };
   const claimMaterial = (value: unknown, path: string): void => {
     const materialIndex = index(value, materials, label, path);
@@ -56,6 +59,8 @@ export const createStaticPrimitiveImageDemand = (
       pbr.baseColorTexture,
       "srgb",
       `${materialPath}.pbrMetallicRoughness.baseColorTexture`,
+      material.alphaMode === "MASK",
+      0,
     );
     if (extensions.KHR_materials_unlit === undefined) {
       claimTexture(
@@ -65,7 +70,13 @@ export const createStaticPrimitiveImageDemand = (
       );
       claimTexture(material.normalTexture, "linear", `${materialPath}.normalTexture`);
       claimTexture(material.occlusionTexture, "linear", `${materialPath}.occlusionTexture`);
-      claimTexture(material.emissiveTexture, "srgb", `${materialPath}.emissiveTexture`);
+      claimTexture(
+        material.emissiveTexture,
+        "srgb",
+        `${materialPath}.emissiveTexture`,
+        false,
+        1,
+      );
       claimTexture(
         specularExtension?.specularTexture,
         "linear",
@@ -80,11 +91,15 @@ export const createStaticPrimitiveImageDemand = (
         transmissionExtension?.transmissionTexture,
         "linear",
         `${materialPath}.extensions.KHR_materials_transmission.transmissionTexture`,
+        false,
+        3,
       );
       claimTexture(
         volumeExtension?.thicknessTexture,
         "linear",
         `${materialPath}.extensions.KHR_materials_volume.thicknessTexture`,
+        false,
+        3,
       );
     }
     if (extensions.MSFT_lod === undefined) return;
@@ -109,4 +124,22 @@ export const createStaticPrimitiveImageDemand = (
       claimMaterial(mapping.material, `${mappingPath}.material`);
     }
   };
+};
+
+/**
+ * Builds one selected-primitive encoded-image collector while preserving the
+ * exact capability-aware preferred/fallback plan.
+ */
+export const createStaticPrimitiveImageDemand = (
+  document: JsonObject,
+  label: string,
+  etc2Available: boolean,
+  claimImage: (imageIndex: number) => void,
+): ((primitive: JsonObject, path: string) => void) => {
+  const planTextureImages = createStaticTextureImagePlanner(document, label, etc2Available);
+  return createStaticPrimitiveTextureDemand(document, label, ({ colorSpace, textureIndex }) => {
+    const plan = planTextureImages(textureIndex, colorSpace);
+    claimImage(plan.primary.imageIndex);
+    if (plan.fallback !== undefined) claimImage(plan.fallback.imageIndex);
+  });
 };

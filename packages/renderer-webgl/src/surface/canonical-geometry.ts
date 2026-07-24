@@ -7,6 +7,8 @@ export type CanonicalTriangleGeometry = Readonly<{
   }>;
   indices: Uint8Array | Uint16Array | Uint32Array;
   key: string;
+  /** @internal Exact source-declaration candidate; equality still requires byte comparison. */
+  sourceKey?: string;
   colors?: Float32Array;
   normals?: Float32Array;
   positions: Float32Array;

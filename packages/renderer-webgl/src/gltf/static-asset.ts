@@ -281,6 +281,7 @@ const prepareStaticDocument = (
   decodeDraco?: StaticDracoDecoder,
   selectedSceneIndex?: number,
   resourceVersion?: TextureVersion,
+  geometryResourceIdentity?: string,
 ): PreparedStaticGltf => {
   const { bufferByteLength } = preflight;
   const accessors = array(document.accessors, label, "accessors");
@@ -440,6 +441,85 @@ const prepareStaticDocument = (
       }
     }
     return false;
+  };
+  const geometryCandidateKey = (
+    primitive: JsonObject,
+    attributes: JsonObject,
+    mode: 4 | 5 | 6,
+    usesTextureCoordinates1: boolean,
+  ): string | undefined => {
+    if (geometryResourceIdentity === undefined) return undefined;
+    const accessorIndices = new Set<number>();
+    const attributeDeclarations = Object.keys(attributes).sort().map((semantic) => {
+      const accessorIndex = index(
+        attributes[semantic],
+        accessors,
+        label,
+        `geometry.attributes.${semantic}`,
+      );
+      accessorIndices.add(accessorIndex);
+      return [semantic, accessorIndex] as const;
+    });
+    if (primitive.indices !== undefined) {
+      accessorIndices.add(index(primitive.indices, accessors, label, "geometry.indices"));
+    }
+    const viewIndices = new Set<number>();
+    const accessorDeclarations = [...accessorIndices].sort((left, right) => left - right)
+      .map((accessorIndex) => {
+        const accessorPath = `accessors[${accessorIndex}]`;
+        const accessor = object(accessors[accessorIndex], label, accessorPath);
+        if (accessor.bufferView !== undefined) {
+          viewIndices.add(index(
+            accessor.bufferView,
+            bufferViews,
+            label,
+            `${accessorPath}.bufferView`,
+          ));
+        }
+        if (accessor.sparse !== undefined) {
+          const sparse = object(accessor.sparse, label, `${accessorPath}.sparse`);
+          const sparseIndices = object(
+            sparse.indices,
+            label,
+            `${accessorPath}.sparse.indices`,
+          );
+          const sparseValues = object(
+            sparse.values,
+            label,
+            `${accessorPath}.sparse.values`,
+          );
+          viewIndices.add(index(
+            sparseIndices.bufferView,
+            bufferViews,
+            label,
+            `${accessorPath}.sparse.indices.bufferView`,
+          ));
+          viewIndices.add(index(
+            sparseValues.bufferView,
+            bufferViews,
+            label,
+            `${accessorPath}.sparse.values.bufferView`,
+          ));
+        }
+        return [accessorIndex, accessor] as const;
+      });
+    const viewDeclarations = [...viewIndices].sort((left, right) => left - right)
+      .map((viewIndex) => [viewIndex, bufferViews[viewIndex]] as const);
+    const extensions = primitive.extensions === undefined
+      ? undefined
+      : object(primitive.extensions, label, "geometry.extensions");
+    return JSON.stringify([
+      geometryResourceIdentity,
+      resourceVersion === undefined ? null : [typeof resourceVersion, resourceVersion],
+      preflight.usesMeshQuantization,
+      mode,
+      attributeDeclarations,
+      primitive.indices ?? null,
+      extensions?.KHR_draco_mesh_compression ?? null,
+      accessorDeclarations,
+      viewDeclarations,
+      usesTextureCoordinates1,
+    ]);
   };
   const preparedMeshes: Array<readonly PreparedMeshPrimitive[] | undefined> = [];
   const prepareMesh = (meshIndex: number): readonly PreparedMeshPrimitive[] => {
@@ -652,6 +732,12 @@ const prepareStaticDocument = (
       if (usesTextureCoordinates1 && textureCoordinates1 === undefined) {
         fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
       }
+      const sourceKey = geometryCandidateKey(
+        primitive,
+        attributes,
+        mode,
+        usesTextureCoordinates1,
+      );
       return {
         geometry: {
           bounds,
@@ -663,6 +749,7 @@ const prepareStaticDocument = (
           ...(tangents === undefined ? {} : { tangents }),
           ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
           ...(textureCoordinates1 === undefined ? {} : { textureCoordinates1 }),
+          ...(sourceKey === undefined ? {} : { sourceKey }),
         },
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
@@ -994,6 +1081,7 @@ const prepareDocumentWithCodecs = async (
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
   validatedDeclarations?: StaticGltfDeclarations,
+  geometryResourceIdentity?: string,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -1027,6 +1115,7 @@ const prepareDocumentWithCodecs = async (
     decodeDraco,
     sceneIndex,
     resourceVersion,
+    geometryResourceIdentity,
   );
 };
 
@@ -1062,5 +1151,6 @@ export const prepareStaticGltfSource = async (
     sceneIndex,
     resourceVersion,
     canonical.declarations,
+    canonical.geometryResourceIdentity,
   );
 };

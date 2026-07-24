@@ -23,9 +23,11 @@ import type { TextureSourceRef } from "../../packages/renderer-webgl/src/texture
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { SurfaceProgramOwner } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
 import { parseRoyalEnvironmentKtx1 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
+import { parseGlb } from "../../packages/renderer-webgl/src/gltf/glb";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
 import {
   staticInstancedTriangleGlb,
+  staticTriangleBinary,
   staticTriangleDocument,
   staticTriangleGlb,
   staticTexturedTriangleGlb,
@@ -199,6 +201,136 @@ describe("canvas root asset publication", () => {
     root.setScene(empty, []);
     expect(root.getTextureAssetSnapshot(imageTexture("/shared-counter.avif")))
       .toEqual({ status: "idle" });
+    root.dispose();
+  });
+
+  it("shares exact external-buffer geometry across independent material roots", async () => {
+    const documents = new Map<string, Uint8Array>();
+    for (const [src, color] of [
+      ["/models/red.gltf", [1, 0, 0, 1]],
+      ["/models/blue.gltf", [0, 0, 1, 1]],
+    ] as const) {
+      const document = staticTriangleDocument();
+      document.buffers = [{ byteLength: 42, uri: "shared.bin" }];
+      const materials = document.materials as Array<Record<string, unknown>>;
+      materials[0]!.pbrMetallicRoughness = { baseColorFactor: color };
+      documents.set(src, new TextEncoder().encode(JSON.stringify(document)));
+    }
+    const first = gltf("/models/red.gltf");
+    const second = gltf("/models/blue.gltf");
+    const { flushScheduledFrames, root } = harness({
+      readGltf: async (asset) => documents.get(asset.src)!,
+      readGltfResource: async () => staticTriangleBinary(),
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [first, second],
+    }));
+    await waitFor(() => {
+      expect(root.getGltfAssetSnapshot(first.asset).status).toBe("ready");
+      expect(root.getGltfAssetSnapshot(second.asset).status).toBe("ready");
+    });
+    const geometries: unknown[] = [];
+    root.visitGltfAssetGeometry(first.asset, (batch) => geometries.push(batch.geometry));
+    root.visitGltfAssetGeometry(second.asset, (batch) => geometries.push(batch.geometry));
+
+    expect(geometries[1]).toBe(geometries[0]);
+    expect(root.getSnapshot().resources.gltfSharedGeometry).toEqual({
+      primitiveClaims: 2,
+      retainedBytes: 42,
+      reusedClaims: 1,
+      uniqueGeometries: 1,
+    });
+    flushScheduledFrames();
+    expect(root.getSnapshot().resources.geometryUploads.admittedBytes).toBe(39);
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [],
+    }));
+    flushScheduledFrames();
+    expect(root.getSnapshot().resources.gltfSharedGeometry).toEqual({
+      primitiveClaims: 0,
+      retainedBytes: 0,
+      reusedClaims: 0,
+      uniqueGeometries: 0,
+    });
+    root.dispose();
+  });
+
+  it("starts external texture decode before geometry resource preparation settles", async () => {
+    const parsed = parseGlb(
+      staticTexturedTriangleGlb(undefined, "early.avif"),
+      "early-texture-fixture",
+    );
+    const document = parsed.document as Record<string, unknown>;
+    document.buffers = [{ byteLength: 68, uri: "geometry.bin" }];
+    const rootBytes = new TextEncoder().encode(JSON.stringify(document));
+    let resolveGeometry: ((bytes: Uint8Array) => void) | undefined;
+    const geometryRead = new Promise<Uint8Array>((resolve) => {
+      resolveGeometry = resolve;
+    });
+    const decodeTexture = vi.fn(async () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const model = gltf("/models/early.gltf");
+    const { root } = harness({
+      decodeTexture,
+      readGltf: async () => rootBytes,
+      readGltfResource: async () => geometryRead,
+    });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [model],
+    }));
+
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    expect(root.getGltfAssetSnapshot(model.asset).status).toBe("loading");
+    resolveGeometry?.(parsed.binaryChunk!.subarray(0, 68));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(model.asset).status).toBe("ready"));
+    root.dispose();
+  });
+
+  it("does not publish early external texture demand after the root is released", async () => {
+    const parsed = parseGlb(
+      staticTexturedTriangleGlb(undefined, "abandoned.avif"),
+      "abandoned-texture-fixture",
+    );
+    const document = parsed.document as Record<string, unknown>;
+    document.buffers = [{ byteLength: 68, uri: "geometry.bin" }];
+    const rootBytes = new TextEncoder().encode(JSON.stringify(document));
+    let resolveRoot: ((bytes: Uint8Array) => void) | undefined;
+    const rootRead = new Promise<Uint8Array>((resolve) => {
+      resolveRoot = resolve;
+    });
+    const decodeTexture = vi.fn(async () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const model = gltf("/models/abandoned.gltf");
+    const { root } = harness({
+      decodeTexture,
+      readGltf: async () => rootRead,
+      readGltfResource: async () => parsed.binaryChunk!.subarray(0, 68),
+    });
+    const emptyScene = scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [],
+    });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [model],
+    }));
+    root.setScene(emptyScene);
+    resolveRoot?.(rootBytes);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(root.getGltfAssetSnapshot(model.asset)).toEqual({ status: "idle" });
+    expect(decodeTexture).not.toHaveBeenCalled();
     root.dispose();
   });
 

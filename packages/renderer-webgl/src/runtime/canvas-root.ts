@@ -46,6 +46,7 @@ import {
 } from "../gltf/asset-owner";
 import type { PreparedStaticGltf } from "../gltf/static-asset";
 import type { StaticGltfResourceRequest } from "../gltf/static-buffer-demand";
+import type { EarlyStaticTextureClaims } from "../gltf/static-external-texture-demand";
 import {
   visitPreparedGltfGeometry,
   type GltfAssetGeometryVisitor,
@@ -125,6 +126,7 @@ import {
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
+import type { SharedStaticGeometrySnapshot } from "../gltf/shared-geometry-owner";
 import {
   DEFAULT_GPU_UPLOAD_BYTE_BUDGET_PER_FRAME,
   FrameUploadBudgetOwner,
@@ -153,6 +155,8 @@ export type RendererResourceSnapshot = Readonly<{
   geometryUploads: SurfaceGeometryUploadSnapshot;
   /** glTF root transport and completed-source staging pressure. */
   gltfSourceReads: StagedByteReadSnapshot;
+  /** Exact retained canonical glTF geometry sharing and CPU bytes. */
+  gltfSharedGeometry: SharedStaticGeometrySnapshot;
   /** Image-texture source preparation and decoded-handoff pressure. */
   imageTexturePreparation: TexturePreparationSnapshot;
   /** Image-texture bytes uploaded or deferred during the latest frame. */
@@ -523,7 +527,7 @@ export class CanvasRoot implements RendererRoot {
   #renderObjectUpdateWorkspace: ReturnType<
     typeof createCanonicalRenderObjectUpdateWorkspace
   > | undefined;
-  readonly #retainedGltfTextureClaims = new Map<string, PreparedStaticGltf>();
+  readonly #retainedGltfTextureClaims = new Map<string, EarlyStaticTextureClaims>();
   #revision = 0;
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
@@ -781,6 +785,7 @@ export class CanvasRoot implements RendererRoot {
         resources: {
           asyncPreparation: this.#asyncPreparation.snapshot(),
           geometryUploads: this.#surfaceGpu.geometryUploadSnapshot(),
+          gltfSharedGeometry: this.#gltfAssets.sharedGeometrySnapshot(),
           gltfSourceReads: this.#gltfAssets.sourceReadSnapshot(),
           imageTexturePreparation: this.#textureAssets.snapshot(),
           imageTextureUploads: this.#frameUploadBudget.snapshot(),
@@ -1240,8 +1245,10 @@ export class CanvasRoot implements RendererRoot {
     for (const node of scene.gltfNodes) {
       const key = gltfAssetKey(node.asset);
       retainedKeys.add(key);
-      const prepared = this.#gltfAssets.prepared(node.asset);
-      if (prepared !== undefined) this.#retainedGltfTextureClaims.set(key, prepared);
+      const claims = this.#gltfAssets.textureClaims(node.asset);
+      if (claims.textureAssets.length !== 0) {
+        this.#retainedGltfTextureClaims.set(key, claims);
+      }
     }
     for (const asset of this.#gltfAssetClaims) retainedKeys.add(gltfAssetKey(asset));
     for (const key of this.#retainedGltfTextureClaims.keys()) {
@@ -1249,9 +1256,9 @@ export class CanvasRoot implements RendererRoot {
     }
     const assets = [...scene.textureAssets];
     const alphaMaskAssets = [...scene.alphaMaskTextureAssets];
-    for (const prepared of this.#retainedGltfTextureClaims.values()) {
-      assets.push(...prepared.textureAssets);
-      alphaMaskAssets.push(...prepared.alphaMaskTextureAssets);
+    for (const claims of this.#retainedGltfTextureClaims.values()) {
+      assets.push(...claims.textureAssets);
+      alphaMaskAssets.push(...claims.alphaMaskTextureAssets);
     }
     this.#reconcileTextureAssetClaims(
       assets,
@@ -1291,8 +1298,9 @@ export class CanvasRoot implements RendererRoot {
   #queuePreparedGltfScene(asset: GltfAssetRef): void {
     if (this.#disposed) return;
     const prepared = this.#gltfAssets.prepared(asset);
-    if (prepared === undefined) return;
     this.#reconcilePreparedGltfTextures();
+    if (prepared === undefined) return;
+    this.#refreshGltfTextureProgress();
     this.#gltfSceneDirty = true;
     this.#clock.invalidate();
   }

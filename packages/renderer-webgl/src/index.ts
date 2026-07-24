@@ -26,6 +26,7 @@ export type {
   BorrowedGltfGeometryBatch,
   GltfAssetGeometryVisitor,
 } from "./gltf/prepared-geometry";
+export type { SharedStaticGeometrySnapshot } from "./gltf/shared-geometry-owner";
 export type {
   TextureAssetSnapshot,
   TextureAssetTimings,

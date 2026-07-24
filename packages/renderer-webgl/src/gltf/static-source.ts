@@ -28,6 +28,8 @@ export type CanonicalStaticGltfSource = Readonly<{
   container: "glb" | "gltf";
   declarations: StaticGltfDeclarations;
   document: JsonObject;
+  /** Resolved immutable external buffer identities, before canonical repacking. */
+  geometryResourceIdentity?: string;
 }>;
 
 export type StaticGltfResourceReader = (
@@ -48,6 +50,33 @@ const parseJsonDocument = (bytes: Uint8Array, label: string): JsonObject => {
     return fail(label, "document", `is not valid UTF-8 JSON: ${detail}`);
   }
   return object(value, label, "document");
+};
+
+/** Parses only the root document, without reading or canonicalizing resources. */
+export const parseStaticGltfDocument = (
+  bytes: Uint8Array,
+  label: string,
+): JsonObject => isGlb(bytes)
+  ? object(parseGlb(bytes, label).document, label, "document")
+  : parseJsonDocument(bytes, label);
+
+const externalGeometryResourceIdentity = (
+  buffers: readonly unknown[],
+  label: string,
+  sourceUri: string,
+): string | undefined => {
+  const identities: string[] = [];
+  for (let bufferIndex = 0; bufferIndex < buffers.length; bufferIndex += 1) {
+    const path = `buffers[${bufferIndex}]`;
+    const buffer = object(buffers[bufferIndex], label, path);
+    if (typeof buffer.uri !== "string" || buffer.uri.length === 0) return undefined;
+    const uri = resolveAssetUri(sourceUri, buffer.uri);
+    // Large inline payloads are already root bytes; retaining them in a key
+    // would duplicate content merely to seek a rare cross-root reuse.
+    if (uri.startsWith("data:")) return undefined;
+    identities.push(uri);
+  }
+  return JSON.stringify(identities);
 };
 
 const readExternalBuffer = async (
@@ -195,9 +224,15 @@ export const readCanonicalStaticGltfSource = async (
       requests[bufferIndex],
     )));
   await decodeSelectedMeshoptBufferViews(document, sources, selectedViews, label);
+  const geometryResourceIdentity = externalGeometryResourceIdentity(
+    buffers,
+    label,
+    sourceUri,
+  );
   return {
     ...canonicalizeGltfBuffers(document, sources, label, selectedViews),
     container: "gltf",
     declarations,
+    ...(geometryResourceIdentity === undefined ? {} : { geometryResourceIdentity }),
   };
 };

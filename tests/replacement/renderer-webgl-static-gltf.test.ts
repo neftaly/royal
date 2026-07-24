@@ -101,6 +101,28 @@ describe("static glTF preparation core", () => {
     expect(prepared.primitives[0]!.geometry.positions).toEqual(new Float32Array([
       -1, -1, 0, 1, -1, 0, 0, 1, 0,
     ]));
+    const sameSource = await prepareStaticGltfSource(
+      fixture.document,
+      "unrelated-root-content",
+      "other.gltf",
+      "/models/other.gltf",
+      read,
+    );
+    const changedVersion = await prepareStaticGltfSource(
+      fixture.document,
+      "json-v2",
+      "triangle.gltf",
+      "/models/triangle.gltf",
+      read,
+      undefined,
+      true,
+      undefined,
+      "v2",
+    );
+    expect(sameSource.primitives[0]!.geometry.sourceKey)
+      .toBe(prepared.primitives[0]!.geometry.sourceKey);
+    expect(changedVersion.primitives[0]!.geometry.sourceKey)
+      .not.toBe(prepared.primitives[0]!.geometry.sourceKey);
   });
 
   it("packs multiple external buffers into the canonical binary boundary", async () => {

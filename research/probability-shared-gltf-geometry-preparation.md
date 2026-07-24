@@ -1,7 +1,8 @@
 # Proposal: source-derived geometry identity and shared preparation
 
-Status: accepted as an architecture target; deliberately not implemented as a
-cache bolted onto the current whole-asset worker protocol.
+Status: accepted as an architecture target. Exact post-preparation CPU
+retention and GPU geometry interning are implemented as an incremental slice;
+shared canonical worker preparation remains open.
 
 ## Product trace
 
@@ -122,7 +123,29 @@ That split must also separate buffer demand for geometry, embedded images, and
 instancing; support cancellation while another root retains a geometry claim;
 and transfer new geometry only once. It belongs with the planned replacement
 architecture rather than a transitional cache. GPU-only exact interning remains
-a valid later slice but is not reported as implementation of this proposal.
+a valid incremental slice but is not reported as implementation of the worker
+target.
+
+## Incremental retained-geometry decision
+
+Royal now derives a conservative candidate identity from immutable external
+buffer/version identity plus primitive topology, compression, accessors,
+buffer views, quantization, and required UV representation. Candidate equality
+does not alias data: the root-owned owner compares every emitted canonical
+typed array and bounds value byte-for-byte. Exact matches borrow the first
+canonical geometry object, so retained CPU arrays and the downstream GPU key
+are shared until the last prepared root releases them.
+
+Focused fixtures prove independent material roots over one external buffer
+retain 42 canonical CPU bytes and perform one 39-byte packed GPU upload.
+Accessor/version/declaration differences produce distinct candidates, while an
+equal candidate with different output bytes does not alias.
+
+This is intentionally partial. Both roots still run the whole-asset worker and
+produce duplicate transferred arrays before one result becomes collectible.
+`resources.gltfSharedGeometry` reports only retained canonical geometry, not
+avoided worker tasks or worker-seconds. Acceptance item 1 therefore remains
+open until the two-stage protocol executes one canonical geometry task.
 
 ## Adversarial review
 

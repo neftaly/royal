@@ -18,7 +18,12 @@ import {
   type StagedByteReadSnapshot,
 } from "../resource/staged-byte-read-owner";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
+import {
+  SharedStaticGeometryOwner,
+  type SharedStaticGeometrySnapshot,
+} from "./shared-geometry-owner";
 import type { GltfJsonValue } from "./gltf-values";
+import type { EarlyStaticTextureClaims } from "./static-external-texture-demand";
 
 export type GltfTextureProgress = Readonly<{
   /** Ready images which recovered from a preferred representation to an authored fallback. */
@@ -127,6 +132,7 @@ export type GltfAssetOwnerPlatform = Readonly<{
 
 type AssetEntry = {
   readonly controller: AbortController;
+  earlyTextureClaims: EarlyStaticTextureClaims;
   readonly key: string;
   prepared: PreparedStaticGltf | undefined;
   snapshot: GltfAssetSnapshot;
@@ -134,7 +140,12 @@ type AssetEntry = {
 };
 
 const IDLE: GltfAssetSnapshot = { status: "idle" };
+const EMPTY_TEXTURE_CLAIMS: EarlyStaticTextureClaims = {
+  alphaMaskTextureAssets: [],
+  textureAssets: [],
+};
 const ACTIVE_ROOT_SOURCE_READ_LIMIT = 16;
+const EARLY_TEXTURE_DISCOVERY_ROOT_BYTE_LIMIT = 256 * 1024;
 const ROOT_SOURCE_RESERVATION_LIMIT = 64;
 const STAGED_ROOT_SOURCE_BYTE_THRESHOLD = 32 * 1024 * 1024;
 
@@ -271,6 +282,7 @@ export class GltfAssetOwner {
   readonly #listeners = new KeyedRetainedListeners<string>();
   readonly #now: () => number;
   readonly #platform: GltfAssetOwnerPlatform;
+  readonly #sharedGeometry = new SharedStaticGeometryOwner();
   readonly #sharedReads = new SharedByteReadOwner<string>();
   readonly #sourceReads: StagedByteReadOwner;
 
@@ -290,6 +302,7 @@ export class GltfAssetOwner {
     this.#disposed = true;
     for (const entry of this.#entries.values()) entry.controller.abort();
     this.#entries.clear();
+    this.#sharedGeometry.clear();
     this.#sourceReads.dispose();
     this.#sharedReads.dispose();
     this.#listeners.clear();
@@ -303,8 +316,17 @@ export class GltfAssetOwner {
     return this.#entries.get(gltfAssetKey(asset))?.prepared;
   }
 
+  textureClaims(asset: GltfAssetRef): EarlyStaticTextureClaims {
+    const entry = this.#entries.get(gltfAssetKey(asset));
+    return entry?.prepared ?? entry?.earlyTextureClaims ?? EMPTY_TEXTURE_CLAIMS;
+  }
+
   sourceReadSnapshot(): StagedByteReadSnapshot {
     return this.#sourceReads.snapshot();
+  }
+
+  sharedGeometrySnapshot(): SharedStaticGeometrySnapshot {
+    return this.#sharedGeometry.snapshot();
   }
 
   /** Recomputes focused image progress without changing geometry readiness. */
@@ -347,13 +369,16 @@ export class GltfAssetOwner {
     };
     for (const node of nodes) claim(node.asset);
     for (const asset of nonVisualAssets) claim(asset);
+    let releasedPreparedGeometry = false;
     for (const [key, entry] of this.#entries) {
       if (claimed.has(key)) continue;
       entry.controller.abort();
+      releasedPreparedGeometry = entry.prepared !== undefined || releasedPreparedGeometry;
       this.#entries.delete(key);
       this.#sharedReads.release(key);
       this.#publish(key);
     }
+    if (releasedPreparedGeometry) this.#reconcileSharedGeometry();
   }
 
   subscribe(asset: GltfAssetRef, listener: () => void): () => void {
@@ -369,6 +394,7 @@ export class GltfAssetOwner {
   #start(asset: GltfAssetRef, key: string): void {
     const entry: AssetEntry = {
       controller: new AbortController(),
+      earlyTextureClaims: EMPTY_TEXTURE_CLAIMS,
       key,
       prepared: undefined,
       snapshot: { status: "loading" },
@@ -402,6 +428,37 @@ export class GltfAssetOwner {
       }
       const { bytes } = source;
       const readCompletedAt = this.#now();
+      if (
+        bytes.byteLength <= EARLY_TEXTURE_DISCOVERY_ROOT_BYTE_LIMIT
+        && (
+          bytes.byteLength < 4
+          || new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true)
+            !== 0x46_54_6c_67
+        )
+      ) {
+        const discoveryBytes = bytes.slice();
+        void import("./static-external-texture-demand").then((module) =>
+          module.discoverExternalStaticGltfTextures(
+            discoveryBytes,
+            gltfSourceKey(asset),
+            diagnosticLabel(asset),
+            asset.src,
+            true,
+            asset.sceneIndex,
+            asset.version,
+          )).then((claims) => {
+          if (
+            this.#disposed
+            || this.#entries.get(key) !== entry
+            || entry.controller.signal.aborted
+            || entry.prepared !== undefined
+          ) return;
+          entry.earlyTextureClaims = claims;
+          if (claims.textureAssets.length !== 0) this.#platform.onAssetChanged(key);
+        }).catch(() => {
+          // Canonical preparation remains the authority for validation errors.
+        });
+      }
       let externalReadCompletedAt = readCompletedAt;
       let externalReadStartedAt: number | undefined;
       const readResource = async (
@@ -464,7 +521,9 @@ export class GltfAssetOwner {
       const externalResourceReadDurationMs = externalReadStartedAt === undefined
         ? 0
         : Math.max(0, externalReadCompletedAt - externalReadStartedAt);
-      entry.prepared = prepared;
+      entry.prepared = this.#sharedGeometry.intern(prepared);
+      this.#reconcileSharedGeometry();
+      prepared = entry.prepared;
       const textures = {
         fallback: 0,
         failed: 0,
@@ -508,5 +567,13 @@ export class GltfAssetOwner {
       entry.snapshot = { error: formatFailure(error), status: "error" };
       this.#publish(key);
     });
+  }
+
+  #reconcileSharedGeometry(): void {
+    const prepared: PreparedStaticGltf[] = [];
+    for (const entry of this.#entries.values()) {
+      if (entry.prepared !== undefined) prepared.push(entry.prepared);
+    }
+    this.#sharedGeometry.reconcile(prepared);
   }
 }

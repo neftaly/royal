@@ -1,7 +1,8 @@
 # Proposal: make many-root progressive loading byte- and work-bound
 
-Status: root-transport and zero-upload admission slices accepted and
-implemented; shared CPU geometry preparation and the texture tail remain open.
+Status: root transport, zero-upload admission, early external-image discovery,
+and exact retained-geometry interning are implemented. Shared canonical worker
+preparation and an end-to-end Probability remeasurement remain open.
 
 ## Workload
 
@@ -127,6 +128,20 @@ remaining boundary clearly: the 45 image requests were still discovered over
 canonical root preparation/material discovery and requires the shared-geometry
 protocol or a separately measured texture-phase change, not more transport
 fan-out.
+
+Royal now parses selected external image demand from small JSON root documents
+before their geometry resource reads and worker lowering settle. It sends those
+claims through the existing bounded texture owner in base-color-first order,
+using the same final canonical identities; it does not raise transport/decode
+concurrency or decode never-visible non-visual roots. The staged root copy is
+limited to 256 KiB per root under the existing 64-source reservation ceiling.
+Embedded images remain in canonical buffer preparation.
+
+Royal also interns byte-exact canonical geometry after worker transfer, which
+removes duplicate retained CPU arrays and GPU uploads for the measured shared
+roots. It does not remove their duplicate worker computation. Neither change
+is reported as a product-time win until Probability repeats the requested cold
+trace and identifies the final content-changing presentation.
 
 ## Adversarial review
 

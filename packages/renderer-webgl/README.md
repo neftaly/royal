@@ -112,6 +112,12 @@ re-lowering the scene or rebuilding GPU resources.
 `resources.gltfSourceReads` distinguishes active/queued root reads from
 completed source bytes waiting for CPU preparation; its internal count and byte
 ceilings are diagnostics rather than tuning controls.
+For small JSON roots, visible external image demand can begin after the root
+read and before geometry resources settle. It uses the final selected-scene and
+canonical texture identities; embedded images remain in canonical preparation.
+`resources.gltfSharedGeometry` reports exact retained CPU geometry sharing
+across prepared roots. That sharing also removes duplicate GPU geometry
+admission, but does not claim to remove repeated whole-asset worker work.
 `getLifecycleSnapshot()` / `subscribeLifecycle()` and
 `getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
 unrelated frames.
