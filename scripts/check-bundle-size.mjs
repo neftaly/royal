@@ -179,6 +179,16 @@ try {
   console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
   console.log(`Royal-only graph:     ${formatBytes(totalIncrementalGzipBytes)} gzip`);
   if (showDetails) {
+    console.log("Exact gzip bytes:", JSON.stringify({
+      gltfAuthoringDelta: gltfIncrementalGzipBytes,
+      gltfInitial: gltf.initialGzipBytes,
+      incremental: incrementalGzipBytes,
+      initial: royal.initialGzipBytes,
+      lazy: royal.lazyGzipBytes,
+      royalOnly: totalIncrementalGzipBytes,
+      total: royal.totalGzipBytes,
+      worker: royal.workerGzipBytes,
+    }));
     console.log('Royal JavaScript files by gzip bytes:');
     for (const [file, bytes] of Object.entries(royal.gzipByFile)
       .sort((left, right) => right[1] - left[1])) {

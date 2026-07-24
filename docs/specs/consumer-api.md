@@ -274,11 +274,12 @@ interpreted by Royal. Consumers own schema validation and MUST NOT treat it as
 mutable renderer state. Reporting the inventory or extras does not prepare or
 fetch unselected scene content.
 
-Royal owns a bounded asynchronous preparation scheduler shared across glTF,
-external image-texture transport, authored VT, and prefiltered environments.
-Image-texture decode and decoded handoff have a separate bounded source
-lifecycle. These limits and policies are renderer implementation details rather
-than consumer creation options. Broad renderer diagnostics expose
+Royal owns a bounded asynchronous CPU-preparation scheduler shared across
+glTF, authored VT, and prefiltered environments. External image-texture
+transport, bitmap decode, and decoded handoff use a separate bounded source
+lifecycle, so network wait cannot occupy a glTF worker slot. These limits and
+policies are renderer implementation details rather than consumer creation
+options. Broad renderer diagnostics expose
 `resources.asyncPreparation: { activeJobs, jobLimit, queuedJobs,
 queuedForegroundJobs, queuedDetailJobs }` for operational inspection. The two
 queued lane counts sum to `queuedJobs`; they diagnose scheduling and are not

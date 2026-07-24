@@ -11,6 +11,7 @@ import {
   type AsyncPreparationScheduler,
 } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { staticTriangleGlb, staticTriangleGltf } from "./support/static-glb";
+import type { StaticGeometryTaskPlan } from "../../packages/renderer-webgl/src/gltf/static-geometry-plan";
 
 const prepareStatic = (
   bytes: Uint8Array,
@@ -31,13 +32,40 @@ const prepareStatic = (
   sceneIndex,
 );
 
+const prepareSharedStatic = (
+  bytes: Uint8Array,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  _signal: AbortSignal,
+  readResource: (uri: string) => Promise<Uint8Array>,
+  sceneIndex?: number,
+  resourceVersion?: string | number,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
+) => prepareStaticGltfSource(
+  bytes,
+  contentKey,
+  label,
+  sourceUri,
+  readResource,
+  undefined,
+  true,
+  sceneIndex,
+  resourceVersion,
+  geometryTasks,
+  computeGeometryTaskKeys,
+);
+
 describe("glTF asset lifecycle owner", () => {
   it("deduplicates one non-visual claim with a later visual claim and releases the last owner", async () => {
     const prepare = vi.fn(prepareStatic);
+    const preloadPreparation = vi.fn();
     const read = vi.fn(async () => staticTriangleGlb());
     const owner = new GltfAssetOwner({
       onAssetChanged: vi.fn(),
       onListenerError: vi.fn(),
+      preloadPreparation,
       prepare,
       read,
       readResource: vi.fn(),
@@ -50,6 +78,7 @@ describe("glTF asset lifecycle owner", () => {
     await waitFor(() => expect(owner.getSnapshot(node.asset).status).toBe("ready"));
     expect(read).toHaveBeenCalledOnce();
     expect(prepare).toHaveBeenCalledOnce();
+    expect(preloadPreparation).toHaveBeenCalledOnce();
 
     owner.reconcile([], [node.asset]);
     expect(owner.getSnapshot(node.asset).status).toBe("ready");
@@ -373,6 +402,114 @@ describe("glTF asset lifecycle owner", () => {
       expect(ready.timings.externalResourceReadDurationMs).toBeGreaterThanOrEqual(0);
     }
     expect(read).toHaveBeenCalledOnce();
+  });
+
+  it("falls back independently when a shared geometry producer fails", async () => {
+    const fixture = staticTriangleGltf();
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
+      (...args) => args[3] === "/models/bad.gltf"
+        ? Promise.reject(new Error("bad root material"))
+        : prepareSharedStatic(...args),
+    );
+    const readResource = vi.fn(async () => fixture.binary);
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read: async () => fixture.document,
+      readResource,
+      sharedGeometryPreparation: true,
+    });
+    const bad = gltf("/models/bad.gltf");
+    const good = gltf("/models/good.gltf");
+
+    owner.reconcile([bad, good]);
+    await waitFor(() => expect(owner.getSnapshot(bad.asset).status).toBe("error"));
+    await waitFor(() => expect(owner.getSnapshot(good.asset).status).toBe("ready"));
+
+    expect(readResource).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledTimes(3);
+    owner.dispose();
+  });
+
+  it("retains joiner retry storage across worker-style root transfer", async () => {
+    const fixture = staticTriangleGltf();
+    const rootByteLength = fixture.document.byteLength;
+    let releaseProducer: (() => void) | undefined;
+    const joinerPrepared = new Promise<void>((resolve) => {
+      releaseProducer = resolve;
+    });
+    let joinerAttempts = 0;
+    const prepare = vi.fn<NonNullable<GltfAssetOwnerPlatform["prepare"]>>(
+      async (...args) => {
+        if (args[3] === "/models/producer.gltf") {
+          await joinerPrepared;
+          throw new Error("producer failed after joiner transfer");
+        }
+        joinerAttempts += 1;
+        if (args[8] !== undefined) {
+          expect(args[9]?.size).toBe(0);
+          const prepared = await prepareSharedStatic(...args);
+          structuredClone(args[0], { transfer: [args[0].buffer] });
+          expect(args[0].byteLength).toBe(0);
+          releaseProducer?.();
+          return prepared;
+        }
+        expect(args[0].byteLength).toBe(rootByteLength);
+        return prepareSharedStatic(...args);
+      },
+    );
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read: async () => fixture.document,
+      readResource: async () => fixture.binary,
+      sharedGeometryPreparation: true,
+    });
+    const producer = gltf("/models/producer.gltf");
+    const joiner = gltf("/models/joiner.gltf");
+
+    owner.reconcile([producer, joiner]);
+    await waitFor(() => expect(owner.getSnapshot(producer.asset).status).toBe("error"));
+    await waitFor(() => expect(owner.getSnapshot(joiner.asset).status).not.toBe("loading"));
+
+    expect(joinerAttempts).toBe(2);
+    const snapshot = owner.getSnapshot(joiner.asset);
+    if (snapshot.status === "error") throw new Error(snapshot.error);
+    expect(snapshot).toMatchObject({ status: "ready" });
+    owner.dispose();
+  });
+
+  it("prepares an independent skeleton before shared geometry and releases cancellation", async () => {
+    const fixture = staticTriangleGltf();
+    let resolveResource: ((bytes: Uint8Array) => void) | undefined;
+    const resource = new Promise<Uint8Array>((resolve) => {
+      resolveResource = resolve;
+    });
+    const prepare = vi.fn(prepareSharedStatic);
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare,
+      read: async () => fixture.document,
+      readResource: async () => resource,
+      sharedGeometryPreparation: true,
+    });
+    const producer = gltf("/models/producer.gltf");
+    const waiting = gltf("/models/waiting.gltf");
+
+    owner.reconcile([producer, waiting]);
+    await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+    owner.reconcile([producer]);
+    await waitFor(() => expect(owner.getSnapshot(waiting.asset)).toEqual({
+      status: "idle",
+    }));
+    resolveResource?.(fixture.binary);
+    await waitFor(() => expect(owner.getSnapshot(producer.asset).status).toBe("ready"));
+
+    expect(prepare).toHaveBeenCalledTimes(2);
+    owner.dispose();
   });
 
   it("reports concurrent external reads as one disjoint wall-clock span", async () => {

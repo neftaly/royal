@@ -22,8 +22,13 @@ import {
   SharedStaticGeometryOwner,
   type SharedStaticGeometrySnapshot,
 } from "./shared-geometry-owner";
+import type {
+  SharedGeometryTaskClaim,
+  SharedStaticGeometryPreparationOwner,
+} from "./shared-geometry-preparation-owner";
 import type { GltfJsonValue } from "./gltf-values";
 import type { EarlyStaticTextureClaims } from "./static-external-texture-demand";
+import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
 
 export type GltfTextureProgress = Readonly<{
   /** Ready images which recovered from a preferred representation to an authored fallback. */
@@ -105,6 +110,8 @@ export type GltfAssetOwnerPlatform = Readonly<{
   onAssetChanged(assetKey: string): void;
   onListenerError(error: unknown): void;
   onSourceReadsChanged?(): void;
+  /** @internal Starts lazy browser preparation code without creating a worker. */
+  preloadPreparation?(): void;
   prepare?(
     bytes: Uint8Array,
     contentKey: string,
@@ -117,6 +124,8 @@ export type GltfAssetOwnerPlatform = Readonly<{
     ) => Promise<Uint8Array>,
     sceneIndex?: number,
     resourceVersion?: GltfAssetRef["version"],
+    geometryTasks?: StaticGeometryTaskPlan,
+    computeGeometryTaskKeys?: ReadonlySet<string>,
   ): Promise<PreparedStaticGltf>;
   read(asset: GltfAssetRef, signal: AbortSignal): Promise<Uint8Array>;
   readResource(
@@ -128,6 +137,8 @@ export type GltfAssetOwnerPlatform = Readonly<{
   /** Whether `readResource` consumes sparse selected-range requests. @defaultValue `true` */
   readResourceRanges?: boolean;
   schedule?: AsyncPreparationScheduler;
+  /** @internal Whether the injected preparer implements geometry task borrowing. */
+  sharedGeometryPreparation?: boolean;
 }>;
 
 type AssetEntry = {
@@ -147,6 +158,8 @@ const EMPTY_TEXTURE_CLAIMS: EarlyStaticTextureClaims = {
 const ACTIVE_ROOT_SOURCE_READ_LIMIT = 16;
 const EARLY_TEXTURE_DISCOVERY_ROOT_BYTE_LIMIT = 256 * 1024;
 const ROOT_SOURCE_RESERVATION_LIMIT = 64;
+const SHARED_GEOMETRY_RETRY_BYTE_LIMIT =
+  EARLY_TEXTURE_DISCOVERY_ROOT_BYTE_LIMIT * ROOT_SOURCE_RESERVATION_LIMIT;
 const STAGED_ROOT_SOURCE_BYTE_THRESHOLD = 32 * 1024 * 1024;
 
 const textureProgress = (
@@ -191,6 +204,24 @@ const usableState = (
 const formatFailure = (error: unknown): string => {
   const value = error instanceof Error ? error.message : String(error);
   return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
+};
+
+const awaitWithAbort = async <Value>(
+  value: Promise<Value>,
+  signal: AbortSignal,
+): Promise<Value> => {
+  if (signal.aborted) throw signal.reason;
+  let rejectAbort = (_error: unknown): void => undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
+  const onAbort = (): void => rejectAbort(signal.reason);
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await Promise.race([value, aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 };
 
 const validateAsset = (asset: GltfAssetRef): void => {
@@ -283,6 +314,8 @@ export class GltfAssetOwner {
   readonly #now: () => number;
   readonly #platform: GltfAssetOwnerPlatform;
   readonly #sharedGeometry = new SharedStaticGeometryOwner();
+  #sharedGeometryPreparation: SharedStaticGeometryPreparationOwner | undefined;
+  #sharedGeometryRetryBytes = 0;
   readonly #sharedReads = new SharedByteReadOwner<string>();
   readonly #sourceReads: StagedByteReadOwner;
 
@@ -303,6 +336,7 @@ export class GltfAssetOwner {
     for (const entry of this.#entries.values()) entry.controller.abort();
     this.#entries.clear();
     this.#sharedGeometry.clear();
+    this.#sharedGeometryPreparation?.clear();
     this.#sourceReads.dispose();
     this.#sharedReads.dispose();
     this.#listeners.clear();
@@ -326,6 +360,10 @@ export class GltfAssetOwner {
   }
 
   sharedGeometrySnapshot(): SharedStaticGeometrySnapshot {
+    const preparation = this.#sharedGeometryPreparation;
+    if (preparation !== undefined) {
+      this.#sharedGeometry.setPreparationSnapshot(preparation.snapshot());
+    }
     return this.#sharedGeometry.snapshot();
   }
 
@@ -373,6 +411,7 @@ export class GltfAssetOwner {
     for (const [key, entry] of this.#entries) {
       if (claimed.has(key)) continue;
       entry.controller.abort();
+      this.#sharedGeometryPreparation?.release(key);
       releasedPreparedGeometry = entry.prepared !== undefined || releasedPreparedGeometry;
       this.#entries.delete(key);
       this.#sharedReads.release(key);
@@ -402,9 +441,15 @@ export class GltfAssetOwner {
     };
     this.#entries.set(key, entry);
     this.#publish(key);
+    this.#platform.preloadPreparation?.();
     const preparation = this.#platform.prepare === undefined
       ? import("./static-asset")
       : undefined;
+    const rootPreparation = import("./static-root-preparation");
+    void rootPreparation.catch(() => undefined);
+    let geometryClaim: SharedGeometryTaskClaim | undefined;
+    let geometryRetryBytes: Uint8Array | undefined;
+    let geometryRetryByteLength = 0;
     const load = async (): Promise<void> => {
       let sourceReadStartedAt = this.#now();
       const source = await this.#sourceReads.read(
@@ -428,6 +473,7 @@ export class GltfAssetOwner {
       }
       const { bytes } = source;
       const readCompletedAt = this.#now();
+      let geometryTasks: StaticGeometryTaskPlan | undefined;
       if (
         bytes.byteLength <= EARLY_TEXTURE_DISCOVERY_ROOT_BYTE_LIMIT
         && (
@@ -436,28 +482,73 @@ export class GltfAssetOwner {
             !== 0x46_54_6c_67
         )
       ) {
-        const discoveryBytes = bytes.slice();
-        void import("./static-external-texture-demand").then((module) =>
-          module.discoverExternalStaticGltfTextures(
-            discoveryBytes,
+        try {
+          const rootPreparationModule = await rootPreparation;
+          const discovered = rootPreparationModule.discoverEarlyStaticGltfRoot(
+            bytes,
             gltfSourceKey(asset),
             diagnosticLabel(asset),
             asset.src,
             true,
             asset.sceneIndex,
             asset.version,
-          )).then((claims) => {
+          );
           if (
             this.#disposed
             || this.#entries.get(key) !== entry
             || entry.controller.signal.aborted
-            || entry.prepared !== undefined
-          ) return;
-          entry.earlyTextureClaims = claims;
-          if (claims.textureAssets.length !== 0) this.#platform.onAssetChanged(key);
-        }).catch(() => {
+          ) {
+            source.release();
+            return;
+          }
+          geometryTasks = this.#platform.prepare === undefined
+            || this.#platform.sharedGeometryPreparation === true
+            ? discovered.geometryTasks
+            : undefined;
+          if (geometryTasks !== undefined) {
+            this.#sharedGeometryPreparation ??=
+              new rootPreparationModule.SharedStaticGeometryPreparationOwner();
+          }
+          entry.earlyTextureClaims = discovered.textureClaims;
+          if (discovered.textureClaims.textureAssets.length !== 0) {
+            this.#platform.onAssetChanged(key);
+          }
+        } catch {
           // Canonical preparation remains the authority for validation errors.
-        });
+        }
+      }
+      if (geometryTasks !== undefined) {
+        geometryClaim = this.#sharedGeometryPreparation!.claim(key, geometryTasks);
+        void geometryClaim.ready.catch(() => undefined);
+        if (geometryClaim.hasDependencies) {
+          if (
+            this.#sharedGeometryRetryBytes + bytes.byteLength
+            <= SHARED_GEOMETRY_RETRY_BYTE_LIMIT
+          ) {
+            geometryRetryBytes = bytes.slice();
+            geometryRetryByteLength = geometryRetryBytes.byteLength;
+            this.#sharedGeometryRetryBytes += geometryRetryByteLength;
+          } else {
+            try {
+              await awaitWithAbort(
+                geometryClaim.dependenciesReady,
+                entry.controller.signal,
+              );
+            } catch {
+              this.#sharedGeometryPreparation!.release(key);
+              geometryClaim = undefined;
+              geometryTasks = undefined;
+              if (
+                this.#disposed
+                || this.#entries.get(key) !== entry
+                || entry.controller.signal.aborted
+              ) {
+                source.release();
+                return;
+              }
+            }
+          }
+        }
       }
       let externalReadCompletedAt = readCompletedAt;
       let externalReadStartedAt: number | undefined;
@@ -482,12 +573,20 @@ export class GltfAssetOwner {
         }
       };
       let preparationStartedAt = readCompletedAt;
-      const prepare = async (): Promise<PreparedStaticGltf> => {
-        preparationStartedAt = this.#now();
+      let preparationStarted = false;
+      const prepare = async (
+        inputBytes: Uint8Array,
+        taskPlan: StaticGeometryTaskPlan | undefined,
+        taskClaim: SharedGeometryTaskClaim | undefined,
+      ): Promise<PreparedStaticGltf> => {
+        if (!preparationStarted) {
+          preparationStartedAt = this.#now();
+          preparationStarted = true;
+        }
         source.release();
         return this.#platform.prepare === undefined
           ? preparation!.then((module) => module.prepareStaticGltfSource(
-            bytes,
+            inputBytes,
             gltfSourceKey(asset),
             diagnosticLabel(asset),
             asset.src,
@@ -496,27 +595,91 @@ export class GltfAssetOwner {
             true,
             asset.sceneIndex,
             asset.version,
+            taskPlan,
+            taskClaim?.computeKeys,
           ))
-          : this.#platform.prepare(
-            bytes,
-            gltfSourceKey(asset),
-            diagnosticLabel(asset),
-            asset.src,
-            entry.controller.signal,
-            readResource,
-            asset.sceneIndex,
-            asset.version,
-          );
+          : taskPlan === undefined
+            ? this.#platform.prepare(
+              inputBytes,
+              gltfSourceKey(asset),
+              diagnosticLabel(asset),
+              asset.src,
+              entry.controller.signal,
+              readResource,
+              asset.sceneIndex,
+              asset.version,
+            )
+            : this.#platform.prepare(
+              inputBytes,
+              gltfSourceKey(asset),
+              diagnosticLabel(asset),
+              asset.src,
+              entry.controller.signal,
+              readResource,
+              asset.sceneIndex,
+              asset.version,
+              taskPlan,
+              taskClaim?.computeKeys,
+            );
       };
       let prepared: PreparedStaticGltf;
+      const prepareAttempt = (
+        inputBytes: Uint8Array,
+        taskPlan: StaticGeometryTaskPlan | undefined,
+        taskClaim: SharedGeometryTaskClaim | undefined,
+      ): Promise<PreparedStaticGltf> => this.#platform.schedule === undefined
+        ? prepare(inputBytes, taskPlan, taskClaim)
+        : this.#platform.schedule(
+            entry.controller.signal,
+            () => prepare(inputBytes, taskPlan, taskClaim),
+          );
       try {
-        prepared = this.#platform.schedule === undefined
-          ? await prepare()
-          : await this.#platform.schedule(entry.controller.signal, prepare);
+        prepared = await prepareAttempt(bytes, geometryTasks, geometryClaim);
       } finally {
         source.release();
       }
-      if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
+      if (
+        this.#disposed
+        || this.#entries.get(key) !== entry
+        || entry.controller.signal.aborted
+      ) return;
+      const producerPreparedAt = this.#now();
+      if (geometryClaim !== undefined) {
+        try {
+          const externalResourceDuration = externalReadStartedAt === undefined
+            ? 0
+            : Math.max(0, externalReadCompletedAt - externalReadStartedAt);
+          this.#sharedGeometryPreparation!.publish(
+            key,
+            prepared,
+            geometryClaim.computeKeys,
+            Math.max(
+              0,
+              producerPreparedAt - preparationStartedAt - externalResourceDuration,
+            ),
+          );
+          prepared = this.#sharedGeometryPreparation!.resolve(
+            prepared,
+            await awaitWithAbort(geometryClaim.ready, entry.controller.signal),
+          );
+        } catch (error) {
+          if (
+            this.#disposed
+            || this.#entries.get(key) !== entry
+            || entry.controller.signal.aborted
+          ) return;
+          if (geometryRetryBytes === undefined) throw error;
+          this.#sharedGeometryPreparation!.release(key);
+          geometryClaim = undefined;
+          geometryTasks = undefined;
+          prepared = await prepareAttempt(geometryRetryBytes, undefined, undefined);
+          if (
+            this.#disposed
+            || this.#entries.get(key) !== entry
+            || entry.controller.signal.aborted
+          ) return;
+        }
+      }
       const preparedAt = this.#now();
       const externalResourceReadDurationMs = externalReadStartedAt === undefined
         ? 0
@@ -562,7 +725,13 @@ export class GltfAssetOwner {
       this.#platform.onAssetChanged(key);
       this.#publish(key);
     };
-    void load().catch((error: unknown) => {
+    void load().finally(() => {
+      this.#sharedGeometryRetryBytes -= geometryRetryByteLength;
+      geometryRetryByteLength = 0;
+      geometryRetryBytes = undefined;
+    }).catch((error: unknown) => {
+      this.#sharedGeometryPreparation?.fail(key, error);
+      this.#sharedGeometryPreparation?.release(key);
       if (this.#disposed || this.#entries.get(key) !== entry || entry.controller.signal.aborted) return;
       entry.snapshot = { error: formatFailure(error), status: "error" };
       this.#publish(key);

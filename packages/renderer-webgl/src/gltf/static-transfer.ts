@@ -19,6 +19,10 @@ export const preparedStaticGltfTransferBuffers = (
 ): ArrayBuffer[] => {
   const buffers = new Set<ArrayBuffer>();
   for (const primitive of prepared.primitives) {
+    if (primitive.deferredGeometryKey !== undefined) {
+      retainViewBuffer(buffers, primitive.instanceBatch?.localModels);
+      continue;
+    }
     const geometry = primitive.geometry;
     retainViewBuffer(buffers, geometry.indices);
     retainViewBuffer(buffers, geometry.colors);

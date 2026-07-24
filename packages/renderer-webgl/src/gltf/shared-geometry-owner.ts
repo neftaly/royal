@@ -2,9 +2,15 @@ import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { PreparedStaticGltf } from "./static-asset";
 
 export type SharedStaticGeometrySnapshot = Readonly<{
+  pendingPreparationTasks: number;
+  preparedTaskBytes: number;
+  preparedTasks: number;
+  preparationTaskClaims: number;
   primitiveClaims: number;
   retainedBytes: number;
   reusedClaims: number;
+  reusedPreparationClaims: number;
+  taskProducerPreparationDurationMs: number;
   uniqueGeometries: number;
 }>;
 
@@ -46,7 +52,7 @@ export const sameCanonicalGeometry = (
   && sameView(left.textureCoordinates0, right.textureCoordinates0)
   && sameView(left.textureCoordinates1, right.textureCoordinates1);
 
-const geometryBytes = (geometry: CanonicalTriangleGeometry): number =>
+export const staticGeometryByteLength = (geometry: CanonicalTriangleGeometry): number =>
   geometry.indices.byteLength
   + geometry.positions.byteLength
   + (geometry.colors?.byteLength ?? 0)
@@ -59,24 +65,36 @@ const geometryBytes = (geometry: CanonicalTriangleGeometry): number =>
  * Root-owned exact interning after worker transfer.
  *
  * This removes duplicate retained CPU arrays and gives the GPU owner one
- * canonical key. It deliberately does not claim to remove worker computation;
- * the two-stage preparation protocol remains the upstream target.
+ * canonical key. It is the exact-output fallback for roots which cannot enter
+ * the pre-read shared-preparation protocol.
  */
 export class SharedStaticGeometryOwner {
   readonly #candidates = new Map<string, CanonicalTriangleGeometry[]>();
   #snapshot: SharedStaticGeometrySnapshot = {
+    pendingPreparationTasks: 0,
+    preparedTaskBytes: 0,
+    preparedTasks: 0,
+    preparationTaskClaims: 0,
     primitiveClaims: 0,
     retainedBytes: 0,
     reusedClaims: 0,
+    reusedPreparationClaims: 0,
+    taskProducerPreparationDurationMs: 0,
     uniqueGeometries: 0,
   };
 
   clear(): void {
     this.#candidates.clear();
     this.#snapshot = {
+      pendingPreparationTasks: 0,
+      preparedTaskBytes: 0,
+      preparedTasks: 0,
+      preparationTaskClaims: 0,
       primitiveClaims: 0,
       retainedBytes: 0,
       reusedClaims: 0,
+      reusedPreparationClaims: 0,
+      taskProducerPreparationDurationMs: 0,
       uniqueGeometries: 0,
     };
   }
@@ -119,7 +137,7 @@ export class SharedStaticGeometryOwner {
           continue;
         }
         unique.add(geometry);
-        retainedBytes += geometryBytes(geometry);
+        retainedBytes += staticGeometryByteLength(geometry);
         const sourceKey = geometry.sourceKey;
         if (sourceKey === undefined) continue;
         const candidates = this.#candidates.get(sourceKey);
@@ -128,11 +146,32 @@ export class SharedStaticGeometryOwner {
       }
     }
     this.#snapshot = {
+      pendingPreparationTasks: this.#snapshot.pendingPreparationTasks,
+      preparedTaskBytes: this.#snapshot.preparedTaskBytes,
+      preparedTasks: this.#snapshot.preparedTasks,
+      preparationTaskClaims: this.#snapshot.preparationTaskClaims,
       primitiveClaims,
       retainedBytes,
       reusedClaims,
+      reusedPreparationClaims: this.#snapshot.reusedPreparationClaims,
+      taskProducerPreparationDurationMs:
+        this.#snapshot.taskProducerPreparationDurationMs,
       uniqueGeometries: unique.size,
     };
+  }
+
+  setPreparationSnapshot(
+    snapshot: Pick<
+      SharedStaticGeometrySnapshot,
+      | "pendingPreparationTasks"
+      | "preparedTaskBytes"
+      | "preparedTasks"
+      | "preparationTaskClaims"
+      | "reusedPreparationClaims"
+      | "taskProducerPreparationDurationMs"
+    >,
+  ): void {
+    this.#snapshot = { ...this.#snapshot, ...snapshot };
   }
 
   snapshot(): SharedStaticGeometrySnapshot {

@@ -7,9 +7,11 @@ import {
 } from "./gltf-values";
 import { readStaticMaterialInputs } from "./static-material-inputs";
 import { createStaticTextureImagePlanner } from "./static-texture-image-plan";
+import { selectedTextureCoordinateSet } from "./static-texture-coordinate-set";
 
 export type StaticTextureDemand = Readonly<{
   colorSpace: "linear" | "srgb";
+  coordinateSet: 0 | 1;
   priority: 0 | 1 | 2 | 3;
   retainAlpha: boolean;
   textureIndex: number;
@@ -40,7 +42,13 @@ export const createStaticPrimitiveTextureDemand = (
     if (value === undefined) return;
     const textureInfo = object(value, label, path);
     const textureIndex = index(textureInfo.index, textures, label, `${path}.index`);
-    claimTextureDemand({ colorSpace, priority, retainAlpha, textureIndex });
+    claimTextureDemand({
+      colorSpace,
+      coordinateSet: selectedTextureCoordinateSet(textureInfo, label, path),
+      priority,
+      retainAlpha,
+      textureIndex,
+    });
   };
   const claimMaterial = (value: unknown, path: string): void => {
     const materialIndex = index(value, materials, label, path);

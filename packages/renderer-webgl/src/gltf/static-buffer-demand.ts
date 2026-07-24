@@ -107,6 +107,7 @@ export const selectedStaticGltfBufferViewIndices = (
   label: string,
   sceneIndex?: number,
   etc2Available = true,
+  preparePrimitive?: (meshIndex: number, primitiveIndex: number) => boolean,
 ): ReadonlySet<number> => {
   const accessors = array(document.accessors, label, "accessors");
   const bufferViews = array(document.bufferViews, label, "bufferViews");
@@ -153,6 +154,7 @@ export const selectedStaticGltfBufferViewIndices = (
       const primitivePath = `${meshPath}.primitives[${primitiveIndex}]`;
       const primitive = object(primitives[primitiveIndex], label, primitivePath);
       claimPrimitiveImages(primitive, primitivePath);
+      if (preparePrimitive?.(meshIndex, primitiveIndex) === false) continue;
       const attributes = object(primitive.attributes, label, `${primitivePath}.attributes`);
       for (const [semantic, accessor] of Object.entries(attributes)) {
         claimAccessorValue(accessor, `${primitivePath}.attributes.${semantic}`);

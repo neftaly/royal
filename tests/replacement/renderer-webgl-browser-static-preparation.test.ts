@@ -71,6 +71,45 @@ describe("browser static glTF preparation", () => {
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it("sends cloneable geometry task and borrowing intent to the worker", async () => {
+    const worker = new FakeWorker();
+    const owner = new BrowserStaticGltfPreparationOwner({
+      createWorker: () => worker as unknown as Worker,
+      workerLimit: 1,
+    });
+    const bytes = new TextEncoder().encode("{}");
+    const geometryTasks = {
+      tasks: [{ key: "shared", meshIndex: 0, primitiveIndex: 0 }],
+    } as const;
+    const result = owner.prepare(
+      bytes,
+      "asset",
+      "asset",
+      "/asset.gltf",
+      new AbortController().signal,
+      vi.fn(),
+      true,
+      undefined,
+      undefined,
+      geometryTasks,
+      new Set(),
+    );
+
+    expect(worker.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        computeGeometryTaskKeys: [],
+        geometryTasks,
+        kind: "prepare",
+      }),
+      [bytes.buffer],
+    );
+    worker.dispatchEvent(new MessageEvent("message", {
+      data: { kind: "ready", prepared },
+    }));
+    await expect(result).resolves.toBe(prepared);
+    owner.dispose();
+  });
+
   it("keeps worker resource reads in the injected asset lifecycle", async () => {
     const worker = new FakeWorker();
     const source = new TextEncoder().encode("{}");

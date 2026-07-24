@@ -8,21 +8,9 @@ import {
   IDENTITY_TEXTURE_COORDINATES,
   type CanonicalTextureCoordinates,
 } from "../surface/texture-coordinates";
+import { selectedTextureCoordinateSet } from "./static-texture-coordinate-set";
 
 const canonicalZero = (value: number): number => value === 0 ? 0 : value;
-
-const selectedTextureCoordinates = (
-  value: unknown,
-  fallback: unknown,
-  label: string,
-  path: string,
-): 0 | 1 => {
-  const selected = value ?? fallback ?? 0;
-  if (selected !== 0 && selected !== 1) {
-    return fail(label, path, "must select TEXCOORD_0 or TEXCOORD_1");
-  }
-  return selected;
-};
 
 /** Lowers one glTF texture-info transform to two shader-ready affine rows. */
 export const prepareTextureCoordinates = (
@@ -35,12 +23,7 @@ export const prepareTextureCoordinates = (
     : object(textureInfo.extensions, label, `${path}.extensions`);
   const value = extensions?.KHR_texture_transform;
   if (value === undefined) {
-    const set = selectedTextureCoordinates(
-      undefined,
-      textureInfo.texCoord,
-      label,
-      `${path}.texCoord`,
-    );
+    const set = selectedTextureCoordinateSet(textureInfo, label, path);
     return set === 0
       ? IDENTITY_TEXTURE_COORDINATES
       : { row0: [1, 0, 0, 1], row1: [0, 1, 0, 0] };
@@ -68,12 +51,7 @@ export const prepareTextureCoordinates = (
       "must be finite",
     );
   }
-  const set = selectedTextureCoordinates(
-    transform.texCoord,
-    textureInfo.texCoord,
-    label,
-    `${path}.extensions.KHR_texture_transform.texCoord`,
-  );
+  const set = selectedTextureCoordinateSet(textureInfo, label, path);
   const cosine = Math.cos(rotation);
   const sine = Math.sin(rotation);
   const row0 = [

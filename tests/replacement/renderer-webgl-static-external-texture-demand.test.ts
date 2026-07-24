@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { discoverExternalStaticGltfTextures } from "../../packages/renderer-webgl/src/gltf/static-external-texture-demand";
+import {
+  discoverEarlyStaticGltfRoot,
+  discoverExternalStaticGltfTextures,
+} from "../../packages/renderer-webgl/src/gltf/static-external-texture-demand";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import { parseGlb } from "../../packages/renderer-webgl/src/gltf/glb";
 import {
@@ -91,7 +94,7 @@ describe("early static external texture demand", () => {
     const document = parsed.document as Record<string, unknown>;
     document.buffers = [{ byteLength: 68, uri: "geometry.bin" }];
     const bytes = new TextEncoder().encode(JSON.stringify(document));
-    const early = discoverExternalStaticGltfTextures(
+    const early = discoverEarlyStaticGltfRoot(
       bytes,
       "shared-root",
       "shared.gltf",
@@ -112,9 +115,58 @@ describe("early static external texture demand", () => {
       7,
     );
 
-    expect(early.textureAssets.map(textureStorageKey))
+    expect(early.textureClaims.textureAssets.map(textureStorageKey))
       .toEqual(prepared.textureAssets.map(textureStorageKey));
-    expect(early.alphaMaskTextureAssets.map(decodedTextureKey))
+    expect(early.textureClaims.alphaMaskTextureAssets.map(decodedTextureKey))
       .toEqual(prepared.alphaMaskTextureAssets.map(decodedTextureKey));
+    expect(early.geometryTasks?.tasks[0]?.key)
+      .toBe(prepared.primitives[0]?.geometry.sourceKey);
+  });
+
+  it("derives material-independent exact geometry task identity", () => {
+    const root = (
+      color: readonly number[],
+      version: number,
+      configure?: (document: Record<string, unknown>) => void,
+    ) => {
+      const document = staticTriangleDocument();
+      document.buffers = [{ byteLength: 42, uri: "shared.bin" }];
+      const materials = document.materials as Array<Record<string, unknown>>;
+      materials[0]!.pbrMetallicRoughness = { baseColorFactor: color };
+      configure?.(document);
+      return discoverEarlyStaticGltfRoot(
+        new TextEncoder().encode(JSON.stringify(document)),
+        `root-${color[0]}`,
+        "shared.gltf",
+        "/models/shared.gltf",
+        true,
+        undefined,
+        version,
+      ).geometryTasks!.tasks[0]!.key;
+    };
+
+    expect(root([1, 0, 0, 1], 1)).toBe(root([0, 0, 1, 1], 1));
+    expect(root([1, 0, 0, 1], 1)).not.toBe(root([1, 0, 0, 1], 2));
+    expect(root([1, 0, 0, 1], 1)).not.toBe(root(
+      [1, 0, 0, 1],
+      1,
+      (document) => {
+        document.buffers = [{ byteLength: 43, uri: "shared.bin" }];
+      },
+    ));
+    expect(root([1, 0, 0, 1], 1)).not.toBe(root(
+      [1, 0, 0, 1],
+      1,
+      (document) => {
+        document.extensionsRequired = [
+          ...(document.extensionsRequired as string[]),
+          "KHR_mesh_quantization",
+        ];
+        document.extensionsUsed = [
+          ...(document.extensionsUsed as string[]),
+          "KHR_mesh_quantization",
+        ];
+      },
+    ));
   });
 });

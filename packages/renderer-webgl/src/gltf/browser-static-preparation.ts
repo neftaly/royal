@@ -2,6 +2,7 @@ import type { PreparedStaticGltf } from "./static-asset";
 import type { TextureVersion } from "@royal/renderer-core";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 import type { StaticGltfResourceReader } from "./static-source";
+import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
 
 export { readGltfResourceRangesWithFetch } from "./browser-range-read";
 
@@ -110,6 +111,8 @@ export class BrowserStaticGltfPreparationOwner {
     etc2Available = true,
     sceneIndex?: number,
     resourceVersion?: TextureVersion,
+    geometryTasks?: StaticGeometryTaskPlan,
+    computeGeometryTaskKeys?: ReadonlySet<string>,
   ): Promise<PreparedStaticGltf> {
     if (this.#disposed || signal.aborted) throw abortFailure();
     if (this.#createWorker === undefined || !shouldPrepareStaticGltfInWorker(bytes)) {
@@ -125,6 +128,8 @@ export class BrowserStaticGltfPreparationOwner {
         etc2Available,
         sceneIndex,
         resourceVersion,
+        geometryTasks,
+        computeGeometryTaskKeys,
       );
     }
     const slot = this.#acquireWorker();
@@ -212,6 +217,10 @@ export class BrowserStaticGltfPreparationOwner {
             resourceVersion,
             sceneIndex,
             sourceUri,
+            geometryTasks,
+            computeGeometryTaskKeys: computeGeometryTaskKeys === undefined
+              ? undefined
+              : [...computeGeometryTaskKeys],
           },
           [bytes.buffer],
         );
@@ -278,6 +287,8 @@ export const prepareStaticGltfInBrowser = async (
   etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
 ): Promise<PreparedStaticGltf> => {
   const owner = new BrowserStaticGltfPreparationOwner({
     ...(createWorker === undefined ? {} : { createWorker }),
@@ -294,6 +305,8 @@ export const prepareStaticGltfInBrowser = async (
       etc2Available,
       sceneIndex,
       resourceVersion,
+      geometryTasks,
+      computeGeometryTaskKeys,
     );
   } finally {
     owner.dispose();

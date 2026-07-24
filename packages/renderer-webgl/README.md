@@ -115,9 +115,14 @@ ceilings are diagnostics rather than tuning controls.
 For small JSON roots, visible external image demand can begin after the root
 read and before geometry resources settle. It uses the final selected-scene and
 canonical texture identities; embedded images remain in canonical preparation.
+The first glTF claim preloads this planning code and the browser preparation
+host in parallel with root transport; worker creation still waits for ordinary
+preparation admission.
 `resources.gltfSharedGeometry` reports exact retained CPU geometry sharing
-across prepared roots. That sharing also removes duplicate GPU geometry
-admission, but does not claim to remove repeated whole-asset worker work.
+and source-derived preparation tasks across roots. Exact external
+resource/version and extraction identity lets joined roots skip geometry
+buffer demand, accessor conversion, worker transfer, and duplicate GPU
+admission while retaining independent materials and scene semantics.
 `getLifecycleSnapshot()` / `subscribeLifecycle()` and
 `getSizeSnapshot()` / `subscribeSize()` are focused streams that do not wake for
 unrelated frames.

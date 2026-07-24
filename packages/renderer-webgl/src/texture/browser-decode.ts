@@ -13,7 +13,6 @@ import {
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import { RetainedFifo } from "../resource/retained-fifo";
 import { createTextureAlphaMipChain } from "./alpha-mipmap-generation";
-import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 export type BrowserTextureDecoder = (
   asset: TextureSourceRef,
@@ -430,15 +429,13 @@ const retainTextureAlpha = (
 /**
  * Creates one root-local browser pipeline. The texture owner bounds complete
  * source lifecycles; this cold adapter separately bounds transport and
- * CPU-heavy bitmap decoding. An injected root scheduler governs transport
- * only, so fetched blobs do not occupy shared preparation slots while waiting
- * for browser decode.
+ * CPU-heavy bitmap decoding. Transport has its own authority because network
+ * wait must not consume glTF/VT/environment CPU-preparation slots.
  */
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
   etc2Available = true,
   retainSvgSource = false,
-  scheduleTransport?: AsyncPreparationScheduler,
   readGltfTexture?: BrowserGltfTextureReader,
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
@@ -452,13 +449,8 @@ export const createBrowserTextureDecoder = (
     const queuedAt = now();
     let startedAt = queuedAt;
     const result = await transports.run(signal, () => {
-      const execute = (): Promise<TextureBlob> => {
-        startedAt = now();
-        return readTextureBlob(asset, signal, readGltfTexture);
-      };
-      return scheduleTransport === undefined
-        ? execute()
-        : scheduleTransport(signal, execute);
+      startedAt = now();
+      return readTextureBlob(asset, signal, readGltfTexture);
     });
     const completedAt = now();
     return {

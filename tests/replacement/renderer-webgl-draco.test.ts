@@ -145,4 +145,34 @@ describe("static Draco adapter", () => {
     expect(() => decode(primitive, "meshes[0].primitives[0]"))
       .toThrow("has no prepared Draco result");
   });
+
+  it("does not schedule borrowed primitives for codec execution", async () => {
+    const primitive = {
+      attributes: { POSITION: 0 },
+      extensions: {
+        KHR_draco_mesh_compression: {
+          attributes: { POSITION: 2 },
+          bufferView: 0,
+        },
+      },
+      indices: 1,
+    };
+    const execute = vi.fn(async () => []);
+    const decode = await prepareSelectedStaticDracoDecoder({
+      accessors: [
+        { componentType: 5126, count: 3, type: "VEC3" },
+        { componentType: 5123, count: 3, type: "SCALAR" },
+      ],
+      bufferViews: [{ buffer: 0, byteLength: 1 }],
+      meshes: [{ primitives: [primitive] }],
+      nodes: [{ mesh: 0 }],
+      scene: 0,
+      scenes: [{ nodes: [0] }],
+    }, new Uint8Array(), "borrowed.gltf", execute, undefined, () => false);
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledWith([]);
+    expect(() => decode(primitive, "meshes[0].primitives[0]"))
+      .toThrow("has no prepared Draco result");
+  });
 });

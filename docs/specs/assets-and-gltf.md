@@ -118,14 +118,19 @@ image demands either form one coherent revision or do not replace the previous
 revision. Individual image outcomes may publish later into material-owned
 slots. A failed image MUST NOT invalidate unrelated images or geometry.
 
-Distinct prepared roots MAY borrow one retained canonical geometry object when
-immutable external resource/version identity and complete extraction
-declarations narrow them to a candidate and byte-exact canonical output proves
-equality. Materials, transforms, lights, status, cancellation, and texture
-claims remain root-specific. This post-preparation interning removes duplicate
-retained CPU arrays and GPU uploads; it does not count as shared worker
-preparation. Eliminating duplicate canonical worker work requires the specified
-two-stage geometry-task protocol rather than a detached whole-asset cache.
+For eligible external JSON roots, immutable buffer URI/version/length identity,
+complete accessor/buffer-view/topology/codec declarations, quantization, and
+required UV representation form exact geometry task identity before any buffer
+read. The first claiming root produces each task; concurrent roots join it.
+Borrowing roots omit those geometry ranges, accessor conversion, typed-array
+transfer, retained CPU storage, and GPU upload while independently preparing
+materials, transforms, instances, lights, status, and textures. A failed or
+cancelled producer rejects only the join: surviving roots retry through their
+ordinary preparation rather than inheriting its failure.
+
+Roots outside the early planning profile retain the byte-exact
+post-preparation interner as a conservative fallback. Candidate identity alone
+never aliases that fallback path; canonical output equality proves it.
 
 Prepared geometry is not part of ordinary status. One explicit cold visitor may
 borrow highest-detail selected-scene indexed positions and packed asset-space

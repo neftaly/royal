@@ -18,10 +18,19 @@ import { createTextureAssetReader } from "./static-material";
 import { createStaticTextureImagePlanner } from "./static-texture-image-plan";
 import { selectedStaticNodeIndices } from "./static-node-selection";
 import { parseStaticGltfDocument } from "./static-source";
+import {
+  planStaticGltfGeometryTasks,
+  type StaticGeometryTaskPlan,
+} from "./static-geometry-plan";
 
 export type EarlyStaticTextureClaims = Readonly<{
   alphaMaskTextureAssets: readonly TextureSourceRef[];
   textureAssets: readonly TextureSourceRef[];
+}>;
+
+export type EarlyStaticGltfRoot = Readonly<{
+  geometryTasks?: StaticGeometryTaskPlan;
+  textureClaims: EarlyStaticTextureClaims;
 }>;
 
 const EMPTY_CLAIMS: EarlyStaticTextureClaims = {
@@ -46,6 +55,26 @@ export const discoverExternalStaticGltfTextures = (
   resourceVersion?: TextureVersion,
 ): EarlyStaticTextureClaims => {
   const document = parseStaticGltfDocument(bytes, label);
+  return discoverExternalStaticGltfDocumentTextures(
+    document,
+    contentKey,
+    label,
+    sourceUri,
+    etc2Available,
+    sceneIndex,
+    resourceVersion,
+  );
+};
+
+const discoverExternalStaticGltfDocumentTextures = (
+  document: ReturnType<typeof parseStaticGltfDocument>,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  etc2Available: boolean,
+  sceneIndex?: number,
+  resourceVersion?: TextureVersion,
+): EarlyStaticTextureClaims => {
   const nodes = array(document.nodes, label, "nodes");
   const meshes = array(document.meshes, label, "meshes");
   const images = optionalArray(document.images, label, "images");
@@ -115,5 +144,37 @@ export const discoverExternalStaticGltfTextures = (
   return {
     alphaMaskTextureAssets: [...alphaMaskTextureAssets.values()],
     textureAssets: [...textureAssets.values()],
+  };
+};
+
+/** Parses one small JSON root once for early texture and geometry planning. */
+export const discoverEarlyStaticGltfRoot = (
+  bytes: Uint8Array,
+  contentKey: string,
+  label: string,
+  sourceUri: string,
+  etc2Available = true,
+  sceneIndex?: number,
+  resourceVersion?: TextureVersion,
+): EarlyStaticGltfRoot => {
+  const document = parseStaticGltfDocument(bytes, label);
+  const geometryTasks = planStaticGltfGeometryTasks(
+    document,
+    label,
+    sourceUri,
+    sceneIndex,
+    resourceVersion,
+  );
+  return {
+    ...(geometryTasks === undefined ? {} : { geometryTasks }),
+    textureClaims: discoverExternalStaticGltfDocumentTextures(
+      document,
+      contentKey,
+      label,
+      sourceUri,
+      etc2Available,
+      sceneIndex,
+      resourceVersion,
+    ),
   };
 };

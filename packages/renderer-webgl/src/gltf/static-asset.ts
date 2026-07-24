@@ -65,6 +65,10 @@ import {
   staticNodeLodIds,
   type GltfDocumentScene,
 } from "./static-node-selection";
+import {
+  staticGeometryTaskKeyMap,
+  type StaticGeometryTaskPlan,
+} from "./static-geometry-plan";
 export type PreparedStaticLodMembership = Readonly<{
   group: LodGroupId;
   level: number;
@@ -77,6 +81,8 @@ export type PreparedStaticMaterialLod = Readonly<{
 }>;
 
 export type PreparedStaticGltfPrimitive = Readonly<{
+  /** @internal Replaced with root-owned canonical geometry before publication. */
+  deferredGeometryKey?: string;
   geometry: CanonicalTriangleGeometry;
   instanceBatch?: StaticInstanceBatch & Readonly<{ key: string }>;
   localModel: Mat4;
@@ -128,6 +134,7 @@ type StaticDocumentPreflight = Readonly<{
 }>;
 
 type PreparedMeshPrimitive = Readonly<{
+  deferredGeometryKey?: string;
   geometry: CanonicalTriangleGeometry;
   material: CanonicalSurfaceMaterial;
   materialLod?: PreparedStaticMaterialLod;
@@ -192,6 +199,9 @@ export const batchRepeatedStaticPrimitives = (
     const batches = prepareStaticMatrixBatches(models);
     for (let batch = 0; batch < batches.length; batch += 1) {
       result.push({
+        ...(primitive.deferredGeometryKey === undefined
+          ? {}
+          : { deferredGeometryKey: primitive.deferredGeometryKey }),
         geometry: primitive.geometry,
         instanceBatch: {
           ...batches[batch]!,
@@ -281,7 +291,8 @@ const prepareStaticDocument = (
   decodeDraco?: StaticDracoDecoder,
   selectedSceneIndex?: number,
   resourceVersion?: TextureVersion,
-  geometryResourceIdentity?: string,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
 ): PreparedStaticGltf => {
   const { bufferByteLength } = preflight;
   const accessors = array(document.accessors, label, "accessors");
@@ -347,6 +358,7 @@ const prepareStaticDocument = (
     label,
     meshQuantization: preflight.usesMeshQuantization,
   };
+  const geometryTaskKeys = staticGeometryTaskKeyMap(geometryTasks);
   let defaultMaterial: CanonicalSurfaceMaterial | undefined;
   const preparedMaterials = new Map<number, CanonicalSurfaceMaterial>();
   const preparePrimitiveMaterial = (
@@ -442,84 +454,85 @@ const prepareStaticDocument = (
     }
     return false;
   };
-  const geometryCandidateKey = (
+  const preparePrimitiveMaterialSet = (
     primitive: JsonObject,
-    attributes: JsonObject,
-    mode: 4 | 5 | 6,
-    usesTextureCoordinates1: boolean,
-  ): string | undefined => {
-    if (geometryResourceIdentity === undefined) return undefined;
-    const accessorIndices = new Set<number>();
-    const attributeDeclarations = Object.keys(attributes).sort().map((semantic) => {
-      const accessorIndex = index(
-        attributes[semantic],
-        accessors,
-        label,
-        `geometry.attributes.${semantic}`,
-      );
-      accessorIndices.add(accessorIndex);
-      return [semantic, accessorIndex] as const;
-    });
-    if (primitive.indices !== undefined) {
-      accessorIndices.add(index(primitive.indices, accessors, label, "geometry.indices"));
-    }
-    const viewIndices = new Set<number>();
-    const accessorDeclarations = [...accessorIndices].sort((left, right) => left - right)
-      .map((accessorIndex) => {
-        const accessorPath = `accessors[${accessorIndex}]`;
-        const accessor = object(accessors[accessorIndex], label, accessorPath);
-        if (accessor.bufferView !== undefined) {
-          viewIndices.add(index(
-            accessor.bufferView,
-            bufferViews,
-            label,
-            `${accessorPath}.bufferView`,
-          ));
-        }
-        if (accessor.sparse !== undefined) {
-          const sparse = object(accessor.sparse, label, `${accessorPath}.sparse`);
-          const sparseIndices = object(
-            sparse.indices,
-            label,
-            `${accessorPath}.sparse.indices`,
-          );
-          const sparseValues = object(
-            sparse.values,
-            label,
-            `${accessorPath}.sparse.values`,
-          );
-          viewIndices.add(index(
-            sparseIndices.bufferView,
-            bufferViews,
-            label,
-            `${accessorPath}.sparse.indices.bufferView`,
-          ));
-          viewIndices.add(index(
-            sparseValues.bufferView,
-            bufferViews,
-            label,
-            `${accessorPath}.sparse.values.bufferView`,
-          ));
-        }
-        return [accessorIndex, accessor] as const;
-      });
-    const viewDeclarations = [...viewIndices].sort((left, right) => left - right)
-      .map((viewIndex) => [viewIndex, bufferViews[viewIndex]] as const);
-    const extensions = primitive.extensions === undefined
+    extensions: JsonObject,
+    path: string,
+  ) => {
+    const materialIndex = primitive.material === undefined
       ? undefined
-      : object(primitive.extensions, label, "geometry.extensions");
-    return JSON.stringify([
-      geometryResourceIdentity,
-      resourceVersion === undefined ? null : [typeof resourceVersion, resourceVersion],
-      preflight.usesMeshQuantization,
-      mode,
-      attributeDeclarations,
-      primitive.indices ?? null,
-      extensions?.KHR_draco_mesh_compression ?? null,
-      accessorDeclarations,
-      viewDeclarations,
-      usesTextureCoordinates1,
-    ]);
+      : index(primitive.material, materials, label, `${path}.material`);
+    const material = preparePrimitiveMaterial(materialIndex, path);
+    const materialLod = prepareMaterialLod(materialIndex);
+    let materialVariants: Map<string, CanonicalSurfaceMaterial> | undefined;
+    let materialVariantLods: Map<string, PreparedStaticMaterialLod> | undefined;
+    if (extensions.KHR_materials_variants !== undefined) {
+      const extensionPath = `${path}.extensions.KHR_materials_variants`;
+      const extension = object(
+        extensions.KHR_materials_variants,
+        label,
+        extensionPath,
+      );
+      const mappings = array(extension.mappings, label, `${extensionPath}.mappings`);
+      materialVariants = new Map();
+      for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex += 1) {
+        const mappingPath = `${extensionPath}.mappings[${mappingIndex}]`;
+        const mapping = object(mappings[mappingIndex], label, mappingPath);
+        const mappedMaterialIndex = index(
+          mapping.material,
+          materials,
+          label,
+          `${mappingPath}.material`,
+        );
+        const mappedMaterial = preparePrimitiveMaterial(mappedMaterialIndex, mappingPath);
+        const mappedMaterialLod = prepareMaterialLod(mappedMaterialIndex);
+        const mappedVariants = array(mapping.variants, label, `${mappingPath}.variants`);
+        if (mappedVariants.length === 0) {
+          fail(label, `${mappingPath}.variants`, "must not be empty");
+        }
+        for (let variantIndex = 0; variantIndex < mappedVariants.length; variantIndex += 1) {
+          const name = variantNames[index(
+            mappedVariants[variantIndex],
+            variantNames,
+            label,
+            `${mappingPath}.variants[${variantIndex}]`,
+          )]!;
+          if (materialVariants.has(name)) {
+            fail(
+              label,
+              `${mappingPath}.variants[${variantIndex}]`,
+              `duplicates variant ${JSON.stringify(name)}`,
+            );
+          }
+          materialVariants.set(name, mappedMaterial);
+          if (mappedMaterialLod !== undefined) {
+            materialVariantLods ??= new Map();
+            materialVariantLods.set(name, mappedMaterialLod);
+          }
+        }
+      }
+      if (materialVariants.size === 0) materialVariants = undefined;
+    }
+    return {
+      material,
+      materialLod,
+      materialVariants,
+      materialVariantLods,
+      usesTextureCoordinates0: materialSetUsesTextureCoordinates(
+        material,
+        materialLod,
+        materialVariants,
+        materialVariantLods,
+        0,
+      ),
+      usesTextureCoordinates1: materialSetUsesTextureCoordinates(
+        material,
+        materialLod,
+        materialVariants,
+        materialVariantLods,
+        1,
+      ),
+    };
   };
   const preparedMeshes: Array<readonly PreparedMeshPrimitive[] | undefined> = [];
   const prepareMesh = (meshIndex: number): readonly PreparedMeshPrimitive[] => {
@@ -544,6 +557,46 @@ const prepareStaticDocument = (
         ? {}
         : object(primitive.extensions, label, `${path}.extensions`);
       const hasDraco = extensions.KHR_draco_mesh_compression !== undefined;
+      const {
+        material,
+        materialLod,
+        materialVariants,
+        materialVariantLods,
+        usesTextureCoordinates0,
+        usesTextureCoordinates1,
+      } = preparePrimitiveMaterialSet(primitive, extensions, path);
+      const plannedTaskKey = geometryTaskKeys.get(`${meshIndex}:${primitiveIndex}`);
+      if (geometryTasks !== undefined && plannedTaskKey === undefined) {
+        fail(label, path, "is missing its planned geometry task");
+      }
+      const deferGeometry = plannedTaskKey !== undefined
+        && computeGeometryTaskKeys?.has(plannedTaskKey) === false;
+      if (deferGeometry) {
+        index(attributes.POSITION, accessors, label, `${path}.attributes.POSITION`);
+        if (hasDraco && mode !== 4) {
+          fail(label, `${path}.mode`, "Draco geometry must use TRIANGLES");
+        }
+        if (usesTextureCoordinates0 && attributes.TEXCOORD_0 === undefined) {
+          fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the material");
+        }
+        if (usesTextureCoordinates1 && attributes.TEXCOORD_1 === undefined) {
+          fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
+        }
+        return {
+          deferredGeometryKey: plannedTaskKey,
+          geometry: {
+            bounds: { max: [0, 0, 0], min: [0, 0, 0] },
+            indices: new Uint16Array(),
+            key: `shared:${plannedTaskKey}`,
+            positions: new Float32Array(),
+            sourceKey: plannedTaskKey,
+          },
+          material,
+          ...(materialLod === undefined ? {} : { materialLod }),
+          ...(materialVariants === undefined ? {} : { materialVariants }),
+          ...(materialVariantLods === undefined ? {} : { materialVariantLods }),
+        };
+      }
       const decoded = hasDraco
         ? decodeDraco?.(primitive, path)
           ?? fail(label, `${path}.extensions.KHR_draco_mesh_compression`, "is unsupported")
@@ -604,70 +657,6 @@ const prepareStaticDocument = (
       if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
         fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
       }
-      const materialIndex = primitive.material === undefined
-        ? undefined
-        : index(primitive.material, materials, label, `${path}.material`);
-      const material = preparePrimitiveMaterial(materialIndex, path);
-      const materialLod = prepareMaterialLod(materialIndex);
-      let materialVariants: Map<string, CanonicalSurfaceMaterial> | undefined;
-      let materialVariantLods: Map<string, PreparedStaticMaterialLod> | undefined;
-      if (extensions.KHR_materials_variants !== undefined) {
-        const extensionPath = `${path}.extensions.KHR_materials_variants`;
-        const extension = object(
-          extensions.KHR_materials_variants,
-          label,
-          extensionPath,
-        );
-        const mappings = array(extension.mappings, label, `${extensionPath}.mappings`);
-        materialVariants = new Map();
-        for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex += 1) {
-          const mappingPath = `${extensionPath}.mappings[${mappingIndex}]`;
-          const mapping = object(mappings[mappingIndex], label, mappingPath);
-          const mappedMaterialIndex = index(
-            mapping.material,
-            materials,
-            label,
-            `${mappingPath}.material`,
-          );
-          const mappedMaterial = preparePrimitiveMaterial(mappedMaterialIndex, mappingPath);
-          const mappedMaterialLod = prepareMaterialLod(mappedMaterialIndex);
-          const mappedVariants = array(mapping.variants, label, `${mappingPath}.variants`);
-          if (mappedVariants.length === 0) {
-            fail(label, `${mappingPath}.variants`, "must not be empty");
-          }
-          for (let variantIndex = 0; variantIndex < mappedVariants.length; variantIndex += 1) {
-            const name = variantNames[index(
-              mappedVariants[variantIndex],
-              variantNames,
-              label,
-              `${mappingPath}.variants[${variantIndex}]`,
-            )]!;
-            if (materialVariants.has(name)) {
-              fail(label, `${mappingPath}.variants[${variantIndex}]`, `duplicates variant ${JSON.stringify(name)}`);
-            }
-            materialVariants.set(name, mappedMaterial);
-            if (mappedMaterialLod !== undefined) {
-              materialVariantLods ??= new Map();
-              materialVariantLods.set(name, mappedMaterialLod);
-            }
-          }
-        }
-        if (materialVariants.size === 0) materialVariants = undefined;
-      }
-      const usesTextureCoordinates0 = materialSetUsesTextureCoordinates(
-        material,
-        materialLod,
-        materialVariants,
-        materialVariantLods,
-        0,
-      );
-      const usesTextureCoordinates1 = materialSetUsesTextureCoordinates(
-        material,
-        materialLod,
-        materialVariants,
-        materialVariantLods,
-        1,
-      );
       const decodedTextureCoordinates1 = usesTextureCoordinates1
         ? decoded?.attribute("TEXCOORD_1")
         : undefined;
@@ -732,12 +721,7 @@ const prepareStaticDocument = (
       if (usesTextureCoordinates1 && textureCoordinates1 === undefined) {
         fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
       }
-      const sourceKey = geometryCandidateKey(
-        primitive,
-        attributes,
-        mode,
-        usesTextureCoordinates1,
-      );
+      const sourceKey = plannedTaskKey;
       return {
         geometry: {
           bounds,
@@ -1081,7 +1065,8 @@ const prepareDocumentWithCodecs = async (
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
   validatedDeclarations?: StaticGltfDeclarations,
-  geometryResourceIdentity?: string,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
 ): Promise<PreparedStaticGltf> => {
   const preflight = preflightStaticDocument(
     document,
@@ -1094,6 +1079,7 @@ const prepareDocumentWithCodecs = async (
     etc2Available,
     validatedDeclarations,
   );
+  const geometryTaskKeys = staticGeometryTaskKeyMap(geometryTasks);
   const decodeDraco = preflight.usesDraco
     ? await import("./draco").then((module) =>
       module.prepareSelectedStaticDracoDecoder(
@@ -1102,6 +1088,12 @@ const prepareDocumentWithCodecs = async (
         label,
         executeDracoTasks,
         sceneIndex,
+        geometryTasks === undefined
+          ? undefined
+          : (meshIndex, primitiveIndex) => {
+            const key = geometryTaskKeys.get(`${meshIndex}:${primitiveIndex}`);
+            return key === undefined || computeGeometryTaskKeys?.has(key) !== false;
+          },
       ))
     : undefined;
   return prepareStaticDocument(
@@ -1115,7 +1107,8 @@ const prepareDocumentWithCodecs = async (
     decodeDraco,
     sceneIndex,
     resourceVersion,
-    geometryResourceIdentity,
+    geometryTasks,
+    computeGeometryTaskKeys,
   );
 };
 
@@ -1130,6 +1123,8 @@ export const prepareStaticGltfSource = async (
   etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
 ): Promise<PreparedStaticGltf> => {
   const canonical = await readCanonicalStaticGltfSource(
     bytes,
@@ -1138,6 +1133,9 @@ export const prepareStaticGltfSource = async (
     read,
     sceneIndex,
     etc2Available,
+    resourceVersion,
+    geometryTasks,
+    computeGeometryTaskKeys,
   );
   return prepareDocumentWithCodecs(
     canonical.document,
@@ -1151,6 +1149,7 @@ export const prepareStaticGltfSource = async (
     sceneIndex,
     resourceVersion,
     canonical.declarations,
-    canonical.geometryResourceIdentity,
+    geometryTasks ?? canonical.geometryTasks,
+    computeGeometryTaskKeys,
   );
 };

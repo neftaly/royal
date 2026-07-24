@@ -6,7 +6,6 @@ import {
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { createAvifHeader } from "./support/avif-header";
 import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
-import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 
 const decodeTextureWithBrowser = createBrowserTextureDecoder();
 
@@ -37,7 +36,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => new Uint8Array([137, 80, 78, 71]));
     vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(4, true, false, undefined, readGltfTexture);
+    const decode = createBrowserTextureDecoder(4, true, false, readGltfTexture);
 
     const decoded = await decode({
       gltfResource: true,
@@ -68,7 +67,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => createAvifHeader(4, 4));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
 
-    await createBrowserTextureDecoder(4, true, false, undefined, readGltfTexture)({
+    await createBrowserTextureDecoder(4, true, false, readGltfTexture)({
       gltfResource: true,
       kind: "asset",
       mimeType: "image/avif",
@@ -689,58 +688,4 @@ describe("browser texture decode shell", () => {
     expect(createImageBitmap).toHaveBeenCalledOnce();
   });
 
-  it("releases shared preparation slots after transport while decode remains bounded", async () => {
-    const releases: Array<(bitmap: ImageBitmap) => void> = [];
-    vi.stubGlobal("createImageBitmap", vi.fn(() => new Promise<ImageBitmap>((resolve) => {
-      releases.push(resolve);
-    })));
-    const fetch = vi.fn(async () => ({
-      blob: async () => new Blob([new Uint8Array([1])]),
-      ok: true,
-      status: 200,
-    }));
-    vi.stubGlobal("fetch", fetch);
-    let activeTransportJobs = 0;
-    const scheduledTransport = vi.fn();
-    const scheduleTransport: AsyncPreparationScheduler = async <Value>(
-      _signal: AbortSignal,
-      work: () => Promise<Value>,
-    ): Promise<Value> => {
-      scheduledTransport();
-      activeTransportJobs += 1;
-      try {
-        return await work();
-      } finally {
-        activeTransportJobs -= 1;
-      }
-    };
-    const decode = createBrowserTextureDecoder(1, true, false, scheduleTransport);
-    const signal = new AbortController().signal;
-    const requests = ["/a.avif", "/b.avif"].map((src) => decode({
-      kind: "asset",
-      src,
-    }, signal));
-
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(releases).toHaveLength(1));
-    expect(scheduledTransport).toHaveBeenCalledTimes(2);
-    expect(activeTransportJobs).toBe(0);
-
-    releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
-    await waitFor(() => expect(releases).toHaveLength(1));
-    releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
-    await expect(Promise.all(requests)).resolves.toHaveLength(2);
-
-    const embedded = decode({
-      bytes: new Uint8Array([1]),
-      contentKey: "embedded",
-      kind: "embedded-asset",
-      label: "embedded",
-      mimeType: "image/avif",
-    }, signal);
-    await waitFor(() => expect(releases).toHaveLength(1));
-    expect(scheduledTransport).toHaveBeenCalledTimes(2);
-    releases.shift()!({ close: vi.fn(), height: 1, width: 1 } as unknown as ImageBitmap);
-    await expect(embedded).resolves.toMatchObject({ height: 1, width: 1 });
-  });
 });

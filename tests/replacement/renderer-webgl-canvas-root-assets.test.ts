@@ -206,21 +206,24 @@ describe("canvas root asset publication", () => {
 
   it("shares exact external-buffer geometry across independent material roots", async () => {
     const documents = new Map<string, Uint8Array>();
-    for (const [src, color] of [
-      ["/models/red.gltf", [1, 0, 0, 1]],
-      ["/models/blue.gltf", [0, 0, 1, 1]],
+    for (const [src, color, x] of [
+      ["/models/red.gltf", [1, 0, 0, 1], 1],
+      ["/models/blue.gltf", [0, 0, 1, 1], 5],
     ] as const) {
       const document = staticTriangleDocument();
       document.buffers = [{ byteLength: 42, uri: "shared.bin" }];
       const materials = document.materials as Array<Record<string, unknown>>;
       materials[0]!.pbrMetallicRoughness = { baseColorFactor: color };
+      const nodes = document.nodes as Array<Record<string, unknown>>;
+      nodes[1]!.translation = [x, 2, 0];
       documents.set(src, new TextEncoder().encode(JSON.stringify(document)));
     }
     const first = gltf("/models/red.gltf");
     const second = gltf("/models/blue.gltf");
+    const readGltfResource = vi.fn(async () => staticTriangleBinary());
     const { flushScheduledFrames, root } = harness({
       readGltf: async (asset) => documents.get(asset.src)!,
-      readGltfResource: async () => staticTriangleBinary(),
+      readGltfResource,
     });
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
@@ -232,14 +235,29 @@ describe("canvas root asset publication", () => {
       expect(root.getGltfAssetSnapshot(second.asset).status).toBe("ready");
     });
     const geometries: unknown[] = [];
-    root.visitGltfAssetGeometry(first.asset, (batch) => geometries.push(batch.geometry));
-    root.visitGltfAssetGeometry(second.asset, (batch) => geometries.push(batch.geometry));
+    const transforms: number[] = [];
+    root.visitGltfAssetGeometry(first.asset, (batch) => {
+      geometries.push(batch.geometry);
+      transforms.push(batch.transforms[12]!);
+    });
+    root.visitGltfAssetGeometry(second.asset, (batch) => {
+      geometries.push(batch.geometry);
+      transforms.push(batch.transforms[12]!);
+    });
 
     expect(geometries[1]).toBe(geometries[0]);
+    expect(transforms).toEqual([2, 6]);
+    expect(readGltfResource).toHaveBeenCalledOnce();
     expect(root.getSnapshot().resources.gltfSharedGeometry).toEqual({
+      pendingPreparationTasks: 0,
+      preparedTaskBytes: 42,
+      preparationTaskClaims: 2,
+      preparedTasks: 1,
       primitiveClaims: 2,
       retainedBytes: 42,
       reusedClaims: 1,
+      reusedPreparationClaims: 1,
+      taskProducerPreparationDurationMs: expect.any(Number),
       uniqueGeometries: 1,
     });
     flushScheduledFrames();
@@ -250,9 +268,15 @@ describe("canvas root asset publication", () => {
     }));
     flushScheduledFrames();
     expect(root.getSnapshot().resources.gltfSharedGeometry).toEqual({
+      pendingPreparationTasks: 0,
+      preparedTaskBytes: 0,
+      preparationTaskClaims: 0,
+      preparedTasks: 0,
       primitiveClaims: 0,
       retainedBytes: 0,
       reusedClaims: 0,
+      reusedPreparationClaims: 0,
+      taskProducerPreparationDurationMs: 0,
       uniqueGeometries: 0,
     });
     root.dispose();
@@ -590,6 +614,51 @@ describe("canvas root asset publication", () => {
       queuedForegroundJobs: 0,
       queuedJobs: 0,
     });
+  });
+
+  it("starts built-in texture transport while shared scene-work slots are occupied", async () => {
+    let finishEnvironment: ((source: ArrayBuffer) => void) | undefined;
+    const environmentRead = new Promise<ArrayBuffer>((resolve) => {
+      finishEnvironment = resolve;
+    });
+    const fetch = vi.fn(async () => new Response(new Uint8Array([0])));
+    const bitmap = {
+      close: vi.fn(),
+      height: 2,
+      width: 2,
+    } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    vi.stubGlobal("fetch", fetch);
+    const environment = prefilteredEnvironment({ src: "/environment.ktx" });
+    const texture = imageTexture("/texture.png");
+    const { root } = harness({
+      preparePrefilteredEnvironment: async (bytes) => parseRoyalEnvironmentKtx1(bytes),
+      readPrefilteredEnvironment: async () => environmentRead,
+      asyncPreparationJobLimit: 1,
+    });
+    try {
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        environment,
+        nodes: [mesh({
+          geometry: planeGeometry(1),
+          material: standardMaterial({ texture }),
+        })],
+      }));
+
+      expect(root.getSnapshot().resources.asyncPreparation.activeJobs).toBe(1);
+      await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      expect(root.getSnapshot().resources.asyncPreparation).toMatchObject({
+        activeJobs: 1,
+        queuedDetailJobs: 0,
+      });
+      await waitFor(() => expect(root.getTextureAssetSnapshot(texture).status).toBe("ready"));
+      finishEnvironment?.(environmentKtx1Fixture(2).source);
+      await waitFor(() => expect(root.getSnapshot().resources.asyncPreparation.activeJobs).toBe(0));
+    } finally {
+      root.dispose();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("keeps texture publication incremental after a large shared-geometry scene", async () => {

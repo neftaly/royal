@@ -1,8 +1,12 @@
 # Proposal: source-derived geometry identity and shared preparation
 
-Status: accepted as an architecture target. Exact post-preparation CPU
-retention and GPU geometry interning are implemented as an incremental slice;
-shared canonical worker preparation remains open.
+Status: implemented for eligible external JSON roots with pre-read task
+identity, claim-aware producer/join ownership, skipped borrower buffer demand,
+and concurrent independent root composition. Large JSON/GLB roots retain exact
+post-transfer interning. Probability's complete-bundle follow-up shows a
+17.15-second median final changed frame versus 20.25 seconds on the clean
+baseline. Royal's direct no-gate reproduction then isolated redundant texture
+transport admission and reduced the final-pixel median to 14.52 seconds.
 
 ## Product trace
 
@@ -121,10 +125,9 @@ The accepted implementation boundary is a two-stage preparation protocol:
 
 That split must also separate buffer demand for geometry, embedded images, and
 instancing; support cancellation while another root retains a geometry claim;
-and transfer new geometry only once. It belongs with the planned replacement
-architecture rather than a transitional cache. GPU-only exact interning remains
-a valid incremental slice but is not reported as implementation of the worker
-target.
+and transfer new geometry only once. It is now the primary path for eligible
+external JSON roots. Exact post-transfer interning remains a conservative
+fallback, but is not reported as implementation of the worker target.
 
 ## Incremental retained-geometry decision
 
@@ -141,11 +144,44 @@ retain 42 canonical CPU bytes and perform one 39-byte packed GPU upload.
 Accessor/version/declaration differences produce distinct candidates, while an
 equal candidate with different output bytes does not alias.
 
-This is intentionally partial. Both roots still run the whole-asset worker and
-produce duplicate transferred arrays before one result becomes collectible.
-`resources.gltfSharedGeometry` reports only retained canonical geometry, not
-avoided worker tasks or worker-seconds. Acceptance item 1 therefore remains
-open until the two-stage protocol executes one canonical geometry task.
+This incremental interner is now the fallback rather than the primary shared
+path. Small external JSON roots are parsed before worker admission into exact
+geometry task identities. One producer performs each geometry buffer demand,
+codec/accessor conversion, canonical allocation, and transfer. Joiners send
+their workers explicit borrowed task placeholders immediately; those workers
+prepare root-specific material, node, instance, light, texture, and status state
+concurrently with the producer. Only main-side placeholder resolution waits.
+Each joiner temporarily retains its at-most-256-KiB root bytes so a producer
+failure can retry ordinary preparation after the first worker transfer. A
+root-owned 16 MiB retry budget bounds aggregate copies; pressure falls back to
+waiting with the staged original intact. The main shell resolves successful
+placeholders to root-owned canonical geometry and recomputes the root's bounds
+before publication.
+
+Task ownership is continuous and claim-bound. Producer cancellation or failure
+rejects joiners without poisoning them; each surviving root retries ordinary
+preparation from its bounded retry storage. A cancelled joiner releases that
+storage without waiting for the producer. Worker messages carry cloneable plans
+and compute-key arrays, while deferred geometry contributes no transfer buffer.
+
+Focused fixtures now prove two independent material/transform roots over one
+external buffer perform one resource read, one prepared task, one 42-byte
+canonical geometry retention, and one 39-byte packed GPU upload. Diagnostics
+report task claims, reused claims, pending/prepared tasks, prepared task bytes,
+and producer preparation duration. The Probability follow-up supports a product
+improvement but does not isolate or prove the modeled 2.70-to-1.11-worker-second
+lower bound; the 16.47--23.85-second range remains material.
+
+The task owner and placeholder resolver load with early glTF root discovery
+rather than Royal's initial renderer graph. On-claim module preload adds only
+the small promise shell to the initial graph. The settled bundle fixture
+measures 121,110 initial, 61,802 incremental, 122,040 glTF-initial, 143,250
+lazy, 56,607 worker, 205,052 Royal-only, and 264,360 deployed gzip bytes. The
+seven affected rounded ceilings are 121,150, 61,850, 122,100, 143,300, 56,650,
+205,100, and 264,450 bytes respectively.
+
+The source-map-bearing renderer package measures 571,480 bytes after this
+slice, so its packed-consumer ceiling moves narrowly from 548 to 560 KiB.
 
 ## Adversarial review
 
@@ -155,8 +191,9 @@ open until the two-stage protocol executes one canonical geometry task.
   codec declarations can interpret the same bytes differently.
 - Do not merge whole prepared assets. The measured roots intentionally differ
   in materials and textures.
-- Do not claim success from fewer GPU uploads alone. The dominant remaining
-  Settlers tail is repeated worker preparation.
+- Do not claim success from fewer GPU uploads alone. Direct final-frame,
+  resource-timeline and CPU-profile evidence must agree on the affected
+  lifecycle boundary.
 - Do not raise worker concurrency to hide duplicate work. The trace already
   uses all eight reported logical processors.
 - Do not regress first geometry while waiting to discover a complete batch.

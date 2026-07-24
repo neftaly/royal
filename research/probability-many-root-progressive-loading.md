@@ -1,8 +1,8 @@
 # Proposal: make many-root progressive loading byte- and work-bound
 
 Status: root transport, zero-upload admission, early external-image discovery,
-and exact retained-geometry interning are implemented. Shared canonical worker
-preparation and an end-to-end Probability remeasurement remain open.
+and source-derived shared geometry preparation are implemented. An end-to-end
+Probability remeasurement remains open.
 
 ## Workload
 
@@ -133,15 +133,36 @@ Royal now parses selected external image demand from small JSON root documents
 before their geometry resource reads and worker lowering settle. It sends those
 claims through the existing bounded texture owner in base-color-first order,
 using the same final canonical identities; it does not raise transport/decode
-concurrency or decode never-visible non-visual roots. The staged root copy is
-limited to 256 KiB per root under the existing 64-source reservation ceiling.
-Embedded images remain in canonical buffer preparation.
+concurrency or decode never-visible non-visual roots. Discovery reuses the
+staged root storage before worker handoff. Producers remain zero-copy; joiners
+retain one temporary retry copy so root-specific lowering can run concurrently
+with the producer and still recover from producer failure. Parsing and retry
+copies remain limited to roots no larger than 256 KiB under the existing
+64-source reservation ceiling. A separate root-owned 16 MiB retry budget keeps
+those copies bounded after source handoff; at pressure, later joiners retain
+their staged original and wait. Embedded images remain in canonical buffer
+preparation.
 
-Royal also interns byte-exact canonical geometry after worker transfer, which
-removes duplicate retained CPU arrays and GPU uploads for the measured shared
-roots. It does not remove their duplicate worker computation. Neither change
-is reported as a product-time win until Probability repeats the requested cold
-trace and identifies the final content-changing presentation.
+Royal now plans exact geometry identity from each small external JSON root
+before buffer demand. One producer performs each shared task; joiners omit its
+geometry ranges, accessor conversion, canonical arrays, worker transfer, and
+GPU admission while retaining root-specific materials and transforms.
+Post-transfer byte-exact interning remains the fallback for roots outside that
+profile. The initial implementation did not claim a product-time win before
+Probability repeated the cold final-presentation trace.
+
+The later complete-bundle Probability runs report a 17.15-second median final
+changed frame versus 20.25 seconds on clean `609052de`, with a
+16.47--23.85-second range and preserved interaction behavior. An adjacent
+profile places the last 15 AVIF request starts between 15.32 and 18.93 seconds,
+while forced app heap is about 12.1 MiB, sampled GC totals about 297 ms, and the
+largest attributable Probability function totals about 204 ms. This rejects a
+GC/app-CPU explanation for the remaining tail. It does not yet distinguish
+late texture claim discovery from known claims queued behind bounded
+source/transport/decode admission, so do not raise concurrency from request
+timing alone. Timing-dependent 105--107 total requests for 104 unique URLs also
+require URI/range/version/task correlation before changing settled-byte
+retention.
 
 ## Adversarial review
 

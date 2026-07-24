@@ -102,4 +102,39 @@ describe("prepared static glTF transfer ownership", () => {
     };
     expect(preparedStaticGltfTransferBuffers(prepared)).toEqual([]);
   });
+
+  it("transfers root-specific instances but no deferred shared geometry", () => {
+    const instanceModels = new Float32Array(16);
+    const prepared: PreparedStaticGltf = {
+      alphaMaskTextureAssets: [],
+      bounds: { max: [0, 0, 0], min: [0, 0, 0] },
+      lights: [],
+      nodeCount: 1,
+      primitives: [{
+        deferredGeometryKey: "shared-task",
+        geometry: {
+          bounds: { max: [0, 0, 0], min: [0, 0, 0] },
+          indices: new Uint16Array(),
+          key: "shared:shared-task",
+          positions: new Float32Array(),
+          sourceKey: "shared-task",
+        },
+        instanceBatch: { handedness: 1, key: "instances", localModels: instanceModels },
+        localModel: matrix(),
+        material: {
+          baseColor: [1, 1, 1, 1],
+          kind: "unlit",
+          requiresTextureCoordinates: false,
+        },
+      }],
+      sceneIndex: 0,
+      scenes: [{ index: 0 }],
+      textureAssets: [],
+      variantNames: [],
+    };
+
+    expect(preparedStaticGltfTransferBuffers(prepared)).toEqual([
+      instanceModels.buffer,
+    ]);
+  });
 });

@@ -1,10 +1,10 @@
 {
-  "royalInitialGzipBytes": 121000,
-  "royalIncrementalGzipBytes": 61700,
-  "royalGltfInitialGzipBytes": 121950,
+  "royalInitialGzipBytes": 121150,
+  "royalIncrementalGzipBytes": 61850,
+  "royalGltfInitialGzipBytes": 122100,
   "royalGltfIncrementalGzipBytes": 1250,
-  "royalLazyGzipBytes": 141300,
-  "royalTotalIncrementalGzipBytes": 202500,
-  "royalTotalGzipBytes": 261800,
-  "royalWorkerGzipBytes": 56300
+  "royalLazyGzipBytes": 143300,
+  "royalTotalIncrementalGzipBytes": 205100,
+  "royalTotalGzipBytes": 264450,
+  "royalWorkerGzipBytes": 56650
 }

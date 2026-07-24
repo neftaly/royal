@@ -122,7 +122,6 @@ import type { PreparedRoyalEnvironment } from "../environment/royal-environment-
 import {
   AsyncPreparationOwner,
   DEFAULT_ASYNC_PREPARATION_JOB_LIMIT,
-  type AsyncPreparationScheduler,
   type AsyncPreparationSnapshot,
 } from "../resource/async-preparation-owner";
 import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
@@ -321,7 +320,6 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
   retainSvgSource: boolean,
-  scheduleTransport: AsyncPreparationScheduler,
   readGltfTexture?: NonNullable<CanvasRootPlatform["readGltfTextureResource"]>,
 ): NonNullable<CanvasRootPlatform["decodeTexture"]> => {
   let decoder: Promise<NonNullable<CanvasRootPlatform["decodeTexture"]>> | undefined;
@@ -331,7 +329,6 @@ const lazyBrowserTextureDecoder = (
         4,
         etc2Available,
         retainSvgSource,
-        scheduleTransport,
         readGltfTexture,
       ));
     return (await decoder)(asset, signal, maxStorageBytes, retainAlpha);
@@ -343,6 +340,7 @@ const lazyBrowserGltfPreparer = (
   workerLimit: number,
 ): Readonly<{
   dispose(): void;
+  preload(): void;
   prepare: NonNullable<GltfAssetOwnerPlatform["prepare"]>;
 }> => {
   let ownerPromise: Promise<
@@ -362,6 +360,9 @@ const lazyBrowserGltfPreparer = (
         );
       }
     },
+    preload: () => {
+      void owner().catch(() => undefined);
+    },
     prepare: async (
       bytes,
       contentKey,
@@ -371,6 +372,8 @@ const lazyBrowserGltfPreparer = (
       readResource,
       sceneIndex,
       resourceVersion,
+      geometryTasks,
+      computeGeometryTaskKeys,
     ) => (await owner()).prepare(
       bytes,
       contentKey,
@@ -381,6 +384,8 @@ const lazyBrowserGltfPreparer = (
       etc2Available,
       sceneIndex,
       resourceVersion,
+      geometryTasks,
+      computeGeometryTaskKeys,
     ),
   };
 };
@@ -645,6 +650,7 @@ export class CanvasRoot implements RendererRoot {
       onSourceReadsChanged: () => {
         if (!this.#disposed) this.#publish();
       },
+      preloadPreparation: this.#gltfPreparer.preload,
       prepare: this.#gltfPreparer.prepare,
       read: platform.readGltf ?? readGltfWithFetch,
       readResource: platform.readGltfResource
@@ -653,12 +659,12 @@ export class CanvasRoot implements RendererRoot {
         ? {}
         : { readResourceRanges: platform.readGltfResourceRanges }),
       schedule: this.#asyncPreparation.runForeground,
+      sharedGeometryPreparation: true,
     });
     this.#textureAssets = new TextureAssetOwner({
       decode: platform.decodeTexture ?? lazyBrowserTextureDecoder(
         this.#etc2Available,
         this.#automaticVirtualTexturing,
-        this.#asyncPreparation.run,
         platform.readGltfTextureResource,
       ),
       onAssetChanged: (key) => this.#queuePreparedTexture(key),

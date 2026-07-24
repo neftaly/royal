@@ -8,13 +8,16 @@ import {
   executeDracoTasksSerially,
 } from "./static-draco-executor";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
+import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
 
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
+  computeGeometryTaskKeys?: readonly string[];
   contentKey: string;
   etc2Available: boolean;
   kind: "prepare";
   label: string;
+  geometryTasks?: StaticGeometryTaskPlan;
   resourceVersion?: TextureVersion;
   sceneIndex?: number;
   sourceUri: string;
@@ -116,6 +119,10 @@ workerScope.addEventListener("message", (event) => {
     request.etc2Available,
     request.sceneIndex,
     request.resourceVersion,
+    request.geometryTasks,
+    request.computeGeometryTaskKeys === undefined
+      ? undefined
+      : new Set(request.computeGeometryTaskKeys),
   ).then((prepared) => {
     workerScope.postMessage(
       { kind: "ready", prepared },

@@ -23,11 +23,26 @@ export const canonicalizeGltfBuffers = (
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length === 0) fail(label, "buffers", "must not be empty");
   if (sources.length !== buffers.length) fail(label, "buffers", "source count does not match");
+  const sourceViews = optionalArray(document.bufferViews, label, "bufferViews");
+  const selectedBuffers = selectedViews === undefined
+    ? undefined
+    : new Set([...selectedViews].map((viewIndex) => {
+      const path = `bufferViews[${viewIndex}]`;
+      return index(
+        object(sourceViews[viewIndex], label, path).buffer,
+        buffers,
+        label,
+        `${path}.buffer`,
+      );
+    }));
   const lengths = buffers.map((value, bufferIndex) => {
     const path = `buffers[${bufferIndex}]`;
     const buffer = object(value, label, path);
     const byteLength = nonNegativeInteger(buffer.byteLength, label, `${path}.byteLength`);
-    if (sources[bufferIndex]!.byteLength !== byteLength) {
+    if (
+      (selectedBuffers === undefined || selectedBuffers.has(bufferIndex))
+      && sources[bufferIndex]!.byteLength !== byteLength
+    ) {
       fail(label, `${path}.byteLength`, "does not match the loaded buffer");
     }
     return byteLength;
@@ -36,7 +51,6 @@ export const canonicalizeGltfBuffers = (
     return { binary: sources[0]!, document };
   }
 
-  const sourceViews = optionalArray(document.bufferViews, label, "bufferViews");
   if (selectedViews !== undefined) {
     const starts = new Map<number, number>();
     let total = 0;

@@ -22,14 +22,19 @@ import {
   validateStaticGltfDeclarations,
   type StaticGltfDeclarations,
 } from "./static-declarations";
+import {
+  planStaticGltfGeometryTasks,
+  staticGeometryTaskKeyMap,
+  type StaticGeometryTaskPlan,
+} from "./static-geometry-plan";
 
 export type CanonicalStaticGltfSource = Readonly<{
   binary: Uint8Array;
   container: "glb" | "gltf";
   declarations: StaticGltfDeclarations;
   document: JsonObject;
-  /** Resolved immutable external buffer identities, before canonical repacking. */
-  geometryResourceIdentity?: string;
+  /** Geometry identity derived before canonical buffer repacking. */
+  geometryTasks?: StaticGeometryTaskPlan;
 }>;
 
 export type StaticGltfResourceReader = (
@@ -59,25 +64,6 @@ export const parseStaticGltfDocument = (
 ): JsonObject => isGlb(bytes)
   ? object(parseGlb(bytes, label).document, label, "document")
   : parseJsonDocument(bytes, label);
-
-const externalGeometryResourceIdentity = (
-  buffers: readonly unknown[],
-  label: string,
-  sourceUri: string,
-): string | undefined => {
-  const identities: string[] = [];
-  for (let bufferIndex = 0; bufferIndex < buffers.length; bufferIndex += 1) {
-    const path = `buffers[${bufferIndex}]`;
-    const buffer = object(buffers[bufferIndex], label, path);
-    if (typeof buffer.uri !== "string" || buffer.uri.length === 0) return undefined;
-    const uri = resolveAssetUri(sourceUri, buffer.uri);
-    // Large inline payloads are already root bytes; retaining them in a key
-    // would duplicate content merely to seek a rare cross-root reuse.
-    if (uri.startsWith("data:")) return undefined;
-    identities.push(uri);
-  }
-  return JSON.stringify(identities);
-};
 
 const readExternalBuffer = async (
   value: unknown,
@@ -126,7 +112,17 @@ export const readCanonicalStaticGltfSource = async (
   read: StaticGltfResourceReader,
   sceneIndex?: number,
   etc2Available = true,
+  resourceVersion?: string | number,
+  geometryTasks?: StaticGeometryTaskPlan,
+  computeGeometryTaskKeys?: ReadonlySet<string>,
 ): Promise<CanonicalStaticGltfSource> => {
+  const geometryTaskKeys = staticGeometryTaskKeyMap(geometryTasks);
+  const preparePrimitive = geometryTasks === undefined
+    ? undefined
+    : (meshIndex: number, primitiveIndex: number): boolean => {
+      const key = geometryTaskKeys.get(`${meshIndex}:${primitiveIndex}`);
+      return key === undefined || computeGeometryTaskKeys?.has(key) !== false;
+    };
   if (isGlb(bytes)) {
     const parsed = parseGlb(bytes, label);
     const document = object(parsed.document, label, "document");
@@ -159,6 +155,7 @@ export const readCanonicalStaticGltfSource = async (
       label,
       sceneIndex,
       etc2Available,
+      preparePrimitive,
     );
     const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
     const meshoptRequired = optionalArray(
@@ -204,6 +201,7 @@ export const readCanonicalStaticGltfSource = async (
     label,
     sceneIndex,
     etc2Available,
+    preparePrimitive,
   );
   const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
   const meshoptRequired = optionalArray(
@@ -212,8 +210,12 @@ export const readCanonicalStaticGltfSource = async (
     "extensionsRequired",
   ).includes("EXT_meshopt_compression");
   const fallbackBuffers = meshoptFallbackBufferIndices(document, label);
-  const sources = await Promise.all(buffers.map((value, bufferIndex) =>
-    readExternalBuffer(
+  const sources = await Promise.all(buffers.map(async (value, bufferIndex) => {
+    const request = requests[bufferIndex];
+    if (request?.ranges.length === 0 && !fallbackBuffers.has(bufferIndex)) {
+      return new Uint8Array();
+    }
+    return await readExternalBuffer(
       value,
       bufferIndex,
       label,
@@ -221,18 +223,23 @@ export const readCanonicalStaticGltfSource = async (
       read,
       fallbackBuffers,
       meshoptRequired,
-      requests[bufferIndex],
-    )));
+      request,
+    );
+  }));
   await decodeSelectedMeshoptBufferViews(document, sources, selectedViews, label);
-  const geometryResourceIdentity = externalGeometryResourceIdentity(
-    buffers,
+  const canonicalGeometryTasks = geometryTasks ?? planStaticGltfGeometryTasks(
+    document,
     label,
     sourceUri,
+    sceneIndex,
+    resourceVersion,
   );
   return {
     ...canonicalizeGltfBuffers(document, sources, label, selectedViews),
     container: "gltf",
     declarations,
-    ...(geometryResourceIdentity === undefined ? {} : { geometryResourceIdentity }),
+    ...(canonicalGeometryTasks === undefined ? {} : {
+      geometryTasks: canonicalGeometryTasks,
+    }),
   };
 };

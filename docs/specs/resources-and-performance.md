@@ -43,13 +43,14 @@ depend on them. This keeps later phase separation and browser-specific work
 attribution from becoming breaking API changes.
 
 The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
-authority shared by glTF asset pipelines, ordinary-texture transport,
-authored-VT transport/decode, and prefiltered-environment work. Newly claimed scene,
-environment, and visible-VT work uses the foreground lane, so an existing image
-detail backlog cannot delay first usable geometry. Ordinary-texture transport uses
-the detail lane. FIFO order is preserved within each lane; after at most four
-foreground starts while detail remains queued, one detail job starts. Active
-work is never preempted.
+authority shared by glTF CPU pipelines, authored-VT transport/decode, and
+prefiltered-environment work. Newly claimed scene, environment, and visible-VT
+work uses the foreground lane, so an existing detail backlog cannot delay first
+usable geometry. Ordinary image transport is network wait, not CPU
+preparation, and uses its separate bounded browser queue. FIFO order is
+preserved within each shared-scheduler lane; after at most four foreground
+starts while detail remains queued, one detail job starts. Active work is never
+preempted.
 
 A non-visual glTF claim enters this same foreground preparation lane. It does
 not create a parallel preload cache, scheduler, or retention policy. Image
@@ -70,22 +71,32 @@ does not occupy scarce CPU preparation slots, while source memory cannot scale
 unboundedly with claims. `resources.gltfSourceReads` reports the exact queue,
 reservation, and completed-byte pressure.
 
-After a JSON glTF root read, Royal may stage one private copy of roots no larger
-than 256 KiB for lazy external-image discovery while the original bytes can be
-transferred to preparation. The 64-source reservation ceiling bounds this
-additional transient storage to 16 MiB. Binary GLB and larger JSON roots do not
-take this path. Released or superseded assets cannot publish discovered claims,
+After a JSON glTF root read, Royal parses roots no larger than 256 KiB once on
+the main side for lazy external-image discovery and source-derived geometry
+task planning before transferring the same bytes to preparation. Producers
+retain the zero-copy handoff. A root joining existing geometry work retains one
+temporary root retry copy so its independent material/scene skeleton can prepare
+immediately without losing failure isolation when the original storage is
+transferred. A dedicated root-owned 16 MiB retry budget bounds those copies; at
+pressure, later joiners keep their original staged source and wait instead.
+Binary GLB and larger JSON roots retain ordinary preparation and post-transfer
+exact interning. Released or superseded assets cannot publish planned claims,
 and never-visible non-visual roots still perform no image transport or decode.
-This bounded copy buys earlier request discovery; it is not a second asset
-loader, retained document cache, or higher decode-concurrency policy.
+This bounded cold parse is not a second asset loader, retained document cache,
+or higher decode-concurrency policy.
+The first glTF claim also begins the lazy root-planning and browser-preparation
+module imports alongside root transport. It does not create or compile a worker
+until ordinary preparation admission, and it adds nothing to apps which never
+claim glTF.
 
-An ordinary-texture
-transport claim releases its shared slot as soon as the encoded `Blob` is
-available; it does not retain that slot while waiting for bitmap decode. A
-queued claim can be aborted without starting, and active phase work retains its
-slot until that phase settles. Root diagnostics expose the current limit plus
-active, total queued, foreground queued, and detail queued counts without
-polling or waking rendering.
+Ordinary-texture transport does not consume a glTF CPU-preparation slot. It is
+already bounded by its root-local eight-request queue, while the texture owner
+bounds complete source lifecycles and the bitmap queue admits four decodes.
+This keeps known image requests moving while glTF workers are occupied without
+raising decode or decoded-handoff concurrency. A queued claim can be aborted
+without starting, and active phase work retains its stage slot until that phase
+settles. Root diagnostics expose CPU-preparation pressure separately from
+texture source and browser-stage timings without polling or waking rendering.
 
 Worker-worthy glTF jobs use a root-owned amortized worker set bounded by this
 same job ceiling. The set is not another scheduler: admitted jobs borrow an
@@ -139,10 +150,12 @@ front.
 
 Exact post-preparation glTF geometry interning is root-owned and claim-bound.
 `resources.gltfSharedGeometry` reports primitive claims, unique canonical
-geometries, reused claims, and retained canonical CPU bytes. Source-derived
-keys only narrow candidates; byte equality proves aliases. The last owning root
-releases the geometry, and the diagnostic does not imply that canonical worker
-computation was shared.
+geometries, reused claims, retained canonical CPU bytes, pending/prepared
+source-derived tasks, task bytes, joined task claims, and producer preparation
+time. Exact pre-read task identity lets joined roots avoid geometry buffer
+demand, conversion, transfer, and upload. Source-derived keys only narrow the
+fallback post-transfer interner, where byte equality still proves aliases. The
+last owning root releases both task and geometry.
 
 Virtual-texture publication retains both a four-page count ceiling and a
 separate 4 MiB byte ceiling. A transaction accounts the exact compressed block
@@ -403,8 +416,13 @@ source/version claim. The values are diagnostics, not scheduling inputs, and
 observing them does not poll or wake the frame loop.
 
 Ordinary image preparation has explicit nested bounds. At most sixteen complete
-source lifecycles hold active preparation slots, while browser transport and
-bitmap decode are separately capped at eight and four active stages. After
+source lifecycles hold active preparation slots, while its dedicated browser
+transport and bitmap decode queues are separately capped at eight and four
+active stages. Network transport is deliberately not admitted through the
+glTF/VT/environment CPU scheduler: coupling the already-bounded fetch queue to
+eight occupied glTF worker slots delayed a measured 46-root workload's first
+known AVIF request by several seconds without reducing decode or retained-byte
+pressure. After
 decode selects an exact browser-image or
 ETC2 representation, the retained upload source is charged by its actual bytes,
 including retained picking alpha, until every claimed GPU representation
