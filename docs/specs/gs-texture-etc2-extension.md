@@ -7,8 +7,9 @@ Vendor prefix owner: Garbo Succus / future registered successor
 ## Decision
 
 `GS_texture_etc2` lets a glTF texture prefer an offline-authored, directly
-uploadable ETC2/EAC image while retaining a core PNG or JPEG source for other
-glTF consumers. Target mobile GPUs commonly expose ETC2, while
+uploadable ETC2/EAC image while retaining either a core PNG/JPEG source or a
+required lower-priority AVIF/WebP source for other glTF consumers. Target mobile
+GPUs commonly expose ETC2, while
 `KHR_texture_basisu` specifies Basis Universal payloads and therefore requires
 a runtime transcoder. Royal deliberately ships no Basis or WASM transcoder.
 WebGL exposes ETC2 through `WEBGL_compressed_texture_etc`, including on WebGL2;
@@ -91,7 +92,7 @@ inside this extension.
 With a valid parent `texture.source`, the extension SHOULD be listed only in
 `extensionsUsed`. Royal enables and tests the context capability before cold
 glTF preparation, then selects exactly one source: ETC2 when available, or the
-ordinary alternate preference/core fallback when unavailable. No alternate is
+ordinary lower-priority portable fallback when unavailable. No alternate is
 fetched merely to make that choice. Once ETC2 is selected, a malformed,
 missing, or failed resource is a texture failure; Royal does not start a second
 fallback request after transport begins because doing so would duplicate
@@ -99,13 +100,16 @@ content identity, admission, cancellation, diagnostics, and memory policy.
 Applications that need network retry may change the asset source/version
 explicitly.
 
-Without a parent `texture.source`, the document MUST list `GS_texture_etc2` in
-both `extensionsUsed` and `extensionsRequired`. A consumer without support
-must fail the asset. Royal rejects this required declaration during cold
-preflight when the context capability is absent, before texture transport.
-Royal otherwise accepts the extension as required only at its documented
-texture placement and after validating the payload through the ordinary cold
-texture reader.
+Without a parent `texture.source`, the document MUST either list
+`GS_texture_etc2` in both `extensionsUsed` and `extensionsRequired`, or provide
+a lower-priority `EXT_texture_avif` or `EXT_texture_webp` source which is itself
+required. This keeps the document honest for a consumer which does not implement
+the optional ETC2 extension without duplicating one image as both extension and
+core source. A consumer missing any required fallback extension still fails the
+asset normally. Royal rejects required ETC2 during cold preflight when the
+context capability is absent, before texture transport. Royal otherwise accepts
+the extension as required only at its documented texture placement and after
+validating the payload through the ordinary cold texture reader.
 
 The extension, draft `EXT_texture_avif`, and `EXT_texture_webp` may occur on one
 texture. Royal's deterministic preference is ETC2, then AVIF, then WebP, then

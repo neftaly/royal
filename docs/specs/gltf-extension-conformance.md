@@ -79,20 +79,25 @@ transform math is generic.
   passes that capability into cold/worker preparation. When available,
   selection is ETC2, then AVIF, then WebP, then core; when absent, optional
   selection is AVIF, then WebP, then core and a required declaration fails
-  preflight. Only the selected source is fetched.
+  preflight. Optional ETC2 may omit the core source when its selected
+  lower-priority AVIF or WebP representation is itself required. Only the
+  selected source is fetched.
 - Draft `EXT_texture_avif` accepts the texture-level `{ source }` shape from
-  open Khronos glTF PR #2235. Optional use requires a core PNG/JPEG source;
-  required use may omit it. The selected external or embedded image must be
+  open Khronos glTF PR #2235. Optional use requires either a core PNG/JPEG
+  source or a present lower-priority WebP source which is itself required;
+  required use may omit both. The selected external or embedded image must be
   AVIF, enters the ordinary browser-image lifecycle, and does not retain a
   corrupt-data retry recipe. Royal's supported browser floor has AVIF decode;
   Royal therefore adds no user-agent branch or startup codec probe. Browsers
   below that floor cross the ordinary bounded decode-failure boundary.
 - `GS_texture_svg` accepts one self-contained, bounded SVG image source for
-  sRGB color slots. Optional use requires a core source and attempts SVG first;
-  on SVG transport, profile, or decode failure it selects ETC2 when supported,
-  then WebP, then core, and fetches only that fallback. Required use may omit the
-  core source and fails rather than silently changing representations. The
-  chosen representation lowers through one texture identity and lifecycle.
+  sRGB color slots. Optional use requires a core source or a present
+  lower-priority texture extension which is itself required, and attempts SVG
+  first; on SVG transport, profile, or decode failure it selects ETC2 when
+  supported, then AVIF, WebP, and core, and fetches only that fallback. Required
+  use may omit the fallback and fails rather than silently changing
+  representations. The chosen representation lowers through one texture
+  identity and lifecycle.
 - Meshopt validates the ratified buffer-view schema, lazily loads its decoder,
   requests only compressed ranges reachable from the selected scene, skips
   marked or implicit URI-less fallback buffers, and decodes into the ordinary

@@ -68,20 +68,23 @@ unaware consumers.
 
 ## Fallback and required-extension rules
 
-When the parent texture has a valid core `source` and the extension is not
-listed in `extensionsRequired`, an aware consumer SHOULD use the SVG source and
-MUST use the core source if SVG decode, validation, or capability fails. An
-unaware glTF consumer sees only the raster core source.
+When the extension is not listed in `extensionsRequired`, an aware consumer
+SHOULD use the SVG source and MUST have a portable raster fallback. That
+fallback may be the parent texture's valid core `source`, or a present
+lower-priority ETC2, AVIF, or WebP extension which is itself required. An
+unaware consumer uses the core source or follows its ordinary
+required-extension policy.
 
-When the parent texture omits core `source`, the asset MUST list
-`GS_texture_svg` in both `extensionsUsed` and `extensionsRequired`. An aware
-consumer that cannot use the SVG MUST fail the texture/asset according to its
-required-extension policy; it MUST NOT invent a raster fallback.
+When the parent texture omits core `source` and supplies no required raster
+extension fallback, the asset MUST list `GS_texture_svg` in both
+`extensionsUsed` and `extensionsRequired`. An aware consumer that cannot use the
+SVG MUST fail the texture/asset according to its required-extension policy; it
+MUST NOT invent a raster fallback.
 
-When every use has a core fallback, the extension SHOULD appear only in
+When every use has a portable fallback, the extension SHOULD appear only in
 `extensionsUsed`. Listing it in `extensionsRequired` is allowed but deliberately
 forfeits compatibility with unaware consumers; SVG failure is then an extension
-failure rather than permission to settle on the core source.
+failure rather than permission to settle on the fallback source.
 
 The fallback and SVG images are alternate representations of one texture. They
 inherit the parent texture's sampler, material-slot color interpretation, UV
@@ -160,17 +163,18 @@ sampler, and logical texture identity.
 
 Royal's policy is preferred-first: pending geometry uses the ordinary
 neutral texture presentation, SVG success publishes once, and optional SVG
-failure starts the core fallback through the same logical texture lifecycle.
+failure starts the selected portable fallback through the same logical texture
+lifecycle.
 It does not race both sources by default. This avoids a second simultaneous
 decode and makes fallback a recovery path rather than a permanent tax.
 
-When an optional texture also declares Royal ETC2 or WebP alternatives, Royal's
-deferred fallback preference is ETC2 when supported, then WebP, then the core
-source. Only that selected fallback is fetched after SVG fails.
+When an optional texture also declares ETC2, AVIF, or WebP alternatives,
+Royal's deferred fallback preference is ETC2 when supported, then AVIF, WebP,
+and the core source. Only that selected fallback is fetched after SVG fails.
 
 For an optional extension, SVG transport/decode/profile failure produces one
-bounded diagnostic and settles on the core fallback. It MUST NOT retry every
-frame. For a required extension, the same condition is a required texture
+bounded diagnostic and settles on the selected fallback. It MUST NOT retry
+every frame. For a required extension, the same condition is a required texture
 failure.
 
 Resource budgets and cancellation apply to whichever representation jobs a

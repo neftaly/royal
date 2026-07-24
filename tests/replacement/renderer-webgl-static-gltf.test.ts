@@ -956,7 +956,7 @@ describe("static glTF preparation core", () => {
       glbFromDocument(optionalWithoutFallback, parsed.binaryChunk!),
       "optional-avif-without-fallback",
     )).toThrow(
-      "textures[0].source: is required when optional EXT_texture_avif needs a core fallback",
+      "textures[0].source: or a required lower-priority texture extension source is required when EXT_texture_avif is optional",
     );
   });
 
@@ -976,6 +976,45 @@ describe("static glTF preparation core", () => {
     expect(prepared.textureAssets).toMatchObject([{
       kind: "asset",
       src: "/models/albedo.webp",
+    }]);
+
+    const optionalWithoutFallback = structuredClone(document);
+    optionalWithoutFallback.extensionsRequired = ["KHR_materials_unlit"];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(optionalWithoutFallback, parsed.binaryChunk!),
+      "optional-webp-without-fallback",
+    )).toThrow("textures[0].source: is required when EXT_texture_webp is optional");
+  });
+
+  it("accepts required WebP as the portable fallback for optional AVIF", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "avif-webp.gltf");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_webp"];
+    document.extensionsUsed = [
+      "KHR_materials_unlit",
+      "EXT_texture_avif",
+      "EXT_texture_webp",
+    ];
+    document.images = [
+      { mimeType: "image/avif", uri: "albedo.avif" },
+      { uri: "albedo.webp" },
+    ];
+    document.textures = [{
+      extensions: {
+        EXT_texture_avif: { source: 0 },
+        EXT_texture_webp: { source: 1 },
+      },
+    }];
+
+    expect(prepareStaticGlb(
+      glbFromDocument(document, parsed.binaryChunk!),
+      "avif-webp",
+      "avif-webp.gltf",
+      "/models/avif-webp.gltf",
+    ).textureAssets).toMatchObject([{
+      kind: "asset",
+      mimeType: "image/avif",
+      src: "/models/albedo.avif",
     }]);
   });
 
@@ -1034,6 +1073,95 @@ describe("static glTF preparation core", () => {
     )).toThrow("GS_texture_etc2");
   });
 
+  it("accepts required AVIF as the portable fallback for optional GS_texture_etc2", () => {
+    const parsed = parseGlb(staticTexturedTriangleGlb(), "etc2-avif.gltf");
+    const document = parsed.document as Record<string, unknown>;
+    document.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
+    document.extensionsUsed = [
+      "KHR_materials_unlit",
+      "EXT_texture_avif",
+      "GS_texture_etc2",
+    ];
+    document.images = [
+      { mimeType: "image/avif", uri: "albedo.avif" },
+      { mimeType: "image/ktx2", uri: "albedo.ktx2" },
+    ];
+    document.textures = [{
+      extensions: {
+        EXT_texture_avif: { source: 0 },
+        GS_texture_etc2: { source: 1 },
+      },
+    }];
+    const bytes = glbFromDocument(document, parsed.binaryChunk!);
+
+    expect(prepareStaticGlb(
+      bytes,
+      "etc2-avif-preferred",
+      "etc2-avif.gltf",
+      "/models/etc2-avif.gltf",
+    ).textureAssets).toMatchObject([{
+      kind: "asset",
+      sourceEncoding: "ktx2-etc2",
+      src: "/models/albedo.ktx2",
+    }]);
+    expect(prepareStaticGlb(
+      bytes,
+      "etc2-avif-fallback",
+      "etc2-avif.gltf",
+      "/models/etc2-avif.gltf",
+      false,
+    ).textureAssets).toMatchObject([{
+      kind: "asset",
+      mimeType: "image/avif",
+      src: "/models/albedo.avif",
+    }]);
+
+    const embedded = prepareStaticGlb(staticTexturedTriangleGlb(
+      new Uint8Array([1, 2, 3, 4]),
+      "unused",
+      (embeddedDocument) => {
+        embeddedDocument.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
+        embeddedDocument.extensionsUsed = [
+          "KHR_materials_unlit",
+          "EXT_texture_avif",
+          "GS_texture_etc2",
+        ];
+        embeddedDocument.images = [
+          { bufferView: 3, mimeType: "image/avif" },
+          { bufferView: 3, mimeType: "image/ktx2" },
+        ];
+        embeddedDocument.textures = [{
+          extensions: {
+            EXT_texture_avif: { source: 0 },
+            GS_texture_etc2: { source: 1 },
+          },
+        }];
+      },
+    ), "embedded-etc2-avif", "embedded-etc2-avif.glb", "embedded-etc2-avif.glb", false);
+    expect(embedded.textureAssets).toMatchObject([{
+      kind: "embedded-asset",
+      mimeType: "image/avif",
+    }]);
+
+    const optionalOnly = structuredClone(document);
+    optionalOnly.extensionsRequired = ["KHR_materials_unlit"];
+    expect(() => prepareStaticGlb(
+      glbFromDocument(optionalOnly, parsed.binaryChunk!),
+      "etc2-avif-optional-only",
+    )).toThrow(
+      "textures[0].source: or a required lower-priority texture extension source is required when GS_texture_etc2 is optional",
+    );
+
+    const malformedRequiredFallback = structuredClone(document);
+    const texture = (malformedRequiredFallback.textures as Array<JsonObject>)[0]!;
+    const extensions = texture.extensions as JsonObject;
+    extensions.EXT_texture_avif = { source: 99 };
+    expect(() => prepareStaticGlb(
+      glbFromDocument(malformedRequiredFallback, parsed.binaryChunk!),
+      "etc2-malformed-required-avif",
+    )).toThrow("textures[0].extensions.EXT_texture_avif.source");
+  });
+
   it("lowers embedded GS_texture_etc2 bytes into the ordinary cold recipe", () => {
     const ktx2 = createKtx2Etc2Fixture(152);
     const prepared = prepareStaticGlb(staticTexturedTriangleGlb(
@@ -1084,7 +1212,9 @@ describe("static glTF preparation core", () => {
     expect(() => prepareStaticGlb(
       glbFromDocument(missingFallbackDocument, missingFallback.binaryChunk!),
       "missing-etc2-fallback",
-    )).toThrow("textures[0].source: is required when optional GS_texture_etc2 needs a core fallback");
+    )).toThrow(
+      "textures[0].source: or a required lower-priority texture extension source is required when GS_texture_etc2 is optional",
+    );
   });
 
   it("lowers optional and required GS_texture_svg forms into one logical source recipe", () => {
@@ -1107,6 +1237,35 @@ describe("static glTF preparation core", () => {
     );
     expect(optional.textureAssets).toMatchObject([{
       fallback: { kind: "asset", src: "/models/fallback.png" },
+      kind: "asset",
+      sourceEncoding: "svg",
+      src: "/models/vector?id=albedo",
+    }]);
+
+    const avifFallbackDocument = structuredClone(optionalDocument);
+    avifFallbackDocument.extensionsRequired = ["KHR_materials_unlit", "EXT_texture_avif"];
+    avifFallbackDocument.extensionsUsed = [
+      "KHR_materials_unlit",
+      "EXT_texture_avif",
+      "GS_texture_svg",
+    ];
+    avifFallbackDocument.images = [
+      { mimeType: "image/avif", uri: "fallback.avif" },
+      { mimeType: "image/svg+xml", uri: "vector?id=albedo" },
+    ];
+    avifFallbackDocument.textures = [{
+      extensions: {
+        EXT_texture_avif: { source: 0 },
+        GS_texture_svg: { source: 1 },
+      },
+    }];
+    expect(prepareStaticGlb(
+      glbFromDocument(avifFallbackDocument, parsed.binaryChunk!),
+      "svg-required-avif-fallback",
+      "svg.gltf",
+      "/models/svg.gltf",
+    ).textureAssets).toMatchObject([{
+      fallback: { kind: "asset", mimeType: "image/avif", src: "/models/fallback.avif" },
       kind: "asset",
       sourceEncoding: "svg",
       src: "/models/vector?id=albedo",
@@ -1163,7 +1322,9 @@ describe("static glTF preparation core", () => {
     expect(() => prepareStaticGlb(
       glbFromDocument(optional, parsed.binaryChunk!),
       "missing-svg-fallback",
-    )).toThrow("textures[0].source: is required when optional GS_texture_svg needs a core raster fallback");
+    )).toThrow(
+      "textures[0].source: or a required lower-priority texture extension source is required when GS_texture_svg is optional",
+    );
 
     const wrongMime = structuredClone(optional);
     wrongMime.extensionsRequired = ["KHR_materials_unlit", "GS_texture_svg"];

@@ -19,6 +19,24 @@ export type StaticTextureImagePlan = Readonly<{
   texture: JsonObject;
 }>;
 
+const isRequiredTextureSource = (
+  extension: string,
+  imageSource: JsonObject | undefined,
+  required: ReadonlySet<unknown>,
+  images: readonly unknown[],
+  label: string,
+  texturePath: string,
+): boolean => {
+  if (imageSource === undefined || !required.has(extension)) return false;
+  index(
+    imageSource.source,
+    images,
+    label,
+    `${texturePath}.extensions.${extension}.source`,
+  );
+  return true;
+};
+
 /** Pure capability-aware image selection shared by transport demand and preparation. */
 export const createStaticTextureImagePlanner = (
   document: JsonObject,
@@ -50,11 +68,42 @@ export const createStaticTextureImagePlanner = (
     const avif = extensions.EXT_texture_avif === undefined
       ? undefined
       : object(extensions.EXT_texture_avif, label, `${texturePath}.extensions.EXT_texture_avif`);
-    if (etc2 !== undefined && texture.source === undefined && !required.has("GS_texture_etc2")) {
+    const hasRequiredAvif = isRequiredTextureSource(
+      "EXT_texture_avif",
+      avif,
+      required,
+      images,
+      label,
+      texturePath,
+    );
+    const hasRequiredEtc2 = isRequiredTextureSource(
+      "GS_texture_etc2",
+      etc2,
+      required,
+      images,
+      label,
+      texturePath,
+    );
+    const hasRequiredWebp = isRequiredTextureSource(
+      "EXT_texture_webp",
+      webp,
+      required,
+      images,
+      label,
+      texturePath,
+    );
+    const etc2HasPortableFallback = texture.source !== undefined
+      || hasRequiredAvif
+      || hasRequiredWebp;
+    if (
+      etc2 !== undefined
+      && !required.has("GS_texture_etc2")
+      && !etc2HasPortableFallback
+    ) {
       fail(
         label,
         `${texturePath}.source`,
-        "is required when optional GS_texture_etc2 needs a core fallback",
+        "or a required lower-priority texture extension source is required when GS_texture_etc2 is optional",
       );
     }
     if (svg !== undefined && colorSpace !== "srgb") {
@@ -64,22 +113,42 @@ export const createStaticTextureImagePlanner = (
         "is supported only for sRGB color texture slots",
       );
     }
-    if (svg !== undefined && texture.source === undefined && !required.has("GS_texture_svg")) {
+    const svgHasPortableFallback = texture.source !== undefined
+      || hasRequiredEtc2
+      || hasRequiredAvif
+      || hasRequiredWebp;
+    if (
+      svg !== undefined
+      && !required.has("GS_texture_svg")
+      && !svgHasPortableFallback
+    ) {
       fail(
         label,
         `${texturePath}.source`,
-        "is required when optional GS_texture_svg needs a core raster fallback",
+        "or a required lower-priority texture extension source is required when GS_texture_svg is optional",
       );
     }
     if (
       avif !== undefined
       && texture.source === undefined
       && !required.has("EXT_texture_avif")
+      && !hasRequiredWebp
     ) {
       fail(
         label,
         `${texturePath}.source`,
-        "is required when optional EXT_texture_avif needs a core fallback",
+        "or a required lower-priority texture extension source is required when EXT_texture_avif is optional",
+      );
+    }
+    if (
+      webp !== undefined
+      && texture.source === undefined
+      && !required.has("EXT_texture_webp")
+    ) {
+      fail(
+        label,
+        `${texturePath}.source`,
+        "is required when EXT_texture_webp is optional",
       );
     }
     const source = (
