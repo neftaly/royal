@@ -142,6 +142,11 @@ when committed atomically through `setScene(scene, claims)`, or when the
 incoming owner is installed before the outgoing one is removed.
 Image decode remains driven by visible material demand, so a textured
 non-visual asset may correctly remain `streaming` while its geometry is usable.
+If that root was already visible, an overlapping non-visual claim retains its
+already-demanded canonical texture identities across a temporary scene gap;
+roots that were never visible still perform no image work. This avoids repeated
+browser decode during React publication handoffs without adding a time-based
+cache.
 
 `visitGltfAssetGeometry(asset, visitor)` is an explicit cold path to the
 highest-detail selected-scene triangles Royal already prepared. It returns

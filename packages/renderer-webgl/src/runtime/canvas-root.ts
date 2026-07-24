@@ -512,8 +512,6 @@ export class CanvasRoot implements RendererRoot {
   #installingScene = false;
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
   readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
-  readonly #pendingGltfAlphaMaskTextureAssets: TextureSourceRef[] = [];
-  readonly #pendingGltfTextureAssets: TextureSourceRef[] = [];
   readonly #pendingTexturePublicationKeys = new Set<string>();
   readonly #onContextLost: (event: Event) => void;
   readonly #onContextRestored: () => void;
@@ -525,6 +523,7 @@ export class CanvasRoot implements RendererRoot {
   #renderObjectUpdateWorkspace: ReturnType<
     typeof createCanonicalRenderObjectUpdateWorkspace
   > | undefined;
+  readonly #retainedGltfTextureClaims = new Map<string, PreparedStaticGltf>();
   #revision = 0;
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
@@ -661,6 +660,7 @@ export class CanvasRoot implements RendererRoot {
       onAssetChanged: (key) => this.#queuePreparedTexture(key),
       onListenerError: (error) => platform.onListenerError(error),
       onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
+      ...(platform.now === undefined ? {} : { now: platform.now }),
     }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75));
     this.#context = new ContextLifecycleOwner(platform.onListenerError);
     this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
@@ -887,10 +887,10 @@ export class CanvasRoot implements RendererRoot {
       if (!claimsChanged) return;
       this.#gltfAssetClaims = claims;
       this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
+      if (this.#surfaceScene !== null) this.#reconcileTextureAssets(this.#surfaceScene);
       return;
     }
     this.#gltfSceneDirty = false;
-    this.#resetPendingGltfTextureAssets();
     this.#pendingTexturePublicationKeys.clear();
     const camera = this.#cameraSource.prepare(scene.camera);
     const prepared = prepareCanonicalSurfaceScene(
@@ -933,6 +933,7 @@ export class CanvasRoot implements RendererRoot {
     if (sameGltfAssetClaims(this.#gltfAssetClaims, claims)) return;
     this.#gltfAssetClaims = claims;
     this.#gltfAssets.reconcile(this.#surfaceScene?.gltfNodes ?? [], claims);
+    if (this.#surfaceScene !== null) this.#reconcileTextureAssets(this.#surfaceScene);
   }
 
   setSize(input: CanvasSizeInput): void {
@@ -1214,7 +1215,6 @@ export class CanvasRoot implements RendererRoot {
     } finally {
       this.#installingScene = false;
     }
-    this.#resetPendingGltfTextureAssets();
     if (!instanceOnly) {
       this.#progressivePresentation.reset();
       this.#surfaceResourcesPending = false;
@@ -1236,9 +1236,26 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #reconcileTextureAssets(scene: CanonicalSurfaceScene): void {
+    const retainedKeys = new Set<string>();
+    for (const node of scene.gltfNodes) {
+      const key = gltfAssetKey(node.asset);
+      retainedKeys.add(key);
+      const prepared = this.#gltfAssets.prepared(node.asset);
+      if (prepared !== undefined) this.#retainedGltfTextureClaims.set(key, prepared);
+    }
+    for (const asset of this.#gltfAssetClaims) retainedKeys.add(gltfAssetKey(asset));
+    for (const key of this.#retainedGltfTextureClaims.keys()) {
+      if (!retainedKeys.has(key)) this.#retainedGltfTextureClaims.delete(key);
+    }
+    const assets = [...scene.textureAssets];
+    const alphaMaskAssets = [...scene.alphaMaskTextureAssets];
+    for (const prepared of this.#retainedGltfTextureClaims.values()) {
+      assets.push(...prepared.textureAssets);
+      alphaMaskAssets.push(...prepared.alphaMaskTextureAssets);
+    }
     this.#reconcileTextureAssetClaims(
-      scene.textureAssets,
-      scene.alphaMaskTextureAssets,
+      assets,
+      alphaMaskAssets,
     );
   }
 
@@ -1262,10 +1279,7 @@ export class CanvasRoot implements RendererRoot {
   #reconcilePreparedGltfTextures(): void {
     const scene = this.#surfaceScene;
     if (scene === null) return;
-    this.#reconcileTextureAssetClaims(
-      [...scene.textureAssets, ...this.#pendingGltfTextureAssets],
-      [...scene.alphaMaskTextureAssets, ...this.#pendingGltfAlphaMaskTextureAssets],
-    );
+    this.#reconcileTextureAssets(scene);
   }
 
   #queuePreparedTexture(key: string): void {
@@ -1278,16 +1292,9 @@ export class CanvasRoot implements RendererRoot {
     if (this.#disposed) return;
     const prepared = this.#gltfAssets.prepared(asset);
     if (prepared === undefined) return;
-    this.#pendingGltfTextureAssets.push(...prepared.textureAssets);
-    this.#pendingGltfAlphaMaskTextureAssets.push(...prepared.alphaMaskTextureAssets);
     this.#reconcilePreparedGltfTextures();
     this.#gltfSceneDirty = true;
     this.#clock.invalidate();
-  }
-
-  #resetPendingGltfTextureAssets(): void {
-    this.#pendingGltfTextureAssets.length = 0;
-    this.#pendingGltfAlphaMaskTextureAssets.length = 0;
   }
 
   #flushPreparedGltfScene(presentInCurrentFrame = false): void {

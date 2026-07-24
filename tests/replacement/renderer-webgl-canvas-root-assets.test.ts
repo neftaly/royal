@@ -156,6 +156,52 @@ describe("canvas root asset publication", () => {
     root.dispose();
   });
 
+  it("retains previously visible texture claims across overlapping root-owned assets", async () => {
+    const decodeTexture = vi.fn(async () => ({
+      height: 8,
+      source: {} as ImageBitmap,
+      width: 8,
+    }));
+    const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
+      undefined,
+      "/shared-counter.avif",
+    ));
+    const { flushScheduledFrames, root } = harness({ decodeTexture, readGltf });
+    const first = gltfAsset("/first-counter.gltf");
+    const second = gltfAsset("/second-counter.gltf");
+    const empty = scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [],
+    });
+    const visible = (asset: typeof first) => scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [gltf(asset)],
+    });
+
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(empty, [first, second]);
+    await waitFor(() => {
+      expect(root.getGltfAssetSnapshot(first).status).toBe("streaming");
+      expect(root.getGltfAssetSnapshot(second).status).toBe("streaming");
+    });
+    expect(decodeTexture).not.toHaveBeenCalled();
+
+    root.setScene(visible(first), [first, second]);
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledOnce());
+    flushScheduledFrames();
+    root.setScene(empty, [first, second]);
+    root.setScene(visible(second), [first, second]);
+
+    await Promise.resolve();
+    expect(decodeTexture).toHaveBeenCalledOnce();
+    expect(readGltf).toHaveBeenCalledTimes(2);
+
+    root.setScene(empty, []);
+    expect(root.getTextureAssetSnapshot(imageTexture("/shared-counter.avif")))
+      .toEqual({ status: "idle" });
+    root.dispose();
+  });
+
   it("visits prepared selected-scene geometry without a second asset path", async () => {
     const model = gltf("/prepared-view.glb");
     const { root } = harness({ readGltf: async () => staticTriangleGlb() });

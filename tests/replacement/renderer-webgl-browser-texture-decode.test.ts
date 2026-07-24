@@ -39,7 +39,7 @@ describe("browser texture decode shell", () => {
     vi.stubGlobal("fetch", fetch);
     const decode = createBrowserTextureDecoder(4, true, false, undefined, readGltfTexture);
 
-    await decode({
+    const decoded = await decode({
       gltfResource: true,
       kind: "asset",
       src: "/shared.png",
@@ -54,6 +54,12 @@ describe("browser texture decode shell", () => {
     );
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith("/direct.png", expect.any(Object));
+    expect(decoded.timings).toEqual({
+      decodeDurationMs: expect.any(Number),
+      decodeQueueDurationMs: expect.any(Number),
+      transportDurationMs: expect.any(Number),
+      transportQueueDurationMs: expect.any(Number),
+    });
   });
 
   it("retains a selected glTF texture-extension MIME for opaque resource URLs", async () => {

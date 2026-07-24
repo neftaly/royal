@@ -104,7 +104,13 @@ const diagnosticLabel = (asset: TextureLeafSourceRef): string => {
   return `texture ${JSON.stringify(source)}`;
 };
 
-type TextureBlob = Readonly<{ blob: Blob; ktx2: boolean; svg: boolean }>;
+type TextureBlob = Readonly<{
+  blob: Blob;
+  ktx2: boolean;
+  svg: boolean;
+  transportDurationMs?: number;
+  transportQueueDurationMs?: number;
+}>;
 
 export type BrowserGltfTextureReader = (
   asset: GltfTextureAssetRef,
@@ -435,16 +441,32 @@ export const createBrowserTextureDecoder = (
   scheduleTransport?: AsyncPreparationScheduler,
   readGltfTexture?: BrowserGltfTextureReader,
 ): BrowserTextureDecoder => {
+  const now = (): number => performance.now();
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
   const transports = new BrowserWorkQueue(8);
-  const read = (
+  const read = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
-  ): Promise<TextureBlob> => asset.kind === "embedded-asset"
-    ? readTextureBlob(asset, signal, readGltfTexture)
-    : transports.run(signal, () => scheduleTransport === undefined
-      ? readTextureBlob(asset, signal, readGltfTexture)
-      : scheduleTransport(signal, () => readTextureBlob(asset, signal, readGltfTexture)));
+  ): Promise<TextureBlob> => {
+    if (asset.kind === "embedded-asset") return readTextureBlob(asset, signal, readGltfTexture);
+    const queuedAt = now();
+    let startedAt = queuedAt;
+    const result = await transports.run(signal, () => {
+      const execute = (): Promise<TextureBlob> => {
+        startedAt = now();
+        return readTextureBlob(asset, signal, readGltfTexture);
+      };
+      return scheduleTransport === undefined
+        ? execute()
+        : scheduleTransport(signal, execute);
+    });
+    const completedAt = now();
+    return {
+      ...result,
+      transportDurationMs: Math.max(0, completedAt - startedAt),
+      transportQueueDurationMs: Math.max(0, startedAt - queuedAt),
+    };
+  };
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
@@ -455,7 +477,13 @@ export const createBrowserTextureDecoder = (
     if (!etc2Available && declaresKtx2(asset)) {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
-    const { blob, ktx2, svg } = await read(asset, signal);
+    const {
+      blob,
+      ktx2,
+      svg,
+      transportDurationMs = 0,
+      transportQueueDurationMs = 0,
+    } = await read(asset, signal);
     if (fallback && svg) {
       throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
     }
@@ -466,15 +494,27 @@ export const createBrowserTextureDecoder = (
       ? await import("./svg-source").then(({ validateSvgTextureBlob }) =>
           validateSvgTextureBlob(blob, signal))
       : undefined;
-    const decoded = await decodes.run(
-      signal,
-      () => ktx2
+    const decodeQueuedAt = now();
+    let decodeStartedAt = decodeQueuedAt;
+    const decoded = await decodes.run(signal, () => {
+      decodeStartedAt = now();
+      return ktx2
         ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha)
-        : decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha),
-    );
-    if (!retainSvgSource || !svg || decoded.kind === "ktx2-etc2") return decoded;
-    return {
+        : decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha);
+    });
+    const decodeCompletedAt = now();
+    const timed = {
       ...decoded,
+      timings: {
+        decodeDurationMs: Math.max(0, decodeCompletedAt - decodeStartedAt),
+        decodeQueueDurationMs: Math.max(0, decodeStartedAt - decodeQueuedAt),
+        transportDurationMs,
+        transportQueueDurationMs,
+      },
+    };
+    if (!retainSvgSource || !svg || timed.kind === "ktx2-etc2") return timed;
+    return {
+      ...timed,
       encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
     };
   };

@@ -26,7 +26,12 @@ export type {
   BorrowedGltfGeometryBatch,
   GltfAssetGeometryVisitor,
 } from "./gltf/prepared-geometry";
-export type { TextureAssetSnapshot } from "./texture/asset-owner";
+export type {
+  TextureAssetSnapshot,
+  TextureAssetTimings,
+  TexturePreparationSnapshot,
+} from "./texture/asset-owner";
+export type { TextureDecodeStageTimings } from "./texture/source";
 export type { PrefilteredEnvironmentAssetSnapshot } from "./environment/asset-owner";
 export type { VirtualTextureAssetSnapshot } from "./virtual-texture/runtime-contract";
 export type { PickInput, PickResult } from "@royal/renderer-core";

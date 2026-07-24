@@ -8,6 +8,14 @@ import type { DecodedTextureAlpha } from "./alpha-mipmap";
 import type { Ktx2Etc2Level } from "./etc2-storage";
 import type { ParsedSvgTextureSource } from "./svg-source";
 
+/** Cold stage attribution captured by the built-in browser texture decoder. */
+export type TextureDecodeStageTimings = Readonly<{
+  decodeDurationMs: number;
+  decodeQueueDurationMs: number;
+  transportDurationMs: number;
+  transportQueueDurationMs: number;
+}>;
+
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
@@ -20,6 +28,8 @@ export type DecodedImageTextureSource = Readonly<{
   source: TexImageSource;
   sourceHeight?: number;
   sourceWidth?: number;
+  /** @internal Renderer diagnostics; custom decoders may omit it. */
+  timings?: TextureDecodeStageTimings;
   width: number;
 }>;
 
@@ -39,6 +49,8 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
   levels: readonly Ktx2Etc2Level[];
   sourceHeight?: number;
   sourceWidth?: number;
+  /** @internal Renderer diagnostics; custom decoders may omit it. */
+  timings?: TextureDecodeStageTimings;
   width: number;
 }>;
 

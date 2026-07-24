@@ -284,7 +284,12 @@ queuedForegroundJobs, queuedDetailJobs }` for operational inspection. The two
 queued lane counts sum to `queuedJobs`; they diagnose scheduling and are not
 separate consumer lifecycles. `resources.imageTexturePreparation` distinguishes
 active source preparations from retained handoff reservations without calling
-both browser phases decodes. Focused asset status remains the product lifecycle.
+both browser phases decodes. When the built-in browser pipeline has ready
+sources, its optional `browserStageTimings` reports the retained source count
+and summed transport-wait, transport, decode-wait, and decode durations.
+Focused ready texture status carries the corresponding claim-to-ready and
+preparation attribution for one source. Custom decoders may omit these timing
+fields. Focused asset status remains the product lifecycle.
 
 Royal also owns the bounded ordinary-texture upload pacing policy. Broad
 diagnostics expose
@@ -357,8 +362,13 @@ status, and borrowed geometry paths. They create no surfaces, GPU geometry,
 lights, picking targets, transform work, or presentation frame. A textured
 non-visual asset may remain `streaming`: images are not decoded until a visible
 material claims them, while geometry, bounds, and root extras are already
-usable. Moving the same identity between the claim and scene does not read or
-prepare it again. `Canvas` bridges both handoff directions; imperative callers
+usable. Once visible material demand has established a texture claim, an
+overlapping non-visual claim retains that exact prepared root and its already
+claimed texture identities across a temporary visual-composition gap. It does
+not eagerly discover or decode images for roots that have never been visible.
+This prevents a React publication boundary from turning one root lifetime into
+repeated browser reads or decodes. Moving the same identity between the claim
+and scene does not read or prepare it again. `Canvas` bridges both handoff directions; imperative callers
 can commit both sides atomically with
 `RendererRoot.setScene(scene, gltfAssetClaims)`. When using separate setters,
 install the incoming visual or non-visual owner before removing the outgoing

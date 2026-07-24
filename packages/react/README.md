@@ -98,7 +98,9 @@ spatial tools must prepare an asset before it joins the visible scene. This is a
 complete lifetime claim, not a preload cache: removing its last visual and
 non-visual owner releases it. Claims do not create surfaces, lights, picking,
 GPU geometry, or frames, and do not decode material images until a visible
-surface needs them. Prepared bounds remain a conservative AABB for framing and
+surface needs them. After that visible demand exists, an overlapping claim
+retains the already-demanded texture identities across a temporary composition
+gap; it does not eagerly decode never-visible roots. Prepared bounds remain a conservative AABB for framing and
 broad phases; derive contact/support data from borrowed geometry rather than
 treating bounds as a physics oracle.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before

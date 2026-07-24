@@ -54,7 +54,10 @@ work is never preempted.
 A non-visual glTF claim enters this same foreground preparation lane. It does
 not create a parallel preload cache, scheduler, or retention policy. Image
 sources remain dormant until a visible prepared material claims them, avoiding
-decode, handoff, and GPU work for metadata- or geometry-only use.
+decode, handoff, and GPU work for metadata- or geometry-only use. After visible
+demand exists, the same root claim may retain those already-demanded texture
+identities across a temporary visual-composition gap. This is continuous claim
+ownership, not speculative preload or time-based caching.
 
 A job is one admitted CPU/decode preparation phase, not necessarily a complete
 asset lifecycle or a promise that a browser created a worker. glTF root
@@ -383,17 +386,26 @@ reconstructed sum. Image completion is likewise elapsed from the exact
 source/version claim. The values are diagnostics, not scheduling inputs, and
 observing them does not poll or wake the frame loop.
 
-Ordinary image preparation has two explicit bounds. At most eight unknown-size
-fetch/decode jobs run at once. After decode selects an exact browser-image or
+Ordinary image preparation has explicit nested bounds. At most sixteen complete
+source lifecycles hold active preparation slots, while browser transport and
+bitmap decode are separately capped at eight and four active stages. After
+decode selects an exact browser-image or
 ETC2 representation, the retained upload source is charged by its actual bytes,
 including retained picking alpha, until every claimed GPU representation
 consumes it, rejects it, or the claim is cancelled. New decodes pause when
 completed handoff storage reaches 64 MiB or the root holds 32 decode
 reservations. Already-active jobs may complete beyond the byte threshold, but
-the eight-job bound makes that overshoot finite. Deterministic source order is
+the active bounds make that overshoot finite. Deterministic source order is
 preserved. Bounding only active decoder calls is insufficient: fast decoders
 can otherwise leave an unbounded queue of completed RGBA images waiting behind
 progressive GPU admission.
+
+Built-in browser preparation records monotonic times at the existing transport
+and decode queue boundaries. Focused texture readiness reports queue and work
+durations plus claim-to-ready elapsed time; the broad root snapshot optionally
+sums the four browser-stage durations across currently retained ready sources.
+These are attribution diagnostics, not unbounded request logs, performance
+entries, or scheduler controls.
 
 GPU resource commitment and scene presentation are separate lifecycle effects.
 The first usable surface set, first decoded texture, and terminal settled

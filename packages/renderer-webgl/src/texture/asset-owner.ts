@@ -13,6 +13,7 @@ import {
   textureStorageKey,
   type DecodedTextureLease,
   type DecodedTextureSource,
+  type TextureDecodeStageTimings,
   type TextureSourceRef,
 } from "./source";
 
@@ -46,14 +47,30 @@ export type TextureAssetSnapshot =
     /** Fitted upload height in texels. */
     height: number;
     status: "ready";
+    /** Cold lifecycle attribution for the successful preparation attempt. */
+    timings?: TextureAssetTimings;
     /** Fitted upload width in texels. */
     width: number;
   }>
   | Readonly<{ error: string; status: "error" }>;
 
+export type TextureAssetTimings = TextureDecodeStageTimings & Readonly<{
+  /** Elapsed time from the initial claim until this source became ready. */
+  firstReadyAfterMs: number;
+  /** Time spent waiting for a root texture-source reservation. */
+  preparationQueueDurationMs: number;
+  /** Total successful source preparation span, including transport and decode queues. */
+  preparationDurationMs: number;
+}>;
+
 export type TexturePreparationSnapshot = Readonly<{
   /** Texture source lifecycles currently executing transport or decode work. */
   activePreparations: number;
+  /** Retained ready built-in sources and their summed cold-stage durations. */
+  browserStageTimings?: Readonly<{
+    sourceCount: number;
+    totals: TextureDecodeStageTimings;
+  }>;
   /** Estimated CPU bytes currently retained for decoded GPU handoff. */
   decodedHandoffBytes: number;
   /** Soft decoded-handoff byte ceiling; one source may exceed it alone. */
@@ -78,6 +95,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
   onAssetChanged(key: string): void;
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
+  now?(): number;
 }>;
 
 type AssetEntry = {
@@ -93,10 +111,13 @@ type AssetEntry = {
   decodedClaims: number;
   decodedReleased: boolean;
   preparationRetainsAlpha: boolean;
+  preparationQueuedAt: number;
+  preparationStartedAt: number;
   queued: boolean;
   readonly residentStorageKeys: Set<string>;
   retainAlpha: boolean;
   snapshot: TextureAssetSnapshot;
+  readonly startedAt: number;
 };
 
 const IDLE: TextureAssetSnapshot = { status: "idle" };
@@ -151,6 +172,7 @@ export class TextureAssetOwner {
   readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
+  readonly #now: () => number;
   readonly #platform: TextureAssetOwnerPlatform;
   readonly #storageBudgetBytes: number | undefined;
   readonly #storageEntries = new Map<string, AssetEntry>();
@@ -160,6 +182,7 @@ export class TextureAssetOwner {
       !Number.isSafeInteger(storageBudgetBytes) || storageBudgetBytes < 0
     )) throw new RangeError("Royal texture storage budget must be a non-negative safe integer");
     this.#platform = platform;
+    this.#now = platform.now ?? (() => performance.now());
     this.#storageBudgetBytes = storageBudgetBytes;
   }
 
@@ -231,6 +254,13 @@ export class TextureAssetOwner {
   snapshot(): TexturePreparationSnapshot {
     let pendingStorageRepresentations = 0;
     let retainedEncodedSourceBytes = 0;
+    let timedSources = 0;
+    const timings = {
+      decodeDurationMs: 0,
+      decodeQueueDurationMs: 0,
+      transportDurationMs: 0,
+      transportQueueDurationMs: 0,
+    };
     for (const entry of this.#entries.values()) {
       retainedEncodedSourceBytes += entry.decoded?.kind === "ktx2-etc2"
         ? 0
@@ -238,9 +268,22 @@ export class TextureAssetOwner {
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
+      if (entry.snapshot.status === "ready" && entry.snapshot.timings !== undefined) {
+        timedSources += 1;
+        timings.decodeDurationMs += entry.snapshot.timings.decodeDurationMs;
+        timings.decodeQueueDurationMs += entry.snapshot.timings.decodeQueueDurationMs;
+        timings.transportDurationMs += entry.snapshot.timings.transportDurationMs;
+        timings.transportQueueDurationMs += entry.snapshot.timings.transportQueueDurationMs;
+      }
     }
     return {
       activePreparations: this.#activePreparations,
+      ...(timedSources === 0 ? {} : {
+        browserStageTimings: {
+          sourceCount: timedSources,
+          totals: timings,
+        },
+      }),
       decodedHandoffBytes: this.#decodedHandoffBytes,
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
       pendingStorageRepresentations,
@@ -411,6 +454,7 @@ export class TextureAssetOwner {
     storageKeys: Set<string>,
     retainAlpha: boolean,
   ): void {
+    const startedAt = this.#now();
     const entry: AssetEntry = {
       alpha: undefined,
       asset,
@@ -423,11 +467,14 @@ export class TextureAssetOwner {
       decodedClaims: 0,
       decodedReleased: false,
       preparationRetainsAlpha: false,
+      preparationQueuedAt: startedAt,
+      preparationStartedAt: 0,
       key,
       queued: false,
       residentStorageKeys: new Set(),
       retainAlpha,
       snapshot: { status: "loading" },
+      startedAt,
     };
     this.#entries.set(key, entry);
     this.#publish(key);
@@ -441,6 +488,7 @@ export class TextureAssetOwner {
       return;
     }
     if (entry.queued) return;
+    entry.preparationQueuedAt = this.#now();
     entry.queued = true;
     this.#preparationQueue.enqueue(entry);
     this.#drainPreparationQueue();
@@ -461,6 +509,7 @@ export class TextureAssetOwner {
       if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;
       entry.preparationActive = true;
+      entry.preparationStartedAt = this.#now();
       this.#activePreparations += 1;
       this.#sourceReservations += 1;
       this.#prepare(entry);
@@ -570,12 +619,25 @@ export class TextureAssetOwner {
       entry.alpha = entry.retainAlpha ? alpha : undefined;
       entry.decoded = decodedSource;
       entry.decodedReleased = false;
+      const completedAt = this.#now();
       entry.snapshot = {
         ...(decoded.fallbackReason === undefined
           ? {}
           : { fallbackReason: decoded.fallbackReason }),
         height: decoded.height,
         status: "ready",
+        ...(decoded.timings === undefined ? {} : {
+          timings: {
+            decodeDurationMs: decoded.timings.decodeDurationMs,
+            decodeQueueDurationMs: decoded.timings.decodeQueueDurationMs,
+            firstReadyAfterMs: completedAt - entry.startedAt,
+            preparationDurationMs: completedAt - entry.preparationStartedAt,
+            preparationQueueDurationMs:
+              entry.preparationStartedAt - entry.preparationQueuedAt,
+            transportDurationMs: decoded.timings.transportDurationMs,
+            transportQueueDurationMs: decoded.timings.transportQueueDurationMs,
+          },
+        }),
         width: decoded.width,
       };
       this.#platform.onAssetChanged(key);

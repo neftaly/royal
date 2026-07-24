@@ -129,7 +129,12 @@ It MUST NOT create scene nodes, transforms, surfaces, lights, picking records,
 GPU resources, texture-image demand, or frame invalidation. Visual and
 non-visual claims reconcile as one complete ownership set, so moving an
 identity between them with overlapping incoming ownership neither rereads nor
-reprepares it. Declarative hosts MUST use the root's atomic scene-and-claim
+reprepares it. A non-visual claim alone MUST NOT eagerly decode material
+images. Once a visible owner has established image demand, however, an
+overlapping root claim MAY retain those already-demanded canonical texture
+identities across a temporary visual-composition gap. The last root and visual
+owner releases them; there is no grace timer or detached cache. Declarative
+hosts MUST use the root's atomic scene-and-claim
 commit or otherwise bridge both handoff directions. Status observation remains
 non-owning.
 

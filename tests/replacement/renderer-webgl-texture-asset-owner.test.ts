@@ -18,6 +18,52 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 });
 
 describe("ordinary texture asset lifecycle owner", () => {
+  it("attributes built-in transport and decode stages without timing custom decoders", async () => {
+    let now = 0;
+    const owner = new TextureAssetOwner({
+      decode: vi.fn(async () => {
+        now = 20;
+        return {
+          ...decoded(),
+          timings: {
+            decodeDurationMs: 7,
+            decodeQueueDurationMs: 3,
+            transportDurationMs: 5,
+            transportQueueDurationMs: 2,
+          },
+        };
+      }),
+      now: () => now,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/timed.avif");
+    owner.reconcile([asset]);
+
+    await waitFor(() => expect(owner.getSnapshot(asset)).toMatchObject({
+      status: "ready",
+      timings: {
+        decodeDurationMs: 7,
+        decodeQueueDurationMs: 3,
+        firstReadyAfterMs: 20,
+        preparationDurationMs: 20,
+        preparationQueueDurationMs: 0,
+        transportDurationMs: 5,
+        transportQueueDurationMs: 2,
+      },
+    }));
+    expect(owner.snapshot().browserStageTimings).toEqual({
+      sourceCount: 1,
+      totals: {
+        decodeDurationMs: 7,
+        decodeQueueDurationMs: 3,
+        transportDurationMs: 5,
+        transportQueueDurationMs: 2,
+      },
+    });
+  });
+
   it("shares decode by content and version, independently of sampling and color interpretation", async () => {
     const changed = vi.fn();
     const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
