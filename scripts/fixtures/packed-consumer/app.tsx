@@ -41,6 +41,7 @@ import {
   triangleGeometry,
   unlitMaterial,
   virtualTexture,
+  type RenderObjectHandle,
   type Scene,
   type WorldPosition3,
 } from '@royal/react/scene';
@@ -86,10 +87,12 @@ orbit.camera.commit();
 const pickingGeometry = triangleGeometry({
   positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
 });
+const modelRef: { current: RenderObjectHandle | null } = { current: null };
 const model = gltf({
   materialVariant: 'Ruby',
   pickingGeometry,
   pickingId: 'hero',
+  ref: modelRef,
   sceneIndex: 2,
   src: '/model.gltf',
   tint: [0.8, 0.25, 0.2, 1],
@@ -203,6 +206,7 @@ const ExternalControls = ({ root }: RendererHookOptions): ReactNode => {
   return (
     <button
       onClick={() => {
+        modelRef.current?.setTransform({ position: [0, 0.1, 0] });
         invalidate();
         console.log(pick({ clientX: 0, clientY: 0 }));
         console.log("prepared geometry batches", visitGeometry(model.asset, (batch) => {

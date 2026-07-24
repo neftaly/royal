@@ -69,6 +69,14 @@ Imperative picking MUST flush a pending structural transaction before querying
 the shared scene, and external frames MUST flush the same glTF and texture
 publication paths rather than maintaining XR-specific state.
 
+Render-object refs attach through one root-owned lifecycle, but their validated
+transform state enters a GL-free retained-scene update. Cold lowering indexes
+only ref-bearing nodes. One update mutates the affected model/normal matrices,
+world and LOD bounds, picking inverses, handedness, and authored glTF lights;
+the WebGL shell refreshes matching packets and uniforms without replacing the
+scene or geometry storage. Declarative reconciliation and imperative mutation
+MUST use this same path.
+
 A slower pure full computation SHOULD exist where useful as a differential
 oracle for fuzzing. It MUST NOT become a silent production fallback.
 

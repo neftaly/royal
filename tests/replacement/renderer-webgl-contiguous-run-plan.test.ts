@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { planContiguousRunEnds } from "../../packages/renderer-webgl/src/surface/contiguous-run-plan";
+import {
+  planContiguousRunEnds,
+  planRetainedContiguousRunEnds,
+} from "../../packages/renderer-webgl/src/surface/contiguous-run-plan";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 describe("contiguous run planning core", () => {
@@ -9,6 +12,21 @@ describe("contiguous run planning core", () => {
       (left, right) => left === right,
     )]).toEqual([2, 2, 5, 5, 5, 6]);
     expect([...planContiguousRunEnds([], Object.is)]).toEqual([]);
+  });
+
+  it("reuses exact retained storage and replaces only topology changes", () => {
+    const retained = new Uint32Array(4);
+    expect(planRetainedContiguousRunEnds(
+      retained,
+      [1, 1, 2, 2],
+      Object.is,
+    )).toBe(retained);
+    expect([...retained]).toEqual([2, 2, 4, 4]);
+    expect(planRetainedContiguousRunEnds(
+      retained,
+      [1, 2],
+      Object.is,
+    )).not.toBe(retained);
   });
 
   it("fuzzes complete, maximal run coverage", () => {

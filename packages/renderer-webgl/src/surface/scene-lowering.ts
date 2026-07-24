@@ -83,6 +83,8 @@ export type CanonicalDrawSurface = Readonly<{
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode | GltfInstancesNode;
   normalTransform: Mat4;
+  /** Asset-local transform composed after an imperative render-object transform. */
+  objectLocalModel?: Mat4;
   textureKeys: readonly string[];
   topology?: "lines";
   worldBounds: WorldBounds;
@@ -105,8 +107,27 @@ export type CanonicalPickSurface = Readonly<{
   materialSource?: CanonicalSurfaceMaterial;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode | GltfInstancesNode;
+  /** Asset-local transform composed after an imperative render-object transform. */
+  objectLocalModel?: Mat4;
   pickingGeometry: CanonicalTriangleGeometry;
 }>;
+
+export type CanonicalRenderObjectLightBinding = Readonly<{
+  index: number;
+  kind: "directional" | "punctual";
+  localModel: Mat4;
+}>;
+
+export type CanonicalRenderObjectBinding = Readonly<{
+  lights: readonly CanonicalRenderObjectLightBinding[];
+  pickSurfaceIndices: readonly number[];
+  surfaceIndices: readonly number[];
+}>;
+
+const EMPTY_RENDER_OBJECTS: ReadonlyMap<
+  MeshNode | GltfNode,
+  CanonicalRenderObjectBinding
+> = new Map();
 
 const canonicalPickMaterial = (
   material: CanonicalSurfaceMaterial,
@@ -139,6 +160,7 @@ export type CanonicalSurfaceScene = Readonly<{
   lodGroups: readonly CanonicalLodGroup[];
   pickSurfaces: readonly CanonicalPickSurface[];
   punctualLights: readonly CanonicalPunctualLight[];
+  renderObjects: ReadonlyMap<MeshNode | GltfNode, CanonicalRenderObjectBinding>;
   surfaces: readonly CanonicalDrawSurface[];
   textureAssets: readonly TextureSourceRef[];
   textureSurfaceIndices: ReadonlyMap<string, readonly number[]>;
@@ -268,12 +290,14 @@ export type CanonicalPunctualLight = Readonly<{
 export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
 export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
 
-const modelHandedness = (model: Mat4): 1 | -1 => {
+export const canonicalModelHandedness = (model: Mat4): 1 | -1 => {
   const determinant = model[0] * (model[5] * model[10] - model[6] * model[9])
     - model[4] * (model[1] * model[10] - model[2] * model[9])
     + model[8] * (model[1] * model[6] - model[2] * model[5]);
   return determinant < 0 ? -1 : 1;
 };
+
+const IDENTITY_OBJECT_LOCAL_MODEL = identityMat4();
 
 const mat4At = (values: Float32Array, offset: number): Mat4 => [
   values[offset]!, values[offset + 1]!, values[offset + 2]!, values[offset + 3]!,
@@ -388,6 +412,10 @@ export const prepareCanonicalSurfaceScene = (
   const gltfNodes: Array<GltfNode | GltfInstancesNode> = [];
   const pickSurfaces: CanonicalPickSurface[] = [];
   const punctualLights: CanonicalPunctualLight[] = [];
+  const renderObjectLights: Array<Readonly<{
+    binding: CanonicalRenderObjectLightBinding;
+    node: GltfNode;
+  }>> = [];
   const surfaces: CanonicalDrawSurface[] = [];
   const virtualTextureAssets: VirtualTextureAssetRef[] = [];
   const lodBounds: ReturnType<typeof emptyWorldBounds>[] = [];
@@ -463,8 +491,11 @@ export const prepareCanonicalSurfaceScene = (
         if (node.kind === "gltf") {
           pickSurfaces.push({
             inverseModel: inverseMat4(rootModel),
-            modelHandedness: modelHandedness(rootModel),
+            modelHandedness: canonicalModelHandedness(rootModel),
             node,
+            ...(node.ref === undefined
+              ? {}
+              : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
             pickingGeometry: proxyGeometry,
           });
         } else {
@@ -505,13 +536,25 @@ export const prepareCanonicalSurfaceScene = (
                 `Royal scenes support at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
               );
             }
+            const index = directionalLights.length;
             directionalLights.push({ color, direction });
+            if (node.kind === "gltf" && node.ref !== undefined) {
+              renderObjectLights.push({
+                binding: {
+                  index,
+                  kind: "directional",
+                  localModel: light.localModel,
+                },
+                node,
+              });
+            }
           } else {
             if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
               throw new Error(
                 `Royal scenes support at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} point and spot lights`,
               );
             }
+            const index = punctualLights.length;
             punctualLights.push({
               color,
               direction,
@@ -521,6 +564,16 @@ export const prepareCanonicalSurfaceScene = (
               position: transformPoint(lightModel, [0, 0, 0]),
               range: light.range,
             });
+            if (node.kind === "gltf" && node.ref !== undefined) {
+              renderObjectLights.push({
+                binding: {
+                  index,
+                  kind: "punctual",
+                  localModel: light.localModel,
+                },
+                node,
+              });
+            }
           }
         };
         if (node.kind === "gltf") {
@@ -613,8 +666,8 @@ export const prepareCanonicalSurfaceScene = (
           }
         }
         const handedness = instanceBatch === undefined
-          ? modelHandedness(model)
-          : (modelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1;
+          ? canonicalModelHandedness(model)
+          : (canonicalModelHandedness(rootModel) * instanceBatch.handedness) as 1 | -1;
         const materialLevelCount = materialLod?.levels.length ?? 1;
         const materialGroup = materialLod === undefined
           ? undefined
@@ -667,6 +720,11 @@ export const prepareCanonicalSurfaceScene = (
             modelHandedness: handedness,
             node,
             normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
+            ...(node.kind !== "gltf" || node.ref === undefined ? {} : {
+              objectLocalModel: instanceBatch === undefined
+                ? primitive.localModel
+                : IDENTITY_OBJECT_LOCAL_MODEL,
+            }),
             textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
             worldBounds,
           });
@@ -678,15 +736,19 @@ export const prepareCanonicalSurfaceScene = (
                 modelHandedness: handedness,
                 node,
                 ...(lods === undefined ? {} : { lods }),
+                ...(node.kind !== "gltf" || node.ref === undefined
+                  ? {}
+                  : { objectLocalModel: primitive.localModel }),
                 pickingGeometry: primitive.geometry,
               });
             } else {
               const localModels = instanceBatch.localModels;
               for (let offset = 0; offset < localModels.length; offset += 16) {
+                const objectLocalModel = mat4At(localModels, offset);
                 const instanceModel = multiplyMat4Into(
                   identityMat4(),
                   rootModel,
-                  mat4At(localModels, offset),
+                  objectLocalModel,
                 );
                 pickSurfaces.push({
                   ...canonicalPickMaterial(presentedMaterial),
@@ -697,6 +759,9 @@ export const prepareCanonicalSurfaceScene = (
                   modelHandedness: handedness,
                   node,
                   ...(lods === undefined ? {} : { lods }),
+                  ...(node.kind !== "gltf" || node.ref === undefined
+                    ? {}
+                    : { objectLocalModel }),
                   pickingGeometry: primitive.geometry,
                 });
               }
@@ -774,11 +839,14 @@ export const prepareCanonicalSurfaceScene = (
       geometry,
       inverseModel: inverseMat4(model),
       model,
-      modelHandedness: modelHandedness(model),
+      modelHandedness: canonicalModelHandedness(model),
       material,
       materialSource,
       node,
       normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
+      ...(node.ref === undefined
+        ? {}
+        : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
       pickingGeometry,
       textureKeys: canonicalMaterialTextureKeys(materialSource),
       ...(wireframe ? { topology: "lines" as const } : {}),
@@ -793,8 +861,46 @@ export const prepareCanonicalSurfaceScene = (
       inverseModel: surface.inverseModel,
       modelHandedness: surface.modelHandedness,
       node,
+      ...(node.ref === undefined
+        ? {}
+        : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
       pickingGeometry: surface.pickingGeometry,
     });
+  }
+  type MutableRenderObjectBinding = {
+    lights: CanonicalRenderObjectLightBinding[];
+    pickSurfaceIndices: number[];
+    surfaceIndices: number[];
+  };
+  let renderObjects: Map<MeshNode | GltfNode, MutableRenderObjectBinding> | undefined;
+  const renderObjectBinding = (node: MeshNode | GltfNode) => {
+    renderObjects ??= new Map();
+    let binding = renderObjects.get(node);
+    if (binding === undefined) {
+      binding = { lights: [], pickSurfaceIndices: [], surfaceIndices: [] };
+      renderObjects.set(node, binding);
+    }
+    return binding;
+  };
+  for (const node of scene.nodes) {
+    if ((node.kind === "mesh" || node.kind === "gltf") && node.ref !== undefined) {
+      renderObjectBinding(node);
+    }
+  }
+  for (let index = 0; index < surfaces.length; index += 1) {
+    const node = surfaces[index]!.node;
+    if ((node.kind === "mesh" || node.kind === "gltf") && node.ref !== undefined) {
+      renderObjectBinding(node).surfaceIndices.push(index);
+    }
+  }
+  for (let index = 0; index < pickSurfaces.length; index += 1) {
+    const node = pickSurfaces[index]!.node;
+    if ((node.kind === "mesh" || node.kind === "gltf") && node.ref !== undefined) {
+      renderObjectBinding(node).pickSurfaceIndices.push(index);
+    }
+  }
+  for (const { binding, node } of renderObjectLights) {
+    renderObjectBinding(node).lights.push(binding);
   }
   return {
     alphaMaskTextureAssets: collectCanonicalAlphaMaskTextureAssets(pickSurfaces),
@@ -807,6 +913,7 @@ export const prepareCanonicalSurfaceScene = (
     lodGroups: indexSurfaceLods(surfaces),
     pickSurfaces,
     punctualLights,
+    renderObjects: renderObjects ?? EMPTY_RENDER_OBJECTS,
     surfaces,
     textureAssets: collectCanonicalSurfaceTextureAssets(surfaces),
     textureSurfaceIndices: indexSurfaceTextures(surfaces),

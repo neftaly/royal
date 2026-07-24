@@ -323,6 +323,22 @@ event, loading, or lifecycle path.
 `data-*` remains native DOM metadata/test selection on the canvas. It is not a
 Royal scene protocol.
 
+## Render-object refs
+
+`mesh({ ref })` and `gltf({ ref })` publish the same backend-neutral
+`RenderObjectHandle` contract re-exported by React. `position`, `rotation`,
+`scale`, and `setTransform()` update one attached object's retained transform
+and request a frame without rebuilding or republishing the scene descriptor.
+Exact picking observes the same transform immediately.
+
+Refs may be object or callback refs. Attachments sharing one ref share one
+handle and notify every attached renderer root; removing one attachment does
+not clear the ref while another remains. A later declarative `transform`
+becomes authoritative and synchronizes the existing handle. Final detach and
+root disposal publish `null`. This is a local transform escape hatch, not an
+animation loop, drag protocol, scene graph, physics API, or application-state
+owner.
+
 ## glTF and textures
 
 `gltfAsset(src)` creates a validated source/version/scene loading identity

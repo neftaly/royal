@@ -62,6 +62,7 @@ import {
   opaqueDepthPrepassRequested,
   planOpaqueDepthPrepass,
   surfaceCanUseOpaqueDepthPrepass,
+  updateOpaqueDepthPrepassPlan,
 } from "./surface-depth-prepass";
 import {
   IDENTITY_TEXTURE_COORDINATES,
@@ -99,7 +100,7 @@ import {
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
-import { planContiguousRunEnds } from "./contiguous-run-plan";
+import { planRetainedContiguousRunEnds } from "./contiguous-run-plan";
 import {
   surfacesShareMultiDrawState,
   surfacesShareDepthPrepassState,
@@ -573,13 +574,50 @@ export class SurfaceGpuOwner {
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
-    this.#depthPrepassPlan = planOpaqueDepthPrepass(this.#scene.surfaces);
+    updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, this.#scene.surfaces);
     this.#dirty = true;
     if (
       this.#gpuScene !== this.#scene
       || this.#admittedSurfaceCount < this.#scene.surfaces.length
     ) this.#fullReconcileRequired = true;
     else this.#instanceTransformsPending = true;
+  }
+
+  /**
+   * Publishes lowering-owned object matrices without replacing scene identity
+   * or touching geometry/instance storage.
+   */
+  publishObjectTransforms(
+    surfaceIndices: readonly number[],
+    sceneGlobalsChanged: boolean,
+  ): void {
+    const scene = this.#scene;
+    if (scene === null) return;
+    updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
+    if (sceneGlobalsChanged) {
+      packCanonicalLightUniformsInto(
+        scene.directionalLights,
+        scene.punctualLights,
+        this.#lightUniforms,
+      );
+      this.#sceneGlobalsRevision += 1;
+    }
+    if (this.#fullReconcileRequired || this.#gpuScene !== scene) return;
+    for (const surfaceIndex of surfaceIndices) {
+      const resource = this.#gpuSurfacesBySceneIndex[surfaceIndex];
+      const surface = scene.surfaces[surfaceIndex];
+      if (resource === undefined || surface === undefined) continue;
+      resource.surface = surface;
+      const frontFace = surface.modelHandedness < 0 ? this.#gl.CW : this.#gl.CCW;
+      if (resource.drawPacket.frontFace !== frontFace) {
+        resource.drawPacket = { ...resource.drawPacket, frontFace };
+      }
+      if (
+        resource.depthPacket !== null
+        && resource.depthPacket.frontFace !== frontFace
+      ) resource.depthPacket = { ...resource.depthPacket, frontFace };
+    }
+    if (this.#multiDraw !== null) this.#planOpaqueMultiDrawRuns();
   }
 
   /** Commits a bounded progressive resource batch without drawing an unchanged frame. */
@@ -1654,15 +1692,18 @@ export class SurfaceGpuOwner {
   }
 
   #planOpaqueMultiDrawRuns(): void {
-    this.#opaqueMultiDrawRunEnds = planContiguousRunEnds(
+    this.#opaqueMultiDrawRunEnds = planRetainedContiguousRunEnds(
+      this.#opaqueMultiDrawRunEnds,
       this.#opaqueSurfaces,
       surfacesShareMultiDrawState,
     );
-    this.#depthPrepassRunEnds = planContiguousRunEnds(
+    this.#depthPrepassRunEnds = planRetainedContiguousRunEnds(
+      this.#depthPrepassRunEnds,
       this.#opaqueSurfaces,
       surfacesShareDepthPrepassState,
     );
-    this.#transmissionMultiDrawRunEnds = planContiguousRunEnds(
+    this.#transmissionMultiDrawRunEnds = planRetainedContiguousRunEnds(
+      this.#transmissionMultiDrawRunEnds,
       this.#transmissionSurfaces,
       surfacesShareMultiDrawState,
     );

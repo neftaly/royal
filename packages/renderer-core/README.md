@@ -51,6 +51,12 @@ remain stable across selections.
 scene-linear RGBA presentation multiplier to every selected base color without
 rewriting the asset or changing its source/preparation identity.
 
+`mesh({ ref })` and `gltf({ ref })` expose one renderer-attached
+`RenderObjectHandle`. Its position, rotation, scale, and `setTransform()` API
+update the retained object without republishing the scene. Object and callback
+refs clear after their final renderer attachment is removed; a later
+declarative transform synchronizes the same handle.
+
 Textured standard and unlit materials accept an optional scene-linear `tint`
 multiplier. The name is deliberately distinct from the mutually exclusive
 solid `color` form. An authored `color` or `tint` alpha below one selects the

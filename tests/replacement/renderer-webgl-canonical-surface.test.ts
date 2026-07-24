@@ -18,6 +18,7 @@ import {
   unlitMaterial,
   virtualTexture,
   wireframeMaterial,
+  type RenderObjectHandle,
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
@@ -40,6 +41,10 @@ import {
   staticTriangleDocument,
   staticTriangleGlb,
 } from "./support/static-glb";
+import {
+  createCanonicalRenderObjectUpdateWorkspace,
+  updateCanonicalRenderObjectTransform,
+} from "../../packages/renderer-webgl/src/surface/render-object-scene-update";
 
 describe("canonical direct surface lowering", () => {
   it("selects exactly one resident base-color representation", () => {
@@ -720,7 +725,12 @@ describe("canonical direct surface lowering", () => {
     const nodes = document.nodes as Array<Record<string, unknown>>;
     nodes[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
     const asset = prepareStaticGlb(staticTriangleGlb(document), "lit-asset");
-    const node = gltf({ src: "/lit.glb", transform: { position: [10, 0, 0] } });
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const node = gltf({
+      ref,
+      src: "/lit.glb",
+      transform: { position: [10, 0, 0] },
+    });
     const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({}),
       nodes: [node],
@@ -730,6 +740,20 @@ describe("canonical direct surface lowering", () => {
       kind: "point",
       position: [11, 2, 0],
     }]);
+
+    const binding = updateCanonicalRenderObjectTransform(
+      prepared,
+      node,
+      {
+        position: [20, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      createCanonicalRenderObjectUpdateWorkspace(),
+    );
+    expect(binding?.lights).toHaveLength(1);
+    expect(prepared.punctualLights[0]!.position).toEqual([21, 2, 0]);
+    expect(prepared.surfaces[0]!.model[12]).toBe(21);
   });
 
   it("retains the instance sources whose pose changes require light relowering", () => {

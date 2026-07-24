@@ -45,6 +45,10 @@ context-loss recovery, and WebGL state. `alpha` and `antialias` default to
 browser multisampling. They are immutable because browsers fix context attributes at context
 creation. Invalid values and unknown option fields fail synchronously.
 `persistentGpuByteBudget` defaults to 256 MiB.
+Mesh and glTF `ref` handles update retained transforms, exact picking, bounds,
+handedness, and authored glTF lights without replacing the scene or reuploading
+geometry. Declarative transforms synchronize those same handles, and disposal
+clears their final attachments.
 Royal owns bounded, fair preparation scheduling across glTF, ordinary textures,
 VT, and prefiltered environments. Newly claimed scene, environment, and
 visible-VT work has bounded priority over detail work; FIFO order is preserved

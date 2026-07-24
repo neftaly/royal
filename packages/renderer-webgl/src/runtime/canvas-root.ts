@@ -4,11 +4,13 @@ import {
   type GltfAssetRef,
   type GltfInstancesNode,
   type GltfNode,
+  type MeshNode,
   type PickInput,
   type PickResult,
   type PrefilteredEnvironmentLight,
   type Scene,
   type TextureAssetRef,
+  type Transform,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
@@ -70,6 +72,11 @@ import {
   refreshCanonicalInstanceLodBounds,
   updateCanonicalGltfInstanceSource,
 } from "../surface/instance-scene-update";
+import {
+  createCanonicalRenderObjectUpdateWorkspace,
+  updateCanonicalRenderObjectTransform,
+} from "../surface/render-object-scene-update";
+import { RenderObjectRefOwner } from "../surface/render-object-ref-owner";
 import {
   TextureAssetOwner,
   type TextureAssetSnapshot,
@@ -502,6 +509,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #listeners = new RetainedListeners();
   #instancePickingDirty = false;
   #instanceSceneDirty = false;
+  #installingScene = false;
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
   readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
   readonly #pendingGltfAlphaMaskTextureAssets: TextureSourceRef[] = [];
@@ -513,6 +521,10 @@ export class CanvasRoot implements RendererRoot {
   readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #presentationRequired = false;
   readonly #progressivePresentation: ProgressivePresentationOwner;
+  #renderObjectRefs: RenderObjectRefOwner | null = null;
+  #renderObjectUpdateWorkspace: ReturnType<
+    typeof createCanonicalRenderObjectUpdateWorkspace
+  > | undefined;
   #revision = 0;
   #size: ResolvedCanvasSize | null = null;
   #sizeInput: CanvasSizeInput | null = null;
@@ -735,6 +747,7 @@ export class CanvasRoot implements RendererRoot {
     this.#progressivePresentation.dispose();
     this.#clock.dispose();
     this.#cameraSource.dispose();
+    this.#renderObjectRefs?.dispose();
     this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
     this.#gltfPreparer.dispose();
@@ -895,6 +908,12 @@ export class CanvasRoot implements RendererRoot {
     this.#progressivePresentation.reset();
     this.#surfaceResourcesPending = false;
     this.#textureResourcesPending = false;
+    this.#installingScene = true;
+    try {
+      this.#reconcileRenderObjectRefs(scene.nodes);
+    } finally {
+      this.#installingScene = false;
+    }
     this.#surfaceGpu.setScene(prepared);
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
@@ -1093,6 +1112,42 @@ export class CanvasRoot implements RendererRoot {
     this.#instanceSceneDirty = false;
   }
 
+  #applyRenderObjectTransform(
+    node: MeshNode | GltfNode,
+    transform: Transform,
+  ): void {
+    if (this.#disposed) return;
+    const scene = this.#surfaceScene;
+    if (scene === null) return;
+    const binding = updateCanonicalRenderObjectTransform(
+      scene,
+      node,
+      transform,
+      this.#renderObjectUpdateWorkspace ??=
+        createCanonicalRenderObjectUpdateWorkspace(),
+    );
+    if (binding === undefined || this.#installingScene) return;
+    this.#surfaceGpu.publishObjectTransforms(
+      binding.surfaceIndices,
+      binding.lights.length !== 0,
+    );
+    this.#virtualTextureRuntime?.invalidateSceneGeometry();
+    this.#invalidatePresentation();
+  }
+
+  #reconcileRenderObjectRefs(nodes: Scene["nodes"]): void {
+    if (
+      this.#renderObjectRefs === null
+      && !nodes.some((node) =>
+        (node.kind === "mesh" || node.kind === "gltf") && node.ref !== undefined)
+    ) return;
+    this.#renderObjectRefs ??= new RenderObjectRefOwner({
+      onError: (error) => this.#platform.onListenerError(error),
+      onTransform: (node, transform) => this.#applyRenderObjectTransform(node, transform),
+    });
+    this.#renderObjectRefs.reconcile(nodes);
+  }
+
   #flushInstanceScene(forPicking = false): void {
     if (!this.#instanceSceneDirty) {
       if (forPicking && this.#instancePickingDirty) this.#refreshPreparedScene(true);
@@ -1153,6 +1208,12 @@ export class CanvasRoot implements RendererRoot {
       this.#isTexturePending,
     );
     this.#surfaceScene = prepared;
+    this.#installingScene = true;
+    try {
+      this.#renderObjectRefs?.applyCurrentTransforms();
+    } finally {
+      this.#installingScene = false;
+    }
     this.#resetPendingGltfTextureAssets();
     if (!instanceOnly) {
       this.#progressivePresentation.reset();

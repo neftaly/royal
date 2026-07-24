@@ -205,3 +205,36 @@ Probability trace must be repeated before claiming a product-time win.
 Source-derived cross-root CPU geometry preparation remains open. This slice
 removes redundant scene/GPU publication; it does not misreport a frame batch as
 canonical geometry reuse or weaken the accepted two-stage preparation target.
+
+## Probability follow-up after frame-coalesced publication
+
+A July 24 production build against Royal `9e73e907` was loaded twice before a
+long unthrottled Chromium trace, with stale pages closed. The trace is
+`/tmp/probability-settlers-warm-long-final.json.gz`.
+
+- LCP was 860 ms with zero layout shift.
+- The last resource completed at 11.865 seconds.
+- The last eight resources were AVIF textures; the last was
+  `molded-plastic-normal.avif`.
+- The last recorded animation frame ended at 13.994 seconds.
+- The final compositor commit ended at 13.982 seconds.
+- 65 renderer-main tasks exceeded 50 ms, totalling 11.902 seconds; the longest
+  was 607 ms.
+
+This is worse than the adjacent earlier trace and is not presented as a
+regression attribution: external timing and software-renderer contention vary.
+It does confirm the same causal boundary after consumer cleanup. The late tail
+is not HTML, the initial bundle, duplicate Probability glTF parsing, eager
+support indexing, or an all-ready consumer barrier. Texture requests are still
+being discovered near 12 seconds, followed by renderer work near 14 seconds.
+That last frame is an operational completion proxy, not proof of the final
+changed pixel. The run is therefore still far from the isolated AVIF
+transport/decode floor described above.
+
+Probability now submits every direct HTTPS root immediately, uses Royal as its
+sole runtime glTF parser, lazily constructs support indexes, and copies borrowed
+geometry once per Royal geometry identity. Further consumer batching would
+delay interaction without moving late material discovery. Please use the
+existing requested stage diagnostics to attribute parse/material discovery,
+image preparation, decoded handoff, upload, and presentation before selecting
+the next Royal slice.

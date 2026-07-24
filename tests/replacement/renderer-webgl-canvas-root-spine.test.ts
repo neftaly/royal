@@ -14,6 +14,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   wireframeMaterial,
+  type RenderObjectHandle,
   type Scene,
 } from "@royal/renderer-core";
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
@@ -30,6 +31,7 @@ import {
   emptyScene,
   FakeCanvas,
 } from "./support/canvas-root-harness";
+import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 
 describe("canvas size selection", () => {
   it("preserves aspect while fitting the capability ceiling", () => {
@@ -834,6 +836,123 @@ describe("clear-only canvas root", () => {
 
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+  });
+
+  it("publishes mesh refs through retained transforms without replacing the GPU scene", () => {
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const geometry = planeGeometry([1, 1]);
+    const material = unlitMaterial({ color: [0.2, 0.4, 0.8, 1] });
+    const setGpuScene = vi.spyOn(SurfaceGpuOwner.prototype, "setScene");
+    const { callbacks, canvas, root } = harness();
+    try {
+      const node = mesh({ geometry, material, ref });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [node],
+      }));
+      callbacks.shift()!();
+      expect(ref.current).not.toBeNull();
+      expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({ node });
+      setGpuScene.mockClear();
+
+      const handle = ref.current!;
+      handle.position.x = 10;
+      expect(setGpuScene).not.toHaveBeenCalled();
+      expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+      expect(callbacks).toHaveLength(1);
+      callbacks.shift()!();
+      expect(setGpuScene).not.toHaveBeenCalled();
+
+      canvas.gl.frontFace.mockClear();
+      handle.setTransform({ position: [0, 0, 0], scale: [-1, 1, 1] });
+      callbacks.shift()!();
+      expect(canvas.gl.frontFace).toHaveBeenCalledWith(canvas.gl.CW);
+      expect(setGpuScene).not.toHaveBeenCalled();
+
+      const declarative = mesh({
+        geometry,
+        material,
+        ref,
+        transform: { position: [1, 0, 0] },
+      });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [declarative],
+      }));
+      expect(ref.current).toBe(handle);
+      expect(handle.position.x).toBe(1);
+
+      root.setScene(emptyScene());
+      expect(ref.current).toBeNull();
+    } finally {
+      root.dispose();
+      setGpuScene.mockRestore();
+    }
+  });
+
+  it("attaches glTF refs to the same transform and picking lifecycle", () => {
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const { root } = harness({
+      readGltf: () => new Promise(() => undefined),
+    });
+    try {
+      const node = gltf({
+        pickingGeometry: planeGeometry([1, 1]),
+        ref,
+        src: "/pending-ref.glb",
+      });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [node],
+      }));
+
+      expect(ref.current).not.toBeNull();
+      expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({ node });
+      ref.current!.position.x = 10;
+      expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+
+      root.setScene(emptyScene());
+      expect(ref.current).toBeNull();
+    } finally {
+      root.dispose();
+    }
+  });
+
+  it("preserves callback-ref identity across shared mesh and glTF attachments", () => {
+    const publications: Array<RenderObjectHandle | null> = [];
+    const ref = (handle: RenderObjectHandle | null): void => {
+      publications.push(handle);
+    };
+    const geometry = planeGeometry([1, 1]);
+    const material = unlitMaterial({ color: [1, 1, 1, 1] });
+    const { root } = harness({
+      readGltf: () => new Promise<Uint8Array>(() => undefined),
+    });
+    try {
+      const direct = mesh({ geometry, material, ref });
+      const model = gltf({
+        pickingGeometry: geometry,
+        ref,
+        src: "/shared-ref.glb",
+      });
+      const camera = perspectiveCamera({ position: [0, 0, 3] });
+      root.setScene(scene({ camera, nodes: [direct, model] }));
+      expect(publications).toHaveLength(1);
+      expect(publications[0]).not.toBeNull();
+
+      root.setScene(scene({
+        camera,
+        nodes: [mesh({ geometry, material, ref })],
+      }));
+      expect(publications).toHaveLength(1);
+
+      root.setScene(scene({ camera, nodes: [] }));
+      expect(publications).toEqual([expect.any(Object), null]);
+    } finally {
+      root.dispose();
+    }
   });
 
   it("matches visible backface culling during picking", () => {

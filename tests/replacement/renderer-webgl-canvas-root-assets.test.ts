@@ -13,6 +13,7 @@ import {
   scene,
   standardMaterial,
   unlitMaterial,
+  type RenderObjectHandle,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { canvasRootHarness as harness } from "./support/canvas-root-harness";
@@ -31,6 +32,48 @@ import {
 } from "./support/static-glb";
 
 describe("canvas root asset publication", () => {
+  it("keeps a glTF ref transform authoritative when preparation settles", async () => {
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const publishTransforms = vi.spyOn(
+      SurfaceGpuOwner.prototype,
+      "publishObjectTransforms",
+    );
+    const setGpuScene = vi.spyOn(SurfaceGpuOwner.prototype, "setScene");
+    const { flushScheduledFrames, root } = harness({
+      readGltf: async () => staticTriangleGlb(),
+    });
+    try {
+      const node = gltf({
+        pickingGeometry: planeGeometry([1, 1]),
+        ref,
+        src: "/ref-transform.glb",
+      });
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [node],
+      }));
+      expect(ref.current).not.toBeNull();
+      ref.current!.position.x = 10;
+      await waitFor(() => {
+        expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready");
+      });
+      flushScheduledFrames();
+      expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
+      setGpuScene.mockClear();
+      publishTransforms.mockClear();
+
+      ref.current!.position.x = 0;
+      expect(publishTransforms).toHaveBeenCalledOnce();
+      expect(setGpuScene).not.toHaveBeenCalled();
+      expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({ node });
+    } finally {
+      root.dispose();
+      publishTransforms.mockRestore();
+      setGpuScene.mockRestore();
+    }
+  });
+
   it("prepares non-visual claims without scene work and reuses them when made visible", async () => {
     const document = staticTriangleDocument();
     document.extras = { application: { supportGeometry: true } };

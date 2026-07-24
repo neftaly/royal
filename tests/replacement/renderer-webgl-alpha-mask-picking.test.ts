@@ -244,6 +244,7 @@ describe("canonical alpha-mask picking", () => {
         inverseModel: identityMat4(),
         modelHandedness: 1,
         node,
+        objectLocalModel: identityMat4(),
         pickingGeometry,
       }),
     );
@@ -270,7 +271,13 @@ describe("canonical alpha-mask picking", () => {
     expect(pickCanonicalSurfaceInto(
       { distance: 0, surfaceIndex: -1 },
       { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [2.25, 0.25, 1] },
-      [{ inverseModel, modelHandedness: 1, node, pickingGeometry: geometry() }],
+      [{
+        inverseModel,
+        modelHandedness: 1,
+        node,
+        objectLocalModel: identityMat4(),
+        pickingGeometry: geometry(),
+      }],
       createCanonicalPickingScratch(),
       undefined,
       accepts,
@@ -291,6 +298,7 @@ describe("canonical alpha-mask picking", () => {
       inverseModel: identityMat4(),
       modelHandedness: 1,
       node,
+      objectLocalModel: identityMat4(),
       pickingGeometry: geometry(),
     };
     const ray = {

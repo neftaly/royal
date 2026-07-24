@@ -5,6 +5,7 @@ import {
   opaqueDepthPrepassRequested,
   planOpaqueDepthPrepass,
   surfaceCanUseOpaqueDepthPrepass,
+  updateOpaqueDepthPrepassPlan,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass";
 import { SurfaceDepthPrepassOwner } from "../../packages/renderer-webgl/src/surface/surface-depth-prepass-owner";
 import { SurfaceProgramOwner } from "../../packages/renderer-webgl/src/surface/surface-program-owner";
@@ -74,6 +75,21 @@ describe("opaque depth-prepass policy core", () => {
     expect(opaqueDepthPrepassRequested(plan, [1.04, 0, 0])).toBe(false);
     expect(opaqueDepthPrepassRequested(plan, [1.04, 0, 0], true)).toBe(true);
     expect(opaqueDepthPrepassRequested(plan, [1.11, 0, 0], true)).toBe(false);
+  });
+
+  it("reuses retained plan storage while object bounds move", () => {
+    const plan = planOpaqueDepthPrepass([surface()]);
+    const min = plan.min;
+    const max = plan.max;
+    const moved = {
+      ...surface(),
+      worldBounds: { max: [6, 1, 1], min: [4, -1, -1] },
+    } as CanonicalDrawSurface;
+
+    expect(updateOpaqueDepthPrepassPlan(plan, [moved])).toBe(plan);
+    expect(plan.min).toBe(min);
+    expect(plan.max).toBe(max);
+    expect(plan).toMatchObject({ candidateCount: 1, max: [6, 1, 1], min: [4, -1, -1] });
   });
 
   it("excludes surfaces whose depth depends on coverage or later composition", () => {

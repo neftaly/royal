@@ -1,11 +1,11 @@
 import { canonicalMaterialHasTransmission } from "./canonical-material";
 import type { CanonicalDrawSurface } from "./scene-lowering";
 
-export type OpaqueDepthPrepassPlan = Readonly<{
+export type OpaqueDepthPrepassPlan = {
   candidateCount: number;
-  max: readonly [number, number, number];
-  min: readonly [number, number, number];
-}>;
+  readonly max: [number, number, number];
+  readonly min: [number, number, number];
+};
 
 export const surfaceCanUseOpaqueDepthPrepass = (surface: CanonicalDrawSurface): boolean => (
   surface.topology !== "lines"
@@ -19,12 +19,18 @@ export const surfaceCanUseOpaqueDepthPrepass = (surface: CanonicalDrawSurface): 
  * A position-only pass amortizes its extra vertex work only across scenes with
  * enough retained opaque surfaces to expose substantial hidden fragment work.
  */
-export const planOpaqueDepthPrepass = (
+export const updateOpaqueDepthPrepassPlan = (
+  plan: OpaqueDepthPrepassPlan,
   surfaces: readonly CanonicalDrawSurface[],
 ): OpaqueDepthPrepassPlan => {
   let candidates = 0;
-  const min: [number, number, number] = [Infinity, Infinity, Infinity];
-  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  const { max, min } = plan;
+  min[0] = Infinity;
+  min[1] = Infinity;
+  min[2] = Infinity;
+  max[0] = -Infinity;
+  max[1] = -Infinity;
+  max[2] = -Infinity;
   for (const surface of surfaces) {
     if (!surfaceCanUseOpaqueDepthPrepass(surface)) continue;
     candidates += 1;
@@ -33,8 +39,17 @@ export const planOpaqueDepthPrepass = (
       max[axis] = Math.max(max[axis]!, surface.worldBounds.max[axis]!);
     }
   }
-  return { candidateCount: candidates, max, min };
+  plan.candidateCount = candidates;
+  return plan;
 };
+
+export const planOpaqueDepthPrepass = (
+  surfaces: readonly CanonicalDrawSurface[],
+): OpaqueDepthPrepassPlan => updateOpaqueDepthPrepassPlan({
+  candidateCount: 0,
+  max: [-Infinity, -Infinity, -Infinity],
+  min: [Infinity, Infinity, Infinity],
+}, surfaces);
 
 /**
  * Position-only depth work is useful only after enough opaque draws and while
