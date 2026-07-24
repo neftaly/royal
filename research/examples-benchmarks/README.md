@@ -134,6 +134,18 @@ is true and `warnings` is empty or understood.
   than 41 MB of network transfer. The adjacent PNG matches the prior physical
   Exterior capture; 12/12 moving frames complete at `33ms` p95.
 
+2026-07-25 iPad Safari texture-read-ahead integration:
+
+- `ipad-safari/2026-07-24T17-24-58-691Z-gltf-scenes.json` is the exact clean
+  `9f697918` cold-cache Sponza run. It reaches first usable geometry at 6.656
+  seconds, settles 69/69 images at 8.656 seconds, retains 197,852,340 ordinary
+  texture bytes within 232,666,368 total persistent bytes, and records no
+  fallback, image failure, GPU denial, lifecycle interruption, warning, or
+  application browser diagnostic. Full-DPR camera motion completes 24/24
+  samples at `27ms` p95 while the host is under ordinary concurrent workload;
+  48 measured renderer callbacks total 66 ms and peak at 5 ms. The adjacent PNG
+  retains the final texture-coherent physical pixels.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at
