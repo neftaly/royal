@@ -136,15 +136,14 @@ export const createStaticPrimitiveTextureDemand = (
 
 /**
  * Builds one selected-primitive encoded-image collector while preserving the
- * exact capability-aware preferred/fallback plan.
+ * exact extension-aware preferred/fallback plan.
  */
 export const createStaticPrimitiveImageDemand = (
   document: JsonObject,
   label: string,
-  etc2Available: boolean,
   claimImage: (imageIndex: number) => void,
 ): ((primitive: JsonObject, path: string) => void) => {
-  const planTextureImages = createStaticTextureImagePlanner(document, label, etc2Available);
+  const planTextureImages = createStaticTextureImagePlanner(document, label);
   return createStaticPrimitiveTextureDemand(document, label, ({ colorSpace, textureIndex }) => {
     const plan = planTextureImages(textureIndex, colorSpace);
     claimImage(plan.primary.imageIndex);

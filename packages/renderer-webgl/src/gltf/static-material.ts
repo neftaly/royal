@@ -119,7 +119,6 @@ export const createTextureAssetReader = (
   contentKey: string,
   sourceUri: string,
   label: string,
-  etc2Available = true,
   resourceVersion?: TextureVersion,
 ): ((
   value: unknown,
@@ -132,7 +131,6 @@ export const createTextureAssetReader = (
   const planTextureImages = createStaticTextureImagePlanner(
     document,
     label,
-    etc2Available,
   );
   const prepared = new Map<string, TextureSourceRef>();
   return (value, path, colorSpace = "srgb") => {
@@ -164,16 +162,12 @@ export const createTextureAssetReader = (
       if ((image.uri === undefined) === (image.bufferView === undefined)) {
         fail(label, imagePath, "must contain exactly one of uri or bufferView");
       }
-      const expectedMime = sourceEncoding === "ktx2-etc2"
-        ? "image/ktx2"
-        : sourceEncoding === "svg" ? "image/svg+xml" : expectedMimeType;
-      const mimeError = sourceEncoding === "ktx2-etc2"
-        ? "must be image/ktx2 for GS_texture_etc2"
-        : sourceEncoding === "svg"
-          ? "must be image/svg+xml for GS_texture_svg"
-          : `must be ${expectedMimeType} for ${
-            expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
-          }`;
+      const expectedMime = sourceEncoding === "svg" ? "image/svg+xml" : expectedMimeType;
+      const mimeError = sourceEncoding === "svg"
+        ? "must be image/svg+xml for GS_texture_svg"
+        : `must be ${expectedMimeType} for ${
+          expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
+        }`;
       if (image.bufferView === undefined) {
         const uri = image.uri;
         if (typeof uri !== "string" || uri.length === 0) {
@@ -195,16 +189,14 @@ export const createTextureAssetReader = (
         };
       }
       if (expectedMime === undefined ? (
-        image.mimeType !== "image/avif"
-        && image.mimeType !== "image/jpeg"
+        image.mimeType !== "image/jpeg"
         && image.mimeType !== "image/png"
-        && image.mimeType !== "image/webp"
       ) : image.mimeType !== expectedMime) {
         fail(
           label,
           `${imagePath}.mimeType`,
           expectedMime === undefined
-            ? "must be image/avif, image/jpeg, image/png, or image/webp"
+            ? "must be image/jpeg or image/png for a core glTF image"
             : mimeError,
         );
       }

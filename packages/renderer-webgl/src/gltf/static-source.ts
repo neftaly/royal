@@ -111,7 +111,6 @@ export const readCanonicalStaticGltfSource = async (
   sourceUri: string,
   read: StaticGltfResourceReader,
   sceneIndex?: number,
-  etc2Available = true,
   resourceVersion?: string | number,
   geometryTasks?: StaticGeometryTaskPlan,
   computeGeometryTaskKeys?: ReadonlySet<string>,
@@ -131,7 +130,6 @@ export const readCanonicalStaticGltfSource = async (
       label,
       true,
       true,
-      etc2Available,
     );
     const binaryChunk = parsed.binaryChunk
       ?? fail(label, "buffers[0]", "requires a GLB BIN chunk");
@@ -154,7 +152,6 @@ export const readCanonicalStaticGltfSource = async (
       document,
       label,
       sceneIndex,
-      etc2Available,
       preparePrimitive,
     );
     const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
@@ -192,7 +189,6 @@ export const readCanonicalStaticGltfSource = async (
     label,
     true,
     true,
-    etc2Available,
   );
   const buffers = array(document.buffers, label, "buffers");
   if (buffers.length === 0) fail(label, "buffers", "must not be empty");
@@ -200,7 +196,6 @@ export const readCanonicalStaticGltfSource = async (
     document,
     label,
     sceneIndex,
-    etc2Available,
     preparePrimitive,
   );
   const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);

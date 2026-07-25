@@ -45,13 +45,11 @@ describe("browser static glTF preparation", () => {
       new AbortController().signal,
       vi.fn(),
       () => worker as unknown as Worker,
-      true,
       2,
     );
     expect(worker.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         contentKey: "asset:v1",
-        etc2Available: true,
         kind: "prepare",
         sceneIndex: 2,
       }),
@@ -88,7 +86,6 @@ describe("browser static glTF preparation", () => {
       "/asset.gltf",
       new AbortController().signal,
       vi.fn(),
-      true,
       undefined,
       undefined,
       geometryTasks,

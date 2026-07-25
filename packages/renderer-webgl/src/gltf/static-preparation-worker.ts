@@ -14,7 +14,6 @@ type PreparationRequest = Readonly<{
   bytes: Uint8Array;
   computeGeometryTaskKeys?: readonly string[];
   contentKey: string;
-  etc2Available: boolean;
   kind: "prepare";
   label: string;
   geometryTasks?: StaticGeometryTaskPlan;
@@ -116,7 +115,6 @@ workerScope.addEventListener("message", (event) => {
     request.sourceUri,
     readResource,
     executeDracoTasksInWorkers,
-    request.etc2Available,
     request.sceneIndex,
     request.resourceVersion,
     request.geometryTasks,

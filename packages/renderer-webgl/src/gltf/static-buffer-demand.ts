@@ -106,7 +106,6 @@ export const selectedStaticGltfBufferViewIndices = (
   document: JsonObject,
   label: string,
   sceneIndex?: number,
-  etc2Available = true,
   preparePrimitive?: (meshIndex: number, primitiveIndex: number) => boolean,
 ): ReadonlySet<number> => {
   const accessors = array(document.accessors, label, "accessors");
@@ -121,7 +120,6 @@ export const selectedStaticGltfBufferViewIndices = (
   const claimPrimitiveImages = createStaticPrimitiveImageDemand(
     document,
     label,
-    etc2Available,
     (imageIndex) => {
       const imagePath = `images[${imageIndex}]`;
       const image = object(images[imageIndex], label, imagePath);
@@ -248,10 +246,9 @@ export const planStaticGltfBufferRequests = (
   document: JsonObject,
   label: string,
   sceneIndex?: number,
-  etc2Available = true,
 ): readonly (StaticGltfResourceRequest | undefined)[] =>
   planStaticGltfBufferRequestsForViews(
     document,
     label,
-    selectedStaticGltfBufferViewIndices(document, label, sceneIndex, etc2Available),
+    selectedStaticGltfBufferViewIndices(document, label, sceneIndex),
   );

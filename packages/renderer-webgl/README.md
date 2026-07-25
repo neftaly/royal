@@ -198,45 +198,20 @@ const info = inspectEtc2Ktx2(encodedBytes);
 console.log(info.colorSpace, info.width, info.height, info.storageBytes);
 ```
 
-The repository command below attaches already-encoded KTX2 images to existing
-core-fallback glTF textures. It accepts JSON `.gltf` and binary `.glb`, requires
-the output to retain that container format, and preserves every non-JSON GLB
-chunk byte-for-byte. Mappings use glTF texture indices, and KTX2 paths are
-relative to the output document. It validates every input byte profile and the
-linear/sRGB material-slot use before writing.
-
-```sh
-pnpm author:gltf-etc2 scene.gltf scene.etc2.gltf \
-  0=textures/base-color.ktx2 3=textures/normal.ktx2
-```
-
-Large scenes can keep the mappings in a reviewable attachment file:
-
-```json
-[
-  { "textureIndex": 0, "uri": "textures/base-color.ktx2" },
-  { "textureIndex": 3, "uri": "textures/normal.ktx2" }
-]
-```
-
-```sh
-pnpm author:gltf-etc2 scene.glb scene.etc2.glb \
-  --attachments=scene.etc2-attachments.json
-```
-
-This command does not encode source pixels. Encoding stays an offline pipeline
-choice; Royal ships no runtime Basis/WASM transcoder. At runtime the root
-enables `WEBGL_compressed_texture_etc` once. Optional `GS_texture_etc2` uses its
-core fallback when unavailable, while required/direct compressed sources fail
-explicitly instead of issuing an invalid upload.
+Direct ETC2 KTX2 is a Royal texture and virtual-texture source, not a glTF
+extension. Royal does not attach it to glTF through a private extension and
+does not reinterpret `KHR_texture_basisu`; the latter remains unsupported
+while Royal ships no Basis runtime transcoder. Direct compressed sources fail
+explicitly when `WEBGL_compressed_texture_etc` is unavailable.
 
 Experimental `GS_texture_svg` prefers one bounded self-contained SVG source on
-sRGB material slots. Optional use requires an ordinary core fallback; Royal
-fetches it only after SVG transport, profile, or decode failure. Required use
-may omit the core source and fails if SVG cannot publish. Both outcomes retain
-one texture identity, sampler, material path and focused lifecycle. This is an
-unregistered Royal vendor experiment, not a registered glTF compatibility
-claim.
+sRGB material slots. Optional use requires a portable raster fallback: an
+ordinary core source, or a lower-priority AVIF/WebP source that is itself
+required. Royal fetches that representation only after SVG transport, profile,
+or decode failure. Required SVG use may omit a fallback and fails if SVG cannot
+publish. Both outcomes retain one texture identity, sampler, material path and
+focused lifecycle. This is an unregistered Royal vendor experiment, not a
+registered glTF compatibility claim.
 
 The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
 `createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It

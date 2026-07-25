@@ -12,7 +12,6 @@ export const validateStaticGltfDeclarations = (
   label: string,
   dracoAvailable: boolean,
   meshoptAvailable: boolean,
-  etc2Available: boolean,
 ): StaticGltfDeclarations => {
   const asset = object(document.asset, label, "asset");
   if (asset.version !== "2.0") fail(label, "asset.version", "must be 2.0");
@@ -35,7 +34,6 @@ export const validateStaticGltfDeclarations = (
     label,
     dracoAvailable,
     meshoptAvailable,
-    etc2Available,
   );
   if (
     usedExtensions.includes("KHR_mesh_quantization")

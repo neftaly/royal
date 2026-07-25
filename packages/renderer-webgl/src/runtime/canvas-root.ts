@@ -357,7 +357,6 @@ const lazyBrowserTextureDecoder = (
 };
 
 const lazyBrowserGltfPreparer = (
-  etc2Available: boolean,
   workerLimit: number,
 ): Readonly<{
   dispose(): void;
@@ -402,7 +401,6 @@ const lazyBrowserGltfPreparer = (
       sourceUri,
       signal,
       readResource,
-      etc2Available,
       sceneIndex,
       resourceVersion,
       geometryTasks,
@@ -627,7 +625,6 @@ export class CanvasRoot implements RendererRoot {
       },
     );
     this.#gltfPreparer = lazyBrowserGltfPreparer(
-      this.#etc2Available,
       asyncPreparationJobLimit,
     );
     this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);

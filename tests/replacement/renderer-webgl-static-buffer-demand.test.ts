@@ -167,45 +167,6 @@ describe("static glTF selected-buffer demand", () => {
     }]);
   });
 
-  it("uses the same capability-aware ETC2 image choice as material preparation", () => {
-    const document = twoSceneDocument() as {
-      bufferViews: Array<Record<string, unknown>>;
-      images?: unknown[];
-      materials?: unknown[];
-      meshes: Array<{ primitives: Array<Record<string, unknown>> }>;
-      textures?: unknown[];
-    };
-    document.bufferViews.push(
-      { buffer: 0, byteLength: 20, byteOffset: 400 },
-      { buffer: 0, byteLength: 20, byteOffset: 500 },
-    );
-    document.images = [
-      { bufferView: 3, mimeType: "image/png" },
-      { bufferView: 4, mimeType: "image/ktx2" },
-    ];
-    document.textures = [{
-      extensions: { GS_texture_etc2: { source: 1 } },
-      source: 0,
-    }];
-    document.materials = [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }];
-    document.meshes[0]!.primitives[0]!.material = 0;
-
-    expect(planStaticGltfBufferRequests(document, "ETC2 demand", 0, true)).toEqual([{
-      byteLength: 1_000,
-      ranges: [
-        { byteLength: 150, byteOffset: 0 },
-        { byteLength: 20, byteOffset: 500 },
-      ],
-    }]);
-    expect(planStaticGltfBufferRequests(document, "ETC2 demand", 0, false)).toEqual([{
-      byteLength: 1_000,
-      ranges: [
-        { byteLength: 150, byteOffset: 0 },
-        { byteLength: 20, byteOffset: 400 },
-      ],
-    }]);
-  });
-
   it("chooses one full read when selected ranges cover most of a buffer", () => {
     const document = twoSceneDocument() as {
       bufferViews: Array<Record<string, unknown>>;

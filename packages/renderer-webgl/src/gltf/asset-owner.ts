@@ -489,7 +489,6 @@ export class GltfAssetOwner {
             gltfSourceKey(asset),
             diagnosticLabel(asset),
             asset.src,
-            true,
             asset.sceneIndex,
             asset.version,
           );
@@ -592,7 +591,6 @@ export class GltfAssetOwner {
             asset.src,
             readResource,
             undefined,
-            true,
             asset.sceneIndex,
             asset.version,
             taskPlan,

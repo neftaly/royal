@@ -25,7 +25,6 @@ describe("early static external texture demand", () => {
       "counter-root",
       "counter.gltf",
       "/models/counter.gltf",
-      true,
       undefined,
       "release-2",
     );
@@ -99,7 +98,6 @@ describe("early static external texture demand", () => {
       "shared-root",
       "shared.gltf",
       "/models/shared.gltf",
-      true,
       undefined,
       7,
     );
@@ -110,7 +108,6 @@ describe("early static external texture demand", () => {
       "/models/shared.gltf",
       async () => parsed.binaryChunk!.subarray(0, 68),
       undefined,
-      true,
       undefined,
       7,
     );
@@ -139,7 +136,6 @@ describe("early static external texture demand", () => {
         `root-${color[0]}`,
         "shared.gltf",
         "/models/shared.gltf",
-        true,
         undefined,
         version,
       ).geometryTasks!.tasks[0]!.key;

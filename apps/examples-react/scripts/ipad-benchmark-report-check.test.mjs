@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   isIpadSafariBenchmarkEnvelope,
   isExpectedIpadDevTransportDiagnostic,
-  validateIpadEtc2BenchmarkEnvelope,
   validateIpadSafariBenchmarkEnvelope,
 } from './ipad-benchmark-report-check.mjs';
 
@@ -110,38 +109,4 @@ describe('iPad Safari benchmark report validation', () => {
     expect(validateIpadSafariBenchmarkEnvelope(report)).toEqual({ errors: [], warnings: [] });
   });
 
-  it('validates the exact clean physical ETC2 residency oracle', () => {
-    const envelope = validEnvelope();
-    envelope.report.example = { id: 'gltf-lab', path: '/gltf-lab' };
-    envelope.report.url = 'http://example.test/gltf-lab?case=RoyalEtc2OptionalFallback';
-    envelope.report.device.webgl.extensions = ['WEBGL_compressed_texture_etc'];
-    envelope.report.renderer.after = {
-      gltfLoadDiagnostics: {
-        assets: [{
-          imageCandidates: 1,
-          imageFailures: 0,
-          imageRequests: 1,
-          imagesLoaded: 1,
-          src: '/fixtures/royal/GsTextureEtc2/optional-fallback-quad.gltf',
-          status: 'ready',
-        }],
-      },
-      textureResidency: {
-        bytes: 16,
-        compressedBytes: 16,
-        compressedResources: 1,
-        fitted: 0,
-        resources: 1,
-      },
-      virtualTexturing: null,
-    };
-
-    expect(validateIpadEtc2BenchmarkEnvelope(envelope)).toEqual({ errors: [], warnings: [] });
-    envelope.report.renderer.after.textureResidency.compressedBytes = 0;
-    envelope.report.source.dirty = true;
-    expect(validateIpadEtc2BenchmarkEnvelope(envelope).errors).toEqual(expect.arrayContaining([
-      expect.stringContaining('clean build'),
-      expect.stringContaining('compressedBytes must be 16'),
-    ]));
-  });
 });

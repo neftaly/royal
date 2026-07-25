@@ -108,7 +108,6 @@ export class BrowserStaticGltfPreparationOwner {
     sourceUri: string,
     signal: AbortSignal,
     readResource: StaticGltfResourceReader,
-    etc2Available = true,
     sceneIndex?: number,
     resourceVersion?: TextureVersion,
     geometryTasks?: StaticGeometryTaskPlan,
@@ -125,7 +124,6 @@ export class BrowserStaticGltfPreparationOwner {
         sourceUri,
         readResource,
         undefined,
-        etc2Available,
         sceneIndex,
         resourceVersion,
         geometryTasks,
@@ -211,7 +209,6 @@ export class BrowserStaticGltfPreparationOwner {
           {
             bytes,
             contentKey,
-            etc2Available,
             kind: "prepare",
             label,
             resourceVersion,
@@ -284,7 +281,6 @@ export const prepareStaticGltfInBrowser = async (
   createWorker: (() => Worker) | undefined = typeof Worker === "function"
     ? defaultWorker
     : undefined,
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
   geometryTasks?: StaticGeometryTaskPlan,
@@ -302,7 +298,6 @@ export const prepareStaticGltfInBrowser = async (
       sourceUri,
       signal,
       readResource,
-      etc2Available,
       sceneIndex,
       resourceVersion,
       geometryTasks,

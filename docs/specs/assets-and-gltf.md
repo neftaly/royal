@@ -97,10 +97,10 @@ For external `.gltf` buffers, the cold pure planner derives byte demand from
 the selected scene's child/LOD graph, accessors, sparse payloads, instancing,
 Draco payloads, and embedded images. Embedded-image demand follows only the
 selected primitives' base materials, material LOD chains, and variant mappings.
-Texture source choice is the same capability-aware pure decision used by
-material preparation: a supported ETC2 source replaces its core/WebP alternate,
-while an optional SVG source retains both its preferred vector source and the
-required raster fallback. Unlit materials demand only their base-color input.
+Texture source choice is the same extension-aware pure decision used by
+material preparation: draft AVIF replaces its WebP/core alternate, while an
+optional SVG source retains both its preferred vector source and the required
+raster fallback. Unlit materials demand only their base-color input.
 The browser port MAY satisfy that plan with single HTTP byte-range requests. It
 MUST probe range behavior before issuing remaining ranges concurrently,
 validate each returned interval, and fall back once to a complete response when
@@ -210,8 +210,8 @@ diagnosed once.
 
 The current replacement implementation accepts these required declarations:
 
-- `EXT_mesh_gpu_instancing`, draft `EXT_texture_avif`, `EXT_texture_webp`, and experimental
-  `GS_texture_etc2`;
+- `EXT_mesh_gpu_instancing`, draft `EXT_texture_avif`, and
+  `EXT_texture_webp`;
 - `EXT_meshopt_compression` through selected-view async codec preparation;
 - `KHR_draco_mesh_compression` through demanded async codec preparation;
 - `KHR_lights_punctual`;
@@ -225,16 +225,16 @@ The current replacement implementation accepts these required declarations:
 - `MSFT_lod` plus its `MSFT_screencoverage` convention.
 
 This is an implementation ledger, not the desired eventual static profile.
-Notably, glTF `KHR_texture_basisu`, image-based-light extensions, and the remaining PBR
-family are not yet accepted as required. Direct Royal offline ETC2 KTX2
-ingestion is not Basis ingestion. Only the explicitly unregistered
-`GS_texture_etc2` vendor extension selects that storage from glTF; it does not
-imply `KHR_texture_basisu` support.
+Notably, glTF `KHR_texture_basisu`, image-based-light extensions, and the
+remaining PBR family are not yet accepted as required. Direct Royal offline
+ETC2 KTX2 ingestion is not Basis ingestion and is not exposed through a private
+glTF extension.
 
 Unknown `extensionsUsed` declarations do not fail core content. An unknown
 `extensionsRequired` declaration MUST fail before knowingly incomplete content
-is published. Royal MUST NOT claim support for imaginary, draft, or similarly
-named extensions merely because it can ignore them.
+is published. Royal MUST NOT claim support for imaginary or similarly named
+extensions merely because it can ignore them. A draft is executable only after
+Royal adopts its actual published proposal name, placement, and payload.
 
 Validation follows the executable extension graph. Payloads of unsupported
 optional extensions are opaque because their core fallback does not execute

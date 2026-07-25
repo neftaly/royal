@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import {
   isIpadSafariBenchmarkEnvelope,
-  validateIpadEtc2BenchmarkEnvelope,
   validateIpadSafariBenchmarkEnvelope,
 } from './ipad-benchmark-report-check.mjs';
 
@@ -840,9 +839,7 @@ const report = await parseReport();
 
 if (requireObject(report, 'report')) {
   if (isIpadSafariBenchmarkEnvelope(report)) {
-    const result = String(report.report?.url ?? '').includes('case=RoyalEtc2OptionalFallback')
-      ? validateIpadEtc2BenchmarkEnvelope(report)
-      : validateIpadSafariBenchmarkEnvelope(report);
+    const result = validateIpadSafariBenchmarkEnvelope(report);
     errors.push(...result.errors);
     warnings.push(...result.warnings);
   } else if (isGltfLoadReport(report)) {

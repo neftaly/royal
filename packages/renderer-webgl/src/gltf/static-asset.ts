@@ -231,7 +231,6 @@ const preflightStaticDocument = (
   label: string,
   dracoAvailable: boolean,
   meshoptAvailable: boolean,
-  etc2Available: boolean,
   validatedDeclarations?: StaticGltfDeclarations,
 ): StaticDocumentPreflight => {
   if (contentKey.length === 0) throw new TypeError("Royal glTF contentKey must not be empty");
@@ -240,7 +239,6 @@ const preflightStaticDocument = (
     label,
     dracoAvailable,
     meshoptAvailable,
-    etc2Available,
   );
 
   const buffers = array(document.buffers, label, "buffers");
@@ -287,7 +285,6 @@ const prepareStaticDocument = (
   label: string,
   sourceUri: string,
   preflight: StaticDocumentPreflight,
-  etc2Available: boolean,
   decodeDraco?: StaticDracoDecoder,
   selectedSceneIndex?: number,
   resourceVersion?: TextureVersion,
@@ -345,7 +342,6 @@ const prepareStaticDocument = (
     contentKey,
     sourceUri,
     label,
-    etc2Available,
     resourceVersion,
   );
   const nodes = array(document.nodes, label, "nodes");
@@ -1021,7 +1017,6 @@ export const prepareStaticGlb = (
   contentKey: string,
   label = "glTF asset",
   sourceUri = "asset.glb",
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
 ): PreparedStaticGltf => {
@@ -1037,7 +1032,6 @@ export const prepareStaticGlb = (
     label,
     false,
     false,
-    etc2Available,
   );
   return prepareStaticDocument(
     document,
@@ -1046,7 +1040,6 @@ export const prepareStaticGlb = (
     label,
     sourceUri,
     preflight,
-    etc2Available,
     undefined,
     sceneIndex,
     resourceVersion,
@@ -1061,7 +1054,6 @@ const prepareDocumentWithCodecs = async (
   label: string,
   sourceUri: string,
   executeDracoTasks?: StaticDracoTaskExecutor,
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
   validatedDeclarations?: StaticGltfDeclarations,
@@ -1076,7 +1068,6 @@ const prepareDocumentWithCodecs = async (
     label,
     true,
     true,
-    etc2Available,
     validatedDeclarations,
   );
   const geometryTaskKeys = staticGeometryTaskKeyMap(geometryTasks);
@@ -1103,7 +1094,6 @@ const prepareDocumentWithCodecs = async (
     label,
     sourceUri,
     preflight,
-    etc2Available,
     decodeDraco,
     sceneIndex,
     resourceVersion,
@@ -1120,7 +1110,6 @@ export const prepareStaticGltfSource = async (
   sourceUri: string,
   read: StaticGltfResourceReader,
   executeDracoTasks?: StaticDracoTaskExecutor,
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
   geometryTasks?: StaticGeometryTaskPlan,
@@ -1132,7 +1121,6 @@ export const prepareStaticGltfSource = async (
     sourceUri,
     read,
     sceneIndex,
-    etc2Available,
     resourceVersion,
     geometryTasks,
     computeGeometryTaskKeys,
@@ -1145,7 +1133,6 @@ export const prepareStaticGltfSource = async (
     label,
     sourceUri,
     executeDracoTasks,
-    etc2Available,
     sceneIndex,
     resourceVersion,
     canonical.declarations,

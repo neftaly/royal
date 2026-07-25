@@ -71,7 +71,7 @@ unaware consumers.
 When the extension is not listed in `extensionsRequired`, an aware consumer
 SHOULD use the SVG source and MUST have a portable raster fallback. That
 fallback may be the parent texture's valid core `source`, or a present
-lower-priority ETC2, AVIF, or WebP extension which is itself required. An
+lower-priority AVIF or WebP extension which is itself required. An
 unaware consumer uses the core source or follows its ordinary
 required-extension policy.
 
@@ -168,9 +168,9 @@ lifecycle.
 It does not race both sources by default. This avoids a second simultaneous
 decode and makes fallback a recovery path rather than a permanent tax.
 
-When an optional texture also declares ETC2, AVIF, or WebP alternatives,
-Royal's deferred fallback preference is ETC2 when supported, then AVIF, WebP,
-and the core source. Only that selected fallback is fetched after SVG fails.
+When an optional texture also declares AVIF or WebP alternatives, Royal's
+deferred fallback preference is AVIF, WebP, and then the core source. Only that
+selected fallback is fetched after SVG fails.
 
 For an optional extension, SVG transport/decode/profile failure produces one
 bounded diagnostic and settles on the selected fallback. It MUST NOT retry
@@ -232,7 +232,7 @@ semantic contract should survive that rename.
   proof of visual equivalence.
 
 Royal implements one canonical logical-source recipe whose decoder publishes
-the preferred SVG or recovers to one selected raster/ETC2 fallback. The winner
+the preferred SVG or recovers to one selected raster fallback. The winner
 keeps one texture identity, sampler, material binding, cancellation generation,
 and focused asset lifecycle. A successful SVG decode retains its already parsed
 encoded authority for automatic VT, so VT does not refetch or reparse it.

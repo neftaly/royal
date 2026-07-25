@@ -1095,30 +1095,6 @@
       }
     },
     {
-      "name": "RoyalEtc2OptionalFallback",
-      "status": "supported-oracle",
-      "path": "fixtures/royal/GsTextureEtc2/optional-fallback-quad.gltf",
-      "bytes": 2650,
-      "sha256": "3d66615d60f64fb8597abef6a79ebd90e3f5ad24feddf18be34e5b98bfdf8adf",
-      "provenance": "fixtures/royal/GsTextureEtc2/README.md",
-      "features": [
-        "GS_texture_etc2",
-        "KHR_materials_unlit",
-        "images"
-      ],
-      "extensionsRequired": [
-        "KHR_materials_unlit"
-      ],
-      "parsed": {
-        "animations": 0,
-        "morphPrimitives": 0,
-        "skins": 0
-      },
-      "presentation": {
-        "scale": 0.44
-      }
-    },
-    {
       "name": "RoyalSvgRequired",
       "status": "supported-oracle",
       "path": "fixtures/royal/GsTextureSvg/required-svg-quad.gltf",

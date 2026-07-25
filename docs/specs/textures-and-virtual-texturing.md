@@ -126,15 +126,13 @@ A mipmapped sampler requires a complete authored pyramid. Under a per-texture
 storage ceiling, Royal MAY drop the largest authored levels and rebase a
 complete remaining suffix; it never resamples compressed texels or calls
 `generateMipmap` for this path. Exact compressed bytes, not an RGBA estimate,
-participate in the persistent GPU budget. Experimental `GS_texture_etc2` may
-select this same source profile from glTF and then disappears into the ordinary
-texture lifecycle. `KHR_texture_basisu` is a separate glTF delivery contract
-and remains unsupported because Royal ships no Basis runtime transcoder.
-Direct ETC2 upload additionally requires the root to enable
-`WEBGL_compressed_texture_etc`. Optional glTF ETC2 sources select their core
-fallback when it is absent; required glTF ETC2 and direct Royal KTX2 sources
-fail explicitly before an unsupported GPU upload. Authored compressed VT pages
-settle as unsupported/error rather than allocating an invalid atlas.
+participate in the persistent GPU budget. This direct storage profile is not a
+glTF extension. `KHR_texture_basisu` is a separate official glTF delivery
+contract and remains unsupported because Royal ships no Basis runtime
+transcoder. Direct ETC2 upload additionally requires the root to enable
+`WEBGL_compressed_texture_etc`; unsupported direct Royal KTX2 sources fail
+explicitly before upload. Authored compressed VT pages settle as
+unsupported/error rather than allocating an invalid atlas.
 
 ## Representation choice
 

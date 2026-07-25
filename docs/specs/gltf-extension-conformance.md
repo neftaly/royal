@@ -1,6 +1,6 @@
 # glTF required-extension conformance ledger
 
-Status: executable replacement profile; reviewed 2026-07-23
+Status: executable replacement profile; reviewed 2026-07-25
 
 This ledger records what Royal may truthfully accept in `extensionsRequired`.
 It is narrower than the optional-feature possibility space. A name is accepted
@@ -19,6 +19,23 @@ appears there, and every executable extension payload is declared. Payloads of
 unsupported optional extensions are opaque core-fallback branches; payloads of
 supported extensions remain recursively validated. Unknown declared optional
 names remain legal when core fallback is valid.
+
+## Extension admission policy
+
+An executable Royal glTF extension MUST be one of:
+
+- ratified or registered in the Khronos glTF extension registry;
+- published under an active Khronos or multi-vendor draft whose exact name,
+  placement, and payload Royal implements; or
+- the single explicit Royal exception, `GS_texture_svg`.
+
+`GS_texture_svg` is the only executable `GS_` name. Direct Royal features,
+browser format support, or a convenient payload shape do not authorize another
+private glTF extension. A new accepted name requires primary specification
+evidence, an honest status label, fallback/required behavior, cold validation,
+and positive and adversarial fixtures before it enters the implementation
+ledger below. Registered vendor extensions such as `MSFT_lod` remain eligible
+but are implemented only when their renderer semantics are justified.
 
 The glTF Lab distinguishes a `supported-oracle` from a
 `core-fallback-oracle`. The latter proves that an optional extension's authored
@@ -39,7 +56,6 @@ oracle.
 | `EXT_meshopt_compression` | buffer view and optional fallback-buffer marker; async preparation with available decoder | demanded decoded buffer-view bytes enter the ordinary canonical accessor path |
 | `EXT_texture_avif` (open draft) | texture | ordinary cold texture recipe using the draft extension image source |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
-| `GS_texture_etc2` | texture | explicitly marked offline ETC2 KTX2 recipe using the ordinary texture lifecycle |
 | `GS_texture_svg` | texture | experimental preferred SVG recipe with required failure or one deferred ordinary fallback |
 | `KHR_draco_mesh_compression` | mesh primitive, async preparation with available decoder | validated canonical triangle attributes and indices |
 | `KHR_lights_punctual` | document and node | canonical punctual light definition and transformed occurrences |
@@ -72,16 +88,6 @@ transform math is generic.
   volume fails because its rendering semantics depend on transmission.
 - Texture transforms accept offset, rotation, scale, and UV-set override and
   disappear into canonical rows.
-- `GS_texture_etc2` accepts one image source containing Royal's validated,
-  unsupercompressed ETC2 RGBA KTX2 subset. Its source marker disappears at
-  canonical decode; sampler, material, budget, upload, draw and picking remain
-  ordinary paths. The root first enables `WEBGL_compressed_texture_etc` and
-  passes that capability into cold/worker preparation. When available,
-  selection is ETC2, then AVIF, then WebP, then core; when absent, optional
-  selection is AVIF, then WebP, then core and a required declaration fails
-  preflight. Optional ETC2 may omit the core source when its selected
-  lower-priority AVIF or WebP representation is itself required. Only the
-  selected source is fetched.
 - Draft `EXT_texture_avif` accepts the texture-level `{ source }` shape from
   open Khronos glTF PR #2235. Optional use requires either a core PNG/JPEG
   source or a present lower-priority WebP source which is itself required;
@@ -93,9 +99,9 @@ transform math is generic.
 - `GS_texture_svg` accepts one self-contained, bounded SVG image source for
   sRGB color slots. Optional use requires a core source or a present
   lower-priority texture extension which is itself required, and attempts SVG
-  first; on SVG transport, profile, or decode failure it selects ETC2 when
-  supported, then AVIF, WebP, and core, and fetches only that fallback. Required
-  use may omit the fallback and fails rather than silently changing
+  first; on SVG transport, profile, or decode failure it selects AVIF, WebP,
+  or core and fetches only that fallback. Required use may omit the fallback
+  and fails rather than silently changing
   representations. The chosen representation lowers through one texture
   identity and lifecycle.
 - Meshopt validates the ratified buffer-view schema, lazily loads its decoder,
@@ -130,7 +136,5 @@ extensions, the remaining PBR extension family, and unimplemented draft or
 imaginary texture extensions. Browser AVIF remains valid as a direct ordinary
 Royal texture source; `EXT_texture_avif` is implemented narrowly as an open
 draft and is not represented as registered or ratified compatibility.
-`GS_texture_etc2` is an explicitly unregistered experimental vendor extension
-rather than an ecosystem compatibility claim.
 `GS_texture_svg` is likewise an implemented but unregistered Royal experiment,
 not a registered ecosystem compatibility claim.

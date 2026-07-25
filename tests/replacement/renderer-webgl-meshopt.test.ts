@@ -203,7 +203,6 @@ describe("EXT_meshopt_compression ingestion", () => {
         sourceUri,
         read,
         undefined,
-        true,
         sceneIndex,
         resourceVersion,
         geometryTasks,

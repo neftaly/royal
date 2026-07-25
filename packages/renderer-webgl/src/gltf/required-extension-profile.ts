@@ -26,7 +26,6 @@ const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> 
   EXT_meshopt_compression: (path) => meshoptStorage.test(path),
   EXT_texture_avif: (path) => texture.test(path),
   EXT_texture_webp: (path) => texture.test(path),
-  GS_texture_etc2: (path) => texture.test(path),
   GS_texture_svg: (path) => texture.test(path),
   KHR_draco_mesh_compression: (path) => primitive.test(path),
   KHR_lights_punctual: (path) => path === "" || node.test(path),
@@ -58,7 +57,6 @@ export const validateRequiredExtensionProfile = (
   label: string,
   dracoAvailable: boolean,
   meshoptAvailable: boolean,
-  etc2Available = true,
 ): void => {
   const used = new Set<string>();
   for (let index = 0; index < usedExtensions.length; index += 1) {
@@ -82,7 +80,6 @@ export const validateRequiredExtensionProfile = (
       profile === undefined
       || (extensionName === "KHR_draco_mesh_compression" && !dracoAvailable)
       || (extensionName === "EXT_meshopt_compression" && !meshoptAvailable)
-      || (extensionName === "GS_texture_etc2" && !etc2Available)
     ) {
       fail(
         label,

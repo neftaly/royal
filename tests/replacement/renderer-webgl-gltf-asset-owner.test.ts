@@ -28,7 +28,6 @@ const prepareStatic = (
   sourceUri,
   readResource,
   undefined,
-  true,
   sceneIndex,
 );
 
@@ -50,7 +49,6 @@ const prepareSharedStatic = (
   sourceUri,
   readResource,
   undefined,
-  true,
   sceneIndex,
   resourceVersion,
   geometryTasks,

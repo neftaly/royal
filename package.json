@@ -19,7 +19,6 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "bench:vt-pages": "node scripts/virtual-texture-page-perf.ts",
-    "author:gltf-etc2": "pnpm --filter @royal/renderer-webgl build && node scripts/gltf-etc2-authoring.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:bundle-size:details": "node scripts/check-bundle-size.mjs --details",
     "check:vt-pages-build": "node scripts/virtual-texture-page-perf.ts --build-only",

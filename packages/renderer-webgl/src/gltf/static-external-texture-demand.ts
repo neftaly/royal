@@ -50,7 +50,6 @@ export const discoverExternalStaticGltfTextures = (
   contentKey: string,
   label: string,
   sourceUri: string,
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
 ): EarlyStaticTextureClaims => {
@@ -60,7 +59,6 @@ export const discoverExternalStaticGltfTextures = (
     contentKey,
     label,
     sourceUri,
-    etc2Available,
     sceneIndex,
     resourceVersion,
   );
@@ -71,7 +69,6 @@ const discoverExternalStaticGltfDocumentTextures = (
   contentKey: string,
   label: string,
   sourceUri: string,
-  etc2Available: boolean,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
 ): EarlyStaticTextureClaims => {
@@ -83,7 +80,6 @@ const discoverExternalStaticGltfDocumentTextures = (
   const planTextureImages = createStaticTextureImagePlanner(
     document,
     label,
-    etc2Available,
   );
   const readTextureAsset = createTextureAssetReader(
     document,
@@ -93,7 +89,6 @@ const discoverExternalStaticGltfDocumentTextures = (
     contentKey,
     sourceUri,
     label,
-    etc2Available,
     resourceVersion,
   );
   const textureAssets = new Map<string, TextureSourceRef>();
@@ -153,7 +148,6 @@ export const discoverEarlyStaticGltfRoot = (
   contentKey: string,
   label: string,
   sourceUri: string,
-  etc2Available = true,
   sceneIndex?: number,
   resourceVersion?: TextureVersion,
 ): EarlyStaticGltfRoot => {
@@ -172,7 +166,6 @@ export const discoverEarlyStaticGltfRoot = (
       contentKey,
       label,
       sourceUri,
-      etc2Available,
       sceneIndex,
       resourceVersion,
     ),
