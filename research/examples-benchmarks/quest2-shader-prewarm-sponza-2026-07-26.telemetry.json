@@ -1,0 +1,291 @@
+{
+  "schema": "royal-quest-telemetry",
+  "version": 1,
+  "available": true,
+  "run": {
+    "startedAt": "2026-07-25T16:35:48.992Z",
+    "endedAt": "2026-07-25T16:35:55.523Z",
+    "durationMs": 6531,
+    "commandExitCode": 0,
+    "commandSignal": null
+  },
+  "device": {
+    "androidRelease": "14",
+    "androidSdk": 34,
+    "buildFingerprint": "oculus/hollywood/hollywood:14/UP1A.231005.007.A1/52202280028100150:user/abl_signing_keys:release,amss_signing_keys:release,release-keys",
+    "buildIncremental": "52202280028100150",
+    "device": "hollywood",
+    "manufacturer": "Oculus",
+    "model": "Quest 2"
+  },
+  "before": {
+    "battery": {
+      "charging": false,
+      "levelPct": 96,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 25.2
+    },
+    "capturedAt": "2026-07-25T16:35:48.774Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 132968,
+        "rssKiB": 277006,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 2627480,
+        "cachedKiB": 2355732,
+        "freeKiB": 667352,
+        "swapFreeKiB": 3669496,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "cpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 48.38
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 46.724003
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 25.9
+        },
+        {
+          "name": "soc-iio-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 44.140003
+        }
+      ]
+    }
+  },
+  "after": {
+    "battery": {
+      "charging": false,
+      "levelPct": 96,
+      "poweredBy": [
+        "ac"
+      ],
+      "temperatureC": 25.2
+    },
+    "capturedAt": "2026-07-25T16:35:55.599Z",
+    "memory": {
+      "browser": {
+        "pssKiB": 127270,
+        "rssKiB": 271358,
+        "swapPssKiB": null
+      },
+      "system": {
+        "availableKiB": 1998900,
+        "cachedKiB": 1720188,
+        "freeKiB": 1023236,
+        "swapFreeKiB": 3669496,
+        "swapTotalKiB": 3670008,
+        "totalKiB": 5972324
+      }
+    },
+    "thermal": {
+      "status": "none",
+      "statusCode": 0,
+      "temperatures": [
+        {
+          "name": "apc-1-max-step",
+          "status": "none",
+          "statusCode": 0,
+          "type": 0,
+          "valueC": 52.746002
+        },
+        {
+          "name": "gpuss-0-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 1,
+          "valueC": 48.094
+        },
+        {
+          "name": "batt-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 2,
+          "valueC": 25.9
+        },
+        {
+          "name": "soc-iio-usr",
+          "status": "none",
+          "statusCode": 0,
+          "type": 3,
+          "valueC": 44.691
+        }
+      ]
+    }
+  },
+  "events": {
+    "dropped": 0,
+    "entries": [
+      {
+        "level": "info",
+        "message": "Explicit concurrent copying GC freed 23871(718KB) AllocSpace objects, 12(240KB) LOS objects, 49% free, 3320KB/6640KB, paused 36us,21us total 18.610ms",
+        "pid": 5895,
+        "tag": ".oculus.browser",
+        "timestamp": 1784997349.044,
+        "tid": 6385
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.51ms,App=2.29ms,GD=0.00ms,CPU&GPU=7.85ms,LCnt=6(DR0,LM0),GPU%=0.64,CPU%=0.18(W0.18),CFL=12.90/17.52,ICFLp95=15.54,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=494,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997349.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=6006 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 5895,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784997349.281,
+        "tid": 5968
+      },
+      {
+        "level": "info",
+        "message": "[INFO:content/browser/web_contents/web_contents_impl.cc:10015] WebContentsImpl Loading begin: ID = 1",
+        "pid": 5895,
+        "tag": "chromium",
+        "timestamp": 1784997349.283,
+        "tid": 5895
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=6006 importance=3 visible=false old_activity=null new_activity=null",
+        "pid": 5895,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784997349.313,
+        "tid": 5968
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=6006 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 5895,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784997349.315,
+        "tid": 5968
+      },
+      {
+        "level": "info",
+        "message": "[chromium bindings] setPriority pid=6006 importance=3 visible=true old_activity=null new_activity=null",
+        "pid": 5895,
+        "tag": "cr_ChildProcLH",
+        "timestamp": 1784997349.315,
+        "tid": 5968
+      },
+      {
+        "level": "info",
+        "message": "[INFO:content/browser/web_contents/web_contents_impl.cc:10058] WebContentsImpl Loading end: ID = 1",
+        "pid": 5895,
+        "tag": "chromium",
+        "timestamp": 1784997349.368,
+        "tid": 5895
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=27ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.57ms,App=2.26ms,GD=0.00ms,CPU&GPU=7.86ms,LCnt=6(DR0,LM0),GPU%=0.65,CPU%=0.61(W0.63),CFL=13.03/17.74,ICFLp95=15.64,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=492,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997350.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=28ms,Tear=4,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.55ms,App=2.32ms,GD=0.00ms,CPU&GPU=8.55ms,LCnt=6(DR0,LM0),GPU%=0.65,CPU%=0.57(W0.58),CFL=13.08/18.16,ICFLp95=15.86,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=471,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997351.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=28ms,Tear=1,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.53ms,App=2.33ms,GD=0.00ms,CPU&GPU=8.39ms,LCnt=6(DR0,LM0),GPU%=0.65,CPU%=0.46(W0.46),CFL=13.08/17.87,ICFLp95=15.87,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=479,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997352.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "FPS=90/90,Prd=28ms,Tear=2,Early=0,Stale=0,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=1804MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.53ms,App=2.30ms,GD=0.00ms,CPU&GPU=7.91ms,LCnt=6(DR0,LM0),GPU%=0.65,CPU%=0.36(W0.36),CFL=13.21/18.16,ICFLp95=16.07,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=462,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997353.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=28ms,Tear=2,Early=0,Stale=2,Stale2/5/10/max=0/0/0/1,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.53ms,App=2.37ms,GD=0.00ms,CPU&GPU=7.86ms,LCnt=6(DR0,LM0),GPU%=0.66,CPU%=0.38(W0.39),CFL=13.28/18.17,ICFLp95=16.38,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=484,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997354.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "crcs::subscriber::app_pressure: AppPressureSubscriber: broadcasting pressure cpu=0.2 gpu=0.0 mem=0.0",
+        "pid": 1001,
+        "tag": "crcs",
+        "timestamp": 1784997354.238,
+        "tid": 1001
+      },
+      {
+        "level": "info",
+        "message": "FPS=91/90,Prd=28ms,Tear=0,Early=0,Stale=1,Stale2/5/10/max=0/0/0/0,VSnc=1,Lat=-4,Fov=0,CPU4/GPU=4/3,1478/490MHz,OC=FF,TA=0/0/0,SP=N/N/N,Mem=2092MHz,Free=2565MB,PLS=0,Temp=25.2C/0.0C,TW=4.51ms,App=3.44ms,GD=0.00ms,CPU&GPU=8.23ms,LCnt=6(DR0,LM0),GPU%=0.70,CPU%=0.23(W0.27),CFL=13.20/18.16,ICFLp95=16.30,LD=0,SF=1.00,LP=0,DVFS=0,ShrpLCnt=4,ShrpR=0.000,SSLCnt=1/2,Preempt=501,PoseAgeP95=0.00",
+        "pid": 3002,
+        "tag": "VrApi",
+        "timestamp": 1784997355.077,
+        "tid": 4591
+      },
+      {
+        "level": "info",
+        "message": "complex_nodes::clocks::clocks: Clock levels changed: CPU 4 -> 4 (Requesting CPU level based on Utilization.), GPU 3 -> 4 (Request GPU level based on Utilization.)",
+        "pid": 1001,
+        "tag": "crcs",
+        "timestamp": 1784997355.637,
+        "tid": 1001
+      },
+      {
+        "level": "info",
+        "message": "XrFeedbackController: feature://xr/feedback/gpu_level --> 4 (raw 0.312500)",
+        "pid": 2497,
+        "tag": "XrFeedbackController",
+        "timestamp": 1784997355.638,
+        "tid": 2515
+      },
+      {
+        "level": "warning",
+        "message": "no IRQ hint VR_MODE_GPU_4 found",
+        "pid": 974,
+        "tag": "perfservice",
+        "timestamp": 1784997355.639,
+        "tid": 1039
+      }
+    ]
+  },
+  "probeFailures": []
+}

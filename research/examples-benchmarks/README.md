@@ -143,8 +143,29 @@ is true and `warnings` is empty or understood.
   fallback, image failure, GPU denial, lifecycle interruption, warning, or
   application browser diagnostic. Full-DPR camera motion completes 24/24
   samples at `27ms` p95 while the host is under ordinary concurrent workload;
-  48 measured renderer callbacks total 66 ms and peak at 5 ms. The adjacent PNG
-  retains the final texture-coherent physical pixels.
+48 measured renderer callbacks total 66 ms and peak at 5 ms. The adjacent PNG
+retains the final texture-coherent physical pixels.
+
+2026-07-26 optional-shader-path device pass:
+
+- Exact clean build `587fdd25` exposes `KHR_parallel_shader_compile` on the
+  physical Safari 17.14/Apple GPU floor. Sponza settles 69/69 images with no
+  fallback, failure, GPU denial, lifecycle interruption, warning, or browser
+  diagnostic, then completes 60/60 moving samples at `27ms` p95 under a noisy
+  network and concurrent host workload. The adjacent PNG retains the final
+  coherent pixels. The smaller instancing scene completes 60/60 at `12ms` p95,
+  separating Safari's ordinary 60 Hz path from Sponza pressure.
+- The same exact build on Quest Browser 149/Adreno 650 does not expose
+  `KHR_parallel_shader_compile`, so it exercises the unchanged synchronous
+  fallback. Sponza settles 69/69 images with no fallback, failure, denial,
+  lifecycle interruption, or browser diagnostic. Its `31.3ms` p95 is the
+  Browser panel's explicitly requested 30 Hz compositor interval, not an
+  immersive-XR or renderer-throughput claim. VrApi concurrently reports the
+  system compositor at 90 Hz, and the telemetry sidecar records thermal status
+  `none`.
+- These runs establish extension-path and fallback correctness, not a
+  device-specific prewarm speedup. The controlled Intel before/after remains
+  the timing evidence.
 
 2026-07-14 Quest 2 Browser pass:
 
