@@ -151,6 +151,21 @@ describe("surface program ownership", () => {
     expect(gl.getProgramParameter).toHaveBeenCalledTimes(1);
   });
 
+  it("reacquires parallel compilation after context restoration", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockReturnValue({
+      COMPLETION_STATUS_KHR: 0x91b1,
+    } as unknown as WEBGL_multi_draw);
+    const owner = new SurfaceProgramOwner(gl);
+
+    owner.invalidate();
+    owner.prewarm("standard", 0, false, false, false);
+
+    expect(gl.getExtension).toHaveBeenCalledTimes(2);
+    expect(gl.linkProgram).toHaveBeenCalledTimes(1);
+    expect(gl.getProgramParameter).not.toHaveBeenCalled();
+  });
+
   it("removes absent lights and specializes retained programs to exact light counts", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);

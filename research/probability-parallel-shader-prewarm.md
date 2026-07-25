@@ -27,6 +27,13 @@ Instrumented `LINK_STATUS` time fell from a 283 ms median to 119 ms, a 58%
 reduction in synchronous main-thread shader waiting. Final-pixel improvement is
 smaller because preparation, decode, upload, and shader work overlap.
 
+These timings establish the scheduling result only on the measured Intel
+renderer. Existing Royal captures confirm that physical Safari exposes the
+extension, but this experiment did not produce physical Safari or Quest timing.
+Do not generalize the 41 ms final-pixel delta to those devices; retain the
+synchronous fallback and remeasure their first-presentation and worst-frame
+behavior.
+
 ## Cost and bounds
 
 - Production delta: 112 lines before formatting/statistical diff accounting.

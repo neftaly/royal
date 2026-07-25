@@ -7,6 +7,7 @@ import {
   type CanonicalTextureBinding,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import {
+  authoredOrdinaryTextureMask,
   collectCompleteSurfaceTextureClaimsInto,
   collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
@@ -81,6 +82,24 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("projects only semantically active authored ordinary texture slots", () => {
+    const asset = { kind: "asset", sampler: {}, src: "/texture.png" } as const;
+
+    expect(authoredOrdinaryTextureMask(standard({
+      baseColorAsset: asset,
+      normalAsset: asset,
+      thicknessAsset: asset,
+      transmissionAsset: asset,
+    }))).toBe(0b000000101);
+    expect(authoredOrdinaryTextureMask(standard({
+      baseColorAsset: asset,
+      thicknessAsset: asset,
+      thicknessFactor: 0.5,
+      transmissionAsset: asset,
+      transmissionFactor: 0.5,
+    }))).toBe(0b110000001);
+  });
+
   it("collects complete storage and sampler claims without conflating their identities", () => {
     const sharedAsset = {
       kind: "asset",

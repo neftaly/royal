@@ -75,6 +75,17 @@ const materialTextureAssetAt = (
   }
 };
 
+/** Pure authored-slot projection used before asynchronous texture residency is known. */
+export const authoredOrdinaryTextureMask = (
+  material: CanonicalSurfaceMaterial,
+): number => {
+  let mask = 0;
+  for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit += 1) {
+    if (materialTextureAssetAt(material, unit) !== undefined) mask |= 1 << unit;
+  }
+  return mask;
+};
+
 /**
  * Rewrites caller-retained storage with the complete ordinary-texture claim.
  * Storage identity comes from the deduplicated asset set, while sampler

@@ -107,6 +107,7 @@ import {
   type WebGlMultiDraw,
 } from "./surface-multi-draw";
 import {
+  authoredOrdinaryTextureMask,
   collectCompleteSurfaceTextureClaimsInto,
   collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
@@ -198,19 +199,6 @@ const sceneEnvironmentFeatures = (
     : SURFACE_FEATURE_STUDIO_ENVIRONMENT;
   return environment.rotated ? source | SURFACE_FEATURE_ROTATED_ENVIRONMENT : source;
 };
-
-const authoredOrdinaryTextureMask = (
-  material: CanonicalSurfaceMaterial,
-): number => (material.baseColorAsset === undefined ? 0 : 1)
-  | (material.kind !== "standard" ? 0
-    : (material.metallicRoughnessAsset === undefined ? 0 : 1 << 1)
-      | (material.normalAsset === undefined ? 0 : 1 << 2)
-      | (material.emissiveAsset === undefined ? 0 : 1 << 3)
-      | (material.occlusionAsset === undefined ? 0 : 1 << 4)
-      | (material.specularTextureAsset === undefined ? 0 : 1 << 5)
-      | (material.specularColorAsset === undefined ? 0 : 1 << 6)
-      | (material.transmissionAsset === undefined ? 0 : 1 << 7)
-      | (material.thicknessAsset === undefined ? 0 : 1 << 8));
 
 const plannedSurfaceProgramFeatures = (
   scene: CanonicalSurfaceScene | null,

@@ -402,7 +402,7 @@ type PendingSurfaceProgram = Readonly<{
 export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #initializedSamplers = new Set<WebGLProgram>();
-  readonly #parallelCompile: boolean;
+  #parallelCompile: boolean;
   readonly #programs = new Map<
     string,
     PendingSurfaceProgram | StandardProgram | UnlitProgram
@@ -510,6 +510,7 @@ export class SurfaceProgramOwner {
     this.#programs.clear();
     this.#vertexShaders.clear();
     this.#initializedSamplers.clear();
+    this.#parallelCompile = this.#gl.getExtension("KHR_parallel_shader_compile") !== null;
   }
 
   setVirtualTextureDeclarations(declarations: string): void {
