@@ -1,9 +1,17 @@
+import { gltf } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { GltfAssetOwner } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import {
   prepareStaticGlb,
   prepareStaticGltfSource,
 } from "../../packages/renderer-webgl/src/gltf/static-asset";
+import {
+  planStaticGltfGeometryTasks,
+  type StaticGeometryTaskPlan,
+} from "../../packages/renderer-webgl/src/gltf/static-geometry-plan";
+import type { JsonObject } from "../../packages/renderer-webgl/src/gltf/gltf-values";
 import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
+import { waitFor } from "./support/wait-for";
 
 const encodedFixture = async (
   quantized: boolean,
@@ -119,6 +127,110 @@ const encodedFixture = async (
 };
 
 describe("EXT_meshopt_compression ingestion", () => {
+  it("plans shared geometry from compressed authority while retaining derived fallback layout", async () => {
+    const marked = await encodedFixture(false);
+    const markedDocument = JSON.parse(
+      new TextDecoder().decode(marked.document),
+    ) as JsonObject;
+    const variantDocument = structuredClone(markedDocument);
+    variantDocument.materials = [{
+      extensions: { KHR_materials_unlit: {} },
+      name: "unrelated variant material",
+    }];
+    const markedPlan = planStaticGltfGeometryTasks(
+      markedDocument,
+      "meshopt-marked-plan",
+      "/models/red.gltf",
+    );
+    const variantPlan = planStaticGltfGeometryTasks(
+      variantDocument,
+      "meshopt-variant-plan",
+      "/models/blue.gltf",
+    );
+
+    expect(markedPlan?.tasks).toHaveLength(1);
+    expect(variantPlan?.tasks[0]!.key).toBe(markedPlan?.tasks[0]!.key);
+
+    const implicit = await encodedFixture(false, false);
+    const implicitDocument = JSON.parse(
+      new TextDecoder().decode(implicit.document),
+    ) as JsonObject;
+    expect(planStaticGltfGeometryTasks(
+      implicitDocument,
+      "meshopt-implicit-plan",
+      "/models/implicit.gltf",
+    )?.tasks).toHaveLength(1);
+
+    implicitDocument.extensionsRequired = ["KHR_materials_unlit"];
+    expect(planStaticGltfGeometryTasks(
+      implicitDocument,
+      "meshopt-optional-placeholder",
+      "/models/optional.gltf",
+    )).toBeUndefined();
+
+    const unexplained = structuredClone(markedDocument);
+    delete (unexplained.buffers as JsonObject[])[1]!.extensions;
+    delete (unexplained.bufferViews as JsonObject[])[0]!.extensions;
+    delete (unexplained.bufferViews as JsonObject[])[1]!.extensions;
+    expect(planStaticGltfGeometryTasks(
+      unexplained,
+      "unexplained-uri-less-buffer",
+      "/models/unexplained.gltf",
+    )).toBeUndefined();
+  });
+
+  it("prepares repeated meshopt roots once without reading derived fallback buffers", async () => {
+    const fixture = await encodedFixture(false);
+    const readResource = vi.fn(async () => fixture.compressed);
+    const owner = new GltfAssetOwner({
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      prepare: (
+        bytes,
+        contentKey,
+        label,
+        sourceUri,
+        _signal,
+        read,
+        sceneIndex,
+        resourceVersion,
+        geometryTasks?: StaticGeometryTaskPlan,
+        computeGeometryTaskKeys?: ReadonlySet<string>,
+      ) => prepareStaticGltfSource(
+        bytes,
+        contentKey,
+        label,
+        sourceUri,
+        read,
+        undefined,
+        true,
+        sceneIndex,
+        resourceVersion,
+        geometryTasks,
+        computeGeometryTaskKeys,
+      ),
+      read: async () => fixture.document,
+      readResource,
+      sharedGeometryPreparation: true,
+    });
+    const first = gltf("/models/red.gltf");
+    const second = gltf("/models/blue.gltf");
+
+    owner.reconcile([first, second]);
+    await waitFor(() => expect(owner.getSnapshot(first.asset).status).toBe("ready"));
+    await waitFor(() => expect(owner.getSnapshot(second.asset).status).toBe("ready"));
+
+    expect(readResource).toHaveBeenCalledOnce();
+    expect(owner.sharedGeometrySnapshot()).toMatchObject({
+      preparationTaskClaims: 2,
+      preparedTasks: 1,
+      reusedClaims: 1,
+      reusedPreparationClaims: 1,
+      uniqueGeometries: 1,
+    });
+    owner.dispose();
+  });
+
   it("decodes demanded attribute and triangle views without reading the fallback buffer", async () => {
     const fixture = await encodedFixture(false);
     const read = vi.fn(async (uri: string) => {

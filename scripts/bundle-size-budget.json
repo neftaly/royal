@@ -3,8 +3,8 @@
   "royalIncrementalGzipBytes": 62000,
   "royalGltfInitialGzipBytes": 122250,
   "royalGltfIncrementalGzipBytes": 1250,
-  "royalLazyGzipBytes": 143950,
-  "royalTotalIncrementalGzipBytes": 205900,
-  "royalTotalGzipBytes": 265200,
-  "royalWorkerGzipBytes": 56750
+  "royalLazyGzipBytes": 144050,
+  "royalTotalIncrementalGzipBytes": 206000,
+  "royalTotalGzipBytes": 265300,
+  "royalWorkerGzipBytes": 56800
 }

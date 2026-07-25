@@ -163,6 +163,11 @@ time. Exact pre-read task identity lets joined roots avoid geometry buffer
 demand, conversion, transfer, and upload. Source-derived keys only narrow the
 fallback post-transfer interner, where byte equality still proves aliases. The
 last owning root releases both task and geometry.
+Ratified meshopt placeholder buffers are derived decode destinations, not
+resource authority. They may participate in pre-read task planning without a
+URI only when the extension graph proves every reference is compressed and the
+required-extension rule permits omission; compressed source identity, decoded
+extent, and the full decode/extraction declaration still distinguish tasks.
 
 Virtual-texture publication retains both a four-page count ceiling and a
 separate 4 MiB byte ceiling. A transaction accounts the exact compressed block

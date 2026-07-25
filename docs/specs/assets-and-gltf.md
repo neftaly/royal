@@ -122,6 +122,13 @@ For eligible external JSON roots, immutable buffer URI/version/length identity,
 complete accessor/buffer-view/topology/codec declarations, quantization, and
 required UV representation form exact geometry task identity before any buffer
 read. The first claiming root produces each task; concurrent roots join it.
+URI-less buffers proven to be required meshopt fallback output retain their
+declared index and extent in task identity but contribute no invented transport
+identity; the immutable compressed source and complete meshopt decode
+declaration remain authoritative. Marked meshopt fallback buffers with an
+ordinary URI follow the same rule because Royal consumes their compressed
+representation. Any unexplained URI-less buffer keeps the root outside early
+task planning.
 Borrowing roots omit those geometry ranges, accessor conversion, typed-array
 transfer, retained CPU storage, and GPU upload while independently preparing
 materials, transforms, instances, lights, status, and textures. A failed or

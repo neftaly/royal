@@ -103,9 +103,12 @@ transform math is generic.
   marked or implicit URI-less fallback buffers, and decodes into the ordinary
   buffer-view storage before one-buffer canonicalization. ATTRIBUTES,
   TRIANGLES, INDICES, and the standard NONE/OCTAHEDRAL/QUATERNION/EXPONENTIAL
-  filters are accepted. The synchronous `prepareStaticGlb` test/helper boundary
-  rejects required meshopt; normal root and React ingestion use async local or
-  preparation-worker execution.
+  filters are accepted. External roots may share pre-read preparation from the
+  immutable compressed source and full decode/extraction declaration; a
+  URI-less fallback buffer is represented only by its derived layout and never
+  becomes fictional transport identity. The synchronous `prepareStaticGlb`
+  test/helper boundary rejects required meshopt; normal root and React
+  ingestion use async local or preparation-worker execution.
 - Mesh quantization accepts BYTE/UNSIGNED_BYTE/SHORT/UNSIGNED_SHORT positions,
   normalized signed normals and tangents, and signed or unsigned integer UVs
   with their authored normalized flag. Values become canonical float streams;

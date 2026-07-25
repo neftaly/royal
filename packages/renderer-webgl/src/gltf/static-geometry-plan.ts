@@ -10,6 +10,7 @@ import {
 } from "./gltf-values";
 import { createStaticPrimitiveTextureDemand } from "./static-image-demand";
 import { resolveAssetUri } from "./static-material";
+import { meshoptFallbackBufferIndices } from "./meshopt";
 import { selectedStaticNodeIndices } from "./static-node-selection";
 
 export type StaticGeometryTask = Readonly<{
@@ -28,17 +29,46 @@ export const staticExternalGeometryResourceIdentity = (
   sourceUri: string,
 ): string | undefined => {
   const buffers = array(document.buffers, label, "buffers");
-  const identities: Array<readonly [uri: string, byteLength: number]> = [];
+  const requiredExtensions = optionalArray(
+    document.extensionsRequired,
+    label,
+    "extensionsRequired",
+  );
+  const meshoptRequired = requiredExtensions.includes("EXT_meshopt_compression");
+  const meshoptDeclared = meshoptRequired || optionalArray(
+    document.extensionsUsed,
+    label,
+    "extensionsUsed",
+  ).includes("EXT_meshopt_compression");
+  // Ordinary external roots stay on the single buffer scan. Meshopt's fallback
+  // graph is inspected only when the document declares that extension.
+  const meshoptFallbacks = meshoptDeclared
+    ? meshoptFallbackBufferIndices(document, label)
+    : undefined;
+  const identities: Array<readonly [uri: string | null, byteLength: number]> = [];
   for (let bufferIndex = 0; bufferIndex < buffers.length; bufferIndex += 1) {
     const path = `buffers[${bufferIndex}]`;
     const buffer = object(buffers[bufferIndex], label, path);
+    const byteLength = nonNegativeInteger(
+      buffer.byteLength,
+      label,
+      `${path}.byteLength`,
+    );
+    if (meshoptFallbacks?.has(bufferIndex) === true) {
+      if (
+        (typeof buffer.uri !== "string" || buffer.uri.length === 0)
+        && !meshoptRequired
+      ) return undefined;
+      // The fallback is decoded output, not transport authority. Retain its
+      // position and declared extent while deriving identity from compressed
+      // source buffers and the buffer-view decode declarations.
+      identities.push([null, byteLength]);
+      continue;
+    }
     if (typeof buffer.uri !== "string" || buffer.uri.length === 0) return undefined;
     const uri = resolveAssetUri(sourceUri, buffer.uri);
     if (uri.startsWith("data:")) return undefined;
-    identities.push([
-      uri,
-      nonNegativeInteger(buffer.byteLength, label, `${path}.byteLength`),
-    ]);
+    identities.push([uri, byteLength]);
   }
   return JSON.stringify(identities);
 };
