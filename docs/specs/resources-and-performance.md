@@ -43,6 +43,21 @@ implementation policy: diagnostics expose them, but consumers do not tune or
 depend on them. This keeps later phase separation and browser-specific work
 attribution from becoming breaking API changes.
 
+The upload byte ceilings bound submitted source traffic; they do not promise a
+maximum frame duration. WebGL submission time does not reveal when queued
+upload, mip generation, shader link, or command-buffer work completes, and
+inclusive browser trace categories overlap. Royal MUST NOT feed
+`performance.now()` around submission calls back into admission as if it were
+GPU time. A future adaptive policy requires delayed, non-disjoint GPU timer
+evidence and must beat the byte policy on both exact-final time and worst frame.
+One oversized first transaction remains necessary to prevent starvation.
+
+Ordinary mipmapped images publish one complete GPU representation. Royal does
+not temporarily bind a non-mipmap sampler to base storage and later promote the
+same image: that would add a second completeness/sampler state, another visible
+transition, and the same eventual mip-generation work. Offline complete
+compressed pyramids remain the less-work path.
+
 The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
 authority shared by glTF CPU pipelines, authored-VT transport/decode, and
 prefiltered-environment work. Newly claimed scene, environment, and visible-VT

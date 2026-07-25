@@ -189,10 +189,16 @@ required float64 accessor would be false compatibility, so such assets fail.
 
 `KHR_texture_basisu` is the ecosystem's portable compressed-delivery path, but
 Royal intentionally does not claim it while doing so would require a shipped
-runtime transcoder. Direct offline ETC2 KTX2 is a narrower Royal source path,
-does not make a Basis container valid, and is not exposed through a private
-glTF extension. `EXT_texture_webp` remains a browser-decoded compatibility
-option. Royal also implements the existing open
+runtime transcoder plus capability-dependent output selection. The installed
+reference implementation alone is about 473 kB raw / 223 kB gzip of WASM plus
+17 kB gzip of JavaScript glue, before Royal ownership and validation code. That
+conflicts with the current no-runtime-WASM and package-size direction. A
+representative material-LOD control also delivered its small JPEG preview after
+the original AVIF final and delayed exact-final, so codec support alone would
+not fix lower-tier scheduling. Direct offline ETC2 KTX2 is a narrower Royal
+source path, does not make a Basis container valid, and is not exposed through
+a private glTF extension. `EXT_texture_webp` remains a browser-decoded
+compatibility option. Royal also implements the existing open
 `EXT_texture_avif` draft narrowly at its texture-source placement. It is not in
 the current Khronos registry and MUST be described as draft compatibility
 rather than ratified support. Royal did not invent its name or shape. There
