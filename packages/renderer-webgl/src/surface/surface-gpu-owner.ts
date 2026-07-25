@@ -199,6 +199,39 @@ const sceneEnvironmentFeatures = (
   return environment.rotated ? source | SURFACE_FEATURE_ROTATED_ENVIRONMENT : source;
 };
 
+const authoredOrdinaryTextureMask = (
+  material: CanonicalSurfaceMaterial,
+): number => (material.baseColorAsset === undefined ? 0 : 1)
+  | (material.kind !== "standard" ? 0
+    : (material.metallicRoughnessAsset === undefined ? 0 : 1 << 1)
+      | (material.normalAsset === undefined ? 0 : 1 << 2)
+      | (material.emissiveAsset === undefined ? 0 : 1 << 3)
+      | (material.occlusionAsset === undefined ? 0 : 1 << 4)
+      | (material.specularTextureAsset === undefined ? 0 : 1 << 5)
+      | (material.specularColorAsset === undefined ? 0 : 1 << 6)
+      | (material.transmissionAsset === undefined ? 0 : 1 << 7)
+      | (material.thicknessAsset === undefined ? 0 : 1 << 8));
+
+const plannedSurfaceProgramFeatures = (
+  scene: CanonicalSurfaceScene | null,
+  surface: CanonicalDrawSurface,
+  environmentFeatures: number,
+  hasVirtualBaseColor: boolean,
+  linearOutput: boolean,
+  ordinaryTextureMask: number,
+): number => surfaceProgramFeatureBits({
+  directionalLightCount: scene?.directionalLights.length ?? 0,
+  environmentFeatures,
+  hasTangent: surface.geometry.tangents !== undefined,
+  hasVertexColor: surface.geometry.colors !== undefined,
+  hasVertexNormal: surface.geometry.normals !== undefined,
+  hasVirtualBaseColor,
+  linearOutput,
+  material: surface.material,
+  ordinaryTextureMask,
+  punctualLightCount: scene?.punctualLights.length ?? 0,
+});
+
 
 const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]) =>
   planGroupedSurfacePasses(
@@ -519,9 +552,35 @@ export class SurfaceGpuOwner {
       (surface) => surface.material.alphaBlend === true,
     ) ?? false;
     this.#transmissionCandidateIndices.length = 0;
+    const environmentFeatures = sceneEnvironmentFeatures(
+      scene,
+      this.#environmentGpu?.binding,
+    );
     for (let index = 0; index < (scene?.surfaces.length ?? 0); index += 1) {
-      if (canonicalMaterialHasTransmission(scene!.surfaces[index]!.material)) {
+      const surface = scene!.surfaces[index]!;
+      const material = surface.material;
+      if (canonicalMaterialHasTransmission(material)) {
         this.#transmissionCandidateIndices.push(index);
+      } else if (material.baseColorVirtualAsset === undefined) {
+        const authoredMask = authoredOrdinaryTextureMask(material);
+        for (const ordinaryTextureMask of authoredMask === 0
+          ? [authoredMask]
+          : [0, authoredMask]) {
+          this.#programs.prewarm(
+            material.kind,
+            plannedSurfaceProgramFeatures(
+              scene,
+              surface,
+              environmentFeatures,
+              false,
+              this.#compositeActive,
+              ordinaryTextureMask,
+            ),
+            (surface.instances?.count ?? 0) > 0,
+            material.alphaCutoff !== undefined,
+            canonicalSurfaceIsDoubleSided(material),
+          );
+        }
       }
     }
     this.#dirty = true;
@@ -1367,21 +1426,17 @@ export class SurfaceGpuOwner {
       : material.baseColorAsset === undefined
         ? undefined
         : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
-    const features = surfaceProgramFeatureBits({
-      directionalLightCount: scene?.directionalLights.length ?? 0,
-      environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-      hasTangent: geometrySurface.geometry.tangentBuffer !== null,
-      hasVertexColor: geometrySurface.geometry.colorBuffer !== null,
-      hasVertexNormal: geometrySurface.geometry.normalBuffer !== null,
-      hasVirtualBaseColor: virtualTexture !== undefined,
-      linearOutput: this.#compositeActive,
-      material,
-      ordinaryTextureMask: presentableOrdinaryTextureMask(
+    const features = plannedSurfaceProgramFeatures(
+      scene,
+      geometrySurface.surface,
+      sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+      virtualTexture !== undefined,
+      this.#compositeActive,
+      presentableOrdinaryTextureMask(
         material,
         residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
-      punctualLightCount: scene?.punctualLights.length ?? 0,
-    });
+    );
     const bindings = Array<GpuTextureBinding>(12);
     composeSurfaceTextureBindingsInto(
       bindings,

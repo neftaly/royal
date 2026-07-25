@@ -114,6 +114,43 @@ describe("surface program ownership", () => {
     expect(gl.deleteShader).toHaveBeenCalledTimes(1);
   });
 
+  it("starts likely variants without synchronizing when parallel compilation is available", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockReturnValue({
+      COMPLETION_STATUS_KHR: 0x91b1,
+    } as unknown as WEBGL_multi_draw);
+    const owner = new SurfaceProgramOwner(gl);
+
+    owner.prewarm("standard", 0, false, false, false);
+    owner.prewarm("unlit", 0, false, false, false);
+    owner.prewarm("standard", 0, false, false, false);
+
+    expect(gl.linkProgram).toHaveBeenCalledTimes(2);
+    expect(gl.getProgramParameter).not.toHaveBeenCalled();
+    expect(owner.get("standard", 0, false, false, false)).toMatchObject({
+      kind: "standard",
+    });
+    expect(gl.getProgramParameter).toHaveBeenCalledTimes(1);
+    expect(owner.get("unlit", 0, false, false, false)).toMatchObject({
+      kind: "unlit",
+    });
+    expect(gl.getProgramParameter).toHaveBeenCalledTimes(2);
+    expect(gl.linkProgram).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not prewarm when parallel compilation is unavailable", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+
+    owner.prewarm("standard", 0, false, false, false);
+
+    expect(gl.createProgram).not.toHaveBeenCalled();
+    expect(owner.get("standard", 0, false, false, false)).toMatchObject({
+      kind: "standard",
+    });
+    expect(gl.getProgramParameter).toHaveBeenCalledTimes(1);
+  });
+
   it("removes absent lights and specializes retained programs to exact light counts", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);

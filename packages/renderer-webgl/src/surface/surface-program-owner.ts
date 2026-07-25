@@ -153,14 +153,15 @@ export const surfaceVertexFeatures = (
   features: number,
 ): number => features & (kind === "standard" ? STANDARD_VERTEX_FEATURES : UNLIT_VERTEX_FEATURES);
 
-const createProgram = (
+const beginProgram = (
   gl: WebGL2RenderingContext,
   vertex: WebGLShader,
   fragmentSource: string,
+  deferValidation: boolean,
 ): WebGLProgram => {
   const fragment = compileWebGlShader(gl, gl.FRAGMENT_SHADER, fragmentSource, "surface");
   try {
-    return linkWebGlProgram(gl, vertex, fragment, "surface");
+    return linkWebGlProgram(gl, vertex, fragment, "surface", deferValidation);
   } finally {
     gl.deleteShader(fragment);
   }
@@ -230,18 +231,10 @@ const textureCoordinatesProgram = (
 
 const createUnlitProgram = (
   gl: WebGL2RenderingContext,
-  vertex: WebGLShader,
+  program: WebGLProgram,
   features: number,
   alphaMasked: boolean,
-  doubleSided: boolean,
-  virtualDeclarations: string,
-  transmissionSource: SurfaceTransmissionShaderSource,
 ): UnlitProgram => {
-  const program = createProgram(
-    gl,
-    vertex,
-    shaderVariant(UNLIT_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
-  );
   const transformedCoordinates = (features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES) === 0;
   return {
     alphaCutoff: alphaMasked ? uniform(gl, program, "alphaCutoff") : null,
@@ -269,18 +262,10 @@ const createUnlitProgram = (
 
 const createStandardProgram = (
   gl: WebGL2RenderingContext,
-  vertex: WebGLShader,
+  program: WebGLProgram,
   features: number,
   alphaMasked: boolean,
-  doubleSided: boolean,
-  virtualDeclarations: string,
-  transmissionSource: SurfaceTransmissionShaderSource,
 ): StandardProgram => {
-  const program = createProgram(
-    gl,
-    vertex,
-    shaderVariant(STANDARD_FRAGMENT_SHADER, features, false, alphaMasked, doubleSided, virtualDeclarations, transmissionSource),
-  );
   const transformedCoordinates = (features & SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES) === 0;
   return {
     alphaMasked,
@@ -409,22 +394,30 @@ const createStandardProgram = (
   };
 };
 
+type PendingSurfaceProgram = Readonly<{
+  pending: true;
+  program: WebGLProgram;
+}>;
+
 export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #initializedSamplers = new Set<WebGLProgram>();
-  readonly #programs = new Map<string, StandardProgram | UnlitProgram>();
+  readonly #parallelCompile: boolean;
+  readonly #programs = new Map<
+    string,
+    PendingSurfaceProgram | StandardProgram | UnlitProgram
+  >();
   readonly #vertexShaders = new Map<string, WebGLShader>();
   #transmissionSource = EMPTY_TRANSMISSION_SHADER_SOURCE;
   #virtualDeclarations = "";
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
+    this.#parallelCompile = gl.getExtension("KHR_parallel_shader_compile") !== null;
   }
 
   dispose(): void {
-    for (const retained of this.#programs.values()) {
-      this.#gl.deleteProgram(retained.program);
-    }
+    for (const retained of this.#programs.values()) this.#gl.deleteProgram(retained.program);
     this.#programs.clear();
     this.#deleteVertexShaders();
     this.#initializedSamplers.clear();
@@ -437,7 +430,6 @@ export class SurfaceProgramOwner {
     alphaMasked: boolean,
     doubleSided: boolean,
   ): StandardProgram | UnlitProgram {
-    const twoSided = kind === "standard" && doubleSided;
     const key = surfaceProgramVariantKey(
       kind,
       features,
@@ -446,13 +438,53 @@ export class SurfaceProgramOwner {
       doubleSided,
     );
     const retained = this.#programs.get(key);
-    if (retained !== undefined) return retained;
-    const vertex = this.#vertexShader(kind, features, instanced);
+    if (retained !== undefined && !("pending" in retained)) return retained;
+    const program = retained?.program
+      ?? this.#begin(kind, features, instanced, alphaMasked, doubleSided, false);
+    if (retained !== undefined) {
+      const gl = this.#gl;
+      if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
+        const detail = gl.getProgramInfoLog(program) || "unknown linker failure";
+        gl.deleteProgram(program);
+        this.#programs.delete(key);
+        throw new Error(`Royal surface program link failed: ${detail}`);
+      }
+    }
+    this.#programs.delete(key);
     const created = kind === "unlit"
-      ? createUnlitProgram(this.#gl, vertex, features, alphaMasked, false, this.#virtualDeclarations, this.#transmissionSource)
-      : createStandardProgram(this.#gl, vertex, features, alphaMasked, twoSided, this.#virtualDeclarations, this.#transmissionSource);
+      ? createUnlitProgram(this.#gl, program, features, alphaMasked)
+      : createStandardProgram(this.#gl, program, features, alphaMasked);
     this.#programs.set(key, created);
     return created;
+  }
+
+  /** Starts one likely future variant while the caller continues other preparation. */
+  prewarm(
+    kind: "standard" | "unlit",
+    features: number,
+    instanced: boolean,
+    alphaMasked: boolean,
+    doubleSided: boolean,
+  ): void {
+    if (
+      !this.#parallelCompile
+      || features & (
+        SURFACE_FEATURE_TRANSMISSION_MATERIAL
+        | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      )
+    ) return;
+    const key = surfaceProgramVariantKey(
+      kind,
+      features,
+      instanced,
+      alphaMasked,
+      doubleSided,
+    );
+    if (this.#programs.has(key)) return;
+    this.#programs.set(key, {
+      pending: true,
+      program: this.#begin(kind, features, instanced, alphaMasked, doubleSided, true),
+    });
   }
 
   initializeSamplers(program: StandardProgram | UnlitProgram): void {
@@ -483,6 +515,7 @@ export class SurfaceProgramOwner {
   setVirtualTextureDeclarations(declarations: string): void {
     if (this.#virtualDeclarations === declarations) return;
     for (const [key, retained] of this.#programs) {
+      if ("pending" in retained) continue;
       if (retained.virtualPageTable === null) continue;
       this.#gl.deleteProgram(retained.program);
       this.#programs.delete(key);
@@ -494,6 +527,7 @@ export class SurfaceProgramOwner {
   setTransmissionShaderSource(source: SurfaceTransmissionShaderSource): void {
     if (this.#transmissionSource === source) return;
     for (const [key, retained] of this.#programs) {
+      if ("pending" in retained) continue;
       if (retained.kind !== "standard" || retained.sceneColor === null) continue;
       this.#gl.deleteProgram(retained.program);
       this.#programs.delete(key);
@@ -505,6 +539,27 @@ export class SurfaceProgramOwner {
       this.#vertexShaders.delete(vertexSource);
     }
     this.#transmissionSource = source;
+  }
+
+  #begin(
+    kind: "standard" | "unlit",
+    features: number,
+    instanced: boolean,
+    alphaMasked: boolean,
+    doubleSided: boolean,
+    deferValidation: boolean,
+  ): WebGLProgram {
+    const vertex = this.#vertexShader(kind, features, instanced);
+    const source = shaderVariant(
+      kind === "standard" ? STANDARD_FRAGMENT_SHADER : UNLIT_FRAGMENT_SHADER,
+      features,
+      false,
+      alphaMasked,
+      kind === "standard" && doubleSided,
+      this.#virtualDeclarations,
+      this.#transmissionSource,
+    );
+    return beginProgram(this.#gl, vertex, source, deferValidation);
   }
 
   #deleteVertexShaders(): void {
