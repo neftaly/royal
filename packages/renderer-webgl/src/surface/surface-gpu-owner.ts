@@ -551,9 +551,9 @@ export class SurfaceGpuOwner {
         this.#transmissionCandidateIndices.push(index);
       } else if (material.baseColorVirtualAsset === undefined) {
         const authoredMask = authoredOrdinaryTextureMask(material);
-        for (const ordinaryTextureMask of authoredMask === 0
-          ? [authoredMask]
-          : [0, authoredMask]) {
+        const variantCount = authoredMask === 0 ? 1 : 2;
+        for (let variant = 0; variant < variantCount; variant += 1) {
+          const ordinaryTextureMask = variant === 0 ? 0 : authoredMask;
           this.#programs.prewarm(
             material.kind,
             plannedSurfaceProgramFeatures(

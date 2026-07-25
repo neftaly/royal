@@ -361,15 +361,20 @@ const decodeTextureBlob = async (
   signal: AbortSignal,
   maxStorageBytes?: number,
   retainAlpha = false,
+  imageElementOutput?: "canvas",
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   const decodeImageElement = async (): Promise<DecodedImageTextureSource> => {
     const decoded = await decodeBrowserImageElement(
       blob,
       signal,
-      maxStorageBytes === undefined
-        ? undefined
-        : (width, height) => fitOrdinaryTextureStorage(width, height, maxStorageBytes),
+      {
+        fit: maxStorageBytes === undefined
+          ? undefined
+          : (width: number, height: number) =>
+              fitOrdinaryTextureStorage(width, height, maxStorageBytes),
+        output: imageElementOutput,
+      },
     );
     return retainAlpha
       ? retainTextureAlpha(decoded, signal, alphaMipmapsRequired(asset))
@@ -616,7 +621,14 @@ export const createBrowserTextureDecoder = (
       decodeStartedAt = now();
       return ktx2
         ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha)
-        : decodeTextureBlob(asset, blob, signal, maxStorageBytes, retainAlpha);
+        : decodeTextureBlob(
+            asset,
+            blob,
+            signal,
+            maxStorageBytes,
+            retainAlpha,
+            svg ? "canvas" : undefined,
+          );
     });
     const decodeCompletedAt = now();
     const timed = {

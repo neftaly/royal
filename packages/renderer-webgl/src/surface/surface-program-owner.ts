@@ -4,6 +4,7 @@ import standardVertexShader from "../webgl/shaders/surface.vert";
 import standardFragmentShader from "../webgl/shaders/surface.frag";
 import { PRESENTATION_GLSL } from "../webgl/shaders/presentation-functions";
 import {
+  beginWebGlProgramLink,
   compileWebGlShader,
   linkWebGlProgram,
   requiredWebGlUniform,
@@ -153,15 +154,17 @@ export const surfaceVertexFeatures = (
   features: number,
 ): number => features & (kind === "standard" ? STANDARD_VERTEX_FEATURES : UNLIT_VERTEX_FEATURES);
 
-const beginProgram = (
+const createSurfaceProgram = (
   gl: WebGL2RenderingContext,
   vertex: WebGLShader,
   fragmentSource: string,
-  deferValidation: boolean,
+  validation: "deferred" | "synchronous",
 ): WebGLProgram => {
   const fragment = compileWebGlShader(gl, gl.FRAGMENT_SHADER, fragmentSource, "surface");
   try {
-    return linkWebGlProgram(gl, vertex, fragment, "surface", deferValidation);
+    return validation === "deferred"
+      ? beginWebGlProgramLink(gl, vertex, fragment, "surface")
+      : linkWebGlProgram(gl, vertex, fragment, "surface");
   } finally {
     gl.deleteShader(fragment);
   }
@@ -440,7 +443,7 @@ export class SurfaceProgramOwner {
     const retained = this.#programs.get(key);
     if (retained !== undefined && !("pending" in retained)) return retained;
     const program = retained?.program
-      ?? this.#begin(kind, features, instanced, alphaMasked, doubleSided, false);
+      ?? this.#begin(kind, features, instanced, alphaMasked, doubleSided, "synchronous");
     if (retained !== undefined) {
       const gl = this.#gl;
       if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
@@ -483,7 +486,7 @@ export class SurfaceProgramOwner {
     if (this.#programs.has(key)) return;
     this.#programs.set(key, {
       pending: true,
-      program: this.#begin(kind, features, instanced, alphaMasked, doubleSided, true),
+      program: this.#begin(kind, features, instanced, alphaMasked, doubleSided, "deferred"),
     });
   }
 
@@ -548,7 +551,7 @@ export class SurfaceProgramOwner {
     instanced: boolean,
     alphaMasked: boolean,
     doubleSided: boolean,
-    deferValidation: boolean,
+    validation: "deferred" | "synchronous",
   ): WebGLProgram {
     const vertex = this.#vertexShader(kind, features, instanced);
     const source = shaderVariant(
@@ -560,7 +563,7 @@ export class SurfaceProgramOwner {
       this.#virtualDeclarations,
       this.#transmissionSource,
     );
-    return beginProgram(this.#gl, vertex, source, deferValidation);
+    return createSurfaceProgram(this.#gl, vertex, source, validation);
   }
 
   #deleteVertexShaders(): void {

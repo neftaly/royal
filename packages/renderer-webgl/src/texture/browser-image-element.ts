@@ -7,13 +7,20 @@ export type BrowserImageElementSource = Readonly<{
   width: number;
 }>;
 
+export type BrowserImageElementDecodeOptions = Readonly<{
+  fit?: ((width: number, height: number) =>
+    Readonly<{ height: number; width: number }>) | undefined;
+  /** Materialize browser pixels before a WebGL upload consumes them. */
+  output?: "canvas" | "native" | undefined;
+}>;
+
 const aborted = (): DOMException => new DOMException("Image decode was aborted", "AbortError");
 
 /** Main-thread browser fallback for formats createImageBitmap does not decode consistently. */
 export const decodeBrowserImageElement = async (
   blob: Blob,
   signal: AbortSignal,
-  fit?: (width: number, height: number) => Readonly<{ height: number; width: number }>,
+  options: BrowserImageElementDecodeOptions = {},
 ): Promise<BrowserImageElementSource> => {
   if (signal.aborted) throw aborted();
   if (typeof document === "undefined") {
@@ -45,13 +52,20 @@ export const decodeBrowserImageElement = async (
     }
     const sourceWidth = image.naturalWidth;
     const sourceHeight = image.naturalHeight;
-    const fitted = fit?.(sourceWidth, sourceHeight)
+    const fitted = options.fit?.(sourceWidth, sourceHeight)
       ?? { height: sourceHeight, width: sourceWidth };
-    if (fitted.width === sourceWidth && fitted.height === sourceHeight) {
-      URL.revokeObjectURL(objectUri);
+    if (
+      options.output !== "canvas"
+      && fitted.width === sourceWidth
+      && fitted.height === sourceHeight
+    ) {
+      let closed = false;
       return {
         close: () => {
+          if (closed) return;
+          closed = true;
           image.src = "";
+          URL.revokeObjectURL(objectUri);
         },
         height: sourceHeight,
         source: image,

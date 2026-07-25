@@ -12,23 +12,29 @@ export const compileWebGlShader = (
   return shader;
 };
 
-/**
- * Links caller-owned shaders. Deferred validation lets extension-gated callers
- * start parallel work; they assume responsibility for the later status query.
- */
-export const linkWebGlProgram = (
+/** Starts linking caller-owned shaders without synchronizing on completion. */
+export const beginWebGlProgramLink = (
   gl: WebGL2RenderingContext,
   vertex: WebGLShader,
   fragment: WebGLShader,
   label: string,
-  deferValidation = false,
 ): WebGLProgram => {
   const program = gl.createProgram();
   if (program === null) throw new Error(`Royal could not allocate a ${label} program`);
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.linkProgram(program);
-  if (deferValidation) return program;
+  return program;
+};
+
+/** Links caller-owned shaders and reports every available compiler diagnostic. */
+export const linkWebGlProgram = (
+  gl: WebGL2RenderingContext,
+  vertex: WebGLShader,
+  fragment: WebGLShader,
+  label: string,
+): WebGLProgram => {
+  const program = beginWebGlProgramLink(gl, vertex, fragment, label);
   if (gl.getProgramParameter(program, gl.LINK_STATUS) === true) return program;
   let detail = gl.getProgramInfoLog(program) || "unknown linker failure";
   const vertexDetail = gl.getShaderInfoLog(vertex);

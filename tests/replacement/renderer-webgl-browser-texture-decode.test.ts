@@ -429,6 +429,58 @@ describe("browser texture decode shell", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-fallback");
   });
 
+  it("rasterizes an SVG image-element fallback before handing pixels to WebGL", async () => {
+    stubValidSvgParser();
+    const context = { drawImage: vi.fn() };
+    const canvas = {
+      getContext: vi.fn(() => context),
+      height: 0,
+      width: 0,
+    };
+    const image = {
+      naturalHeight: 8,
+      naturalWidth: 16,
+      onerror: null as (() => void) | null,
+      onload: null as (() => void) | null,
+      src: "",
+    };
+    let imageSrc = "";
+    Object.defineProperty(image, "src", {
+      get: () => imageSrc,
+      set: (value: string) => {
+        imageSrc = value;
+        if (value !== "") queueMicrotask(() => image.onload?.());
+      },
+    });
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => {
+      throw new Error("SVG bitmap decode unavailable");
+    }));
+    vi.stubGlobal("document", {
+      createElement: vi.fn((kind: string) => kind === "img" ? image : canvas),
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:royal-svg"),
+      revokeObjectURL,
+    });
+
+    const result = await decodeTextureWithBrowser({
+      bytes: new TextEncoder().encode("<svg/>"),
+      contentKey: "svg-canvas",
+      kind: "embedded-asset",
+      label: "SVG canvas",
+      mimeType: "image/svg+xml",
+      sourceEncoding: "svg",
+    }, new AbortController().signal);
+
+    expect(result).toMatchObject({ height: 8, source: canvas, width: 16 });
+    expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, 16, 8);
+    expect(image.src).toBe("");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-svg");
+    result.close?.();
+    expect(canvas).toMatchObject({ height: 1, width: 1 });
+  });
+
   it("hands full-size AVIF pixels from the image-element compatibility fallback to WebGL", async () => {
     let imageSrc = "";
     const image = {
@@ -466,9 +518,13 @@ describe("browser texture decode shell", () => {
 
     expect(result).toMatchObject({ height: 880, source: image, width: 630 });
     expect(createImageBitmap).toHaveBeenCalledOnce();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-avif");
+    expect(revokeObjectURL).not.toHaveBeenCalled();
     result.close?.();
     expect(image.src).toBe("");
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-avif");
+    result.close?.();
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
   });
 
   it("keeps direct KTX2 ETC2 levels compressed and extracts alpha only on demand", async () => {

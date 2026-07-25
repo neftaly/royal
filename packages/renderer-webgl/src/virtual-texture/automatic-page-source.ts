@@ -266,7 +266,7 @@ const rasterizeSvgRegion = async (
       width: bitmap.width,
     };
   } catch {
-    return decodeBrowserImageElement(blob, signal);
+    return decodeBrowserImageElement(blob, signal, { output: "canvas" });
   }
 };
 
