@@ -42,6 +42,19 @@ export const nonNegativeInteger = (value: unknown, label: string, path: string):
   return result;
 };
 
+export const finiteNumber = (
+  value: unknown,
+  fallback: number,
+  label: string,
+  path: string,
+): number => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fail(label, path, "must be finite");
+  }
+  return value;
+};
+
 export const index = (value: unknown, values: readonly unknown[], label: string, path: string): number => {
   const result = nonNegativeInteger(value, label, path);
   if (result >= values.length) fail(label, path, `index ${result} is out of range`);

@@ -84,10 +84,18 @@ describe("renderer-core orbit camera API", () => {
     const target: [number, number, number] = [1, 2, 3];
     const view = resolveOrbitCameraView({ distance: 5, target });
     target[0] = 9;
+    const frozenTarget = Object.freeze([4, 5, 6]) as unknown as [number, number, number];
+    const frozenView = resolveOrbitCameraView({ distance: 5, target: frozenTarget });
+    const defaultView = resolveOrbitCameraView({ distance: 5 });
+    const secondDefaultView = resolveOrbitCameraView({ distance: 5 });
 
     expect(view.target).toEqual([1, 2, 3]);
+    expect(frozenView.target).toEqual(frozenTarget);
+    expect(frozenView.target).not.toBe(frozenTarget);
+    expect(defaultView.target).not.toBe(secondDefaultView.target);
     expect(Object.isFrozen(view)).toBe(false);
     expect(Object.isFrozen(view.target)).toBe(false);
+    expect(Object.isFrozen(frozenView.target)).toBe(false);
     expect(Object.isFrozen(orbitCameraBasis(view))).toBe(false);
     expect(Object.isFrozen(orbitCameraTransform(view))).toBe(false);
   });

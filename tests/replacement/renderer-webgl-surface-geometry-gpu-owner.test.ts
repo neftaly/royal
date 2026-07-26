@@ -19,29 +19,7 @@ import {
   surfaceGeometryResourceKey,
   surfaceGeometryUploadByteLength,
 } from "../../packages/renderer-webgl/src/surface/gpu-admission";
-
-const fakeGl = (): WebGL2RenderingContext => ({
-  ARRAY_BUFFER: 0x8892,
-  ELEMENT_ARRAY_BUFFER: 0x8893,
-  FLOAT: 0x1406,
-  STATIC_DRAW: 0x88e4,
-  UNSIGNED_BYTE: 0x1401,
-  UNSIGNED_INT: 0x1405,
-  UNSIGNED_SHORT: 0x1403,
-  bindBuffer: vi.fn(),
-  bindVertexArray: vi.fn(),
-  bufferData: vi.fn(),
-  bufferSubData: vi.fn(),
-  createBuffer: vi.fn(() => ({})),
-  createVertexArray: vi.fn(() => ({})),
-  deleteBuffer: vi.fn(),
-  deleteVertexArray: vi.fn(),
-  disableVertexAttribArray: vi.fn(),
-  enableVertexAttribArray: vi.fn(),
-  vertexAttrib3f: vi.fn(),
-  vertexAttribDivisor: vi.fn(),
-  vertexAttribPointer: vi.fn(),
-} as unknown as WebGL2RenderingContext);
+import { fakeGl } from "./support/canvas-root-harness";
 
 const surface = (geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof boxGeometry>) =>
   prepareCanonicalSurfaceScene(scene({

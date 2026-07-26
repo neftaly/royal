@@ -19,6 +19,7 @@ import { staticGltfBounds } from "./static-bounds";
 import {
   array,
   fail,
+  finiteNumber,
   finiteTuple,
   index,
   integer,
@@ -141,19 +142,6 @@ type PreparedMeshPrimitive = Readonly<{
   materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
   materialVariantLods?: ReadonlyMap<string, PreparedStaticMaterialLod>;
 }>;
-
-const finiteNumber = (
-  value: unknown,
-  fallback: number,
-  label: string,
-  path: string,
-): number => {
-  if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fail(label, path, "must be finite");
-  }
-  return value;
-};
 
 /** Converges repeated ordinary node occurrences on the authored instance ABI. */
 export const batchRepeatedStaticPrimitives = (

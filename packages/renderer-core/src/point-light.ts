@@ -3,7 +3,7 @@ import {
   resolveVec3,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
-  positiveFiniteNumber,
+  optionalPositiveFiniteNumber,
 } from './descriptor-values';
 import type { LinearRgba, Metres, WorldPosition3 } from './primitives';
 
@@ -34,9 +34,7 @@ const POINT_LIGHT_FIELDS = ['color', 'intensityCandela', 'position', 'range'] as
 /** Creates an omnidirectional point light with physically named intensity units. */
 export const pointLight = (options: PointLightOptions): PointLightNode => {
   objectWithAllowedFields(options, POINT_LIGHT_FIELDS, 'point light');
-  const range = options.range === undefined
-    ? undefined
-    : positiveFiniteNumber(options.range, 'point light range');
+  const range = optionalPositiveFiniteNumber(options.range, 'point light range');
   return {
     kind: 'point-light',
     color: resolveRgba(options.color ?? DEFAULT_LIGHT_COLOR, 'point light color'),

@@ -34,6 +34,11 @@ export const positiveFiniteNumber = (value: number, label: string): number => {
   return value;
 };
 
+export const optionalPositiveFiniteNumber = (
+  value: number | undefined,
+  label: string,
+): number | undefined => value === undefined ? undefined : positiveFiniteNumber(value, label);
+
 export const nonNegativeFiniteNumber = (value: number, label: string): number => {
   finiteNumber(value, label);
   if (value < 0) throw new RangeError(`${label} must be non-negative; received ${String(value)}`);

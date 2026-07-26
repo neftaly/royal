@@ -3,9 +3,10 @@ import { perspectiveCamera } from './camera';
 import type { GltfAssetBounds } from './gltf';
 import {
   finiteNumber,
-  resolveVec3,
   objectWithAllowedFields,
+  optionalPositiveFiniteNumber,
   positiveFiniteNumber,
+  resolveVec3,
 } from './descriptor-values';
 import type { Direction3, EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
@@ -69,19 +70,14 @@ export type OrbitPerspectiveCameraOptions =
     readonly view: OrbitCameraViewOptions;
   };
 
-const defaultTarget = resolveVec3([0, 0, 0], 'orbit target');
+const DEFAULT_TARGET: WorldPosition3 = [0, 0, 0];
 const ORBIT_VIEW_FIELDS = ['distance', 'pitch', 'target', 'yaw'] as const;
 const ORBIT_CONSTRAINT_FIELDS = ['maxDistance', 'maxPitch', 'minDistance', 'minPitch'] as const;
 const ORBIT_FIT_FIELDS = ['aspectRatio', 'fovY', 'minDistance', 'padding', 'pitch', 'yaw'] as const;
 const ORBIT_PERSPECTIVE_CAMERA_FIELDS = ['far', 'fovY', 'near', 'view'] as const;
 
-const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 => {
-  if (target === undefined) return defaultTarget;
-  finiteNumber(target[0], 'orbit target[0]');
-  finiteNumber(target[1], 'orbit target[1]');
-  finiteNumber(target[2], 'orbit target[2]');
-  return Object.isFrozen(target) ? target : resolveVec3(target, 'orbit target');
-};
+const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 =>
+  resolveVec3(target ?? DEFAULT_TARGET, 'orbit target');
 
 const clamp = (
   value: number,
@@ -94,12 +90,8 @@ const finiteOptional = (value: number | undefined, label: string): number | unde
 
 const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void => {
   objectWithAllowedFields(constraints, ORBIT_CONSTRAINT_FIELDS, 'orbit constraints');
-  const minDistance = constraints.minDistance === undefined
-    ? undefined
-    : positiveFiniteNumber(constraints.minDistance, 'orbit minDistance');
-  const maxDistance = constraints.maxDistance === undefined
-    ? undefined
-    : positiveFiniteNumber(constraints.maxDistance, 'orbit maxDistance');
+  const minDistance = optionalPositiveFiniteNumber(constraints.minDistance, 'orbit minDistance');
+  const maxDistance = optionalPositiveFiniteNumber(constraints.maxDistance, 'orbit maxDistance');
   const minPitch = finiteOptional(constraints.minPitch, 'orbit minPitch');
   const maxPitch = finiteOptional(constraints.maxPitch, 'orbit maxPitch');
   if (minDistance !== undefined && maxDistance !== undefined && minDistance > maxDistance) {
@@ -155,9 +147,10 @@ export const fitOrbitCameraView = (
   }
   const padding = finiteNumber(options.padding ?? 1, 'orbit camera fit padding');
   if (padding < 1) throw new RangeError('orbit camera fit padding must be at least 1');
-  const minDistance = options.minDistance === undefined
-    ? undefined
-    : positiveFiniteNumber(options.minDistance, 'orbit camera fit minDistance');
+  const minDistance = optionalPositiveFiniteNumber(
+    options.minDistance,
+    'orbit camera fit minDistance',
+  );
 
   const min = bounds.min;
   const max = bounds.max;

@@ -10,6 +10,7 @@ import type {
   TextureAssetSnapshot,
 } from "../texture/asset-owner";
 import type { TextureSourceRef } from "../texture/source";
+import { formatFailure } from "../diagnostics/format-failure";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import { SharedByteReadOwner } from "../resource/shared-byte-read-owner";
@@ -200,11 +201,6 @@ const usableState = (
 ): "degraded" | "ready" | "streaming" => progress.loading > 0
   ? "streaming"
   : progress.failed > 0 ? "degraded" : "ready";
-
-const formatFailure = (error: unknown): string => {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
-};
 
 const awaitWithAbort = async <Value>(
   value: Promise<Value>,

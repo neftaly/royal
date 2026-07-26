@@ -1,6 +1,7 @@
 import type {
   TextureAssetRef,
 } from "@royal/renderer-core";
+import { formatFailure } from "../diagnostics/format-failure";
 import { RetainedFifo } from "../resource/retained-fifo";
 import { KeyedRetainedListeners } from "../resource/retained-listeners";
 import type { StagedByteReadSnapshot } from "../resource/staged-byte-read-owner";
@@ -153,11 +154,6 @@ const storageIncomplete = (
     if (!resident.has(key)) return true;
   }
   return false;
-};
-
-const formatFailure = (error: unknown): string => {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
 };
 
 const diagnosticLabel = (asset: TextureSourceRef): string => {

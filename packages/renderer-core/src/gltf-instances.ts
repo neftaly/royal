@@ -277,50 +277,42 @@ export const createGltfInstanceTransforms = (
     }
     if (failed) throw firstFailure;
   };
+  const commit = (
+    channel: GltfInstanceTransformChannel,
+    startIndex: number | undefined,
+    committedCount: number | undefined,
+  ): void => {
+    if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
+    const start = startIndex ?? 0;
+    const rangeCount = committedCount ?? count - start;
+    assertCommittedRange(count, start, rangeCount);
+    const startOffset = start * 3;
+    const endOffset = (start + rangeCount) * 3;
+    switch (channel) {
+      case 'position':
+        validateFiniteChannel(positions, 'positions', startOffset, endOffset);
+        break;
+      case 'pose':
+        validateFiniteChannel(positions, 'positions', startOffset, endOffset);
+        validateFiniteChannel(rotations, 'rotations', startOffset, endOffset);
+        break;
+      case 'rotation':
+        validateFiniteChannel(rotations, 'rotations', startOffset, endOffset);
+        break;
+      case 'scale':
+        validateFiniteChannel(scales, 'scales', startOffset, endOffset);
+        break;
+    }
+    const version = channel === 'scale' ? ++scaleVersion : ++poseVersion;
+    notify(channel, start, rangeCount, version);
+  };
   const transforms: GltfInstanceTransforms = {
     count,
     ...(logicalIds === undefined ? {} : { logicalIds }),
-    commitPosition: (startIndex, committedCount) => {
-      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
-      assertCommittedRange(count, startIndex, committedCount);
-      const start = startIndex ?? 0;
-      const rangeCount = committedCount ?? count - start;
-      validateFiniteChannel(positions, 'positions', start * 3, (start + rangeCount) * 3);
-      poseVersion += 1;
-      notify('position', start, rangeCount, poseVersion);
-    },
-    commitPose: (startIndex, committedCount) => {
-      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
-      assertCommittedRange(count, startIndex, committedCount);
-      const start = startIndex ?? 0;
-      const rangeCount = committedCount ?? count - start;
-      const startOffset = start * 3;
-      const endOffset = (start + rangeCount) * 3;
-      validateFiniteChannel(positions, 'positions', startOffset, endOffset);
-      validateFiniteChannel(rotations, 'rotations', startOffset, endOffset);
-      poseVersion += 1;
-      notify('pose', start, rangeCount, poseVersion);
-    },
-    commitRotation: (startIndex, committedCount) => {
-      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
-      assertCommittedRange(count, startIndex, committedCount);
-      const start = startIndex ?? 0;
-      const rangeCount = committedCount ?? count - start;
-      validateFiniteChannel(rotations, 'rotations', start * 3, (start + rangeCount) * 3);
-      poseVersion += 1;
-      notify('rotation', start, rangeCount, poseVersion);
-    },
-    commitScale: (startIndex, committedCount) => {
-      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
-      assertCommittedRange(count, startIndex, committedCount);
-      const start = startIndex ?? 0;
-      const rangeCount = committedCount ?? count - start;
-      const startOffset = start * 3;
-      const endOffset = (start + rangeCount) * 3;
-      validateFiniteChannel(scales, 'scales', startOffset, endOffset);
-      scaleVersion += 1;
-      notify('scale', start, rangeCount, scaleVersion);
-    },
+    commitPosition: (startIndex, count) => commit('position', startIndex, count),
+    commitPose: (startIndex, count) => commit('pose', startIndex, count),
+    commitRotation: (startIndex, count) => commit('rotation', startIndex, count),
+    commitScale: (startIndex, count) => commit('scale', startIndex, count),
     get poseVersion() {
       return poseVersion;
     },

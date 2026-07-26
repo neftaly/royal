@@ -11,6 +11,7 @@ import type {
 } from "../texture/source";
 import {
   fail,
+  finiteNumber,
   finiteTuple,
   index,
   integer,
@@ -37,25 +38,9 @@ const factor01 = (
   label: string,
   path: string,
 ): number => {
-  if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fail(label, path, "must be finite");
-  }
-  if (value < 0 || value > 1) fail(label, path, "must be within 0..1");
-  return value;
-};
-
-const finiteFactor = (
-  value: unknown,
-  fallback: number,
-  label: string,
-  path: string,
-): number => {
-  if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fail(label, path, "must be finite");
-  }
-  return value;
+  const factor = finiteNumber(value, fallback, label, path);
+  if (factor < 0 || factor > 1) fail(label, path, "must be within 0..1");
+  return factor;
 };
 
 export const resolveAssetUri = (baseUri: string, uri: string): string => {
@@ -288,7 +273,7 @@ export const prepareMaterial = (
   if (unlit && (transmissionExtension !== undefined || volumeExtension !== undefined)) {
     fail(label, `${materialPath}.extensions`, "must not combine transmission or volume with KHR_materials_unlit");
   }
-  const indexOfRefraction = finiteFactor(
+  const indexOfRefraction = finiteNumber(
     iorExtension?.ior,
     1.5,
     label,
@@ -435,7 +420,7 @@ export const prepareMaterial = (
       label,
       `${materialPath}.extensions.KHR_materials_emissive_strength`,
     );
-  const emissiveStrength = finiteFactor(
+  const emissiveStrength = finiteNumber(
     emissiveStrengthExtension?.emissiveStrength,
     1,
     label,
@@ -472,7 +457,7 @@ export const prepareMaterial = (
   }
   const attenuationDistance = volumeExtension?.attenuationDistance === undefined
     ? undefined
-    : finiteFactor(
+    : finiteNumber(
       volumeExtension.attenuationDistance,
       1,
       label,
@@ -485,7 +470,7 @@ export const prepareMaterial = (
       "must be greater than zero",
     );
   }
-  const thicknessFactor = finiteFactor(
+  const thicknessFactor = finiteNumber(
     volumeExtension?.thicknessFactor,
     0,
     label,
@@ -533,7 +518,7 @@ export const prepareMaterial = (
     ...(normalTextureUse === undefined ? {} : { normalAsset: normalTextureUse.asset }),
     normalScale: normalTexture === undefined
       ? 1
-      : finiteFactor(normalTexture.scale, 1, label, `${materialPath}.normalTexture.scale`),
+      : finiteNumber(normalTexture.scale, 1, label, `${materialPath}.normalTexture.scale`),
     ...(normalTextureUse === undefined || normalTextureUse.coordinates === IDENTITY_TEXTURE_COORDINATES
       ? {}
       : { normalTextureCoordinates: normalTextureUse.coordinates }),

@@ -2,7 +2,7 @@ import {
   finiteNumber,
   nonNegativeFiniteNumber,
   objectWithAllowedFields,
-  positiveFiniteNumber,
+  optionalPositiveFiniteNumber,
   resolveDirection3,
   resolveRgba,
   resolveVec3,
@@ -57,6 +57,7 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   if (innerConeAngle < 0 || innerConeAngle >= outerConeAngle) {
     throw new RangeError('spot light innerConeAngle must be in [0, outerConeAngle)');
   }
+  const range = optionalPositiveFiniteNumber(options.range, 'spot light range');
   return {
     kind: 'spot-light',
     color: resolveRgba(options.color ?? DEFAULT_LIGHT_COLOR, 'spot light color'),
@@ -68,8 +69,6 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
     ),
     outerConeAngle,
     position: resolveVec3(options.position, 'spot light position'),
-    ...(options.range === undefined
-      ? {}
-      : { range: positiveFiniteNumber(options.range, 'spot light range') })
+    ...(range === undefined ? {} : { range })
   };
 };

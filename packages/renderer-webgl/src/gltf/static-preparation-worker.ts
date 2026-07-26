@@ -9,6 +9,7 @@ import {
 } from "./static-draco-executor";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
+import { formatFailure } from "../diagnostics/format-failure";
 
 type PreparationRequest = Readonly<{
   bytes: Uint8Array;
@@ -42,11 +43,6 @@ type WorkerScope = Readonly<{
 }>;
 
 const workerScope = globalThis as unknown as WorkerScope;
-
-const formatFailure = (error: unknown): string => {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
-};
 
 type ResourceRead = Readonly<{
   reject(error: Error): void;

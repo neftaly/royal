@@ -141,16 +141,7 @@ const replaceRenderObjectTransformField = (
   value: Vec3
 ): RenderObjectTransformState => {
   if (sameVec3(state[field], value)) return state;
-
-  const nextValue = copyVec3(value);
-  switch (field) {
-    case 'position':
-      return { ...state, position: nextValue };
-    case 'rotation':
-      return { ...state, rotation: nextValue };
-    case 'scale':
-      return { ...state, scale: nextValue };
-  }
+  return { ...state, [field]: copyVec3(value) };
 };
 
 const replaceRenderObjectTransformComponent = (

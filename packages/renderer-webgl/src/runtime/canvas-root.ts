@@ -15,6 +15,7 @@ import {
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
+import { formatFailure } from "../diagnostics/format-failure";
 import type {
   ClearFrameIntent,
   LinearRgba,
@@ -407,11 +408,6 @@ const lazyBrowserGltfPreparer = (
       computeGeometryTaskKeys,
     ),
   };
-};
-
-const formatFailure = (error: unknown): string => {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
 };
 
 const IDLE_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {

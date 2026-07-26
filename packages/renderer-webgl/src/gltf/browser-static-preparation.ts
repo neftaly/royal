@@ -1,5 +1,6 @@
 import type { PreparedStaticGltf } from "./static-asset";
 import type { TextureVersion } from "@royal/renderer-core";
+import { formatFailure } from "../diagnostics/format-failure";
 import type { StaticGltfResourceRequest } from "./static-buffer-demand";
 import type { StaticGltfResourceReader } from "./static-source";
 import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
@@ -29,11 +30,6 @@ const abortFailure = (): DOMException => new DOMException(
   "Royal glTF preparation was aborted",
   "AbortError",
 );
-
-const formatFailure = (error: unknown): string => {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.length <= 400 ? value : `${value.slice(0, 399)}…`;
-};
 
 const defaultWorker = (): Worker => new Worker(
   new URL("./static-preparation-worker.ts", import.meta.url),

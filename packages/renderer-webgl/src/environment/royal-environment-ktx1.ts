@@ -46,32 +46,19 @@ export type PreparedRoyalEnvironmentFace = Readonly<{
   face: RoyalEnvironmentFace;
 }>;
 
+type CubeFaces<Value> = readonly [Value, Value, Value, Value, Value, Value];
+type Rgb = readonly [number, number, number];
+type SphericalHarmonics = readonly [Rgb, Rgb, Rgb, Rgb, Rgb, Rgb, Rgb, Rgb, Rgb];
+
 export type PreparedRoyalEnvironmentLevel = Readonly<{
-  faces: readonly [
-    PreparedRoyalEnvironmentFace,
-    PreparedRoyalEnvironmentFace,
-    PreparedRoyalEnvironmentFace,
-    PreparedRoyalEnvironmentFace,
-    PreparedRoyalEnvironmentFace,
-    PreparedRoyalEnvironmentFace,
-  ];
+  faces: CubeFaces<PreparedRoyalEnvironmentFace>;
   level: number;
   size: number;
 }>;
 
 export type RoyalEnvironmentMetadata = Readonly<{
   provenance: string;
-  sh: readonly [
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-    readonly [number, number, number],
-  ];
+  sh: SphericalHarmonics;
   version: 1;
 }>;
 

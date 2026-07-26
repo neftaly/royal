@@ -9,47 +9,7 @@ import {
 import { ETC2_SRGB8_ALPHA8_WEBGL_FORMAT } from "../../packages/renderer-webgl/src/texture/etc2-storage";
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
-
-const fakeGl = (): WebGL2RenderingContext => ({
-  CLAMP_TO_EDGE: 0x812f,
-  COMPRESSED_RGBA8_ETC2_EAC: 0x9278,
-  COMPRESSED_SRGB8_ALPHA8_ETC2_EAC: 0x9279,
-  LINEAR: 0x2601,
-  LINEAR_MIPMAP_LINEAR: 0x2703,
-  LINEAR_MIPMAP_NEAREST: 0x2701,
-  MIRRORED_REPEAT: 0x8370,
-  NEAREST: 0x2600,
-  NEAREST_MIPMAP_LINEAR: 0x2702,
-  NEAREST_MIPMAP_NEAREST: 0x2700,
-  NONE: 0,
-  REPEAT: 0x2901,
-  RGBA: 0x1908,
-  RGBA8: 0x8058,
-  SRGB8_ALPHA8: 0x8c43,
-  TEXTURE0: 0x84c0,
-  TEXTURE_2D: 0x0de1,
-  TEXTURE_MAG_FILTER: 0x2800,
-  TEXTURE_MIN_FILTER: 0x2801,
-  TEXTURE_WRAP_S: 0x2802,
-  TEXTURE_WRAP_T: 0x2803,
-  UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
-  UNPACK_FLIP_Y_WEBGL: 0x9240,
-  UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
-  UNSIGNED_BYTE: 0x1401,
-  activeTexture: vi.fn(),
-  bindTexture: vi.fn(),
-  compressedTexImage2D: vi.fn(),
-  createSampler: vi.fn(() => ({})),
-  createTexture: vi.fn(() => ({})),
-  deleteSampler: vi.fn(),
-  deleteTexture: vi.fn(),
-  generateMipmap: vi.fn(),
-  pixelStorei: vi.fn(),
-  samplerParameteri: vi.fn(),
-  texImage2D: vi.fn(),
-  texStorage2D: vi.fn(),
-  texSubImage2D: vi.fn(),
-} as unknown as WebGL2RenderingContext);
+import { fakeGl } from "./support/canvas-root-harness";
 
 const binding = (
   samplerKey: string,
