@@ -3,6 +3,7 @@ import {
   boxGeometry,
   createGltfInstanceTransforms,
   directionalLight,
+  edgeMaterial,
   gltf,
   gltfAsset,
   gltfInstances,
@@ -10,6 +11,7 @@ import {
   linearRgbaFromSrgb,
   mesh,
   orthographicCamera,
+  outlineGltf,
   perspectiveCamera,
   planeGeometry,
   pointLight,
@@ -206,6 +208,43 @@ describe("renderer-core descriptor contract", () => {
         pickingId: "hint",
       })],
     })).toThrow(/cannot participate in picking/);
+  });
+
+  it("builds a constrained glTF edge overlay without picking authority", () => {
+    const material = edgeMaterial({
+      color: [0.4, 0.6, 1, 0.5],
+      widthCssPixels: 5,
+    });
+    const node = outlineGltf({
+      material,
+      src: "/piece.glb",
+      transform: { position: [1, 2, 3] },
+      version: "selected",
+    });
+    expect(node).toMatchObject({
+      asset: { src: "/piece.glb", version: "selected" },
+      kind: "outline-gltf",
+      material,
+      transform: { position: [1, 2, 3] },
+    });
+    expect(sceneOverlay({ nodes: [node] }).nodes).toEqual([node]);
+    expect(() => edgeMaterial({
+      color: [1, 1, 1, 1],
+      widthCssPixels: 0,
+    })).toThrow(RangeError);
+    expect(() => edgeMaterial({
+      color: [1, 1, 1, 1],
+      widthCssPixels: 17,
+    })).toThrow(/within/);
+    expect(() => outlineGltf({
+      material: unlitMaterial({ color: [1, 1, 1, 1] }) as never,
+      src: "/piece.glb",
+    })).toThrow(/edge material/);
+    expect(() => outlineGltf({
+      material,
+      pickingId: "forbidden",
+      src: "/piece.glb",
+    } as never)).toThrow(/unsupported option/);
   });
 
   it("does not share mutable default tuples between descriptors", () => {

@@ -22,6 +22,7 @@ import {
   type CanonicalDrawSurface,
   type CanonicalSurfaceScene,
 } from "./scene-lowering";
+import type { CanonicalEdgeSurface } from "./edge-overlay-scene";
 import {
   createCanonicalLightUniformStorage,
   packCanonicalLightUniformsInto,
@@ -151,6 +152,23 @@ export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly
   /** Scene surfaces still waiting for bounded geometry/instance admission. */
   pendingSurfaces: number;
 }>;
+
+export type BorrowedSurfaceGeometry = Readonly<{
+  geometry: Readonly<{
+    indexCount: number;
+    indexOffset: number;
+    indexType: number;
+    key: string;
+  }>;
+  /** Stable only until the world owner next reconciles its retained resources. */
+  identity: object;
+  instanceCount: number;
+  vertexArray: WebGLVertexArrayObject;
+}>;
+
+export type BorrowedSurfaceGeometryMatch =
+  | Readonly<{ status: "absent" | "inactive" | "pending" }>
+  | Readonly<{ resource: BorrowedSurfaceGeometry; status: "ready" }>;
 
 type GpuSurface = {
   depthOrder: number;
@@ -446,6 +464,54 @@ export class SurfaceGpuOwner {
   /** Current canonical LOD choices shared by visual submission and exact picking. */
   lodSelections(): LodLevelSelections {
     return this.#lodSelection.currentLevels;
+  }
+
+  /**
+   * Borrows the exact currently presented world occurrence without transferring
+   * ownership of its geometry, indices, instance buffer, or VAO.
+   */
+  borrowPresentedGeometry(
+    requested: CanonicalEdgeSurface,
+  ): BorrowedSurfaceGeometryMatch {
+    const scene = this.#scene;
+    if (scene === null) return { status: "absent" };
+    let matched = false;
+    let pending = false;
+    for (let index = 0; index < scene.surfaces.length; index += 1) {
+      const surface = scene.surfaces[index]!;
+      if (
+        surface.node.kind !== "gltf"
+        || surface.geometry.key !== requested.geometry.key
+        || surface.instances?.key !== requested.instances?.key
+        || !mat4ValuesEqual(surface.model, requested.model)
+        || surface.node.asset.src !== requested.asset.src
+        || surface.node.asset.sceneIndex !== requested.asset.sceneIndex
+        || surface.node.asset.version !== requested.asset.version
+      ) continue;
+      matched = true;
+      const resource = this.#gpuSurfacesBySceneIndex[index];
+      if (resource === undefined) {
+        pending = true;
+        continue;
+      }
+      if (!lodMembershipsSelected(surface.lods, this.#lodSelection.currentLevels)) continue;
+      return {
+        resource: {
+          geometry: {
+            indexCount: resource.geometry.indexCount,
+            indexOffset: resource.geometry.indexOffset,
+            indexType: resource.geometry.indexType,
+            key: resource.geometry.key,
+          },
+          identity: resource,
+          instanceCount: resource.instanceCount,
+          vertexArray: resource.vertexArray,
+        },
+        status: "ready",
+      };
+    }
+    if (pending) return { status: "pending" };
+    return { status: matched ? "inactive" : "absent" };
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {

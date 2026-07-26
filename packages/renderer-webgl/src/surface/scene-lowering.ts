@@ -290,6 +290,13 @@ export type CanonicalPunctualLight = Readonly<{
 export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
 export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
 
+export type CanonicalSurfacePreparationOptions = Readonly<{
+  /** @defaultValue `true` */
+  includeLighting?: boolean;
+  /** @defaultValue `true` */
+  includePicking?: boolean;
+}>;
+
 export const canonicalModelHandedness = (model: Mat4): 1 | -1 => {
   const determinant = model[0] * (model[5] * model[10] - model[6] * model[9])
     - model[4] * (model[1] * model[10] - model[2] * model[9])
@@ -387,9 +394,12 @@ export const prepareCanonicalSurfaceScene = (
   camera: CanonicalCamera = staticCamera(scene),
   decodedTexture: (asset: TextureSourceRef) => DecodedTextureSource | undefined = () => undefined,
   texturePending: (asset: TextureSourceRef) => boolean = () => true,
+  options: CanonicalSurfacePreparationOptions = {},
 ): CanonicalSurfaceScene => {
+  const includeLighting = options.includeLighting !== false;
+  const includePicking = options.includePicking !== false;
   let requiresLighting = false;
-  for (const node of scene.nodes) {
+  for (const node of includeLighting ? scene.nodes : []) {
     if (node.kind === "mesh" && node.material.kind === "standard") {
       requiresLighting = true;
       break;
@@ -484,7 +494,7 @@ export const prepareCanonicalSurfaceScene = (
       const mountIndex = gltfNodes.length - 1;
       const tintKey = node.tint === undefined ? undefined : JSON.stringify(node.tint);
       const rootModel = node.kind === "gltf" ? transformMat4(node.transform) : identityMat4();
-      const proxyGeometry = node.pickingGeometry === undefined
+      const proxyGeometry = !includePicking || node.pickingGeometry === undefined
         ? undefined
         : directGeometry(node.pickingGeometry);
       if (proxyGeometry !== undefined) {
@@ -728,7 +738,7 @@ export const prepareCanonicalSurfaceScene = (
             textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
             worldBounds,
           });
-          if (proxyGeometry === undefined) {
+          if (includePicking && proxyGeometry === undefined) {
             if (instanceBatch === undefined) {
               pickSurfaces.push({
                 ...canonicalPickMaterial(presentedMaterial),
@@ -853,19 +863,21 @@ export const prepareCanonicalSurfaceScene = (
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
     surfaces.push(surface);
-    pickSurfaces.push(node.pickingGeometry === undefined ? {
-      ...surface,
-      ...canonicalPickMaterial(materialSource),
-    } : {
-      ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
-      inverseModel: surface.inverseModel,
-      modelHandedness: surface.modelHandedness,
-      node,
-      ...(node.ref === undefined
-        ? {}
-        : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
-      pickingGeometry: surface.pickingGeometry,
-    });
+    if (includePicking) {
+      pickSurfaces.push(node.pickingGeometry === undefined ? {
+        ...surface,
+        ...canonicalPickMaterial(materialSource),
+      } : {
+        ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
+        inverseModel: surface.inverseModel,
+        modelHandedness: surface.modelHandedness,
+        node,
+        ...(node.ref === undefined
+          ? {}
+          : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
+        pickingGeometry: surface.pickingGeometry,
+      });
+    }
   }
   type MutableRenderObjectBinding = {
     lights: CanonicalRenderObjectLightBinding[];

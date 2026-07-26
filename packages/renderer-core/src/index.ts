@@ -73,6 +73,8 @@ export type {
   GltfInstancesOptions,
 } from './gltf-instances';
 export type { CameraKind, GeometryKind, MaterialKind, SceneNodeKind } from './kind';
+export type { EdgeMaterial, EdgeMaterialOptions } from './edge-material';
+export { edgeMaterial } from './edge-material';
 export type {
   Material,
   MaterialSurfaceOptions,
@@ -123,6 +125,8 @@ export type {
 export { prefilteredEnvironment, studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
+export type { OutlineGltfNode, OutlineGltfOptions } from './outline-gltf';
+export { outlineGltf } from './outline-gltf';
 export type {
   GltfInstancesPickTarget,
   GltfPickTarget,
@@ -147,7 +151,11 @@ export type {
   SceneOptions
 } from './render-graph';
 export { scene } from './render-graph';
-export type { SceneOverlay, SceneOverlayOptions } from './scene-overlay';
+export type {
+  SceneOverlay,
+  SceneOverlayNode,
+  SceneOverlayOptions,
+} from './scene-overlay';
 export { sceneOverlay } from './scene-overlay';
 export type {
   Direction3,

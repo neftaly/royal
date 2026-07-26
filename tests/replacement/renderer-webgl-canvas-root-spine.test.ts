@@ -5,9 +5,11 @@ import {
   mesh,
   imageTexture,
   directionalLight,
+  edgeMaterial,
   createCameraViewResource,
   gltf,
   perspectiveCamera,
+  outlineGltf,
   planeGeometry,
   pointLight,
   scene,
@@ -25,6 +27,7 @@ import {
   type CanvasRootPlatform,
 } from "../../packages/renderer-webgl/src/runtime/canvas-root";
 import {
+  staticInstancedTriangleGlb,
   staticTriangleDocument,
   staticTriangleGlb,
 } from "./support/static-glb";
@@ -319,6 +322,74 @@ describe("clear-only canvas root", () => {
       node: base,
       pickingId: "base",
     });
+  });
+
+  it("reuses presented glTF geometry for screen-space edge overlays", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const transform = { position: [-1, -2, 0] as const };
+    const base = gltf({ src: "/outlined.glb", transform });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 2 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [base],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({
+          color: [1, 0.5, 0.1, 0.75],
+          widthCssPixels: 5,
+        }),
+        src: "/outlined.glb",
+        transform,
+      })],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(readGltf).toHaveBeenCalledOnce();
+    // Position and index storage are uploaded once by the base scene. The edge
+    // lane borrows that VAO and allocates textures, never another buffer.
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("dFdx(viewPosition)"))).toBe(true);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("center.b < neighbor.b"))).toBe(true);
+    expect(canvas.gl.uniform1f.mock.calls.some(([, value]) => value === 4.5)).toBe(true);
+    expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
+  });
+
+  it("borrows authored glTF instance cohorts without another instance upload", async () => {
+    const readGltf = vi.fn(async () => staticInstancedTriangleGlb());
+    const { callbacks, canvas, root } = harness({ readGltf });
+    const base = gltf("/outlined-instances.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [base],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({
+          color: [0.2, 0.8, 1, 1],
+          widthCssPixels: 3,
+        }),
+        src: "/outlined-instances.glb",
+      })],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    callbacks.shift()!();
+
+    // One position arena, one index arena, and one authored instance cohort.
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
   });
 
   it("restores retained world color for overlay replace, clear, and re-add", () => {
