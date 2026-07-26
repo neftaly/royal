@@ -147,6 +147,8 @@ export type {
   SceneOptions
 } from './render-graph';
 export { scene } from './render-graph';
+export type { SceneOverlay, SceneOverlayOptions } from './scene-overlay';
+export { sceneOverlay } from './scene-overlay';
 export type {
   Direction3,
   EulerRads,

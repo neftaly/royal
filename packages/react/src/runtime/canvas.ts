@@ -5,6 +5,7 @@ import {
   type PickInput,
   type PickResult,
   type Scene,
+  type SceneOverlay,
 } from "@royal/renderer-core";
 import {
   createRendererRoot,
@@ -59,6 +60,8 @@ export interface CanvasProps
   readonly ref?: Ref<HTMLCanvasElement>;
   /** Backing pixels per CSS pixel. Defaults to the browser device pixel ratio. */
   readonly pixelRatio?: number;
+  /** Independently replaceable, non-picking world geometry presented above the scene. */
+  readonly overlay?: SceneOverlay;
   /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
   readonly gltfResourceReader?: GltfResourceReader;
   /**
@@ -226,6 +229,7 @@ export const Canvas = ({
   children,
   gltfAssetClaims,
   gltfResourceReader,
+  overlay,
   pixelRatio,
   ref,
   rendererOptions,
@@ -322,6 +326,12 @@ export const Canvas = ({
       activeRoot.setScene(scene, resolvedGltfAssetClaims);
     }
   }, [activeRoot, resolvedGltfAssetClaims, scene]);
+
+  useLayoutEffect(() => {
+    if (activeRoot !== null && liveRootRef.current === activeRoot) {
+      activeRoot.setOverlay(overlay ?? null);
+    }
+  }, [activeRoot, overlay]);
 
   useLayoutEffect(() => {
     reconcileCanvasPointerInteractionScene({

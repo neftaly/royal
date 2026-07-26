@@ -13,12 +13,15 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly compressedTexImage2D: ReturnType<typeof vi.fn>;
+  readonly copyTexSubImage2D: ReturnType<typeof vi.fn>;
   readonly createBuffer: ReturnType<typeof vi.fn<() => WebGLBuffer | null>>;
+  readonly createFramebuffer: ReturnType<typeof vi.fn<() => WebGLFramebuffer | null>>;
   readonly createTexture: ReturnType<typeof vi.fn<() => WebGLTexture | null>>;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly bufferSubData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
   readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
+  readonly drawArrays: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
@@ -31,6 +34,7 @@ export type FakeGl = WebGL2RenderingContext & {
 
 export const fakeGl = (): FakeGl => ({
   COLOR_BUFFER_BIT: 0x4000,
+  COLOR_ATTACHMENT0: 0x8ce0,
   CLAMP_TO_EDGE: 0x812f,
   COMPRESSED_RGBA8_ETC2_EAC: 0x9278,
   COMPRESSED_SRGB8_ALPHA8_ETC2_EAC: 0x9279,
@@ -49,6 +53,8 @@ export const fakeGl = (): FakeGl => ({
   FLOAT: 0x1406,
   FRAGMENT_SHADER: 0x8b30,
   FRAMEBUFFER: 0x8d40,
+  FRAMEBUFFER_COMPLETE: 0x8cd5,
+  DRAW_FRAMEBUFFER: 0x8ca9,
   LEQUAL: 0x0203,
   LINES: 0x0001,
   LINEAR: 0x2601,
@@ -66,6 +72,7 @@ export const fakeGl = (): FakeGl => ({
   ONE: 1,
   ONE_MINUS_SRC_ALPHA: 0x0303,
   REPEAT: 0x2901,
+  READ_FRAMEBUFFER: 0x8ca8,
   RGB: 0x1907,
   RGBA: 0x1908,
   RGBA8: 0x8058,
@@ -109,6 +116,9 @@ export const fakeGl = (): FakeGl => ({
   compileShader: vi.fn(),
   compressedTexImage2D: vi.fn(),
   createBuffer: vi.fn<() => WebGLBuffer | null>(() => ({} as WebGLBuffer)),
+  createFramebuffer: vi.fn<() => WebGLFramebuffer | null>(
+    () => ({} as WebGLFramebuffer),
+  ),
   createProgram: vi.fn(() => ({})),
   createSampler: vi.fn(() => ({})),
   createShader: vi.fn(() => ({})),
@@ -116,6 +126,7 @@ export const fakeGl = (): FakeGl => ({
   createTexture: vi.fn(() => ({})),
   cullFace: vi.fn(),
   deleteBuffer: vi.fn(),
+  deleteFramebuffer: vi.fn(),
   deleteProgram: vi.fn(),
   deleteShader: vi.fn(),
   deleteSampler: vi.fn(),
@@ -127,10 +138,14 @@ export const fakeGl = (): FakeGl => ({
   disableVertexAttribArray: vi.fn(),
   drawElements: vi.fn(),
   drawElementsInstanced: vi.fn(),
+  drawArrays: vi.fn(),
   enable: vi.fn(),
   enableVertexAttribArray: vi.fn(),
   frontFace: vi.fn(),
   generateMipmap: vi.fn(),
+  checkFramebufferStatus: vi.fn(() => 0x8cd5),
+  copyTexSubImage2D: vi.fn(),
+  framebufferTexture2D: vi.fn(),
   getProgramInfoLog: vi.fn(() => ""),
   getProgramParameter: vi.fn(() => true),
   getShaderInfoLog: vi.fn(() => ""),

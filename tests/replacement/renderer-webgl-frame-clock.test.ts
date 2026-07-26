@@ -7,6 +7,7 @@ import {
   FRAME_CLOCK_EVENT_CONTEXT_RESUMED,
   FRAME_CLOCK_EVENT_FLUSH_EXTERNAL,
   FRAME_CLOCK_EVENT_INVALIDATE,
+  FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL,
   FRAME_CLOCK_EVENT_RELEASE_EXTERNAL,
   FRAME_CLOCK_EVENT_RENDER_FAILED,
   FRAME_CLOCK_EVENT_RETRY,
@@ -57,6 +58,14 @@ describe("frame clock core", () => {
     expect(resumed.next).toMatchObject({ available: true, demand: true, scheduledToken: 2 });
   });
 
+  it("renders immediate internal demand without scheduling an extra callback", () => {
+    const immediate = transition(createFrameClockState(), {
+      kind: FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL,
+    });
+    expect(immediate).toMatchObject({ accepted: true, effect: FRAME_CLOCK_EFFECT_RENDER });
+    expect(immediate.next).toMatchObject({ demand: false, scheduledToken: 0 });
+  });
+
   it("latches a render failure until an explicit retry", () => {
     const scheduled = transition(createFrameClockState(), { kind: FRAME_CLOCK_EVENT_INVALIDATE }).next;
     const rendering = transition(scheduled, {
@@ -92,6 +101,19 @@ describe("frame clock core", () => {
 });
 
 describe("frame clock shell", () => {
+  it("flushes new demand immediately without asking the host for another frame", () => {
+    const callbacks: Array<() => void> = [];
+    const render = vi.fn();
+    const owner = new FrameClockOwner({
+      render,
+      reportScheduledFailure: vi.fn(),
+      requestFrame: (callback) => callbacks.push(callback),
+    });
+    owner.invalidateAndFlush();
+    expect(render).toHaveBeenCalledOnce();
+    expect(callbacks).toHaveLength(0);
+  });
+
   it("schedules once, renders once and ignores the stale callback after an explicit flush", () => {
     const callbacks: Array<() => void> = [];
     const render = vi.fn();

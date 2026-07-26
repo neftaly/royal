@@ -14,6 +14,7 @@ export const FRAME_CLOCK_EVENT_RETRY = 8 as const;
 export const FRAME_CLOCK_EVENT_SCHEDULE_FAILED = 9 as const;
 export const FRAME_CLOCK_EVENT_SCHEDULED_FRAME = 10 as const;
 export const FRAME_CLOCK_EVENT_FLUSH_EXTERNAL = 11 as const;
+export const FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL = 12 as const;
 
 const FRAME_CLOCK_FAILED_TOKEN = -1;
 
@@ -44,7 +45,8 @@ export type FrameClockEvent =
   | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_RETRY }>
   | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_SCHEDULE_FAILED; token: number }>
   | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_SCHEDULED_FRAME; token: number }>
-  | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_FLUSH_EXTERNAL; token: number }>;
+  | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_FLUSH_EXTERNAL; token: number }>
+  | Readonly<{ kind: typeof FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL }>;
 
 export type FrameClockTransition = {
   accepted: boolean;
@@ -161,6 +163,20 @@ export const planFrameClockTransition = (
       next.scheduledToken = 0;
       transition.accepted = true;
       transition.effect = FRAME_CLOCK_EFFECT_RENDER;
+      return;
+    case FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL:
+      copyState(current, next);
+      next.demand = true;
+      transition.accepted = true;
+      if (
+        next.available
+        && next.externalToken === 0
+        && next.scheduledToken !== FRAME_CLOCK_FAILED_TOKEN
+      ) {
+        next.demand = false;
+        next.scheduledToken = 0;
+        transition.effect = FRAME_CLOCK_EFFECT_RENDER;
+      }
       return;
     case FRAME_CLOCK_EVENT_ACQUIRE_EXTERNAL: {
       if (current.externalToken !== 0) return;

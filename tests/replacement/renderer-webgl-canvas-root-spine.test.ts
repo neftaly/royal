@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
 import {
+  boxGeometry,
   mesh,
   imageTexture,
   directionalLight,
@@ -10,6 +11,7 @@ import {
   planeGeometry,
   pointLight,
   scene,
+  sceneOverlay,
   standardMaterial,
   studioEnvironment,
   unlitMaterial,
@@ -166,6 +168,63 @@ describe("clear-only canvas root", () => {
     });
   });
 
+  it("presents backing-size replacements synchronously after the first frame", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 150, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(emptyScene([0.25, 0.5, 0.75, 1]));
+    callbacks.shift()!();
+
+    root.setSize({ cssHeight: 150, cssWidth: 360, pixelRatio: 1 });
+
+    expect(root.getSnapshot()).toMatchObject({
+      frame: 2,
+      size: { backingHeight: 150, backingWidth: 360 },
+    });
+    expect(canvas.width).toBe(360);
+    expect(canvas.gl.clear).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.viewport).toHaveBeenLastCalledWith(0, 0, 360, 150);
+    expect(callbacks).toHaveLength(0);
+
+    root.setSize({ cssHeight: 180, cssWidth: 360, pixelRatio: 1 });
+    expect(root.getSnapshot()).toMatchObject({
+      frame: 3,
+      size: { backingHeight: 180, backingWidth: 360 },
+    });
+    expect(canvas.height).toBe(180);
+    expect(canvas.gl.viewport).toHaveBeenLastCalledWith(0, 0, 360, 180);
+
+    root.setSize({ cssHeight: 180, cssWidth: 360, pixelRatio: 2 });
+    expect(root.getSnapshot()).toMatchObject({
+      frame: 4,
+      size: { backingHeight: 360, backingWidth: 720 },
+    });
+    expect(canvas.width).toBe(720);
+    expect(canvas.height).toBe(360);
+    expect(canvas.gl.clear).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.viewport).toHaveBeenLastCalledWith(0, 0, 720, 360);
+    expect(callbacks).toHaveLength(0);
+  });
+
+  it("redraws retained surfaces before returning from a backing-size change", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+
+    root.setSize({ cssHeight: 240, cssWidth: 320, pixelRatio: 1 });
+
+    expect(root.getSnapshot().frame).toBe(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(0);
+  });
+
   it("uploads one canonical surface once and reuses it across frames", () => {
     const { callbacks, canvas, root } = harness();
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
@@ -218,6 +277,94 @@ describe("clear-only canvas root", () => {
       canvas.gl.UNSIGNED_BYTE,
       0,
     );
+  });
+
+  it("draws scene overlays last in authored order without depth or picking", () => {
+    const { callbacks, canvas, root } = harness();
+    const base = mesh({
+      geometry: planeGeometry([2, 2]),
+      material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      pickingId: "base",
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [base],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [
+        mesh({
+          geometry: boxGeometry(1),
+          material: wireframeMaterial({ color: [1, 0.5, 0.1, 0.5] }),
+          transform: { position: [0, 0, 1] },
+        }),
+        mesh({
+          geometry: planeGeometry([0.5, 0.5]),
+          material: unlitMaterial({ color: [0.1, 1, 0.5, 1] }),
+          transform: { position: [0, 0, 1.25] },
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+
+    expect(canvas.gl.drawElements.mock.calls.map(([mode]) => mode)).toEqual([
+      canvas.gl.TRIANGLES,
+      canvas.gl.LINES,
+      canvas.gl.TRIANGLES,
+    ]);
+    expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
+    expect(canvas.gl.depthMask).toHaveBeenLastCalledWith(false);
+    expect(root.pick({ clientX: 160, clientY: 120 })?.target).toMatchObject({
+      kind: "mesh",
+      node: base,
+      pickingId: "base",
+    });
+  });
+
+  it("restores retained world color for overlay replace, clear, and re-add", () => {
+    const { callbacks, canvas, root } = harness();
+    const material = unlitMaterial({ color: [1, 0.5, 0.1, 1] });
+    const firstOverlay = sceneOverlay({
+      nodes: [mesh({ geometry: boxGeometry(1), material })],
+    });
+    const secondOverlay = sceneOverlay({
+      nodes: [mesh({ geometry: boxGeometry(2), material })],
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({ geometry: planeGeometry([2, 2]), material })],
+    }));
+    root.setOverlay(firstOverlay);
+    callbacks.shift()!();
+    expect(canvas.gl.copyTexSubImage2D).toHaveBeenCalledOnce();
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.drawArrays.mockClear();
+    canvas.gl.copyTexSubImage2D.mockClear();
+    canvas.gl.drawElements.mockClear();
+
+    root.setOverlay(secondOverlay);
+    callbacks.shift()!();
+    root.setOverlay(null);
+    callbacks.shift()!();
+    root.setOverlay(firstOverlay);
+    callbacks.shift()!();
+
+    // The two distinct overlay geometries can publish independently; the base
+    // geometry and all base draw packets remain untouched.
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.copyTexSubImage2D).not.toHaveBeenCalled();
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+
+    root.invalidate();
+    callbacks.shift()!();
+    expect(canvas.gl.copyTexSubImage2D).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(4);
+    root.setOverlay(null);
+    callbacks.shift()!();
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(4);
   });
 
   it("publishes every surface sharing one uploaded geometry in one transaction", () => {
@@ -1045,6 +1192,32 @@ describe("clear-only canvas root", () => {
       context: { generation: 2, interruptions: 1, recoveries: 1 },
       frame: 1,
     });
+  });
+
+  it("restores and redraws the current scene overlay with its root context", () => {
+    const { callbacks, canvas, root } = harness();
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(emptyScene());
+    root.setOverlay(sceneOverlay({
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: wireframeMaterial({ color: [1, 0.5, 0.1, 1] }),
+      })],
+    }));
+    callbacks.shift()!();
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    canvas.dispatchEvent(new Event("webglcontextrestored"));
+    callbacks.shift()!();
+
+    expect(root.getSnapshot().context).toMatchObject({
+      generation: 2,
+      interruptions: 1,
+      recoveries: 1,
+    });
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
   });
 
   it("captures scheduled draw failure without advancing the frame", () => {

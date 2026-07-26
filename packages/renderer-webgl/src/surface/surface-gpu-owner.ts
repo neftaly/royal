@@ -237,18 +237,21 @@ const surfaceDrawPacket = (
   textureBindings: readonly GpuTextureBinding[],
   textureUnits: number,
   vertexArray: WebGLVertexArrayObject,
+  overlay: boolean,
 ): SurfaceDrawPacket => ({
   alphaBlend: surface.material.alphaBlend === true,
   colorWrite: true,
   cullBackFaces: !canonicalSurfaceIsDoubleSided(surface.material),
-  depthTest: true,
-  depthWrite: surface.material.alphaBlend !== true,
+  depthTest: !overlay,
+  depthWrite: !overlay && surface.material.alphaBlend !== true,
   frontFace: surface.modelHandedness < 0 ? gl.CW : gl.CCW,
   program,
   textureBindings,
   textureUnits,
   vertexArray,
 });
+
+export type SurfacePresentationLane = "overlay" | "world";
 
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
@@ -303,6 +306,7 @@ export class SurfaceGpuOwner {
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
+  readonly #presentationLane: SurfacePresentationLane;
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #lightUniforms = createCanonicalLightUniformStorage();
   readonly #sceneUniforms = createCanonicalSceneUniformStorage();
@@ -334,6 +338,7 @@ export class SurfaceGpuOwner {
     onFailure: (error: unknown) => void = () => undefined,
     uploadBudget = new FrameUploadBudgetOwner(),
     etc2Available = true,
+    presentationLane: SurfacePresentationLane = "world",
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
@@ -345,6 +350,7 @@ export class SurfaceGpuOwner {
       hasFloatColorTarget: this.#readExtension("EXT_color_buffer_float"),
     };
     this.#programs = new SurfaceProgramOwner(gl);
+    this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
     this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available);
     this.#uploadBudget = uploadBudget;
@@ -530,15 +536,19 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
-    this.#depthPrepassPlan = planOpaqueDepthPrepass(scene?.surfaces ?? []);
+    this.#depthPrepassPlan = planOpaqueDepthPrepass(
+      this.#presentationLane === "world" ? scene?.surfaces ?? [] : [],
+    );
     this.#setDepthPrepassActive(scene?.camera.position ?? this.#cameraPosition);
     this.#instanceTransformsPending = false;
     this.#compositeGpu?.resetAdmission();
-    this.#terminalPresentationEligible = scene !== null
+    this.#terminalPresentationEligible = this.#presentationLane === "world"
+      && scene !== null
       && scene.surfaces.every((surface) => surface.material.kind === "standard");
-    this.#terminalPresentationHasAlphaBlend = scene?.surfaces.some(
+    this.#terminalPresentationHasAlphaBlend = this.#presentationLane === "world"
+      && (scene?.surfaces.some(
       (surface) => surface.material.alphaBlend === true,
-    ) ?? false;
+      ) ?? false);
     this.#transmissionCandidateIndices.length = 0;
     const environmentFeatures = sceneEnvironmentFeatures(
       scene,
@@ -547,7 +557,10 @@ export class SurfaceGpuOwner {
     for (let index = 0; index < (scene?.surfaces.length ?? 0); index += 1) {
       const surface = scene!.surfaces[index]!;
       const material = surface.material;
-      if (canonicalMaterialHasTransmission(material)) {
+      if (
+        this.#presentationLane === "world"
+        && canonicalMaterialHasTransmission(material)
+      ) {
         this.#transmissionCandidateIndices.push(index);
       } else if (material.baseColorVirtualAsset === undefined) {
         const authoredMask = authoredOrdinaryTextureMask(material);
@@ -621,7 +634,9 @@ export class SurfaceGpuOwner {
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
-    updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, this.#scene.surfaces);
+    if (this.#presentationLane === "world") {
+      updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, this.#scene.surfaces);
+    }
     this.#dirty = true;
     if (
       this.#gpuScene !== this.#scene
@@ -640,7 +655,9 @@ export class SurfaceGpuOwner {
   ): void {
     const scene = this.#scene;
     if (scene === null) return;
-    updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
+    if (this.#presentationLane === "world") {
+      updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
+    }
     if (sceneGlobalsChanged) {
       packCanonicalLightUniformsInto(
         scene.directionalLights,
@@ -894,7 +911,8 @@ export class SurfaceGpuOwner {
   }
 
   #setDepthPrepassActive(cameraPosition: ArrayLike<number>): void {
-    const active = this.#multiDraw !== null
+    const active = this.#presentationLane === "world"
+      && this.#multiDraw !== null
       && opaqueDepthPrepassRequested(
         this.#depthPrepassPlan,
         cameraPosition,
@@ -1001,7 +1019,10 @@ export class SurfaceGpuOwner {
     let transformModel: Mat4 | null = null;
     let transformProgram: WebGLProgram | null = null;
     const gl = this.#gl;
-    if (surfaceDrawPassNeedsDepthOrder(pass)) {
+    if (
+      this.#presentationLane === "world"
+      && surfaceDrawPassNeedsDepthOrder(pass)
+    ) {
       sortTransmissionSurfaces(this.#transmissionSurfaces, view);
       sortSurfacesBackToFront(this.#blendedSurfaces, view);
     }
@@ -1445,7 +1466,8 @@ export class SurfaceGpuOwner {
       material.alphaCutoff !== undefined,
       canonicalSurfaceIsDoubleSided(material),
     );
-    const depthProgram = this.#depthPrepassActive
+    const depthProgram = this.#presentationLane === "world"
+      && this.#depthPrepassActive
       && surfaceCanUseOpaqueDepthPrepass(geometrySurface.surface)
       ? this.#depthPrepassOwner?.get(geometrySurface.instanceCount > 0) ?? null
       : null;
@@ -1472,6 +1494,7 @@ export class SurfaceGpuOwner {
         bindings,
         surfaceTextureUnitMask(features),
         geometrySurface.vertexArray,
+        this.#presentationLane === "overlay",
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
@@ -1560,18 +1583,19 @@ export class SurfaceGpuOwner {
       this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuScene = scene;
       if (appendedSurfaces !== null && admittedSurfaceCount < surfaces.length) {
-        const appended = planSurfacePasses(
-          appendedSurfaces,
-          (resource) => resource.surface.material,
-        );
-        this.#opaqueSurfaces.push(...appended.opaque);
-        this.#blendedSurfaces.push(...appended.transparent);
-        this.#transmissionSurfaces.push(...appended.transmission);
+        if (this.#presentationLane === "overlay") {
+          this.#blendedSurfaces.push(...appendedSurfaces);
+        } else {
+          const appended = planSurfacePasses(
+            appendedSurfaces,
+            (resource) => resource.surface.material,
+          );
+          this.#opaqueSurfaces.push(...appended.opaque);
+          this.#blendedSurfaces.push(...appended.transparent);
+          this.#transmissionSurfaces.push(...appended.transmission);
+        }
       } else {
-        const grouped = groupSurfacesForDrawing(nextSurfaces);
-        this.#opaqueSurfaces = grouped.opaque;
-        this.#blendedSurfaces = grouped.transparent;
-        this.#transmissionSurfaces = grouped.transmission;
+        this.#replaceDrawBuckets(nextSurfaces);
       }
       this.#planOpaqueMultiDrawRuns();
     } catch (error) {
@@ -1667,6 +1691,7 @@ export class SurfaceGpuOwner {
         retainedBindings,
         textureUnits,
         resource.vertexArray,
+        this.#presentationLane === "overlay",
       );
       resource.program = program;
     }
@@ -1686,10 +1711,7 @@ export class SurfaceGpuOwner {
       if (!deferred) this.#texturePublicationKeys.delete(key);
     }
     if (regroup) {
-      const grouped = groupSurfacesForDrawing(surfaces);
-      this.#opaqueSurfaces = grouped.opaque;
-      this.#blendedSurfaces = grouped.transparent;
-      this.#transmissionSurfaces = grouped.transmission;
+      this.#replaceDrawBuckets(surfaces);
     }
     this.#planOpaqueMultiDrawRuns();
     this.#gpuScene = scene;
@@ -1757,6 +1779,19 @@ export class SurfaceGpuOwner {
       }
       start = end;
     }
+  }
+
+  #replaceDrawBuckets(surfaces: readonly GpuSurface[]): void {
+    if (this.#presentationLane === "overlay") {
+      this.#opaqueSurfaces = [];
+      this.#transmissionSurfaces = [];
+      this.#blendedSurfaces = [...surfaces];
+      return;
+    }
+    const grouped = groupSurfacesForDrawing(surfaces);
+    this.#opaqueSurfaces = grouped.opaque;
+    this.#blendedSurfaces = grouped.transparent;
+    this.#transmissionSurfaces = grouped.transmission;
   }
 
   /** Candidate indices retain scene order, so cold preparation needs no lookup table. */

@@ -15,6 +15,7 @@ import {
   pointLight,
   prefilteredEnvironment,
   scene,
+  sceneOverlay,
   solidTexture,
   spotLight,
   standardMaterial,
@@ -170,6 +171,41 @@ describe("renderer-core descriptor contract", () => {
       nodes: [],
       clearColor: [0, Number.NaN, 0, 1],
     })).toThrow(/clearColor.*finite/);
+  });
+
+  it("builds a non-picking solid-color mesh overlay", () => {
+    const node = mesh({
+      geometry: boxGeometry(1),
+      material: wireframeMaterial({ color: [0.4, 0.6, 1, 0.5] }),
+      transform: { position: [1, 2, 3] },
+    });
+    const nodes = [node];
+    const overlay = sceneOverlay({ nodes });
+    expect(overlay).toEqual({ kind: "scene-overlay", nodes: [node] });
+    expect(overlay.nodes).not.toBe(nodes);
+
+    expect(() => sceneOverlay({
+      nodes: [directionalLight({ direction: [0, -1, 0] })] as never,
+    })).toThrow(/must be a mesh/);
+    expect(() => sceneOverlay({
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1] }),
+      })],
+    })).toThrow(/unlit or wireframe/);
+    expect(() => sceneOverlay({
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ texture: imageTexture("/hint.png") }),
+      })],
+    })).toThrow(/solid-color/);
+    expect(() => sceneOverlay({
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        pickingId: "hint",
+      })],
+    })).toThrow(/cannot participate in picking/);
   });
 
   it("does not share mutable default tuples between descriptors", () => {

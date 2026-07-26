@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
@@ -86,10 +86,30 @@ const failOnRollupWarning = (warning: string | { readonly message?: string }): n
   throw new Error('Rollup warning treated as error: ' + message);
 };
 
-const omitPublishedWorkerEntryMap = (): Plugin => {
+const assertPublishedSourceMapReferences = (directory: string): void => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      assertPublishedSourceMapReferences(entryPath);
+      continue;
+    }
+    if (!entry.name.endsWith('.js')) continue;
+    const source = readFileSync(entryPath, 'utf8');
+    for (const match of source.matchAll(/\/\/# sourceMappingURL=([^\r\n]+)/gu)) {
+      const reference = match[1];
+      if (reference === undefined || reference.startsWith('data:')) continue;
+      const target = path.resolve(path.dirname(entryPath), reference);
+      if (!existsSync(target)) {
+        throw new Error(`Published JavaScript references a missing source map: ${entryPath} -> ${reference}`);
+      }
+    }
+  }
+};
+
+const normalizePublishedWorkerSourceMap = (): Plugin => {
   let outputDirectory: string | undefined;
   return {
-    name: 'royal-omit-published-worker-entry-map',
+    name: 'royal-normalize-published-worker-source-map',
     writeBundle: (options) => {
       outputDirectory = options.dir;
     },
@@ -100,13 +120,23 @@ const omitPublishedWorkerEntryMap = (): Plugin => {
       try {
         files = readdirSync(assets);
       } catch {
-        return;
+        files = [];
       }
       for (const fileName of files) {
+        if (/^static-preparation-worker-.*\.js$/u.test(fileName)) {
+          const workerPath = path.join(assets, fileName);
+          const source = readFileSync(workerPath, 'utf8');
+          const normalized = source.replace(
+            /(?:\r?\n)?\/\/# sourceMappingURL=[^\r\n]+(?:\r?\n)?$/u,
+            '\n'
+          );
+          if (normalized !== source) writeFileSync(workerPath, normalized);
+        }
         if (/^static-preparation-worker-.*\.js\.map$/u.test(fileName)) {
           rmSync(path.join(assets, fileName), { force: true });
         }
       }
+      assertPublishedSourceMapReferences(outputDirectory);
     }
   };
 };
@@ -138,7 +168,7 @@ const packageExternalPredicate = (
 export default ({ command, mode }: { readonly command: string; readonly mode: string }) => {
   const sharedPlugins = [
     glsl({ include: ['**/*.frag', '**/*.vert'], minify: mode === 'production' }),
-    omitPublishedWorkerEntryMap()
+    normalizePublishedWorkerSourceMap()
   ];
   const worker = {
     format: 'iife' as const,

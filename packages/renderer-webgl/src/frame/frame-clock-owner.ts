@@ -8,6 +8,7 @@ import {
   FRAME_CLOCK_EVENT_FLUSH_EXTERNAL,
   FRAME_CLOCK_EVENT_FLUSH_INTERNAL,
   FRAME_CLOCK_EVENT_INVALIDATE,
+  FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL,
   FRAME_CLOCK_EVENT_RELEASE_EXTERNAL,
   FRAME_CLOCK_EVENT_RENDER_FAILED,
   FRAME_CLOCK_EVENT_RETRY,
@@ -21,6 +22,9 @@ import {
 } from "./frame-clock";
 
 const INVALIDATE_EVENT = { kind: FRAME_CLOCK_EVENT_INVALIDATE } as const;
+const INVALIDATE_AND_FLUSH_INTERNAL_EVENT = {
+  kind: FRAME_CLOCK_EVENT_INVALIDATE_AND_FLUSH_INTERNAL,
+} as const;
 const FLUSH_INTERNAL_EVENT = { kind: FRAME_CLOCK_EVENT_FLUSH_INTERNAL } as const;
 const ACQUIRE_EXTERNAL_EVENT = { kind: FRAME_CLOCK_EVENT_ACQUIRE_EXTERNAL } as const;
 const CONTEXT_BLOCKED_EVENT = { kind: FRAME_CLOCK_EVENT_CONTEXT_BLOCKED } as const;
@@ -86,6 +90,16 @@ export class FrameClockOwner {
 
   invalidate(): void {
     this.#apply(INVALIDATE_EVENT);
+  }
+
+  /** Presents new demand synchronously when the internal clock has authority. */
+  invalidateAndFlush(): void {
+    try {
+      this.#apply(INVALIDATE_AND_FLUSH_INTERNAL_EVENT);
+    } catch (error) {
+      this.#apply(RENDER_FAILED_EVENT);
+      this.#reportScheduledFailure(error);
+    }
   }
 
   /** Rearms scheduled rendering after a previously reported render failure. */

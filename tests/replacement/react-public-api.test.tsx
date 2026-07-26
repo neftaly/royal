@@ -150,6 +150,7 @@ describe("replacement React public API", () => {
       "rotateOrbitCameraView",
       "royalCoordinateConvention",
       "scene",
+      "sceneOverlay",
       "solidTexture",
       "spotLight",
       "standardMaterial",
