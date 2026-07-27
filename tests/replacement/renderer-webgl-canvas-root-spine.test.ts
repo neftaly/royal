@@ -392,6 +392,126 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
   });
 
+  it("presents a displaced outline while borrowing the stationary source occurrence", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const sourceTransform = { position: [-1, -2, 0] as const };
+    const base = gltf({ src: "/displaced-outline.glb", transform: sourceTransform });
+    const material = edgeMaterial({
+      color: [1, 0.4, 0.1, 0.8],
+      widthCssPixels: 5,
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 6] }),
+      nodes: [base],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material,
+        src: "/displaced-outline.glb",
+        transform: sourceTransform,
+      })],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    callbacks.shift()!();
+
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.copyTexSubImage2D.mockClear();
+    canvas.gl.drawArrays.mockClear();
+    canvas.gl.drawElements.mockClear();
+    canvas.gl.uniformMatrix4fv.mockClear();
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material,
+        sourceTransform,
+        src: "/displaced-outline.glb",
+        transform: { position: [2, 1, 0] },
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toEqual([]);
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+    expect(canvas.gl.copyTexSubImage2D).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(3);
+    // The prepared fixture contributes local translation [1, 2, 0], so the
+    // displaced outer transform [2, 1, 0] presents at [3, 3, 0].
+    expect(canvas.gl.uniformMatrix4fv.mock.calls.some(([, , matrix]) =>
+      matrix[12] === 3 && matrix[13] === 3 && matrix[14] === 0)).toBe(true);
+  });
+
+  it("diagnoses a missing outline source occurrence before edge drawing", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const base = gltf("/missing-outline-source.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 6] }),
+      nodes: [base],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    callbacks.shift()!();
+    canvas.gl.drawArrays.mockClear();
+    canvas.gl.shaderSource.mockClear();
+
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({ color: [1, 0, 0, 1], widthCssPixels: 3 }),
+        sourceTransform: { position: [5, 0, 0] },
+        src: "/missing-outline-source.glb",
+        transform: { position: [1, 0, 0] },
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toHaveLength(1);
+    expect(String(scheduledFailures[0])).toMatch(
+      /source occurrence transform .* is missing .*presentation transform/,
+    );
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("dFdx(viewPosition)"))).toBe(false);
+    expect(canvas.gl.drawArrays).not.toHaveBeenCalled();
+  });
+
+  it("diagnoses an ambiguous outline source occurrence before edge drawing", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const repeated = gltf("/ambiguous-outline-source.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 6] }),
+      nodes: [repeated, repeated],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(repeated.asset).status).toBe("ready"));
+    callbacks.shift()!();
+    canvas.gl.drawArrays.mockClear();
+    canvas.gl.shaderSource.mockClear();
+
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({ color: [1, 0, 0, 1], widthCssPixels: 3 }),
+        src: "/ambiguous-outline-source.glb",
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toHaveLength(1);
+    expect(String(scheduledFailures[0])).toMatch(
+      /source occurrence transform identity is ambiguous .*presentation transform is identity/,
+    );
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("dFdx(viewPosition)"))).toBe(false);
+    expect(canvas.gl.drawArrays).not.toHaveBeenCalled();
+  });
+
   it("restores retained world color for overlay replace, clear, and re-add", () => {
     const { callbacks, canvas, root } = harness();
     const material = unlitMaterial({ color: [1, 0.5, 0.1, 1] });

@@ -167,7 +167,7 @@ export type BorrowedSurfaceGeometry = Readonly<{
 }>;
 
 export type BorrowedSurfaceGeometryMatch =
-  | Readonly<{ status: "absent" | "inactive" | "pending" }>
+  | Readonly<{ status: "absent" | "ambiguous" | "inactive" | "pending" }>
   | Readonly<{ resource: BorrowedSurfaceGeometry; status: "ready" }>;
 
 type GpuSurface = {
@@ -475,20 +475,30 @@ export class SurfaceGpuOwner {
   ): BorrowedSurfaceGeometryMatch {
     const scene = this.#scene;
     if (scene === null) return { status: "absent" };
-    let matched = false;
-    let pending = false;
+    const occurrences = new Set<number>();
+    const matchingIndices: number[] = [];
     for (let index = 0; index < scene.surfaces.length; index += 1) {
       const surface = scene.surfaces[index]!;
       if (
         surface.node.kind !== "gltf"
         || surface.geometry.key !== requested.geometry.key
         || surface.instances?.key !== requested.instances?.key
-        || !mat4ValuesEqual(surface.model, requested.model)
+        || !mat4ValuesEqual(surface.model, requested.sourceModel)
         || surface.node.asset.src !== requested.asset.src
         || surface.node.asset.sceneIndex !== requested.asset.sceneIndex
         || surface.node.asset.version !== requested.asset.version
       ) continue;
-      matched = true;
+      if (surface.gltfOccurrence === undefined) {
+        throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
+      }
+      occurrences.add(surface.gltfOccurrence);
+      matchingIndices.push(index);
+    }
+    if (occurrences.size === 0) return { status: "absent" };
+    if (occurrences.size > 1) return { status: "ambiguous" };
+    let pending = false;
+    for (const index of matchingIndices) {
+      const surface = scene.surfaces[index]!;
       const resource = this.#gpuSurfacesBySceneIndex[index];
       if (resource === undefined) {
         pending = true;
@@ -511,7 +521,7 @@ export class SurfaceGpuOwner {
       };
     }
     if (pending) return { status: "pending" };
-    return { status: matched ? "inactive" : "absent" };
+    return { status: "inactive" };
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {

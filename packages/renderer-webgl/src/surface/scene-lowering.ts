@@ -62,6 +62,8 @@ import type { LodGroupId, LodMembership } from "./lod-selection";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
+  /** Dense mounted glTF occurrence identity; distinct even if one descriptor is repeated. */
+  gltfOccurrence?: number;
   instances?: {
     count: number;
     innerCount?: number;
@@ -699,6 +701,7 @@ export const prepareCanonicalSurfaceScene = (
           }
           surfaces.push({
             geometry: primitive.geometry,
+            gltfOccurrence: mountIndex,
             ...(instanceBatch === undefined ? {} : {
             instances: {
               count: instanceBatch.localModels.length / 16,

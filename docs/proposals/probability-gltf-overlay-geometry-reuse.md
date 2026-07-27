@@ -67,7 +67,10 @@ remain invalid rather than silently rendering authored PBR surfaces in the
 always-visible lane.
 
 `outlineGltf(...)` accepts the same source/version/selected-scene identity and
-outer transform fields as `gltf(...)`. It deliberately has no picking ID,
+outer transform fields as `gltf(...)`. Its optional `sourceTransform` selects a
+stationary base occurrence while `transform` independently places a displaced
+preview; omitting `sourceTransform` uses `transform` for both roles. It
+deliberately has no picking ID,
 picking geometry, render-object ref, tint, material variant, or authored
 material path. `SceneOverlay.nodes` accepts it alongside the existing direct
 mesh overlay.

@@ -217,6 +217,7 @@ describe("renderer-core descriptor contract", () => {
     });
     const node = outlineGltf({
       material,
+      sourceTransform: { position: [0, 1, 2] },
       src: "/piece.glb",
       transform: { position: [1, 2, 3] },
       version: "selected",
@@ -225,6 +226,7 @@ describe("renderer-core descriptor contract", () => {
       asset: { src: "/piece.glb", version: "selected" },
       kind: "outline-gltf",
       material,
+      sourceTransform: { position: [0, 1, 2] },
       transform: { position: [1, 2, 3] },
     });
     expect(sceneOverlay({ nodes: [node] }).nodes).toEqual([node]);
@@ -243,6 +245,11 @@ describe("renderer-core descriptor contract", () => {
     expect(() => outlineGltf({
       material,
       pickingId: "forbidden",
+      src: "/piece.glb",
+    } as never)).toThrow(/unsupported option/);
+    expect(() => outlineGltf({
+      material,
+      sourceTransform: { offset: [1, 2, 3] },
       src: "/piece.glb",
     } as never)).toThrow(/unsupported option/);
   });

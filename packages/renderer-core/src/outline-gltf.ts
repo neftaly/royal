@@ -16,17 +16,22 @@ export interface OutlineGltfNode {
   readonly kind: 'outline-gltf';
   readonly asset: GltfAssetRef;
   readonly material: EdgeMaterial;
+  /** Base-scene occurrence transform which lends geometry and active LOD. Defaults to `transform`. */
+  readonly sourceTransform?: Transform;
+  /** Independent overlay presentation transform. */
   readonly transform?: Transform;
 }
 
 export interface OutlineGltfOptions extends GltfAssetOptions {
   readonly material: EdgeMaterial;
-  /** Omit for an identity outer transform. */
+  /** Base-scene occurrence transform which lends geometry and active LOD. Defaults to `transform`. */
+  readonly sourceTransform?: TransformOptions;
+  /** Overlay presentation transform. Omit for identity. */
   readonly transform?: TransformOptions;
 }
 
 const OUTLINE_GLTF_FIELDS = [
-  'bounds', 'material', 'sceneIndex', 'src', 'transform', 'version',
+  'bounds', 'material', 'sceneIndex', 'sourceTransform', 'src', 'transform', 'version',
 ] as const;
 
 /** Reuses one rendered glTF occurrence as a non-picking edge overlay. */
@@ -43,8 +48,14 @@ export const outlineGltf = (options: OutlineGltfOptions): OutlineGltfNode => {
     asset: resolveGltfAsset(options),
     kind: 'outline-gltf',
     material: options.material,
-  } satisfies Omit<OutlineGltfNode, 'transform'>;
-  return options.transform === undefined
-    ? node
-    : { ...node, transform: resolveTransform(options.transform) };
+  } satisfies Omit<OutlineGltfNode, 'sourceTransform' | 'transform'>;
+  return {
+    ...node,
+    ...(options.sourceTransform === undefined
+      ? {}
+      : { sourceTransform: resolveTransform(options.sourceTransform) }),
+    ...(options.transform === undefined
+      ? {}
+      : { transform: resolveTransform(options.transform) }),
+  };
 };

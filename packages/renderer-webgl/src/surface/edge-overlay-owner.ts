@@ -394,8 +394,9 @@ export class EdgeOverlayOwner {
   ): boolean {
     const scene = this.#scene;
     if (scene === null || scene.runs.length === 0 || views.length === 0) return false;
+    const matches = this.#preflight(scene, borrow);
     this.#ensurePipeline(state);
-    let pending = false;
+    let pending = matches.some((match) => match.status === "pending");
     for (const view of views) {
       if (!this.#ensureTargets(view.viewport.width, view.viewport.height, state)) continue;
       frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
@@ -408,7 +409,7 @@ export class EdgeOverlayOwner {
           state,
           cssScaleX,
           cssScaleY,
-          borrow,
+          matches,
         );
         pending ||= result.pending;
       }
@@ -424,7 +425,7 @@ export class EdgeOverlayOwner {
     state: WebGlStateOwner,
     cssScaleX: number,
     cssScaleY: number,
-    borrow: (surface: CanonicalEdgeSurface) => BorrowedSurfaceGeometryMatch,
+    matches: readonly BorrowedSurfaceGeometryMatch[],
   ): Readonly<{ pending: boolean }> {
     const targets = this.#targets!;
     const pipeline = this.#pipeline!;
@@ -452,13 +453,7 @@ export class EdgeOverlayOwner {
       for (const surfaceIndex of occurrence.surfaceIndices) {
         const surface = scene.surfaces[surfaceIndex]!;
         if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
-        const match = borrow(surface);
-        if (match.status === "absent") {
-          throw new Error(
-            `Royal outline glTF ${JSON.stringify(surface.asset.src)} must match `
-              + "one rendered base-scene occurrence",
-          );
-        }
+        const match = matches[surfaceIndex]!;
         if (match.status === "pending") {
           pending = true;
           continue;
@@ -538,6 +533,33 @@ export class EdgeOverlayOwner {
     gl.uniform4fv(pipeline.resolve.edgeColor, run.material.color);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return { pending };
+  }
+
+  #preflight(
+    scene: CanonicalEdgeOverlayScene,
+    borrow: (surface: CanonicalEdgeSurface) => BorrowedSurfaceGeometryMatch,
+  ): readonly BorrowedSurfaceGeometryMatch[] {
+    const matches = Array<BorrowedSurfaceGeometryMatch>(scene.surfaces.length);
+    for (let index = 0; index < scene.surfaces.length; index += 1) {
+      const surface = scene.surfaces[index]!;
+      const match = borrow(surface);
+      matches[index] = match;
+      if (match.status !== "absent" && match.status !== "ambiguous") continue;
+      const sourceTransform = surface.node.sourceTransform ?? surface.node.transform;
+      const presentationTransform = surface.node.transform;
+      const sourceLabel = sourceTransform === undefined
+        ? "identity"
+        : JSON.stringify(sourceTransform);
+      const presentationLabel = presentationTransform === undefined
+        ? "identity"
+        : JSON.stringify(presentationTransform);
+      throw new Error(
+        `Royal outline glTF ${JSON.stringify(surface.asset.src)} source occurrence `
+          + `transform ${sourceLabel} is ${match.status === "absent" ? "missing" : "ambiguous"} `
+          + `in the base scene; presentation transform is ${presentationLabel}`,
+      );
+    }
+    return matches;
   }
 
   #ensurePipeline(state: WebGlStateOwner): void {

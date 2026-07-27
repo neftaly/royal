@@ -16,6 +16,9 @@ export type CanonicalEdgeSurface = Readonly<{
   asset: OutlineGltfNode["asset"];
   geometry: CanonicalDrawSurface["geometry"];
   instances?: CanonicalDrawSurface["instances"];
+  /** Matrix used only to identify the rendered base occurrence and its active LOD. */
+  sourceModel: CanonicalDrawSurface["model"];
+  /** Matrix used to present the borrowed geometry in the edge mask. */
   model: CanonicalDrawSurface["model"];
   modelHandedness: CanonicalDrawSurface["modelHandedness"];
   node: OutlineGltfNode;
@@ -59,16 +62,29 @@ export const prepareCanonicalEdgeOverlayScene = (
   camera: CanonicalCamera,
 ): CanonicalEdgeOverlayScene => {
   if (nodes.length === 0) return { runs: [], surfaces: [] };
-  const syntheticNodes = nodes.map((node): GltfNode => ({
+  const presentationNodes = nodes.map((node): GltfNode => ({
     asset: node.asset,
     kind: "gltf",
     ...(node.transform === undefined ? {} : { transform: node.transform }),
   }));
+  const explicitSourceNodes: GltfNode[] = [];
+  const sourceOccurrenceByNode = new Map<GltfNode, number>();
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index]!;
+    if (node.sourceTransform === undefined) continue;
+    const sourceNode: GltfNode = {
+      asset: node.asset,
+      kind: "gltf",
+      transform: node.sourceTransform,
+    };
+    explicitSourceNodes.push(sourceNode);
+    sourceOccurrenceByNode.set(sourceNode, index);
+  }
   const syntheticScene: Scene = {
     camera: baseScene.camera,
     clearColor: baseScene.clearColor,
     kind: "scene",
-    nodes: syntheticNodes,
+    nodes: [...presentationNodes, ...explicitSourceNodes],
     ...(baseScene.exposureEv100 === undefined
       ? {}
       : { exposureEv100: baseScene.exposureEv100 }),
@@ -84,29 +100,69 @@ export const prepareCanonicalEdgeOverlayScene = (
     undefined,
     { includeLighting: false, includePicking: false },
   );
-  const nodeBySynthetic = new Map<GltfNode, OutlineGltfNode>();
+  const presentationOccurrenceByNode = new Map<GltfNode, number>();
   for (let index = 0; index < nodes.length; index += 1) {
-    nodeBySynthetic.set(syntheticNodes[index]!, nodes[index]!);
+    presentationOccurrenceByNode.set(presentationNodes[index]!, index);
   }
   const surfaces: CanonicalEdgeSurface[] = [];
-  const indicesByNode = new Map<OutlineGltfNode, number[]>();
-  for (const source of lowered.surfaces) {
-    if (source.node.kind !== "gltf") continue;
-    const node = nodeBySynthetic.get(source.node);
-    if (node === undefined) continue;
-    const surfaceIndex = surfaces.length;
-    surfaces.push({
-      asset: node.asset,
-      geometry: source.geometry,
-      ...(source.instances === undefined ? {} : { instances: source.instances }),
-      model: source.model,
-      modelHandedness: source.modelHandedness,
-      node,
-      worldBounds: source.worldBounds,
-    });
-    const indices = indicesByNode.get(node);
-    if (indices === undefined) indicesByNode.set(node, [surfaceIndex]);
-    else indices.push(surfaceIndex);
+  const presentationSurfacesByOccurrence = Array.from(
+    { length: nodes.length },
+    (): CanonicalDrawSurface[] => [],
+  );
+  const sourceSurfacesByOccurrence = Array.from(
+    { length: nodes.length },
+    (): CanonicalDrawSurface[] => [],
+  );
+  for (const surface of lowered.surfaces) {
+    if (surface.node.kind !== "gltf") continue;
+    const presentationOccurrence = presentationOccurrenceByNode.get(surface.node);
+    if (presentationOccurrence !== undefined) {
+      presentationSurfacesByOccurrence[presentationOccurrence]!.push(surface);
+      continue;
+    }
+    const sourceOccurrence = sourceOccurrenceByNode.get(surface.node);
+    if (sourceOccurrence !== undefined) {
+      sourceSurfacesByOccurrence[sourceOccurrence]!.push(surface);
+    }
+  }
+  const indicesByOccurrence = Array.from(
+    { length: nodes.length },
+    (): number[] => [],
+  );
+  for (let occurrence = 0; occurrence < nodes.length; occurrence += 1) {
+    const node = nodes[occurrence]!;
+    const presentationSurfaces = presentationSurfacesByOccurrence[occurrence]!;
+    const explicitSourceSurfaces = sourceSurfacesByOccurrence[occurrence]!;
+    const sourceSurfaces = node.sourceTransform === undefined
+      ? presentationSurfaces
+      : explicitSourceSurfaces;
+    if (presentationSurfaces.length !== sourceSurfaces.length) {
+      throw new Error("Royal outline glTF source and presentation lowering diverged");
+    }
+    for (let index = 0; index < presentationSurfaces.length; index += 1) {
+      const presentation = presentationSurfaces[index]!;
+      const source = sourceSurfaces[index]!;
+      if (
+        presentation.geometry.key !== source.geometry.key
+        || presentation.instances?.key !== source.instances?.key
+      ) {
+        throw new Error("Royal outline glTF source and presentation geometry diverged");
+      }
+      const surfaceIndex = surfaces.length;
+      surfaces.push({
+        asset: node.asset,
+        geometry: presentation.geometry,
+        ...(presentation.instances === undefined
+          ? {}
+          : { instances: presentation.instances }),
+        model: presentation.model,
+        modelHandedness: presentation.modelHandedness,
+        node,
+        sourceModel: source.model,
+        worldBounds: presentation.worldBounds,
+      });
+      indicesByOccurrence[occurrence]!.push(surfaceIndex);
+    }
   }
 
   const runs: CanonicalEdgeRun[] = [];
@@ -118,9 +174,10 @@ export const prepareCanonicalEdgeOverlayScene = (
     runs.push({ material: activeMaterial, occurrences: activeOccurrences });
     activeOccurrences = [];
   };
-  for (const node of nodes) {
-    const surfaceIndices = indicesByNode.get(node);
-    if (surfaceIndices === undefined || surfaceIndices.length === 0) continue;
+  for (let occurrence = 0; occurrence < nodes.length; occurrence += 1) {
+    const node = nodes[occurrence]!;
+    const surfaceIndices = indicesByOccurrence[occurrence]!;
+    if (surfaceIndices.length === 0) continue;
     const key = edgeStyleKey(node.material);
     if (
       activeMaterial === undefined
