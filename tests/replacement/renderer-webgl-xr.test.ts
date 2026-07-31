@@ -77,6 +77,36 @@ describe("WebXR session renderer", () => {
     expect(() => validateXrSessionRendererOptions({
       preferredFrameRate: 0,
     })).toThrow("preferredFrameRate must be highest or a positive finite number");
+    expect(() => validateXrSessionRendererOptions({
+      depthRange: { far: 10, near: 0 },
+    })).toThrow("depthRange near must be a positive finite number");
+    expect(() => validateXrSessionRendererOptions({
+      depthRange: { far: 0.01, near: 0.01 },
+    })).toThrow("depthRange far must be finite and greater than near");
+    expect(() => validateXrSessionRendererOptions({
+      depthRange: { far: 10, near: 0.01, scale: 1 },
+    } as unknown as Parameters<typeof validateXrSessionRendererOptions>[0]))
+      .toThrow("Royal XR depthRange has unsupported field scale");
+  });
+
+  it("installs one explicit projection depth range into browser-owned XR state", async () => {
+    const { canvas, root } = canvasRootHarness();
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const session = new FakeSession();
+
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      session,
+      { depthRange: { far: 20, near: 0.01 } },
+      { layerConstructor: () => FakeLayer },
+    );
+
+    expect(session.updateRenderState).toHaveBeenCalledWith({
+      baseLayer: renderer.layer,
+      depthFar: 20,
+      depthNear: 0.01,
+    });
+    renderer.dispose();
   });
 
   it("borrows one root context and submits both eyes in one frame transaction", async () => {

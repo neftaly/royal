@@ -27,7 +27,10 @@ The canonical React XR composition is a control under the same `Canvas`:
 ```tsx
 const xr = useXrSession({
   mode: "immersive-vr",
-  renderer: { preferredFrameRate: "highest" },
+  renderer: {
+    depthRange: { far: 20, near: 0.01 },
+    preferredFrameRate: "highest",
+  },
   session: { optionalFeatures: ["local-floor"] },
 });
 
@@ -42,7 +45,8 @@ snapshot uses one `status` authority; `enter`, `exit`, and
 hidden live session, while `blocked` and `error` retain an actionable message.
 `renderer.preferredFrameRate` accepts `"highest"` or a positive number and is a
 best-effort preference: unsupported browsers retain their selected rate rather
-than failing session acquisition.
+than failing session acquisition. `renderer.depthRange` is the explicit
+positive clipping interval forwarded to the browser-owned XR projection.
 
 ## Entrypoints
 
@@ -85,7 +89,7 @@ const renderScene = useMemo(() => scene({
 
 return (
   <Canvas scene={renderScene}>
-    <GltfOrbitCameraFit node={asset} orbit={orbit} />
+    <GltfOrbitCameraFit clipping="track-bounds" node={asset} orbit={orbit} />
     <OrbitControls orbit={orbit} />
   </Canvas>
 );
@@ -95,6 +99,12 @@ return (
 same React tree. There is no renderable JSX scene reconciler. CSS owns layout;
 Royal owns backing resolution. Native `width`/`height` props are excluded to
 avoid conflicting authorities.
+
+Tracked orbit clipping is driven only by the transformed bounds passed through
+the fit component. It tightens after camera movement, retains the orbit's
+authored `near` as a minimum, and is replaced by an explicit
+`orbit.setProjection(...)` call. The renderer does not scan currently drawn
+surfaces to invent camera policy.
 
 Backing resolution follows the browser device pixel ratio by default.
 `pixelRatio={1}` (or another positive finite ratio) is the explicit React

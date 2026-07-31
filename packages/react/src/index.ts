@@ -55,6 +55,8 @@ export { GltfOrbitCameraFit } from "./orbit/gltf-camera-fit";
 export type { GltfOrbitCameraFitProps } from "./orbit/gltf-camera-fit";
 export type {
   OrbitCameraController,
+  OrbitCameraControllerFitOptions,
+  OrbitCameraFitClipping,
   OrbitCameraOptions,
   OrbitCameraProjection,
   OrbitCameraView,

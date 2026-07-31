@@ -140,6 +140,10 @@ Pure orbit view/camera helpers such as `orbitPerspectiveCamera` and
 other scene-authoring functions.
 `useOrbitCamera({ initial })` packages that resource as `orbit.camera` with a
 stable controller; pass it directly to `scene({ camera: orbit.camera })`.
+`<GltfOrbitCameraFit clipping="track-bounds" />` uses that asset's explicit
+transformed bounds to tighten both clipping planes after orbit movement. The
+orbit's authored `near` remains the minimum; Royal does not infer bounds from
+incidental rendered surfaces.
 Place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,
 pan, wheel, and pinch gestures. `useOrbitCameraView(orbit)` is opt-in UI
 observation; rendering itself does not subscribe React to camera motion.
@@ -182,7 +186,10 @@ import { useXrSession } from "@royal/react/xr";
 function XrButton() {
   const xr = useXrSession({
     mode: "immersive-vr",
-    renderer: { preferredFrameRate: "highest" },
+    renderer: {
+      depthRange: { far: 20, near: 0.01 },
+      preferredFrameRate: "highest",
+    },
     session: { optionalFeatures: ["local-floor"] },
   });
   const live = xr.status === "active" || xr.status === "suspended";
@@ -205,3 +212,5 @@ try `local-floor`, then `local`; pass `renderer.referenceSpacePreference` to
 replace that ordered fallback explicitly. Pass
 `renderer.preferredFrameRate: "highest"` (or a positive numeric preference) to
 request an advertised session rate without making unsupported browsers fail.
+`renderer.depthRange` installs one explicit positive `near`/`far` interval into
+the browser-owned XR projection; omission preserves WebXR's defaults.

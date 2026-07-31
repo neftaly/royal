@@ -152,10 +152,39 @@ const normalizeOptions = (
   if (options.renderer !== undefined) {
     recordWithAllowedFields(
       options.renderer,
-      ["onFrameSnapshot", "preferredFrameRate", "referenceSpacePreference", "webGlLayer"],
+      [
+        "depthRange",
+        "onFrameSnapshot",
+        "preferredFrameRate",
+        "referenceSpacePreference",
+        "webGlLayer",
+      ],
       "XR renderer options",
       "option",
     );
+    const depthRange = options.renderer.depthRange;
+    if (depthRange !== undefined) {
+      recordWithAllowedFields(
+        depthRange,
+        ["far", "near"],
+        "XR renderer depthRange",
+        "field",
+      );
+      if (
+        typeof depthRange.near !== "number"
+        || !Number.isFinite(depthRange.near)
+        || !(depthRange.near > 0)
+      ) {
+        throw new RangeError("XR renderer depthRange near must be a positive finite number");
+      }
+      if (
+        typeof depthRange.far !== "number"
+        || !Number.isFinite(depthRange.far)
+        || !(depthRange.far > depthRange.near)
+      ) {
+        throw new RangeError("XR renderer depthRange far must be finite and greater than near");
+      }
+    }
     if (options.renderer.onFrameSnapshot !== undefined
       && typeof options.renderer.onFrameSnapshot !== "function") {
       throw new TypeError("XR renderer onFrameSnapshot must be a function");
@@ -200,6 +229,7 @@ const normalizeOptions = (
       }
     }
     renderer = {
+      ...(depthRange === undefined ? {} : { depthRange: { ...depthRange } }),
       ...(options.renderer.onFrameSnapshot === undefined
         ? {}
         : { onFrameSnapshot: options.renderer.onFrameSnapshot }),

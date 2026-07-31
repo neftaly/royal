@@ -56,6 +56,7 @@ const XrControls = (): ReactNode => {
   const xr = useXrSession({
     mode: "immersive-vr",
     renderer: {
+      depthRange: { far: 30, near: 0.05 },
       preferredFrameRate: "highest",
       referenceSpacePreference: ["local-floor", "local"],
       webGlLayer: { framebufferScaleFactor: 1 },

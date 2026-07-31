@@ -148,6 +148,12 @@ update method without an advertised list, Royal forwards a numeric preference
 directly. Unsupported or rejected preferences retain the usable session rather
 than turning an optional performance request into acquisition failure.
 
+Projection clipping is also explicit session-renderer policy. A validated
+`depthRange: { near, far }` is installed together with the browser-owned XR
+layer; omission preserves WebXR's defaults. Royal does not derive this range
+from model bounds because the viewer pose and permitted physical movement are
+owned by the XR runtime and application.
+
 ## XR performance
 
 XR uses the session RAF and is continuously rendered while active. It MUST NOT

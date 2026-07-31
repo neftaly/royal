@@ -7,10 +7,19 @@ import {
 import { useLayoutEffect, type ReactNode } from "react";
 import { useCanvasSize } from "../observation/canvas-size";
 import { useGltfAssetStatus } from "../observation/gltf-asset";
-import type { OrbitCameraController } from "./camera-controller";
+import type {
+  OrbitCameraController,
+  OrbitCameraFitClipping,
+} from "./camera-controller";
 
 /** Declarative responsive framing for one glTF asset and orbit controller. */
 export interface GltfOrbitCameraFitProps {
+  /**
+   * `track-bounds` derives clipping from this asset after subsequent orbit
+   * movement. The orbit's authored `near` remains the minimum near plane.
+   * @defaultValue `"preserve"`
+   */
+  readonly clipping?: OrbitCameraFitClipping;
   /** Optional field of view used only for fitting; defaults to the orbit projection. */
   readonly fovY?: Rads;
   /** Lower distance clamp in metres. */
@@ -30,10 +39,11 @@ export interface GltfOrbitCameraFitProps {
 /**
  * Fits an orbit camera when glTF bounds become available and whenever the
  * surrounding Canvas aspect ratio changes. The current orientation is
- * preserved unless `pitch` or `yaw` is supplied, and the controller's far
- * plane expands when necessary to keep the fitted asset inside the frustum.
+ * preserved unless `pitch` or `yaw` is supplied. Fixed clipping expands the
+ * far plane when required; tracked clipping follows the declared bounds.
  */
 export const GltfOrbitCameraFit = ({
+  clipping,
   fovY,
   minDistance,
   node,
@@ -56,6 +66,7 @@ export const GltfOrbitCameraFit = ({
     const current = orbit.getView();
     orbit.fit(transformGltfAssetBounds(bounds, node.transform), {
       aspectRatio,
+      ...(clipping === undefined ? {} : { clipping }),
       ...(fovY === undefined ? {} : { fovY }),
       ...(minDistance === undefined ? {} : { minDistance }),
       ...(padding === undefined ? {} : { padding }),
@@ -71,6 +82,7 @@ export const GltfOrbitCameraFit = ({
     bounds?.min[0],
     bounds?.min[1],
     bounds?.min[2],
+    clipping,
     fovY,
     minDistance,
     node.transform?.position[0],

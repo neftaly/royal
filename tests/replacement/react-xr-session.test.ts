@@ -98,6 +98,12 @@ describe("XR session controller", () => {
       createRenderer: async () => fakeRenderer(),
       xrSystem: () => undefined,
     })).toThrow("preferredFrameRate must be highest or a positive finite number");
+    expect(() => createXrSessionControllerWithPlatform(root, {
+      renderer: { depthRange: { far: 0.01, near: 0.01 } },
+    }, {
+      createRenderer: async () => fakeRenderer(),
+      xrSystem: () => undefined,
+    })).toThrow("depthRange far must be finite and greater than near");
   });
 
   it("uses the guaranteed viewer reference space for inline sessions by default", async () => {
@@ -115,6 +121,29 @@ describe("XR session controller", () => {
     await expect(controller.enter()).resolves.toBe(true);
     expect(createRenderer).toHaveBeenCalledWith(root, session, {
       referenceSpacePreference: ["viewer"],
+    });
+    controller.dispose();
+  });
+
+  it("retains a validated XR depth range across the React controller boundary", async () => {
+    const { root } = canvasRootHarness();
+    const session = new FakeBrowserSession();
+    const createRenderer = vi.fn(async () => fakeRenderer());
+    const depthRange = { far: 20, near: 0.01 };
+    const controller = createXrSessionControllerWithPlatform(root, {
+      renderer: { depthRange },
+    }, {
+      createRenderer,
+      xrSystem: () => ({
+        isSessionSupported: async () => true,
+        requestSession: async () => session,
+      }),
+    });
+    depthRange.far = 200;
+
+    await expect(controller.enter()).resolves.toBe(true);
+    expect(createRenderer).toHaveBeenCalledWith(root, session, {
+      depthRange: { far: 20, near: 0.01 },
     });
     controller.dispose();
   });

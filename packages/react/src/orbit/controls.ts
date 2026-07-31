@@ -20,6 +20,8 @@ export {
 } from "./camera-controller";
 export type {
   OrbitCameraController,
+  OrbitCameraControllerFitOptions,
+  OrbitCameraFitClipping,
   OrbitCameraOptions,
   OrbitCameraProjection,
 } from "./camera-controller";

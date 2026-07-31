@@ -56,7 +56,11 @@ export interface XrSession {
   ): void;
   requestReferenceSpace(type: XrReferenceSpaceType): Promise<XrReferenceSpace>;
   updateTargetFrameRate?(frameRate: number): Promise<void>;
-  updateRenderState(state: { readonly baseLayer: XrWebGlLayer }): void | Promise<void>;
+  updateRenderState(state: {
+    readonly baseLayer: XrWebGlLayer;
+    readonly depthFar?: number;
+    readonly depthNear?: number;
+  }): void | Promise<void>;
 }
 
 export interface XrWebGlLayer {
@@ -80,6 +84,14 @@ export type XrWebGlLayerOptions = Readonly<{
   framebufferScaleFactor?: number;
 }>;
 
+/** Explicit WebXR projection depth interval in metres. */
+export type XrDepthRange = Readonly<{
+  /** Positive far clipping distance. */
+  far: number;
+  /** Positive near clipping distance. */
+  near: number;
+}>;
+
 export interface XrWebGlLayerConstructor {
   new (
     session: XrSession,
@@ -96,6 +108,11 @@ export type XrSessionRendererFrameSnapshot = Readonly<{
 }>;
 
 export type XrSessionRendererOptions = Readonly<{
+  /**
+   * Projection range installed into the browser-owned XR render state.
+   * Omitted values preserve WebXR's defaults.
+   */
+  depthRange?: XrDepthRange;
   /** Allocating diagnostic callback; omit it from production frame paths. */
   onFrameSnapshot?: (snapshot: XrSessionRendererFrameSnapshot) => void;
   /** Best-effort browser frame-rate preference; omitted preserves the browser default. */
@@ -133,11 +150,13 @@ const REFERENCE_SPACE_TYPES: readonly XrReferenceSpaceType[] = [
 ];
 const DEFAULT_REFERENCE_SPACES = ["local-floor", "local"] as const;
 const OPTION_FIELDS = new Set([
+  "depthRange",
   "onFrameSnapshot",
   "preferredFrameRate",
   "referenceSpacePreference",
   "webGlLayer",
 ]);
+const DEPTH_RANGE_FIELDS = new Set(["far", "near"]);
 const LAYER_OPTION_FIELDS = new Set(["antialias", "framebufferScaleFactor"]);
 
 const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
@@ -164,6 +183,17 @@ export const validateXrSessionRendererOptions = (
 ): void => {
   const record = requireRecord(options, "Royal XR renderer options");
   rejectUnknownFields(record, OPTION_FIELDS, "Royal XR renderer options");
+  if (options.depthRange !== undefined) {
+    const depthRange = requireRecord(options.depthRange, "Royal XR depthRange");
+    rejectUnknownFields(depthRange, DEPTH_RANGE_FIELDS, "Royal XR depthRange");
+    const { far, near } = options.depthRange;
+    if (typeof near !== "number" || !Number.isFinite(near) || !(near > 0)) {
+      throw new RangeError("Royal XR depthRange near must be a positive finite number");
+    }
+    if (typeof far !== "number" || !Number.isFinite(far) || !(far > near)) {
+      throw new RangeError("Royal XR depthRange far must be finite and greater than near");
+    }
+  }
   if (options.onFrameSnapshot !== undefined && typeof options.onFrameSnapshot !== "function") {
     throw new TypeError("Royal XR onFrameSnapshot must be a function");
   }
@@ -345,7 +375,15 @@ export const createWebXrSessionRendererWithPlatform = async (
         ? {}
         : { framebufferScaleFactor: options.webGlLayer.framebufferScaleFactor }),
     });
-    await session.updateRenderState({ baseLayer: layer });
+    await session.updateRenderState({
+      baseLayer: layer,
+      ...(options.depthRange === undefined
+        ? {}
+        : {
+          depthFar: options.depthRange.far,
+          depthNear: options.depthRange.near,
+        }),
+    });
     assertSetupActive();
     const referenceSpace = await firstReferenceSpace(
       session,

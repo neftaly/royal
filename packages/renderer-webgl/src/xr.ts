@@ -8,6 +8,7 @@ export type {
 
 export type {
   XrFrame,
+  XrDepthRange,
   XrReferenceSpace,
   XrReferenceSpaceType,
   XrSession,

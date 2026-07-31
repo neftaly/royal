@@ -301,6 +301,66 @@ describe("OrbitControls", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("tracks declared fit bounds across view changes until projection is manually replaced", () => {
+    const orbit = createOrbitCameraController({
+      far: 1_000,
+      fovY: Math.PI / 4,
+      initial: { distance: 3 },
+      near: 0.01,
+    });
+    const bounds = { max: [1, 1, 1] as const, min: [-1, -1, -1] as const };
+    const listener = vi.fn();
+    orbit.subscribeView(listener);
+
+    orbit.fit(bounds, {
+      aspectRatio: 1,
+      clipping: "track-bounds",
+      padding: 1.1,
+    });
+
+    const fitted = orbit.getProjection();
+    expect(fitted.near).toBeGreaterThan(3);
+    expect(fitted.far).toBeLessThan(7);
+    expect(fitted.far).toBeLessThan(1_000);
+    expect(orbit.camera).toMatchObject(fitted);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    orbit.setView({ ...orbit.getView(), distance: 10 });
+    expect(orbit.getProjection().near).toBeGreaterThan(8);
+    expect(orbit.getProjection().far).toBeLessThan(12);
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    orbit.setView({ ...orbit.getView(), distance: 0.5 });
+    expect(orbit.getProjection().near).toBe(0.01);
+    expect(orbit.getProjection().far).toBeGreaterThan(2);
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    orbit.setProjection({ far: 40, fovY: Math.PI / 3, near: 0.02 });
+    orbit.setView({ ...orbit.getView(), distance: 20 });
+    expect(orbit.getProjection()).toEqual({
+      far: 40,
+      fovY: Math.PI / 3,
+      near: 0.02,
+    });
+    expect(listener).toHaveBeenCalledTimes(5);
+  });
+
+  it("rejects unknown managed fit clipping without changing the camera", () => {
+    const orbit = createOrbitCameraController({ initial: { distance: 3 } });
+    const projection = orbit.getProjection();
+    const view = orbit.getView();
+
+    expect(() => orbit.fit(
+      { max: [1, 1, 1], min: [-1, -1, -1] },
+      {
+        aspectRatio: 1,
+        clipping: "automatic",
+      } as unknown as Parameters<typeof orbit.fit>[1],
+    )).toThrow("unsupported clipping automatic");
+    expect(orbit.getProjection()).toBe(projection);
+    expect(orbit.getView()).toBe(view);
+  });
+
   it("zooms in and out from wheel input", () => {
     const canvas = fakeCanvas();
     const changes: OrbitCameraView[] = [];
