@@ -153,6 +153,7 @@ describe("replacement React public API", () => {
       "royalCoordinateConvention",
       "scene",
       "sceneOverlay",
+      "screenSpacePartition",
       "solidTexture",
       "spotLight",
       "standardMaterial",

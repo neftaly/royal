@@ -1,9 +1,14 @@
 import {
+  edgeMaterial,
+  gltf,
   imageTexture,
   mesh,
+  outlineGltf,
   perspectiveCamera,
   planeGeometry,
   scene,
+  sceneOverlay,
+  screenSpacePartition,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
@@ -20,6 +25,7 @@ import {
 } from "../../packages/renderer-webgl/src/xr/session-renderer";
 import { selectXrPreferredFrameRate } from "../../packages/renderer-webgl/src/xr/frame-rate";
 import { canvasRootHarness } from "./support/canvas-root-harness";
+import { staticTriangleGlb } from "./support/static-glb";
 
 class FakeSession extends EventTarget implements XrSession {
   readonly supportedFrameRates = new Float32Array([72, 90, 120]);
@@ -159,6 +165,54 @@ describe("WebXR session renderer", () => {
     expect(canvas.gl.clear).toHaveBeenCalledTimes(1);
     renderer.dispose();
     expect(renderer.disposed).toBe(true);
+  });
+
+  it("anchors partition coverage independently within each stereo viewport", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root } = canvasRootHarness({ readGltf });
+    vi.mocked(canvas.gl.getUniformLocation).mockImplementation((_, name) => (
+      { name } as unknown as WebGLUniformLocation
+    ));
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const base = gltf("/xr-partitioned-outline.glb");
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [base],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({
+          color: [1, 0, 0, 1],
+          coverage: screenSpacePartition({
+            cellSizeCssPixels: 1,
+            count: 2,
+            index: 0,
+          }),
+          widthCssPixels: 4,
+        }),
+        src: "/xr-partitioned-outline.glb",
+      })],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    callbacks.shift()!();
+    vi.mocked(canvas.gl.uniform2f).mockClear();
+
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      new FakeSession(),
+      {},
+      { layerConstructor: () => FakeLayer },
+    );
+    renderer.renderFrame({ getViewerPose: () => ({ views: [LEFT_VIEW, RIGHT_VIEW] }) });
+
+    const viewportOrigins = vi.mocked(canvas.gl.uniform2f).mock.calls
+      .filter(([location]) =>
+        (location as unknown as { name?: string }).name === "viewportOrigin")
+      .map(([, x, y]) => [x, y]);
+    expect(viewportOrigins).toEqual([[0, 0], [100, 0]]);
+    renderer.dispose();
   });
 
   it("publishes textures which settle under external XR frame authority", async () => {

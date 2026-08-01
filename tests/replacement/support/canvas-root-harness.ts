@@ -8,6 +8,7 @@ import {
 } from "../../../packages/renderer-webgl/src/runtime/canvas-root";
 
 export type FakeGl = WebGL2RenderingContext & {
+  readonly activeTexture: ReturnType<typeof vi.fn>;
   readonly blendFuncSeparate: ReturnType<typeof vi.fn>;
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
   readonly clear: ReturnType<typeof vi.fn>;
@@ -25,8 +26,10 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
+  readonly texSubImage2D: ReturnType<typeof vi.fn>;
   readonly uniform1i: ReturnType<typeof vi.fn>;
   readonly uniform1f: ReturnType<typeof vi.fn>;
+  readonly uniform2f: ReturnType<typeof vi.fn>;
   readonly uniformMatrix4fv: ReturnType<typeof vi.fn>;
   readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
@@ -62,6 +65,8 @@ export const fakeGl = (): FakeGl => ({
   LINEAR_MIPMAP_NEAREST: 0x2701,
   R11F_G11F_B10F: 0x8c3a,
   R8: 0x8229,
+  R8UI: 0x8232,
+  R16UI: 0x8234,
   LINK_STATUS: 0x8b82,
   MAX_RENDERBUFFER_SIZE: 0x84e8,
   MAX_VIEWPORT_DIMS: 0x0d3a,
@@ -77,6 +82,7 @@ export const fakeGl = (): FakeGl => ({
   RGB: 0x1907,
   RGBA: 0x1908,
   RGBA8: 0x8058,
+  RED_INTEGER: 0x8d94,
   SCISSOR_TEST: 0x0c11,
   STATIC_DRAW: 0x88e4,
   SRGB8_ALPHA8: 0x8c43,

@@ -18,6 +18,7 @@ import {
   prefilteredEnvironment,
   scene,
   sceneOverlay,
+  screenSpacePartition,
   solidTexture,
   spotLight,
   standardMaterial,
@@ -211,8 +212,14 @@ describe("renderer-core descriptor contract", () => {
   });
 
   it("builds a constrained glTF edge overlay without picking authority", () => {
+    const coverage = screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 3,
+      index: 1,
+    });
     const material = edgeMaterial({
       color: [0.4, 0.6, 1, 0.5],
+      coverage,
       widthCssPixels: 5,
     });
     const node = outlineGltf({
@@ -222,6 +229,13 @@ describe("renderer-core descriptor contract", () => {
       transform: { position: [1, 2, 3] },
       version: "selected",
     });
+    expect(material.coverage).toEqual({
+      cellSizeCssPixels: 1,
+      count: 3,
+      index: 1,
+      kind: "screen-space-partition",
+    });
+    expect(material.coverage).not.toBe(coverage);
     expect(node).toMatchObject({
       asset: { src: "/piece.glb", version: "selected" },
       kind: "outline-gltf",
@@ -238,6 +252,42 @@ describe("renderer-core descriptor contract", () => {
       color: [1, 1, 1, 1],
       widthCssPixels: 17,
     })).toThrow(/within/);
+    expect(() => screenSpacePartition({
+      cellSizeCssPixels: 0,
+      count: 2,
+      index: 0,
+    })).toThrow(RangeError);
+    expect(() => screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 1.5,
+      index: 0,
+    })).toThrow(/count must be an integer/);
+    expect(() => screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 4097,
+      index: 0,
+    })).toThrow(/count must be an integer/);
+    expect(() => screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 2,
+      index: 2,
+    })).toThrow(/index must be an integer/);
+    expect(() => screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 2,
+      index: 0,
+      lane: 0,
+    } as never)).toThrow(/unsupported option/);
+    expect(() => edgeMaterial({
+      color: [1, 1, 1, 1],
+      coverage: {
+        cellSizeCssPixels: 1,
+        count: 2,
+        index: 0,
+        kind: "stipple",
+      },
+      widthCssPixels: 2,
+    } as never)).toThrow(/kind must be screen-space-partition/);
     expect(() => outlineGltf({
       material: unlitMaterial({ color: [1, 1, 1, 1] }) as never,
       src: "/piece.glb",

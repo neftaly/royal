@@ -45,6 +45,7 @@ const MAX_MASK_OBJECT_ID = 255;
 
 const edgeStyleKey = (material: EdgeMaterial): string => JSON.stringify([
   material.color,
+  material.coverage,
   material.widthCssPixels,
 ]);
 

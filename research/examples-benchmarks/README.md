@@ -167,6 +167,29 @@ retains the final texture-coherent physical pixels.
   device-specific prewarm speedup. The controlled Intel before/after remains
   the timing evidence.
 
+2026-08-01 screen-space edge-partition device pass:
+
+- Exact production build `4947ebc1cd82-dirty-msaao2sk` compares three
+  coincident partitioned edge runs with three otherwise-identical solid runs.
+  On iPad Safari 17.14/Apple GPU at DPR 2, the partitioned
+  `ipad-safari/2026-08-01T11-35-24-086Z-webxr-vr.json` run completes 24/24
+  camera-motion samples at 60/65/66 ms p50/p95/p99. The solid
+  `ipad-safari/2026-08-01T11-35-38-138Z-webxr-vr.json` control measures
+  59/63/66 ms. Both submit 408 draws with no measured-frame texture uploads;
+  the adjacent partition PNG retains the final correct three-color outline.
+- The accepted renderer uses one lazy deterministic 64-by-64 `R16UI`
+  permutation texture (8 KiB). An arithmetic-only avalanche-hash prototype
+  was rejected after matched iPad p95 results of 72--74 ms versus 63--64 ms
+  solid. An intermediate 8-bit texture was also rejected because counts above
+  256 could have valid but empty indices.
+- The exact same final deployment runs on physical Quest 2/Adreno 650 in the
+  harness-controlled two-view path. `quest2-screen-space-partition.json`
+  measures 14.6 ms frame/XR p95 and 2.0 ms XR-callback p95; the solid
+  `quest2-screen-space-partition-solid.json` control measures 14.7 ms and
+  2.2 ms. This is shader, texture-format, and two-view renderer evidence, not
+  an immersive stereo-comfort claim; trusted immersive activation did not
+  complete during this pass.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at

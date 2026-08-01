@@ -76,6 +76,11 @@ export type { CameraKind, GeometryKind, MaterialKind, SceneNodeKind } from './ki
 export type { EdgeMaterial, EdgeMaterialOptions } from './edge-material';
 export { edgeMaterial } from './edge-material';
 export type {
+  ScreenSpacePartition,
+  ScreenSpacePartitionOptions,
+} from './screen-space-partition';
+export { screenSpacePartition } from './screen-space-partition';
+export type {
   Material,
   MaterialSurfaceOptions,
   StandardMaterial,
