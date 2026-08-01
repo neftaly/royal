@@ -147,6 +147,10 @@ import {
   sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "./surface-depth-order";
+import {
+  SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT,
+  ScreenSpacePartitionPatternOwner,
+} from "./screen-space-partition-pattern";
 
 export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
   /** Scene surfaces still waiting for bounded geometry/instance admission. */
@@ -324,6 +328,8 @@ export class SurfaceGpuOwner {
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
+  readonly #ownsPartitionPattern: boolean;
+  readonly #partitionPattern: ScreenSpacePartitionPatternOwner;
   readonly #presentationLane: SurfacePresentationLane;
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #lightUniforms = createCanonicalLightUniformStorage();
@@ -332,6 +338,7 @@ export class SurfaceGpuOwner {
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
   #scene: CanonicalSurfaceScene | null = null;
+  #screenSpacePartitionRequested = false;
   #sceneGlobalsRevision = 0;
   #programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
   #standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
@@ -357,6 +364,7 @@ export class SurfaceGpuOwner {
     uploadBudget = new FrameUploadBudgetOwner(),
     etc2Available = true,
     presentationLane: SurfacePresentationLane = "world",
+    partitionPattern?: ScreenSpacePartitionPatternOwner,
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
@@ -368,6 +376,9 @@ export class SurfaceGpuOwner {
       hasFloatColorTarget: this.#readExtension("EXT_color_buffer_float"),
     };
     this.#programs = new SurfaceProgramOwner(gl);
+    this.#ownsPartitionPattern = partitionPattern === undefined;
+    this.#partitionPattern = partitionPattern
+      ?? new ScreenSpacePartitionPatternOwner(gl, budget);
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
     this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available);
@@ -393,6 +404,7 @@ export class SurfaceGpuOwner {
     this.#depthPrepassOwner = null;
     this.#textureGpu.dispose();
     this.#programs.dispose();
+    if (this.#ownsPartitionPattern) this.#partitionPattern.dispose();
     this.#compositeLoadGeneration += 1;
     this.#compositeGpu?.dispose();
     this.#compositeGpu = null;
@@ -401,6 +413,7 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
     this.#clearGpuSurfaces();
     this.#scene = null;
+    this.#screenSpacePartitionRequested = false;
     this.#textureSamplerClaim.clear();
     this.#textureStorageClaim.clear();
     this.#texturePublicationKeys.clear();
@@ -424,6 +437,7 @@ export class SurfaceGpuOwner {
     this.#clearGpuSurfaces();
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
+    if (this.#ownsPartitionPattern) this.#partitionPattern.abandon();
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     this.#standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
     this.#compositeGpu?.invalidate();
@@ -612,6 +626,10 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
+    this.#screenSpacePartitionRequested = scene?.surfaces.some(
+      (surface) => surface.material.kind === "unlit"
+        && surface.material.coverage !== undefined,
+    ) ?? false;
     this.#depthPrepassPlan = planOpaqueDepthPrepass(
       this.#presentationLane === "world" ? scene?.surfaces ?? [] : [],
     );
@@ -772,6 +790,8 @@ export class SurfaceGpuOwner {
     framebuffer: WebGLFramebuffer | null,
     state: WebGlStateOwner,
     clearColor: LinearRgba,
+    cssScaleX = 1,
+    cssScaleY = 1,
   ): boolean {
     const scene = this.#scene;
     if (scene !== null && views.length !== 0) {
@@ -864,7 +884,17 @@ export class SurfaceGpuOwner {
       for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
         const view = views[viewIndex]!;
         this.#prepareView(view);
-        this.#drawView(view, viewIndex, visibilityStride, framebuffer, state, scene, "all");
+        this.#drawView(
+          view,
+          viewIndex,
+          visibilityStride,
+          framebuffer,
+          state,
+          scene,
+          "all",
+          cssScaleX,
+          cssScaleY,
+        );
       }
     } else {
       const composite = this.#compositeGpu;
@@ -885,6 +915,8 @@ export class SurfaceGpuOwner {
           state,
           scene,
           "opaque",
+          cssScaleX,
+          cssScaleY,
         );
         if (transmissionRequested) composite.snapshot(state);
         this.#drawView(
@@ -895,6 +927,8 @@ export class SurfaceGpuOwner {
           state,
           scene,
           "remaining",
+          cssScaleX,
+          cssScaleY,
         );
         composite.present(
           framebuffer,
@@ -916,6 +950,10 @@ export class SurfaceGpuOwner {
 
   #reconcilePendingResources(state: WebGlStateOwner): void {
     if (!this.#dirty) return;
+    if (
+      this.#screenSpacePartitionRequested
+      && this.#partitionPattern.ensure()
+    ) state.invalidate();
     if (this.#instanceTransformsPending && !this.#fullReconcileRequired) {
       if (this.#geometryGpu.updateInstanceTransforms(this.#scene?.surfaces ?? [])) {
         this.#instanceTransformsPending = false;
@@ -1074,6 +1112,8 @@ export class SurfaceGpuOwner {
     state: WebGlStateOwner,
     scene: CanonicalSurfaceScene,
     pass: SurfaceDrawPass,
+    cssScaleX: number,
+    cssScaleY: number,
   ): void {
     this.#drawFrame.framebuffer = framebuffer;
     this.#drawFrame.viewport = frameView.viewport;
@@ -1176,11 +1216,41 @@ export class SurfaceGpuOwner {
         transmissionCoordinates = undefined;
       }
       if (program.kind === "unlit") {
+        if (program.partition !== null) {
+          if (programChanged) {
+            gl.uniform2f(
+              program.partition.viewportOrigin,
+              frameView.viewport.x,
+              frameView.viewport.y,
+            );
+            const coverage = surface.material.kind === "unlit"
+              ? surface.material.coverage
+              : undefined;
+            if (coverage === undefined) {
+              throw new Error("Royal partitioned unlit program got solid coverage");
+            }
+            gl.uniform2f(
+              program.partition.cellSize,
+              coverage.cellSizeCssPixels * cssScaleX,
+              coverage.cellSizeCssPixels * cssScaleY,
+            );
+          }
+        }
         if (transformChanged) {
           multiplyMat4Into(this.#viewProjectionModel, viewProjection, surface.model);
           gl.uniformMatrix4fv(program.viewProjectionModel, false, this.#viewProjectionModel);
         }
         if (materialChanged) {
+          if (program.partition !== null) {
+            const coverage = surface.material.kind === "unlit"
+              ? surface.material.coverage
+              : undefined;
+            if (coverage === undefined) {
+              throw new Error("Royal partitioned unlit program got solid coverage");
+            }
+            gl.uniform1i(program.partition.count, coverage.count);
+            gl.uniform1i(program.partition.index, coverage.index);
+          }
           gl.uniform4fv(
             program.color,
             presentableBaseColorInto(
@@ -1522,7 +1592,9 @@ export class SurfaceGpuOwner {
         residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
     );
-    const bindings = Array<GpuTextureBinding>(12);
+    const bindings = Array<GpuTextureBinding>(
+      SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT + 1,
+    );
     composeSurfaceTextureBindingsInto(
       bindings,
       ordinaryBindings,
@@ -1535,6 +1607,10 @@ export class SurfaceGpuOwner {
         : undefined,
       this.#environmentGpu?.binding,
     );
+    if (material.kind === "unlit" && material.coverage !== undefined) {
+      bindings[SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT] =
+        this.#partitionPattern.binding;
+    }
     const program = this.#programs.get(
       material.kind,
       features,

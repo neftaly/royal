@@ -1,6 +1,7 @@
 import {
   type LinearRgba,
   type Material,
+  type ScreenSpacePartition,
   type TextureAssetRef,
   type TextureColorSpace,
   type TextureSamplerFilter,
@@ -38,6 +39,7 @@ export type CanonicalUnlitMaterial = Readonly<{
   baseColorVirtualAsset?: VirtualTextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   baseColorTextureCoordinates?: CanonicalTextureCoordinates;
+  coverage?: ScreenSpacePartition;
   doubleSided?: true;
   kind: "unlit";
   requiresTextureCoordinates: boolean;
@@ -291,7 +293,13 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
     requiresTextureCoordinates: source.kind !== "solid",
   };
   return material.kind !== "standard"
-    ? { ...common, kind: "unlit" }
+    ? {
+        ...common,
+        ...(material.kind === "unlit" && material.coverage !== undefined
+          ? { coverage: material.coverage }
+          : {}),
+        kind: "unlit",
+      }
     : {
       ...common,
       emissiveFactor: [0, 0, 0],

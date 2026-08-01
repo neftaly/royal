@@ -23,6 +23,7 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_OCCLUSION_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+  SURFACE_FEATURE_SCREEN_SPACE_PARTITION,
   SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
   SURFACE_FEATURE_SPECULAR_MATERIAL,
   SURFACE_FEATURE_SPECULAR_TEXTURE,
@@ -37,6 +38,7 @@ import {
   SURFACE_TEXTURE_FEATURES,
   surfaceLightCountFeatureBits,
 } from "./surface-program-features";
+import { SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT } from "./screen-space-partition-pattern";
 
 export const MATERIAL_TEXTURE_UNITS = 9;
 const EMPTY_TEXTURE_BINDING: GpuTextureBinding = { sampler: null, target: "2d", texture: null };
@@ -259,6 +261,9 @@ export const surfaceProgramFeatureBits = ({
   if (hasVertexNormal) features |= SURFACE_FEATURE_VERTEX_NORMAL;
   if (linearOutput) features |= SURFACE_FEATURE_LINEAR_OUTPUT;
   if (material.kind !== "standard") {
+    if (material.coverage !== undefined) {
+      features |= SURFACE_FEATURE_SCREEN_SPACE_PARTITION;
+    }
     return surfaceTexturesUseIdentityCoordinates(material, features)
       ? features | SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES
       : features;
@@ -300,6 +305,9 @@ export const surfaceTextureUnitMask = (features: number): number => (
   | (features & SURFACE_FEATURE_THICKNESS_TEXTURE ? 1 << 9 : 0)
   | (features & SURFACE_FEATURE_TRANSMISSION_MATERIAL ? 1 << 10 : 0)
   | (features & SURFACE_FEATURE_PREFILTERED_ENVIRONMENT ? 1 << 11 : 0)
+  | (features & SURFACE_FEATURE_SCREEN_SPACE_PARTITION
+    ? 1 << SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT
+    : 0)
   | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b1000_0001 : 0);
 
 export const residentOrdinaryTextureMask = (

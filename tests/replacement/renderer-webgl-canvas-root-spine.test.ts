@@ -243,6 +243,10 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
     expect(canvas.gl.useProgram).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.texSubImage2D.mock.calls.some(([, , , , width, height]) =>
+      width === 64 && height === 64)).toBe(false);
+    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("#define SCREEN_SPACE_PARTITION"))).toBe(false);
     root.invalidate();
     callbacks.shift()!();
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
@@ -325,6 +329,72 @@ describe("clear-only canvas root", () => {
     });
   });
 
+  it("shares exact screen-space coverage across direct and overlay unlit surfaces", () => {
+    const { callbacks, canvas, root } = harness();
+    const geometry = planeGeometry([2, 2]);
+    const covered = (index: number) => unlitMaterial({
+      color: index === 0 ? [1, 0, 0, 1] : [0, 0.5, 1, 1],
+      coverage: screenSpacePartition({
+        cellSizeCssPixels: 1,
+        count: 2,
+        index,
+      }),
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 2 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [
+        mesh({
+          geometry,
+          material: unlitMaterial({ color: [0.1, 0.1, 0.1, 1] }),
+        }),
+        mesh({
+          geometry,
+          material: covered(0),
+          pickingId: "covered-world",
+          transform: { position: [0, 0, 0.1] },
+        }),
+      ],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [
+        mesh({ geometry, material: covered(1) }),
+        mesh({
+          geometry: planeGeometry([0.25, 0.25]),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+
+    const patternUploads = canvas.gl.texSubImage2D.mock.calls.filter(
+      ([, , , , width, height]) => width === 64 && height === 64,
+    );
+    expect(patternUploads).toHaveLength(1);
+    expect(canvas.gl.activeTexture.mock.calls.some(
+      ([unit]) => unit === canvas.gl.TEXTURE0 + 12,
+    )).toBe(true);
+    expect(canvas.gl.uniform2f.mock.calls.some(([, x, y]) => x === 2 && y === 2))
+      .toBe(true);
+    const fragmentSources = canvas.gl.shaderSource.mock.calls
+      .map(([, source]) => String(source))
+      .filter((source) => source.includes("uniform vec4 linearColor"));
+    expect(fragmentSources.some((source) =>
+      source.includes("#define SCREEN_SPACE_PARTITION")
+      && source.includes("partitionPattern")
+      && source.includes(") discard;"))).toBe(true);
+    expect(fragmentSources.some((source) =>
+      !source.includes("#define SCREEN_SPACE_PARTITION"))).toBe(true);
+    expect(root.pick({ clientX: 150, clientY: 100 })?.target).toMatchObject({
+      pickingId: "covered-world",
+    });
+
+    canvas.gl.uniform2f.mockClear();
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    expect(canvas.gl.uniform2f.mock.calls.some(([, x, y]) => x === 1 && y === 1))
+      .toBe(true);
+  });
+
   it("reuses presented glTF geometry for screen-space edge overlays", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root } = harness({ readGltf });
@@ -374,37 +444,55 @@ describe("clear-only canvas root", () => {
       nodes: [base],
     }));
     const overlay = sceneOverlay({
-      nodes: [0, 1, 2].map((index) => outlineGltf({
-        material: edgeMaterial({
-          color: index === 0 ? [1, 0, 0, 1] : index === 1
-            ? [0, 1, 0, 1]
-            : [0, 0, 1, 1],
-          coverage: screenSpacePartition({
-            cellSizeCssPixels: 1,
-            count: 3,
-            index,
+      nodes: [
+        mesh({
+          geometry: planeGeometry([0.5, 0.5]),
+          material: unlitMaterial({
+            color: [1, 1, 1, 1],
+            coverage: screenSpacePartition({
+              cellSizeCssPixels: 1,
+              count: 2,
+              index: 0,
+            }),
           }),
-          widthCssPixels: 4,
         }),
-        src: "/partitioned-outline.glb",
-      })),
+        ...[0, 1, 2].map((index) => outlineGltf({
+          material: edgeMaterial({
+            color: index === 0 ? [1, 0, 0, 1] : index === 1
+              ? [0, 1, 0, 1]
+              : [0, 0, 1, 1],
+            coverage: screenSpacePartition({
+              cellSizeCssPixels: 1,
+              count: 3,
+              index,
+            }),
+            widthCssPixels: 4,
+          }),
+          src: "/partitioned-outline.glb",
+        })),
+      ],
     });
     root.setOverlay(overlay);
     callbacks.shift()!();
     await waitFor(() =>
       expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
+    canvas.gl.drawArrays.mockClear();
+    canvas.gl.drawElements.mockClear();
     callbacks.shift()!();
 
-    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
-    // One base draw plus one mask draw per differently partitioned edge run.
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(4);
+    // One base draw, one unlit overlay, and one mask draw per edge run.
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(5);
     // Each requested edge run still performs its existing horizontal + resolve draws.
     expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(6);
     const fragmentSources = canvas.gl.shaderSource.mock.calls
       .map(([, source]) => String(source))
       .filter((source) => source.includes("outputColor"));
     expect(fragmentSources.filter((source) =>
-      source.includes("usampler2D partitionPattern"))).toHaveLength(1);
+      source.includes("usampler2D partitionPattern")
+      && source.includes("in vec2 textureCoordinate"))).toHaveLength(1);
+    expect(fragmentSources.filter((source) =>
+      source.includes("#define SCREEN_SPACE_PARTITION"))).toHaveLength(1);
     expect(fragmentSources.some((source) =>
       source.includes("edgeColor.a * signal);")
       && !source.includes("partitionPattern"))).toBe(true);
@@ -412,8 +500,8 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.uniform1i.mock.calls.some(([, value]) => value === 2)).toBe(true);
     expect(canvas.gl.uniform2f.mock.calls.some(([, x, y]) => x === 2 && y === 2))
       .toBe(true);
-    expect(canvas.gl.texSubImage2D.mock.calls.some(([, , , , width, height]) =>
-      width === 64 && height === 64)).toBe(true);
+    expect(canvas.gl.texSubImage2D.mock.calls.filter(([, , , , width, height]) =>
+      width === 64 && height === 64)).toHaveLength(1);
 
     canvas.gl.activeTexture.mockClear();
     root.setOverlay(sceneOverlay({ nodes: overlay.nodes }));
@@ -425,8 +513,13 @@ describe("clear-only canvas root", () => {
     canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     canvas.dispatchEvent(new Event("webglcontextrestored"));
     callbacks.shift()!();
-    expect(canvas.gl.shaderSource.mock.calls.filter(([, source]) =>
-      String(source).includes("usampler2D partitionPattern"))).toHaveLength(1);
+    expect(canvas.gl.shaderSource.mock.calls.filter(([, source]) => {
+      const value = String(source);
+      return value.includes("usampler2D partitionPattern")
+        && value.includes("in vec2 textureCoordinate");
+    })).toHaveLength(1);
+    expect(canvas.gl.texSubImage2D.mock.calls.filter(([, , , , width, height]) =>
+      width === 64 && height === 64)).toHaveLength(2);
   });
 
   it("borrows authored glTF instance cohorts without another instance upload", async () => {

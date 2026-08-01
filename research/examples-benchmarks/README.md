@@ -190,6 +190,29 @@ retains the final texture-coherent physical pixels.
   an immersive stereo-comfort claim; trusted immersive activation did not
   complete during this pass.
 
+2026-08-02 screen-space unlit-coverage device pass:
+
+- Exact production build `5826042041ac-dirty-msaeao8e` compares six
+  coincident guide boxes (three colours across horizontal and vertical guides)
+  while holding partitioned edge coverage constant. On iPad Safari 17.14/Apple
+  GPU at DPR 2, partitioned
+  `ipad-safari/2026-08-01T13-18-45-247Z-webxr-vr.json` completes 24/24
+  camera-motion samples at 59/61/61 ms p50/p95/p99. The solid-guide
+  `ipad-safari/2026-08-01T13-19-01-786Z-webxr-vr.json` control measures
+  59/63/66 ms. Both submit 552 draws and perform no measured-frame upload;
+  coverage adds one texture bind and nineteen uniform calls per frame. The
+  adjacent PNG retains all three colours on both guide directions.
+- The pattern texture and sampler are now one lazy 8 KiB root resource shared
+  by world surfaces, overlay surfaces, and edge resolution. Uncovered unlit
+  fragments discard so opaque holes cannot write depth; solid-only unlit scenes
+  do not allocate the pattern or activate its shader feature.
+- The exact same deployment runs on physical Quest 2/Adreno 650 through the
+  harness-controlled two-view path. `quest2-screen-space-unlit-partition.json`
+  measures 14.7 ms frame/XR p95 and 2.1 ms XR-callback p95;
+  `quest2-screen-space-unlit-solid.json` measures 14.6 ms and 2.1 ms. Both
+  report 46.5 draws per frame with no measured-frame upload. This establishes
+  shader, state, and two-view renderer cost, not immersive stereo comfort.
+
 2026-07-14 Quest 2 Browser pass:
 
 - `quest2-virtual-texture-stress-2026-07-14.json` completed 24/24 frames at

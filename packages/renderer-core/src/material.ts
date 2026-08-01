@@ -1,5 +1,9 @@
 import type { LinearRgba } from './primitives';
 import { finiteNumber, objectWithAllowedFields, resolveRgba } from './descriptor-values';
+import {
+  resolveScreenSpacePartition,
+  type ScreenSpacePartition,
+} from './screen-space-partition';
 import { solidTexture, type TextureRef } from './texture';
 
 export type MaterialSurfaceOptions =
@@ -33,6 +37,8 @@ export interface StandardMaterial {
 export interface UnlitMaterial {
   readonly kind: 'unlit';
   readonly baseColor: TextureRef;
+  /** Optional complementary view-local screen-space fragment coverage. */
+  readonly coverage?: ScreenSpacePartition;
   /** Scene-linear RGBA multiplier for a textured base color; alpha below 1 selects blending. */
   readonly tint?: LinearRgba;
 }
@@ -52,7 +58,10 @@ export type StandardMaterialOptions = MaterialSurfaceOptions & {
   readonly roughness?: number;
 };
 
-export type UnlitMaterialOptions = MaterialSurfaceOptions;
+export type UnlitMaterialOptions = MaterialSurfaceOptions & {
+  /** Optional complementary view-local screen-space fragment coverage. */
+  readonly coverage?: ScreenSpacePartition;
+};
 
 export interface WireframeMaterialOptions {
   /** Scene-linear RGBA line color. Use `linearRgbaFromSrgb` for authored sRGB values. */
@@ -77,7 +86,7 @@ const materialTint = (
 };
 
 const STANDARD_MATERIAL_FIELDS = ['color', 'metallic', 'roughness', 'texture', 'tint'] as const;
-const UNLIT_MATERIAL_FIELDS = ['color', 'texture', 'tint'] as const;
+const UNLIT_MATERIAL_FIELDS = ['color', 'coverage', 'texture', 'tint'] as const;
 const WIREFRAME_MATERIAL_FIELDS = ['color'] as const;
 
 const factor01 = (value: number | undefined, fallback: number, label: string): number => {
@@ -107,6 +116,14 @@ export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   return {
     kind: 'unlit',
     baseColor: toBaseColorTexture(options, 'unlit material'),
+    ...(options.coverage === undefined
+      ? {}
+      : {
+          coverage: resolveScreenSpacePartition(
+            options.coverage,
+            'unlit material coverage',
+          ),
+        }),
     ...(tint === undefined ? {} : { tint }),
   };
 };

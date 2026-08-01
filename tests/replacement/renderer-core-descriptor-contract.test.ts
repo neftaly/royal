@@ -177,15 +177,26 @@ describe("renderer-core descriptor contract", () => {
   });
 
   it("builds a non-picking solid-color mesh overlay", () => {
+    const coverage = screenSpacePartition({
+      cellSizeCssPixels: 1,
+      count: 3,
+      index: 1,
+    });
     const node = mesh({
       geometry: boxGeometry(1),
-      material: wireframeMaterial({ color: [0.4, 0.6, 1, 0.5] }),
+      material: unlitMaterial({
+        color: [0.4, 0.6, 1, 0.5],
+        coverage,
+      }),
       transform: { position: [1, 2, 3] },
     });
     const nodes = [node];
     const overlay = sceneOverlay({ nodes });
     expect(overlay).toEqual({ kind: "scene-overlay", nodes: [node] });
     expect(overlay.nodes).not.toBe(nodes);
+    if (node.material.kind !== "unlit") throw new Error("expected unlit material");
+    expect(node.material.coverage).toEqual(coverage);
+    expect(node.material.coverage).not.toBe(coverage);
 
     expect(() => sceneOverlay({
       nodes: [directionalLight({ direction: [0, -1, 0] })] as never,
@@ -196,6 +207,10 @@ describe("renderer-core descriptor contract", () => {
         material: standardMaterial({ color: [1, 1, 1, 1] }),
       })],
     })).toThrow(/unlit or wireframe/);
+    expect(() => standardMaterial({
+      color: [1, 1, 1, 1],
+      coverage,
+    } as never)).toThrow(/unsupported option/);
     expect(() => sceneOverlay({
       nodes: [mesh({
         geometry: boxGeometry(1),

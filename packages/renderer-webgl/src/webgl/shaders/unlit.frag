@@ -1,7 +1,15 @@
 #version 300 es
 precision highp float;
+precision highp int;
 __VIRTUAL_TEXTURE_DECLARATIONS__
 uniform vec4 linearColor;
+#ifdef SCREEN_SPACE_PARTITION
+uniform vec2 partitionCellSize;
+uniform int partitionCount;
+uniform int partitionIndex;
+uniform highp usampler2D partitionPattern;
+uniform vec2 viewportOrigin;
+#endif
 #ifdef VERTEX_COLOR
 in vec4 surfaceVertexColor;
 #endif
@@ -33,6 +41,18 @@ void main() {
 #endif
 #ifdef ALPHA_MASK
   if (color.a < alphaCutoff) discard;
+#endif
+#ifdef SCREEN_SPACE_PARTITION
+  uvec2 cell = uvec2(floor((gl_FragCoord.xy - viewportOrigin) / partitionCellSize));
+  uint bucket = texelFetch(
+    partitionPattern,
+    ivec2(cell & uvec2(__SCREEN_SPACE_PARTITION_MASK__u)),
+    0
+  ).r;
+  if (
+    (bucket * uint(partitionCount) >> __SCREEN_SPACE_PARTITION_BUCKET_BITS__u)
+      != uint(partitionIndex)
+  ) discard;
 #endif
 #ifdef ALPHA_BLEND
   float surfaceAlpha = color.a;

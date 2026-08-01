@@ -75,6 +75,7 @@ import {
   type CanonicalEdgeOverlayScene,
 } from "../surface/edge-overlay-scene";
 import { EdgeOverlayOwner } from "../surface/edge-overlay-owner";
+import { ScreenSpacePartitionPatternOwner } from "../surface/screen-space-partition-pattern";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   createCanonicalInstanceSceneUpdateWorkspace,
@@ -574,6 +575,7 @@ export class CanvasRoot implements RendererRoot {
   #snapshot: CanvasRootSnapshot | undefined;
   #snapshotRevision = -1;
   readonly #state: WebGlStateOwner;
+  readonly #screenSpacePartitionPattern: ScreenSpacePartitionPatternOwner;
   readonly #surfaceGpu: SurfaceGpuOwner;
   readonly #surfacePicker = new SurfacePicker(this.#getDecodedAlpha);
   #surfaceResourcesPending = false;
@@ -653,6 +655,10 @@ export class CanvasRoot implements RendererRoot {
     );
     this.#sizeLimits = readSizeLimits(this.#gl);
     this.#state = new WebGlStateOwner(this.#gl);
+    this.#screenSpacePartitionPattern = new ScreenSpacePartitionPatternOwner(
+      this.#gl,
+      this.#persistentGpuBudget,
+    );
     this.#surfaceGpu = new SurfaceGpuOwner(
       this.#gl,
       this.#persistentGpuBudget,
@@ -660,6 +666,8 @@ export class CanvasRoot implements RendererRoot {
       (error) => this.#captureScheduledFailure(error),
       this.#frameUploadBudget,
       this.#etc2Available,
+      "world",
+      this.#screenSpacePartitionPattern,
     );
     this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
       onAssetChanged: () => {
@@ -753,6 +761,7 @@ export class CanvasRoot implements RendererRoot {
       this.#surfaceGpu.invalidate();
       this.#overlayGpu?.invalidate();
       this.#edgeOverlayGpu?.abandon();
+      this.#screenSpacePartitionPattern.abandon();
       this.#retainedPresentation.abandon();
       this.#worldPresentationRequired = true;
       this.#context.transition({ kind: "context-lost" });
@@ -843,6 +852,7 @@ export class CanvasRoot implements RendererRoot {
     this.#surfaceGpu.dispose();
     this.#overlayGpu?.dispose();
     this.#edgeOverlayGpu?.dispose();
+    this.#screenSpacePartitionPattern.dispose();
     this.#retainedPresentation.dispose();
     this.#textureAssets.dispose();
     this.#asyncPreparation.dispose();
@@ -1388,6 +1398,7 @@ export class CanvasRoot implements RendererRoot {
         new FrameUploadBudgetOwner(),
         this.#etc2Available,
         "overlay",
+        this.#screenSpacePartitionPattern,
       );
       this.#overlayGpu.setScene(prepared);
       this.#overlayResourcesPending = this.#overlayGpu.surfacePublicationsPending();
@@ -1399,6 +1410,7 @@ export class CanvasRoot implements RendererRoot {
       this.#edgeOverlayGpu ??= new EdgeOverlayOwner(
         this.#gl,
         this.#persistentGpuBudget,
+        this.#screenSpacePartitionPattern,
       );
       this.#edgeOverlayGpu.setScene(this.#edgeOverlay);
     } else this.#edgeOverlayGpu?.setScene(null);
@@ -1818,6 +1830,12 @@ export class CanvasRoot implements RendererRoot {
       multiplyMat4Into(this.#viewProjection, this.#projection, this.#view);
       this.#canvasViewport.height = size.backingHeight;
       this.#canvasViewport.width = size.backingWidth;
+      const cssScaleX = size.cssWidth === 0
+        ? 1
+        : size.backingWidth / size.cssWidth;
+      const cssScaleY = size.cssHeight === 0
+        ? 1
+        : size.backingHeight / size.cssHeight;
       try {
         let worldPending = false;
         let overlayPending = false;
@@ -1827,6 +1845,8 @@ export class CanvasRoot implements RendererRoot {
             null,
             this.#state,
             this.#clearColor,
+            cssScaleX,
+            cssScaleY,
           );
         }
         if (!restoredWorld && hasPresentationOverlay) {
@@ -1842,15 +1862,11 @@ export class CanvasRoot implements RendererRoot {
             null,
             this.#state,
             this.#clearColor,
+            cssScaleX,
+            cssScaleY,
           );
         }
         if (this.#edgeOverlayGpu !== null && edgeOverlay !== null) {
-          const cssScaleX = size.cssWidth === 0
-            ? 1
-            : size.backingWidth / size.cssWidth;
-          const cssScaleY = size.cssHeight === 0
-            ? 1
-            : size.backingHeight / size.cssHeight;
           overlayPending = this.#edgeOverlayGpu.drawViews(
             this.#canvasViews,
             null,
@@ -1902,6 +1918,7 @@ export class CanvasRoot implements RendererRoot {
       this.#surfaceGpu.invalidate();
       this.#overlayGpu?.invalidate();
       this.#edgeOverlayGpu?.abandon();
+      this.#screenSpacePartitionPattern.abandon();
       if (this.#surfaceScene !== null) this.#reconcilePrefilteredEnvironment(this.#surfaceScene);
       this.#textureAssets.invalidateResidency();
       if (this.#sizeInput !== null) {

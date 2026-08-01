@@ -17,10 +17,10 @@ import type {
   CanonicalEdgeSurface,
 } from "./edge-overlay-scene";
 import {
-  createScreenSpacePartitionPattern,
-  SCREEN_SPACE_PARTITION_PATTERN_BYTES,
+  SCREEN_SPACE_PARTITION_BUCKET_BITS,
   SCREEN_SPACE_PARTITION_PATTERN_SIZE,
-} from "./edge-overlay-partition";
+  type ScreenSpacePartitionPatternOwner,
+} from "./screen-space-partition-pattern";
 import {
   frustumPlanesInto,
   worldBoundsVisible,
@@ -199,7 +199,7 @@ void main() {
     ivec2(cell & uvec2(${SCREEN_SPACE_PARTITION_PATTERN_SIZE - 1}u)),
     0
   ).r;
-  float covered = (bucket * uint(partitionCount) >> 12u)
+  float covered = (bucket * uint(partitionCount) >> ${SCREEN_SPACE_PARTITION_BUCKET_BITS}u)
     == uint(partitionIndex) ? 1.0 : 0.0;
   outputColor = vec4(edgeColor.rgb, edgeColor.a * signal * covered);
 }`;
@@ -397,7 +397,6 @@ const framebufferComplete = (
 export class EdgeOverlayOwner {
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
-  readonly #partitionClaim = {};
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
   readonly #horizontalBindings: TextureUnitBinding[] = [{
@@ -421,7 +420,7 @@ export class EdgeOverlayOwner {
     { sampler: null, target: "2d", texture: null },
   ];
   #partitionResolvePacket: SurfaceDrawPacket | null = null;
-  #partitionPattern: WebGLTexture | null = null;
+  readonly #partitionPattern: ScreenSpacePartitionPatternOwner;
   readonly #resolveBindings: TextureUnitBinding[] = [{
     sampler: null,
     target: "2d",
@@ -438,9 +437,11 @@ export class EdgeOverlayOwner {
   constructor(
     gl: WebGL2RenderingContext,
     budget: PersistentGpuBudgetOwner,
+    partitionPattern: ScreenSpacePartitionPatternOwner,
   ) {
     this.#budget = budget;
     this.#gl = gl;
+    this.#partitionPattern = partitionPattern;
   }
 
   setScene(scene: CanonicalEdgeOverlayScene | null): void {
@@ -462,12 +463,9 @@ export class EdgeOverlayOwner {
     if (this.#partitionResolve !== null) {
       this.#gl.deleteProgram(this.#partitionResolve.program);
     }
-    if (this.#partitionPattern !== null) this.#gl.deleteTexture(this.#partitionPattern);
-    this.#budget.release(this.#partitionClaim);
     this.#pipeline = null;
     this.#partitionResolve = null;
     this.#partitionResolvePacket = null;
-    this.#partitionPattern = null;
     this.#horizontalPacket = null;
     this.#resolvePacket = null;
     this.#scene = null;
@@ -479,7 +477,6 @@ export class EdgeOverlayOwner {
     this.#pipeline = null;
     this.#partitionResolve = null;
     this.#partitionResolvePacket = null;
-    this.#partitionPattern = null;
     this.#horizontalPacket = null;
     this.#resolvePacket = null;
     this.#horizontalBindings[0] = { sampler: null, target: "2d", texture: null };
@@ -487,7 +484,6 @@ export class EdgeOverlayOwner {
     this.#partitionResolveBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#partitionResolveBindings[1] = { sampler: null, target: "2d", texture: null };
     this.#budget.release(this.#claim);
-    this.#budget.release(this.#partitionClaim);
   }
 
   drawViews(
@@ -736,41 +732,12 @@ export class EdgeOverlayOwner {
     if (this.#partitionResolve !== null) return;
     const gl = this.#gl;
     const resolve = partitionResolveProgram(gl);
-    if (!this.#budget.tryClaim(this.#partitionClaim, SCREEN_SPACE_PARTITION_PATTERN_BYTES)) {
-      gl.deleteProgram(resolve.program);
-      throw new Error("Royal persistent GPU budget denied the edge partition pattern");
-    }
-    const pattern = gl.createTexture();
     try {
-      if (pattern === null) {
-        throw new Error("Royal could not allocate the edge partition pattern");
-      }
-      gl.bindTexture(gl.TEXTURE_2D, pattern);
-      gl.texStorage2D(
-        gl.TEXTURE_2D,
-        1,
-        gl.R16UI,
-        SCREEN_SPACE_PARTITION_PATTERN_SIZE,
-        SCREEN_SPACE_PARTITION_PATTERN_SIZE,
-      );
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        SCREEN_SPACE_PARTITION_PATTERN_SIZE,
-        SCREEN_SPACE_PARTITION_PATTERN_SIZE,
-        gl.RED_INTEGER,
-        gl.UNSIGNED_SHORT,
-        createScreenSpacePartitionPattern(),
-      );
+      this.#partitionPattern.ensure();
       this.#partitionResolve = resolve;
-      this.#partitionPattern = pattern;
       this.#rebuildPackets();
     } catch (error) {
       gl.deleteProgram(resolve.program);
-      if (pattern !== null) gl.deleteTexture(pattern);
-      this.#budget.release(this.#partitionClaim);
       throw error;
     } finally {
       state.invalidate();
@@ -886,11 +853,9 @@ export class EdgeOverlayOwner {
       target: "2d",
       texture: targets.scratch,
     };
-    this.#partitionResolveBindings[1] = {
-      sampler: pipeline.sampler,
-      target: "2d",
-      texture: this.#partitionPattern,
-    };
+    this.#partitionResolveBindings[1] = this.#partitionResolve === null
+      ? { sampler: null, target: "2d", texture: null }
+      : { ...this.#partitionPattern.binding };
     const gl = this.#gl;
     this.#horizontalPacket = {
       alphaBlend: false,

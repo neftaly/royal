@@ -3,7 +3,7 @@ import {
   createScreenSpacePartitionPattern,
   SCREEN_SPACE_PARTITION_PATTERN_BYTES,
   screenSpacePartitionCellIndex,
-} from "../../packages/renderer-webgl/src/surface/edge-overlay-partition";
+} from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
 
 describe("screen-space edge partition", () => {
   it("exposes every two- and three-way partition across common edge orientations", () => {

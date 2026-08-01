@@ -29,6 +29,7 @@ import {
   SURFACE_FEATURE_NORMAL_TEXTURE,
   SURFACE_FEATURE_OCCLUSION_TEXTURE,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
+  SURFACE_FEATURE_SCREEN_SPACE_PARTITION,
   SURFACE_FEATURE_SPECULAR_COLOR_TEXTURE,
   SURFACE_FEATURE_SPECULAR_TEXTURE,
   SURFACE_FEATURE_THICKNESS_TEXTURE,
@@ -201,6 +202,35 @@ describe("surface texture planning core", () => {
     });
     expect(opaque & SURFACE_FEATURE_ALPHA_BLEND).toBe(0);
     expect(blended & SURFACE_FEATURE_ALPHA_BLEND).toBe(SURFACE_FEATURE_ALPHA_BLEND);
+  });
+
+  it("reserves the shared pattern unit only for covered unlit materials", () => {
+    const covered: Extract<CanonicalSurfaceMaterial, { kind: "unlit" }> = {
+      baseColor: [1, 1, 1, 1],
+      coverage: {
+        cellSizeCssPixels: 1,
+        count: 2,
+        index: 0,
+        kind: "screen-space-partition",
+      },
+      kind: "unlit",
+      requiresTextureCoordinates: false,
+    };
+    const features = surfaceProgramFeatureBits({
+      directionalLightCount: 0,
+      environmentFeatures: 0,
+      hasTangent: false,
+      hasVertexColor: false,
+      hasVertexNormal: false,
+      hasVirtualBaseColor: false,
+      linearOutput: false,
+      material: covered,
+      ordinaryTextureMask: 0,
+      punctualLightCount: 0,
+    });
+    expect(features & SURFACE_FEATURE_SCREEN_SPACE_PARTITION)
+      .toBe(SURFACE_FEATURE_SCREEN_SPACE_PARTITION);
+    expect(surfaceTextureUnitMask(features)).toBe(1 << 12);
   });
 
   it("selects authored vertex normals independently from normal textures", () => {

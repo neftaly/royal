@@ -215,6 +215,57 @@ describe("WebXR session renderer", () => {
     renderer.dispose();
   });
 
+  it("uses the same view-local phase for direct and overlay unlit coverage", async () => {
+    const { callbacks, canvas, root } = canvasRootHarness();
+    vi.mocked(canvas.gl.getUniformLocation).mockImplementation((_, name) => (
+      { name } as unknown as WebGLUniformLocation
+    ));
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const material = (index: number) => unlitMaterial({
+      color: index === 0 ? [1, 0, 0, 1] : [0, 0, 1, 1],
+      coverage: screenSpacePartition({
+        cellSizeCssPixels: 1,
+        count: 2,
+        index,
+      }),
+    });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: material(0),
+      })],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [mesh({
+        geometry: planeGeometry([2, 1]),
+        material: material(1),
+      })],
+    }));
+    callbacks.shift()!();
+    vi.mocked(canvas.gl.uniform2f).mockClear();
+
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      new FakeSession(),
+      {},
+      { layerConstructor: () => FakeLayer },
+    );
+    renderer.renderFrame({ getViewerPose: () => ({ views: [LEFT_VIEW, RIGHT_VIEW] }) });
+
+    const viewportOrigins = vi.mocked(canvas.gl.uniform2f).mock.calls
+      .filter(([location]) =>
+        (location as unknown as { name?: string }).name === "viewportOrigin")
+      .map(([, x, y]) => [x, y]);
+    expect(viewportOrigins).toEqual([
+      [0, 0],
+      [100, 0],
+      [0, 0],
+      [100, 0],
+    ]);
+    renderer.dispose();
+  });
+
   it("publishes textures which settle under external XR frame authority", async () => {
     let resolveDecode: ((source: {
       height: number;

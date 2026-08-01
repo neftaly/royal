@@ -17,6 +17,7 @@ import {
   screenSpacePartition,
   standardMaterial,
   studioEnvironment,
+  unlitMaterial,
 } from "@royal/react/scene";
 import { useXrSession } from "@royal/react/xr";
 import { useMemo, type ReactNode } from "react";
@@ -35,13 +36,28 @@ const tigerOutlineColors = [
   [0.04, 0.82, 1, 1],
   [0.78, 0.16, 1, 1],
 ] as const;
-const partitionTigerOutline = new URLSearchParams(globalThis.location.search)
+const exampleSearch = typeof globalThis.location === "undefined"
+  ? new URLSearchParams()
+  : new URLSearchParams(globalThis.location.search);
+const partitionTigerOutline = exampleSearch
   .get("edgeCoverage") !== "solid";
-const xrOverlay = sceneOverlay({
-  nodes: tigerOutlineColors.map((color, index) => outlineGltf({
-    material: edgeMaterial({
+const partitionGuides = exampleSearch.get("unlitCoverage") !== "solid";
+const guideShapes = [
+  {
+    geometry: boxGeometry([3.4, 0.045, 0.045]),
+    transform: { position: [0, 0.08, -3] },
+  },
+  {
+    geometry: boxGeometry([0.045, 0.045, 3.4]),
+    transform: { position: [0, 0.08, -3] },
+  },
+] as const;
+const guideNodes = guideShapes.flatMap(({ geometry, transform }) =>
+  tigerOutlineColors.map((color, index) => mesh({
+    geometry,
+    material: unlitMaterial({
       color,
-      ...(partitionTigerOutline
+      ...(partitionGuides
         ? {
             coverage: screenSpacePartition({
               cellSizeCssPixels: 1,
@@ -50,11 +66,30 @@ const xrOverlay = sceneOverlay({
             }),
           }
         : {}),
-      widthCssPixels: 6,
     }),
-    src: xrTiger.asset.src,
-    transform: xrTigerTransform,
-  })),
+    transform,
+  })));
+const xrOverlay = sceneOverlay({
+  nodes: [
+    ...guideNodes,
+    ...tigerOutlineColors.map((color, index) => outlineGltf({
+      material: edgeMaterial({
+        color,
+        ...(partitionTigerOutline
+          ? {
+              coverage: screenSpacePartition({
+                cellSizeCssPixels: 1,
+                count: tigerOutlineColors.length,
+                index,
+              }),
+            }
+          : {}),
+        widthCssPixels: 6,
+      }),
+      src: xrTiger.asset.src,
+      transform: xrTigerTransform,
+    })),
+  ],
 });
 
 const xrNodes = [
