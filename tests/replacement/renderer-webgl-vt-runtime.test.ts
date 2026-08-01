@@ -16,7 +16,11 @@ import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/sr
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/frame/surface-frame";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
-import { virtualTextureRuntimeRequired } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
+import {
+  automaticVirtualTextureAssetKey,
+  virtualTextureAssetKey,
+  virtualTextureRuntimeRequired,
+} from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
 import {
   initialVirtualTextureActivationState,
   reconcileVirtualTextureActivation,
@@ -27,6 +31,45 @@ import { fakeGl } from "./support/canvas-root-harness";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("VT runtime activation core", () => {
+  it("keeps typed versions distinct and normalizes equivalent sampler defaults", () => {
+    const unversioned = virtualTexture("/map.vt.json");
+    const numericZero = virtualTexture({ manifestUri: "/map.vt.json", version: 0 });
+    const stringZero = virtualTexture({ manifestUri: "/map.vt.json", version: "0" });
+    const explicitContentIdentity = virtualTexture({
+      contentKey: "/map.vt.json",
+      manifestUri: "/another-map.vt.json",
+    });
+    const explicitDefaults = virtualTexture({
+      colorSpace: "srgb",
+      manifestUri: "/map.vt.json",
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
+    });
+
+    expect(virtualTextureAssetKey(unversioned)).not.toBe(virtualTextureAssetKey(numericZero));
+    expect(virtualTextureAssetKey(numericZero)).not.toBe(virtualTextureAssetKey(stringZero));
+    expect(virtualTextureAssetKey(unversioned))
+      .not.toBe(virtualTextureAssetKey(explicitContentIdentity));
+    expect(virtualTextureAssetKey(unversioned)).toBe(virtualTextureAssetKey(explicitDefaults));
+
+    const ordinary = imageTexture("/map.png");
+    const ordinaryExplicitDefaults = imageTexture({
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear-mipmap-linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
+      src: "/map.png",
+    });
+    expect(automaticVirtualTextureAssetKey(ordinary))
+      .toBe(automaticVirtualTextureAssetKey(ordinaryExplicitDefaults));
+  });
+
   it("separates authored demand from opt-in automatic base-color demand", () => {
     const ordinary = imageTexture("/large.png");
     const authored = virtualTexture("/authored.vt.json");

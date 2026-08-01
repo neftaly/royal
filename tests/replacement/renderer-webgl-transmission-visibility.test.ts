@@ -7,10 +7,21 @@ import {
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
+import { ScreenSpacePartitionPatternOwner } from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
 import { fakeGl } from "./support/canvas-root-harness";
+
+const createSurfaceGpuOwner = (gl: WebGL2RenderingContext): SurfaceGpuOwner => {
+  const budget = new PersistentGpuBudgetOwner();
+  return new SurfaceGpuOwner(
+    gl,
+    budget,
+    new ScreenSpacePartitionPatternOwner(gl, budget),
+  );
+};
 
 describe("retained transmission visibility", () => {
   it("indexes visibility by transmission candidates rather than sparse scene indices", () => {
@@ -29,7 +40,7 @@ describe("retained transmission visibility", () => {
       { ...transmitted, material, materialSource: material },
     ];
     const gl = fakeGl();
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     owner.setScene({ ...prepared, surfaces });
     owner.beginFrame();
 
@@ -65,7 +76,7 @@ describe("retained transmission visibility", () => {
       return { ...surface, material, materialSource: material };
     });
     const gl = fakeGl();
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     owner.setScene({ ...prepared, surfaces });
     owner.beginFrame();
 

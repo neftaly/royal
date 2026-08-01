@@ -69,6 +69,32 @@ standardMaterial({
 });
 ```
 
+Unlit fills and edge materials may select complementary presentation coverage:
+
+```ts
+const coverage = screenSpacePartition({
+  cellSizeCssPixels: 2,
+  count: 2,
+  index: 0,
+});
+
+unlitMaterial({ color: [1, 1, 1, 1], coverage });
+edgeMaterial({ color: [0, 0, 0, 1], coverage });
+```
+
+Create the other member with the same cell size and `count`, and `index: 1`.
+Matching members share a deterministic screen-space phase and cover every cell
+exactly once. Coverage affects presentation only: it does not change picking.
+It is intentionally unavailable on standard and wireframe materials.
+
+`sceneOverlay({ nodes })` creates a non-picking, always-visible presentation
+lane. It accepts solid-color unlit/wireframe meshes and `outlineGltf(...)`
+nodes with `edgeMaterial(...)`. An outline borrows a matching rendered glTF
+occurrence's selected scene, active LOD, instances, and GPU geometry. Use
+`sourceTransform` to identify a stationary source occurrence while
+`transform` places a displaced preview; missing or ambiguous sources fail
+instead of creating a second geometry authority.
+
 `prefilteredEnvironment({ src, version, rotation, radianceScaleNits })` selects
 one offline Royal KTX 1 environment artifact. Raw HDR decode and convolution
 are deliberately not runtime scene operations. `src` plus the type and value of

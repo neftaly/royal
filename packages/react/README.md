@@ -60,6 +60,8 @@ Canvas defaults to `display: block; width: 100%` so its renderer-owned backing
 dimensions cannot feed back into unconstrained intrinsic CSS sizing. An explicit
 React `style` may override either default; CSS should keep at least one axis
 independent of the canvas's intrinsic dimensions.
+Royal's Safari 17 browser floor includes `ResizeObserver`; `Canvas` requires
+it so element-only layout changes cannot silently leave the backing size stale.
 
 Backing resolution defaults to the browser device pixel ratio. Set
 `pixelRatio={1}` (or another positive finite value) to choose backing pixels per
@@ -104,6 +106,11 @@ broad phases; derive contact/support data from borrowed geometry rather than
 treating bounds as a physics oracle.
 `useCanvasPick()` calls the root's exact picker and returns `undefined` before
 mount or when no visible triangle is hit.
+`<Canvas overlay={sceneOverlay(...)} />` publishes non-picking world-space
+feedback independently of `scene`. Overlay-only changes do not republish the
+base scene. Direct overlay meshes use solid-color unlit or wireframe materials;
+`outlineGltf(...)` provides CSS-width boundary/crease edges while borrowing a
+matching rendered glTF occurrence's active geometry and LOD.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact source, version, and
 selected document scene without polling or waking for unrelated frames. Its
 `streaming`, `ready`, and `degraded` states all

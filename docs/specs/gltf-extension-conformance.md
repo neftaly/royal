@@ -1,6 +1,6 @@
 # glTF required-extension conformance ledger
 
-Status: executable replacement profile; reviewed 2026-07-25
+Status: executable profile; reviewed 2026-08-02
 
 This ledger records what Royal may truthfully accept in `extensionsRequired`.
 It is narrower than the optional-feature possibility space. A name is accepted

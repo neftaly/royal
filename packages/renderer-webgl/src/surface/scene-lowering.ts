@@ -33,12 +33,12 @@ import {
   canonicalMaterialHasTransmission,
   canonicalMaterialHasVolume,
   canonicalMaterialTextureKeys,
-  canonicalTextureSampler,
   prepareCanonicalMaterialSource,
   resolveCanonicalMaterialTexture,
   tintCanonicalMaterial,
   type CanonicalSurfaceMaterial,
 } from "./canonical-material";
+import { canonicalTextureSampler } from "../texture/sampler";
 import {
   prepareCanonicalGeometry,
   prepareCanonicalWireframeGeometry,

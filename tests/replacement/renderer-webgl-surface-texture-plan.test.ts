@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  canonicalTextureSampler,
-  canonicalTextureSamplerKey,
   resolveCanonicalMaterialTexture,
   type CanonicalSurfaceMaterial,
   type CanonicalTextureBinding,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import {
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
+} from "../../packages/renderer-webgl/src/texture/sampler";
 import {
   authoredOrdinaryTextureMask,
   collectCompleteSurfaceTextureClaimsInto,

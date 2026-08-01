@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import { IDENTITY_TEXTURE_COORDINATES } from "../../packages/renderer-webgl/src/surface/texture-coordinates";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { prepareCanonicalGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
-import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/texture/sampler";
 import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
 import {
   collectVirtualTextureDemand,

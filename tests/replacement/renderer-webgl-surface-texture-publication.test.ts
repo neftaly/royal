@@ -17,6 +17,7 @@ import {
 } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { SurfaceGeometryGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-geometry-gpu-owner";
+import { ScreenSpacePartitionPatternOwner } from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
 import {
   decodedTextureKey,
   textureStorageKey,
@@ -32,6 +33,15 @@ const TEST_VIEWS = [{
   viewProjection: identityMat4(),
   viewport: { height: 100, width: 100, x: 0, y: 0 },
 }];
+
+const createSurfaceGpuOwner = (
+  gl: WebGL2RenderingContext,
+  budget = new PersistentGpuBudgetOwner(),
+): SurfaceGpuOwner => new SurfaceGpuOwner(
+  gl,
+  budget,
+  new ScreenSpacePartitionPatternOwner(gl, budget),
+);
 
 describe("retained surface texture publication", () => {
   it("retires superseded scene storage before admitting replacement geometry", () => {
@@ -64,7 +74,7 @@ describe("retained surface texture publication", () => {
     planner.dispose();
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(budgetBytes);
-    const owner = new SurfaceGpuOwner(gl, budget);
+    const owner = createSurfaceGpuOwner(gl, budget);
     const state = new WebGlStateOwner(gl);
 
     try {
@@ -111,7 +121,7 @@ describe("retained surface texture publication", () => {
       textureCoordinates: [0, 0, 1, 0, 0, 1],
     }));
     const gl = fakeGl();
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
     const draw = (): void => {
       owner.beginFrame();
@@ -151,7 +161,7 @@ describe("retained surface texture publication", () => {
       })],
     }));
     const gl = fakeGl();
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
 
     try {
@@ -232,7 +242,7 @@ describe("retained surface texture publication", () => {
       const resolve = (asset: TextureSourceRef): DecodedTextureSource | undefined =>
         decoded.get(decodedTextureKey(asset));
       let prepared = prepareCanonicalSurfaceScene(authored, undefined, undefined, resolve);
-      const owner = new SurfaceGpuOwner(gl);
+      const owner = createSurfaceGpuOwner(gl);
       const state = new WebGlStateOwner(gl);
       const remaining = assets.map((_asset, index) => index);
       owner.setScene(prepared);
@@ -374,7 +384,7 @@ describe("retained surface texture publication", () => {
     }), undefined, undefined, decoded);
     const firstScene = prepare(first);
     const secondScene = prepare(second);
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
 
     owner.setScene(firstScene);
@@ -425,7 +435,7 @@ describe("retained surface texture publication", () => {
     }>();
     const decodedSource = (asset: TextureSourceRef) => decoded.get(asset);
     const pending = prepareCanonicalSurfaceScene(authored, undefined, undefined, decodedSource);
-    const owner = new SurfaceGpuOwner(gl);
+    const owner = createSurfaceGpuOwner(gl);
     const state = new WebGlStateOwner(gl);
     const draw = (): void => {
       draws.length = 0;

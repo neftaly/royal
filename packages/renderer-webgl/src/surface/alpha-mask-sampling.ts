@@ -4,7 +4,8 @@ import {
 } from "./texture-coordinates";
 import type { DecodedTextureAlpha, TextureAlphaLevel } from "../texture/alpha-mipmap";
 import type { CanonicalTriangleGeometry } from "./canonical-geometry";
-import type { CanonicalSurfaceMaterial, CanonicalTextureSampler } from "./canonical-material";
+import type { CanonicalSurfaceMaterial } from "./canonical-material";
+import type { CanonicalTextureSampler } from "../texture/sampler";
 import type {
   CanonicalLocalPickRay,
   CanonicalLocalPickRayFootprint,

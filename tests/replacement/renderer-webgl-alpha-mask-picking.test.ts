@@ -15,9 +15,9 @@ import { assertFuzz, forEachFuzzCase } from "../fuzz";
 import type { CanonicalTriangleGeometry } from "../../packages/renderer-webgl/src/surface/canonical-geometry";
 import type {
   CanonicalSurfaceMaterial,
-  CanonicalTextureSampler,
   CanonicalUnlitMaterial,
 } from "../../packages/renderer-webgl/src/surface/canonical-material";
+import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/texture/sampler";
 import {
   createCanonicalPickingScratch,
   pickCanonicalSurfaceInto,

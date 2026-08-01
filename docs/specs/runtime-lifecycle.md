@@ -45,6 +45,13 @@ The root MUST retain enough normalized state to draw that scene again after
 resize, resource completion, or context restoration without requiring another
 React commit.
 
+Changing the canvas backing dimensions clears its default framebuffer. A live
+resize therefore updates the backing dimensions and flushes the already
+committed scene presentation in the same browser turn; Royal MUST NOT expose an
+intermediate cleared canvas while waiting for a later scheduled frame. This
+does not make ordinary scene commits synchronous and does not create a
+continuous resize render loop.
+
 A newer scene commit supersedes older scene intent atomically. Work belonging
 only to the old scene MUST lose its root claim, but content shared with the new
 scene MAY continue through the content owner. Stale completions MUST NOT publish

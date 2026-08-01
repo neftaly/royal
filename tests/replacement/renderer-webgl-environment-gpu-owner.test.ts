@@ -7,6 +7,7 @@ import {
 } from "../../packages/renderer-webgl/src/environment/royal-environment-ktx1";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import { ScreenSpacePartitionPatternOwner } from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
 import { environmentKtx1Fixture } from "./support/environment-ktx1";
 import { fakeGl } from "./support/canvas-root-harness";
 
@@ -14,7 +15,12 @@ describe("prefiltered environment GPU owner", () => {
   it("does not create a lazily requested owner after the environment is deselected", async () => {
     const gl = fakeGl();
     const prepared = parseRoyalEnvironmentKtx1(environmentKtx1Fixture(2).source);
-    const owner = new SurfaceGpuOwner(gl);
+    const budget = new PersistentGpuBudgetOwner();
+    const owner = new SurfaceGpuOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
 
     expect(owner.setPrefilteredEnvironment(prepared)).toBe(false);
     expect(owner.setPrefilteredEnvironment(undefined)).toBe(false);

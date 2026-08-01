@@ -104,6 +104,11 @@ coalesced frame without replacing scene intent. `flushInvalidated()` is
 available to deliberate imperative hosts. External frame-clock authority is
 owned by dedicated integrations such as `@royal/renderer-webgl/xr`; it is not
 part of the ordinary root API.
+`setOverlay(sceneOverlay)` independently replaces the non-picking,
+always-visible presentation lane. Warm overlay-only updates restore retained
+world presentation when its budget-governed target is available; allocation
+denial falls back to a correct complete world render. Passing `null` clears the
+lane.
 `createCameraViewResource(...)` may be used as the scene camera; committed
 changes invalidate one frame and update retained camera storage without
 re-lowering the scene or rebuilding GPU resources.

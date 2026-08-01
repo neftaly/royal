@@ -226,7 +226,7 @@ support. Vendor registry presence alone is insufficient.
 
 ## Current breadth
 
-Royal's replacement currently has a useful but deliberately narrower static
+Royal currently has a useful but deliberately narrower static
 profile: baseline metallic-roughness/unlit, emissive strength, IOR, specular,
 transmission/volume, Draco, Meshopt, mesh quantization, WebP, texture transforms,
 GPU instancing, variants, punctual lights, and vendor LOD. Basis-in-glTF,

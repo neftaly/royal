@@ -56,7 +56,7 @@ export class ScreenSpacePartitionPatternOwner {
 
   constructor(
     gl: WebGL2RenderingContext,
-    budget = new PersistentGpuBudgetOwner(),
+    budget: PersistentGpuBudgetOwner,
   ) {
     this.#budget = budget;
     this.#gl = gl;
@@ -76,9 +76,11 @@ export class ScreenSpacePartitionPatternOwner {
     if (!this.#budget.tryClaim(this.#claim, SCREEN_SPACE_PARTITION_PATTERN_BYTES)) {
       throw new Error("Royal persistent GPU budget denied the screen-space partition pattern");
     }
-    const texture = gl.createTexture();
-    const sampler = gl.createSampler();
+    let texture: WebGLTexture | null = null;
+    let sampler: WebGLSampler | null = null;
     try {
+      texture = gl.createTexture();
+      sampler = gl.createSampler();
       if (texture === null || sampler === null) {
         throw new Error("Royal could not allocate the screen-space partition pattern");
       }

@@ -1,4 +1,4 @@
-import type { CanonicalTextureSampler } from "../surface/canonical-material";
+import type { CanonicalTextureSampler } from "../texture/sampler";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalTextureCoordinates } from "../surface/texture-coordinates";
 import {

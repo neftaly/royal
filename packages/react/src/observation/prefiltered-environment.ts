@@ -53,6 +53,16 @@ const validateInput = (input: PrefilteredEnvironmentStatusInput): void => {
       "usePrefilteredEnvironmentStatus presentation fields require a prefiltered environment ref",
     );
   }
+  prefilteredEnvironment({
+    ...(input.kind === "environment-light"
+      ? {
+        radianceScaleNits: input.radianceScaleNits,
+        rotation: input.rotation,
+      }
+      : {}),
+    src: input.src,
+    ...(input.version === undefined ? {} : { version: input.version }),
+  });
 };
 
 /** Observes one offline environment source/version without frame-wide subscriptions. */

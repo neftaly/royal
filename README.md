@@ -5,15 +5,14 @@ descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
 hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
 canvas rendering.
 
-Royal is an open-source prerelease at `0.0.1`. Its accepted behavior and clean
-replacement architecture are defined in [docs/specs](docs/specs/README.md).
+Royal is an open-source prerelease at `0.0.2`. Its intended behavior and
+current conformance are documented in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained
 camera/instance resources, LOD and variants, WebXR, and optional virtual
 texturing through shared canonical scene paths. Unsupported required glTF
 semantics fail explicitly. The detailed status and remaining gaps live in the
-[conformance ledger](docs/specs/conformance-and-review.md); old renderer code is
-evidence and oracle material, never a runtime fallback.
+[conformance ledger](docs/specs/conformance-and-review.md).
 
 ## Current React API
 
@@ -67,7 +66,7 @@ pnpm check:vt-pages-build
 pnpm bench:vt-pages
 ```
 
-The default example exercises the replacement root under React StrictMode.
+The default example exercises the renderer root under React StrictMode.
 `/gltf-bistro-web` is the approximate 100 MB Draco + AVIF integration workload;
 its selected scene fetches only the texture sources it actually references.
 The Royal bundle baseline tracks total initial gzip and the incremental Royal

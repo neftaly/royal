@@ -50,6 +50,10 @@ describe("renderer-core descriptor contract", () => {
     expect(() => perspectiveCamera({ fovY: 0 })).toThrow(RangeError);
     expect(() => directionalLight({ direction: [0, 0, 0] })).toThrow(RangeError);
     expect(() => gltf("")).toThrow(TypeError);
+    expect(() => scene({
+      camera,
+      nodes: undefined as unknown as [],
+    })).toThrow("scene nodes must be an array");
     expect(() => createGltfInstanceTransforms({
       count: 1,
       positions: [0, "0", 0] as unknown as number[],

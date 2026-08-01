@@ -2,12 +2,13 @@
 
 Status: pre-release architectural contract
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-08-02
 
-This directory defines Royal's intended observable behavior and the boundaries
-that implementations must preserve. It is the source of truth for architectural
-work. Package READMEs explain how to use the current API; tests prove individual
-properties; these specifications explain what the whole system means.
+This directory defines Royal's reviewable intended behavior and the boundaries
+that implementations must preserve. Package READMEs explain how to use the
+current API; tests provide evidence for individual properties; these
+specifications explain what the whole system is intended to mean. None of those
+sources proves its own claims: contradictions belong in the conformance ledger.
 
 Royal is still pre-release. A specification may deliberately require a breaking
 implementation change. Such a difference belongs in the conformance ledger,
@@ -20,20 +21,18 @@ not in an undocumented compatibility path.
 3. [Runtime lifecycle](runtime-lifecycle.md)
 4. [Scene-to-frame pipeline](scene-to-frame-pipeline.md)
 5. [Architecture pattern selection](architecture-patterns.md)
-6. [Clean implementation strategy](implementation-strategy.md)
-7. [Replacement execution readiness](execution-readiness.md)
-8. [Assets and glTF ingestion](assets-and-gltf.md)
-9. [Optional glTF feature profile](optional-gltf-features.md)
-10. [glTF required-extension conformance ledger](gltf-extension-conformance.md)
-11. [Textures and virtual texturing](textures-and-virtual-texturing.md)
-12. [Experimental `GS_texture_svg` glTF extension](gs-texture-svg-extension.md)
-13. [Rendering and presentation](rendering-and-presentation.md)
-14. [Interaction and XR](interaction-and-xr.md)
-15. [Resources and performance](resources-and-performance.md)
-16. [Hot-path normalization](hot-path-normalization.md)
-17. [Failures and diagnostics](failures-and-diagnostics.md)
-18. [Specification verification strategy](verification-strategy.md)
-19. [Conformance and adversarial review](conformance-and-review.md)
+6. [Assets and glTF ingestion](assets-and-gltf.md)
+7. [Optional glTF feature profile](optional-gltf-features.md)
+8. [glTF required-extension conformance ledger](gltf-extension-conformance.md)
+9. [Textures and virtual texturing](textures-and-virtual-texturing.md)
+10. [Experimental `GS_texture_svg` glTF extension](gs-texture-svg-extension.md)
+11. [Rendering and presentation](rendering-and-presentation.md)
+12. [Interaction and XR](interaction-and-xr.md)
+13. [Resources and performance](resources-and-performance.md)
+14. [Hot-path normalization](hot-path-normalization.md)
+15. [Failures and diagnostics](failures-and-diagnostics.md)
+16. [Specification verification strategy](verification-strategy.md)
+17. [Conformance and adversarial review](conformance-and-review.md)
 
 ## Normative language
 

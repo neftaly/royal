@@ -4,7 +4,7 @@ import { IDENTITY_TEXTURE_COORDINATES } from "../surface/texture-coordinates";
 import {
   canonicalTextureSampler,
   type CanonicalTextureSampler,
-} from "../surface/canonical-material";
+} from "../texture/sampler";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import { etc2RgbaWebGlFormat } from "../texture/etc2-storage";
 import {

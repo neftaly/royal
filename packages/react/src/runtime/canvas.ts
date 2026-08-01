@@ -159,13 +159,7 @@ export const observeCanvasSize = (
 ): (() => void) => {
   const ResizeObserverConstructor = globalThis.ResizeObserver;
   if (typeof ResizeObserverConstructor !== "function") {
-    const update = (): void => {
-      const box = canvas.getBoundingClientRect();
-      publishCanvasSize(root, box.width, box.height, pixelRatio);
-    };
-    update();
-    globalThis.addEventListener?.("resize", update);
-    return () => globalThis.removeEventListener?.("resize", update);
+    throw new Error("Royal Canvas requires ResizeObserver");
   }
   let cssHeight = 0;
   let cssWidth = 0;
@@ -185,11 +179,11 @@ export const observeCanvasSize = (
     schedulePublication();
   });
   observer.observe(canvas);
-  globalThis.addEventListener?.("resize", schedulePublication);
+  globalThis.addEventListener("resize", schedulePublication);
   return () => {
     if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
     observer.disconnect();
-    globalThis.removeEventListener?.("resize", schedulePublication);
+    globalThis.removeEventListener("resize", schedulePublication);
   };
 };
 

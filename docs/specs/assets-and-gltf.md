@@ -208,7 +208,7 @@ diagnosed once.
 
 ## Extensions and codecs
 
-The current replacement implementation accepts these required declarations:
+The current implementation accepts these required declarations:
 
 - `EXT_mesh_gpu_instancing`, draft `EXT_texture_avif`, and
   `EXT_texture_webp`;

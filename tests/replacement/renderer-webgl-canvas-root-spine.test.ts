@@ -12,12 +12,14 @@ import {
   outlineGltf,
   planeGeometry,
   pointLight,
+  prefilteredEnvironment,
   scene,
   sceneOverlay,
   screenSpacePartition,
   standardMaterial,
   studioEnvironment,
   unlitMaterial,
+  virtualTexture,
   wireframeMaterial,
   type RenderObjectHandle,
   type Scene,
@@ -1519,6 +1521,28 @@ describe("clear-only canvas root", () => {
       .toThrow("Royal subscriber must be a function");
     expect(() => root.subscribeSize(null as unknown as () => void))
       .toThrow("Royal subscriber must be a function");
+
+    root.dispose();
+    expect(() => root.subscribe(null as unknown as () => void))
+      .toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeSize(null as unknown as () => void))
+      .toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeGltfAsset(
+      gltf("/disposed.glb").asset,
+      null as unknown as () => void,
+    )).toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribePrefilteredEnvironment(
+      prefilteredEnvironment({ src: "/disposed.ktx" }),
+      null as unknown as () => void,
+    )).toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeTextureAsset(
+      imageTexture("/disposed.png"),
+      null as unknown as () => void,
+    )).toThrow("Royal subscriber must be a function");
+    expect(() => root.subscribeVirtualTextureAsset(
+      virtualTexture("/disposed.vt.json"),
+      null as unknown as () => void,
+    )).toThrow("Royal subscriber must be a function");
   });
 
   it("blocks stale work on loss and reconstructs the current clear intent on restore", () => {

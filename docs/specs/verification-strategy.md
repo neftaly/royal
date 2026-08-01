@@ -106,7 +106,7 @@ Automate negative boundaries where practical:
 - optional entrypoints have no import-time effects and do not enter minimal
   reachable graphs;
 - package/module dependency cycles fail the check;
-- replacement code cannot import a legacy runtime path;
+- production code cannot import an abandoned runtime path;
 - frame/draw code cannot query capabilities, parse formats, or build diagnostic
   strings;
 - public barrels expose only reviewed symbols;
@@ -161,8 +161,8 @@ the implementation is reasonable is not independent conformance evidence.
   boundaries.
 - At slice completion: packed-consumer, browser visual, performance/resource,
   and conformance-ledger review.
-- Before replacement integration: full physical-device, security, bundle, and
-  deletion review.
+- Before release: full physical-device, security, bundle, package-consumer,
+  cross-browser, and deletion review.
 - After a reported regression: add the smallest durable oracle at the semantic
   boundary, then re-run the affected cross-cut reviews.
 

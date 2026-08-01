@@ -275,6 +275,14 @@ const surfaceDrawPacket = (
 
 export type SurfacePresentationLane = "overlay" | "world";
 
+export type SurfaceGpuOwnerOptions = Readonly<{
+  etc2Available?: boolean;
+  onChanged?: () => void;
+  onFailure?: (error: unknown) => void;
+  presentationLane?: SurfacePresentationLane;
+  uploadBudget?: FrameUploadBudgetOwner;
+}>;
+
 /** Coordinates one context generation's program, geometry, texture, and draw-state owners. */
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
@@ -328,7 +336,6 @@ export class SurfaceGpuOwner {
   #multiDrawCounts = new Int32Array(0);
   #multiDrawOffsets = new Int32Array(0);
   readonly #ordinaryBindingScratch = Array<GpuTextureBinding>(MATERIAL_TEXTURE_UNITS);
-  readonly #ownsPartitionPattern: boolean;
   readonly #partitionPattern: ScreenSpacePartitionPatternOwner;
   readonly #presentationLane: SurfacePresentationLane;
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
@@ -358,13 +365,15 @@ export class SurfaceGpuOwner {
 
   constructor(
     gl: WebGL2RenderingContext,
-    budget = new PersistentGpuBudgetOwner(),
-    onChanged: () => void = () => undefined,
-    onFailure: (error: unknown) => void = () => undefined,
-    uploadBudget = new FrameUploadBudgetOwner(),
-    etc2Available = true,
-    presentationLane: SurfacePresentationLane = "world",
-    partitionPattern?: ScreenSpacePartitionPatternOwner,
+    budget: PersistentGpuBudgetOwner,
+    partitionPattern: ScreenSpacePartitionPatternOwner,
+    {
+      etc2Available = true,
+      onChanged = () => undefined,
+      onFailure = () => undefined,
+      presentationLane = "world",
+      uploadBudget = new FrameUploadBudgetOwner(),
+    }: SurfaceGpuOwnerOptions = {},
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
@@ -376,9 +385,7 @@ export class SurfaceGpuOwner {
       hasFloatColorTarget: this.#readExtension("EXT_color_buffer_float"),
     };
     this.#programs = new SurfaceProgramOwner(gl);
-    this.#ownsPartitionPattern = partitionPattern === undefined;
-    this.#partitionPattern = partitionPattern
-      ?? new ScreenSpacePartitionPatternOwner(gl, budget);
+    this.#partitionPattern = partitionPattern;
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
     this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available);
@@ -404,7 +411,6 @@ export class SurfaceGpuOwner {
     this.#depthPrepassOwner = null;
     this.#textureGpu.dispose();
     this.#programs.dispose();
-    if (this.#ownsPartitionPattern) this.#partitionPattern.dispose();
     this.#compositeLoadGeneration += 1;
     this.#compositeGpu?.dispose();
     this.#compositeGpu = null;
@@ -437,7 +443,6 @@ export class SurfaceGpuOwner {
     this.#clearGpuSurfaces();
     this.#textureGpu.invalidate();
     this.#programs.invalidate();
-    if (this.#ownsPartitionPattern) this.#partitionPattern.abandon();
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     this.#standardProgramSceneGlobals = new WeakMap<WebGLProgram, number>();
     this.#compositeGpu?.invalidate();
@@ -452,9 +457,7 @@ export class SurfaceGpuOwner {
   }
 
   #readMultiDraw(): WebGlMultiDraw | null {
-    return typeof this.#gl.getExtension === "function"
-      ? this.#gl.getExtension("WEBGL_multi_draw") as WebGlMultiDraw | null
-      : null;
+    return this.#gl.getExtension("WEBGL_multi_draw") as WebGlMultiDraw | null;
   }
 
   #clearGpuSurfaces(): void {
@@ -471,8 +474,7 @@ export class SurfaceGpuOwner {
   }
 
   #readExtension(name: string): boolean {
-    return typeof this.#gl.getExtension === "function"
-      && this.#gl.getExtension(name) !== null;
+    return this.#gl.getExtension(name) !== null;
   }
 
   /** Current canonical LOD choices shared by visual submission and exact picking. */

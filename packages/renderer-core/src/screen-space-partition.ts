@@ -9,7 +9,7 @@ export interface ScreenSpacePartition {
   readonly kind: 'screen-space-partition';
   /** Width and height of one square coverage cell in CSS pixels. */
   readonly cellSizeCssPixels: number;
-  /** Number of complementary partitions sharing the same spatial phase. */
+  /** Number of complementary partitions sharing the same spatial phase, in `[1, 4096]`. */
   readonly count: number;
   /** Selected partition in `[0, count)`. */
   readonly index: number;
@@ -18,7 +18,7 @@ export interface ScreenSpacePartition {
 export interface ScreenSpacePartitionOptions {
   /** Width and height of one square coverage cell in CSS pixels. */
   readonly cellSizeCssPixels: number;
-  /** Number of complementary partitions sharing the same spatial phase. */
+  /** Number of complementary partitions sharing the same spatial phase, in `[1, 4096]`. */
   readonly count: number;
   /** Selected partition in `[0, count)`. */
   readonly index: number;

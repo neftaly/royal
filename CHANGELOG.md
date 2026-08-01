@@ -5,6 +5,36 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.2 - 2026-08-02
+
+### Correctness
+
+- Distinguished unversioned, numeric, and string virtual-texture identities,
+  while canonicalizing omitted and explicit default color-space/sampler values.
+- Validated complete focused-status references instead of discarding malformed
+  presentation-only fields, and made every subscription boundary validate
+  callbacks consistently after root disposal.
+- Made shared screen-space partition allocation rollback atomic and required
+  surface owners to receive the root-owned pattern dependency explicitly.
+- Rejected malformed scene node collections with a stable authoring error.
+
+### Browser and React behavior
+
+- Removed partial scheduling, pointer, size-observation, and WebGL capability
+  fallbacks below Royal's Safari 17 browser floor. Missing `ResizeObserver`
+  now fails explicitly instead of leaving element-only layout changes stale.
+
+### Documentation
+
+- Consolidated overlay, displaced-edge, screen-space partition, resize, and
+  depth-policy behavior into the permanent specifications.
+- Removed completed proposals and historical implementation plans from the
+  active documentation set.
+- Recorded the currently failing bundle and packed-renderer size ratchets
+  without raising their ceilings.
+
+## 0.0.1 - 2026-08-02
+
 ### Public API
 
 - Standardized every focused lifecycle union on the `status` discriminator,
@@ -145,12 +175,12 @@ versions identify source-level prerelease checkpoints in this repository.
   release abandoned decode/preparation closures before earlier active work
   settles.
 
-## 0.0.1 - 2026-07-14
+### Initial workspace checkpoint - 2026-07-14
 
 Initial source-level prerelease for application development inside the Royal
 workspace.
 
-### React authoring
+#### React authoring
 
 - Added the `<Canvas>` scene host, orbit-camera controls, frame invalidation,
   picking events, renderer lifecycle observation, and glTF asset status hooks.
@@ -159,14 +189,14 @@ workspace.
 - Defined scene-linear color types, metric units, camera/transform defaults,
   and discriminated loading and failure states.
 
-### Renderer
+#### Renderer
 
 - Added WebGL2 rendering for built-in meshes, lighting, image and virtual
   textures, glTF assets and instances, material variants, picking, and WebXR.
 - Added bounded diagnostics, resource-governor policies, context recovery,
   async demand scheduling, and explicit renderer-root ownership boundaries.
 
-### Packaging and validation
+#### Packaging and validation
 
 - Added narrow package export maps and tarballs that exclude source and build
   metadata.
@@ -175,5 +205,4 @@ workspace.
 - Added unit, property, integration, hardware browser, context-loss, and WebXR
   regression coverage.
 
-The packages remain private and are not available from a registry at this
-checkpoint.
+The packages were not published to a registry at this checkpoint.

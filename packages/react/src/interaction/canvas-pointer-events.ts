@@ -137,7 +137,7 @@ export const attachCanvasPointerEventHandlers = ({
   };
 
   const flushPendingPointerMoves = (): void => {
-    if (pointerMoveFrame !== undefined && typeof globalThis.cancelAnimationFrame === "function") {
+    if (pointerMoveFrame !== undefined) {
       globalThis.cancelAnimationFrame(pointerMoveFrame);
     }
     pointerMoveFrame = undefined;
@@ -172,13 +172,6 @@ export const attachCanvasPointerEventHandlers = ({
     if (!sceneInteractionsRef.current.hasHoverEventTargets) return;
     if (event.buttons !== 0) {
       flushPendingPointerMoves();
-      applyPointerInteraction(event, {
-        picked: pickedTargetAt(event),
-        type: "pointermove",
-      });
-      return;
-    }
-    if (typeof globalThis.requestAnimationFrame !== "function") {
       applyPointerInteraction(event, {
         picked: pickedTargetAt(event),
         type: "pointermove",
@@ -230,7 +223,7 @@ export const attachCanvasPointerEventHandlers = ({
   canvas.addEventListener("pointerleave", handlePointerLeave, true);
   canvas.addEventListener("pointercancel", handlePointerCancel, true);
   return () => {
-    if (pointerMoveFrame !== undefined && typeof globalThis.cancelAnimationFrame === "function") {
+    if (pointerMoveFrame !== undefined) {
       globalThis.cancelAnimationFrame(pointerMoveFrame);
     }
     pointerMoveFrame = undefined;

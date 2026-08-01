@@ -1,26 +1,31 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { decodedTextureKey, type TextureSourceRef } from "../texture/source";
+import {
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
+} from "../texture/sampler";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 
+const versionIdentity = (version: VirtualTextureAssetRef["version"]): readonly unknown[] =>
+  version === undefined
+    ? ["unversioned"]
+    : ["version", typeof version, version];
+
 export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string => JSON.stringify([
-  asset.contentKey ?? asset.manifestUri,
-  asset.version ?? 0,
-  asset.colorSpace ?? "",
-  asset.sampler?.magFilter ?? "",
-  asset.sampler?.minFilter ?? "",
-  asset.sampler?.wrapS ?? "",
-  asset.sampler?.wrapT ?? "",
+  asset.contentKey === undefined
+    ? ["manifest", asset.manifestUri]
+    : ["content", typeof asset.contentKey, asset.contentKey],
+  versionIdentity(asset.version),
+  asset.colorSpace ?? "srgb",
+  canonicalTextureSamplerKey(canonicalTextureSampler(asset)),
 ]);
 
 export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
   decodedTextureKey(asset),
   asset.colorSpace ?? "srgb",
-  asset.sampler?.magFilter ?? "",
-  asset.sampler?.minFilter ?? "",
-  asset.sampler?.wrapS ?? "",
-  asset.sampler?.wrapT ?? "",
+  canonicalTextureSamplerKey(canonicalTextureSampler(asset)),
 ]);
 
 export type VirtualTextureSceneDemand = Readonly<{

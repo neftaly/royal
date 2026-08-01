@@ -1,4 +1,4 @@
-import { gltf, type GltfAssetRef } from "@royal/renderer-core";
+import { gltfAsset, type GltfAssetRef } from "@royal/renderer-core";
 import type { GltfAssetSnapshot } from "@royal/renderer-webgl";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
@@ -23,15 +23,16 @@ const GLTF_STATUS_INPUT_FIELDS = ["bounds", "sceneIndex", "src", "version"] as c
 const validateInputShape = (input: GltfAssetStatusInput): void => {
   if (typeof input === "string") return;
   recordWithAllowedFields(input, GLTF_STATUS_INPUT_FIELDS, "useGltfAssetStatus input");
+  gltfAsset(input);
 };
 
 const resolveInput = (input: GltfAssetStatusInput): GltfAssetRef => {
-  if (typeof input === "string") return gltf(input).asset;
-  return gltf({
+  if (typeof input === "string") return gltfAsset(input);
+  return gltfAsset({
     ...(input.sceneIndex === undefined ? {} : { sceneIndex: input.sceneIndex }),
     src: input.src,
     ...(input.version === undefined ? {} : { version: input.version }),
-  }).asset;
+  });
 };
 
 /** Observes one exact source/version/scene selection without polling renderer frames. */

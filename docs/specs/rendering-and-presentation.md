@@ -193,6 +193,72 @@ color. `OPAQUE` and surviving `MASK` fragments write alpha one; only `BLEND`
 preserves factor/texture/vertex alpha. The choice is a shader feature selected
 before submission, so ordinary opaque fragments pay no dynamic mode branch.
 
+## Screen-space complementary coverage
+
+`screenSpacePartition({ cellSizeCssPixels, count, index })` assigns one
+material to one member of a deterministic, view-local screen-space partition.
+It is accepted only by unlit and edge materials. Standard and wireframe
+materials reject the field instead of approximating it through blending,
+geometry offsets, or draw order. `cellSizeCssPixels` is positive and finite,
+`count` is an integer in `[1, 4096]`, and `index` is an integer in
+`[0, count)`.
+
+Descriptors with equal cell size and count use the same spatial phase, so the
+complete set of indices covers each fragment cell exactly once. Canvas
+presentation scales cells from CSS pixels to backing pixels independently on
+each axis. External XR presentation has no CSS coordinate space, so the same
+numeric cell size is interpreted in each view's presentation pixels and the
+phase begins at that view's viewport origin. The result is stable within a
+view, not a world-space pattern or a promise that left and right eye fragments
+select the same cells.
+
+Partitioned unlit fragments outside their selected cells are discarded, which
+preserves ordinary depth semantics for the selected coverage. Partitioned edge
+resolve writes zero alpha outside selected cells because that full-screen
+resolve does not own scene depth. A one-way partition is visually equivalent
+to full coverage. Picking deliberately ignores this presentation-only
+partition and continues to query exact authored geometry.
+
+The renderer owns one deterministic, lazily allocated R16UI pattern per root
+and shares it across world and overlay presentation. A scene with no
+partitioned material allocates no pattern. This mechanism does not retain a
+screen-sized texture, create a second scene renderer, or make temporal/stereo
+comfort guarantees; those require separate physical-device evidence.
+
+## Always-visible scene overlays
+
+`SceneOverlay` is one independently replaceable, presentation-only lane after
+the ordinary world. It disables depth testing and depth writes, preserves
+authored overlay order and normal color management, creates no picking
+surface, and does not contribute to world depth, transmission input, or depth
+prepasses. Direct overlay meshes are limited to solid-color unlit or wireframe
+materials. The API does not expose arbitrary draw order or raw WebGL depth
+state.
+
+`outlineGltf(...)` is the accepted glTF overlay form. It requires an
+`edgeMaterial`, reuses a currently rendered occurrence's prepared selected
+scene, nested transforms, instances, active LOD and GPU geometry, and creates no
+second source read or geometry upload. The edge lane derives boundary,
+occurrence-boundary, and conservative crease edges through private
+screen-space mask targets. It does not expose authored triangle diagonals as
+wireframe edges. Edge width is in CSS pixels on canvas and presentation pixels
+per external/XR view.
+
+By default, an outline's presentation transform also identifies the rendered
+source occurrence. `sourceTransform` may instead identify a stationary source
+occurrence while `transform` independently places a displaced preview. Source
+identity includes asset version, selected scene, primitive/cohort identity and
+the complete source model transform. A missing or ambiguous source occurrence
+fails before any edge draw; Royal does not fall back to copied application
+geometry or choose LOD from the displaced preview.
+
+When an overlay is active, the root may retain the completed world
+presentation and restore it for overlay-only add, replace, clear, or transform
+updates. That retained target is root-, size-, and context-generation-owned and
+budget-governed. If it cannot be allocated, a complete world render is the
+correct fallback. A scene with no overlay retains neither that presentation nor
+edge targets, programs, or scratch.
+
 ## Transmission and dispersion
 
 Transmission is a screen-space approximation of already-rendered scene color,

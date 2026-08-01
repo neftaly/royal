@@ -8,11 +8,13 @@ import type { VirtualTextureGpuBinding } from "../virtual-texture/runtime-contra
 import {
   canonicalMaterialHasTransmission,
   canonicalMaterialHasVolume,
-  canonicalTextureSampler,
-  canonicalTextureSamplerKey,
   type CanonicalSurfaceMaterial,
   type CanonicalTextureBinding,
 } from "./canonical-material";
+import {
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
+} from "../texture/sampler";
 import {
   SURFACE_FEATURE_ALPHA_BLEND,
   SURFACE_FEATURE_BASE_COLOR_TEXTURE,

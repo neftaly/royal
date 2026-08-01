@@ -1,5 +1,5 @@
 import type { TextureSamplerWrap } from "@royal/renderer-core";
-import type { CanonicalTextureSampler } from "../surface/canonical-material";
+import type { CanonicalTextureSampler } from "../texture/sampler";
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,

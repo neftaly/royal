@@ -52,6 +52,9 @@ const finiteExposureEv100 = (value: number | undefined): number | undefined => {
 /** Creates one public scene. Multipass planning remains renderer-private. */
 export const scene = (options: SceneOptions): Scene => {
   objectWithAllowedFields(options, SCENE_OPTION_FIELDS, 'scene');
+  if (!Array.isArray(options.nodes)) {
+    throw new TypeError('scene nodes must be an array');
+  }
   const exposureEv100 = finiteExposureEv100(options.exposureEv100);
   const toneMapping = options.toneMapping === undefined
     ? undefined

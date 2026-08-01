@@ -32,9 +32,12 @@ non-finite values, illegal ranges, and contradictory options synchronously.
 They SHOULD use `TypeError` for shape/type failures and `RangeError` for numeric
 ranges. Messages identify the Royal operation and field.
 
-`render`, `renderViews`, `pick`, and `flushInvalidated` report failures caused
-by that explicit invocation synchronously. A scheduled RAF has no caller, so
-its failures go to the render-failure observer and lifecycle where applicable.
+Public root calls report validation and other work performed by that invocation
+synchronously. In particular, `setScene`, `setOverlay`, `setSize`, `pick`,
+and `flushInvalidated` do not hide their immediate failures. Work deferred by
+`setScene`, `setOverlay`, or `invalidate` to a scheduled animation frame has
+no synchronous caller, so its failures go to the scheduled-failure observer
+and root snapshot.
 
 ## Progressive failure behavior
 

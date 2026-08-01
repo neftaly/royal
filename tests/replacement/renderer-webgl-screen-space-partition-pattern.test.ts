@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import {
   createScreenSpacePartitionPattern,
   SCREEN_SPACE_PARTITION_PATTERN_BYTES,
+  ScreenSpacePartitionPatternOwner,
   screenSpacePartitionCellIndex,
 } from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
+import { fakeGl } from "./support/canvas-root-harness";
 
 describe("screen-space edge partition", () => {
   it("exposes every two- and three-way partition across common edge orientations", () => {
@@ -48,5 +51,19 @@ describe("screen-space edge partition", () => {
     expect(pattern).toBeInstanceOf(Uint16Array);
     expect(pattern.byteLength).toBe(SCREEN_SPACE_PARTITION_PATTERN_BYTES);
     expect(new Set(pattern).size).toBe(4096);
+  });
+
+  it("releases its budget claim when a WebGL allocation throws", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner();
+    const owner = new ScreenSpacePartitionPatternOwner(gl, budget);
+    vi.mocked(gl.createSampler).mockImplementationOnce(() => {
+      throw new Error("injected sampler allocation failure");
+    });
+
+    expect(() => owner.ensure()).toThrow("injected sampler allocation failure");
+    expect(budget.snapshot().retainedBytes).toBe(0);
+    expect(gl.deleteTexture).toHaveBeenCalledOnce();
+    expect(() => owner.ensure()).not.toThrow();
   });
 });

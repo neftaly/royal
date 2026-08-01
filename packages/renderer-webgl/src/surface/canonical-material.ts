@@ -4,8 +4,6 @@ import {
   type ScreenSpacePartition,
   type TextureAssetRef,
   type TextureColorSpace,
-  type TextureSamplerFilter,
-  type TextureSamplerWrap,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
@@ -14,14 +12,12 @@ import {
   textureStorageKey,
   type TextureSourceRef,
 } from "../texture/source";
+import {
+  canonicalTextureSampler,
+  canonicalTextureSamplerKey,
+  type CanonicalTextureSampler,
+} from "../texture/sampler";
 import type { CanonicalTextureCoordinates } from "./texture-coordinates";
-
-export type CanonicalTextureSampler = Readonly<{
-  magFilter: "linear" | "nearest";
-  minFilter: TextureSamplerFilter;
-  wrapS: TextureSamplerWrap;
-  wrapT: TextureSamplerWrap;
-}>;
 
 export type CanonicalTextureBinding = Readonly<{
   colorSpace: TextureColorSpace;
@@ -176,23 +172,6 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
       && (material.thicknessTextureCoordinates?.row0[3] ?? 0) === set
   );
 };
-
-export const canonicalTextureSampler = (
-  asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "sampler">,
-): CanonicalTextureSampler => ({
-  magFilter: asset.sampler?.magFilter ?? "linear",
-  minFilter: asset.sampler?.minFilter ?? "linear-mipmap-linear",
-  wrapS: asset.sampler?.wrapS ?? "clamp-to-edge",
-  wrapT: asset.sampler?.wrapT ?? "clamp-to-edge",
-});
-
-/** Stable GPU sampler identity for one normalized authored sampler recipe. */
-export const canonicalTextureSamplerKey = (sampler: CanonicalTextureSampler): string => JSON.stringify([
-  sampler.magFilter,
-  sampler.minFilter,
-  sampler.wrapS,
-  sampler.wrapT,
-]);
 
 const textureBinding = (
   asset: TextureSourceRef,

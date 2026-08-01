@@ -322,13 +322,7 @@ const defaultPlatform = (): CanvasRootPlatform => ({
     }
   },
   requestDelay: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-  requestFrame: (callback) => {
-    if (typeof globalThis.requestAnimationFrame === "function") {
-      globalThis.requestAnimationFrame(callback);
-    } else {
-      queueMicrotask(callback);
-    }
-  },
+  requestFrame: (callback) => globalThis.requestAnimationFrame(callback),
 });
 
 const lazyBrowserTextureDecoder = (
@@ -662,12 +656,14 @@ export class CanvasRoot implements RendererRoot {
     this.#surfaceGpu = new SurfaceGpuOwner(
       this.#gl,
       this.#persistentGpuBudget,
-      () => this.#invalidatePresentation(),
-      (error) => this.#captureScheduledFailure(error),
-      this.#frameUploadBudget,
-      this.#etc2Available,
-      "world",
       this.#screenSpacePartitionPattern,
+      {
+        etc2Available: this.#etc2Available,
+        onChanged: () => this.#invalidatePresentation(),
+        onFailure: (error) => this.#captureScheduledFailure(error),
+        presentationLane: "world",
+        uploadBudget: this.#frameUploadBudget,
+      },
     );
     this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
       onAssetChanged: () => {
@@ -1103,7 +1099,10 @@ export class CanvasRoot implements RendererRoot {
   }
 
   subscribe = (listener: () => void): (() => void) => {
-    if (this.#disposed) return () => undefined;
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
     return this.#listeners.subscribe(listener);
   };
 
@@ -1115,30 +1114,52 @@ export class CanvasRoot implements RendererRoot {
 
   /** Subscribes only to semantic canvas-size changes. */
   subscribeSize = (listener: () => void): (() => void) => {
-    if (this.#disposed) return () => undefined;
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
     return this.#sizeListeners.subscribe(listener);
   };
 
   /** Subscribes only to one exact glTF source/version/selected-scene identity. */
-  subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) =>
-    this.#gltfAssets.subscribe(asset, listener);
+  subscribeGltfAsset = (asset: GltfAssetRef, listener: () => void): (() => void) => {
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
+    return this.#gltfAssets.subscribe(asset, listener);
+  };
 
   /** Subscribes only to one exact offline environment source/version identity. */
   subscribePrefilteredEnvironment = (
     environment: PrefilteredEnvironmentLight,
     listener: () => void,
-  ): (() => void) => this.#environmentAssets.subscribe(environment, listener);
+  ): (() => void) => {
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
+    return this.#environmentAssets.subscribe(environment, listener);
+  };
 
   /** Subscribes only to one exact decoded texture identity. */
-  subscribeTextureAsset = (asset: TextureAssetRef, listener: () => void): (() => void) =>
-    this.#textureAssets.subscribe(asset, listener);
+  subscribeTextureAsset = (asset: TextureAssetRef, listener: () => void): (() => void) => {
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
+    return this.#textureAssets.subscribe(asset, listener);
+  };
 
   /** Subscribes only to one exact authored VT identity. */
   subscribeVirtualTextureAsset = (
     asset: VirtualTextureAssetRef,
     listener: () => void,
   ): (() => void) => {
-    if (this.#disposed) return () => undefined;
+    if (this.#disposed) {
+      requireRetainedListener(listener);
+      return () => undefined;
+    }
     const key = virtualTextureAssetKey(asset);
     return this.#virtualTextureListeners.subscribe(key, listener);
   };
@@ -1393,12 +1414,14 @@ export class CanvasRoot implements RendererRoot {
       this.#overlayGpu ??= new SurfaceGpuOwner(
         this.#gl,
         this.#persistentGpuBudget,
-        () => this.#invalidateOverlayPresentation(),
-        (error) => this.#captureScheduledFailure(error),
-        new FrameUploadBudgetOwner(),
-        this.#etc2Available,
-        "overlay",
         this.#screenSpacePartitionPattern,
+        {
+          etc2Available: this.#etc2Available,
+          onChanged: () => this.#invalidateOverlayPresentation(),
+          onFailure: (error) => this.#captureScheduledFailure(error),
+          presentationLane: "overlay",
+          uploadBudget: new FrameUploadBudgetOwner(),
+        },
       );
       this.#overlayGpu.setScene(prepared);
       this.#overlayResourcesPending = this.#overlayGpu.surfacePublicationsPending();

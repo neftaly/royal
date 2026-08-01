@@ -41,6 +41,17 @@ const validateInput = (input: TextureAssetStatusInput): void => {
     throw new TypeError("useTextureAssetStatus input must be a source string or texture asset identity");
   }
   recordWithAllowedFields(input, TEXTURE_STATUS_INPUT_FIELDS, "useTextureAssetStatus input");
+  textureAsset({
+    ...(input.kind === "asset" && input.colorSpace !== undefined
+      ? { colorSpace: input.colorSpace }
+      : {}),
+    ...(input.contentKey === undefined ? {} : { contentKey: input.contentKey }),
+    ...(input.kind === "asset" && input.sampler !== undefined
+      ? { sampler: input.sampler }
+      : {}),
+    src: input.src,
+    ...(input.version === undefined ? {} : { version: input.version }),
+  });
 };
 
 const resolveInput = (input: TextureAssetStatusInput): TextureAssetRef => {

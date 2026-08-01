@@ -376,6 +376,46 @@ describe("replacement React public API", () => {
     expect(html).toContain("<output>idle</output>");
   });
 
+  it("validates presentation-only fields on full focused-status refs", () => {
+    const InvalidGltf = () => createElement("output", null, useGltfAssetStatus({
+      bounds: { max: [1, 1, Number.NaN], min: [-1, -1, -1] },
+      src: "/model.glb",
+    }).status);
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(InvalidGltf),
+    ))).toThrow("glTF asset bounds max[2] must be finite");
+
+    const InvalidTexture = () => createElement("output", null, useTextureAssetStatus({
+      kind: "asset",
+      sampler: { wrapS: "invalid" },
+      src: "/texture.png",
+    } as unknown as TextureAssetStatusInput).status);
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(InvalidTexture),
+    ))).toThrow("texture sampler wrapS must be one of");
+
+    const InvalidEnvironment = () => createElement(
+      "output",
+      null,
+      usePrefilteredEnvironmentStatus({
+        kind: "environment-light",
+        radianceScaleNits: -1,
+        rotation: [0, 0, 0],
+        source: "royal-prefiltered-v1",
+        src: "/studio.ktx",
+      }).status,
+    );
+    expect(() => renderToStaticMarkup(createElement(
+      Canvas,
+      { scene: emptyScene },
+      createElement(InvalidEnvironment),
+    ))).toThrow("environment radianceScaleNits must be non-negative");
+  });
+
   it("rejects symbol fields in focused-status identities", () => {
     const invalid = { src: "/model.glb", [Symbol("hidden")]: true };
     const Status = () => createElement(
@@ -643,6 +683,18 @@ describe("replacement React public API", () => {
       expect(canvas.getBoundingClientRect).not.toHaveBeenCalled();
       release();
       expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("fails explicitly when the supported browser observation primitive is absent", () => {
+    vi.stubGlobal("ResizeObserver", undefined);
+    try {
+      expect(() => observeCanvasSize(
+        {} as HTMLCanvasElement,
+        {} as RendererRoot,
+      )).toThrow("Royal Canvas requires ResizeObserver");
     } finally {
       vi.unstubAllGlobals();
     }
