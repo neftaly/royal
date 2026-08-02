@@ -186,6 +186,8 @@ describe("ordinary texture GPU owner", () => {
     expect(replacement[0]!.texture).not.toBeNull();
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.createTexture).toHaveBeenCalledTimes(2);
+    expect(owner.takeReleasedStorageKeys()).toEqual([first.storageKey]);
+    expect(owner.takeReleasedStorageKeys()).toEqual([]);
     expect(owner.takeUploadedStorageKeys()).toEqual([second.storageKey]);
     expect(owner.takeDeniedStorageKeys()).toEqual([]);
     expect(budget.snapshot()).toEqual({

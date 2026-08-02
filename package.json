@@ -1,7 +1,7 @@
 {
   "name": "royal",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
     "bench:vt-pages": "node scripts/virtual-texture-page-perf.ts",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:bundle-size:details": "node scripts/check-bundle-size.mjs --details",
+    "report:bundle-size": "node scripts/check-bundle-size.mjs --json",
     "check:vt-pages-build": "node scripts/virtual-texture-page-perf.ts --build-only",
     "check:package-consumer": "node scripts/package-consumer-smoke.mjs",
     "check:package-imports": "node scripts/package-import-smoke.mjs",

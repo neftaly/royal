@@ -1014,6 +1014,7 @@ export class CanvasRoot implements RendererRoot {
       this.#installingScene = false;
     }
     this.#surfaceGpu.setScene(prepared);
+    this.#invalidateReleasedTextureResidency();
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
     this.#cameraSource.commit(camera);
@@ -1536,6 +1537,7 @@ export class CanvasRoot implements RendererRoot {
       this.#textureResourcesPending = false;
     }
     this.#surfaceGpu.setScene(prepared);
+    this.#invalidateReleasedTextureResidency();
     if (this.#overlayInput !== null) this.#installOverlay();
     this.#reconcilePrefilteredEnvironment(prepared);
     this.#reconcileVirtualTextureRuntime(prepared);
@@ -1974,6 +1976,7 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #releaseUploadedTextures(): boolean {
+    this.#invalidateReleasedTextureResidency();
     // Keep the bounded decode handoff alive until the lazy automatic-VT owner can claim it.
     if (
       this.#automaticVirtualTexturing
@@ -1984,6 +1987,12 @@ export class CanvasRoot implements RendererRoot {
     this.#textureAssets.releaseUploaded(uploaded);
     this.#textureAssets.rejectGpuStorage(denied);
     return uploaded.length !== 0;
+  }
+
+  #invalidateReleasedTextureResidency(): void {
+    this.#textureAssets.invalidateStorageResidency(
+      this.#surfaceGpu.takeReleasedTextureStorageKeys(),
+    );
   }
 
   #progressiveResourcesSettled(): boolean {

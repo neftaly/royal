@@ -5,6 +5,19 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.3 - 2026-08-02
+
+### Correctness
+
+- Reacquire decoded image pixels when a live root retires and later reclaims
+  ordinary GPU texture storage, preventing closed browser image sources from
+  being uploaded after transient scene replacement or React hot refresh.
+
+### Tooling
+
+- Added deterministic JSON bundle attribution for Draco, Meshopt, KTX2, SVG,
+  environment, transmission, and XR without weakening the existing size gates.
+
 ## 0.0.2 - 2026-08-02
 
 ### Correctness

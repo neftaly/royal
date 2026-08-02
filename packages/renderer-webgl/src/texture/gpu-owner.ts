@@ -72,6 +72,7 @@ export class TextureGpuOwner {
   readonly #deferredStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
   readonly #etc2Available: boolean;
+  readonly #releasedStorageKeys = new Set<string>();
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
   readonly #uploadedStorageKeys = new Set<string>();
@@ -100,6 +101,7 @@ export class TextureGpuOwner {
     this.#textures.clear();
     this.#deniedStorageKeys.clear();
     this.#deferredStorageKeys.clear();
+    this.#releasedStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
   }
 
@@ -110,6 +112,7 @@ export class TextureGpuOwner {
     this.#textures.clear();
     this.#deniedStorageKeys.clear();
     this.#deferredStorageKeys.clear();
+    this.#releasedStorageKeys.clear();
     this.#uploadedStorageKeys.clear();
     this.#unpackStateKnown = false;
   }
@@ -235,6 +238,7 @@ export class TextureGpuOwner {
       this.#gl.deleteTexture(resource.texture);
       this.#budget.release(resource.budgetIdentity);
       this.#textures.delete(key);
+      this.#releasedStorageKeys.add(key);
       this.#uploadedStorageKeys.delete(key);
       this.#deniedStorageKeys.delete(key);
       this.#deferredStorageKeys.delete(key);
@@ -295,6 +299,13 @@ export class TextureGpuOwner {
     if (this.#uploadedStorageKeys.size === 0) return EMPTY_STORAGE_KEYS;
     const keys = [...this.#uploadedStorageKeys];
     this.#uploadedStorageKeys.clear();
+    return keys;
+  }
+
+  takeReleasedStorageKeys(): readonly string[] {
+    if (this.#releasedStorageKeys.size === 0) return EMPTY_STORAGE_KEYS;
+    const keys = [...this.#releasedStorageKeys];
+    this.#releasedStorageKeys.clear();
     return keys;
   }
 

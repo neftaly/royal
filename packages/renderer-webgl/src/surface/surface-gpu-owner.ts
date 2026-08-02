@@ -544,6 +544,10 @@ export class SurfaceGpuOwner {
     return this.#textureGpu.takeUploadedStorageKeys();
   }
 
+  takeReleasedTextureStorageKeys(): readonly string[] {
+    return this.#textureGpu.takeReleasedStorageKeys();
+  }
+
   takeDeniedTextureStorageKeys(): readonly string[] {
     const denied = this.#textureGpu.takeDeniedStorageKeys();
     if (denied.length !== 0) {

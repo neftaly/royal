@@ -390,6 +390,28 @@ export class TextureAssetOwner {
     }
   }
 
+  /** Reacquires decoded pixels when a previously resident WebGL copy is retired. */
+  invalidateStorageResidency(storageKeys: readonly string[]): void {
+    if (this.#disposed || storageKeys.length === 0) return;
+    const touched = new Set<AssetEntry>();
+    for (const storageKey of storageKeys) {
+      const entry = this.#storageEntries.get(storageKey);
+      if (entry === undefined || !entry.residentStorageKeys.delete(storageKey)) continue;
+      touched.add(entry);
+    }
+    for (const entry of touched) {
+      if (
+        !entry.decodedReleased
+        || entry.snapshot.status === "error"
+        || !storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)
+      ) continue;
+      entry.snapshot = { status: "loading" };
+      this.#platform.onSnapshotChanged(entry.key);
+      this.#publish(entry.key);
+      this.#queuePreparation(entry);
+    }
+  }
+
   /** Settles denied GPU representations without misclassifying decode readiness. */
   rejectGpuStorage(storageKeys: readonly string[]): void {
     if (this.#disposed || storageKeys.length === 0) return;

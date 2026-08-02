@@ -223,6 +223,36 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(decode).toHaveBeenCalledTimes(1);
   });
 
+  it("reacquires decoded pixels after resident GPU storage is retired", async () => {
+    const first = decoded();
+    const second = decoded();
+    const decode = vi.fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const onSnapshotChanged = vi.fn();
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged,
+    });
+    const asset = imageTexture("/reinstalled.avif");
+    const storageKey = textureStorageKey(asset);
+    owner.reconcile([asset]);
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+    owner.releaseUploaded([storageKey]);
+    expect(first.close).toHaveBeenCalledOnce();
+
+    owner.invalidateStorageResidency([storageKey]);
+
+    expect(owner.decoded(asset)).toBeUndefined();
+    expect(owner.getSnapshot(asset)).toEqual({ status: "loading" });
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+    expect(owner.decoded(asset)).toBe(second);
+    expect(onSnapshotChanged).toHaveBeenCalled();
+  });
+
   it("reports retained encoded vector authority independently of decoded handoff bytes", async () => {
     const source = {
       ...decoded(),

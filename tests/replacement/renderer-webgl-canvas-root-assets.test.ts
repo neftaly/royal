@@ -164,16 +164,19 @@ describe("canvas root asset publication", () => {
   });
 
   it("shares claimed texture preparation across roots before either is visible", async () => {
+    const decodedSources = [{}, {}] as ImageBitmap[];
+    const closeDecoded = vi.fn();
     const decodeTexture = vi.fn(async () => ({
+      close: closeDecoded,
       height: 8,
-      source: {} as ImageBitmap,
+      source: decodedSources[decodeTexture.mock.calls.length - 1]!,
       width: 8,
     }));
     const readGltf = vi.fn(async () => staticTexturedTriangleGlb(
       undefined,
       "/shared-counter.avif",
     ));
-    const { flushScheduledFrames, root } = harness({ decodeTexture, readGltf });
+    const { canvas, flushScheduledFrames, root } = harness({ decodeTexture, readGltf });
     const first = gltfAsset("/first-counter.gltf");
     const second = gltfAsset("/second-counter.gltf");
     const empty = scene({
@@ -195,11 +198,24 @@ describe("canvas root asset publication", () => {
 
     root.setScene(visible(first), [first, second]);
     flushScheduledFrames();
+    expect(closeDecoded).toHaveBeenCalledOnce();
     root.setScene(empty, [first, second]);
     root.setScene(visible(second), [first, second]);
 
-    await Promise.resolve();
-    expect(decodeTexture).toHaveBeenCalledOnce();
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(root.getTextureAssetSnapshot(
+      imageTexture("/shared-counter.avif"),
+    ).status).toBe("ready"));
+    flushScheduledFrames();
+    expect(canvas.gl.texSubImage2D).toHaveBeenLastCalledWith(
+      canvas.gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      canvas.gl.RGBA,
+      canvas.gl.UNSIGNED_BYTE,
+      decodedSources[1],
+    );
     expect(readGltf).toHaveBeenCalledTimes(2);
 
     root.setScene(empty, []);

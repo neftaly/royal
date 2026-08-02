@@ -4,6 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { build } from 'vite';
+import {
+  attributeCapabilities,
+  bundleCapabilityDefinitions,
+} from './bundle-size-attribution.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureRoot = path.join(repoRoot, 'apps/examples-react/bundle-size');
@@ -11,10 +15,24 @@ const budget = JSON.parse(readFileSync(
   path.join(repoRoot, 'scripts/bundle-size-budget.json'),
   'utf8',
 ));
-const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'royal-bundle-size-'));
+const unsupportedArguments = process.argv.slice(2)
+  .filter((argument) => argument !== '--details' && argument !== '--json');
+if (unsupportedArguments.length > 0) {
+  throw new Error(`Unsupported argument(s): ${unsupportedArguments.join(', ')}`);
+}
 const showDetails = process.argv.includes('--details');
+const jsonOutput = process.argv.includes('--json');
+if (showDetails && jsonOutput) {
+  throw new Error('--details and --json are mutually exclusive');
+}
+const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'royal-bundle-size-'));
 
 const gzipBytes = (filePath) => gzipSync(readFileSync(filePath), { level: 9 }).byteLength;
+
+const reportModuleId = (id) => {
+  const relative = path.relative(repoRoot, id);
+  return relative.startsWith('..') || path.isAbsolute(relative) ? id : relative;
+};
 
 const buildRendererAttribution = async () => {
   const packageRoot = path.join(repoRoot, 'packages/renderer-webgl');
@@ -124,7 +142,8 @@ const buildFixture = async (name) => {
   visitInitialChunk(entry);
 
   const jsFiles = readdirSync(path.join(outputDirectory, 'assets'))
-    .filter((file) => file.endsWith('.js'));
+    .filter((file) => file.endsWith('.js'))
+    .sort();
   const gzipByFile = Object.fromEntries(jsFiles.map((file) => [
     file,
     gzipBytes(path.join(outputDirectory, 'assets', file)),
@@ -141,7 +160,26 @@ const buildFixture = async (name) => {
       );
     }
   }
+  const chunks = jsFiles.map((file) => {
+    const outputFile = `assets/${file}`;
+    const initial = initialFiles.has(outputFile);
+    const worker = file.includes('-worker-');
+    if (initial && worker) {
+      throw new Error(`Bundle chunk ${outputFile} cannot be both initial and a worker`);
+    }
+    return {
+      file: outputFile,
+      gzipBytes: gzipByFile[file],
+      initial,
+      modules: (renderedModulesByFile.get(outputFile) ?? []).map(([id, renderedBytes]) => ({
+        id: reportModuleId(id),
+        renderedBytes,
+      })),
+      worker,
+    };
+  });
   return {
+    chunks,
     gzipByFile,
     initialFiles,
     initialGzipBytes: Array.from(initialFiles)
@@ -161,23 +199,80 @@ const buildFixture = async (name) => {
 
 const formatBytes = (bytes) => `${(bytes / 1000).toFixed(1)} kB`;
 
+const fixtureReport = (fixture) => ({
+  files: fixture.chunks.map(({ file, gzipBytes: bytes, initial, worker }) => ({
+    file,
+    gzipBytes: bytes,
+    initial,
+    worker,
+  })),
+  gzipBytes: {
+    initial: fixture.initialGzipBytes,
+    lazy: fixture.lazyGzipBytes,
+    total: fixture.totalGzipBytes,
+    worker: fixture.workerGzipBytes,
+  },
+});
+
+const capabilityReport = (fixtures) => {
+  const report = {};
+  for (const fixtureName of new Set(bundleCapabilityDefinitions.map(({ fixture }) => fixture))) {
+    Object.assign(report, attributeCapabilities(
+      fixtures[fixtureName].chunks,
+      bundleCapabilityDefinitions.filter(({ fixture }) => fixture === fixtureName),
+    ));
+  }
+  return Object.fromEntries(
+    Object.entries(report).sort(([left], [right]) => left.localeCompare(right)),
+  );
+};
+
 try {
   const react = await buildFixture('react');
   const royal = await buildFixture('royal');
   const gltf = await buildFixture('gltf');
+  const environment = await buildFixture('environment');
+  const xr = await buildFixture('xr');
   const incrementalGzipBytes = royal.initialGzipBytes - react.initialGzipBytes;
   const gltfIncrementalGzipBytes = gltf.initialGzipBytes - royal.initialGzipBytes;
   const totalIncrementalGzipBytes = royal.totalGzipBytes - react.initialGzipBytes;
+  const capabilities = capabilityReport({ environment, gltf, xr });
+  const report = {
+    capabilities,
+    compression: {
+      algorithm: 'gzip',
+      level: 9,
+      note: 'Capability gzip upper bounds count whole emitted chunks and may overlap. Matched module rendered bytes retain published-module granularity and are not an exact division of shared source contributions.',
+    },
+    fixtures: {
+      environment: fixtureReport(environment),
+      gltf: fixtureReport(gltf),
+      react: fixtureReport(react),
+      royal: fixtureReport(royal),
+      xr: fixtureReport(xr),
+    },
+    measurements: {
+      gltfAuthoringDeltaGzipBytes: gltfIncrementalGzipBytes,
+      royalIncrementalGzipBytes: incrementalGzipBytes,
+      royalOnlyGraphGzipBytes: totalIncrementalGzipBytes,
+    },
+    phaseSemantics: 'Initial and lazy partition emitted JavaScript; worker is a subset of lazy; total counts each fixture file once.',
+    schemaVersion: 1,
+  };
 
-  console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
-  console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
-  console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
-  console.log(`Royal glTF initial:   ${formatBytes(gltf.initialGzipBytes)} gzip`);
-  console.log(`glTF authoring delta: ${formatBytes(gltfIncrementalGzipBytes)} gzip`);
-  console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
-  console.log(`Royal worker assets:  ${formatBytes(royal.workerGzipBytes)} gzip`);
-  console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
-  console.log(`Royal-only graph:     ${formatBytes(totalIncrementalGzipBytes)} gzip`);
+  if (jsonOutput) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(`React baseline:       ${formatBytes(react.initialGzipBytes)} gzip`);
+    console.log(`Royal initial:        ${formatBytes(royal.initialGzipBytes)} gzip`);
+    console.log(`Royal incremental:    ${formatBytes(incrementalGzipBytes)} gzip`);
+    console.log(`Royal glTF initial:   ${formatBytes(gltf.initialGzipBytes)} gzip`);
+    console.log(`glTF authoring delta: ${formatBytes(gltfIncrementalGzipBytes)} gzip`);
+    console.log(`Royal lazy chunks:    ${formatBytes(royal.lazyGzipBytes)} gzip`);
+    console.log(`Royal worker assets:  ${formatBytes(royal.workerGzipBytes)} gzip`);
+    console.log(`Royal deployed JS:    ${formatBytes(royal.totalGzipBytes)} gzip`);
+    console.log(`Royal-only graph:     ${formatBytes(totalIncrementalGzipBytes)} gzip`);
+  }
   if (showDetails) {
     console.log("Exact gzip bytes:", JSON.stringify({
       gltfAuthoringDelta: gltfIncrementalGzipBytes,
@@ -213,50 +308,58 @@ try {
         console.log(`${String(bytes).padStart(7)}  ${path.relative(repoRoot, id)}`);
       }
     }
+    console.log('Optional capability whole-chunk gzip upper bounds:');
+    for (const [name, attribution] of Object.entries(capabilities)) {
+      console.log(
+        `${name.padEnd(14)} initial ${String(attribution.gzipWholeChunkUpperBoundBytes.initial).padStart(7)}  lazy ${String(attribution.gzipWholeChunkUpperBoundBytes.lazy).padStart(7)}  worker ${String(attribution.gzipWholeChunkUpperBoundBytes.worker).padStart(7)}  total ${String(attribution.gzipWholeChunkUpperBoundBytes.total).padStart(7)}`,
+      );
+    }
   }
 
-  const failures = [];
-  if (royal.initialGzipBytes > budget.royalInitialGzipBytes) {
-    failures.push(
-      `Royal initial gzip ${royal.initialGzipBytes} exceeds ${budget.royalInitialGzipBytes}`,
-    );
+  if (!jsonOutput) {
+    const failures = [];
+    if (royal.initialGzipBytes > budget.royalInitialGzipBytes) {
+      failures.push(
+        `Royal initial gzip ${royal.initialGzipBytes} exceeds ${budget.royalInitialGzipBytes}`,
+      );
+    }
+    if (incrementalGzipBytes > budget.royalIncrementalGzipBytes) {
+      failures.push(
+        `Royal incremental gzip ${incrementalGzipBytes} exceeds ${budget.royalIncrementalGzipBytes}`,
+      );
+    }
+    if (gltf.initialGzipBytes > budget.royalGltfInitialGzipBytes) {
+      failures.push(
+        `Royal glTF initial gzip ${gltf.initialGzipBytes} exceeds ${budget.royalGltfInitialGzipBytes}`,
+      );
+    }
+    if (gltfIncrementalGzipBytes > budget.royalGltfIncrementalGzipBytes) {
+      failures.push(
+        `Royal glTF authoring delta ${gltfIncrementalGzipBytes} exceeds ${budget.royalGltfIncrementalGzipBytes}`,
+      );
+    }
+    if (royal.lazyGzipBytes > budget.royalLazyGzipBytes) {
+      failures.push(
+        `Royal lazy gzip ${royal.lazyGzipBytes} exceeds ${budget.royalLazyGzipBytes}`,
+      );
+    }
+    if (royal.workerGzipBytes > budget.royalWorkerGzipBytes) {
+      failures.push(
+        `Royal worker gzip ${royal.workerGzipBytes} exceeds ${budget.royalWorkerGzipBytes}`,
+      );
+    }
+    if (royal.totalGzipBytes > budget.royalTotalGzipBytes) {
+      failures.push(
+        `Royal deployed JS gzip ${royal.totalGzipBytes} exceeds ${budget.royalTotalGzipBytes}`,
+      );
+    }
+    if (totalIncrementalGzipBytes > budget.royalTotalIncrementalGzipBytes) {
+      failures.push(
+        `Royal-only main graph gzip ${totalIncrementalGzipBytes} exceeds ${budget.royalTotalIncrementalGzipBytes}`,
+      );
+    }
+    if (failures.length > 0) throw new Error(failures.join('\n'));
   }
-  if (incrementalGzipBytes > budget.royalIncrementalGzipBytes) {
-    failures.push(
-      `Royal incremental gzip ${incrementalGzipBytes} exceeds ${budget.royalIncrementalGzipBytes}`,
-    );
-  }
-  if (gltf.initialGzipBytes > budget.royalGltfInitialGzipBytes) {
-    failures.push(
-      `Royal glTF initial gzip ${gltf.initialGzipBytes} exceeds ${budget.royalGltfInitialGzipBytes}`,
-    );
-  }
-  if (gltfIncrementalGzipBytes > budget.royalGltfIncrementalGzipBytes) {
-    failures.push(
-      `Royal glTF authoring delta ${gltfIncrementalGzipBytes} exceeds ${budget.royalGltfIncrementalGzipBytes}`,
-    );
-  }
-  if (royal.lazyGzipBytes > budget.royalLazyGzipBytes) {
-    failures.push(
-      `Royal lazy gzip ${royal.lazyGzipBytes} exceeds ${budget.royalLazyGzipBytes}`,
-    );
-  }
-  if (royal.workerGzipBytes > budget.royalWorkerGzipBytes) {
-    failures.push(
-      `Royal worker gzip ${royal.workerGzipBytes} exceeds ${budget.royalWorkerGzipBytes}`,
-    );
-  }
-  if (royal.totalGzipBytes > budget.royalTotalGzipBytes) {
-    failures.push(
-      `Royal deployed JS gzip ${royal.totalGzipBytes} exceeds ${budget.royalTotalGzipBytes}`,
-    );
-  }
-  if (totalIncrementalGzipBytes > budget.royalTotalIncrementalGzipBytes) {
-    failures.push(
-      `Royal-only main graph gzip ${totalIncrementalGzipBytes} exceeds ${budget.royalTotalIncrementalGzipBytes}`,
-    );
-  }
-  if (failures.length > 0) throw new Error(failures.join('\n'));
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
 }

@@ -5,7 +5,7 @@ descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
 hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
 canvas rendering.
 
-Royal is an open-source prerelease at `0.0.2`. Its intended behavior and
+Royal is an open-source prerelease at `0.0.3`. Its intended behavior and
 current conformance are documented in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained
@@ -62,6 +62,7 @@ pnpm test
 pnpm check:package-imports
 pnpm check:package-consumer
 pnpm check:bundle-size:details
+pnpm report:bundle-size
 pnpm check:vt-pages-build
 pnpm bench:vt-pages
 ```
@@ -73,6 +74,15 @@ The Royal bundle baseline tracks total initial gzip and the incremental Royal
 cost separately. glTF, VT, IBL, codecs, and XR have distinct reachable and
 lazy-byte gates; unused or deferred features are not counted as working merely
 because a type or research implementation exists.
+
+`report:bundle-size` emits deterministic JSON attribution for Draco, Meshopt,
+KTX2, SVG, environment, transmission, and XR. Capability gzip values are
+named whole-chunk upper bounds and may overlap when Rollup shares a chunk;
+matched rendered-module bytes retain the published module's granularity without
+pretending shared source or gzip can be divided exactly. Initial and lazy
+partition emitted JavaScript, worker is a subset of lazy, and total counts each
+fixture file once. The report is diagnostic; `check:bundle-size` owns budget
+enforcement. Neither command claims runtime execution or network transfer.
 
 `check:vt-pages-build` verifies that the VT2 page-generation and page-table
 benchmark still compiles against the current source graph. `bench:vt-pages`
