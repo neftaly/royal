@@ -502,6 +502,15 @@ const sameGltfAssetClaims = (
 ): boolean => left.length === right.length
   && left.every((asset, index) => gltfAssetKey(asset) === gltfAssetKey(right[index]!));
 
+const sameGltfAssetClaimSet = (
+  left: readonly GltfAssetRef[],
+  right: readonly GltfAssetRef[],
+): boolean => {
+  if (left.length !== right.length) return false;
+  const rightKeys = new Set(right.map(gltfAssetKey));
+  return left.every((asset) => rightKeys.has(gltfAssetKey(asset)));
+};
+
 /** Root-local lifecycle, canonical surface, picking, and WebGL state authority. */
 export class CanvasRoot implements RendererRoot {
   readonly #asyncPreparation: AsyncPreparationOwner;
@@ -998,6 +1007,7 @@ export class CanvasRoot implements RendererRoot {
       camera.camera,
       this.#getDecodedTexture,
       this.#isTexturePending,
+      { automaticInstancingExcludedAssets: this.#automaticInstancingExcludedAssets() },
     );
     this.#updateClearColor(scene.clearColor);
     this.#surfaceScene = prepared;
@@ -1041,8 +1051,14 @@ export class CanvasRoot implements RendererRoot {
       throw new TypeError("Royal overlay requires a validated scene overlay");
     }
     if (overlay === this.#overlayInput) return;
+    const previousExclusions = this.#automaticInstancingExcludedAssets();
     this.#overlayInput = overlay;
-    this.#installOverlay();
+    const nextExclusions = this.#automaticInstancingExcludedAssets();
+    if (
+      this.#surfaceSceneInput !== null
+      && !sameGltfAssetClaimSet(previousExclusions, nextExclusions)
+    ) this.#refreshPreparedScene();
+    else this.#installOverlay();
     this.#reconcileGltfAssets();
     this.#clock.retry();
     this.#invalidateOverlayPresentation();
@@ -1351,6 +1367,14 @@ export class CanvasRoot implements RendererRoot {
     this.#invalidateOverlayPresentation();
   }
 
+  #automaticInstancingExcludedAssets(): readonly GltfAssetRef[] {
+    const assets: GltfAssetRef[] = [];
+    for (const node of this.#overlayInput?.nodes ?? []) {
+      if (node.kind === "outline-gltf") assets.push(node.asset);
+    }
+    return normalizedGltfAssetClaims(assets);
+  }
+
   #installOverlay(): void {
     const input = this.#overlayInput;
     const baseInput = this.#surfaceSceneInput;
@@ -1523,6 +1547,7 @@ export class CanvasRoot implements RendererRoot {
       camera.camera,
       this.#getDecodedTexture,
       this.#isTexturePending,
+      { automaticInstancingExcludedAssets: this.#automaticInstancingExcludedAssets() },
     );
     this.#surfaceScene = prepared;
     this.#installingScene = true;

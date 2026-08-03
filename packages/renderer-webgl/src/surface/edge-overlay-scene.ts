@@ -99,7 +99,7 @@ export const prepareCanonicalEdgeOverlayScene = (
     camera,
     undefined,
     undefined,
-    { includeLighting: false, includePicking: false },
+    { automaticInstancing: false, includeLighting: false, includePicking: false },
   );
   const presentationOccurrenceByNode = new Map<GltfNode, number>();
   for (let index = 0; index < nodes.length; index += 1) {

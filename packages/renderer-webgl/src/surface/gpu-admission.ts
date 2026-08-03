@@ -6,11 +6,12 @@ export const surfaceUsesTextureCoordinateSet = (
   set: 0 | 1,
 ): boolean => canonicalMaterialUsesTextureCoordinateSet(surface.material, set);
 
-export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): string => {
-  const geometryBaseKey = surface.material.kind === "standard"
+/** Vertex streams required by one surface, independent of source geometry identity. */
+export const surfaceGeometryLayoutKey = (surface: CanonicalDrawSurface): string => {
+  const normalKey = surface.material.kind === "standard"
     && surface.geometry.normals !== undefined
-    ? `${surface.geometry.key}:normal`
-    : `${surface.geometry.key}:position`;
+    ? "normal"
+    : "position";
   const tangentKey = surface.material.kind === "standard"
     && surface.material.normalAsset !== undefined
     && surface.material.normalTextureCoordinates === undefined
@@ -22,8 +23,11 @@ export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): strin
   const uvKey = usesTextureCoordinates1
     ? usesTextureCoordinates0 ? "uv01" : "uv1"
     : usesTextureCoordinates0 ? "uv0" : "no-uv";
-  return `${geometryBaseKey}:${uvKey}:${tangentKey}`;
+  return `${normalKey}:${uvKey}:${tangentKey}`;
 };
+
+export const surfaceGeometryResourceKey = (surface: CanonicalDrawSurface): string =>
+  `${surface.geometry.key}:${surfaceGeometryLayoutKey(surface)}`;
 
 /** Exact source bytes transferred while publishing one canonical geometry. */
 export const surfaceGeometryUploadByteLength = (

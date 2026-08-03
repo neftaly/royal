@@ -5,6 +5,19 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.4 - 2026-08-03
+
+### Rendering
+
+- Automatically lower exact-compatible repeated static opaque glTF surfaces
+  into the existing instanced submission path while preserving authored
+  occurrence-level picking.
+- Keep alpha blending, transmission, LOD, explicit instances, render-object
+  bindings, mixed handedness, outlines, and non-triangle geometry on their
+  correctness-first paths.
+- Compare embedded geometry and pixel payloads exactly, and derive stable
+  cohort transform revisions without relying on source object identity.
+
 ## 0.0.3 - 2026-08-02
 
 ### Correctness

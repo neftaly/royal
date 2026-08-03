@@ -1,6 +1,7 @@
 import type {
   Direction3,
   Geometry,
+  GltfAssetRef,
   GltfInstanceTransforms,
   GltfInstancesNode,
   GltfNode,
@@ -59,6 +60,7 @@ import {
   type WorldBounds,
 } from "./surface-visibility";
 import type { LodGroupId, LodMembership } from "./lod-selection";
+import { automaticallyInstanceCanonicalSurfaces } from "./automatic-surface-instancing";
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -293,6 +295,10 @@ export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
 export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
 
 export type CanonicalSurfacePreparationOptions = Readonly<{
+  /** glTF assets whose occurrence identity must remain individually renderable. */
+  automaticInstancingExcludedAssets?: readonly GltfAssetRef[];
+  /** @defaultValue `true` */
+  automaticInstancing?: boolean;
   /** @defaultValue `true` */
   includeLighting?: boolean;
   /** @defaultValue `true` */
@@ -428,7 +434,8 @@ export const prepareCanonicalSurfaceScene = (
     binding: CanonicalRenderObjectLightBinding;
     node: GltfNode;
   }>> = [];
-  const surfaces: CanonicalDrawSurface[] = [];
+  const emittedSurfaces: CanonicalDrawSurface[] = [];
+  let surfaces: readonly CanonicalDrawSurface[] = emittedSurfaces;
   const virtualTextureAssets: VirtualTextureAssetRef[] = [];
   const lodBounds: ReturnType<typeof emptyWorldBounds>[] = [];
   const geometryLodGroupIds: LodGroupId[] = [];
@@ -699,7 +706,7 @@ export const prepareCanonicalSurfaceScene = (
               ? [materialMembership]
               : [...geometryLods, materialMembership];
           }
-          surfaces.push({
+          emittedSurfaces.push({
             geometry: primitive.geometry,
             gltfOccurrence: mountIndex,
             ...(instanceBatch === undefined ? {} : {
@@ -865,7 +872,7 @@ export const prepareCanonicalSurfaceScene = (
       ...(wireframe ? { topology: "lines" as const } : {}),
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
-    surfaces.push(surface);
+    emittedSurfaces.push(surface);
     if (includePicking) {
       pickSurfaces.push(node.pickingGeometry === undefined ? {
         ...surface,
@@ -881,6 +888,12 @@ export const prepareCanonicalSurfaceScene = (
         pickingGeometry: surface.pickingGeometry,
       });
     }
+  }
+  if (options.automaticInstancing !== false) {
+    surfaces = automaticallyInstanceCanonicalSurfaces(
+      surfaces,
+      options.automaticInstancingExcludedAssets,
+    );
   }
   type MutableRenderObjectBinding = {
     lights: CanonicalRenderObjectLightBinding[];
