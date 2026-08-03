@@ -88,7 +88,7 @@ import {
   selectDrawableLodsInto,
   type LodLevelSelections,
 } from "./lod-selection";
-import type { LinearRgba } from "@royal/renderer-core";
+import type { GltfAssetRef, LinearRgba } from "@royal/renderer-core";
 import type {
   VirtualTextureGpuBinding,
   VirtualTextureRuntime,
@@ -173,6 +173,57 @@ export type BorrowedSurfaceGeometry = Readonly<{
 export type BorrowedSurfaceGeometryMatch =
   | Readonly<{ status: "absent" | "ambiguous" | "inactive" | "pending" }>
   | Readonly<{ resource: BorrowedSurfaceGeometry; status: "ready" }>;
+
+const sameGltfAssetIdentity = (
+  left: GltfAssetRef,
+  right: GltfAssetRef,
+): boolean => left.src === right.src
+  && left.sceneIndex === right.sceneIndex
+  && left.version === right.version;
+
+/** Adds exact source occurrences represented by one cold automatic instance cohort. */
+const collectAutomaticInstanceSourceOccurrences = (
+  surface: CanonicalDrawSurface,
+  requested: Pick<CanonicalEdgeSurface, "asset" | "geometry" | "instances" | "sourceModel">,
+  occurrences: Set<number>,
+): boolean => {
+  if (
+    requested.instances !== undefined
+    || surface.instances === undefined
+    || surface.instances.automaticSourceOccurrences === undefined
+  ) return false;
+  const sources = surface.instances.automaticSourceOccurrences;
+  if (
+    sources.length !== surface.instances.count
+    || surface.instances.localModels.length !== surface.instances.count * 16
+  ) {
+    throw new Error("Royal automatic instance sources diverged from their transform cohort");
+  }
+  let matched = false;
+  for (let instance = 0; instance < sources.length; instance += 1) {
+    const source = sources[instance]!;
+    if (
+      source.geometryKey !== requested.geometry.key
+      || !sameGltfAssetIdentity(source.asset, requested.asset)
+    ) continue;
+    const offset = instance * 16;
+    let transformMatches = true;
+    for (let component = 0; component < 16; component += 1) {
+      if (!Object.is(
+        surface.instances.localModels[offset + component],
+        Math.fround(requested.sourceModel[component]!),
+      )) {
+        transformMatches = false;
+        break;
+      }
+    }
+    if (transformMatches) {
+      occurrences.add(source.gltfOccurrence);
+      matched = true;
+    }
+  }
+  return matched;
+};
 
 type GpuSurface = {
   depthOrder: number;
@@ -492,9 +543,20 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     if (scene === null) return { status: "absent" };
     const occurrences = new Set<number>();
-    const matchingIndices: number[] = [];
+    const matchingIndices: Array<Readonly<{
+      borrowAsOrdinary: boolean;
+      index: number;
+    }>> = [];
     for (let index = 0; index < scene.surfaces.length; index += 1) {
       const surface = scene.surfaces[index]!;
+      if (collectAutomaticInstanceSourceOccurrences(
+        surface,
+        requested,
+        occurrences,
+      )) {
+        matchingIndices.push({ borrowAsOrdinary: true, index });
+        continue;
+      }
       if (
         surface.node.kind !== "gltf"
         || surface.geometry.key !== requested.geometry.key
@@ -508,12 +570,12 @@ export class SurfaceGpuOwner {
         throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
       }
       occurrences.add(surface.gltfOccurrence);
-      matchingIndices.push(index);
+      matchingIndices.push({ borrowAsOrdinary: false, index });
     }
     if (occurrences.size === 0) return { status: "absent" };
     if (occurrences.size > 1) return { status: "ambiguous" };
     let pending = false;
-    for (const index of matchingIndices) {
+    for (const { borrowAsOrdinary, index } of matchingIndices) {
       const surface = scene.surfaces[index]!;
       const resource = this.#gpuSurfacesBySceneIndex[index];
       if (resource === undefined) {
@@ -530,7 +592,7 @@ export class SurfaceGpuOwner {
             key: resource.geometry.key,
           },
           identity: resource,
-          instanceCount: resource.instanceCount,
+          instanceCount: borrowAsOrdinary ? 0 : resource.instanceCount,
           vertexArray: resource.vertexArray,
         },
         status: "ready",

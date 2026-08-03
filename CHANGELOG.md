@@ -5,6 +5,23 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.5 - 2026-08-04
+
+### Correctness
+
+- Retain exact source-occurrence provenance inside automatic instance batches,
+  allowing a glTF outline to borrow one same-root or cross-root member without
+  outlining unrelated instances or duplicating GPU geometry.
+- Match source transforms against their exact float32 instance storage while
+  preserving missing, ambiguous, pending, inactive-LOD, and authored-instance
+  behavior.
+
+### Rendering lifecycle
+
+- Removed the asset-wide outline instancing exclusion and its world-scene
+  re-lowering path. Adding, replacing, or removing an outline now preserves
+  automatic world cohorts and their instance buffers.
+
 ## 0.0.4 - 2026-08-03
 
 ### Rendering

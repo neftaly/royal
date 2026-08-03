@@ -37,6 +37,7 @@ const packageSizeBudgets = {
   '@royal/renderer-core': 512 * 1024,
   '@royal/renderer-webgl': 564 * 1024,
 };
+const packageSizeFailures = [];
 
 const readPackage = (directory) => JSON.parse(readFileSync(
   path.join(repoRoot, directory, 'package.json'),
@@ -124,9 +125,11 @@ try {
     const packedBytes = statSync(tarball).size;
     const sizeBudget = packageSizeBudgets[manifest.name];
     if (sizeBudget === undefined || packedBytes > sizeBudget) {
-      throw new Error(`${manifest.name} tarball is ${packedBytes} bytes; budget is ${sizeBudget ?? 0}`);
+      packageSizeFailures.push(
+        `${manifest.name} tarball is ${packedBytes} bytes; budget is ${sizeBudget ?? 0}`,
+      );
     }
-    console.log(`ok packed ${manifest.name} ${Math.ceil(packedBytes / 1024)} KiB`);
+    console.log(`checked packed ${manifest.name} ${Math.ceil(packedBytes / 1024)} KiB`);
   }
 
   const manifests = packageDirectories.map(readPackage);
@@ -171,6 +174,9 @@ try {
   runPnpm(['install', '--prefer-offline', '--ignore-scripts'], { cwd: temporaryRoot });
   runPnpm(['exec', 'tsc'], { cwd: temporaryRoot });
   execFileSync(process.execPath, ['imports.mjs'], { cwd: temporaryRoot, stdio: 'inherit' });
+  if (packageSizeFailures.length !== 0) {
+    throw new Error(packageSizeFailures.join('\n'));
+  }
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
 }

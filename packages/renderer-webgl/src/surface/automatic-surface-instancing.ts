@@ -1,4 +1,3 @@
-import type { GltfAssetRef } from "@royal/renderer-core";
 import { identityMat4 } from "../math/mat4";
 import {
   canonicalTextureSampler,
@@ -202,7 +201,6 @@ const surfaceGeometriesEqual = (
 
 const automaticInstanceCandidateKey = (
   surface: CanonicalDrawSurface,
-  excludedAssets: readonly GltfAssetRef[],
 ): string | undefined => {
   const node = surface.node;
   if (
@@ -216,10 +214,6 @@ const automaticInstanceCandidateKey = (
     || surface.material.alphaBlend === true
     || canonicalMaterialHasTransmission(surface.material)
   ) return undefined;
-  if (excludedAssets.some((asset) =>
-    asset.src === node.asset.src
-    && asset.sceneIndex === node.asset.sceneIndex
-    && asset.version === node.asset.version)) return undefined;
   return JSON.stringify([
     surfaceGeometryLayoutKey(surface),
     geometryBucketKey(surface),
@@ -261,6 +255,16 @@ const collapsedCohort = (
   return {
     ...representative,
     instances: {
+      automaticSourceOccurrences: cohort.members.map(({ surface }) => {
+        if (surface.node.kind !== "gltf" || surface.gltfOccurrence === undefined) {
+          throw new Error("Royal automatic instance cohort lost its glTF occurrence");
+        }
+        return {
+          asset: surface.node.asset,
+          geometryKey: surface.geometry.key,
+          gltfOccurrence: surface.gltfOccurrence,
+        };
+      }),
       count: cohort.members.length,
       key: JSON.stringify(["automatic-surface-instances-v1", cohort.key, membership]),
       localModels,
@@ -279,13 +283,12 @@ const collapsedCohort = (
  */
 export const automaticallyInstanceCanonicalSurfaces = (
   surfaces: readonly CanonicalDrawSurface[],
-  excludedAssets: readonly GltfAssetRef[] = [],
 ): readonly CanonicalDrawSurface[] => {
   const cohortsByKey = new Map<string, AutomaticInstanceCohort[]>();
   const cohortBySurfaceIndex = new Map<number, AutomaticInstanceCohort>();
   for (let index = 0; index < surfaces.length; index += 1) {
     const surface = surfaces[index]!;
-    const key = automaticInstanceCandidateKey(surface, excludedAssets);
+    const key = automaticInstanceCandidateKey(surface);
     if (key === undefined) continue;
     let cohorts = cohortsByKey.get(key);
     if (cohorts === undefined) {

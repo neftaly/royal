@@ -67,6 +67,12 @@ export type CanonicalDrawSurface = Readonly<{
   /** Dense mounted glTF occurrence identity; distinct even if one descriptor is repeated. */
   gltfOccurrence?: number;
   instances?: {
+    /** Source occurrence for each same-index automatic `localModels` matrix. */
+    automaticSourceOccurrences?: readonly Readonly<{
+      asset: GltfAssetRef;
+      geometryKey: string;
+      gltfOccurrence: number;
+    }>[];
     count: number;
     innerCount?: number;
     innerIndices?: Uint32Array;
@@ -295,8 +301,6 @@ export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
 export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
 
 export type CanonicalSurfacePreparationOptions = Readonly<{
-  /** glTF assets whose occurrence identity must remain individually renderable. */
-  automaticInstancingExcludedAssets?: readonly GltfAssetRef[];
   /** @defaultValue `true` */
   automaticInstancing?: boolean;
   /** @defaultValue `true` */
@@ -890,10 +894,7 @@ export const prepareCanonicalSurfaceScene = (
     }
   }
   if (options.automaticInstancing !== false) {
-    surfaces = automaticallyInstanceCanonicalSurfaces(
-      surfaces,
-      options.automaticInstancingExcludedAssets,
-    );
+    surfaces = automaticallyInstanceCanonicalSurfaces(surfaces);
   }
   type MutableRenderObjectBinding = {
     lights: CanonicalRenderObjectLightBinding[];

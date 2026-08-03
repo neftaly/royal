@@ -436,6 +436,60 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
   });
 
+  it("outlines one automatic instance member without relowering or another upload", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    // A non-float32-exact source value proves matching follows cohort storage.
+    const rightTransform = { position: [0.1, 0, 0] as const };
+    const left = gltf({
+      src: "/automatic-outline-left.glb",
+      transform: { position: [-1, 0, 0] },
+    });
+    const right = gltf({
+      src: "/automatic-outline-right.glb",
+      transform: rightTransform,
+    });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [left, right],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({ color: [1, 0.5, 0.1, 1], widthCssPixels: 4 }),
+        src: "/automatic-outline-right.glb",
+        transform: rightTransform,
+      })],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(left.asset).status).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toEqual([]);
+    // The outlined occurrence is the non-representative member of a cross-root cohort.
+    expect(readGltf).toHaveBeenCalledTimes(2);
+    // Position, index, and one automatic instance buffer; the outline owns none.
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledTimes(1);
+    // One ordinary mask draw selects only the requested member.
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(2);
+
+    canvas.gl.bufferData.mockClear();
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    canvas.dispatchEvent(new Event("webglcontextrestored"));
+    callbacks.shift()!();
+    expect(scheduledFailures).toEqual([]);
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
+
+    canvas.gl.bufferData.mockClear();
+    root.setOverlay(null);
+    callbacks.shift()!();
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+    root.dispose();
+  });
+
   it("partitions coincident edge runs without another pass or solid-shader branch", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root } = harness({ readGltf });

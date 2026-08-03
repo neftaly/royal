@@ -48,6 +48,18 @@ describe("automatic canonical surface instancing", () => {
     expect(converged.surfaces).toHaveLength(1);
     const surface = converged.surfaces[0]!;
     expect(surface.instances?.count).toBe(2);
+    expect(surface.instances?.automaticSourceOccurrences).toEqual([
+      {
+        asset: left.asset,
+        geometryKey: prepared.surfaces[0]!.geometry.key,
+        gltfOccurrence: 0,
+      },
+      {
+        asset: right.asset,
+        geometryKey: prepared.surfaces[1]!.geometry.key,
+        gltfOccurrence: 1,
+      },
+    ]);
     expect(surface.model).toEqual(identityMat4());
     expect(surface.normalTransform).toEqual(identityMat4());
     expect(surface.instances?.localModels[12]).toBe(-4);

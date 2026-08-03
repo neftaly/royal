@@ -252,6 +252,16 @@ the complete source model transform. A missing or ambiguous source occurrence
 fails before any edge draw; Royal does not fall back to copied application
 geometry or choose LOD from the displaced preview.
 
+Automatic surface instancing retains the exact asset, original primitive
+geometry identity, and mounted occurrence for every same-index stored instance
+transform. An outline resolves that provenance using the cohort's float32
+transform storage, borrows the cohort's resident geometry and vertex array,
+and submits one ordinary mask draw for the requested occurrence. It neither
+draws the other cohort members nor disables world instancing. Adding, changing,
+or removing an outline therefore does not re-lower the world scene or rebuild
+its instance buffers. Authored glTF instance cohorts retain their existing
+whole-cohort outline behavior.
+
 When an overlay is active, the root may retain the completed world
 presentation and restore it for overlay-only add, replace, clear, or transform
 updates. That retained target is root-, size-, and context-generation-owned and
