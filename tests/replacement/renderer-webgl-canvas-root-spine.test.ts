@@ -490,6 +490,63 @@ describe("clear-only canvas root", () => {
     root.dispose();
   });
 
+  it("batches exact-compatible outline occurrences by borrowed geometry", async () => {
+    const readGltf = vi.fn(async () => staticTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const leftTransform = { position: [-1, 0, 0] as const };
+    const rightTransform = { position: [1, 0, 0] as const };
+    const left = gltf({ src: "/outline-batch-left.glb", transform: leftTransform });
+    const right = gltf({ src: "/outline-batch-right.glb", transform: rightTransform });
+    const material = edgeMaterial({ color: [1, 0.5, 0.1, 1], widthCssPixels: 4 });
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [left, right],
+    }));
+    root.setOverlay(sceneOverlay({
+      nodes: [
+        outlineGltf({ material, src: left.asset.src, transform: leftTransform }),
+        outlineGltf({ material, src: right.asset.src, transform: rightTransform }),
+      ],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(left.asset).status).toBe("ready"));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toEqual([]);
+    // One world cohort and one edge-mask cohort, both with two instances.
+    expect(canvas.gl.drawElementsInstanced.mock.calls.filter((call) => call[4] === 2))
+      .toHaveLength(2);
+    expect(canvas.gl.drawElements).not.toHaveBeenCalled();
+    expect(canvas.gl.bufferSubData.mock.calls.some((call) => call[4] === 34)).toBe(true);
+
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.bufferSubData.mockClear();
+    const createdBuffers = canvas.gl.createBuffer.mock.calls.length;
+    root.setOverlay(sceneOverlay({
+      nodes: [
+        outlineGltf({
+          material,
+          sourceTransform: leftTransform,
+          src: left.asset.src,
+          transform: { position: [-0.5, 0, 0] },
+        }),
+        outlineGltf({
+          material,
+          sourceTransform: rightTransform,
+          src: right.asset.src,
+          transform: { position: [0.5, 0, 0] },
+        }),
+      ],
+    }));
+    callbacks.shift()!();
+    expect(scheduledFailures).toEqual([]);
+    expect(canvas.gl.createBuffer).toHaveBeenCalledTimes(createdBuffers);
+    expect(canvas.gl.bufferData).toHaveBeenCalledOnce();
+    expect(canvas.gl.bufferSubData.mock.calls.some((call) => call[4] === 34)).toBe(true);
+  });
+
   it("partitions coincident edge runs without another pass or solid-shader branch", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root } = harness({ readGltf });

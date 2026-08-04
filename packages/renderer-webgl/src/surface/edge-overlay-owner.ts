@@ -1,5 +1,6 @@
 import type { LinearRgba } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
+import { identityMat4 } from "../math/mat4";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import type {
   MutableSurfaceDrawFrame,
@@ -30,6 +31,8 @@ import type {
 } from "./surface-gpu-owner";
 
 const MASK_CLEAR: LinearRgba = [0, 0, 0, 0];
+const IDENTITY_MODEL = identityMat4();
+const BATCH_INSTANCE_FLOATS = 17;
 const MAX_EDGE_RADIUS_FRAMEBUFFER_PIXELS = 64;
 const CREASE_NORMAL_COSINE = 0.866_025_4;
 
@@ -52,6 +55,10 @@ layout(location = 0) in vec3 position;
 #ifdef INSTANCED
 layout(location = 3) in mat4 instanceModel;
 #endif
+#ifdef BATCHED
+layout(location = 7) in float instanceObjectId;
+flat out float maskObjectId;
+#endif
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 viewProjection;
@@ -64,12 +71,19 @@ void main() {
   vec4 worldPosition = model * localPosition;
   viewPosition = (view * worldPosition).xyz;
   gl_Position = viewProjection * worldPosition;
+#ifdef BATCHED
+  maskObjectId = instanceObjectId;
+#endif
 }`;
 
 export const EDGE_MASK_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in highp vec3 viewPosition;
+#ifdef BATCHED
+flat in float maskObjectId;
+#else
 uniform float objectId;
+#endif
 out vec4 outputMask;
 vec2 octEncode(vec3 normal) {
   normal /= abs(normal.x) + abs(normal.y) + abs(normal.z);
@@ -86,7 +100,13 @@ vec2 octEncode(vec3 normal) {
 void main() {
   vec3 normal = normalize(cross(dFdx(viewPosition), dFdy(viewPosition)));
   if (!gl_FrontFacing) normal = -normal;
-  outputMask = vec4(octEncode(normal), objectId, 1.0);
+  outputMask = vec4(octEncode(normal),
+#ifdef BATCHED
+    maskObjectId,
+#else
+    objectId,
+#endif
+    1.0);
 }`;
 
 export const EDGE_HORIZONTAL_FRAGMENT_SHADER = `#version 300 es
@@ -206,7 +226,7 @@ void main() {
 
 type MaskProgram = Readonly<{
   model: WebGLUniformLocation;
-  objectId: WebGLUniformLocation;
+  objectId?: WebGLUniformLocation;
   program: WebGLProgram;
   view: WebGLUniformLocation;
   viewProjection: WebGLUniformLocation;
@@ -233,6 +253,7 @@ type PartitionResolveProgram = ResolveProgram & Readonly<{
 }>;
 
 type EdgePipeline = Readonly<{
+  batchedMask: MaskProgram;
   fullscreenVertexArray: WebGLVertexArrayObject;
   horizontal: HorizontalProgram;
   instancedMask: MaskProgram;
@@ -250,6 +271,71 @@ type EdgeTargets = Readonly<{
   scratchFramebuffer: WebGLFramebuffer;
   width: number;
 }>;
+
+type ReadyBorrowedGeometry = Extract<
+  BorrowedSurfaceGeometryMatch,
+  { status: "ready" }
+>["resource"];
+
+type EdgeMaskDraw = Readonly<{
+  objectId: number;
+  resource: ReadyBorrowedGeometry;
+  surface: CanonicalEdgeSurface;
+}>;
+
+type EdgeMaskBatch = Readonly<{
+  draws: EdgeMaskDraw[];
+  resource: ReadyBorrowedGeometry;
+}>;
+
+const planEdgeMaskBatches = (
+  scene: CanonicalEdgeOverlayScene,
+  run: CanonicalEdgeOverlayScene["runs"][number],
+  matches: readonly BorrowedSurfaceGeometryMatch[],
+  visible: (surface: CanonicalEdgeSurface) => boolean,
+): Readonly<{ batches: readonly EdgeMaskBatch[]; pending: boolean }> => {
+  const batches: EdgeMaskBatch[] = [];
+  const ordinary = new Map<object, Map<number, EdgeMaskBatch>>();
+  let pending = false;
+  for (const occurrence of run.occurrences) {
+    const drawnResources = new Set<object>();
+    for (const surfaceIndex of occurrence.surfaceIndices) {
+      const surface = scene.surfaces[surfaceIndex]!;
+      if (!visible(surface)) continue;
+      const match = matches[surfaceIndex]!;
+      if (match.status === "pending") {
+        pending = true;
+        continue;
+      }
+      if (match.status !== "ready" || drawnResources.has(match.resource.identity)) {
+        continue;
+      }
+      drawnResources.add(match.resource.identity);
+      const draw = {
+        objectId: occurrence.objectId,
+        resource: match.resource,
+        surface,
+      };
+      if (match.resource.instanceCount > 0) {
+        batches.push({ draws: [draw], resource: match.resource });
+        continue;
+      }
+      let byHandedness = ordinary.get(match.resource.geometry.identity);
+      if (byHandedness === undefined) {
+        byHandedness = new Map();
+        ordinary.set(match.resource.geometry.identity, byHandedness);
+      }
+      let batch = byHandedness.get(surface.modelHandedness);
+      if (batch === undefined) {
+        batch = { draws: [], resource: match.resource };
+        byHandedness.set(surface.modelHandedness, batch);
+        batches.push(batch);
+      }
+      batch.draws.push(draw);
+    }
+  }
+  return { batches, pending };
+};
 
 const compileProgram = (
   gl: WebGL2RenderingContext,
@@ -275,20 +361,27 @@ const compileProgram = (
 
 const maskProgram = (
   gl: WebGL2RenderingContext,
-  instanced: boolean,
+  mode: "batched" | "instanced" | "ordinary",
 ): MaskProgram => {
+  const instanced = mode !== "ordinary";
+  const batched = mode === "batched";
   const program = compileProgram(
     gl,
     EDGE_MASK_VERTEX_SHADER.replace(
       "\n",
-      `\n${instanced ? "#define INSTANCED\n" : ""}`,
+      `\n${instanced ? "#define INSTANCED\n" : ""}${batched ? "#define BATCHED\n" : ""}`,
     ),
-    EDGE_MASK_FRAGMENT_SHADER,
+    EDGE_MASK_FRAGMENT_SHADER.replace(
+      "\n",
+      `\n${batched ? "#define BATCHED\n" : ""}`,
+    ),
     "edge mask",
   );
   return {
     model: requiredWebGlUniform(gl, program, "model", "edge mask"),
-    objectId: requiredWebGlUniform(gl, program, "objectId", "edge mask"),
+    ...(batched
+      ? {}
+      : { objectId: requiredWebGlUniform(gl, program, "objectId", "edge mask") }),
     program,
     view: requiredWebGlUniform(gl, program, "view", "edge mask"),
     viewProjection: requiredWebGlUniform(gl, program, "viewProjection", "edge mask"),
@@ -395,6 +488,14 @@ const framebufferComplete = (
 
 /** Owns the private normal/id mask and separable screen-space edge presentation. */
 export class EdgeOverlayOwner {
+  #batchBuffer: WebGLBuffer | null = null;
+  #batchCapacityBytes = 0;
+  readonly #batchClaim = {};
+  #batchValues = new Float32Array(0);
+  readonly #batchVertexArrays = new Map<
+    object,
+    { byteOffset: number; vertexArray: WebGLVertexArrayObject }
+  >();
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
   readonly #frustumPlanes = new Float32Array(24);
@@ -450,9 +551,11 @@ export class EdgeOverlayOwner {
 
   dispose(): void {
     this.#deleteTargets();
+    this.#deleteBatchResources();
     const pipeline = this.#pipeline;
     if (pipeline !== null) {
       const gl = this.#gl;
+      gl.deleteProgram(pipeline.batchedMask.program);
       gl.deleteProgram(pipeline.mask.program);
       gl.deleteProgram(pipeline.instancedMask.program);
       gl.deleteProgram(pipeline.horizontal.program);
@@ -473,6 +576,10 @@ export class EdgeOverlayOwner {
 
   /** Drops context-invalid handles without issuing delete calls. */
   abandon(): void {
+    this.#batchBuffer = null;
+    this.#batchCapacityBytes = 0;
+    this.#batchValues = new Float32Array(0);
+    this.#batchVertexArrays.clear();
     this.#targets = null;
     this.#pipeline = null;
     this.#partitionResolve = null;
@@ -484,6 +591,7 @@ export class EdgeOverlayOwner {
     this.#partitionResolveBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#partitionResolveBindings[1] = { sampler: null, target: "2d", texture: null };
     this.#budget.release(this.#claim);
+    this.#budget.release(this.#batchClaim);
   }
 
   drawViews(
@@ -497,6 +605,7 @@ export class EdgeOverlayOwner {
     const scene = this.#scene;
     if (scene === null || scene.runs.length === 0 || views.length === 0) return false;
     const matches = this.#preflight(scene, borrow);
+    this.#reconcileBatchVertexArrays(matches);
     this.#ensurePipeline(state);
     if (scene.runs.some((run) => run.material.coverage !== undefined)) {
       this.#ensurePartitionResolve(state);
@@ -551,22 +660,19 @@ export class EdgeOverlayOwner {
       x: 0,
       y: 0,
     };
-    let drew = false;
-    let pending = false;
-    for (const occurrence of run.occurrences) {
-      const drawnResources = new Set<object>();
-      for (const surfaceIndex of occurrence.surfaceIndices) {
-        const surface = scene.surfaces[surfaceIndex]!;
-        if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
-        const match = matches[surfaceIndex]!;
-        if (match.status === "pending") {
-          pending = true;
-          continue;
-        }
-        if (match.status !== "ready") continue;
-        const resource = match.resource;
-        if (drawnResources.has(resource.identity)) continue;
-        drawnResources.add(resource.identity);
+    const plan = planEdgeMaskBatches(
+      scene,
+      run,
+      matches,
+      (surface) => worldBoundsVisible(surface.worldBounds, this.#frustumPlanes),
+    );
+    const batchOffsets = this.#uploadBatches(plan.batches, state);
+    for (const batch of plan.batches) {
+      const resource = batch.resource;
+      if (batch.draws.length > 1 && resource.instanceCount === 0) {
+        this.#drawBatch(batch, batchOffsets.get(batch)!, view, state);
+      } else {
+        const { objectId, surface } = batch.draws[0]!;
         const program = resource.instanceCount > 0
           ? pipeline.instancedMask
           : pipeline.mask;
@@ -586,7 +692,7 @@ export class EdgeOverlayOwner {
         gl.uniformMatrix4fv(program.view, false, view.view);
         gl.uniformMatrix4fv(program.viewProjection, false, view.viewProjection);
         gl.uniformMatrix4fv(program.model, false, surface.model);
-        gl.uniform1f(program.objectId, occurrence.objectId / 255);
+        gl.uniform1f(program.objectId!, objectId / 255);
         if (resource.instanceCount > 0) {
           gl.drawElementsInstanced(
             gl.TRIANGLES,
@@ -603,10 +709,9 @@ export class EdgeOverlayOwner {
             resource.geometry.indexOffset,
           );
         }
-        drew = true;
       }
     }
-    if (!drew) return { pending };
+    if (plan.batches.length === 0) return { pending: plan.pending };
 
     const texelX = 1 / targets.width;
     const texelY = 1 / targets.height;
@@ -654,7 +759,133 @@ export class EdgeOverlayOwner {
       gl.uniform2f(resolve.viewportOrigin, view.viewport.x, view.viewport.y);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    return { pending };
+    return { pending: plan.pending };
+  }
+
+  #drawBatch(
+    batch: EdgeMaskBatch,
+    byteOffset: number,
+    view: SurfaceFrameView,
+    state: WebGlStateOwner,
+  ): void {
+    const gl = this.#gl;
+    const program = this.#pipeline!.batchedMask;
+    const resource = batch.resource;
+    const geometry = resource.geometry;
+    let binding = this.#batchVertexArrays.get(geometry.identity);
+    if (binding === undefined) {
+      const vertexArray = gl.createVertexArray();
+      if (vertexArray === null) {
+        throw new Error("Royal could not allocate a batched edge-mask vertex array");
+      }
+      gl.bindVertexArray(vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, geometry.vertexBuffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
+      binding = { byteOffset: -1, vertexArray };
+      this.#batchVertexArrays.set(geometry.identity, binding);
+    }
+    if (binding.byteOffset !== byteOffset) {
+      gl.bindVertexArray(binding.vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.#batchBuffer);
+      const floatBytes = Float32Array.BYTES_PER_ELEMENT;
+      const stride = BATCH_INSTANCE_FLOATS * floatBytes;
+      for (let column = 0; column < 4; column += 1) {
+        const location = 3 + column;
+        gl.enableVertexAttribArray(location);
+        gl.vertexAttribPointer(
+          location,
+          4,
+          gl.FLOAT,
+          false,
+          stride,
+          byteOffset + column * 4 * floatBytes,
+        );
+        gl.vertexAttribDivisor(location, 1);
+      }
+      gl.enableVertexAttribArray(7);
+      gl.vertexAttribPointer(
+        7,
+        1,
+        gl.FLOAT,
+        false,
+        stride,
+        byteOffset + 16 * floatBytes,
+      );
+      gl.vertexAttribDivisor(7, 1);
+      binding.byteOffset = byteOffset;
+    }
+    state.invalidate();
+    state.applySurfaceDraw(this.#maskFrame, {
+      alphaBlend: false,
+      colorWrite: true,
+      cullBackFaces: false,
+      depthTest: true,
+      depthWrite: true,
+      frontFace: batch.draws[0]!.surface.modelHandedness < 0 ? gl.CW : gl.CCW,
+      program: program.program,
+      textureBindings: [],
+      textureUnits: 0,
+      vertexArray: binding.vertexArray,
+    });
+    gl.uniformMatrix4fv(program.view, false, view.view);
+    gl.uniformMatrix4fv(program.viewProjection, false, view.viewProjection);
+    gl.uniformMatrix4fv(program.model, false, IDENTITY_MODEL);
+    gl.drawElementsInstanced(
+      gl.TRIANGLES,
+      geometry.indexCount,
+      geometry.indexType,
+      geometry.indexOffset,
+      batch.draws.length,
+    );
+  }
+
+  #uploadBatches(
+    batches: readonly EdgeMaskBatch[],
+    state: WebGlStateOwner,
+  ): ReadonlyMap<EdgeMaskBatch, number> {
+    const offsets = new Map<EdgeMaskBatch, number>();
+    let valueCount = 0;
+    for (const batch of batches) {
+      if (batch.draws.length < 2 || batch.resource.instanceCount > 0) continue;
+      offsets.set(batch, valueCount * Float32Array.BYTES_PER_ELEMENT);
+      valueCount += batch.draws.length * BATCH_INSTANCE_FLOATS;
+    }
+    if (valueCount === 0) return offsets;
+    if (this.#batchValues.length < valueCount) {
+      this.#batchValues = new Float32Array(valueCount);
+    }
+    let offset = 0;
+    for (const batch of batches) {
+      if (!offsets.has(batch)) continue;
+      for (const { objectId, surface } of batch.draws) {
+        this.#batchValues.set(surface.model, offset);
+        this.#batchValues[offset + 16] = objectId / 255;
+        offset += BATCH_INSTANCE_FLOATS;
+      }
+    }
+    const byteLength = valueCount * Float32Array.BYTES_PER_ELEMENT;
+    const gl = this.#gl;
+    if (this.#batchBuffer === null) {
+      this.#batchBuffer = gl.createBuffer();
+      if (this.#batchBuffer === null) {
+        throw new Error("Royal could not allocate edge-mask instance transforms");
+      }
+    }
+    if (byteLength > this.#batchCapacityBytes) {
+      if (!this.#budget.tryClaim(this.#batchClaim, byteLength)) {
+        throw new Error("Royal persistent GPU budget denied edge-mask instances");
+      }
+      this.#batchCapacityBytes = byteLength;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.#batchBuffer);
+    // Orphan before the one packed upload so a hot overlay never waits for the
+    // preceding mask draws to release this storage.
+    gl.bufferData(gl.ARRAY_BUFFER, this.#batchCapacityBytes, gl.DYNAMIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#batchValues, 0, valueCount);
+    state.invalidate();
+    return offsets;
   }
 
   #preflight(
@@ -684,17 +915,36 @@ export class EdgeOverlayOwner {
     return matches;
   }
 
+  #reconcileBatchVertexArrays(
+    matches: readonly BorrowedSurfaceGeometryMatch[],
+  ): void {
+    const active = new Set(
+      matches.flatMap((match) =>
+        match.status === "ready" && match.resource.instanceCount === 0
+          ? [match.resource.geometry.identity]
+          : []
+      ),
+    );
+    for (const [identity, { vertexArray }] of this.#batchVertexArrays) {
+      if (active.has(identity)) continue;
+      this.#gl.deleteVertexArray(vertexArray);
+      this.#batchVertexArrays.delete(identity);
+    }
+  }
+
   #ensurePipeline(state: WebGlStateOwner): void {
     if (this.#pipeline !== null) return;
     const gl = this.#gl;
-    const mask = maskProgram(gl, false);
+    const mask = maskProgram(gl, "ordinary");
     let instancedMask: MaskProgram | undefined;
+    let batchedMask: MaskProgram | undefined;
     let horizontal: HorizontalProgram | undefined;
     let resolve: ResolveProgram | undefined;
     let sampler: WebGLSampler | null = null;
     let fullscreenVertexArray: WebGLVertexArrayObject | null = null;
     try {
-      instancedMask = maskProgram(gl, true);
+      instancedMask = maskProgram(gl, "instanced");
+      batchedMask = maskProgram(gl, "batched");
       horizontal = horizontalProgram(gl);
       resolve = resolveProgram(gl);
       sampler = gl.createSampler();
@@ -707,6 +957,7 @@ export class EdgeOverlayOwner {
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.#pipeline = {
+        batchedMask,
         fullscreenVertexArray,
         horizontal,
         instancedMask,
@@ -718,6 +969,7 @@ export class EdgeOverlayOwner {
     } catch (error) {
       gl.deleteProgram(mask.program);
       if (instancedMask !== undefined) gl.deleteProgram(instancedMask.program);
+      if (batchedMask !== undefined) gl.deleteProgram(batchedMask.program);
       if (horizontal !== undefined) gl.deleteProgram(horizontal.program);
       if (resolve !== undefined) gl.deleteProgram(resolve.program);
       if (sampler !== null) gl.deleteSampler(sampler);
@@ -905,5 +1157,17 @@ export class EdgeOverlayOwner {
     this.#resolvePacket = null;
     this.#partitionResolvePacket = null;
     this.#budget.release(this.#claim);
+  }
+
+  #deleteBatchResources(): void {
+    if (this.#batchBuffer !== null) this.#gl.deleteBuffer(this.#batchBuffer);
+    for (const { vertexArray } of this.#batchVertexArrays.values()) {
+      this.#gl.deleteVertexArray(vertexArray);
+    }
+    this.#batchBuffer = null;
+    this.#batchCapacityBytes = 0;
+    this.#batchValues = new Float32Array(0);
+    this.#batchVertexArrays.clear();
+    this.#budget.release(this.#batchClaim);
   }
 }

@@ -159,10 +159,14 @@ export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly
 
 export type BorrowedSurfaceGeometry = Readonly<{
   geometry: Readonly<{
+    /** Stable exact geometry allocation identity until the world owner reconciles. */
+    identity: object;
+    indexBuffer: WebGLBuffer;
     indexCount: number;
     indexOffset: number;
     indexType: number;
     key: string;
+    vertexBuffer: WebGLBuffer;
   }>;
   /** Stable only until the world owner next reconciles its retained resources. */
   identity: object;
@@ -588,10 +592,13 @@ export class SurfaceGpuOwner {
       return {
         resource: {
           geometry: {
+            identity: resource.geometry,
+            indexBuffer: resource.geometry.indexBuffer,
             indexCount: resource.geometry.indexCount,
             indexOffset: resource.geometry.indexOffset,
             indexType: resource.geometry.indexType,
             key: resource.geometry.key,
+            vertexBuffer: resource.geometry.vertexBuffer,
           },
           identity: resource,
           instanceCount: borrowAsOrdinary ? 0 : resource.instanceCount,
