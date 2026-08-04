@@ -62,6 +62,49 @@ describe("canonical LOD selection", () => {
     );
   });
 
+  it("promotes a material level only after its base presentation is drawable", () => {
+    const workspace = createDrawableLodSelectionWorkspace();
+    const group = {
+      group: 0,
+      levels: [0, 1],
+      selectionBounds: { max: [1, 1, 0], min: [-1, -1, 0] },
+      surfaceIndices: [0, 1],
+      thresholds: [0.5, 0],
+    } as const;
+    const views = [{ viewProjection: identityMat4() }];
+    const preferred = {
+      lodDrawable: false,
+      surface: { lods: [{ group: 0, level: 0 }] },
+    };
+    const preview = {
+      lodDrawable: true,
+      surface: { lods: [{ group: 0, level: 1 }] },
+    };
+
+    expect(Array.from(selectDrawableLodsInto(
+      [group],
+      views,
+      [preferred, preview],
+      workspace,
+    ))).toEqual([1]);
+
+    preferred.lodDrawable = true;
+    expect(Array.from(selectDrawableLodsInto(
+      [group],
+      views,
+      [preferred, preview],
+      workspace,
+    ))).toEqual([0]);
+
+    preferred.lodDrawable = false;
+    expect(Array.from(selectDrawableLodsInto(
+      [group],
+      views,
+      [preferred, preview],
+      workspace,
+    ))).toEqual([1]);
+  });
+
   it("shares one cold-start and selected-level rule across visual and picking paths", () => {
     const level0 = [{ group: 0, level: 0 }];
     const level1 = [{ group: 0, level: 1 }];

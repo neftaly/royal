@@ -21,17 +21,34 @@ const collectStaticMaterials = (
 ): readonly CanonicalSurfaceMaterial[] => {
   const materialSet = new Set<CanonicalSurfaceMaterial>();
   const materials: CanonicalSurfaceMaterial[] = [];
-  const retain = (material: CanonicalSurfaceMaterial): void => {
-    if (materialSet.has(material)) return;
-    materialSet.add(material);
-    materials.push(material);
+  let found = true;
+  const retainSet = (
+    material: CanonicalSurfaceMaterial,
+    lod: StaticMaterialLod | undefined,
+    phase: number,
+  ): void => {
+    const levels = lod?.levels;
+    const selected = levels === undefined
+      ? phase === 0 ? material : undefined
+      : levels[levels.length - phase - 1];
+    if (selected === undefined) return;
+    found = true;
+    if (!materialSet.has(selected)) {
+      materialSet.add(selected);
+      materials.push(selected);
+    }
   };
-  for (const primitive of primitives) {
-    retain(primitive.material);
-    for (const level of primitive.materialLod?.levels ?? []) retain(level);
-    for (const material of primitive.materialVariants?.values() ?? []) retain(material);
-    for (const lod of primitive.materialVariantLods?.values() ?? []) {
-      for (const level of lod.levels) retain(level);
+  for (let phase = 0; found; phase += 1) {
+    found = false;
+    for (const primitive of primitives) {
+      retainSet(primitive.material, primitive.materialLod, phase);
+      for (const [name, material] of primitive.materialVariants ?? []) {
+        retainSet(
+          material,
+          primitive.materialVariantLods?.get(name),
+          phase,
+        );
+      }
     }
   }
   return materials;

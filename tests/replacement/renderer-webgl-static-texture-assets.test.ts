@@ -30,6 +30,29 @@ const material = (
 });
 
 describe("static texture asset collection", () => {
+  it("prepares the lowest material LOD base presentation first", () => {
+    const preferredA = asset("preferred-a");
+    const preferredB = asset("preferred-b");
+    const previewA = asset("preview-a");
+    const previewB = asset("preview-b");
+    const levelsA = [
+      material({ baseColorAsset: preferredA }),
+      material({ baseColorAsset: previewA }),
+    ];
+    const levelsB = [
+      material({ baseColorAsset: preferredB }),
+      material({ baseColorAsset: previewB }),
+    ];
+
+    expect(collectStaticTextureAssets([{
+      material: levelsA[0]!,
+      materialLod: { levels: levelsA },
+    }, {
+      material: levelsB[0]!,
+      materialLod: { levels: levelsB },
+    }])).toEqual([previewA, previewB, preferredA, preferredB]);
+  });
+
   it("promotes shared content to its earliest visible contribution", () => {
     const shared = asset("shared");
     const base = asset("base");

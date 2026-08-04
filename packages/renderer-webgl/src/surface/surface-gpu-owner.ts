@@ -233,6 +233,8 @@ type GpuSurface = {
   drawPacket: SurfaceDrawPacket;
   readonly geometry: GpuGeometry;
   readonly instanceCount: number;
+  /** Whether an admitted material-LOD level has its base presentation resident. */
+  lodDrawable: boolean;
   readonly mode: number;
   program: StandardProgram | UnlitProgram;
   surface: CanonicalDrawSurface;
@@ -1718,6 +1720,9 @@ export class SurfaceGpuOwner {
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
+      lodDrawable: geometrySurface.surface.materialLodLevel !== true
+        || material.baseColorAsset === undefined
+        || ordinaryBindings[bindingOffset]!.texture !== null,
       mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
       program,
       surface: geometrySurface.surface,
@@ -1902,6 +1907,9 @@ export class SurfaceGpuOwner {
           : undefined,
         this.#environmentGpu?.binding,
       );
+      resource.lodDrawable = surface.materialLodLevel !== true
+        || material.baseColorAsset === undefined
+        || ordinaryBindings[0]!.texture !== null;
       if (!textureUnitsChanged) continue;
       regroup ||= program.program !== resource.program.program;
       resource.drawPacket = surfaceDrawPacket(

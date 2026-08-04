@@ -498,8 +498,11 @@ incremental path.
 Canonical scene lowering deduplicates ordinary image claims by GPU storage
 identity. It orders every selected surface's base-color claim before emissive,
 metallic-roughness, normal, and occlusion claims, preserving stable authored
-order within each tier. This reduces neutral-grey first display without a
-camera-specific scheduler; panel and XR consume the same claim order.
+order within each tier. Material LOD sets contribute their lowest authored
+base-color level first, followed by progressively preferred levels; FIFO
+preparation therefore starts every preview before a replacement can consume a
+new worker slot. This reduces neutral-grey first display without a camera-
+specific scheduler; panel and XR consume the same claim order.
 
 Encoding can materially improve load time: GLB reduces request overhead;
 Meshopt/Draco reduce geometry bytes and parsing; offline ETC2 KTX2 reduces texture

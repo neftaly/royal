@@ -1163,6 +1163,98 @@ describe("canvas root asset publication", () => {
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(1);
   });
 
+  it("retains a material preview when its preferred base image fails", async () => {
+    type Decoded = Readonly<{ height: number; source: ImageBitmap; width: number }>;
+    const pending = new Map<string, Readonly<{
+      reject: (error: Error) => void;
+      resolve: (decoded: Decoded) => void;
+    }>>();
+    const sources = new Map([
+      ["/models/preview.webp", { preview: true } as unknown as ImageBitmap],
+    ]);
+    const decodeTexture = vi.fn((asset: TextureSourceRef) => new Promise<Decoded>((resolve, reject) => {
+      if (asset.kind !== "asset") throw new Error("expected external material LOD image");
+      pending.set(asset.src, { reject, resolve });
+    }));
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_materials_unlit", "MSFT_lod"];
+    document.extensionsUsed = ["KHR_materials_unlit", "MSFT_lod"];
+    document.images = [{ uri: "preferred.webp" }, { uri: "preview.webp" }];
+    document.textures = [{ source: 0 }, { source: 1 }];
+    document.materials = [{
+      extensions: { KHR_materials_unlit: {}, MSFT_lod: { ids: [1] } },
+      extras: { MSFT_screencoverage: [0, 0] },
+      pbrMetallicRoughness: { baseColorTexture: { index: 0 } },
+    }, {
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorTexture: { index: 1 } },
+    }];
+    let activeUnit = 0;
+    const bound: Array<WebGLTexture | null | undefined> = [];
+    const uploaded = new Map<TexImageSource, WebGLTexture | null | undefined>();
+    const draws: Array<WebGLTexture | null | undefined> = [];
+    let textureId = 0;
+    const { callbacks, flushScheduledFrames, root } = harness({
+      decodeTexture,
+      readGltf: async () => staticTexturedTriangleGlb(
+        undefined,
+        "preferred.webp",
+        (fixture) => {
+          fixture.extensionsRequired = document.extensionsRequired;
+          fixture.extensionsUsed = document.extensionsUsed;
+          fixture.images = document.images;
+          fixture.textures = document.textures;
+          fixture.materials = document.materials;
+        },
+      ),
+    }, {
+      activeTexture: vi.fn((unit: number) => { activeUnit = unit - 0x84c0; }),
+      bindTexture: vi.fn((target: number, texture: WebGLTexture | null) => {
+        if (target === 0x0de1) bound[activeUnit] = texture;
+      }),
+      createTexture: vi.fn(() => ({ id: textureId += 1 }) as unknown as WebGLTexture),
+      drawElements: vi.fn(() => draws.push(bound[0])),
+      texSubImage2D: vi.fn((...arguments_: unknown[]) => {
+        uploaded.set(arguments_.at(-1) as TexImageSource, bound[activeUnit]);
+      }),
+    });
+    const node = gltf("/models/material-lod.gltf");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [node],
+    }));
+    callbacks.shift()!();
+    await waitFor(() => expect(decodeTexture).toHaveBeenCalledTimes(2));
+    expect(decodeTexture.mock.calls.map(([asset]) =>
+      asset.kind === "asset" ? asset.src : asset.kind)).toEqual([
+      "/models/preview.webp",
+      "/models/preferred.webp",
+    ]);
+
+    pending.get("/models/preview.webp")!.resolve({
+      height: 2,
+      source: sources.get("/models/preview.webp")!,
+      width: 2,
+    });
+    await waitFor(() => expect(root.getTextureAssetSnapshot(
+      imageTexture("/models/preview.webp"),
+    ).status).toBe("ready"));
+    draws.length = 0;
+    flushScheduledFrames();
+    expect(draws.at(-1)).toBe(uploaded.get(sources.get("/models/preview.webp")!));
+
+    pending.get("/models/preferred.webp")!.reject(new Error("preferred decode failed"));
+    await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset)).toMatchObject({
+      status: "degraded",
+      textures: { failed: 1, ready: 1, total: 2 },
+    }));
+    draws.length = 0;
+    flushScheduledFrames();
+    expect(draws.at(-1)).toBe(uploaded.get(sources.get("/models/preview.webp")!));
+    root.dispose();
+  });
+
   it("streams external glTF color images through the ordinary texture path", async () => {
     let resolveDecode: ((source: {
       height: number;

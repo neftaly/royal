@@ -1,4 +1,10 @@
-import { object, type JsonObject } from "./gltf-values";
+import {
+  array,
+  fail,
+  index,
+  object,
+  type JsonObject,
+} from "./gltf-values";
 
 export type StaticMaterialInputs = Readonly<{
   extensions: JsonObject;
@@ -56,4 +62,27 @@ export const readStaticMaterialInputs = (
       materialPath,
     ),
   };
+};
+
+/** Reads one validated material LOD edge list for planning and preparation. */
+export const staticMaterialLodIds = (
+  materials: readonly unknown[],
+  extensions: JsonObject,
+  label: string,
+  materialPath: string,
+): readonly number[] => {
+  if (extensions.MSFT_lod === undefined) return [];
+  const extensionPath = `${materialPath}.extensions.MSFT_lod`;
+  const ids = array(
+    object(extensions.MSFT_lod, label, extensionPath).ids,
+    label,
+    `${extensionPath}.ids`,
+  );
+  if (ids.length === 0) fail(label, `${extensionPath}.ids`, "must not be empty");
+  return ids.map((id, lodIndex) => index(
+    id,
+    materials,
+    label,
+    `${extensionPath}.ids[${lodIndex}]`,
+  ));
 };

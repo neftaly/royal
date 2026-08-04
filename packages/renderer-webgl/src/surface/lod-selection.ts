@@ -242,6 +242,8 @@ export type DrawableLodGroup = Readonly<{
 }>;
 
 export type DrawableLodResource = Readonly<{
+  /** False while this admitted resource cannot yet represent its authored level. */
+  lodDrawable?: boolean;
   surface: Readonly<{
     lods?: readonly Pick<LodMembership, "group" | "level">[];
   }>;
@@ -285,7 +287,8 @@ export const selectDrawableLodsInto = (
     } else workspace.drawableLevels.fill(0, 0, group.thresholds.length);
     let drawable = false;
     for (let index = 0; index < group.surfaceIndices.length; index += 1) {
-      if (resources[group.surfaceIndices[index]!] === undefined) continue;
+      const resource = resources[group.surfaceIndices[index]!];
+      if (resource === undefined || resource.lodDrawable === false) continue;
       workspace.drawableLevels[group.levels[index]!] = 1;
       drawable = true;
     }
@@ -313,8 +316,9 @@ export const selectDrawableLodsInto = (
     let matched = false;
     let fallback: DrawableLodResource["surface"] | undefined;
     for (const surfaceIndex of group.surfaceIndices) {
-      const surface = resources[surfaceIndex]?.surface;
-      if (surface === undefined) continue;
+      const resource = resources[surfaceIndex];
+      if (resource === undefined || resource.lodDrawable === false) continue;
+      const surface = resource.surface;
       fallback ??= surface;
       if (lodMembershipsSelected(surface.lods, workspace.currentLevels)) {
         matched = true;

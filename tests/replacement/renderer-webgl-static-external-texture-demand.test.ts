@@ -82,6 +82,62 @@ describe("early static external texture demand", () => {
     ]);
   });
 
+  it("discovers the lowest material LOD image before preferred replacements", () => {
+    const document = staticTriangleDocument();
+    document.extensions = {
+      KHR_materials_variants: { variants: [{ name: "alternate" }] },
+    };
+    document.extensionsRequired = [
+      "KHR_materials_unlit",
+      "KHR_materials_variants",
+      "MSFT_lod",
+    ];
+    document.extensionsUsed = document.extensionsRequired;
+    document.images = [
+      { uri: "preferred-a.webp" },
+      { uri: "preview-a.webp" },
+      { uri: "preferred-b.webp" },
+      { uri: "preview-b.webp" },
+    ];
+    document.textures = [{ source: 0 }, { source: 1 }, { source: 2 }, { source: 3 }];
+    document.materials = [{
+      extensions: { KHR_materials_unlit: {}, MSFT_lod: { ids: [1] } },
+      pbrMetallicRoughness: { baseColorTexture: { index: 0 } },
+    }, {
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorTexture: { index: 1 } },
+    }, {
+      extensions: { KHR_materials_unlit: {}, MSFT_lod: { ids: [3] } },
+      pbrMetallicRoughness: { baseColorTexture: { index: 2 } },
+    }, {
+      extensions: { KHR_materials_unlit: {} },
+      pbrMetallicRoughness: { baseColorTexture: { index: 3 } },
+    }];
+    document.meshes = [{ primitives: [{
+      attributes: { POSITION: 0 },
+      extensions: {
+        KHR_materials_variants: { mappings: [{ material: 2, variants: [0] }] },
+      },
+      indices: 1,
+      material: 0,
+    }] }];
+
+    const claims = discoverExternalStaticGltfTextures(
+      glbFromDocument(document, new Uint8Array(44)),
+      "lod-priority-root",
+      "lod-priority.gltf",
+      "/models/lod-priority.gltf",
+    );
+
+    expect(claims.textureAssets.map((asset) =>
+      asset.kind === "asset" ? asset.src : asset.kind)).toEqual([
+      "/models/preview-a.webp",
+      "/models/preview-b.webp",
+      "/models/preferred-a.webp",
+      "/models/preferred-b.webp",
+    ]);
+  });
+
   it("converges on the canonical prepared texture identities", async () => {
     const parsed = parseGlb(
       staticTexturedTriangleGlb(undefined, "shared.avif", (document) => {

@@ -117,7 +117,10 @@ strings do not survive into those retained paths.
 If the ideal level is not drawable, Royal SHOULD select the closest drawable
 level that preserves content. A positive authored terminal threshold MAY cull
 the whole set below that coverage. LOD changes MUST NOT alter logical picking
-identity.
+identity. An admitted material LOD level becomes drawable only when its base
+presentation is resident on the GPU, or when it has no base image. Pending and
+failed preferred images therefore cannot replace a resident lower level;
+ordinary materials outside a LOD set retain the neutral base-color fallback.
 
 Royal does not generate mesh LODs in the browser. Automatic Royal LOD is an
 offline authoring/preparation concern: it emits explicit levels and coverage

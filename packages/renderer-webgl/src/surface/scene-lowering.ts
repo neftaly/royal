@@ -86,6 +86,8 @@ export type CanonicalDrawSurface = Readonly<{
     updateCount?: number;
     updateStart?: number;
   };
+  /** Material-LOD level whose base presentation must be resident before selection. */
+  materialLodLevel?: true;
   lods?: readonly LodMembership[];
   material: CanonicalSurfaceMaterial;
   materialSource: CanonicalSurfaceMaterial;
@@ -738,6 +740,7 @@ export const prepareCanonicalSurfaceScene = (
               decodedTexture,
               texturePending,
             ),
+            ...(materialLod === undefined ? {} : { materialLodLevel: true as const }),
             materialSource: presentedMaterial,
             ...(lods === undefined ? {} : { lods }),
             model,

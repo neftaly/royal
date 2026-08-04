@@ -5,6 +5,26 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.6 - 2026-08-05
+
+### Progressive presentation
+
+- Prepare selected material-LOD base images globally from the lowest authored
+  preview toward the preferred level, while retaining base-color-first slot
+  ordering and shared texture identity.
+- Select a material level only after its base presentation is GPU-resident, so
+  a pending or failed preferred image preserves the nearest drawable preview.
+- Share one validated material-LOD edge reader between early planning and
+  canonical preparation, preventing the two paths from drifting.
+
+### Verification
+
+- Added browser-level texture-binding coverage for failed preferred images,
+  settlement-order property coverage, and cross-primitive/variant ordering
+  controls.
+- Kept the affected lazy and worker bundles within their existing gzip
+  ceilings without raising ratchets.
+
 ## 0.0.5 - 2026-08-04
 
 ### Correctness

@@ -593,6 +593,8 @@ describe("canonical direct surface lowering", () => {
 
     expect(prepared.surfaces).toHaveLength(2);
     expect(prepared.surfaces[0]!.geometry).toBe(prepared.surfaces[1]!.geometry);
+    expect(prepared.surfaces.map((surface) => surface.materialLodLevel))
+      .toEqual([true, true]);
     expect(prepared.surfaces.map((surface) => surface.lods?.[0]?.level)).toEqual([0, 1]);
     expect(prepared.surfaces.map((surface) => surface.material.baseColor)).toEqual([
       [0.2, 0.4, 0.8, 1],

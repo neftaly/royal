@@ -5,14 +5,18 @@ import {
   optionalArray,
   type JsonObject,
 } from "./gltf-values";
-import { readStaticMaterialInputs } from "./static-material-inputs";
+import {
+  readStaticMaterialInputs,
+  staticMaterialLodIds,
+} from "./static-material-inputs";
 import { createStaticTextureImagePlanner } from "./static-texture-image-plan";
 import { selectedTextureCoordinateSet } from "./static-texture-coordinate-set";
 
 export type StaticTextureDemand = Readonly<{
   colorSpace: "linear" | "srgb";
   coordinateSet: 0 | 1;
-  priority: 0 | 1 | 2 | 3;
+  /** Texture-slot tier followed by lowest-to-preferred material phase. */
+  priority: number;
   retainAlpha: boolean;
   textureIndex: number;
 }>;
@@ -31,13 +35,14 @@ export const createStaticPrimitiveTextureDemand = (
 ): ((primitive: JsonObject, path: string) => void) => {
   const materials = optionalArray(document.materials, label, "materials");
   const textures = optionalArray(document.textures, label, "textures");
-  const claimedMaterials = new Set<number>();
+  const claimedMaterialPhases: (number | undefined)[] = [];
+  let materialPhase = 0;
   const claimTexture = (
     value: unknown,
     colorSpace: "linear" | "srgb",
     path: string,
     retainAlpha = false,
-    priority: StaticTextureDemand["priority"] = 2,
+    priority = 2,
   ): void => {
     if (value === undefined) return;
     const textureInfo = object(value, label, path);
@@ -45,15 +50,13 @@ export const createStaticPrimitiveTextureDemand = (
     claimTextureDemand({
       colorSpace,
       coordinateSet: selectedTextureCoordinateSet(textureInfo, label, path),
-      priority,
+      priority: priority * materials.length + materialPhase,
       retainAlpha,
       textureIndex,
     });
   };
-  const claimMaterial = (value: unknown, path: string): void => {
+  const claimMaterial = (value: unknown, path: string, phase?: number): void => {
     const materialIndex = index(value, materials, label, path);
-    if (claimedMaterials.has(materialIndex)) return;
-    claimedMaterials.add(materialIndex);
     const materialPath = `materials[${materialIndex}]`;
     const material = object(materials[materialIndex], label, materialPath);
     const {
@@ -63,6 +66,21 @@ export const createStaticPrimitiveTextureDemand = (
       transmissionExtension,
       volumeExtension,
     } = readStaticMaterialInputs(material, label, materialPath);
+    const lodIds = staticMaterialLodIds(materials, extensions, label, materialPath);
+    phase ??= lodIds.length;
+    const claimedPhase = claimedMaterialPhases[materialIndex];
+    if (claimedPhase !== undefined && claimedPhase <= phase) return;
+    claimedMaterialPhases[materialIndex] = phase;
+    // Direct IDs descend in authored order, so the last ID owns phase zero.
+    const extensionPath = `${materialPath}.extensions.MSFT_lod`;
+    for (let lodIndex = lodIds.length - 1; lodIndex >= 0; lodIndex -= 1) {
+      claimMaterial(
+        lodIds[lodIndex],
+        `${extensionPath}.ids[${lodIndex}]`,
+        lodIds.length - lodIndex - 1,
+      );
+    }
+    materialPhase = phase;
     claimTexture(
       pbr.baseColorTexture,
       "srgb",
@@ -76,8 +94,16 @@ export const createStaticPrimitiveTextureDemand = (
         "linear",
         `${materialPath}.pbrMetallicRoughness.metallicRoughnessTexture`,
       );
-      claimTexture(material.normalTexture, "linear", `${materialPath}.normalTexture`);
-      claimTexture(material.occlusionTexture, "linear", `${materialPath}.occlusionTexture`);
+      claimTexture(
+        material.normalTexture,
+        "linear",
+        `${materialPath}.normalTexture`,
+      );
+      claimTexture(
+        material.occlusionTexture,
+        "linear",
+        `${materialPath}.occlusionTexture`,
+      );
       claimTexture(
         material.emissiveTexture,
         "srgb",
@@ -109,13 +135,6 @@ export const createStaticPrimitiveTextureDemand = (
         false,
         3,
       );
-    }
-    if (extensions.MSFT_lod === undefined) return;
-    const extensionPath = `${materialPath}.extensions.MSFT_lod`;
-    const extension = object(extensions.MSFT_lod, label, extensionPath);
-    const ids = array(extension.ids, label, `${extensionPath}.ids`);
-    for (let lodIndex = 0; lodIndex < ids.length; lodIndex += 1) {
-      claimMaterial(ids[lodIndex], `${extensionPath}.ids[${lodIndex}]`);
     }
   };
   return (primitive, path) => {

@@ -105,7 +105,11 @@ Royal currently:
 - selects projected-coverage LOD with hysteresis across all active views;
 - selects repeated mounts independently even when they share one prepared asset;
 - honors a positive lowest threshold by rendering nothing below it;
-- preserves a drawable level while a selected replacement texture settles;
+- prepares material base-color images from the lowest authored level toward the
+  preferred level;
+- selects a material level only after its base presentation reaches GPU
+  residency, preserving the nearest resident level while a preferred image is
+  pending or failed;
 - shares texture/resource identity across levels.
 
 Royal currently prepares the asset's geometry as one scene rather than

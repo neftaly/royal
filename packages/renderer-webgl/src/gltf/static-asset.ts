@@ -56,6 +56,7 @@ import {
   collectStaticAlphaMaskTextureAssets,
   collectStaticTextureAssets,
 } from "./static-texture-assets";
+import { staticMaterialLodIds } from "./static-material-inputs";
 import {
   readCanonicalStaticGltfSource,
   type StaticGltfResourceReader,
@@ -362,19 +363,10 @@ const prepareStaticDocument = (
   const materialLodIds = (materialIndex: number): readonly number[] => {
     const path = `materials[${materialIndex}]`;
     const material = object(materials[materialIndex], label, path);
-    if (material.extensions === undefined) return [];
-    const extensions = object(material.extensions, label, `${path}.extensions`);
-    if (extensions.MSFT_lod === undefined) return [];
-    const extensionPath = `${path}.extensions.MSFT_lod`;
-    const extension = object(extensions.MSFT_lod, label, extensionPath);
-    const ids = array(extension.ids, label, `${extensionPath}.ids`);
-    if (ids.length === 0) fail(label, `${extensionPath}.ids`, "must not be empty");
-    return ids.map((id, lodIndex) => index(
-      id,
-      materials,
-      label,
-      `${extensionPath}.ids[${lodIndex}]`,
-    ));
+    const extensions = material.extensions === undefined
+      ? {}
+      : object(material.extensions, label, `${path}.extensions`);
+    return staticMaterialLodIds(materials, extensions, label, path);
   };
   const materialGraphState = new Uint8Array(materials.length);
   const validateMaterialLodGraph = (materialIndex: number): void => {
