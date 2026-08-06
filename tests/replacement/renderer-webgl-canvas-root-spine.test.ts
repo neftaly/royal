@@ -493,8 +493,8 @@ describe("clear-only canvas root", () => {
   it("batches exact-compatible outline occurrences by borrowed geometry", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
-    const leftTransform = { position: [-1, 0, 0] as const };
-    const rightTransform = { position: [1, 0, 0] as const };
+    const leftTransform = { position: [-1.2, 0, 0] as const };
+    const rightTransform = { position: [1.2, 0, 0] as const };
     const left = gltf({ src: "/outline-batch-left.glb", transform: leftTransform });
     const right = gltf({ src: "/outline-batch-right.glb", transform: rightTransform });
     const material = edgeMaterial({ color: [1, 0.5, 0.1, 1], widthCssPixels: 4 });
@@ -530,13 +530,13 @@ describe("clear-only canvas root", () => {
           material,
           sourceTransform: leftTransform,
           src: left.asset.src,
-          transform: { position: [-0.5, 0, 0] },
+          transform: { position: [-1.1, 0, 0] },
         }),
         outlineGltf({
           material,
           sourceTransform: rightTransform,
           src: right.asset.src,
-          transform: { position: [0.5, 0, 0] },
+          transform: { position: [1.1, 0, 0] },
         }),
       ],
     }));
@@ -545,6 +545,20 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.createBuffer).toHaveBeenCalledTimes(createdBuffers);
     expect(canvas.gl.bufferData).toHaveBeenCalledOnce();
     expect(canvas.gl.bufferSubData.mock.calls.some((call) => call[4] === 34)).toBe(true);
+
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.bufferSubData.mockClear();
+    canvas.gl.drawElementsInstanced.mockClear();
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    canvas.dispatchEvent(new Event("webglcontextrestored"));
+    callbacks.shift()!();
+    expect(scheduledFailures).toEqual([]);
+    // Position, index, automatic instances, and outline-batch instances.
+    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(4);
+    expect(canvas.gl.bufferSubData.mock.calls.some((call) => call[4] === 34)).toBe(true);
+    expect(canvas.gl.drawElementsInstanced.mock.calls.filter((call) => call[4] === 2))
+      .toHaveLength(2);
+    root.dispose();
   });
 
   it("partitions coincident edge runs without another pass or solid-shader branch", async () => {

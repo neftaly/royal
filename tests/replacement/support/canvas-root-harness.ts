@@ -18,6 +18,9 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly createBuffer: ReturnType<typeof vi.fn<() => WebGLBuffer | null>>;
   readonly createFramebuffer: ReturnType<typeof vi.fn<() => WebGLFramebuffer | null>>;
   readonly createTexture: ReturnType<typeof vi.fn<() => WebGLTexture | null>>;
+  readonly createVertexArray: ReturnType<
+    typeof vi.fn<() => WebGLVertexArrayObject | null>
+  >;
   readonly bufferData: ReturnType<typeof vi.fn>;
   readonly bufferSubData: ReturnType<typeof vi.fn>;
   readonly drawElements: ReturnType<typeof vi.fn>;
@@ -130,7 +133,9 @@ export const fakeGl = (): FakeGl => ({
   createProgram: vi.fn(() => ({})),
   createSampler: vi.fn(() => ({})),
   createShader: vi.fn(() => ({})),
-  createVertexArray: vi.fn(() => ({})),
+  createVertexArray: vi.fn<() => WebGLVertexArrayObject | null>(
+    () => ({} as WebGLVertexArrayObject),
+  ),
   createTexture: vi.fn(() => ({})),
   cullFace: vi.fn(),
   deleteBuffer: vi.fn(),
