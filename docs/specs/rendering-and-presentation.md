@@ -268,8 +268,9 @@ outline behavior.
 
 The mask target is full resolution and its depth attachment is discarded after
 rasterization because no later pass samples it. Horizontal expansion reuses
-overlapping mask texels; vertical binary expansion pairs adjacent texels through
-a linear sampler and thresholds the result. The two sampled passes are
+overlapping mask texels and their decoded covered normals; vertical binary
+expansion pairs adjacent texels through a linear sampler and thresholds the
+result. The two sampled passes are
 scissored to conservative projected overlay bounds plus their complete sampling
 halo. The scratch halo is cleared before a partial pass, and indeterminate or
 viewport-sized projection uses the full-target path. This is one canvas/XR

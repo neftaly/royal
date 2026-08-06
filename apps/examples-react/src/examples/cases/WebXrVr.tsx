@@ -39,9 +39,11 @@ const tigerOutlineColors = [
 const exampleSearch = typeof globalThis.location === "undefined"
   ? new URLSearchParams()
   : new URLSearchParams(globalThis.location.search);
-const partitionTigerOutline = exampleSearch
-  .get("edgeCoverage") !== "solid";
-const partitionGuides = exampleSearch.get("unlitCoverage") !== "solid";
+const partitionCoverage = exampleSearch.get("coverage") === "partitioned";
+const presentedTigerOutlineColors = tigerOutlineColors.slice(
+  0,
+  partitionCoverage ? tigerOutlineColors.length : 1,
+);
 const guideShapes = [
   {
     geometry: boxGeometry([3.4, 0.045, 0.045]),
@@ -53,15 +55,15 @@ const guideShapes = [
   },
 ] as const;
 const guideNodes = guideShapes.flatMap(({ geometry, transform }) =>
-  tigerOutlineColors.map((color, index) => mesh({
+  presentedTigerOutlineColors.map((color, index) => mesh({
     geometry,
     material: unlitMaterial({
       color,
-      ...(partitionGuides
+      ...(partitionCoverage
         ? {
             coverage: screenSpacePartition({
               cellSizeCssPixels: 1,
-              count: tigerOutlineColors.length,
+              count: presentedTigerOutlineColors.length,
               index,
             }),
           }
@@ -72,14 +74,14 @@ const guideNodes = guideShapes.flatMap(({ geometry, transform }) =>
 const xrOverlay = sceneOverlay({
   nodes: [
     ...guideNodes,
-    ...tigerOutlineColors.map((color, index) => outlineGltf({
+    ...presentedTigerOutlineColors.map((color, index) => outlineGltf({
       material: edgeMaterial({
         color,
-        ...(partitionTigerOutline
+        ...(partitionCoverage
           ? {
               coverage: screenSpacePartition({
                 cellSizeCssPixels: 1,
-                count: tigerOutlineColors.length,
+                count: presentedTigerOutlineColors.length,
                 index,
               }),
             }

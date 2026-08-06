@@ -194,10 +194,36 @@ resolve and Adreno's cheap full mask clear. Reports are:
 - `/tmp/royal-quest-box-outline-xr-scissored-mask-clear.json`
 
 This is a material improvement over the original 21.33--22.23 ms medians, but
-it does not satisfy a 120 Hz 8.33 ms frame or a stable 60 Hz p95. The Quest
-release concern is narrowed rather than removed. The Tiger SVG/automatic-VT
-flicker also remains a separate open physical observation; none of these opaque
-Box measurements explain or resolve it.
+the short 120-frame windows over-weight XR-entry warm-up and do not describe the
+steady path. A corrected 600-frame protocol then reused decoded covered normals
+across the horizontal mask window. Two exact cached-shader runs measured
+8.38--8.39 ms median and 13.49--14.23 ms p95 across the complete 607--624
+intervals. After the first 120 intervals, their remaining 487--504 intervals
+measured 8.33--8.35 ms median and 9.28--9.44 ms p95. Both therefore satisfy the
+60 Hz floor in steady use, and even the complete warm-up-inclusive p95 stays
+below 16.67 ms.
+
+Two matching 600-frame committed-shader controls measured 8.67--8.79 ms median
+and 13.05--14.75 ms p95 over the complete runs; after their first 120 intervals,
+they measured 8.54--8.60 ms median and 10.46--10.55 ms p95. The normal cache is
+retained because it improves both steady median and steady p95 without another
+fetch, pass, branch, public policy, or output change. An explicit radius-loop
+break, algebraically equivalent unnormalized-normal comparison, native depth
+renderbuffer, and nested edge short-circuits all regressed physical medians and
+were removed. Every run retained eight submissions per frame. One of the four
+long runs ended with an isolated `GL_INVALID_OPERATION`; the other three had no
+page or GL error, so the existing unlocalized runtime diagnostic remains
+separate from the shader result. Reports are:
+
+- `/tmp/royal-quest-box-outline-xr-horizontal-normal-cache-long.json`
+- `/tmp/royal-quest-box-outline-xr-horizontal-normal-cache-long-2.json`
+- `/tmp/royal-quest-box-outline-xr-committed-long.json`
+- `/tmp/royal-quest-box-outline-xr-committed-long-2.json`
+
+This removes stable 60 Hz from the opaque-outline release concerns. It does not
+claim sustained 120 Hz: the 8.33 ms budget has no credible tail margin. The
+Tiger SVG/automatic-VT flicker also remains a separate open physical
+observation; none of these opaque Box measurements explain or resolve it.
 
 A focused follow-up narrows that observation without claiming a fix. The first
 Tiger XR session progressively moved from 7 resident / 4 pending automatic-VT
@@ -214,3 +240,30 @@ presentation remain distinct hypotheses. The reports and capture are:
 - `/tmp/royal-quest-tiger-xr-vt-steady.json`
 - `/tmp/royal-quest-tiger-xr-solid-steady.json`
 - `/tmp/royal-tiger-solid-xr.png`
+
+The remaining default-example presentation was itself adversarial: it
+interleaved three saturated guide and outline colors in one-pixel screen-space
+cells. That pattern is display-fixed while the outlined Tiger moves under head
+motion, so it can crawl even when every texture page is stable. The ordinary
+WebXR example now presents one solid guide/outline color and exposes the
+three-way partition only through the explicit `?coverage=partitioned` stress
+case. This is an example correction, not a device/browser heuristic or a second
+renderer path.
+
+On the same physical Quest, the corrected first session halved complete
+submissions from roughly 46 to 22 per frame and measured 8.38 ms median / 13.42
+ms p95 over 612 intervals. Its post-entry 492-interval window measured 8.36 ms
+median / 9.70 ms p95 while automatic VT legitimately refined from 11 to 21
+resident pages. A resident-resource repeat kept one identical 21-resident,
+zero-pending/failure/upload VT snapshot across all 55 samples, measured 8.42 ms
+median / 12.55 ms p95 over the complete run and 8.37 ms median / 9.69 ms p95
+after the first 120 intervals, and ended without page or GL errors. The retained
+physical stereo capture is coherent in both eyes. These results remove the
+display-fixed partition crawl and steady VT churn from the default Tiger path;
+the visible refinement during first-session page admission remains intentional
+progressive presentation.
+
+- `/tmp/royal-quest-tiger-single-presentation-long.json`
+- `/tmp/royal-quest-tiger-single-presentation-steady-long.json`
+- `/tmp/royal-quest-tiger-single-presentation-capture.json`
+- `/tmp/royal-tiger-single-presentation.png`

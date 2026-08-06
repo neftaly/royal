@@ -137,7 +137,10 @@ vec3 octDecode(vec2 encoded) {
   }
   return normalize(normal);
 }
-float edgeSeed(vec4 center, vec4 neighbor) {
+vec3 coveredNormal(vec4 sampleValue) {
+  return sampleValue.a > 0.5 ? octDecode(sampleValue.rg) : vec3(0.0);
+}
+float edgeSeed(vec4 center, vec3 centerNormal, vec4 neighbor, vec3 neighborNormal) {
   bool centerCovered = center.a > 0.5;
   bool neighborCovered = neighbor.a > 0.5;
   if (centerCovered != neighborCovered) return centerCovered ? 1.0 : 0.0;
@@ -145,7 +148,7 @@ float edgeSeed(vec4 center, vec4 neighbor) {
   if (abs(center.b - neighbor.b) > (0.5 / 255.0)) {
     return center.b < neighbor.b ? 1.0 : 0.0;
   }
-  if (dot(octDecode(center.rg), octDecode(neighbor.rg)) >= ${CREASE_NORMAL_COSINE}) {
+  if (dot(centerNormal, neighborNormal) >= ${CREASE_NORMAL_COSINE}) {
     return 0.0;
   }
   if (abs(center.r - neighbor.r) > (0.5 / 255.0)) {
@@ -160,16 +163,23 @@ void main() {
   vec2 verticalStep = vec2(0.0, texelSize.y);
   vec2 coordinate = textureCoordinate - float(radius) * horizontalStep;
   vec4 left = texture(edgeMask, coordinate - horizontalStep);
+  vec3 leftNormal = coveredNormal(left);
   vec4 center = texture(edgeMask, coordinate);
+  vec3 centerNormal = coveredNormal(center);
   for (int index = 0; index <= radius * 2; index += 1) {
     vec4 right = texture(edgeMask, coordinate + horizontalStep);
-    float edge = edgeSeed(center, right);
-    edge = max(edge, edgeSeed(center, left));
-    edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate + verticalStep)));
-    edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate - verticalStep)));
+    vec3 rightNormal = coveredNormal(right);
+    vec4 up = texture(edgeMask, coordinate + verticalStep);
+    vec4 down = texture(edgeMask, coordinate - verticalStep);
+    float edge = edgeSeed(center, centerNormal, right, rightNormal);
+    edge = max(edge, edgeSeed(center, centerNormal, left, leftNormal));
+    edge = max(edge, edgeSeed(center, centerNormal, up, coveredNormal(up)));
+    edge = max(edge, edgeSeed(center, centerNormal, down, coveredNormal(down)));
     signal = max(signal, edge);
     left = center;
+    leftNormal = centerNormal;
     center = right;
+    centerNormal = rightNormal;
     coordinate += horizontalStep;
   }
   outputSignal = vec4(signal, 0.0, 0.0, 1.0);
