@@ -129,8 +129,38 @@ budgeted only after required overlay targets.
 
 The renderer-webgl bundle adds 2,277 gzip bytes over an exact 0.0.6 rebuild
 (133,746 bytes current versus 131,469 bytes at `bf0075da`). The packed renderer
-adds 9,655 bytes over the published 0.0.6 tarball (632,170 versus 622,515
+adds 9,723 bytes over the published 0.0.6 tarball (632,238 versus 622,515
 bytes). Both release gates now record the exact 0.0.6 reference instead of the
-older ceilings that 0.0.6 itself already exceeded. A current Quest pass remains
-required; the connected headset exposed only USB mass storage and no ADB or
-browser-inspector interface during this review.
+older ceilings that 0.0.6 itself already exceeded.
+
+A subsequent physical Quest 2 pass used Meta Browser 149 and Adreno 650 in an
+immersive 120 Hz session. A matched lab rendered 72 automatically instanced
+opaque Box glTF occurrences, first without an overlay and then with 72 displaced
+outlines sharing one selection material. The baseline submitted 2 draws per XR
+frame and measured 8.36 ms median / 10.05 ms p95 frame intervals. The outline
+run submitted 8 draws per frame and measured 21.33 ms median / 40.84 ms p95,
+with no page or WebGL errors in either run. The two additional instanced draws
+are one batched outline mask per eye; four full-screen presentation draws make
+up the rest of the six-draw delta. Reports are
+`/tmp/royal-quest-box-outline-xr-baseline.json` and
+`/tmp/royal-quest-box-outline-xr-overlay.json`.
+
+An independent repeat preserved the structural result exactly: 2 submissions
+per frame without the overlay and 8 with it. It measured 8.38 ms median /
+19.95 ms p95 for the baseline and 22.23 ms median / 40.52 ms p95 with outlines.
+The repeated overlay run again had no page or GL error. The repeated baseline,
+which contains no outline work, ended with one unlocalized
+`GL_INVALID_OPERATION`; the other three opaque runs were clean. Retain that as
+a separate physical-runtime diagnostic rather than assigning it to the outline
+path. Repeat reports append `-2` to the artifact names above.
+
+This proves exact occurrence batching and ordered stereo execution, but it
+also rejects release readiness on the Quest 2 floor: full-screen mask
+presentation, not per-object submission count, is now the dominant renderer
+cost. The first exploratory run used 72 SVG-textured tiger cards and visibly
+flickered in-headset. That asset was removed from the timing A/B; its SVG/VT/XR
+behavior is a separate unresolved observation, not evidence against or for
+outline batching. Quest Browser also left an optional frame-rate preference
+promise unsettled during initial session setup. Royal now starts the XR layer
+without awaiting that optional preference, while containing asynchronous and
+synchronous runtime failures.

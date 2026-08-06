@@ -359,12 +359,13 @@ export const createWebXrSessionRendererWithPlatform = async (
         session.supportedFrameRates,
       );
       if (frameRate !== undefined) {
+        // Some runtimes settle this preference only after the first XR frame.
+        // Setup must reach the layer and frame clock without waiting on it.
         try {
-          await session.updateTargetFrameRate(frameRate);
+          void session.updateTargetFrameRate(frameRate).catch(() => undefined);
         } catch {
           // A preference cannot make an otherwise usable XR session fail.
         }
-        assertSetupActive();
       }
     }
     const Layer = platform.layerConstructor();

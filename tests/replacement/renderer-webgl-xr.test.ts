@@ -167,6 +167,43 @@ describe("WebXR session renderer", () => {
     expect(renderer.disposed).toBe(true);
   });
 
+  it("does not let an unsettled optional frame-rate preference block XR setup", async () => {
+    const { canvas, root } = canvasRootHarness();
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const session = new FakeSession();
+    session.updateTargetFrameRate.mockImplementation(() => new Promise(() => undefined));
+
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      session,
+      { preferredFrameRate: "highest" },
+      { layerConstructor: () => FakeLayer },
+    );
+
+    expect(session.updateTargetFrameRate).toHaveBeenCalledWith(120);
+    expect(session.updateRenderState).toHaveBeenCalledOnce();
+    renderer.dispose();
+  });
+
+  it("ignores a synchronous optional frame-rate preference failure", async () => {
+    const { canvas, root } = canvasRootHarness();
+    Object.assign(canvas.gl, { makeXRCompatible: vi.fn(async () => undefined) });
+    const session = new FakeSession();
+    session.updateTargetFrameRate.mockImplementation(() => {
+      throw new Error("runtime rejected frame-rate update");
+    });
+
+    const renderer = await createWebXrSessionRendererWithPlatform(
+      root,
+      session,
+      { preferredFrameRate: "highest" },
+      { layerConstructor: () => FakeLayer },
+    );
+
+    expect(session.updateRenderState).toHaveBeenCalledOnce();
+    renderer.dispose();
+  });
+
   it("anchors partition coverage independently within each stereo viewport", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root } = canvasRootHarness({ readGltf });
