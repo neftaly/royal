@@ -1,10 +1,26 @@
 {
-  "royalInitialGzipBytes": 121800,
-  "royalIncrementalGzipBytes": 62500,
-  "royalGltfInitialGzipBytes": 122750,
+  "_reference": {
+    "revision": "bf0075da",
+    "version": "0.0.6",
+    "royalInitialGzipBytes": 131469,
+    "royalIncrementalGzipBytes": 72161,
+    "royalGltfInitialGzipBytes": 132423,
+    "royalGltfIncrementalGzipBytes": 954,
+    "royalLazyGzipBytes": 143694,
+    "royalTotalIncrementalGzipBytes": 215855,
+    "royalTotalGzipBytes": 275163,
+    "royalWorkerGzipBytes": 56618
+  },
+  "_allowance": {
+    "feature": "exact-compatible outline batching",
+    "initialAndTotalGzipBytes": 2500
+  },
+  "royalInitialGzipBytes": 134000,
+  "royalIncrementalGzipBytes": 74700,
+  "royalGltfInitialGzipBytes": 135000,
   "royalGltfIncrementalGzipBytes": 1250,
   "royalLazyGzipBytes": 143700,
-  "royalTotalIncrementalGzipBytes": 206150,
-  "royalTotalGzipBytes": 265450,
+  "royalTotalIncrementalGzipBytes": 218400,
+  "royalTotalGzipBytes": 277700,
   "royalWorkerGzipBytes": 56650
 }

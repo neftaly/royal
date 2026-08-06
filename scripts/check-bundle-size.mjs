@@ -15,6 +15,20 @@ const budget = JSON.parse(readFileSync(
   path.join(repoRoot, 'scripts/bundle-size-budget.json'),
   'utf8',
 ));
+for (const name of [
+  'royalGltfIncrementalGzipBytes',
+  'royalGltfInitialGzipBytes',
+  'royalIncrementalGzipBytes',
+  'royalInitialGzipBytes',
+  'royalLazyGzipBytes',
+  'royalTotalGzipBytes',
+  'royalTotalIncrementalGzipBytes',
+  'royalWorkerGzipBytes',
+]) {
+  if (!Number.isSafeInteger(budget[name]) || budget[name] < 0) {
+    throw new Error(`Bundle-size budget ${name} must be a non-negative safe integer`);
+  }
+}
 const unsupportedArguments = process.argv.slice(2)
   .filter((argument) => argument !== '--details' && argument !== '--json');
 if (unsupportedArguments.length > 0) {

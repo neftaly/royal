@@ -1,0 +1,10 @@
+{
+  "_reference": {
+    "revision": "bf0075da",
+    "version": "0.0.6",
+    "@royal/renderer-webgl": 622515
+  },
+  "@royal/react": 131072,
+  "@royal/renderer-core": 524288,
+  "@royal/renderer-webgl": 638976
+}

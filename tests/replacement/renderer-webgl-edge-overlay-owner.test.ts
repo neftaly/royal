@@ -393,4 +393,32 @@ describe("edge-overlay batch ownership", () => {
     expect(gl.drawElements).toHaveBeenCalledTimes(2);
     owner.dispose();
   });
+
+  it("falls back if the optional batch shader cannot link", () => {
+    const gl = fakeGl();
+    gl.getProgramParameter.mockImplementation(() =>
+      gl.createProgram.mock.calls.length < 5);
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = overlayFixture();
+    owner.setScene(scene);
+
+    expect(() => owner.drawViews(
+      [view()],
+      null,
+      new WebGlStateOwner(gl),
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    )).not.toThrow();
+
+    expect(gl.drawElementsInstanced).not.toHaveBeenCalled();
+    expect(gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(gl.deleteProgram).toHaveBeenCalledOnce();
+    owner.dispose();
+  });
 });

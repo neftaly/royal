@@ -32,11 +32,10 @@ const packageDirectories = [
   'packages/react',
 ];
 
-const packageSizeBudgets = {
-  '@royal/react': 128 * 1024,
-  '@royal/renderer-core': 512 * 1024,
-  '@royal/renderer-webgl': 564 * 1024,
-};
+const packageSizeBudgets = JSON.parse(readFileSync(
+  path.join(repoRoot, 'scripts/package-size-budget.json'),
+  'utf8',
+));
 const packageSizeFailures = [];
 
 const readPackage = (directory) => JSON.parse(readFileSync(
@@ -124,9 +123,12 @@ try {
     }
     const packedBytes = statSync(tarball).size;
     const sizeBudget = packageSizeBudgets[manifest.name];
-    if (sizeBudget === undefined || packedBytes > sizeBudget) {
+    if (!Number.isSafeInteger(sizeBudget) || sizeBudget < 1) {
+      throw new Error(`${manifest.name} package-size budget must be a positive safe integer`);
+    }
+    if (packedBytes > sizeBudget) {
       packageSizeFailures.push(
-        `${manifest.name} tarball is ${packedBytes} bytes; budget is ${sizeBudget ?? 0}`,
+        `${manifest.name} tarball is ${packedBytes} bytes; budget is ${sizeBudget}`,
       );
     }
     console.log(`checked packed ${manifest.name} ${Math.ceil(packedBytes / 1024)} KiB`);
