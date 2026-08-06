@@ -12,15 +12,15 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching",
-    "initialAndTotalGzipBytes": 2500
+    "feature": "exact-compatible outline batching and bounded screen-space presentation",
+    "initialAndTotalGzipBytes": 3200
   },
-  "royalInitialGzipBytes": 134000,
-  "royalIncrementalGzipBytes": 74700,
-  "royalGltfInitialGzipBytes": 135000,
+  "royalInitialGzipBytes": 134650,
+  "royalIncrementalGzipBytes": 75350,
+  "royalGltfInitialGzipBytes": 135650,
   "royalGltfIncrementalGzipBytes": 1250,
   "royalLazyGzipBytes": 143700,
-  "royalTotalIncrementalGzipBytes": 218400,
-  "royalTotalGzipBytes": 277700,
+  "royalTotalIncrementalGzipBytes": 219050,
+  "royalTotalGzipBytes": 278350,
   "royalWorkerGzipBytes": 56650
 }

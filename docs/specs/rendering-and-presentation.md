@@ -256,11 +256,25 @@ Automatic surface instancing retains the exact asset, original primitive
 geometry identity, and mounted occurrence for every same-index stored instance
 transform. An outline resolves that provenance using the cohort's float32
 transform storage, borrows the cohort's resident geometry and vertex array,
-and submits one ordinary mask draw for the requested occurrence. It neither
-draws the other cohort members nor disables world instancing. Adding, changing,
-or removing an outline therefore does not re-lower the world scene or rebuild
-its instance buffers. Authored glTF instance cohorts retain their existing
-whole-cohort outline behavior.
+and does not draw unrequested cohort members or disable world instancing.
+Exact-compatible requested occurrences share one retained transform block and
+one instanced mask submission. Compatible multi-primitive occurrences retain
+one combined occurrence-major geometry allocation so primitive order cannot
+cross occurrence order. Allocation or optional batch-program failure falls
+back to the same ordinary ordered mask draws. Adding, changing, or removing an
+outline therefore does not re-lower the world scene or rebuild its instance
+buffers. Authored glTF instance cohorts retain their existing whole-cohort
+outline behavior.
+
+The mask target is full resolution and its depth attachment is discarded after
+rasterization because no later pass samples it. Horizontal expansion reuses
+overlapping mask texels; vertical binary expansion pairs adjacent texels through
+a linear sampler and thresholds the result. The two sampled passes are
+scissored to conservative projected overlay bounds plus their complete sampling
+halo. The scratch halo is cleared before a partial pass, and indeterminate or
+viewport-sized projection uses the full-target path. This is one canvas/XR
+policy: it does not lower resolution, retain temporal pixels, inspect browser
+identity, or expose a consumer quality switch.
 
 When an overlay is active, the root may retain the completed world
 presentation and restore it for overlay-only add, replace, clear, or transform

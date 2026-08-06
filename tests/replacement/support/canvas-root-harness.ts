@@ -17,6 +17,8 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly copyTexSubImage2D: ReturnType<typeof vi.fn>;
   readonly createBuffer: ReturnType<typeof vi.fn<() => WebGLBuffer | null>>;
   readonly createFramebuffer: ReturnType<typeof vi.fn<() => WebGLFramebuffer | null>>;
+  readonly createProgram: ReturnType<typeof vi.fn<() => WebGLProgram | null>>;
+  readonly createSampler: ReturnType<typeof vi.fn<() => WebGLSampler | null>>;
   readonly createTexture: ReturnType<typeof vi.fn<() => WebGLTexture | null>>;
   readonly createVertexArray: ReturnType<
     typeof vi.fn<() => WebGLVertexArrayObject | null>
@@ -27,6 +29,9 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
   readonly drawArrays: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
+  readonly getProgramParameter: ReturnType<typeof vi.fn>;
+  readonly invalidateFramebuffer: ReturnType<typeof vi.fn>;
+  readonly scissor: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
   readonly texSubImage2D: ReturnType<typeof vi.fn>;
@@ -168,6 +173,7 @@ export const fakeGl = (): FakeGl => ({
     : 4096),
   getExtension: vi.fn(() => null),
   getUniformLocation: vi.fn(() => ({})),
+  invalidateFramebuffer: vi.fn(),
   linkProgram: vi.fn(),
   pixelStorei: vi.fn(),
   samplerParameteri: vi.fn(),

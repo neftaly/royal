@@ -127,11 +127,12 @@ meets a 60 Hz frame budget. The displaced capture and report are
 combined allocation both fail closed to ordinary ordered draws; the latter is
 budgeted only after required overlay targets.
 
-The renderer-webgl bundle adds 2,277 gzip bytes over an exact 0.0.6 rebuild
-(133,746 bytes current versus 131,469 bytes at `bf0075da`). The packed renderer
-adds 9,723 bytes over the published 0.0.6 tarball (632,238 versus 622,515
-bytes). Both release gates now record the exact 0.0.6 reference instead of the
-older ceilings that 0.0.6 itself already exceeded.
+The completed renderer path adds 3,142 initial gzip bytes over an exact 0.0.6
+rebuild (134,611 bytes current versus 131,469 bytes at `bf0075da`). The packed
+renderer adds 13,098 bytes over the published 0.0.6 tarball (635,613 versus
+622,515 bytes). Both release gates record the exact 0.0.6 reference; their
+allowance names batching and bounded screen-space presentation rather than
+hiding the added path inside an unrelated ceiling.
 
 A subsequent physical Quest 2 pass used Meta Browser 149 and Adreno 650 in an
 immersive 120 Hz session. A matched lab rendered 72 automatically instanced
@@ -164,3 +165,52 @@ outline batching. Quest Browser also left an optional frame-rate preference
 promise unsettled during initial session setup. Royal now starts the XR layer
 without awaiting that optional preference, while containing asynchronous and
 synchronous runtime failures.
+
+The next renderer pass kept full-resolution output and the same public
+descriptor. It discarded the mask depth attachment before leaving the mask
+target, reused overlapping horizontal mask samples, paired adjacent binary
+vertical samples through a dedicated linear sampler, and conservatively
+projected visible outline bounds to scissor only the two sampled screen-space
+passes. A scissored scratch clear covers the complete resolve sampling halo, so
+pixels from an earlier frame or material run cannot enter the result. If bounds
+cannot be projected or the region reaches the viewport, Royal retains the
+ordinary full-target path. There is no XR/browser branch, resolution reduction,
+temporal state, or consumer tuning knob.
+
+On the same Quest 2 lab, shader fetch reduction alone brought width-four
+outlines to 18.02--18.64 ms median. The bounded screen-space path then measured
+14.13 ms median / 26.82 ms p95 and 13.64 ms median / 30.49 ms p95 in two runs.
+It retained exactly eight submissions per frame and both runs ended with no
+page or GL error. Width one measured 10.40 ms median / 17.28 ms p95, isolating
+about 3.2--3.7 ms of the width-four result to radius-dependent sampling. An
+unpaired-resolve counterfactual regressed the bounded path to 14.83 ms median;
+scissoring the mask clear regressed it to 14.64 ms, so Royal retains the paired
+resolve and Adreno's cheap full mask clear. Reports are:
+
+- `/tmp/royal-quest-box-outline-xr-scissored.json`
+- `/tmp/royal-quest-box-outline-xr-scissored-2.json`
+- `/tmp/royal-quest-box-outline-xr-scissored-width-1.json`
+- `/tmp/royal-quest-box-outline-xr-scissored-unpaired-resolve.json`
+- `/tmp/royal-quest-box-outline-xr-scissored-mask-clear.json`
+
+This is a material improvement over the original 21.33--22.23 ms medians, but
+it does not satisfy a 120 Hz 8.33 ms frame or a stable 60 Hz p95. The Quest
+release concern is narrowed rather than removed. The Tiger SVG/automatic-VT
+flicker also remains a separate open physical observation; none of these opaque
+Box measurements explain or resolve it.
+
+A focused follow-up narrows that observation without claiming a fix. The first
+Tiger XR session progressively moved from 7 resident / 4 pending automatic-VT
+pages to 21 resident / 0 pending. A second session preserved 21 resident pages,
+zero pending or failed pages, zero uploads, and one unchanged VT snapshot across
+all 32 samples. The existing solid-coverage control produced a coherent physical
+stereo capture with the same settled residency and no page or GL error. Thus
+steady-state atlas eviction or page-request churn is not supported by this run;
+startup refinement, discrete mip sampling, the example's default one-pixel
+three-way screen-space partition, and its 46-submission / roughly 20 ms median
+presentation remain distinct hypotheses. The reports and capture are:
+
+- `/tmp/royal-quest-tiger-xr-vt-samples.json`
+- `/tmp/royal-quest-tiger-xr-vt-steady.json`
+- `/tmp/royal-quest-tiger-xr-solid-steady.json`
+- `/tmp/royal-tiger-solid-xr.png`

@@ -62,6 +62,34 @@ export class WebGlStateOwner {
     this.#state.textureBindings[unit] = undefined;
   }
 
+  /** Restricts draws after their ordinary state has been applied. */
+  applyDrawScissor(scissor: Readonly<{
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  }>): void {
+    const gl = this.#gl;
+    try {
+      if (!this.#state.scissorEnabled) gl.enable(gl.SCISSOR_TEST);
+      if (
+        !this.#state.scissorEnabled
+        || this.#state.scissorX !== scissor.x
+        || this.#state.scissorY !== scissor.y
+        || this.#state.scissorWidth !== scissor.width
+        || this.#state.scissorHeight !== scissor.height
+      ) gl.scissor(scissor.x, scissor.y, scissor.width, scissor.height);
+      this.#state.scissorEnabled = true;
+      this.#state.scissorX = scissor.x;
+      this.#state.scissorY = scissor.y;
+      this.#state.scissorWidth = scissor.width;
+      this.#state.scissorHeight = scissor.height;
+    } catch (error) {
+      this.invalidate();
+      throw error;
+    }
+  }
+
   clear(intent: ClearFrameIntent): void {
     const gl = this.#gl;
     const transition = this.#clearTransition;

@@ -148,6 +148,84 @@ describe("edge-overlay batch ownership", () => {
       68,
     );
     expect(gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
+    expect(gl.invalidateFramebuffer).toHaveBeenCalledTimes(2);
+    expect(gl.invalidateFramebuffer).toHaveBeenNthCalledWith(
+      1,
+      gl.FRAMEBUFFER,
+      [gl.DEPTH_ATTACHMENT],
+    );
+    owner.dispose();
+  });
+
+  it("restricts screen-space work to the projected overlay and pairs binary samples", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = overlayFixture();
+    owner.setScene(scene);
+
+    owner.drawViews(
+      [{
+        ...view(),
+        viewport: { height: 100, width: 100, x: 7, y: 11 },
+      }],
+      null,
+      new WebGlStateOwner(gl),
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    expect(gl.scissor.mock.calls).toContainEqual([12, 36, 76, 28]);
+    expect(gl.scissor.mock.calls).toContainEqual([12, 38, 76, 24]);
+    expect(gl.scissor.mock.calls).toContainEqual([19, 48, 76, 26]);
+    const maskSampler = gl.createSampler.mock.results[0]!.value as WebGLSampler;
+    const signalSampler = gl.createSampler.mock.results[1]!.value as WebGLSampler;
+    expect(gl.samplerParameteri).toHaveBeenCalledWith(
+      maskSampler,
+      gl.TEXTURE_MIN_FILTER,
+      gl.NEAREST,
+    );
+    expect(gl.samplerParameteri).toHaveBeenCalledWith(
+      signalSampler,
+      gl.TEXTURE_MIN_FILTER,
+      gl.LINEAR,
+    );
+    owner.dispose();
+  });
+
+  it("does not clear or scissor a screen-space pass that already covers the target", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = overlayFixture();
+    for (const surface of scene.surfaces) {
+      (surface as { worldBounds: CanonicalEdgeSurface["worldBounds"] }).worldBounds = {
+        max: [4, 4, 0.2],
+        min: [-4, -4, -0.2],
+      };
+    }
+    owner.setScene(scene);
+
+    owner.drawViews(
+      [view()],
+      null,
+      new WebGlStateOwner(gl),
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    expect(gl.clear).toHaveBeenCalledOnce();
+    expect(gl.scissor).not.toHaveBeenCalled();
     owner.dispose();
   });
 

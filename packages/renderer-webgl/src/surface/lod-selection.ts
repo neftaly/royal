@@ -157,12 +157,12 @@ const includeProjectedPoint = (
   return true;
 };
 
-/** Computes clipped normalized screen area using caller-owned scratch. */
-export const projectedBoundsScreenCoverage = (
+/** Writes clipped normalized screen extents into the caller-owned workspace. */
+export const projectedBoundsScreenExtentsInto = (
   bounds: WorldBounds,
   viewProjection: Mat4,
   workspace: ProjectedBoundsWorkspace,
-): number => {
+): boolean => {
   const corners = workspace.clipCorners;
   for (let corner = 0; corner < CORNER_COUNT; corner += 1) {
     const x = (corner & 1) === 0 ? bounds.min[0] : bounds.max[0];
@@ -207,7 +207,17 @@ export const projectedBoundsScreenCoverage = (
       corners[start + 3]! + (corners[end + 3]! - corners[start + 3]!) * t,
     ) || projected;
   }
-  if (!projected) return 0;
+  return projected;
+};
+
+/** Computes clipped normalized screen area using caller-owned scratch. */
+export const projectedBoundsScreenCoverage = (
+  bounds: WorldBounds,
+  viewProjection: Mat4,
+  workspace: ProjectedBoundsWorkspace,
+): number => {
+  if (!projectedBoundsScreenExtentsInto(bounds, viewProjection, workspace)) return 0;
+  const extents = workspace.screenExtents;
   const coverage = Math.max(0, extents[2]! - extents[0]!)
     * Math.max(0, extents[3]! - extents[1]!);
   return Number.isFinite(coverage) ? Math.max(0, Math.min(1, coverage)) : 0;

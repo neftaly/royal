@@ -7,6 +7,10 @@ import {
   planGeometryBatch,
   planGeometryBatchLayout,
 } from "./geometry-batch-plan";
+import {
+  createProjectedBoundsWorkspace,
+  projectedBoundsScreenExtentsInto,
+} from "./lod-selection";
 import type {
   MutableSurfaceDrawFrame,
   SurfaceDrawPacket,
@@ -149,22 +153,24 @@ float edgeSeed(vec4 center, vec4 neighbor) {
   }
   return center.g < neighbor.g ? 1.0 : 0.0;
 }
-float edgeAt(vec2 coordinate) {
-  vec4 center = texture(edgeMask, coordinate);
-  float edge = edgeSeed(center, texture(edgeMask, coordinate + vec2(texelSize.x, 0.0)));
-  edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate - vec2(texelSize.x, 0.0))));
-  edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate + vec2(0.0, texelSize.y))));
-  edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate - vec2(0.0, texelSize.y))));
-  return edge;
-}
 void main() {
   float signal = 0.0;
   int radius = int(ceil(horizontalRadius));
-  for (int offset = -radius; offset <= radius; offset += 1) {
-    signal = max(
-      signal,
-      edgeAt(textureCoordinate + vec2(float(offset) * texelSize.x, 0.0))
-    );
+  vec2 horizontalStep = vec2(texelSize.x, 0.0);
+  vec2 verticalStep = vec2(0.0, texelSize.y);
+  vec2 coordinate = textureCoordinate - float(radius) * horizontalStep;
+  vec4 left = texture(edgeMask, coordinate - horizontalStep);
+  vec4 center = texture(edgeMask, coordinate);
+  for (int index = 0; index <= radius * 2; index += 1) {
+    vec4 right = texture(edgeMask, coordinate + horizontalStep);
+    float edge = edgeSeed(center, right);
+    edge = max(edge, edgeSeed(center, left));
+    edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate + verticalStep)));
+    edge = max(edge, edgeSeed(center, texture(edgeMask, coordinate - verticalStep)));
+    signal = max(signal, edge);
+    left = center;
+    center = right;
+    coordinate += horizontalStep;
   }
   outputSignal = vec4(signal, 0.0, 0.0, 1.0);
 }`;
@@ -180,15 +186,25 @@ out vec4 outputColor;
 void main() {
   float signal = 0.0;
   int radius = int(ceil(verticalRadius));
-  for (int offset = -radius; offset <= radius; offset += 1) {
+  // The source is binary. Linear samples halfway between adjacent texels are
+  // therefore an exact OR after the final threshold, halving the fetches.
+  for (int offset = -radius; offset < radius; offset += 2) {
     signal = max(
       signal,
       texture(
         horizontalSignal,
-        textureCoordinate + vec2(0.0, float(offset) * texelSize.y)
+        textureCoordinate + vec2(0.0, (float(offset) + 0.5) * texelSize.y)
       ).r
     );
   }
+  signal = max(
+    signal,
+    texture(
+      horizontalSignal,
+      textureCoordinate + vec2(0.0, float(radius) * texelSize.y)
+    ).r
+  );
+  signal = signal > 0.0 ? 1.0 : 0.0;
   outputColor = vec4(edgeColor.rgb, edgeColor.a * signal);
 }`;
 
@@ -209,15 +225,23 @@ out vec4 outputColor;
 void main() {
   float signal = 0.0;
   int radius = int(ceil(verticalRadius));
-  for (int offset = -radius; offset <= radius; offset += 1) {
+  for (int offset = -radius; offset < radius; offset += 2) {
     signal = max(
       signal,
       texture(
         horizontalSignal,
-        textureCoordinate + vec2(0.0, float(offset) * texelSize.y)
+        textureCoordinate + vec2(0.0, (float(offset) + 0.5) * texelSize.y)
       ).r
     );
   }
+  signal = max(
+    signal,
+    texture(
+      horizontalSignal,
+      textureCoordinate + vec2(0.0, float(radius) * texelSize.y)
+    ).r
+  );
+  signal = signal > 0.0 ? 1.0 : 0.0;
   uvec2 cell = uvec2(floor((gl_FragCoord.xy - viewportOrigin) / partitionCellSize));
   uint bucket = texelFetch(
     partitionPattern,
@@ -262,8 +286,9 @@ type EdgePipeline = Readonly<{
   horizontal: HorizontalProgram;
   instancedMask: MaskProgram;
   mask: MaskProgram;
+  maskSampler: WebGLSampler;
   resolve: ResolveProgram;
-  sampler: WebGLSampler;
+  signalSampler: WebGLSampler;
 }>;
 
 type EdgeTargets = Readonly<{
@@ -275,6 +300,45 @@ type EdgeTargets = Readonly<{
   scratchFramebuffer: WebGLFramebuffer;
   width: number;
 }>;
+
+type MutablePixelRegion = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+const updatePixelRegion = (
+  output: MutablePixelRegion,
+  extents: Float64Array,
+  width: number,
+  height: number,
+  paddingX: number,
+  paddingY: number,
+  originX = 0,
+  originY = 0,
+): void => {
+  const x = Math.min(width - 1, Math.max(
+    0,
+    Math.floor(extents[0]! * width) - paddingX,
+  ));
+  const y = Math.min(height - 1, Math.max(
+    0,
+    Math.floor(extents[1]! * height) - paddingY,
+  ));
+  const maximumX = Math.max(
+    x + 1,
+    Math.min(width, Math.ceil(extents[2]! * width) + paddingX),
+  );
+  const maximumY = Math.max(
+    y + 1,
+    Math.min(height, Math.ceil(extents[3]! * height) + paddingY),
+  );
+  output.x = originX + x;
+  output.y = originY + y;
+  output.width = maximumX - x;
+  output.height = maximumY - y;
+};
 
 type ReadyBorrowedGeometry = Extract<
   BorrowedSurfaceGeometryMatch,
@@ -615,8 +679,10 @@ export class EdgeOverlayOwner {
   #combinedGeometries: OwnedCombinedGeometry[] = [];
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
+  readonly #discardDepthAttachment: number[];
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
+  #horizontalRestricted = false;
   readonly #horizontalBindings: TextureUnitBinding[] = [{
     sampler: null,
     target: "2d",
@@ -639,6 +705,7 @@ export class EdgeOverlayOwner {
   ];
   #partitionResolvePacket: SurfaceDrawPacket | null = null;
   readonly #partitionPattern: ScreenSpacePartitionPatternOwner;
+  readonly #projectedBounds = createProjectedBoundsWorkspace();
   readonly #resolveBindings: TextureUnitBinding[] = [{
     sampler: null,
     target: "2d",
@@ -649,7 +716,12 @@ export class EdgeOverlayOwner {
     viewport: { height: 1, width: 1, x: 0, y: 0 },
   };
   #resolvePacket: SurfaceDrawPacket | null = null;
+  #resolveRestricted = false;
   #scene: CanonicalEdgeOverlayScene | null = null;
+  readonly #screenExtents = new Float64Array(4);
+  readonly #scratchClearScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
+  readonly #horizontalScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
+  readonly #resolveScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
   #targets: EdgeTargets | null = null;
 
   constructor(
@@ -658,6 +730,7 @@ export class EdgeOverlayOwner {
     partitionPattern: ScreenSpacePartitionPatternOwner,
   ) {
     this.#budget = budget;
+    this.#discardDepthAttachment = [gl.DEPTH_ATTACHMENT];
     this.#gl = gl;
     this.#partitionPattern = partitionPattern;
   }
@@ -677,7 +750,8 @@ export class EdgeOverlayOwner {
       gl.deleteProgram(pipeline.instancedMask.program);
       gl.deleteProgram(pipeline.horizontal.program);
       gl.deleteProgram(pipeline.resolve.program);
-      gl.deleteSampler(pipeline.sampler);
+      gl.deleteSampler(pipeline.maskSampler);
+      gl.deleteSampler(pipeline.signalSampler);
       gl.deleteVertexArray(pipeline.fullscreenVertexArray);
     }
     if (this.#batchProgram !== null) this.#gl.deleteProgram(this.#batchProgram.program);
@@ -853,6 +927,10 @@ export class EdgeOverlayOwner {
       }
     }
     if (!drew) return;
+    // The mask depth is needed only while rasterizing this run. Discard it
+    // before switching targets so tiled GPUs do not store a full-screen depth
+    // attachment which no later pass samples.
+    gl.invalidateFramebuffer(gl.FRAMEBUFFER, this.#discardDepthAttachment);
 
     const texelX = 1 / targets.width;
     const texelY = 1 / targets.height;
@@ -864,6 +942,17 @@ export class EdgeOverlayOwner {
       MAX_EDGE_RADIUS_FRAMEBUFFER_PIXELS,
       Math.max(0, (run.material.widthCssPixels * cssScaleY - 1) * 0.5),
     );
+    this.#updatePassScissors(plan, view, horizontalRadius, verticalRadius);
+    if (this.#horizontalRestricted) {
+      state.clear({
+        clearColor: MASK_CLEAR,
+        clearDepth: 1,
+        framebuffer: targets.scratchFramebuffer,
+        scissor: this.#scratchClearScissor,
+        size: { height: targets.height, width: targets.width },
+        viewport: { height: targets.height, width: targets.width, x: 0, y: 0 },
+      });
+    }
     this.#horizontalFrame.framebuffer = targets.scratchFramebuffer;
     this.#horizontalFrame.viewport = {
       height: targets.height,
@@ -872,6 +961,7 @@ export class EdgeOverlayOwner {
       y: 0,
     };
     state.applySurfaceDraw(this.#horizontalFrame, this.#horizontalPacket!);
+    if (this.#horizontalRestricted) state.applyDrawScissor(this.#horizontalScissor);
     gl.uniform2f(pipeline.horizontal.texelSize, texelX, texelY);
     gl.uniform1f(pipeline.horizontal.horizontalRadius, horizontalRadius);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -881,12 +971,14 @@ export class EdgeOverlayOwner {
     const coverage = run.material.coverage;
     if (coverage === undefined) {
       state.applySurfaceDraw(this.#resolveFrame, this.#resolvePacket!);
+      if (this.#resolveRestricted) state.applyDrawScissor(this.#resolveScissor);
       gl.uniform2f(pipeline.resolve.texelSize, texelX, texelY);
       gl.uniform1f(pipeline.resolve.verticalRadius, verticalRadius);
       gl.uniform4fv(pipeline.resolve.edgeColor, run.material.color);
     } else {
       const resolve = this.#partitionResolve!;
       state.applySurfaceDraw(this.#resolveFrame, this.#partitionResolvePacket!);
+      if (this.#resolveRestricted) state.applyDrawScissor(this.#resolveScissor);
       gl.uniform2f(resolve.texelSize, texelX, texelY);
       gl.uniform1f(resolve.verticalRadius, verticalRadius);
       gl.uniform4fv(resolve.edgeColor, run.material.color);
@@ -900,6 +992,78 @@ export class EdgeOverlayOwner {
       gl.uniform2f(resolve.viewportOrigin, view.viewport.x, view.viewport.y);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  #updatePassScissors(
+    plan: EdgeMaskPlan,
+    view: SurfaceFrameView,
+    horizontalRadius: number,
+    verticalRadius: number,
+  ): void {
+    const extents = this.#screenExtents;
+    extents[0] = 1;
+    extents[1] = 1;
+    extents[2] = 0;
+    extents[3] = 0;
+    let projected = false;
+    for (const batch of plan.batches) {
+      for (const { surface } of batch.fallbackDraws) {
+        if (!projectedBoundsScreenExtentsInto(
+          surface.worldBounds,
+          view.viewProjection,
+          this.#projectedBounds,
+        )) continue;
+        const candidate = this.#projectedBounds.screenExtents;
+        extents[0] = Math.min(extents[0]!, candidate[0]!);
+        extents[1] = Math.min(extents[1]!, candidate[1]!);
+        extents[2] = Math.max(extents[2]!, candidate[2]!);
+        extents[3] = Math.max(extents[3]!, candidate[3]!);
+        projected = true;
+      }
+    }
+    if (!projected) {
+      extents[0] = 0;
+      extents[1] = 0;
+      extents[2] = 1;
+      extents[3] = 1;
+    }
+    const horizontalPadding = Math.ceil(horizontalRadius) + 2;
+    const verticalPadding = Math.ceil(verticalRadius) + 2;
+    const targets = this.#targets!;
+    updatePixelRegion(
+      this.#horizontalScissor,
+      extents,
+      targets.width,
+      targets.height,
+      horizontalPadding,
+      2,
+    );
+    updatePixelRegion(
+      this.#resolveScissor,
+      extents,
+      targets.width,
+      targets.height,
+      horizontalPadding,
+      verticalPadding,
+      view.viewport.x,
+      view.viewport.y,
+    );
+    updatePixelRegion(
+      this.#scratchClearScissor,
+      extents,
+      targets.width,
+      targets.height,
+      horizontalPadding,
+      verticalPadding + Math.ceil(verticalRadius),
+    );
+    this.#horizontalRestricted = this.#horizontalScissor.x !== 0
+      || this.#horizontalScissor.y !== 0
+      || this.#horizontalScissor.width !== targets.width
+      || this.#horizontalScissor.height !== targets.height;
+    this.#resolveRestricted = this.#resolveScissor.x !== view.viewport.x
+      || this.#resolveScissor.y !== view.viewport.y
+      || this.#resolveScissor.width !== targets.width
+      || this.#resolveScissor.height !== targets.height;
   }
 
   #drawBatch(
@@ -1223,28 +1387,35 @@ export class EdgeOverlayOwner {
     let instancedMask: MaskProgram | undefined;
     let horizontal: HorizontalProgram | undefined;
     let resolve: ResolveProgram | undefined;
-    let sampler: WebGLSampler | null = null;
+    let maskSampler: WebGLSampler | null = null;
+    let signalSampler: WebGLSampler | null = null;
     let fullscreenVertexArray: WebGLVertexArrayObject | null = null;
     try {
       instancedMask = maskProgram(gl, "instanced");
       horizontal = horizontalProgram(gl);
       resolve = resolveProgram(gl);
-      sampler = gl.createSampler();
+      maskSampler = gl.createSampler();
+      signalSampler = gl.createSampler();
       fullscreenVertexArray = gl.createVertexArray();
-      if (sampler === null || fullscreenVertexArray === null) {
+      if (maskSampler === null || signalSampler === null || fullscreenVertexArray === null) {
         throw new Error("Royal could not allocate the edge overlay pipeline");
       }
-      gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.samplerParameteri(maskSampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.samplerParameteri(maskSampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.samplerParameteri(maskSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.samplerParameteri(maskSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.samplerParameteri(signalSampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.samplerParameteri(signalSampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.samplerParameteri(signalSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.samplerParameteri(signalSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.#pipeline = {
         fullscreenVertexArray,
         horizontal,
         instancedMask,
         mask,
+        maskSampler,
         resolve,
-        sampler,
+        signalSampler,
       };
       this.#rebuildPackets();
     } catch (error) {
@@ -1252,7 +1423,8 @@ export class EdgeOverlayOwner {
       if (instancedMask !== undefined) gl.deleteProgram(instancedMask.program);
       if (horizontal !== undefined) gl.deleteProgram(horizontal.program);
       if (resolve !== undefined) gl.deleteProgram(resolve.program);
-      if (sampler !== null) gl.deleteSampler(sampler);
+      if (maskSampler !== null) gl.deleteSampler(maskSampler);
+      if (signalSampler !== null) gl.deleteSampler(signalSampler);
       if (fullscreenVertexArray !== null) gl.deleteVertexArray(fullscreenVertexArray);
       throw error;
     } finally {
@@ -1371,17 +1543,17 @@ export class EdgeOverlayOwner {
       return;
     }
     this.#horizontalBindings[0] = {
-      sampler: pipeline.sampler,
+      sampler: pipeline.maskSampler,
       target: "2d",
       texture: targets.mask,
     };
     this.#resolveBindings[0] = {
-      sampler: pipeline.sampler,
+      sampler: pipeline.signalSampler,
       target: "2d",
       texture: targets.scratch,
     };
     this.#partitionResolveBindings[0] = {
-      sampler: pipeline.sampler,
+      sampler: pipeline.signalSampler,
       target: "2d",
       texture: targets.scratch,
     };
