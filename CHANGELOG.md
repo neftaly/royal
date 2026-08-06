@@ -5,6 +5,40 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.7 - 2026-08-06
+
+### Outline presentation
+
+- Batch exact-compatible glTF outline occurrences while borrowing their
+  resident geometry, active LOD, instance provenance, and ordered primitive
+  semantics instead of rebuilding the world or uploading duplicate geometry.
+- Reuse overlapping mask samples and decoded normals, pair exact binary resolve
+  samples, discard unused mask depth, and restrict sampled presentation work to
+  conservative projected bounds without resolution, browser, or quality-policy
+  branches.
+- Keep allocation, budget, and optional shader failures on the same correct
+  ordinary ordered mask path.
+
+### WebXR
+
+- Start an immersive session without blocking renderer setup on the optional
+  preferred-frame-rate request.
+- Make the ordinary Tiger example use one solid guide/outline presentation;
+  retain its shimmer-prone three-way one-pixel partition only as the explicit
+  `?coverage=partitioned` stress case.
+
+### Verification
+
+- Reduced the 72-outline Quest 2 lab from 21.33--22.23 ms median to
+  8.38--8.39 ms median / 13.49--14.23 ms p95 over two warm-up-inclusive
+  600-frame runs, with eight submissions per frame.
+- Reduced the default Tiger Quest example from roughly 46 to 22 submissions per
+  frame; its resident repeat held 21 VT pages with no pending, failed, or upload
+  work and measured 8.37 ms median / 9.69 ms p95 after entry.
+- Passed 855 tests across 117 files, lint, typecheck, production builds, public
+  package imports, measured bundle gates, and the packed TypeScript/runtime
+  consumer before release.
+
 ## 0.0.6 - 2026-08-05
 
 ### Progressive presentation
