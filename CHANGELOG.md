@@ -5,6 +5,31 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.8 - 2026-08-07
+
+### Correctness
+
+- Match every public `EulerRads` tuple to Three.js's default
+  `Euler(x, y, z, "XYZ")` matrix semantics without an order option or legacy
+  compatibility path.
+- Apply the convention to render objects, cameras, environments, root
+  transforms, and packed Euler instance streams while leaving authored glTF
+  quaternions and explicit matrices unchanged.
+- Decompose orbit camera poses into the corrected XYZ convention so existing
+  orbit views remain aimed at their target across ordinary and gimbal-boundary
+  angles.
+
+### Verification
+
+- Added an executable Three.js oracle for representative and 128 generated
+  rotations with translation and signed scale, plus generated camera-inverse,
+  orbit-target, instance-stream, and glTF-quaternion controls.
+- Passed 863 tests across 117 files, lint, typecheck, production builds, bundle
+  gates, package imports, and the packed TypeScript/runtime consumer.
+- Passed hardware WebGL smoke for ordinary orbit rendering and glTF instancing;
+  the focused camera drag measured 0.30 ms input-handler and renderer-callback
+  p95 with 0.42 ms GPU p95.
+
 ## 0.0.7 - 2026-08-06
 
 ### Outline presentation
