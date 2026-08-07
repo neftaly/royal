@@ -80,6 +80,7 @@ export type {
   ScreenSpacePartitionOptions,
 } from './screen-space-partition';
 export { screenSpacePartition } from './screen-space-partition';
+export type { SurfaceDepth } from './surface-depth';
 export type {
   Material,
   MaterialSurfaceOptions,

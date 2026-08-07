@@ -9,6 +9,7 @@ import { resolvePickingId, type PickingId } from './picking';
 import { validateGeometry, type Geometry } from './geometry';
 import { objectWithAllowedFields, resolveRgba } from './descriptor-values';
 import type { LinearRgba } from './primitives';
+import { resolveSurfaceDepth, type SurfaceDepth } from './surface-depth';
 
 /**
  * Mutable packed-transform protocol consumed by `gltfInstances`.
@@ -361,6 +362,8 @@ export interface GltfInstancesNode {
   readonly pickingGeometry?: Geometry;
   /** Stable application identity shared by the instance collection. */
   readonly pickingId?: PickingId;
+  /** Present every visual primitive as resting directly on opaque support geometry. */
+  readonly surfaceDepth?: SurfaceDepth;
   /** Exact material-variant name. Unknown names fall back to the base material. */
   readonly materialVariant?: GltfMaterialVariantName;
   /** Scene-linear RGBA multiplier applied to every selected base color. */
@@ -379,6 +382,8 @@ export interface GltfInstancesOptions {
   readonly pickingGeometry?: Geometry;
   /** Stable application identity returned with every picked instance. */
   readonly pickingId?: PickingId;
+  /** Present every visual primitive as resting directly on opaque support geometry. */
+  readonly surfaceDepth?: SurfaceDepth;
   /** Zero-based glTF document scene to prepare; omit for the document default. */
   readonly sceneIndex?: number;
   /** URI of the glTF asset repeated by the bulk-transform source. */
@@ -392,7 +397,7 @@ export interface GltfInstancesOptions {
 }
 
 const GLTF_INSTANCES_FIELDS = [
-  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'tint', 'version',
+  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'surfaceDepth', 'tint', 'version',
 ] as const;
 
 /** Creates one instanced glTF node using the canonical glTF material and picking path. */
@@ -408,12 +413,14 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
   const tint = options.tint === undefined
     ? undefined
     : resolveRgba(options.tint, 'glTF instances tint');
+  const surfaceDepth = resolveSurfaceDepth(options.surfaceDepth);
   return {
     asset,
     instances,
     kind: 'gltf-instances',
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
+    ...(surfaceDepth === undefined ? {} : { surfaceDepth }),
     ...(materialVariant === undefined ? {} : { materialVariant }),
     ...(tint === undefined ? {} : { tint }),
   };

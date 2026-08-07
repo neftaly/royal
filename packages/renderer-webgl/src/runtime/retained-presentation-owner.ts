@@ -272,6 +272,7 @@ export class RetainedPresentationOwner {
       alphaBlend: false,
       colorWrite: true,
       cullBackFaces: false,
+      depthBias: false,
       depthTest: false,
       depthWrite: false,
       frontFace: gl.CCW,

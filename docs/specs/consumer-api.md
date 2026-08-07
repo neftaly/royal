@@ -324,6 +324,15 @@ snapshots rather than touching DOM/WebGL or throwing due solely to absence of a
 mounted root. A hook used neither inside `Canvas` nor with `{ root }` throws an
 actionable placement error.
 
+## Contact surfaces
+
+Filled `mesh`, `gltf`, and `gltfInstances` nodes accept
+`surfaceDepth: "contact"` when their visual triangles are intentionally
+authored directly on opaque support geometry. This is a semantic presentation
+choice, not a numeric z-index or transform adjustment. It leaves bounds,
+picking, sorting, alpha, and source identity unchanged and does not define an
+order among multiple contact nodes. Wireframes reject the option.
+
 ## Picking and events
 
 Scene nodes declare `pickingId`; React callbacks live in

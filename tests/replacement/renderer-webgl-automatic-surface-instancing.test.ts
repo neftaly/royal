@@ -85,6 +85,36 @@ describe("automatic canonical surface instancing", () => {
     expect(moved.revision).not.toBe(first.revision);
   });
 
+  it("converges equal contact intent without mixing it with ordinary depth", () => {
+    const asset = prepareStaticGlb(staticTriangleGlb(), "shared-root");
+    const contactNodes = [
+      gltf({ src: "/left.glb", surfaceDepth: "contact" }),
+      gltf({ src: "/right.glb", surfaceDepth: "contact" }),
+    ];
+    const contact = prepareCanonicalSurfaceScene(
+      scene({ camera: perspectiveCamera({}), nodes: contactNodes }),
+      () => asset,
+    );
+    expect(contact.surfaces).toHaveLength(1);
+    expect(contact.surfaces[0]).toMatchObject({
+      contact: true,
+      instances: { count: 2 },
+    });
+
+    const mixed = prepareCanonicalSurfaceScene(
+      scene({
+        camera: perspectiveCamera({}),
+        nodes: [contactNodes[0]!, gltf({ src: "/ordinary.glb" })],
+      }),
+      () => asset,
+    );
+    expect(mixed.surfaces).toHaveLength(2);
+    expect(mixed.surfaces.map(({ contact: isContact }) => isContact)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
   it("submits converged roots through the existing WebGL instance executor", async () => {
     const { canvas, flushScheduledFrames, root } = canvasRootHarness({
       readGltf: async () => staticTriangleGlb(),

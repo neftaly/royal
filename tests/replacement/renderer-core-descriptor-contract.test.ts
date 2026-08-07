@@ -463,6 +463,39 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/glTF instances pickingGeometry contains unsupported field.*radius/i);
   });
 
+  it("normalizes one semantic contact-depth mode across visual node kinds", () => {
+    const geometry = planeGeometry(1);
+    const material = unlitMaterial({ color: [1, 1, 1, 0.5] });
+    const instances = createGltfInstanceTransforms({ count: 1 });
+
+    expect(mesh({ geometry, material, surfaceDepth: "contact" }).surfaceDepth)
+      .toBe("contact");
+    expect(gltf({ src: "/piece.glb", surfaceDepth: "contact" }).surfaceDepth)
+      .toBe("contact");
+    expect(gltfInstances({ instances, src: "/piece.glb", surfaceDepth: "contact" }).surfaceDepth)
+      .toBe("contact");
+
+    expect(() => mesh({
+      geometry,
+      material,
+      surfaceDepth: "front" as "contact",
+    })).toThrow("surfaceDepth must be contact");
+    expect(() => gltf({
+      src: "/piece.glb",
+      surfaceDepth: "front" as "contact",
+    })).toThrow("surfaceDepth must be contact");
+    expect(() => gltfInstances({
+      instances,
+      src: "/piece.glb",
+      surfaceDepth: "front" as "contact",
+    })).toThrow("surfaceDepth must be contact");
+    expect(() => mesh({
+      geometry,
+      material: wireframeMaterial({ color: [1, 1, 1, 1] }),
+      surfaceDepth: "contact",
+    })).toThrow("mesh surfaceDepth requires a filled surface material");
+  });
+
   it("validates the structural glTF instance-transform protocol at the node boundary", () => {
     const instances = createGltfInstanceTransforms({ count: 2 });
     expect(gltfInstances({ instances, src: '/models/tree.glb' }).instances).toBe(instances);

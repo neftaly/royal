@@ -17,6 +17,7 @@ const state = (): AppliedSurfaceDrawState => ({
   blendFunctionKnown: false,
   cullFaceKnown: false,
   cullBackFaces: null,
+  depthBias: null,
   depthFunctionKnown: false,
   depthTest: null,
   depthWrite: null,
@@ -35,6 +36,7 @@ const draw = (): Readonly<{ frame: SurfaceDrawFrame; packet: SurfaceDrawPacket }
     alphaBlend: false,
     colorWrite: true,
     cullBackFaces: true,
+    depthBias: false,
     depthTest: true,
     depthWrite: true,
     frontFace: 0x0901,
@@ -57,6 +59,7 @@ describe("surface draw state transition core", () => {
       colorMask: true,
       cullFace: true,
       cullMode: true,
+      depthBias: true,
       depthFunction: true,
       depthMode: true,
       depthWrite: true,
@@ -86,6 +89,7 @@ describe("surface draw state transition core", () => {
       colorMask: false,
       cullFace: false,
       cullMode: false,
+      depthBias: false,
       depthFunction: false,
       depthMode: false,
       depthWrite: false,
@@ -236,6 +240,19 @@ describe("surface draw state transition core", () => {
     expect(transition.depthWrite).toBe(true);
     expect(Object.entries(transition)
       .filter(([key]) => key !== "blendFunction" && key !== "blendMode" && key !== "depthWrite")
+      .every(([, value]) => !value)).toBe(true);
+  });
+
+  it("isolates contact depth from every unrelated draw state", () => {
+    const previous = state();
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, frame, { ...packet, depthBias: true }, transition);
+
+    expect(transition.depthBias).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "depthBias")
       .every(([, value]) => !value)).toBe(true);
   });
 

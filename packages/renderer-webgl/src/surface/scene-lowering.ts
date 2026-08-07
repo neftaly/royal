@@ -63,6 +63,8 @@ import type { LodGroupId, LodMembership } from "./lod-selection";
 import { automaticallyInstanceCanonicalSurfaces } from "./automatic-surface-instancing";
 
 export type CanonicalDrawSurface = Readonly<{
+  /** Presentation-only contact depth; it never changes geometry or picking. */
+  contact: boolean;
   geometry: CanonicalTriangleGeometry;
   /** Dense mounted glTF occurrence identity; distinct even if one descriptor is repeated. */
   gltfOccurrence?: number;
@@ -747,6 +749,7 @@ export const prepareCanonicalSurfaceScene = (
                 ? primitive.localModel
                 : IDENTITY_OBJECT_LOCAL_MODEL,
             }),
+            contact: node.surfaceDepth === "contact",
             textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
             worldBounds,
           });
@@ -857,9 +860,9 @@ export const prepareCanonicalSurfaceScene = (
       ? wireframeGeometry(node.geometry)
       : directGeometry(node.geometry, material.requiresTextureCoordinates);
     const model = transformMat4(node.transform);
+    const inverseModel = includePicking ? inverseMat4(model) : undefined;
     const surface = {
       geometry,
-      inverseModel: inverseMat4(model),
       model,
       modelHandedness: canonicalModelHandedness(model),
       material,
@@ -869,6 +872,7 @@ export const prepareCanonicalSurfaceScene = (
       ...(node.ref === undefined
         ? {}
         : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
+      contact: node.surfaceDepth === "contact",
       pickingGeometry,
       textureKeys: canonicalMaterialTextureKeys(materialSource),
       ...(wireframe ? { topology: "lines" as const } : {}),
@@ -877,11 +881,17 @@ export const prepareCanonicalSurfaceScene = (
     emittedSurfaces.push(surface);
     if (includePicking) {
       pickSurfaces.push(node.pickingGeometry === undefined ? {
-        ...surface,
         ...canonicalPickMaterial(materialSource),
+        inverseModel,
+        modelHandedness: surface.modelHandedness,
+        node,
+        ...(node.ref === undefined
+          ? {}
+          : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
+        pickingGeometry: surface.pickingGeometry,
       } : {
         ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
-        inverseModel: surface.inverseModel,
+        inverseModel,
         modelHandedness: surface.modelHandedness,
         node,
         ...(node.ref === undefined

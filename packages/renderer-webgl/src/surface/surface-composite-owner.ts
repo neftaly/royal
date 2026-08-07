@@ -403,6 +403,7 @@ export class SurfaceCompositeOwner {
         alphaBlend: false,
         colorWrite: true,
         cullBackFaces: false,
+        depthBias: false,
         depthTest: false,
         depthWrite: false,
         frontFace: this.#gl.CCW,

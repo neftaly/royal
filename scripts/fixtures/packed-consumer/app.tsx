@@ -43,6 +43,7 @@ import {
   virtualTexture,
   type RenderObjectHandle,
   type Scene,
+  type SurfaceDepth,
   type WorldPosition3,
 } from '@royal/react/scene';
 import { useXrSession } from '@royal/react/xr';
@@ -88,6 +89,7 @@ const pickingGeometry = triangleGeometry({
   positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
 });
 const modelRef: { current: RenderObjectHandle | null } = { current: null };
+const contactDepth: SurfaceDepth = 'contact';
 const model = gltf({
   materialVariant: 'Ruby',
   pickingGeometry,
@@ -95,6 +97,7 @@ const model = gltf({
   ref: modelRef,
   sceneIndex: 2,
   src: '/model.gltf',
+  surfaceDepth: contactDepth,
   tint: [0.8, 0.25, 0.2, 1],
   version: 'model-sha256',
 });

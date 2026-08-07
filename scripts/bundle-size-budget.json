@@ -12,12 +12,12 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, and exact scene-replacement geometry ownership",
-    "initialAndTotalGzipBytes": 3400
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, and semantic contact-depth presentation",
+    "initialAndTotalGzipBytes": 3450
   },
-  "royalInitialGzipBytes": 134850,
-  "royalIncrementalGzipBytes": 75550,
-  "royalGltfInitialGzipBytes": 135850,
+  "royalInitialGzipBytes": 134900,
+  "royalIncrementalGzipBytes": 75600,
+  "royalGltfInitialGzipBytes": 135900,
   "royalGltfIncrementalGzipBytes": 1250,
   "royalLazyGzipBytes": 143700,
   "royalTotalIncrementalGzipBytes": 219250,

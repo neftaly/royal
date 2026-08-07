@@ -5,6 +5,17 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+### Contact surfaces
+
+- Add one backend-neutral `surfaceDepth: "contact"` intent to filled `mesh`,
+  `gltf`, and `gltfInstances` nodes so intentionally coplanar visual surfaces
+  win near-equal depth comparisons without changing transforms or bounds.
+- Map that intent to one private fixed WebGL fill bias while retaining ordinary
+  alpha, sorting, picking, outlines, LOD, instancing, and depth-prepass paths.
+- Keep raw depth functions, bias parameters, render-order numbers, automatic
+  contact inference, and ordering between multiple contact layers out of the
+  public API.
+
 ## 0.0.9 - 2026-08-07
 
 ### Correctness

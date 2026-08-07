@@ -51,6 +51,12 @@ remain stable across selections.
 scene-linear RGBA presentation multiplier to every selected base color without
 rewriting the asset or changing its source/preparation identity.
 
+`surfaceDepth: 'contact'` on `mesh`, `gltf`, or `gltfInstances` marks filled
+triangles authored directly on opaque support geometry. The renderer gives
+that one contact layer a private, fixed near-depth bias without changing world
+transforms, bounds, picking, or alpha behavior. It does not expose bias numbers
+or define ordering between two contact layers.
+
 `mesh({ ref })` and `gltf({ ref })` expose one renderer-attached
 `RenderObjectHandle`. Its position, rotation, scale, and `setTransform()` API
 update the retained object without republishing the scene. Object and callback

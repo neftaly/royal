@@ -36,6 +36,7 @@ const candidate = (
       alphaBlend: false,
       colorWrite: true,
       cullBackFaces: true,
+      depthBias: false,
       depthTest: true,
       depthWrite: true,
       frontFace: 0x0901,
@@ -202,6 +203,10 @@ describe("surface multi-draw compatibility core", () => {
         drawPacket: { ...left.drawPacket, cullBackFaces: false },
         surface: left.surface,
       }),
+      candidate({
+        drawPacket: { ...left.drawPacket, depthBias: true },
+        surface: left.surface,
+      }),
     ];
 
     for (const right of variants) {
@@ -236,6 +241,9 @@ describe("surface depth-prepass multi-draw compatibility core", () => {
     const left = depthCandidate();
     expect(surfacesShareDepthPrepassState(left, depthCandidate({ depthPacket: null }))).toBe(false);
     expect(surfacesShareDepthPrepassState(left, depthCandidate({ instanceCount: 2 }))).toBe(false);
+    expect(surfacesShareDepthPrepassState(left, depthCandidate({
+      depthPacket: { ...left.depthPacket!, depthBias: true },
+    }))).toBe(false);
     expect(surfacesShareDepthPrepassState(left, depthCandidate({
       surface: { model: [
         1, 0, 0, 0,
