@@ -6,6 +6,7 @@ export type CanonicalTriangleGeometry = Readonly<{
     min: readonly [number, number, number];
   }>;
   indices: Uint8Array | Uint16Array | Uint32Array;
+  /** Compact candidate identity; resource reuse must also prove exact value equality. */
   key: string;
   /** @internal Exact source-declaration candidate; equality still requires byte comparison. */
   sourceKey?: string;
@@ -16,6 +17,37 @@ export type CanonicalTriangleGeometry = Readonly<{
   textureCoordinates0?: Float32Array;
   textureCoordinates1?: Float32Array;
 }>;
+
+const sameView = (
+  left: ArrayBufferView<ArrayBufferLike> | undefined,
+  right: ArrayBufferView<ArrayBufferLike> | undefined,
+): boolean => {
+  if (left === right) return true;
+  if (
+    left === undefined
+    || right === undefined
+    || left.constructor !== right.constructor
+    || left.byteLength !== right.byteLength
+  ) return false;
+  const leftValues = left as unknown as ArrayLike<number>;
+  const rightValues = right as unknown as ArrayLike<number>;
+  for (let index = 0; index < leftValues.length; index += 1) {
+    if (!Object.is(leftValues[index], rightValues[index])) return false;
+  }
+  return true;
+};
+
+/** Exact canonical geometry value equality; compact keys only narrow candidates. */
+export const sameCanonicalGeometry = (
+  left: CanonicalTriangleGeometry,
+  right: CanonicalTriangleGeometry,
+): boolean => sameView(left.indices, right.indices)
+  && sameView(left.colors, right.colors)
+  && sameView(left.normals, right.normals)
+  && sameView(left.positions, right.positions)
+  && sameView(left.tangents, right.tangents)
+  && sameView(left.textureCoordinates0, right.textureCoordinates0)
+  && sameView(left.textureCoordinates1, right.textureCoordinates1);
 
 const planeGeometry = (
   width: number,
@@ -104,30 +136,31 @@ const boxGeometry = (
 
 const authoredTriangleGeometry = (
   geometry: Extract<Geometry, { readonly kind: "triangles" }>,
-  key: string,
   textureCoordinates: boolean,
 ): CanonicalTriangleGeometry => {
   if (textureCoordinates && geometry.textureCoordinates === undefined) {
     throw new Error("Royal textured triangleGeometry requires textureCoordinates");
   }
+  const indices = geometry.indices.slice();
+  const normals = geometry.normals?.slice();
+  const positions = geometry.positions.slice();
+  const textureCoordinates0 = geometry.textureCoordinates?.slice();
   let minX = Infinity; let minY = Infinity; let minZ = Infinity;
   let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
-  for (let offset = 0; offset < geometry.positions.length; offset += 3) {
-    const x = geometry.positions[offset]!;
-    const y = geometry.positions[offset + 1]!;
-    const z = geometry.positions[offset + 2]!;
+  for (let offset = 0; offset < positions.length; offset += 3) {
+    const x = positions[offset]!;
+    const y = positions[offset + 1]!;
+    const z = positions[offset + 2]!;
     minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
     maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
   }
   return {
     bounds: { max: [maxX, maxY, maxZ], min: [minX, minY, minZ] },
-    indices: geometry.indices,
-    key,
-    ...(geometry.normals === undefined ? {} : { normals: geometry.normals }),
-    positions: geometry.positions,
-    ...(geometry.textureCoordinates === undefined
-      ? {}
-      : { textureCoordinates0: geometry.textureCoordinates }),
+    indices,
+    key: `direct-triangles:${positions.length}:${minX}:${minY}:${minZ}:${maxX}:${maxY}:${maxZ}`,
+    ...(normals === undefined ? {} : { normals }),
+    positions,
+    ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
   };
 };
 
@@ -135,7 +168,6 @@ const authoredTriangleGeometry = (
 export const prepareCanonicalGeometry = (
   geometry: Geometry,
   textureCoordinates = false,
-  authoredKey = "authored-triangles",
 ): CanonicalTriangleGeometry => {
   switch (geometry.kind) {
     case "plane":
@@ -143,7 +175,7 @@ export const prepareCanonicalGeometry = (
     case "box":
       return boxGeometry(geometry.size[0], geometry.size[1], geometry.size[2], textureCoordinates);
     case "triangles":
-      return authoredTriangleGeometry(geometry, authoredKey, textureCoordinates);
+      return authoredTriangleGeometry(geometry, textureCoordinates);
   }
 };
 

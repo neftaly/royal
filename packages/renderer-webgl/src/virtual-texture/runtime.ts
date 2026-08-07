@@ -391,7 +391,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     has: (resourceKey: string, pageKey: VirtualTexturePageKey): boolean =>
       this.#resources.get(resourceKey)?.workspace.keys.has(pageKey) === true,
   };
-  readonly #assetKeys = new WeakMap<VirtualTextureAssetRef, string>();
   #scene: CanonicalSurfaceScene | null = null;
   readonly shaderSource = { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS };
 
@@ -418,7 +417,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   binding(asset: VirtualTextureAssetRef): VirtualTextureGpuBinding | undefined {
-    const resource = this.#resources.get(this.#keyForAsset(asset));
+    const resource = this.#resources.get(virtualTextureAssetKey(asset));
     return resource?.gpu !== undefined && resource.gpu.residentSlots.size > 0
       ? resource.gpu.binding
       : undefined;
@@ -496,7 +495,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot {
-    const resource = this.#resources.get(this.#keyForAsset(asset));
+    const resource = this.#resources.get(virtualTextureAssetKey(asset));
     if (resource === undefined) return IDLE_VIRTUAL_TEXTURE_SNAPSHOT;
     let next: VirtualTextureAssetSnapshot;
     if (resource.manifestFailure !== undefined) {
@@ -535,7 +534,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const claimed = new Set<string>();
     for (const asset of scene?.virtualTextureAssets ?? []) {
       const key = virtualTextureAssetKey(asset);
-      this.#assetKeys.set(asset, key);
       claimed.add(key);
       if (this.#resources.has(key)) continue;
       const resource: RuntimeResource = {
@@ -666,7 +664,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const authoredAsset = surface.material.baseColorVirtualAsset;
       const automaticAsset = surface.material.baseColorAsset;
       const resource = authoredAsset !== undefined
-        ? this.#resources.get(this.#keyForAsset(authoredAsset))
+        ? this.#resources.get(virtualTextureAssetKey(authoredAsset))
         : automaticAsset === undefined
           ? undefined
           : this.#resources.get(automaticVirtualTextureAssetKey(automaticAsset));
@@ -976,14 +974,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     this.#viewCount = views.length;
     return changed;
-  }
-
-  #keyForAsset(asset: VirtualTextureAssetRef): string {
-    const retained = this.#assetKeys.get(asset);
-    if (retained !== undefined) return retained;
-    const key = virtualTextureAssetKey(asset);
-    this.#assetKeys.set(asset, key);
-    return key;
   }
 
   #publicationAncestorReady(

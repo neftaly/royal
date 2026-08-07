@@ -1,5 +1,10 @@
-import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
+import {
+  sameCanonicalGeometry,
+  type CanonicalTriangleGeometry,
+} from "../surface/canonical-geometry";
 import type { PreparedStaticGltf } from "./static-asset";
+
+export { sameCanonicalGeometry } from "../surface/canonical-geometry";
 
 export type SharedStaticGeometrySnapshot = Readonly<{
   pendingPreparationTasks: number;
@@ -13,44 +18,6 @@ export type SharedStaticGeometrySnapshot = Readonly<{
   taskProducerPreparationDurationMs: number;
   uniqueGeometries: number;
 }>;
-
-const sameView = (
-  left: ArrayBufferView<ArrayBufferLike> | undefined,
-  right: ArrayBufferView<ArrayBufferLike> | undefined,
-): boolean => {
-  if (left === right) return true;
-  if (
-    left === undefined
-    || right === undefined
-    || left.constructor !== right.constructor
-    || left.byteLength !== right.byteLength
-  ) return false;
-  const leftBytes = new Uint8Array(left.buffer, left.byteOffset, left.byteLength);
-  const rightBytes = new Uint8Array(right.buffer, right.byteOffset, right.byteLength);
-  for (let index = 0; index < leftBytes.length; index += 1) {
-    if (leftBytes[index] !== rightBytes[index]) return false;
-  }
-  return true;
-};
-
-/** Exact canonical output equality; source keys only narrow candidates. */
-export const sameCanonicalGeometry = (
-  left: CanonicalTriangleGeometry,
-  right: CanonicalTriangleGeometry,
-): boolean =>
-  left.bounds.min[0] === right.bounds.min[0]
-  && left.bounds.min[1] === right.bounds.min[1]
-  && left.bounds.min[2] === right.bounds.min[2]
-  && left.bounds.max[0] === right.bounds.max[0]
-  && left.bounds.max[1] === right.bounds.max[1]
-  && left.bounds.max[2] === right.bounds.max[2]
-  && sameView(left.indices, right.indices)
-  && sameView(left.colors, right.colors)
-  && sameView(left.normals, right.normals)
-  && sameView(left.positions, right.positions)
-  && sameView(left.tangents, right.tangents)
-  && sameView(left.textureCoordinates0, right.textureCoordinates0)
-  && sameView(left.textureCoordinates1, right.textureCoordinates1);
 
 export const staticGeometryByteLength = (geometry: CanonicalTriangleGeometry): number =>
   geometry.indices.byteLength

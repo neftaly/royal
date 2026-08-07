@@ -4,6 +4,7 @@ import {
   perspectiveCamera,
   planeGeometry,
   scene,
+  triangleGeometry,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
@@ -31,6 +32,98 @@ const surface = (geometry: ReturnType<typeof planeGeometry> | ReturnType<typeof 
   })).surfaces;
 
 describe("surface geometry GPU owner", () => {
+  const authoredSurface = (x: number, y = 1) => prepareCanonicalSurfaceScene(scene({
+    camera: perspectiveCamera({}),
+    nodes: [mesh({
+      geometry: triangleGeometry({
+        positions: [0, 0, 0, x, 0, 0, 0, y, 0],
+      }),
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+    })],
+  })).surfaces[0]!;
+
+  it("replaces same-sized authored geometry when its exact value changes", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const first = authoredSurface(1);
+    const changed = authoredSurface(2);
+
+    owner.prepare([first]).commit();
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(2);
+    owner.prepare([changed]).commit();
+
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(4);
+    const positionUploads = vi.mocked(gl.bufferSubData).mock.calls
+      .filter(([target]) => target === gl.ARRAY_BUFFER);
+    expect(positionUploads.at(-1)?.[2]).toBe(changed.geometry.positions);
+  });
+
+  it("keeps authored geometry resources attached to their values across reordering", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const firstScene = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [
+        mesh({
+          geometry: triangleGeometry({ positions: [0, 0, 0, 1, 0, 0, 0, 1, 0] }),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+        mesh({
+          geometry: triangleGeometry({ positions: [0, 0, 0, 2, 0, 0, 0, 2, 0] }),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    })).surfaces;
+    const secondScene = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [
+        mesh({
+          geometry: triangleGeometry({ positions: [0, 0, 0, 2, 0, 0, 0, 2, 0] }),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+        mesh({
+          geometry: triangleGeometry({ positions: [0, 0, 0, 1, 0, 0, 0, 1, 0] }),
+          material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ],
+    })).surfaces;
+
+    const firstAdmission = owner.prepare(firstScene);
+    const [firstResource, secondResource] = firstAdmission.surfaces.map(({ geometry }) => geometry);
+    firstAdmission.commit();
+    const uploads = vi.mocked(gl.bufferSubData).mock.calls.length;
+    const reordered = owner.prepare(secondScene);
+
+    expect(reordered.surfaces.map(({ geometry }) => geometry))
+      .toEqual([secondResource, firstResource]);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(uploads);
+    reordered.commit();
+  });
+
+  it("does not collapse distinct exact geometry behind one candidate key", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const first = authoredSurface(1);
+    const changed = authoredSurface(2);
+    const collision = {
+      ...changed,
+      geometry: { ...changed.geometry, key: first.geometry.key },
+    };
+
+    const admission = owner.prepare([first, collision]);
+
+    expect(admission.surfaces[0]!.geometry)
+      .not.toBe(admission.surfaces[1]!.geometry);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(4);
+    admission.commit();
+
+    const uploads = vi.mocked(gl.bufferSubData).mock.calls.length;
+    const reordered = owner.prepare([collision, first]);
+    expect(reordered.surfaces[0]!.geometry).not.toBe(reordered.surfaces[1]!.geometry);
+    expect(gl.bufferSubData).toHaveBeenCalledTimes(uploads + 4);
+    reordered.commit();
+  });
+
   it("borrows an already compatible zero-offset index stream", () => {
     const gl = fakeGl();
     const owner = new SurfaceGeometryGpuOwner(gl);

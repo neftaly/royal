@@ -130,6 +130,47 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(changed).toHaveBeenCalledWith(decodedTextureKey(first));
   });
 
+  it("derives lifecycle identity from the current descriptor value", async () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const asset = imageTexture("/before-hot-reload.png");
+    owner.reconcile([asset]);
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+
+    (asset as { src: string }).src = "/after-hot-reload.png";
+    owner.reconcile([asset]);
+
+    expect(owner.getSnapshot(asset)).toEqual({ status: "loading" });
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(decode.mock.calls[1]![0]).toBe(asset);
+  });
+
+  it("reloads one URI when its explicit content version changes", async () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(async () => decoded());
+    const owner = new TextureAssetOwner({
+      decode,
+      onAssetChanged: vi.fn(),
+      onListenerError: vi.fn(),
+      onSnapshotChanged: vi.fn(),
+    });
+    const first = imageTexture({ src: "/hot-reload.png", version: 1 });
+    owner.reconcile([first]);
+    await waitFor(() => expect(owner.getSnapshot(first).status).toBe("ready"));
+
+    const changed = imageTexture({ src: "/hot-reload.png", version: 2 });
+    owner.reconcile([changed]);
+    await waitFor(() => expect(owner.getSnapshot(changed).status).toBe("ready"));
+
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(owner.getSnapshot(first)).toEqual({ status: "idle" });
+  });
+
   it("keeps an explicitly encoded ETC2 source distinct from auto-decoded bytes", () => {
     const ordinary = textureAsset({ contentKey: "hero", src: "/content" });
     const etc2 = { ...ordinary, sourceEncoding: "ktx2-etc2" as const };

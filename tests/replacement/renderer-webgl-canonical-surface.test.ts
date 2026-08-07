@@ -187,6 +187,30 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces[0]!.pickingGeometry).toBe(prepared.surfaces[0]!.geometry);
   });
 
+  it("owns canonical triangle bytes instead of aliasing public descriptors", () => {
+    const geometry = triangleGeometry({
+      indices: [0, 1, 2],
+      normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      textureCoordinates: [0, 0, 1, 0, 0, 1],
+    });
+    const canonical = prepareCanonicalGeometry(geometry);
+
+    expect(canonical.indices).not.toBe(geometry.indices);
+    expect(canonical.normals).not.toBe(geometry.normals);
+    expect(canonical.positions).not.toBe(geometry.positions);
+    expect(canonical.textureCoordinates0).not.toBe(geometry.textureCoordinates);
+
+    geometry.indices[1] = 0;
+    geometry.normals![2] = -1;
+    geometry.positions[3] = 9;
+    geometry.textureCoordinates![2] = 0.5;
+    expect([...canonical.indices]).toEqual([0, 1, 2]);
+    expect([...canonical.normals!]).toEqual([0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    expect([...canonical.positions]).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    expect([...canonical.textureCoordinates0!]).toEqual([0, 0, 1, 0, 0, 1]);
+  });
+
   it("lowers wireframes to shared unlit lines while retaining triangle picking", () => {
     const geometry = boxGeometry(2);
     const prepared = prepareCanonicalSurfaceScene(scene({
@@ -416,8 +440,8 @@ describe("canonical direct surface lowering", () => {
     expect(surface.node.pickingId).toBe("hero");
     expect(surface.geometry.indices).toHaveLength(36);
     expect(surface.model.slice(12, 15)).toEqual([1, 2, -3]);
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toBe(pickingGeometry.indices);
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toBe(pickingGeometry.positions);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toEqual(pickingGeometry.indices);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toEqual(pickingGeometry.positions);
     expect(prepared.pickSurfaces[0]!.pickingGeometry.bounds).toEqual({
       max: [2, 0.5, 0],
       min: [-2, -0.5, 0],
@@ -446,8 +470,8 @@ describe("canonical direct surface lowering", () => {
       modelHandedness: 1,
       node,
     });
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toBe(pickingGeometry.indices);
-    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toBe(pickingGeometry.positions);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toEqual(pickingGeometry.indices);
+    expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toEqual(pickingGeometry.positions);
     expect(prepared.environment).toBeDefined();
   });
 

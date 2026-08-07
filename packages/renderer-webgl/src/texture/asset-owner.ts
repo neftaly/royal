@@ -170,7 +170,6 @@ export class TextureAssetOwner {
   #disposed = false;
   readonly #preparationQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
-  readonly #keys = new WeakMap<TextureSourceRef, string>();
   readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
   readonly #now: () => number;
@@ -202,7 +201,7 @@ export class TextureAssetOwner {
   }
 
   decoded(asset: TextureSourceRef): DecodedTextureSource | undefined {
-    const entry = this.#entries.get(this.#key(asset));
+    const entry = this.#entries.get(decodedTextureKey(asset));
     if (entry === undefined || entry.decoded === undefined) return undefined;
     return !entry.decodedReleased || entry.residentStorageKeys.has(textureStorageKey(asset))
       ? entry.decoded
@@ -212,7 +211,7 @@ export class TextureAssetOwner {
   /** Retains live decoded pixels until the returned idempotent lease is released. */
   acquireDecoded(asset: TextureSourceRef): DecodedTextureLease | undefined {
     if (this.#disposed) return undefined;
-    const entry = this.#entries.get(this.#key(asset));
+    const entry = this.#entries.get(decodedTextureKey(asset));
     if (entry?.decoded === undefined || entry.decodedReleased) return undefined;
     entry.decodedClaims += 1;
     // The optional representation now charges the retained source; this slot
@@ -237,7 +236,7 @@ export class TextureAssetOwner {
   }
 
   alpha(asset: TextureSourceRef): DecodedTextureAlpha | undefined {
-    const entry = this.#entries.get(this.#key(asset));
+    const entry = this.#entries.get(decodedTextureKey(asset));
     return entry?.retainAlpha === true
       && entry.residentStorageKeys.has(textureStorageKey(asset))
       ? entry.alpha
@@ -245,11 +244,11 @@ export class TextureAssetOwner {
   }
 
   getSnapshot(asset: TextureAssetRef): TextureAssetSnapshot {
-    return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
+    return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
   }
 
   getSourceSnapshot(asset: TextureSourceRef): TextureAssetSnapshot {
-    return this.#entries.get(this.#key(asset))?.snapshot ?? IDLE;
+    return this.#entries.get(decodedTextureKey(asset))?.snapshot ?? IDLE;
   }
 
   snapshot(): TexturePreparationSnapshot {
@@ -304,10 +303,10 @@ export class TextureAssetOwner {
     if (this.#disposed) return;
     this.#storageEntries.clear();
     const retainedAlphaKeys = new Set<string>();
-    for (const asset of alphaMaskAssets) retainedAlphaKeys.add(this.#key(asset));
+    for (const asset of alphaMaskAssets) retainedAlphaKeys.add(decodedTextureKey(asset));
     const claimed = new Map<string, { asset: TextureSourceRef; storageKeys: Set<string> }>();
     for (const asset of assets) {
-      const key = this.#key(asset);
+      const key = decodedTextureKey(asset);
       const storageKey = textureStorageKey(asset);
       const existing = claimed.get(key);
       if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
@@ -453,22 +452,13 @@ export class TextureAssetOwner {
   }
 
   subscribe(asset: TextureAssetRef, listener: () => void): () => void {
-    const key = this.#key(asset);
+    const key = decodedTextureKey(asset);
     if (this.#disposed) return () => undefined;
     return this.#listeners.subscribe(key, listener);
   }
 
   #publish(key: string): void {
     this.#listeners.publish(key, this.#platform.onListenerError);
-  }
-
-  #key(asset: TextureSourceRef): string {
-    let key = this.#keys.get(asset);
-    if (key === undefined) {
-      key = decodedTextureKey(asset);
-      this.#keys.set(asset, key);
-    }
-    return key;
   }
 
   #start(

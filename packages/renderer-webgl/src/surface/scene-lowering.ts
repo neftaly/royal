@@ -471,7 +471,6 @@ export const prepareCanonicalSurfaceScene = (
     }
     return presented;
   };
-  let authoredGeometryIndex = 0;
   const directGeometry = (
     geometry: Geometry,
     textureCoordinates = false,
@@ -482,13 +481,9 @@ export const prepareCanonicalSurfaceScene = (
       : directTexturedGeometry;
     let canonical = retained.get(geometry);
     if (canonical === undefined) {
-      const authoredKey = geometry.kind === "triangles"
-        ? `triangles:${authoredGeometryIndex++}`
-        : "";
       canonical = prepareCanonicalGeometry(
         geometry,
         textureCoordinates,
-        authoredKey,
       );
       retained.set(geometry, canonical);
     }

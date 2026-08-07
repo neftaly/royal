@@ -24,6 +24,7 @@ import {
   FrameUploadBudgetOwner,
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
+import { sameCanonicalGeometry } from "./canonical-geometry";
 
 type GpuGeometryArena = Readonly<{
   budgetIdentity: object;
@@ -127,10 +128,10 @@ const geometryVertexStrideBytes = (layout: number): number => (
   + ((layout & 16) !== 0 ? 4 * 4 : 0)
 );
 
-type PendingGeometry = Readonly<{
+type PendingGeometry = {
   key: string;
   surface: CanonicalDrawSurface;
-}>;
+};
 
 type PlannedGeometry = PendingGeometry & Readonly<{
   planIndex: number;
@@ -177,22 +178,44 @@ const planGeometryArenas = (
   surfaces: readonly CanonicalDrawSurface[],
 ): Readonly<{
   plans: readonly PlannedGeometryArena[];
+  resourceKeys: ReadonlyMap<CanonicalDrawSurface, string>;
   retainedBytes: number;
   uploads: ReadonlyMap<string, PlannedGeometry>;
 }> => {
+  const candidates = new Map<string, PendingGeometry[]>();
+  const pendingBySurface = new Map<CanonicalDrawSurface, PendingGeometry>();
   const byLayout = new Map<number, PendingGeometry[]>();
-  const keys = new Set<string>();
   for (const surface of surfaces) {
-    const key = surfaceGeometryResourceKey(surface);
-    if (keys.has(key)) continue;
-    keys.add(key);
-    const layout = geometryLayout(surface);
-    const entries = byLayout.get(layout);
-    if (entries === undefined) byLayout.set(layout, [{ key, surface }]);
-    else entries.push({ key, surface });
+    const candidateKey = surfaceGeometryResourceKey(surface);
+    let bucket = candidates.get(candidateKey);
+    if (bucket === undefined) {
+      bucket = [];
+      candidates.set(candidateKey, bucket);
+    }
+    let pending = bucket.find((entry) =>
+      sameCanonicalGeometry(entry.surface.geometry, surface.geometry));
+    if (pending === undefined) {
+      pending = { key: candidateKey, surface };
+      bucket.push(pending);
+      const layout = geometryLayout(surface);
+      const entries = byLayout.get(layout);
+      if (entries === undefined) byLayout.set(layout, [pending]);
+      else entries.push(pending);
+    }
+    pendingBySurface.set(surface, pending);
+  }
+  for (const bucket of candidates.values()) {
+    for (let index = 0; index < bucket.length; index += 1) {
+      const pending = bucket[index]!;
+      pending.key = `${index}:${pending.key}`;
+    }
+  }
+  const orderedLayouts = [...byLayout.entries()].sort(([left], [right]) => left - right);
+  for (const [, entries] of orderedLayouts) {
+    entries.sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
   }
   const plans: PlannedGeometryArena[] = [];
-  for (const [layout, entries] of byLayout) {
+  for (const [layout, entries] of orderedLayouts) {
     const inputs = Array<GeometryBatchInput>(entries.length);
     for (let index = 0; index < entries.length; index += 1) {
       const geometry = entries[index]!.surface.geometry;
@@ -248,7 +271,11 @@ const planGeometryArenas = (
   if (!Number.isSafeInteger(retainedBytes)) {
     throw new RangeError("Royal planned surface geometry storage exceeds safe integer range");
   }
-  return { plans, retainedBytes, uploads };
+  const resourceKeys = new Map<CanonicalDrawSurface, string>();
+  for (const [surface, pending] of pendingBySurface) {
+    resourceKeys.set(surface, pending.key);
+  }
+  return { plans, resourceKeys, retainedBytes, uploads };
 };
 
 const sameGeometryArenaPlan = (
@@ -262,10 +289,10 @@ const sameGeometryArenaPlan = (
       && leftPlan.entries.every((leftEntry, entryIndex) => {
         const rightEntry = rightPlan.entries[entryIndex]!;
         return leftEntry.key === rightEntry.key
-          && leftEntry.surface.geometry.positions.length
-            === rightEntry.surface.geometry.positions.length
-          && leftEntry.surface.geometry.indices.length
-            === rightEntry.surface.geometry.indices.length;
+          && sameCanonicalGeometry(
+            leftEntry.surface.geometry,
+            rightEntry.surface.geometry,
+          );
       });
   });
 
@@ -871,7 +898,7 @@ export class SurfaceGeometryGpuOwner {
         surfaceIndex += 1
       ) {
         const surface = surfaces[surfaceIndex]!;
-        const key = surfaceGeometryResourceKey(surface);
+        const key = planned.resourceKeys.get(surface)!;
         let geometry = stagedGeometryByKey.get(key)
           ?? (geometryPlanChanged ? undefined : this.#geometryResourcesByKey.get(key));
         const geometryUpload = planned.uploads.get(key)!;
