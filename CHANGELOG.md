@@ -5,6 +5,40 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.9 - 2026-08-07
+
+### Correctness
+
+- Preserve the correct retained GPU geometry when direct triangle descriptors
+  are reordered, replaced with same-sized values, or share a compact candidate
+  key; exact typed-array value equality now proves reuse.
+- Copy public direct-triangle arrays at canonicalization so caller mutation
+  cannot silently alter renderer-owned geometry.
+- Recompute ordinary and virtual-texture descriptor identities from their
+  current values, allowing reconciled descriptor objects to change `src` or
+  explicit `version` without retaining stale texture work.
+- Make the browser context-restoration smoke wait for final glTF, texture,
+  geometry, and optional virtual-texture fidelity instead of treating an
+  available lifecycle alone as recovery.
+
+### Architecture and performance
+
+- Centralize canonical geometry equality in the surface functional core and
+  use allocation-free typed-array comparisons without temporary byte views.
+- Bucket direct geometry by compact value-derived candidates, prove equality
+  only within each bucket, and keep ordinary candidate ordering independent of
+  scene traversal.
+- Remove object-identity texture memoization that obscured descriptor value
+  changes and duplicated ownership rules.
+
+### Verification
+
+- Added focused same-size replacement, reorder, forced-collision, defensive
+  ownership, reconciled texture identity, explicit-version reload, and
+  context-restoration readiness tests.
+- Passed 872 tests across 118 files, lint, typecheck, production builds, bundle
+  gates, package imports, and the packed TypeScript/runtime consumer.
+
 ## 0.0.8 - 2026-08-07
 
 ### Correctness
