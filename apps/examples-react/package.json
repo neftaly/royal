@@ -1,7 +1,7 @@
 {
   "name": "@royal/examples-react",
   "private": true,
-  "version": "0.0.9",
+  "version": "0.0.10",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {

@@ -5,6 +5,8 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.10 - 2026-08-07
+
 ### Correctness and contracts
 
 - Validate nested material, texture, edge-material, canvas-size, and React
@@ -28,7 +30,7 @@ versions identify source-level prerelease checkpoints in this repository.
 - Keep lazy and worker payload budgets unchanged; the complete boundary and
   retained-frame work adds about 0.75 kB gzip to the synchronous/deployed graph.
 - Ratchet the packed renderer ceiling to 641,024 bytes around the measured
-  639,833-byte artifact; core and React package ceilings remain unchanged.
+  639,837-byte artifact; core and React package ceilings remain unchanged.
 
 ### Verification
 
