@@ -19,6 +19,7 @@ import {
   requireExampleRoute,
 } from './example-contract.mjs';
 import { summarizeCanvasPixels } from './canvas-sample.mjs';
+import { contextLossResourcesRecovered } from './context-loss-readiness.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -1537,6 +1538,7 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
 (async () => {
   const canvas = document.querySelector('canvas');
   const snapshot = () => ${rendererSnapshotExpression};
+  const resourcesRecovered = ${contextLossResourcesRecovered.toString()};
   if (canvas === null) return { status: 'error', reason: 'missing canvas' };
   if (snapshot()?.lifecycle?.state !== 'available') {
     return { status: 'error', reason: 'renderer snapshot was not available before interruption', snapshot: snapshot() };
@@ -1556,6 +1558,7 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
     return snapshot();
   };
   const before = snapshot();
+  const hadVirtualTexturing = (before?.virtualTexturing?.residentPages ?? 0) > 0;
   if (${expectVirtualTexturing ? 'true' : 'false'} && (before?.virtualTexturing?.residentPages ?? 0) <= 0) {
     return { status: 'error', reason: 'VT recovery route had no resident pages before interruption', before };
   }
@@ -1582,26 +1585,28 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
   globalThis.__royalExamplesRenderNow?.();
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   globalThis.__royalExamplesRenderNow?.();
-  const recoveredResources = ${expectVirtualTexturing ? 'true' : 'false'}
-    ? await waitFor((value) => {
-      const vt = value?.virtualTexturing;
-      return value?.lifecycle?.state === 'available'
-        && vt?.manifestsReady === 1
-        && (vt?.residentPages ?? 0) > 0
-        && vt?.pendingPages === 0;
-    }, 10_000)
-    : restored;
-  if (${expectVirtualTexturing ? 'true' : 'false'}) {
+  const recoveredResources = await waitFor(
+    (value) => resourcesRecovered(value, hadVirtualTexturing),
+    10_000,
+  );
+  if (!resourcesRecovered(recoveredResources, hadVirtualTexturing)) {
+    return {
+      status: 'error',
+      reason: 'resources did not reach final fidelity after context restoration',
+      before,
+      recoveredResources,
+    };
+  }
+  if (hadVirtualTexturing) {
     const vt = recoveredResources?.virtualTexturing;
     const beforeVt = before?.virtualTexturing;
     const cumulativeFailureCounters = ['failedPages', 'manifestFailures'];
     const newFailures = cumulativeFailureCounters.filter((name) => (
-      !Number.isFinite(vt?.[name])
-      || !Number.isFinite(beforeVt?.[name])
-      || vt[name] > beforeVt[name]
+      Number.isFinite(beforeVt?.[name])
+      && (!Number.isFinite(vt?.[name]) || vt[name] > beforeVt[name])
     ));
     if (
-      vt?.manifestsReady !== 1
+      (Number.isFinite(beforeVt?.manifestsReady) && vt?.manifestsReady !== beforeVt.manifestsReady)
       || (vt?.residentPages ?? 0) <= 0
       || vt?.pendingPages !== 0
       || newFailures.length > 0
