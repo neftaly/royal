@@ -59,6 +59,19 @@ describe("canvas size selection", () => {
       { maxHeight: 4096, maxWidth: 4096 },
     )).toMatchObject({ backingHeight: 0, backingWidth: 0, renderScale: 0 });
   });
+
+  it("rejects malformed canvas-size records at the public call boundary", () => {
+    expect(() => resolveCanvasSize(
+      null as unknown as Parameters<typeof resolveCanvasSize>[0],
+      { maxHeight: 4096, maxWidth: 4096 },
+    )).toThrow("Royal canvas size must be an object");
+    expect(() => resolveCanvasSize(
+      { cssHeight: 100, cssWidth: 100, pixelRatio: 1, scale: 2 } as unknown as Parameters<
+        typeof resolveCanvasSize
+      >[0],
+      { maxHeight: 4096, maxWidth: 4096 },
+    )).toThrow('unsupported field "scale"');
+  });
 });
 
 describe("clear-only canvas root", () => {

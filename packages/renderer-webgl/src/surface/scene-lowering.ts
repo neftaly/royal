@@ -852,9 +852,6 @@ export const prepareCanonicalSurfaceScene = (
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
-    const pickingGeometry = node.pickingGeometry === undefined
-      ? directGeometry(node.geometry)
-      : directGeometry(node.pickingGeometry);
     const wireframe = node.material.kind === "wireframe";
     const geometry = wireframe
       ? wireframeGeometry(node.geometry)
@@ -873,13 +870,15 @@ export const prepareCanonicalSurfaceScene = (
         ? {}
         : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
       contact: node.surfaceDepth === "contact",
-      pickingGeometry,
       textureKeys: canonicalMaterialTextureKeys(materialSource),
       ...(wireframe ? { topology: "lines" as const } : {}),
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };
     emittedSurfaces.push(surface);
     if (includePicking) {
+      const pickingGeometry = node.pickingGeometry === undefined
+        ? directGeometry(node.geometry)
+        : directGeometry(node.pickingGeometry);
       pickSurfaces.push(node.pickingGeometry === undefined ? {
         ...canonicalPickMaterial(materialSource),
         inverseModel,
@@ -888,7 +887,7 @@ export const prepareCanonicalSurfaceScene = (
         ...(node.ref === undefined
           ? {}
           : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
-        pickingGeometry: surface.pickingGeometry,
+        pickingGeometry,
       } : {
         ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
         inverseModel,
@@ -897,7 +896,7 @@ export const prepareCanonicalSurfaceScene = (
         ...(node.ref === undefined
           ? {}
           : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
-        pickingGeometry: surface.pickingGeometry,
+        pickingGeometry,
       });
     }
   }

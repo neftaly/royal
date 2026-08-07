@@ -36,11 +36,11 @@ const SCREEN_SPACE_PARTITION_FIELDS = [
 // Every valid index owns at least one cell in the shared 64-by-64 pattern.
 const MAX_PARTITION_COUNT = 4096;
 
-const resolvePartitionValues = (
+const validatePartitionValues = (
   options: ScreenSpacePartitionOptions,
   label: string,
-): ScreenSpacePartition => {
-  const cellSizeCssPixels = positiveFiniteNumber(
+): void => {
+  positiveFiniteNumber(
     options.cellSizeCssPixels,
     `${label} cellSizeCssPixels`,
   );
@@ -54,12 +54,32 @@ const resolvePartitionValues = (
   if (!Number.isInteger(index) || index < 0 || index >= count) {
     throw new RangeError(`${label} index must be an integer within [0, count)`);
   }
+};
+
+const resolvePartitionValues = (
+  options: ScreenSpacePartitionOptions,
+  label: string,
+): ScreenSpacePartition => {
+  validatePartitionValues(options, label);
   return {
-    cellSizeCssPixels,
-    count,
-    index,
+    cellSizeCssPixels: options.cellSizeCssPixels,
+    count: options.count,
+    index: options.index,
     kind: 'screen-space-partition',
   };
+};
+
+/** @internal Validates composed coverage without allocating an ownership copy. */
+export const validateScreenSpacePartition: (
+  value: unknown,
+  label: string,
+) => asserts value is ScreenSpacePartition = (value, label) => {
+  objectWithAllowedFields(value as ScreenSpacePartition, SCREEN_SPACE_PARTITION_FIELDS, label);
+  const partition = value as Partial<ScreenSpacePartition>;
+  if (partition.kind !== 'screen-space-partition') {
+    throw new TypeError(`${label} kind must be screen-space-partition`);
+  }
+  validatePartitionValues(partition as ScreenSpacePartition, label);
 };
 
 /** Validates and copies a nested public coverage descriptor. */
@@ -67,11 +87,13 @@ export const resolveScreenSpacePartition = (
   value: ScreenSpacePartition,
   label: string,
 ): ScreenSpacePartition => {
-  objectWithAllowedFields(value, SCREEN_SPACE_PARTITION_FIELDS, label);
-  if (value.kind !== 'screen-space-partition') {
-    throw new TypeError(`${label} kind must be screen-space-partition`);
-  }
-  return resolvePartitionValues(value, label);
+  validateScreenSpacePartition(value, label);
+  return {
+    cellSizeCssPixels: value.cellSizeCssPixels,
+    count: value.count,
+    index: value.index,
+    kind: 'screen-space-partition',
+  };
 };
 
 /** Creates one member of an exact complementary screen-space partition. */

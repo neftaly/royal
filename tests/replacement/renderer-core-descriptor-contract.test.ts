@@ -312,6 +312,10 @@ describe("renderer-core descriptor contract", () => {
       src: "/piece.glb",
     })).toThrow(/edge material/);
     expect(() => outlineGltf({
+      material: { ...material, widthCssPixels: Number.NaN },
+      src: "/piece.glb",
+    })).toThrow(/widthCssPixels must be finite/);
+    expect(() => outlineGltf({
       material,
       pickingId: "forbidden",
       src: "/piece.glb",
@@ -620,6 +624,24 @@ describe("renderer-core descriptor contract", () => {
       color: [1, 1, 1, 1],
       width: 2,
     } as unknown as Parameters<typeof wireframeMaterial>[0])).toThrow(/unsupported option "width"/);
+    expect(() => standardMaterial({
+      texture: { kind: "video", src: "/albedo.mp4" },
+    } as unknown as Parameters<typeof standardMaterial>[0])).toThrow(/solidTexture/);
+    expect(() => unlitMaterial({
+      texture: {
+        kind: "asset",
+        sampler: { wrapS: "mirror" },
+        src: "/albedo.png",
+      },
+    } as unknown as Parameters<typeof unlitMaterial>[0])).toThrow(/wrapS/);
+    expect(() => mesh({
+      geometry: boxGeometry(1),
+      material: {
+        baseColor: solidTexture({ color: [1, 1, 1, 1] }),
+        kind: "standard",
+        metallic: 0,
+      },
+    } as unknown as Parameters<typeof mesh>[0])).toThrow(/metallic and roughness/);
 
     if (false) {
       // @ts-expect-error tint is a texture multiplier, not an alias for solid color.

@@ -122,6 +122,33 @@ describe("React scene pointer events", () => {
     })).toThrow("requires one scene node");
   });
 
+  it("validates every own pointer-map and handler key", () => {
+    const renderScene = scene({
+      camera,
+      nodes: [mesh({ geometry: boxGeometry(1), material, pickingId: "hero" })],
+    });
+    const index = createScenePickingIndex(renderScene);
+    const symbolHandlers = {
+      hero: { onClick: () => undefined },
+      [Symbol("hidden")]: { onClick: () => undefined },
+    };
+    expect(() => createScenePointerEventRegistry(index, symbolHandlers as never))
+      .toThrow(/unsupported pickingId Symbol\(hidden\)/);
+    expect(() => createScenePointerEventRegistry(index, {
+      hero: {
+        onClick: () => undefined,
+        [Symbol("hidden")]: () => undefined,
+      } as never,
+    })).toThrow(/unsupported handler Symbol\(hidden\)/);
+
+    const handlers = {};
+    Object.defineProperty(handlers, "onClick", {
+      value: () => undefined,
+    });
+    const registry = createScenePointerEventRegistry(index, { hero: handlers });
+    expect(registry.pointerEventTarget("hero")).toBeDefined();
+  });
+
   it("plans hover transitions in leave-enter-move order", () => {
     const picked = (id: string): CanvasPickedPointerTarget => {
       const node = mesh({ geometry: boxGeometry(1), material, pickingId: id });

@@ -1,4 +1,5 @@
 import type { LinearRgba } from "@royal/renderer-core";
+import type { MutableClearFrameIntent } from "../frame/clear-frame";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { identityMat4, mat4ValuesEqual } from "../math/mat4";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
@@ -41,6 +42,7 @@ import type {
 
 const MASK_CLEAR: LinearRgba = [0, 0, 0, 0];
 const IDENTITY_MODEL = identityMat4();
+const NO_TEXTURE_BINDINGS: readonly TextureUnitBinding[] = [];
 const BATCH_INSTANCE_FLOATS = 17;
 const MAX_EDGE_RADIUS_FRAMEBUFFER_PIXELS = 64;
 const CREASE_NORMAL_COSINE = 0.866_025_4;
@@ -374,10 +376,11 @@ export type EdgeMaskPlan = Readonly<{
   pending: boolean;
 }>;
 
-type PreparedEdgeMaskBatch = Readonly<{
+type PreparedEdgeMaskBatch = {
   byteOffset: number;
   geometry: ReadyBorrowedGeometryAllocation;
-}>;
+  instanceCount: number;
+};
 
 type OwnedCombinedGeometry = Readonly<{
   byteLength: number;
@@ -401,18 +404,46 @@ type CombinedGeometryPlan = Readonly<{
 const sameDrawGeometrySequence = (
   left: readonly EdgeMaskDraw[],
   right: readonly EdgeMaskDraw[],
-): boolean => left.length === right.length && left.every(
-  (draw, index) =>
-    draw.resource.geometry.identity === right[index]!.resource.geometry.identity,
-);
+): boolean => {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index]!.resource.geometry.identity !== right[index]!.resource.geometry.identity) {
+      return false;
+    }
+  }
+  return true;
+};
 
 const sameGeometrySequence = (
   resource: OwnedCombinedGeometry,
   draws: readonly EdgeMaskDraw[],
-): boolean => resource.identities.length === draws.length
-  && resource.identities.every(
-    (identity, index) => identity === draws[index]!.resource.geometry.identity,
-  );
+): boolean => {
+  if (resource.identities.length !== draws.length) return false;
+  for (let index = 0; index < draws.length; index += 1) {
+    if (resource.identities[index] !== draws[index]!.resource.geometry.identity) return false;
+  }
+  return true;
+};
+
+const matchingCombinedGeometry = (
+  resources: readonly OwnedCombinedGeometry[],
+  draws: readonly EdgeMaskDraw[],
+): OwnedCombinedGeometry | undefined => {
+  for (const resource of resources) {
+    if (sameGeometrySequence(resource, draws)) return resource;
+  }
+  return undefined;
+};
+
+const hasMatchingUploadPlan = (
+  plans: readonly CombinedGeometryPlan[],
+  draws: readonly EdgeMaskDraw[],
+): boolean => {
+  for (const plan of plans) {
+    if (sameDrawGeometrySequence(plan.draws, draws)) return true;
+  }
+  return false;
+};
 
 type PlannedOccurrence = Readonly<{
   draws: readonly EdgeMaskDraw[];
@@ -679,6 +710,9 @@ export class EdgeOverlayOwner {
   #batchBuffer: WebGLBuffer | null = null;
   readonly #batchClaim = {};
   #batchDisabled = false;
+  readonly #batchGeometryIdentities = new Set<object>();
+  readonly #batchOffsets = new Map<EdgeMaskBatch, number>();
+  readonly #batchVisibleDraws = new Set<EdgeMaskDraw>();
   #batchProgram: MaskProgram | null = null;
   #batchRetainedBytes = 0;
   #batchValues = new Float32Array(0);
@@ -686,7 +720,16 @@ export class EdgeOverlayOwner {
     object,
     { byteOffset: number; vertexArray: WebGLVertexArrayObject }
   >();
+  readonly #combinedGeometryClaims = new Set<OwnedCombinedGeometry>();
   #combinedGeometries: OwnedCombinedGeometry[] = [];
+  readonly #clearIntent: MutableClearFrameIntent = {
+    clearColor: MASK_CLEAR,
+    clearDepth: 1,
+    framebuffer: null,
+    scissor: null,
+    size: { height: 1, width: 1 },
+    viewport: { height: 1, width: 1, x: 0, y: 0 },
+  };
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #claim = {};
   readonly #discardDepthAttachment: number[];
@@ -700,14 +743,31 @@ export class EdgeOverlayOwner {
   }];
   readonly #horizontalFrame: MutableSurfaceDrawFrame = {
     framebuffer: null,
-    viewport: { height: 1, width: 1, x: 0, y: 0 },
+    viewport: this.#clearIntent.viewport,
   };
   #horizontalPacket: SurfaceDrawPacket | null = null;
   readonly #maskFrame: MutableSurfaceDrawFrame = {
     framebuffer: null,
-    viewport: { height: 1, width: 1, x: 0, y: 0 },
+    viewport: this.#clearIntent.viewport,
   };
+  #maskDrawPacket: {
+    alphaBlend: boolean;
+    colorWrite: boolean;
+    cullBackFaces: boolean;
+    depthBias: boolean;
+    depthTest: boolean;
+    depthWrite: boolean;
+    frontFace: number;
+    program: WebGLProgram;
+    textureBindings: readonly TextureUnitBinding[];
+    textureUnits: number;
+    vertexArray: WebGLVertexArrayObject;
+  } | null = null;
   #pipeline: EdgePipeline | null = null;
+  #plannedMatches: (object | BorrowedSurfaceGeometryMatch["status"])[] = [];
+  #plannedScene: CanonicalEdgeOverlayScene | null = null;
+  #plans: readonly EdgeMaskPlan[] = [];
+  readonly #preparedBatches = new Map<EdgeMaskBatch, PreparedEdgeMaskBatch>();
   #partitionResolve: PartitionResolveProgram | null = null;
   readonly #partitionResolveBindings: TextureUnitBinding[] = [
     { sampler: null, target: "2d", texture: null },
@@ -728,6 +788,9 @@ export class EdgeOverlayOwner {
   #resolvePacket: SurfaceDrawPacket | null = null;
   #resolveRestricted = false;
   #scene: CanonicalEdgeOverlayScene | null = null;
+  readonly #surfaceMatches: BorrowedSurfaceGeometryMatch[] = [];
+  readonly #uploadPlans: CombinedGeometryPlan[] = [];
+  readonly #viewFrustumPlanes: Float32Array[] = [];
   readonly #screenExtents = new Float64Array(4);
   readonly #scratchClearScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
   readonly #horizontalScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
@@ -746,6 +809,11 @@ export class EdgeOverlayOwner {
   }
 
   setScene(scene: CanonicalEdgeOverlayScene | null): void {
+    if (this.#scene !== scene) {
+      this.#plannedMatches.length = 0;
+      this.#plannedScene = null;
+      this.#plans = [];
+    }
     this.#scene = scene;
     if (scene === null || scene.runs.length === 0) this.#deleteBatchResources();
   }
@@ -783,15 +851,28 @@ export class EdgeOverlayOwner {
     this.#batchDisabled = false;
     this.#batchProgram = null;
     this.#batchRetainedBytes = 0;
-    this.#batchValues = new Float32Array(0);
+    this.#batchGeometryIdentities.clear();
+    this.#batchOffsets.clear();
+    this.#batchVisibleDraws.clear();
     this.#batchVertexArrays.clear();
-    this.#combinedGeometries = [];
+    this.#combinedGeometries.length = 0;
+    this.#combinedGeometryClaims.clear();
+    this.#preparedBatches.clear();
+    this.#uploadPlans.length = 0;
     this.#targets = null;
     this.#pipeline = null;
     this.#partitionResolve = null;
     this.#partitionResolvePacket = null;
     this.#horizontalPacket = null;
+    this.#maskDrawPacket = null;
     this.#resolvePacket = null;
+    this.#clearIntent.framebuffer = null;
+    this.#horizontalFrame.framebuffer = null;
+    this.#maskFrame.framebuffer = null;
+    this.#plannedMatches.length = 0;
+    this.#plannedScene = null;
+    this.#plans = [];
+    this.#surfaceMatches.length = 0;
     this.#horizontalBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#resolveBindings[0] = { sampler: null, target: "2d", texture: null };
     this.#partitionResolveBindings[0] = { sampler: null, target: "2d", texture: null };
@@ -812,29 +893,22 @@ export class EdgeOverlayOwner {
     if (scene === null || scene.runs.length === 0 || views.length === 0) return false;
     const matches = this.#preflight(scene, borrow);
     this.#ensurePipeline(state);
-    if (scene.runs.some((run) => run.material.coverage !== undefined)) {
+    for (const run of scene.runs) {
+      if (run.material.coverage === undefined) continue;
       this.#ensurePartitionResolve(state);
+      break;
     }
-    const plansByView = views.map((view) => {
-      frustumPlanesInto(this.#frustumPlanes, view.viewProjection);
-      return scene.runs.map((run) => planEdgeMaskBatches(
-        scene,
-        run,
-        matches,
-        (surface) => worldBoundsVisible(surface.worldBounds, this.#frustumPlanes),
-      ));
-    });
-    const plans = plansByView.flat();
-    const maximumTargetBytes = views.reduce((maximum, view) => Math.max(
-      maximum,
-      view.viewport.width * view.viewport.height * 9,
-    ), 0);
-    const batchOffsets = this.#prepareBatches(
-      plans.flatMap((plan) => plan.batches),
-      state,
-      maximumTargetBytes,
-    );
-    const pending = plans.some((plan) => plan.pending);
+    const plans = this.#plansFor(scene, matches);
+    let maximumTargetBytes = 0;
+    for (const view of views) {
+      maximumTargetBytes = Math.max(
+        maximumTargetBytes,
+        view.viewport.width * view.viewport.height * 9,
+      );
+    }
+    const batchOffsets = this.#prepareBatches(plans, views, state, maximumTargetBytes);
+    let pending = false;
+    for (const plan of plans) pending ||= plan.pending;
     for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
       const view = views[viewIndex]!;
       if (!this.#ensureTargets(view.viewport.width, view.viewport.height, state)) continue;
@@ -842,7 +916,7 @@ export class EdgeOverlayOwner {
       for (let runIndex = 0; runIndex < scene.runs.length; runIndex += 1) {
         this.#drawRun(
           scene.runs[runIndex]!,
-          plansByView[viewIndex]![runIndex]!,
+          plans[runIndex]!,
           view,
           framebuffer,
           state,
@@ -869,25 +943,24 @@ export class EdgeOverlayOwner {
     const pipeline = this.#pipeline!;
     const gl = this.#gl;
     state.unbindTextureUnit(0);
-    state.clear({
-      clearColor: MASK_CLEAR,
-      clearDepth: 1,
-      framebuffer: targets.maskFramebuffer,
-      scissor: null,
-      size: { height: targets.height, width: targets.width },
-      viewport: { height: targets.height, width: targets.width, x: 0, y: 0 },
-    });
+    this.#clearIntent.framebuffer = targets.maskFramebuffer;
+    this.#clearIntent.scissor = null;
+    this.#clearIntent.size.height = targets.height;
+    this.#clearIntent.size.width = targets.width;
+    this.#clearIntent.viewport.height = targets.height;
+    this.#clearIntent.viewport.width = targets.width;
+    this.#clearIntent.viewport.x = 0;
+    this.#clearIntent.viewport.y = 0;
+    state.clear(this.#clearIntent);
     this.#maskFrame.framebuffer = targets.maskFramebuffer;
-    this.#maskFrame.viewport = {
-      height: targets.height,
-      width: targets.width,
-      x: 0,
-      y: 0,
-    };
     let drew = false;
     for (const batch of plan.batches) {
-      const batchVisible = batch.draws.some(({ surface }) =>
-        worldBoundsVisible(surface.worldBounds, this.#frustumPlanes));
+      let batchVisible = false;
+      for (const { surface } of batch.fallbackDraws) {
+        if (!worldBoundsVisible(surface.worldBounds, this.#frustumPlanes)) continue;
+        batchVisible = true;
+        break;
+      }
       if (!batchVisible) continue;
       const prepared = preparedBatches?.get(batch);
       if (batch.draws.length > 1 && prepared !== undefined) {
@@ -899,20 +972,12 @@ export class EdgeOverlayOwner {
           const program = drawResource.instanceCount > 0
             ? pipeline.instancedMask
             : pipeline.mask;
-          const packet: SurfaceDrawPacket = {
-            alphaBlend: false,
-            colorWrite: true,
-            cullBackFaces: false,
-            depthBias: false,
-            depthTest: true,
-            depthWrite: true,
-            frontFace: surface.modelHandedness < 0 ? gl.CW : gl.CCW,
-            program: program.program,
-            textureBindings: [],
-            textureUnits: 0,
-            vertexArray: drawResource.vertexArray,
-          };
-          state.applySurfaceDraw(this.#maskFrame, packet);
+          this.#applyMaskDraw(
+            state,
+            program.program,
+            drawResource.vertexArray,
+            surface.modelHandedness < 0 ? gl.CW : gl.CCW,
+          );
           gl.uniformMatrix4fv(program.view, false, view.view);
           gl.uniformMatrix4fv(program.viewProjection, false, view.viewProjection);
           gl.uniformMatrix4fv(program.model, false, surface.model);
@@ -955,22 +1020,11 @@ export class EdgeOverlayOwner {
     );
     this.#updatePassScissors(plan, view, horizontalRadius, verticalRadius);
     if (this.#horizontalRestricted) {
-      state.clear({
-        clearColor: MASK_CLEAR,
-        clearDepth: 1,
-        framebuffer: targets.scratchFramebuffer,
-        scissor: this.#scratchClearScissor,
-        size: { height: targets.height, width: targets.width },
-        viewport: { height: targets.height, width: targets.width, x: 0, y: 0 },
-      });
+      this.#clearIntent.framebuffer = targets.scratchFramebuffer;
+      this.#clearIntent.scissor = this.#scratchClearScissor;
+      state.clear(this.#clearIntent);
     }
     this.#horizontalFrame.framebuffer = targets.scratchFramebuffer;
-    this.#horizontalFrame.viewport = {
-      height: targets.height,
-      width: targets.width,
-      x: 0,
-      y: 0,
-    };
     state.applySurfaceDraw(this.#horizontalFrame, this.#horizontalPacket!);
     if (this.#horizontalRestricted) state.applyDrawScissor(this.#horizontalScissor);
     gl.uniform2f(pipeline.horizontal.texelSize, texelX, texelY);
@@ -1085,7 +1139,7 @@ export class EdgeOverlayOwner {
   ): void {
     const gl = this.#gl;
     const program = this.#batchProgram!;
-    const { byteOffset, geometry } = prepared;
+    const { byteOffset, geometry, instanceCount } = prepared;
     const binding = this.#batchVertexArrays.get(geometry.identity)!;
     if (binding.byteOffset !== byteOffset) {
       gl.bindVertexArray(binding.vertexArray);
@@ -1118,19 +1172,12 @@ export class EdgeOverlayOwner {
       binding.byteOffset = byteOffset;
       state.invalidate();
     }
-    state.applySurfaceDraw(this.#maskFrame, {
-      alphaBlend: false,
-      colorWrite: true,
-      cullBackFaces: false,
-      depthBias: false,
-      depthTest: true,
-      depthWrite: true,
-      frontFace: batch.draws[0]!.surface.modelHandedness < 0 ? gl.CW : gl.CCW,
-      program: program.program,
-      textureBindings: [],
-      textureUnits: 0,
-      vertexArray: binding.vertexArray,
-    });
+    this.#applyMaskDraw(
+      state,
+      program.program,
+      binding.vertexArray,
+      batch.draws[0]!.surface.modelHandedness < 0 ? gl.CW : gl.CCW,
+    );
     gl.uniformMatrix4fv(program.view, false, view.view);
     gl.uniformMatrix4fv(program.viewProjection, false, view.viewProjection);
     gl.uniformMatrix4fv(program.model, false, IDENTITY_MODEL);
@@ -1139,40 +1186,56 @@ export class EdgeOverlayOwner {
       geometry.indexCount,
       geometry.indexType,
       geometry.indexOffset,
-      batch.draws.length,
+      instanceCount,
     );
   }
 
   #prepareBatches(
-    batches: readonly EdgeMaskBatch[],
+    plans: readonly EdgeMaskPlan[],
+    views: readonly SurfaceFrameView[],
     state: WebGlStateOwner,
     requiredTargetBytes: number,
   ): ReadonlyMap<EdgeMaskBatch, PreparedEdgeMaskBatch> | undefined {
-    const offsets = new Map<EdgeMaskBatch, number>();
+    const offsets = this.#batchOffsets;
+    offsets.clear();
+    while (this.#viewFrustumPlanes.length < views.length) {
+      this.#viewFrustumPlanes.push(new Float32Array(24));
+    }
+    for (let index = 0; index < views.length; index += 1) {
+      frustumPlanesInto(this.#viewFrustumPlanes[index]!, views[index]!.viewProjection);
+    }
+    const visibleDraws = this.#batchVisibleDraws;
+    visibleDraws.clear();
     let valueCount = 0;
-    for (const batch of batches) {
-      if (batch.draws.length < 2) continue;
-      offsets.set(batch, valueCount * Float32Array.BYTES_PER_ELEMENT);
-      valueCount += batch.draws.length * BATCH_INSTANCE_FLOATS;
+    for (const plan of plans) {
+      for (const batch of plan.batches) {
+        if (batch.draws.length < 2) continue;
+        const visibleCount = this.#retainVisibleBatchDraws(batch, views.length);
+        if (visibleCount < 2) continue;
+        offsets.set(batch, valueCount * Float32Array.BYTES_PER_ELEMENT);
+        valueCount += visibleCount * BATCH_INSTANCE_FLOATS;
+      }
     }
     if (valueCount === 0) {
       this.#deleteBatchResources();
-      return new Map();
+      this.#preparedBatches.clear();
+      return this.#preparedBatches;
     }
     if (this.#batchDisabled) return undefined;
     const byteLength = valueCount * Float32Array.BYTES_PER_ELEMENT;
-    const uploadPlans: CombinedGeometryPlan[] = [];
-    const activeCombined = new Set<OwnedCombinedGeometry>();
+    const uploadPlans = this.#uploadPlans;
+    uploadPlans.length = 0;
+    const activeCombined = this.#combinedGeometryClaims;
+    activeCombined.clear();
     for (const batch of offsets.keys()) {
       const draws = batch.combinedDraws;
       if (draws === undefined) continue;
-      const retained = this.#combinedGeometries.find((resource) =>
-        sameGeometrySequence(resource, draws));
+      const retained = matchingCombinedGeometry(this.#combinedGeometries, draws);
       if (retained !== undefined) {
         activeCombined.add(retained);
         continue;
       }
-      if (uploadPlans.some((upload) => sameDrawGeometrySequence(upload.draws, draws))) continue;
+      if (hasMatchingUploadPlan(uploadPlans, draws)) continue;
       const layout = planGeometryBatchLayout(draws.map(({ surface }) => ({
         indices: surface.geometry.indices,
         vertexCount: surface.geometry.positions.length / 3,
@@ -1183,17 +1246,23 @@ export class EdgeOverlayOwner {
       });
     }
     let reconciled = false;
-    this.#combinedGeometries = this.#combinedGeometries.filter((resource) => {
-      if (activeCombined.has(resource)) return true;
-      this.#deleteCombinedGeometry(resource);
-      reconciled = true;
-      return false;
-    });
+    let retainedCombinedCount = 0;
+    for (const resource of this.#combinedGeometries) {
+      if (activeCombined.has(resource)) {
+        this.#combinedGeometries[retainedCombinedCount] = resource;
+        retainedCombinedCount += 1;
+      } else {
+        this.#deleteCombinedGeometry(resource);
+        reconciled = true;
+      }
+    }
+    this.#combinedGeometries.length = retainedCombinedCount;
     if (reconciled) state.invalidate();
-    const combinedByteLength = this.#combinedGeometries.reduce(
-      (total, resource) => total + resource.byteLength,
-      uploadPlans.reduce((total, upload) => total + upload.byteLength, 0),
-    );
+    let combinedByteLength = 0;
+    for (const resource of this.#combinedGeometries) {
+      combinedByteLength += resource.byteLength;
+    }
+    for (const upload of uploadPlans) combinedByteLength += upload.byteLength;
     const retainedByteLength = byteLength + combinedByteLength;
     const gl = this.#gl;
     const currentTargetBytes = this.#targets === null
@@ -1222,12 +1291,16 @@ export class EdgeOverlayOwner {
       this.#batchValues = new Float32Array(valueCount);
     }
     let offset = 0;
-    for (const batch of batches) {
-      if (!offsets.has(batch)) continue;
-      for (const { objectId, surface } of batch.draws) {
-        this.#batchValues.set(surface.model, offset);
-        this.#batchValues[offset + 16] = objectId / 255;
-        offset += BATCH_INSTANCE_FLOATS;
+    for (const plan of plans) {
+      for (const batch of plan.batches) {
+        if (!offsets.has(batch)) continue;
+        for (const draw of batch.draws) {
+          if (!visibleDraws.has(draw)) continue;
+          const { objectId, surface } = draw;
+          this.#batchValues.set(surface.model, offset);
+          this.#batchValues[offset + 16] = objectId / 255;
+          offset += BATCH_INSTANCE_FLOATS;
+        }
       }
     }
     if (this.#batchBuffer === null) {
@@ -1276,17 +1349,30 @@ export class EdgeOverlayOwner {
       state.invalidate();
       throw error;
     }
-    const prepared = new Map<EdgeMaskBatch, PreparedEdgeMaskBatch>();
+    const prepared = this.#preparedBatches;
+    for (const batch of prepared.keys()) {
+      if (!offsets.has(batch)) prepared.delete(batch);
+    }
     for (const [batch, byteOffset] of offsets) {
       const geometry = batch.combinedDraws === undefined
         ? batch.geometry
-        : this.#combinedGeometries.find((resource) =>
-          sameGeometrySequence(resource, batch.combinedDraws!))!.geometry;
-      prepared.set(batch, { byteOffset, geometry });
+        : matchingCombinedGeometry(this.#combinedGeometries, batch.combinedDraws)!.geometry;
+      const retained = prepared.get(batch);
+      let instanceCount = 0;
+      for (const draw of batch.draws) {
+        if (visibleDraws.has(draw)) instanceCount += 1;
+      }
+      if (retained === undefined) {
+        prepared.set(batch, { byteOffset, geometry, instanceCount });
+      } else {
+        retained.byteOffset = byteOffset;
+        retained.geometry = geometry;
+        retained.instanceCount = instanceCount;
+      }
     }
-    const activeGeometries = new Set(
-      [...prepared.values()].map(({ geometry }) => geometry.identity),
-    );
+    const activeGeometries = this.#batchGeometryIdentities;
+    activeGeometries.clear();
+    for (const { geometry } of prepared.values()) activeGeometries.add(geometry.identity);
     for (const [identity, { vertexArray }] of this.#batchVertexArrays) {
       if (activeGeometries.has(identity)) continue;
       gl.deleteVertexArray(vertexArray);
@@ -1315,6 +1401,59 @@ export class EdgeOverlayOwner {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#batchValues, 0, valueCount);
     state.invalidate();
     return prepared;
+  }
+
+  #applyMaskDraw(
+    state: WebGlStateOwner,
+    program: WebGLProgram,
+    vertexArray: WebGLVertexArrayObject,
+    frontFace: number,
+  ): void {
+    const packet = this.#maskDrawPacket ??= {
+      alphaBlend: false,
+      colorWrite: true,
+      cullBackFaces: false,
+      depthBias: false,
+      depthTest: true,
+      depthWrite: true,
+      frontFace,
+      program,
+      textureBindings: NO_TEXTURE_BINDINGS,
+      textureUnits: 0,
+      vertexArray,
+    };
+    packet.frontFace = frontFace;
+    packet.program = program;
+    packet.vertexArray = vertexArray;
+    state.applySurfaceDraw(this.#maskFrame, packet);
+  }
+
+  #retainVisibleBatchDraws(
+    batch: EdgeMaskBatch,
+    viewCount: number,
+  ): number {
+    let visibleDraws = 0;
+    for (const draw of batch.draws) {
+      let visible = false;
+      for (const candidate of batch.fallbackDraws) {
+        if (candidate.objectId !== draw.objectId) continue;
+        for (let viewIndex = 0; viewIndex < viewCount; viewIndex += 1) {
+          if (worldBoundsVisible(
+            candidate.surface.worldBounds,
+            this.#viewFrustumPlanes[viewIndex]!,
+          )) {
+            visible = true;
+            break;
+          }
+        }
+        if (visible) break;
+      }
+      if (visible) {
+        this.#batchVisibleDraws.add(draw);
+        visibleDraws += 1;
+      }
+    }
+    return visibleDraws;
   }
 
   #createCombinedGeometry(
@@ -1369,7 +1508,8 @@ export class EdgeOverlayOwner {
     scene: CanonicalEdgeOverlayScene,
     borrow: (surface: CanonicalEdgeSurface) => BorrowedSurfaceGeometryMatch,
   ): readonly BorrowedSurfaceGeometryMatch[] {
-    const matches = Array<BorrowedSurfaceGeometryMatch>(scene.surfaces.length);
+    const matches = this.#surfaceMatches;
+    matches.length = scene.surfaces.length;
     for (let index = 0; index < scene.surfaces.length; index += 1) {
       const surface = scene.surfaces[index]!;
       const match = borrow(surface);
@@ -1390,6 +1530,24 @@ export class EdgeOverlayOwner {
       );
     }
     return matches;
+  }
+
+  #plansFor(
+    scene: CanonicalEdgeOverlayScene,
+    matches: readonly BorrowedSurfaceGeometryMatch[],
+  ): readonly EdgeMaskPlan[] {
+    let changed = this.#plannedScene !== scene || this.#plannedMatches.length !== matches.length;
+    for (let index = 0; index < matches.length; index += 1) {
+      const match = matches[index]!;
+      const key = match.status === "ready" ? match.resource : match.status;
+      if (this.#plannedMatches[index] !== key) changed = true;
+      this.#plannedMatches[index] = key;
+    }
+    this.#plannedMatches.length = matches.length;
+    if (!changed) return this.#plans;
+    this.#plannedScene = scene;
+    this.#plans = scene.runs.map((run) => planEdgeMaskBatches(scene, run, matches));
+    return this.#plans;
   }
 
   #ensurePipeline(state: WebGlStateOwner): void {
@@ -1635,9 +1793,14 @@ export class EdgeOverlayOwner {
     }
     this.#batchBuffer = null;
     this.#batchRetainedBytes = 0;
-    this.#batchValues = new Float32Array(0);
     this.#batchVertexArrays.clear();
-    this.#combinedGeometries = [];
+    this.#combinedGeometries.length = 0;
+    this.#batchGeometryIdentities.clear();
+    this.#batchOffsets.clear();
+    this.#batchVisibleDraws.clear();
+    this.#combinedGeometryClaims.clear();
+    this.#preparedBatches.clear();
+    this.#uploadPlans.length = 0;
     this.#budget.release(this.#batchClaim);
   }
 }

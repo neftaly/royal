@@ -171,6 +171,7 @@ describe("canonical direct surface lowering", () => {
       contact: true,
       node,
     });
+    expect(prepared.surfaces[0]).not.toHaveProperty("pickingGeometry");
     expect(prepared.surfaces[0]!.worldBounds).toEqual({
       max: [1, 2.5, 0],
       min: [-1, 1.5, 0],
@@ -179,6 +180,25 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces[0]!.pickingGeometry).toBe(
       prepared.surfaces[0]!.geometry,
     );
+  });
+
+  it("does not prepare or retain picking-only geometry when picking is disabled", () => {
+    const visualGeometry = planeGeometry(2);
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({
+        geometry: visualGeometry,
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        pickingGeometry: boxGeometry(10),
+      })],
+    }), undefined, undefined, undefined, undefined, { includePicking: false });
+
+    expect(prepared.pickSurfaces).toEqual([]);
+    expect(prepared.surfaces[0]).not.toHaveProperty("pickingGeometry");
+    expect(prepared.surfaces[0]!.geometry.bounds).toEqual({
+      max: [1, 1, 0],
+      min: [-1, -1, 0],
+    });
   });
 
   it("canonicalizes shared direct descriptors once per scene lowering", () => {

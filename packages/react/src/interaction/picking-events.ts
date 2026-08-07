@@ -95,12 +95,14 @@ export const validateScenePointerEventHandlers: ScenePointerEventHandlersValidat
   }
 
   let handlerCount = 0;
-  for (const [prop, handler] of Object.entries(value)) {
-    if (!pointerHandlerPropSet.has(prop)) {
-      throw new TypeError(`${label} contains unsupported handler ${JSON.stringify(prop)}`);
+  for (const field of Reflect.ownKeys(value)) {
+    if (typeof field !== 'string' || !pointerHandlerPropSet.has(field)) {
+      const name = typeof field === 'string' ? JSON.stringify(field) : String(field);
+      throw new TypeError(`${label} contains unsupported handler ${name}`);
     }
+    const handler = (value as Record<string, unknown>)[field];
     if (handler !== undefined && typeof handler !== 'function') {
-      throw new TypeError(`${label}.${prop} must be a function when provided`);
+      throw new TypeError(`${label}.${field} must be a function when provided`);
     }
     if (typeof handler === 'function') handlerCount += 1;
   }

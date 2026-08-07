@@ -261,15 +261,19 @@ export type DrawableLodResource = Readonly<{
 
 export type DrawableLodSelectionWorkspace = {
   currentLevels: Int32Array;
+  currentLevelCount: number;
   drawableLevels: Uint8Array;
   previousLevels: Int32Array;
+  previousLevelCount: number;
   readonly projection: ProjectedBoundsWorkspace;
 };
 
 export const createDrawableLodSelectionWorkspace = (): DrawableLodSelectionWorkspace => ({
   currentLevels: new Int32Array(0),
+  currentLevelCount: 0,
   drawableLevels: new Uint8Array(1),
   previousLevels: new Int32Array(0),
+  previousLevelCount: 0,
   projection: createProjectedBoundsWorkspace(),
 });
 
@@ -285,12 +289,20 @@ export const selectDrawableLodsInto = (
   workspace: DrawableLodSelectionWorkspace,
 ): LodLevelSelections => {
   const previousLevels = workspace.currentLevels;
+  const previousLevelCount = workspace.currentLevelCount;
   workspace.currentLevels = workspace.previousLevels;
+  workspace.currentLevelCount = workspace.previousLevelCount;
   workspace.previousLevels = previousLevels;
+  workspace.previousLevelCount = previousLevelCount;
   if (workspace.currentLevels.length < groups.length) {
     workspace.currentLevels = new Int32Array(groups.length);
   }
-  workspace.currentLevels.fill(ABSENT_LOD_LEVEL);
+  workspace.currentLevels.fill(
+    ABSENT_LOD_LEVEL,
+    0,
+    Math.max(workspace.currentLevelCount, groups.length),
+  );
+  workspace.currentLevelCount = groups.length;
   for (const group of groups) {
     if (workspace.drawableLevels.length < group.thresholds.length) {
       workspace.drawableLevels = new Uint8Array(group.thresholds.length);

@@ -42,7 +42,14 @@ export const createScenePointerEventRegistry = (
   const targets = new Map<string, ScenePointerEventTarget>();
   let hasHoverEventTargets = false;
 
-  for (const [pickingId, handlers] of Object.entries(interactions ?? {})) {
+  for (const field of Reflect.ownKeys(interactions ?? {})) {
+    if (typeof field !== "string") {
+      throw new TypeError(
+        `Canvas scenePointerEvents contains unsupported pickingId ${String(field)}`,
+      );
+    }
+    const pickingId = field;
+    const handlers = interactions![pickingId];
     validateScenePointerEventHandlers(
       handlers,
       `Canvas scenePointerEvents[${JSON.stringify(pickingId)}]`,

@@ -109,8 +109,8 @@ surfaces to invent camera policy.
 Backing resolution follows the browser device pixel ratio by default.
 `pixelRatio={1}` (or another positive finite ratio) is the explicit React
 policy override; changing it resizes the retained root without recreating the
-canvas or WebGL context. `useCanvasSize().pixelRatio` reports the applied
-request under either policy. This is display policy, not a renderer creation
+canvas or WebGL context. `useCanvasSize().pixelRatio` reports the requested
+ratio under either policy. This is display policy, not a renderer creation
 option.
 
 Native canvas props, `aria-*`, `role`, class/style, event handlers, refs, and

@@ -178,56 +178,17 @@ export type BorrowedSurfaceGeometryMatch =
   | Readonly<{ status: "absent" | "ambiguous" | "inactive" | "pending" }>
   | Readonly<{ resource: BorrowedSurfaceGeometry; status: "ready" }>;
 
+const ABSENT_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "absent" };
+const AMBIGUOUS_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "ambiguous" };
+const INACTIVE_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "inactive" };
+const PENDING_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "pending" };
+
 const sameGltfAssetIdentity = (
   left: GltfAssetRef,
   right: GltfAssetRef,
 ): boolean => left.src === right.src
   && left.sceneIndex === right.sceneIndex
   && left.version === right.version;
-
-/** Adds exact source occurrences represented by one cold automatic instance cohort. */
-const collectAutomaticInstanceSourceOccurrences = (
-  surface: CanonicalDrawSurface,
-  requested: Pick<CanonicalEdgeSurface, "asset" | "geometry" | "instances" | "sourceModel">,
-  occurrences: Set<number>,
-): boolean => {
-  if (
-    requested.instances !== undefined
-    || surface.instances === undefined
-    || surface.instances.automaticSourceOccurrences === undefined
-  ) return false;
-  const sources = surface.instances.automaticSourceOccurrences;
-  if (
-    sources.length !== surface.instances.count
-    || surface.instances.localModels.length !== surface.instances.count * 16
-  ) {
-    throw new Error("Royal automatic instance sources diverged from their transform cohort");
-  }
-  let matched = false;
-  for (let instance = 0; instance < sources.length; instance += 1) {
-    const source = sources[instance]!;
-    if (
-      source.geometryKey !== requested.geometry.key
-      || !sameGltfAssetIdentity(source.asset, requested.asset)
-    ) continue;
-    const offset = instance * 16;
-    let transformMatches = true;
-    for (let component = 0; component < 16; component += 1) {
-      if (!Object.is(
-        surface.instances.localModels[offset + component],
-        Math.fround(requested.sourceModel[component]!),
-      )) {
-        transformMatches = false;
-        break;
-      }
-    }
-    if (transformMatches) {
-      occurrences.add(source.gltfOccurrence);
-      matched = true;
-    }
-  }
-  return matched;
-};
 
 type GpuSurface = {
   depthOrder: number;
@@ -345,6 +306,10 @@ export type SurfaceGpuOwnerOptions = Readonly<{
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
   readonly #cameraPosition = new Float32Array(4);
+  readonly #borrowedGeometry = new WeakMap<GpuSurface, Readonly<{
+    instanced: BorrowedSurfaceGeometryMatch;
+    ordinary: BorrowedSurfaceGeometryMatch;
+  }>>();
   #compositeActive = false;
   #compositeBindingRevision = 0;
   #compositeGpu: SurfaceCompositeOwner | null = null;
@@ -548,23 +513,55 @@ export class SurfaceGpuOwner {
     requested: CanonicalEdgeSurface,
   ): BorrowedSurfaceGeometryMatch {
     const scene = this.#scene;
-    if (scene === null) return { status: "absent" };
-    const occurrences = new Set<number>();
-    const matchingIndices: Array<Readonly<{
-      borrowAsOrdinary: boolean;
-      index: number;
-    }>> = [];
+    if (scene === null) return ABSENT_BORROWED_GEOMETRY;
+    let occurrence = -1;
+    let readyIndex = -1;
+    let readyAsOrdinary = false;
+    let pending = false;
     for (let index = 0; index < scene.surfaces.length; index += 1) {
       const surface = scene.surfaces[index]!;
-      if (collectAutomaticInstanceSourceOccurrences(
-        surface,
-        requested,
-        occurrences,
-      )) {
-        matchingIndices.push({ borrowAsOrdinary: true, index });
-        continue;
-      }
+      let matches = false;
+      let borrowAsOrdinary = false;
+      const instances = surface.instances;
       if (
+        requested.instances === undefined
+        && instances !== undefined
+        && instances.automaticSourceOccurrences !== undefined
+      ) {
+        const sources = instances.automaticSourceOccurrences;
+        if (
+          sources.length !== instances.count
+          || instances.localModels.length !== instances.count * 16
+        ) {
+          throw new Error("Royal automatic instance sources diverged from their transform cohort");
+        }
+        for (let instance = 0; instance < sources.length; instance += 1) {
+          const source = sources[instance]!;
+          if (
+            source.geometryKey !== requested.geometry.key
+            || !sameGltfAssetIdentity(source.asset, requested.asset)
+          ) continue;
+          const offset = instance * 16;
+          let transformMatches = true;
+          for (let component = 0; component < 16; component += 1) {
+            if (!Object.is(
+              instances.localModels[offset + component],
+              Math.fround(requested.sourceModel[component]!),
+            )) {
+              transformMatches = false;
+              break;
+            }
+          }
+          if (!transformMatches) continue;
+          if (occurrence !== -1 && occurrence !== source.gltfOccurrence) {
+            return AMBIGUOUS_BORROWED_GEOMETRY;
+          }
+          occurrence = source.gltfOccurrence;
+          matches = true;
+          borrowAsOrdinary = true;
+        }
+      }
+      if (!matches && (
         surface.node.kind !== "gltf"
         || surface.geometry.key !== requested.geometry.key
         || surface.instances?.key !== requested.instances?.key
@@ -572,44 +569,68 @@ export class SurfaceGpuOwner {
         || surface.node.asset.src !== requested.asset.src
         || surface.node.asset.sceneIndex !== requested.asset.sceneIndex
         || surface.node.asset.version !== requested.asset.version
-      ) continue;
-      if (surface.gltfOccurrence === undefined) {
-        throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
+      )) continue;
+      if (!matches) {
+        if (surface.gltfOccurrence === undefined) {
+          throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
+        }
+        if (occurrence !== -1 && occurrence !== surface.gltfOccurrence) {
+          return AMBIGUOUS_BORROWED_GEOMETRY;
+        }
+        occurrence = surface.gltfOccurrence;
       }
-      occurrences.add(surface.gltfOccurrence);
-      matchingIndices.push({ borrowAsOrdinary: false, index });
-    }
-    if (occurrences.size === 0) return { status: "absent" };
-    if (occurrences.size > 1) return { status: "ambiguous" };
-    let pending = false;
-    for (const { borrowAsOrdinary, index } of matchingIndices) {
-      const surface = scene.surfaces[index]!;
       const resource = this.#gpuSurfacesBySceneIndex[index];
       if (resource === undefined) {
         pending = true;
         continue;
       }
       if (!lodMembershipsSelected(surface.lods, this.#lodSelection.currentLevels)) continue;
-      return {
+      if (readyIndex === -1) {
+        readyIndex = index;
+        readyAsOrdinary = borrowAsOrdinary;
+      }
+    }
+    if (occurrence === -1) return ABSENT_BORROWED_GEOMETRY;
+    if (readyIndex !== -1) {
+      return this.#borrowedGeometryMatch(
+        this.#gpuSurfacesBySceneIndex[readyIndex]!,
+        readyAsOrdinary,
+      );
+    }
+    return pending ? PENDING_BORROWED_GEOMETRY : INACTIVE_BORROWED_GEOMETRY;
+  }
+
+  #borrowedGeometryMatch(
+    resource: GpuSurface,
+    ordinary: boolean,
+  ): BorrowedSurfaceGeometryMatch {
+    let matches = this.#borrowedGeometry.get(resource);
+    if (matches === undefined) {
+      const geometry = {
+        identity: resource.geometry,
+        indexBuffer: resource.geometry.indexBuffer,
+        indexCount: resource.geometry.indexCount,
+        indexOffset: resource.geometry.indexOffset,
+        indexType: resource.geometry.indexType,
+        key: resource.geometry.key,
+        vertexBuffer: resource.geometry.vertexBuffer,
+      };
+      const match = (instanceCount: number): BorrowedSurfaceGeometryMatch => ({
         resource: {
-          geometry: {
-            identity: resource.geometry,
-            indexBuffer: resource.geometry.indexBuffer,
-            indexCount: resource.geometry.indexCount,
-            indexOffset: resource.geometry.indexOffset,
-            indexType: resource.geometry.indexType,
-            key: resource.geometry.key,
-            vertexBuffer: resource.geometry.vertexBuffer,
-          },
+          geometry,
           identity: resource,
-          instanceCount: borrowAsOrdinary ? 0 : resource.instanceCount,
+          instanceCount,
           vertexArray: resource.vertexArray,
         },
         status: "ready",
+      });
+      matches = {
+        instanced: match(resource.instanceCount),
+        ordinary: match(0),
       };
+      this.#borrowedGeometry.set(resource, matches);
     }
-    if (pending) return { status: "pending" };
-    return { status: "inactive" };
+    return ordinary ? matches.ordinary : matches.instanced;
   }
 
   takeUploadedTextureStorageKeys(): readonly string[] {

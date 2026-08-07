@@ -45,15 +45,26 @@ export const nonNegativeFiniteNumber = (value: number, label: string): number =>
   return value;
 };
 
+const validateNumberTuple: (
+  value: unknown,
+  length: number,
+  label: string,
+) => asserts value is readonly number[] = (value, length, label) => {
+  if (!Array.isArray(value) || value.length !== length) {
+    throw new TypeError(`${label} must be an array of exactly ${length} numbers`);
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    finiteNumber(value[index], `${label}[${index}]`);
+  }
+};
+
 const resolveNumberTuple = (
   value: unknown,
   length: number,
   label: string,
 ): readonly number[] => {
-  if (!Array.isArray(value) || value.length !== length) {
-    throw new TypeError(`${label} must be an array of exactly ${length} numbers`);
-  }
-  return value.map((component, index) => finiteNumber(component, `${label}[${index}]`));
+  validateNumberTuple(value, length, label);
+  return [...value];
 };
 
 export const resolveVec3 = (value: unknown, label: string): Vec3 =>
@@ -67,8 +78,16 @@ export const resolveDirection3 = (value: Vec3, label: string): Vec3 => {
   return direction;
 };
 
-export const resolveRgba = (value: unknown, label: string): LinearRgba =>
-  resolveNumberTuple(value, 4, label) as LinearRgba;
+/** @internal Validates a composed color without allocating an ownership copy. */
+export const validateRgba: (
+  value: unknown,
+  label: string,
+) => asserts value is LinearRgba = (value, label) => validateNumberTuple(value, 4, label);
+
+export const resolveRgba = (value: unknown, label: string): LinearRgba => {
+  validateRgba(value, label);
+  return [...value];
+};
 
 const TRANSFORM_FIELDS = ['position', 'rotation', 'scale'] as const;
 const BOUNDS_FIELDS = ['max', 'min'] as const;

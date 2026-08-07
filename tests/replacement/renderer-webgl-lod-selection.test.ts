@@ -169,4 +169,27 @@ describe("canonical LOD selection", () => {
       selectDrawableLodsInto([], views, resources, workspace),
     )).toBe(false);
   });
+
+  it("clears only current and formerly live retained LOD slots", () => {
+    const workspace = createDrawableLodSelectionWorkspace();
+    workspace.currentLevels = new Int32Array(8);
+    workspace.previousLevels = new Int32Array(8);
+    workspace.currentLevels[7] = 123;
+    workspace.previousLevels[7] = 123;
+    const group = {
+      group: 0,
+      levels: [0],
+      selectionBounds: { max: [0.1, 0.1, 0], min: [-0.1, -0.1, 0] },
+      surfaceIndices: [0],
+      thresholds: [0],
+    } as const;
+    const resources = [{ surface: { lods: [{ group: 0, level: 0 }] } }];
+    const views = [{ viewProjection: identityMat4() }];
+
+    selectDrawableLodsInto([group], views, resources, workspace);
+    selectDrawableLodsInto([group], views, resources, workspace);
+
+    expect(workspace.currentLevels[7]).toBe(123);
+    expect(workspace.previousLevels[7]).toBe(123);
+  });
 });

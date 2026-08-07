@@ -48,10 +48,10 @@ const overlayFixture = (positions: readonly number[] = [-0.5, 0.5]) => {
   const scene = {
     runs: [{
       material: edgeMaterial({ color: [1, 0.5, 0.1, 1], widthCssPixels: 2 }),
-      occurrences: [
-        { objectId: 1, surfaceIndices: [0] },
-        { objectId: 2, surfaceIndices: [1] },
-      ],
+      occurrences: surfaces.map((_surface, index) => ({
+        objectId: index + 1,
+        surfaceIndices: [index],
+      })),
     }],
     surfaces,
   } as CanonicalEdgeOverlayScene;
@@ -145,7 +145,7 @@ describe("edge-overlay batch ownership", () => {
       0,
       expect.any(Float32Array),
       0,
-      68,
+      34,
     );
     expect(gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
     expect(gl.invalidateFramebuffer).toHaveBeenCalledTimes(2);
@@ -251,6 +251,91 @@ describe("edge-overlay batch ownership", () => {
 
     expect(gl.bufferSubData).not.toHaveBeenCalled();
     expect(gl.drawElementsInstanced).not.toHaveBeenCalled();
+    expect(gl.drawElements).toHaveBeenCalledOnce();
+    owner.dispose();
+  });
+
+  it("does not upload offscreen transforms with a visible batch", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = overlayFixture([-0.5, 0.5, 5]);
+    owner.setScene(scene);
+
+    owner.drawViews(
+      [view()],
+      null,
+      new WebGlStateOwner(gl),
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    expect(gl.bufferSubData).toHaveBeenCalledWith(
+      gl.ARRAY_BUFFER,
+      0,
+      expect.any(Float32Array),
+      0,
+      34,
+    );
+    expect(gl.drawElementsInstanced).toHaveBeenCalledWith(
+      gl.TRIANGLES,
+      3,
+      0x1401,
+      0,
+      2,
+    );
+    owner.dispose();
+  });
+
+  it("replans when one retained GPU surface changes borrow mode", () => {
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = overlayFixture();
+    const state = new WebGlStateOwner(gl);
+    owner.setScene(scene);
+    owner.drawViews(
+      [view()],
+      null,
+      state,
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    const first = matchBySurface.get(scene.surfaces[0]!)!;
+    if (first.status !== "ready") throw new Error("fixture must be ready");
+    matchBySurface.set(scene.surfaces[0]!, {
+      resource: { ...first.resource, instanceCount: 3 },
+      status: "ready",
+    });
+    gl.drawElements.mockClear();
+    gl.drawElementsInstanced.mockClear();
+    owner.drawViews(
+      [view()],
+      null,
+      state,
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    expect(gl.drawElementsInstanced).toHaveBeenCalledWith(
+      gl.TRIANGLES,
+      3,
+      0x1401,
+      0,
+      3,
+    );
     expect(gl.drawElements).toHaveBeenCalledOnce();
     owner.dispose();
   });

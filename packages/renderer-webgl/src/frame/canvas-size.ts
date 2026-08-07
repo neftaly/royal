@@ -27,6 +27,25 @@ export type ResolvedCanvasSize = Readonly<{
   renderScale: number;
 }>;
 
+const CANVAS_SIZE_FIELDS = ["cssHeight", "cssWidth", "pixelRatio"] as const;
+
+const validateCanvasSizeInput: (
+  input: unknown,
+) => asserts input is CanvasSizeInput = (input) => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new TypeError("Royal canvas size must be an object");
+  }
+  for (const field of Reflect.ownKeys(input)) {
+    if (
+      typeof field !== "string"
+      || !CANVAS_SIZE_FIELDS.includes(field as (typeof CANVAS_SIZE_FIELDS)[number])
+    ) {
+      const name = typeof field === "string" ? JSON.stringify(field) : String(field);
+      throw new TypeError(`Royal canvas size contains unsupported field ${name}`);
+    }
+  }
+};
+
 const requireFinite = (value: number, field: string): void => {
   if (!Number.isFinite(value)) throw new TypeError(`Royal canvas ${field} must be finite`);
 };
@@ -42,6 +61,7 @@ export const resolveCanvasSize = (
   input: CanvasSizeInput,
   limits: CanvasSizeLimits,
 ): ResolvedCanvasSize => {
+  validateCanvasSizeInput(input);
   requireFinite(input.cssWidth, "cssWidth");
   requireFinite(input.cssHeight, "cssHeight");
   requireFinite(input.pixelRatio, "pixelRatio");

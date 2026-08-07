@@ -1,10 +1,11 @@
 import type { LinearRgba } from './primitives';
 import {
-  resolveRgba,
   identityScalar,
   nonEmptyString,
   objectWithAllowedFields,
+  resolveRgba,
   stringChoice,
+  validateRgba,
 } from './descriptor-values';
 
 /** Interpretation of encoded RGB texels before material sampling. */
@@ -140,6 +141,9 @@ const IMAGE_TEXTURE_FIELDS = ['colorSpace', 'sampler', 'src', 'version'] as cons
 const VIRTUAL_TEXTURE_FIELDS = [
   'colorSpace', 'contentKey', 'manifestUri', 'sampler', 'version',
 ] as const;
+const SOLID_TEXTURE_REF_FIELDS = ['color', 'kind'] as const;
+const TEXTURE_ASSET_REF_FIELDS = [...TEXTURE_ASSET_FIELDS, 'kind'] as const;
+const VIRTUAL_TEXTURE_REF_FIELDS = [...VIRTUAL_TEXTURE_FIELDS, 'kind'] as const;
 
 const optionalChoice = <Choice extends string>(
   value: unknown,
@@ -147,18 +151,57 @@ const optionalChoice = <Choice extends string>(
   label: string,
 ): Choice | undefined => value === undefined ? undefined : stringChoice(value, choices, label);
 
-const resolveSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
-  if (sampler === undefined) return undefined;
-  objectWithAllowedFields(sampler, TEXTURE_SAMPLER_FIELDS, 'texture sampler');
+const validateSampler = (sampler: TextureSampler, label: string): void => {
+  objectWithAllowedFields(sampler, TEXTURE_SAMPLER_FIELDS, label);
   if (sampler.magFilter !== undefined) {
-    stringChoice(sampler.magFilter, TEXTURE_MAG_FILTERS, 'texture sampler magFilter');
+    stringChoice(sampler.magFilter, TEXTURE_MAG_FILTERS, `${label} magFilter`);
   }
   if (sampler.minFilter !== undefined) {
-    stringChoice(sampler.minFilter, TEXTURE_MIN_FILTERS, 'texture sampler minFilter');
+    stringChoice(sampler.minFilter, TEXTURE_MIN_FILTERS, `${label} minFilter`);
   }
-  if (sampler.wrapS !== undefined) stringChoice(sampler.wrapS, TEXTURE_WRAPS, 'texture sampler wrapS');
-  if (sampler.wrapT !== undefined) stringChoice(sampler.wrapT, TEXTURE_WRAPS, 'texture sampler wrapT');
+  if (sampler.wrapS !== undefined) stringChoice(sampler.wrapS, TEXTURE_WRAPS, `${label} wrapS`);
+  if (sampler.wrapT !== undefined) stringChoice(sampler.wrapT, TEXTURE_WRAPS, `${label} wrapT`);
+};
+
+const resolveSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
+  if (sampler === undefined) return undefined;
+  validateSampler(sampler, 'texture sampler');
   return { ...sampler };
+};
+
+/** @internal Validates a structurally supplied texture at a material boundary. */
+export const validateTextureRef: (
+  value: unknown,
+  label: string,
+) => asserts value is TextureRef = (value, label) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} must be a Royal texture descriptor`);
+  }
+  const texture = value as Partial<TextureRef>;
+  if (texture.kind === 'solid') {
+    objectWithAllowedFields(value, SOLID_TEXTURE_REF_FIELDS, label);
+    validateRgba(texture.color, `${label} color`);
+    return;
+  }
+  if (texture.kind === 'asset') {
+    objectWithAllowedFields(value, TEXTURE_ASSET_REF_FIELDS, label);
+    optionalChoice(texture.colorSpace, TEXTURE_COLOR_SPACES, `${label} colorSpace`);
+    if (texture.contentKey !== undefined) identityScalar(texture.contentKey, `${label} contentKey`);
+    if (texture.sampler !== undefined) validateSampler(texture.sampler, `${label} sampler`);
+    nonEmptyString(texture.src, `${label} src`);
+    if (texture.version !== undefined) identityScalar(texture.version, `${label} version`);
+    return;
+  }
+  if (texture.kind === 'virtual-asset') {
+    objectWithAllowedFields(value, VIRTUAL_TEXTURE_REF_FIELDS, label);
+    optionalChoice(texture.colorSpace, TEXTURE_COLOR_SPACES, `${label} colorSpace`);
+    if (texture.contentKey !== undefined) identityScalar(texture.contentKey, `${label} contentKey`);
+    nonEmptyString(texture.manifestUri, `${label} manifestUri`);
+    if (texture.sampler !== undefined) validateSampler(texture.sampler, `${label} sampler`);
+    if (texture.version !== undefined) identityScalar(texture.version, `${label} version`);
+    return;
+  }
+  throw new TypeError(`${label} must be a solidTexture, imageTexture, textureAsset, or virtualTexture descriptor`);
 };
 
 /** Creates one scene-linear constant texture without an external asset lifecycle. */

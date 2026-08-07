@@ -314,6 +314,15 @@ stable binding plans, batch compatible draws, reuse texture units, and avoid
 redundant binds. Texture atlases/VT are content representations, not a generic
 bindless abstraction.
 
+Edge-overlay batch structure is retained resource-lifecycle state, not a
+view-local frame product. Royal rebuilds it only when the canonical overlay or
+the borrowed surface resource/mode changes. Each frame writes the union of
+occurrences visible to the submitted views into one retained transform block,
+omits occurrences outside every view, and reuses that upload across stereo
+draws. Fewer than two visible compatible occurrences, optional batch-resource
+denial, or batch-program setup failure uses the same ordered ordinary mask
+draws; those are correctness fallbacks, not hidden quality tiers.
+
 Lit fragment programs specialize their bounded directional and punctual light
 array sizes to the canonical scene counts. Absent lights compile out, static
 loops contain no runtime count branch, and the imperative shell uploads only

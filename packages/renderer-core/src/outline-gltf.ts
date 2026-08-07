@@ -1,5 +1,5 @@
 import { objectWithAllowedFields } from './descriptor-values';
-import type { EdgeMaterial } from './edge-material';
+import { validateEdgeMaterial, type EdgeMaterial } from './edge-material';
 import {
   resolveGltfAsset,
   type GltfAssetOptions,
@@ -37,13 +37,7 @@ const OUTLINE_GLTF_FIELDS = [
 /** Reuses one rendered glTF occurrence as a non-picking edge overlay. */
 export const outlineGltf = (options: OutlineGltfOptions): OutlineGltfNode => {
   objectWithAllowedFields(options, OUTLINE_GLTF_FIELDS, 'outline glTF');
-  if (
-    typeof options.material !== 'object'
-    || options.material === null
-    || options.material.kind !== 'edge'
-  ) {
-    throw new TypeError('outline glTF material must be an edge material');
-  }
+  validateEdgeMaterial(options.material, 'outline glTF material');
   const node = {
     asset: resolveGltfAsset(options),
     kind: 'outline-gltf',

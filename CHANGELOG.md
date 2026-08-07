@@ -5,6 +5,39 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+### Correctness and contracts
+
+- Validate nested material, texture, edge-material, canvas-size, and React
+  pointer-handler records at their public composition boundaries, including
+  symbol and non-enumerable own keys.
+- Keep picking-only direct geometry out of visual draw records, avoid preparing
+  it when picking is disabled, and preserve the exact proxy in the picking scene.
+- Document `useCanvasSize().pixelRatio` as the requested ratio; backing limits
+  may produce a lower applied render scale.
+
+### Architecture and performance
+
+- Retain resource-dependent outline mask plans across frames and views, scan
+  borrowed geometry without per-frame candidate collections, and reuse one
+  packed visible-transform upload across stereo draws.
+- Reuse outline visibility, batch, packet, and clear workspaces, omit transforms
+  outside every submitted view, and release context-invalid retained plans on
+  abandonment.
+- Clear only live and formerly-live LOD selection slots rather than each typed
+  workspace's complete historical high-water capacity.
+- Keep lazy and worker payload budgets unchanged; the complete boundary and
+  retained-frame work adds about 0.75 kB gzip to the synchronous/deployed graph.
+- Ratchet the packed renderer ceiling to 641,024 bytes around the measured
+  639,833-byte artifact; core and React package ceilings remain unchanged.
+
+### Verification
+
+- Passed 883 tests across 118 files, lint, typecheck, clean production builds,
+  package imports, packed TypeScript/runtime consumption, and bundle gates.
+- Passed the complete local hardware-WebGL browser smoke, including direct
+  materials, picking, ordinary/virtual texture transitions, glTF, Tiger SVG,
+  LOD, instancing, and the emulated WebXR route.
+
 ### Contact surfaces
 
 - Add one backend-neutral `surfaceDepth: "contact"` intent to filled `mesh`,
