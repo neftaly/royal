@@ -31,7 +31,6 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly getProgramParameter: ReturnType<typeof vi.fn>;
   readonly invalidateFramebuffer: ReturnType<typeof vi.fn>;
-  readonly polygonOffset: ReturnType<typeof vi.fn>;
   readonly scissor: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
@@ -87,7 +86,6 @@ export const fakeGl = (): FakeGl => ({
   NONE: 0,
   ONE: 1,
   ONE_MINUS_SRC_ALPHA: 0x0303,
-  POLYGON_OFFSET_FILL: 0x8037,
   REPEAT: 0x2901,
   READ_FRAMEBUFFER: 0x8ca8,
   RGB: 0x1907,
@@ -178,7 +176,6 @@ export const fakeGl = (): FakeGl => ({
   invalidateFramebuffer: vi.fn(),
   linkProgram: vi.fn(),
   pixelStorei: vi.fn(),
-  polygonOffset: vi.fn(),
   samplerParameteri: vi.fn(),
   scissor: vi.fn(),
   shaderSource: vi.fn(),

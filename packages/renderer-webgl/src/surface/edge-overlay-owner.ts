@@ -754,7 +754,6 @@ export class EdgeOverlayOwner {
     alphaBlend: boolean;
     colorWrite: boolean;
     cullBackFaces: boolean;
-    depthBias: boolean;
     depthTest: boolean;
     depthWrite: boolean;
     frontFace: number;
@@ -1413,7 +1412,6 @@ export class EdgeOverlayOwner {
       alphaBlend: false,
       colorWrite: true,
       cullBackFaces: false,
-      depthBias: false,
       depthTest: true,
       depthWrite: true,
       frontFace,
@@ -1735,7 +1733,6 @@ export class EdgeOverlayOwner {
       alphaBlend: false,
       colorWrite: true,
       cullBackFaces: false,
-      depthBias: false,
       depthTest: false,
       depthWrite: false,
       frontFace: gl.CCW,
@@ -1748,7 +1745,6 @@ export class EdgeOverlayOwner {
       alphaBlend: true,
       colorWrite: true,
       cullBackFaces: false,
-      depthBias: false,
       depthTest: false,
       depthWrite: false,
       frontFace: gl.CCW,

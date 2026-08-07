@@ -153,35 +153,6 @@ describe("canonical direct surface lowering", () => {
     expect(box.bounds).toEqual({ max: [1, 2, 3], min: [-1, -2, -3] });
   });
 
-  it("carries contact depth through drawing without changing bounds or picking", () => {
-    const geometry = planeGeometry([2, 1]);
-    const node = mesh({
-      geometry,
-      material: unlitMaterial({ color: [1, 1, 1, 0.5] }),
-      pickingId: "contact",
-      surfaceDepth: "contact",
-      transform: { position: [0, 2, 0] },
-    });
-    const prepared = prepareCanonicalSurfaceScene(scene({
-      camera: perspectiveCamera({}),
-      nodes: [node],
-    }));
-
-    expect(prepared.surfaces[0]).toMatchObject({
-      contact: true,
-      node,
-    });
-    expect(prepared.surfaces[0]).not.toHaveProperty("pickingGeometry");
-    expect(prepared.surfaces[0]!.worldBounds).toEqual({
-      max: [1, 2.5, 0],
-      min: [-1, 1.5, 0],
-    });
-    expect(prepared.pickSurfaces[0]).not.toHaveProperty("surfaceDepth");
-    expect(prepared.pickSurfaces[0]!.pickingGeometry).toBe(
-      prepared.surfaces[0]!.geometry,
-    );
-  });
-
   it("does not prepare or retain picking-only geometry when picking is disabled", () => {
     const visualGeometry = planeGeometry(2);
     const prepared = prepareCanonicalSurfaceScene(scene({

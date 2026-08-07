@@ -15,7 +15,6 @@ export type SurfaceDrawPacket = Readonly<{
   alphaBlend: boolean;
   colorWrite: boolean;
   cullBackFaces: boolean;
-  depthBias: boolean;
   depthTest: boolean;
   depthWrite: boolean;
   frontFace: number;
@@ -36,7 +35,6 @@ export type SurfaceDrawStateTransition = {
   colorMask: boolean;
   cullFace: boolean;
   cullMode: boolean;
-  depthBias: boolean;
   depthFunction: boolean;
   depthMode: boolean;
   depthWrite: boolean;
@@ -54,7 +52,6 @@ export type AppliedSurfaceDrawState = AppliedClearState & {
   blendFunctionKnown: boolean;
   cullFaceKnown: boolean;
   cullBackFaces: boolean | null;
-  depthBias: boolean | null;
   depthFunctionKnown: boolean;
   depthTest: boolean | null;
   depthWrite: boolean | null;
@@ -70,7 +67,6 @@ export const createSurfaceDrawStateTransition = (): SurfaceDrawStateTransition =
   colorMask: false,
   cullFace: false,
   cullMode: false,
-  depthBias: false,
   depthFunction: false,
   depthMode: false,
   depthWrite: false,
@@ -105,7 +101,6 @@ export const planSurfaceDrawStateTransition = (
     || previous.cullBackFaces !== packet.cullBackFaces;
   output.cullFace = packet.cullBackFaces
     && (unknown || !previous.cullFaceKnown);
-  output.depthBias = unknown || previous.depthBias !== packet.depthBias;
   output.depthMode = unknown || previous.depthTest !== packet.depthTest;
   output.depthFunction = packet.depthTest
     && (unknown || !previous.depthFunctionKnown);
@@ -137,7 +132,6 @@ export const commitAppliedSurfaceDrawState = (
   state.cullBackFaces = packet.cullBackFaces;
   state.colorWrite = packet.colorWrite;
   if (packet.cullBackFaces) state.cullFaceKnown = true;
-  state.depthBias = packet.depthBias;
   state.depthTest = packet.depthTest;
   if (packet.depthTest) state.depthFunctionKnown = true;
   state.depthWrite = packet.depthWrite;

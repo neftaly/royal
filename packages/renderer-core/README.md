@@ -51,11 +51,11 @@ remain stable across selections.
 scene-linear RGBA presentation multiplier to every selected base color without
 rewriting the asset or changing its source/preparation identity.
 
-`surfaceDepth: 'contact'` on `mesh`, `gltf`, or `gltfInstances` marks filled
-triangles authored directly on opaque support geometry. The renderer gives
-that one contact layer a private, fixed near-depth bias without changing world
-transforms, bounds, picking, or alpha behavior. It does not expose bias numbers
-or define ordering between two contact layers.
+Separately authored world surfaces that must remain visually distinct require
+distinct geometry. In particular, coplanar triangles can produce different
+stored depths even when their source planes are mathematically equal, so Royal
+does not infer a winner or expose a polygon-offset classification. Use a small
+physical separation, or the explicit overlay lane for depth-independent UI.
 
 `mesh({ ref })` and `gltf({ ref })` expose one renderer-attached
 `RenderObjectHandle`. Its position, rotation, scale, and `setTransform()` API

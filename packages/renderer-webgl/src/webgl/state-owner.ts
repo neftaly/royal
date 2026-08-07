@@ -14,12 +14,6 @@ import {
   type SurfaceDrawPacket,
 } from "./draw-state-transition";
 
-// WebGL's conventional depth mapping treats negative polygon offset as nearer.
-// One slope-scaled step plus one implementation depth unit is the fixed
-// backend representation of public `surfaceDepth: "contact"` intent.
-const CONTACT_DEPTH_BIAS_FACTOR = -1;
-const CONTACT_DEPTH_BIAS_UNITS = -1;
-
 /** Sole root-local writer for WebGL pipeline state used by clears and surface draws. */
 export class WebGlStateOwner {
   readonly #clearTransition = createClearStateTransition();
@@ -31,7 +25,6 @@ export class WebGlStateOwner {
     blendFunctionKnown: false,
     cullFaceKnown: false,
     cullBackFaces: null,
-    depthBias: null,
     depthFunctionKnown: false,
     depthTest: null,
     depthWrite: null,
@@ -158,12 +151,6 @@ export class WebGlStateOwner {
       if (transition.depthMode) {
         if (packet.depthTest) gl.enable(gl.DEPTH_TEST);
         else gl.disable(gl.DEPTH_TEST);
-      }
-      if (transition.depthBias) {
-        if (packet.depthBias) {
-          gl.enable(gl.POLYGON_OFFSET_FILL);
-          gl.polygonOffset(CONTACT_DEPTH_BIAS_FACTOR, CONTACT_DEPTH_BIAS_UNITS);
-        } else gl.disable(gl.POLYGON_OFFSET_FILL);
       }
       if (transition.depthFunction) gl.depthFunc(gl.LEQUAL);
       if (transition.cullMode) {

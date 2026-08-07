@@ -140,7 +140,6 @@ export type {
   SpotLightOptions,
   StandardMaterial,
   StandardMaterialOptions,
-  SurfaceDepth,
   StudioEnvironmentOptions,
   StudioEnvironmentLight,
   SolidTextureOptions,

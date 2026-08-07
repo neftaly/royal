@@ -219,7 +219,6 @@ const automaticInstanceCandidateKey = (
     geometryBucketKey(surface),
     canonicalMaterialInstanceIdentityKey(surface.materialSource),
     surface.modelHandedness,
-    surface.contact,
   ]);
 };
 

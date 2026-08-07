@@ -63,8 +63,6 @@ import type { LodGroupId, LodMembership } from "./lod-selection";
 import { automaticallyInstanceCanonicalSurfaces } from "./automatic-surface-instancing";
 
 export type CanonicalDrawSurface = Readonly<{
-  /** Presentation-only contact depth; it never changes geometry or picking. */
-  contact: boolean;
   geometry: CanonicalTriangleGeometry;
   /** Dense mounted glTF occurrence identity; distinct even if one descriptor is repeated. */
   gltfOccurrence?: number;
@@ -749,7 +747,6 @@ export const prepareCanonicalSurfaceScene = (
                 ? primitive.localModel
                 : IDENTITY_OBJECT_LOCAL_MODEL,
             }),
-            contact: node.surfaceDepth === "contact",
             textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
             worldBounds,
           });
@@ -869,7 +866,6 @@ export const prepareCanonicalSurfaceScene = (
       ...(node.ref === undefined
         ? {}
         : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
-      contact: node.surfaceDepth === "contact",
       textureKeys: canonicalMaterialTextureKeys(materialSource),
       ...(wireframe ? { topology: "lines" as const } : {}),
       worldBounds: transformedWorldBounds(geometry.bounds, model),

@@ -467,39 +467,6 @@ describe("renderer-core descriptor contract", () => {
     })).toThrow(/glTF instances pickingGeometry contains unsupported field.*radius/i);
   });
 
-  it("normalizes one semantic contact-depth mode across visual node kinds", () => {
-    const geometry = planeGeometry(1);
-    const material = unlitMaterial({ color: [1, 1, 1, 0.5] });
-    const instances = createGltfInstanceTransforms({ count: 1 });
-
-    expect(mesh({ geometry, material, surfaceDepth: "contact" }).surfaceDepth)
-      .toBe("contact");
-    expect(gltf({ src: "/piece.glb", surfaceDepth: "contact" }).surfaceDepth)
-      .toBe("contact");
-    expect(gltfInstances({ instances, src: "/piece.glb", surfaceDepth: "contact" }).surfaceDepth)
-      .toBe("contact");
-
-    expect(() => mesh({
-      geometry,
-      material,
-      surfaceDepth: "front" as "contact",
-    })).toThrow("surfaceDepth must be contact");
-    expect(() => gltf({
-      src: "/piece.glb",
-      surfaceDepth: "front" as "contact",
-    })).toThrow("surfaceDepth must be contact");
-    expect(() => gltfInstances({
-      instances,
-      src: "/piece.glb",
-      surfaceDepth: "front" as "contact",
-    })).toThrow("surfaceDepth must be contact");
-    expect(() => mesh({
-      geometry,
-      material: wireframeMaterial({ color: [1, 1, 1, 1] }),
-      surfaceDepth: "contact",
-    })).toThrow("mesh surfaceDepth requires a filled surface material");
-  });
-
   it("validates the structural glTF instance-transform protocol at the node boundary", () => {
     const instances = createGltfInstanceTransforms({ count: 2 });
     expect(gltfInstances({ instances, src: '/models/tree.glb' }).instances).toBe(instances);
@@ -521,6 +488,33 @@ describe("renderer-core descriptor contract", () => {
       .toThrow('glTF instance transform listener must be a function');
     expect(() => createGltfInstanceTransforms({ count: Number.MAX_SAFE_INTEGER + 1 }))
       .toThrow(/positive safe integer/);
+  });
+
+  it("rejects the removed contact-depth option on every former node shape", () => {
+    const instances = createGltfInstanceTransforms({ count: 1 });
+    expect(() => mesh({
+      geometry: planeGeometry(1),
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      surfaceDepth: "contact",
+    } as unknown as Parameters<typeof mesh>[0])).toThrow(/unsupported option "surfaceDepth"/);
+    expect(() => gltf({
+      src: "/piece.glb",
+      surfaceDepth: "contact",
+    } as unknown as Parameters<typeof gltf>[0])).toThrow(/unsupported option "surfaceDepth"/);
+    expect(() => gltfInstances({
+      instances,
+      src: "/piece.glb",
+      surfaceDepth: "contact",
+    } as unknown as Parameters<typeof gltfInstances>[0])).toThrow(/unsupported option "surfaceDepth"/);
+
+    if (false) {
+      // @ts-expect-error contact depth was removed rather than retained as a deprecated path.
+      mesh({ geometry: planeGeometry(1), material: unlitMaterial({ color: [1, 1, 1, 1] }), surfaceDepth: "contact" });
+      // @ts-expect-error glTF nodes do not classify arbitrary primitives as contact surfaces.
+      gltf({ src: "/piece.glb", surfaceDepth: "contact" });
+      // @ts-expect-error instanced glTF nodes follow the same ordinary depth contract.
+      gltfInstances({ instances, src: "/piece.glb", surfaceDepth: "contact" });
+    }
   });
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {

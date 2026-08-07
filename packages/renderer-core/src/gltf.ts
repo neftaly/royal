@@ -15,7 +15,6 @@ import {
 import { resolvePickingId, type PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 import { validateGeometry, type Geometry } from './geometry';
-import { resolveSurfaceDepth, type SurfaceDepth } from './surface-depth';
 
 /**
  * Conservative asset-space AABB for framing, coarse layout, and broad phases.
@@ -69,8 +68,6 @@ export interface GltfNode {
   readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
-  /** Present every visual primitive as resting directly on opaque support geometry. */
-  readonly surfaceDepth?: SurfaceDepth;
   readonly transform?: Transform;
   /** Scene-linear RGBA multiplier applied to every selected base color. */
   readonly tint?: LinearRgba;
@@ -85,8 +82,6 @@ export interface GltfOptions extends GltfAssetOptions {
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
-  /** Present every visual primitive as resting directly on opaque support geometry. */
-  readonly surfaceDepth?: SurfaceDepth;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
   /** Scene-linear RGBA multiplier applied to every selected base color. */
@@ -147,7 +142,7 @@ export const transformGltfAssetBounds = (
 };
 
 const GLTF_FIELDS = [
-  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'surfaceDepth', 'tint', 'transform', 'version',
+  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'tint', 'transform', 'version',
 ] as const;
 const GLTF_ASSET_FIELDS = ['bounds', 'sceneIndex', 'src', 'version'] as const;
 
@@ -203,14 +198,12 @@ export function gltf(input: GltfInput): GltfNode {
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
   const tint = options.tint === undefined ? undefined : resolveRgba(options.tint, 'glTF tint');
-  const surfaceDepth = resolveSurfaceDepth(options.surfaceDepth);
   const node = {
     kind: 'gltf',
     asset,
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
-    ...(surfaceDepth === undefined ? {} : { surfaceDepth }),
     ...(materialVariant === undefined ? {} : { materialVariant }),
     ...(tint === undefined ? {} : { tint }),
   } satisfies Omit<GltfNode, 'transform'>;

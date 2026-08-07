@@ -193,27 +193,21 @@ color. `OPAQUE` and surviving `MASK` fragments write alpha one; only `BLEND`
 preserves factor/texture/vertex alpha. The choice is a shader feature selected
 before submission, so ordinary opaque fragments pay no dynamic mode branch.
 
-## Contact-surface depth
+## Coplanar surfaces
 
-`mesh({ surfaceDepth: "contact" })`, `gltf({ surfaceDepth: "contact" })`, and
-`gltfInstances({ surfaceDepth: "contact" })` express one presentation intent:
-the node's filled triangles are authored directly on opaque support geometry
-and should win their near-equal depth comparisons. For a glTF node the intent
-applies to every selected visual primitive. Royal maps it to one private,
-constant triangle-raster depth bias; applications cannot supply backend units,
-slopes, depth functions, render-order numbers, or a bias magnitude.
+Royal uses ordinary depth testing and does not infer a presentation order for
+separately authored coplanar surfaces. Equal stored depth values pass in draw
+order, but mathematically coplanar triangles can rasterize to different depth
+values when their geometry, tessellation, or transform paths differ. Draw order
+therefore cannot guarantee a continuous winner.
 
-Contact depth does not change positions, transforms, bounds, LOD, sorting,
-picking geometry, or picking results. Alpha blending and material evaluation
-remain on their ordinary paths. Omission retains ordinary depth, so a raised
-control surface is unchanged. Scene overlays already ignore world depth and do
-not need this mode. Wireframes reject it because fill depth bias has no defined
-effect on line rasterization.
-
-The mode resolves one intentional contact layer over ordinary support. It does
-not define an ordering among two contact surfaces; authored layers which must
-remain distinct still require distinct geometry. Royal does not infer contact
-from coincident bounds or scan pairs of scene geometry.
+Applications and assets MUST represent distinct world surfaces with distinct
+geometry. A small physical separation is the portable representation for a
+surface resting visibly above another surface. Royal does not expose numeric
+polygon offsets, depth tolerances, render-order fields, or an inferred contact
+classification: each can incorrectly override physically distinguishable depth
+and would make results depend on batching or backend precision. Depth-independent
+presentation belongs in the explicit scene-overlay lane.
 
 ## Screen-space complementary coverage
 

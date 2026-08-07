@@ -665,10 +665,7 @@ describe("clear-only canvas root", () => {
   it("borrows authored glTF instance cohorts without another instance upload", async () => {
     const readGltf = vi.fn(async () => staticInstancedTriangleGlb());
     const { callbacks, canvas, root } = harness({ readGltf });
-    const base = gltf({
-      src: "/outlined-instances.glb",
-      surfaceDepth: "contact",
-    });
+    const base = gltf("/outlined-instances.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
@@ -692,7 +689,6 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.bufferData).toHaveBeenCalledTimes(3);
     expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
-    expect(canvas.gl.polygonOffset).toHaveBeenCalledWith(-1, -1);
   });
 
   it("presents a displaced outline while borrowing the stationary source occurrence", async () => {
@@ -1201,35 +1197,6 @@ describe("clear-only canvas root", () => {
       canvas.gl.ONE_MINUS_SRC_ALPHA,
     );
     expect(canvas.gl.depthMask).toHaveBeenLastCalledWith(false);
-  });
-
-  it("maps contact depth to one fixed fill bias without changing scene geometry", () => {
-    const { callbacks, canvas, root } = harness();
-    const geometry = planeGeometry([2, 1]);
-    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
-    root.setScene(scene({
-      camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [
-        mesh({ geometry, material: unlitMaterial({ color: [0, 0, 1, 1] }) }),
-        mesh({
-          geometry,
-          material: unlitMaterial({ color: [1, 0, 0, 0.5] }),
-          surfaceDepth: "contact",
-        }),
-      ],
-    }));
-    callbacks.shift()!();
-
-    expect(canvas.gl.polygonOffset).toHaveBeenCalledTimes(1);
-    expect(canvas.gl.polygonOffset).toHaveBeenCalledWith(-1, -1);
-    expect(canvas.gl.enable).toHaveBeenCalledWith(canvas.gl.POLYGON_OFFSET_FILL);
-
-    root.setScene(scene({
-      camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [mesh({ geometry, material: unlitMaterial({ color: [0, 0, 1, 1] }) })],
-    }));
-    callbacks.shift()!();
-    expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.POLYGON_OFFSET_FILL);
   });
 
   it("restores depth writes before clearing after a transparent frame", () => {

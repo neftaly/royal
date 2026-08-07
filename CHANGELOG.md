@@ -5,6 +5,32 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.11 - 2026-08-07
+
+### Correctness and contracts
+
+- Remove the prerelease `surfaceDepth: "contact"` API after the reduced
+  Probability reproduction showed that a single semantic polygon offset cannot
+  classify arbitrary glTF primitives or guarantee continuous coplanar depth.
+- Specify small physical separation as the portable representation for visually
+  distinct world surfaces. Royal explicitly rejects automatic near-depth
+  tie-breaking because every generic tolerance can override real geometry.
+
+### Architecture and performance
+
+- Remove contact classification from canonical surfaces and automatic-instance
+  identity, and delete the renderer's otherwise-unused depth-bias packet,
+  transition, multi-draw partition, and WebGL polygon-offset state paths.
+- Reduce the named synchronous/deployed gzip allowance from 4,250 to 4,100
+  bytes over the 0.0.6 reference and ratchet the packed renderer ceiling from
+  641,024 to 640,000 bytes around the measured 639,183-byte artifact.
+
+### Verification
+
+- Passed 879 tests across 118 files, typecheck, lint, production builds,
+  package imports, packed TypeScript/runtime consumption, virtual-texture build
+  validation, and bundle-size gates.
+
 ## 0.0.10 - 2026-08-07
 
 ### Correctness and contracts
