@@ -295,16 +295,16 @@ export const composeEulerMat4Into = (
   const scaleY = scale[offset + 1]!;
   const scaleZ = scale[offset + 2]!;
 
-  out[0] = cosZ * cosY * scaleX;
-  out[1] = sinZ * cosY * scaleX;
-  out[2] = -sinY * scaleX;
+  out[0] = cosY * cosZ * scaleX;
+  out[1] = (sinX * sinY * cosZ + cosX * sinZ) * scaleX;
+  out[2] = (sinX * sinZ - cosX * sinY * cosZ) * scaleX;
   out[3] = 0;
-  out[4] = (cosZ * sinY * sinX - sinZ * cosX) * scaleY;
-  out[5] = (sinZ * sinY * sinX + cosZ * cosX) * scaleY;
-  out[6] = cosY * sinX * scaleY;
+  out[4] = -cosY * sinZ * scaleY;
+  out[5] = (cosX * cosZ - sinX * sinY * sinZ) * scaleY;
+  out[6] = (sinX * cosZ + cosX * sinY * sinZ) * scaleY;
   out[7] = 0;
-  out[8] = (cosZ * sinY * cosX + sinZ * sinX) * scaleZ;
-  out[9] = (sinZ * sinY * cosX - cosZ * sinX) * scaleZ;
+  out[8] = sinY * scaleZ;
+  out[9] = -sinX * cosY * scaleZ;
   out[10] = cosY * cosX * scaleZ;
   out[11] = 0;
   out[12] = position[offset]!;
@@ -373,34 +373,23 @@ export const quaternionMat4 = (rotation: readonly number[] | undefined): Mat4 =>
 
 type ReadableCamera = Camera | CameraViewReadTarget;
 
-export const viewMat4 = (camera: ReadableCamera): Mat4 => multiplyMat4(
-  multiplyMat4(
-    multiplyMat4(
-      rotationXMat4(-camera.rotation[0]),
-      rotationYMat4(-camera.rotation[1]),
-    ),
-    rotationZMat4(-camera.rotation[2]),
-  ),
-  translationMat4([-camera.position[0], -camera.position[1], -camera.position[2]]),
-);
-
 export const viewMat4Into = (out: MutableMat4, camera: ReadableCamera): MutableMat4 => {
-  const xRotation = -camera.rotation[0]!;
-  const yRotation = -camera.rotation[1]!;
-  const zRotation = -camera.rotation[2]!;
+  const xRotation = camera.rotation[0]!;
+  const yRotation = camera.rotation[1]!;
+  const zRotation = camera.rotation[2]!;
   const cx = Math.cos(xRotation); const sx = Math.sin(xRotation);
   const cy = Math.cos(yRotation); const sy = Math.sin(yRotation);
   const cz = Math.cos(zRotation); const sz = Math.sin(zRotation);
   out[0] = cy * cz;
-  out[1] = cx * sz + sx * sy * cz;
-  out[2] = sx * sz - cx * sy * cz;
+  out[1] = -cy * sz;
+  out[2] = sy;
   out[3] = 0;
-  out[4] = -cy * sz;
+  out[4] = sx * sy * cz + cx * sz;
   out[5] = cx * cz - sx * sy * sz;
-  out[6] = sx * cz + cx * sy * sz;
+  out[6] = -sx * cy;
   out[7] = 0;
-  out[8] = sy;
-  out[9] = -sx * cy;
+  out[8] = sx * sz - cx * sy * cz;
+  out[9] = sx * cz + cx * sy * sz;
   out[10] = cx * cy;
   out[11] = 0;
   const x = -camera.position[0]!;
@@ -412,6 +401,9 @@ export const viewMat4Into = (out: MutableMat4, camera: ReadableCamera): MutableM
   out[15] = 1;
   return out;
 };
+
+export const viewMat4 = (camera: ReadableCamera): Mat4 =>
+  viewMat4Into(identityMat4(), camera);
 
 export const projectionMat4Into = (
   out: MutableMat4,

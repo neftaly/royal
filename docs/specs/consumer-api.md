@@ -350,6 +350,12 @@ Royal scene protocol.
 and request a frame without rebuilding or republishing the scene descriptor.
 Exact picking observes the same transform immediately.
 
+Every public Euler tuple uses the matrix semantics of Three.js's default
+`Euler(x, y, z, "XYZ")`. Cameras, environments, render objects, direct meshes,
+glTF root transforms, and Royal-owned Euler instance streams share that one
+convention. Authored glTF node quaternions and explicit matrices remain glTF
+transforms; there is no Euler-order field or compatibility mode.
+
 Refs may be object or callback refs. Attachments sharing one ref share one
 handle and notify every attached renderer root; removing one attachment does
 not clear the ref while another remains. A later declarative `transform`

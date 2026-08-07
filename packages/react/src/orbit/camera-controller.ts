@@ -1,6 +1,7 @@
 import {
   createCameraViewResource,
   fitOrbitCameraView,
+  orbitCameraTransform,
   orbitPerspectiveCamera,
   resolveOrbitCameraView,
   type Metres,
@@ -134,13 +135,13 @@ const sameOrbitCameraView = (left: OrbitCameraView, right: OrbitCameraView): boo
   && left.target[2] === right.target[2];
 
 const writeOrbitCamera = (resource: PerspectiveCameraViewResource, view: OrbitCameraView): void => {
-  const cosPitch = Math.cos(view.pitch);
-  resource.position[0] = view.target[0] - Math.sin(view.yaw) * cosPitch * view.distance;
-  resource.position[1] = view.target[1] + Math.sin(view.pitch) * view.distance;
-  resource.position[2] = view.target[2] + Math.cos(view.yaw) * cosPitch * view.distance;
-  resource.rotation[0] = -view.pitch;
-  resource.rotation[1] = -view.yaw;
-  resource.rotation[2] = 0;
+  const transform = orbitCameraTransform(view);
+  resource.position[0] = transform.position[0];
+  resource.position[1] = transform.position[1];
+  resource.position[2] = transform.position[2];
+  resource.rotation[0] = transform.rotation[0];
+  resource.rotation[1] = transform.rotation[1];
+  resource.rotation[2] = transform.rotation[2];
 };
 
 /** Pure conservative far-plane requirement for a view fitted to these bounds. */

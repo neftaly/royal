@@ -6,7 +6,7 @@ import {
   prepareStaticInstanceBatches,
   updateGltfInstanceBatchRangeInto,
 } from "../../packages/renderer-webgl/src/gltf/instance-transforms";
-import { translationMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import { transformMat4, translationMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 
 describe("static glTF instance transform core", () => {
   it("composes flat instance matrices relative to the node", () => {
@@ -68,6 +68,21 @@ describe("static glTF instance transform core", () => {
     expect(batches[0]!.localModels.slice(12, 15)).toEqual(new Float32Array([11, 2, 3]));
     expect(batches[1]!.localModels[12]).toBeCloseTo(-4);
     expect(batches[1]!.localModels.slice(13, 15)).toEqual(new Float32Array([-15, -6]));
+  });
+
+  it("uses the ordinary Three-compatible XYZ matrix for multi-axis Euler instances", () => {
+    const rotation = [0.31, -0.72, 1.13] as const;
+    const source = createGltfInstanceTransforms({
+      count: 1,
+      rotations: rotation,
+    });
+    const [batch] = prepareGltfInstanceBatches(source, translationMat4([0, 0, 0]), 1);
+    const expected = new Float32Array(transformMat4({
+      position: [0, 0, 0],
+      rotation: [source.rotations[0]!, source.rotations[1]!, source.rotations[2]!],
+      scale: [1, 1, 1],
+    }));
+    expect(batch?.localModels).toEqual(expected);
   });
 
   it("updates one retained mixed-handedness range without rebuilding its cohorts", () => {

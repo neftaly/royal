@@ -41,6 +41,7 @@
     "oxlint-tsgolint": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "three": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-glsl": "catalog:",

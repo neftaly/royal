@@ -23,7 +23,7 @@ export interface GltfInstanceTransforms {
   readonly poseVersion: number;
   /** Packed XYZ translations in metres (`count * 3`). */
   readonly positions: Float32Array;
-  /** Packed XYZ Euler angles in radians (`count * 3`). */
+  /** Packed Three.js-compatible XYZ Euler angles in radians (`count * 3`). */
   readonly rotations: Float32Array;
   readonly scaleVersion: number;
   /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). */
@@ -61,7 +61,7 @@ export interface CreateGltfInstanceTransformsOptions {
   readonly logicalIds?: readonly PickingId[];
   /** Packed XYZ translations in metres (`count * 3`). @defaultValue all zero */
   readonly positions?: ArrayLike<number>;
-  /** Packed XYZ Euler angles in radians (`count * 3`). @defaultValue all zero */
+  /** Packed Three.js-compatible XYZ Euler angles in radians (`count * 3`). @defaultValue all zero */
   readonly rotations?: ArrayLike<number>;
   /** Packed finite signed dimensionless XYZ multipliers (`count * 3`). @defaultValue all one */
   readonly scales?: ArrayLike<number>;

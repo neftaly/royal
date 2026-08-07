@@ -196,6 +196,29 @@ export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis
   };
 };
 
+const orbitCameraEulerRotation = (pitch: number, yaw: number): EulerRads => {
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  const cosYaw = Math.cos(yaw);
+  const sinYaw = Math.sin(yaw);
+  const matrix13 = -sinYaw * cosPitch;
+  const rotationY = Math.asin(Math.max(-1, Math.min(1, matrix13)));
+  let rotationX: number;
+  let rotationZ: number;
+  if (Math.abs(matrix13) < 0.999_999_9) {
+    rotationX = Math.atan2(-sinPitch, cosYaw * cosPitch);
+    rotationZ = Math.atan2(-sinPitch * sinYaw, cosYaw);
+  } else {
+    rotationX = Math.atan2(-sinPitch * cosYaw, cosPitch);
+    rotationZ = 0;
+  }
+  return resolveVec3([
+    rotationX,
+    rotationY,
+    rotationZ === 0 ? 0 : rotationZ,
+  ], 'orbit camera rotation') as EulerRads;
+};
+
 /** Rotates an orbit view by pointer movement measured in CSS pixels. */
 export const rotateOrbitCameraView = (
   view: OrbitCameraViewOptions,
@@ -286,7 +309,7 @@ export const orbitCameraTransform = (
       target[1] + Math.sin(pitch) * distance,
       target[2] + Math.cos(yaw) * cosPitch * distance
     ], 'orbit camera position'),
-    rotation: resolveVec3([-pitch, -yaw, 0], 'orbit camera rotation') as EulerRads
+    rotation: orbitCameraEulerRotation(pitch, yaw)
   };
 };
 

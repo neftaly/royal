@@ -43,7 +43,7 @@ export type SrgbRgba = readonly [r: number, g: number, b: number, a: number];
 /** Dimensionless world-space direction; constructors normalize where required. */
 export type Direction3 = readonly [x: number, y: number, z: number];
 
-/** XYZ Euler rotation in radians. */
+/** Three.js-compatible `Euler(x, y, z, "XYZ")` rotation in radians. */
 export type EulerRads = readonly [x: Rads, y: Rads, z: Rads];
 
 const linearChannelFromSrgb = (value: number): number => {

@@ -33,6 +33,9 @@ catalogs:
     react-dom:
       specifier: ^19.2.7
       version: 19.2.7
+    three:
+      specifier: 0.184.0
+      version: 0.184.0
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
@@ -74,6 +77,9 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.7(react@19.2.7)
+      three:
+        specifier: 'catalog:'
+        version: 0.184.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -180,7 +186,7 @@ importers:
         version: 1.2.0
       minidraco:
         specifier: 'catalog:'
-        version: 0.3.0
+        version: 0.3.0(three@0.184.0)
     devDependencies:
       oxlint:
         specifier: 'catalog:'
@@ -790,6 +796,9 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  three@0.184.0:
+    resolution: {integrity: sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==}
+
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
@@ -1281,7 +1290,9 @@ snapshots:
 
   meshoptimizer@1.2.0: {}
 
-  minidraco@0.3.0: {}
+  minidraco@0.3.0(three@0.184.0):
+    optionalDependencies:
+      three: 0.184.0
 
   nanoid@3.3.15: {}
 
@@ -1385,6 +1396,8 @@ snapshots:
       commander: 2.20.3
       source-map-support: 0.5.21
     optional: true
+
+  three@0.184.0: {}
 
   tinybench@2.9.0: {}
 
