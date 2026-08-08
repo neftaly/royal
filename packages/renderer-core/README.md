@@ -98,8 +98,9 @@ lane. It accepts solid-color unlit/wireframe meshes and `outlineGltf(...)`
 nodes with `edgeMaterial(...)`. An outline borrows a matching rendered glTF
 occurrence's selected scene, active LOD, instances, and GPU geometry. Use
 `sourceTransform` to identify a stationary source occurrence while
-`transform` places a displaced preview; missing or ambiguous sources fail
-instead of creating a second geometry authority.
+`transform` places a displaced preview. Coincident equivalent occurrences may
+share resident geometry; missing sources fail instead of creating a second
+geometry authority.
 
 `prefilteredEnvironment({ src, version, rotation, radianceScaleNits })` selects
 one offline Royal KTX 1 environment artifact. Raw HDR decode and convolution

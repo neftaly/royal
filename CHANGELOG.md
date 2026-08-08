@@ -5,6 +5,35 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.12 - 2026-08-08
+
+### Correctness and contracts
+
+- Treat coincident glTF occurrences as interchangeable sources for non-picking
+  edge presentation only when asset version, selected scene, primitive geometry,
+  authored instance cohort, complete source transform, and active LOD agree.
+- Preserve missing-source failure and displaced `sourceTransform` semantics
+  without exposing application occurrence IDs or reusing picking identity.
+
+### Architecture and performance
+
+- Isolate borrowed-source equivalence in an allocation-free functional core and
+  stop automatic-cohort matching at the first exact source member.
+- Keep the existing bundle and package ceilings: the measured Royal initial and
+  deployed graphs are 135,424 and 279,075 gzip bytes, while the source-map-bearing
+  packed renderer is 639,267 bytes.
+
+### Verification
+
+- Added focused source-equivalence and renderer integration coverage for
+  coincident ordinary occurrences, automatic instances, authored instance
+  cohorts, multi-primitive assets, malformed provenance, and distinct source
+  identities.
+- Passed 891 tests across 119 files, typecheck, lint, production builds,
+  package imports, packed TypeScript/runtime consumption, virtual-texture build
+  validation, bundle-size gates, the hardware-WebGL browser sweep, and browser
+  context-loss restoration.
+
 ## 0.0.11 - 2026-08-07
 
 ### Correctness and contracts

@@ -778,10 +778,10 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawArrays).not.toHaveBeenCalled();
   });
 
-  it("diagnoses an ambiguous outline source occurrence before edge drawing", async () => {
+  it("outlines coincident equivalent source occurrences", async () => {
     const readGltf = vi.fn(async () => staticTriangleGlb());
     const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
-    const repeated = gltf("/ambiguous-outline-source.glb");
+    const repeated = gltf("/coincident-outline-source.glb");
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 6] }),
@@ -792,23 +792,88 @@ describe("clear-only canvas root", () => {
       expect(root.getGltfAssetSnapshot(repeated.asset).status).toBe("ready"));
     callbacks.shift()!();
     canvas.gl.drawArrays.mockClear();
+    canvas.gl.drawElements.mockClear();
+    canvas.gl.drawElementsInstanced.mockClear();
     canvas.gl.shaderSource.mockClear();
 
     root.setOverlay(sceneOverlay({
       nodes: [outlineGltf({
         material: edgeMaterial({ color: [1, 0, 0, 1], widthCssPixels: 3 }),
-        src: "/ambiguous-outline-source.glb",
+        src: "/coincident-outline-source.glb",
       })],
     }));
     callbacks.shift()!();
 
-    expect(scheduledFailures).toHaveLength(1);
-    expect(String(scheduledFailures[0])).toMatch(
-      /source occurrence transform identity is ambiguous .*presentation transform is identity/,
-    );
-    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
-      String(source).includes("dFdx(viewPosition)"))).toBe(false);
-    expect(canvas.gl.drawArrays).not.toHaveBeenCalled();
+    expect(scheduledFailures).toEqual([]);
+    expect(readGltf).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(2);
+  });
+
+  it("outlines coincident authored instance cohorts without duplicating GPU data", async () => {
+    const readGltf = vi.fn(async () => staticInstancedTriangleGlb());
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const repeated = gltf("/coincident-authored-instances.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 6] }),
+      nodes: [repeated, repeated],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(repeated.asset).status).toBe("ready"));
+    callbacks.shift()!();
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.drawElementsInstanced.mockClear();
+
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({ color: [0, 1, 1, 1], widthCssPixels: 3 }),
+        src: "/coincident-authored-instances.glb",
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toEqual([]);
+    expect(readGltf).toHaveBeenCalledOnce();
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledTimes(3);
+  });
+
+  it("outlines every primitive from coincident multi-primitive occurrences", async () => {
+    const document = staticTriangleDocument();
+    const meshes = document.meshes as Array<{ primitives: Array<Record<string, unknown>> }>;
+    meshes[0]!.primitives.push({ ...meshes[0]!.primitives[0] });
+    const readGltf = vi.fn(async () => staticTriangleGlb(document));
+    const { callbacks, canvas, root, scheduledFailures } = harness({ readGltf });
+    const repeated = gltf("/coincident-multi-primitive.glb");
+    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+    root.setScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 6] }),
+      nodes: [repeated, repeated],
+    }));
+    callbacks.shift()!();
+    await waitFor(() =>
+      expect(root.getGltfAssetSnapshot(repeated.asset).status).toBe("ready"));
+    callbacks.shift()!();
+    canvas.gl.bufferData.mockClear();
+    canvas.gl.drawElements.mockClear();
+    canvas.gl.drawElementsInstanced.mockClear();
+
+    root.setOverlay(sceneOverlay({
+      nodes: [outlineGltf({
+        material: edgeMaterial({ color: [1, 0, 1, 1], widthCssPixels: 3 }),
+        src: "/coincident-multi-primitive.glb",
+      })],
+    }));
+    callbacks.shift()!();
+
+    expect(scheduledFailures).toEqual([]);
+    expect(readGltf).toHaveBeenCalledOnce();
+    expect(canvas.gl.bufferData).not.toHaveBeenCalled();
+    expect(canvas.gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
   });
 
   it("restores retained world color for overlay replace, clear, and re-add", () => {

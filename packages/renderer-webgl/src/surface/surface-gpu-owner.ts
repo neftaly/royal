@@ -175,11 +175,10 @@ export type BorrowedSurfaceGeometry = Readonly<{
 }>;
 
 export type BorrowedSurfaceGeometryMatch =
-  | Readonly<{ status: "absent" | "ambiguous" | "inactive" | "pending" }>
+  | Readonly<{ status: "absent" | "inactive" | "pending" }>
   | Readonly<{ resource: BorrowedSurfaceGeometry; status: "ready" }>;
 
 const ABSENT_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "absent" };
-const AMBIGUOUS_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "ambiguous" };
 const INACTIVE_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "inactive" };
 const PENDING_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "pending" };
 
@@ -189,6 +188,65 @@ const sameGltfAssetIdentity = (
 ): boolean => left.src === right.src
   && left.sceneIndex === right.sceneIndex
   && left.version === right.version;
+
+/** @internal */
+export type BorrowedSurfaceSourceKind = "automatic-member" | "whole-surface";
+
+/**
+ * @internal
+ * Identifies a resident-world surface that has the exact geometry provenance and
+ * source placement requested by a non-picking edge presentation. Coincident
+ * mounted occurrences are deliberately interchangeable here: application and
+ * picking identity never enter this renderer-owned equivalence relation.
+ */
+export const matchingBorrowedSurfaceSourceKind = (
+  surface: CanonicalDrawSurface,
+  requested: CanonicalEdgeSurface,
+): BorrowedSurfaceSourceKind | null => {
+  const instances = surface.instances;
+  if (
+    requested.instances === undefined
+    && instances?.automaticSourceOccurrences !== undefined
+  ) {
+    const sources = instances.automaticSourceOccurrences;
+    if (
+      sources.length !== instances.count
+      || instances.localModels.length !== instances.count * 16
+    ) {
+      throw new Error("Royal automatic instance sources diverged from their transform cohort");
+    }
+    for (let instance = 0; instance < sources.length; instance += 1) {
+      const source = sources[instance]!;
+      if (
+        source.geometryKey !== requested.geometry.key
+        || !sameGltfAssetIdentity(source.asset, requested.asset)
+      ) continue;
+      const offset = instance * 16;
+      let transformMatches = true;
+      for (let component = 0; component < 16; component += 1) {
+        if (!Object.is(
+          instances.localModels[offset + component],
+          Math.fround(requested.sourceModel[component]!),
+        )) {
+          transformMatches = false;
+          break;
+        }
+      }
+      if (transformMatches) return "automatic-member";
+    }
+  }
+  if (
+    surface.node.kind !== "gltf"
+    || surface.geometry.key !== requested.geometry.key
+    || surface.instances?.key !== requested.instances?.key
+    || !mat4ValuesEqual(surface.model, requested.sourceModel)
+    || !sameGltfAssetIdentity(surface.node.asset, requested.asset)
+  ) return null;
+  if (surface.gltfOccurrence === undefined) {
+    throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
+  }
+  return "whole-surface";
+};
 
 type GpuSurface = {
   depthOrder: number;
@@ -513,71 +571,15 @@ export class SurfaceGpuOwner {
   ): BorrowedSurfaceGeometryMatch {
     const scene = this.#scene;
     if (scene === null) return ABSENT_BORROWED_GEOMETRY;
-    let occurrence = -1;
+    let found = false;
     let readyIndex = -1;
     let readyAsOrdinary = false;
     let pending = false;
     for (let index = 0; index < scene.surfaces.length; index += 1) {
       const surface = scene.surfaces[index]!;
-      let matches = false;
-      let borrowAsOrdinary = false;
-      const instances = surface.instances;
-      if (
-        requested.instances === undefined
-        && instances !== undefined
-        && instances.automaticSourceOccurrences !== undefined
-      ) {
-        const sources = instances.automaticSourceOccurrences;
-        if (
-          sources.length !== instances.count
-          || instances.localModels.length !== instances.count * 16
-        ) {
-          throw new Error("Royal automatic instance sources diverged from their transform cohort");
-        }
-        for (let instance = 0; instance < sources.length; instance += 1) {
-          const source = sources[instance]!;
-          if (
-            source.geometryKey !== requested.geometry.key
-            || !sameGltfAssetIdentity(source.asset, requested.asset)
-          ) continue;
-          const offset = instance * 16;
-          let transformMatches = true;
-          for (let component = 0; component < 16; component += 1) {
-            if (!Object.is(
-              instances.localModels[offset + component],
-              Math.fround(requested.sourceModel[component]!),
-            )) {
-              transformMatches = false;
-              break;
-            }
-          }
-          if (!transformMatches) continue;
-          if (occurrence !== -1 && occurrence !== source.gltfOccurrence) {
-            return AMBIGUOUS_BORROWED_GEOMETRY;
-          }
-          occurrence = source.gltfOccurrence;
-          matches = true;
-          borrowAsOrdinary = true;
-        }
-      }
-      if (!matches && (
-        surface.node.kind !== "gltf"
-        || surface.geometry.key !== requested.geometry.key
-        || surface.instances?.key !== requested.instances?.key
-        || !mat4ValuesEqual(surface.model, requested.sourceModel)
-        || surface.node.asset.src !== requested.asset.src
-        || surface.node.asset.sceneIndex !== requested.asset.sceneIndex
-        || surface.node.asset.version !== requested.asset.version
-      )) continue;
-      if (!matches) {
-        if (surface.gltfOccurrence === undefined) {
-          throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
-        }
-        if (occurrence !== -1 && occurrence !== surface.gltfOccurrence) {
-          return AMBIGUOUS_BORROWED_GEOMETRY;
-        }
-        occurrence = surface.gltfOccurrence;
-      }
+      const sourceKind = matchingBorrowedSurfaceSourceKind(surface, requested);
+      if (sourceKind === null) continue;
+      found = true;
       const resource = this.#gpuSurfacesBySceneIndex[index];
       if (resource === undefined) {
         pending = true;
@@ -586,10 +588,10 @@ export class SurfaceGpuOwner {
       if (!lodMembershipsSelected(surface.lods, this.#lodSelection.currentLevels)) continue;
       if (readyIndex === -1) {
         readyIndex = index;
-        readyAsOrdinary = borrowAsOrdinary;
+        readyAsOrdinary = sourceKind === "automatic-member";
       }
     }
-    if (occurrence === -1) return ABSENT_BORROWED_GEOMETRY;
+    if (!found) return ABSENT_BORROWED_GEOMETRY;
     if (readyIndex !== -1) {
       return this.#borrowedGeometryMatch(
         this.#gpuSurfacesBySceneIndex[readyIndex]!,

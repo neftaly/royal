@@ -262,11 +262,13 @@ per external/XR view.
 
 By default, an outline's presentation transform also identifies the rendered
 source occurrence. `sourceTransform` may instead identify a stationary source
-occurrence while `transform` independently places a displaced preview. Source
-identity includes asset version, selected scene, primitive/cohort identity and
-the complete source model transform. A missing or ambiguous source occurrence
-fails before any edge draw; Royal does not fall back to copied application
-geometry or choose LOD from the displaced preview.
+occurrence while `transform` independently places a displaced preview.
+Source identity includes asset version, selected scene, primitive/cohort
+identity and the complete source model transform. Coincident occurrences with
+that same identity are presentation-equivalent and share any ready resident
+geometry. A missing source occurrence fails before any edge draw; Royal does
+not fall back to copied application geometry or choose LOD from the displaced
+preview.
 
 Automatic surface instancing retains the exact asset, original primitive
 geometry identity, and mounted occurrence for every same-index stored instance

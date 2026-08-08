@@ -1512,7 +1512,7 @@ export class EdgeOverlayOwner {
       const surface = scene.surfaces[index]!;
       const match = borrow(surface);
       matches[index] = match;
-      if (match.status !== "absent" && match.status !== "ambiguous") continue;
+      if (match.status !== "absent") continue;
       const sourceTransform = surface.node.sourceTransform ?? surface.node.transform;
       const presentationTransform = surface.node.transform;
       const sourceLabel = sourceTransform === undefined
@@ -1523,7 +1523,7 @@ export class EdgeOverlayOwner {
         : JSON.stringify(presentationTransform);
       throw new Error(
         `Royal outline glTF ${JSON.stringify(surface.asset.src)} source occurrence `
-          + `transform ${sourceLabel} is ${match.status === "absent" ? "missing" : "ambiguous"} `
+          + `transform ${sourceLabel} is missing `
           + `in the base scene; presentation transform is ${presentationLabel}`,
       );
     }
