@@ -644,12 +644,21 @@ const assertEmbeddedTextureTransition = (fallback, authored, comparison, repeatC
   }
 };
 
-const assertVaoOwnership = (snapshot, minimumIndexedInstanceCount = 1) => {
+const assertVaoOwnership = (snapshot, {
+  minimumDefaultElementArrayPreparations = 0,
+  minimumIndexedInstanceCount = 1,
+} = {}) => {
   if (
     snapshot === undefined
+    || !Number.isSafeInteger(snapshot.contexts)
     || snapshot.contexts < 1
+    || !Number.isSafeInteger(snapshot.defaultElementArrayPreparations)
+    || !Number.isSafeInteger(snapshot.indexedDraws)
     || snapshot.indexedDraws < 1
+    || snapshot.defaultElementArrayPreparations < minimumDefaultElementArrayPreparations
+    || !Number.isSafeInteger(snapshot.maximumInstanceCount)
     || snapshot.maximumInstanceCount < minimumIndexedInstanceCount
+    || !Array.isArray(snapshot.violations)
     || snapshot.violations.length > 0
   ) {
     throw new Error(`VAO ownership oracle failed: ${JSON.stringify(snapshot)}`);
@@ -1990,6 +1999,7 @@ const main = async () => {
       : route.id === 'webxr-vr'
         ? [{
             ...route,
+            minimumDefaultElementArrayPreparations: 1,
             minimumIndexedInstanceCount: 2,
             path: `${route.path}?vaoOwnershipProbe=1`,
             vaoOwnershipProbe: true,
@@ -2358,7 +2368,11 @@ const main = async () => {
         }
         assertVaoOwnership(
           state.vaoOwnership,
-          route.minimumIndexedInstanceCount ?? 1,
+          {
+            minimumDefaultElementArrayPreparations:
+              route.minimumDefaultElementArrayPreparations ?? 0,
+            minimumIndexedInstanceCount: route.minimumIndexedInstanceCount ?? 1,
+          },
         );
         assertRoute(effectiveRoute, state);
         if (state.textureTransition !== undefined) {

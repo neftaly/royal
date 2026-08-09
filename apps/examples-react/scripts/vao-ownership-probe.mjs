@@ -13,6 +13,7 @@ export const vaoOwnershipProbeSource = `
     let elementArrayBuffers = new Map([[null, null]]);
     let submittedVertexArrays = new Set();
     let vertexArrayExplicitlyBound = false;
+    let defaultElementArrayPreparations = 0;
     let indexedDraws = 0;
     let maximumInstanceCount = 0;
     const violations = [];
@@ -74,6 +75,9 @@ export const vaoOwnershipProbeSource = `
       const result = bindBuffer(target, buffer);
       if (target !== context.ELEMENT_ARRAY_BUFFER) return result;
       const before = elementArrayBuffers.get(currentVertexArray) ?? null;
+      if (currentVertexArray === null && buffer !== null && before !== buffer) {
+        defaultElementArrayPreparations += 1;
+      }
       if (
         submittedVertexArrays.has(currentVertexArray)
         && !vertexArrayExplicitlyBound
@@ -207,6 +211,7 @@ export const vaoOwnershipProbeSource = `
     this.addEventListener('webglcontextrestored', reset);
     contexts.push({
       snapshot: () => ({
+        defaultElementArrayPreparations,
         indexedDraws,
         maximumInstanceCount,
         operations: [...operations],
@@ -217,6 +222,7 @@ export const vaoOwnershipProbeSource = `
   };
   globalThis.__royalVaoOwnershipSnapshot = () => contexts.reduce((combined, context) => {
     const snapshot = context.snapshot();
+    combined.defaultElementArrayPreparations += snapshot.defaultElementArrayPreparations;
     combined.indexedDraws += snapshot.indexedDraws;
     combined.maximumInstanceCount = Math.max(
       combined.maximumInstanceCount,
@@ -230,6 +236,7 @@ export const vaoOwnershipProbeSource = `
     return combined;
   }, {
     contexts: contexts.length,
+    defaultElementArrayPreparations: 0,
     indexedDraws: 0,
     maximumInstanceCount: 0,
     operations: [],

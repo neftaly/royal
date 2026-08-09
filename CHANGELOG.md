@@ -5,6 +5,18 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+### Verification
+
+- Mutation-test the injected real-WebGL ownership oracle itself, proving that it
+  rejects inherited element-array writes, native/model binding divergence, and
+  sticky buffer-target changes while accepting an explicitly rebound owner.
+- Require the WebXR Tiger smoke to observe a default-VAO index preparation, not
+  merely an unrelated instanced draw, before accepting the forced combined-edge
+  path as exercised.
+- Removing the production VAO bind makes the deterministic regression, seeded
+  state-sequence test, and source-fitness boundary fail independently. The exact
+  forced route passes on both NVIDIA/Vulkan WebGL and CI-equivalent SwiftShader.
+
 ## 0.0.13 - 2026-08-09
 
 ### Correctness and contracts
