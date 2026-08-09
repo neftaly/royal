@@ -22,6 +22,12 @@ transforms, LOD, picking math, state transitions, failure classification, and
 resource arithmetic. A pure reference implementation is preferred where the
 production form retains mutable workspaces.
 
+A call recorder is not a semantic WebGL oracle. Tests for relational GPU state
+MUST model the smallest relevant state machine—for example, current vertex array,
+its retained element-array binding, buffer target typing, deletion, context
+generation, and the resources consumed by a draw—and assert ownership rather
+than only call order or count.
+
 ### Property, differential, and fuzz review
 
 Use property tests for broad valid domains and invariants, differential tests
@@ -64,6 +70,14 @@ The page report and server MUST expose the same unique build identity, full
 revision, and dirty state. A remembered server start, URL, or open tab is not
 evidence for the code under test, and a harness MUST reject a mismatched build
 before accepting device results.
+
+Real WebGL is the independent oracle for browser-defined resource and state
+semantics that a JavaScript model can encode incorrectly. A browser check for
+such a claim MUST exercise the intended production path, inspect native state or
+errors where needed, and fail if the path was not reached. It complements rather
+than replaces deterministic semantic and property tests: real contexts do not
+provide the same bounded sequence coverage, readable reference state, or precise
+failure injection.
 
 ### Performance and resource review
 

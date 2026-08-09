@@ -1468,6 +1468,9 @@ export class EdgeOverlayOwner {
     try {
       gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, upload.positions, gl.STATIC_DRAW);
+      // ELEMENT_ARRAY_BUFFER is VAO state and WebGL buffer target typing is
+      // sticky. Use Royal's non-drawing default VAO as the preparation scratch.
+      gl.bindVertexArray(null);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, upload.indices, gl.STATIC_DRAW);
       return {

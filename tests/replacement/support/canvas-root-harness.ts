@@ -10,7 +10,9 @@ import {
 export type FakeGl = WebGL2RenderingContext & {
   readonly activeTexture: ReturnType<typeof vi.fn>;
   readonly blendFuncSeparate: ReturnType<typeof vi.fn>;
+  readonly bindBuffer: ReturnType<typeof vi.fn>;
   readonly bindFramebuffer: ReturnType<typeof vi.fn>;
+  readonly bindVertexArray: ReturnType<typeof vi.fn>;
   readonly clear: ReturnType<typeof vi.fn>;
   readonly clearColor: ReturnType<typeof vi.fn>;
   readonly compressedTexImage2D: ReturnType<typeof vi.fn>;
@@ -28,6 +30,8 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly drawElements: ReturnType<typeof vi.fn>;
   readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
   readonly drawArrays: ReturnType<typeof vi.fn>;
+  readonly deleteBuffer: ReturnType<typeof vi.fn>;
+  readonly deleteVertexArray: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly getProgramParameter: ReturnType<typeof vi.fn>;
   readonly invalidateFramebuffer: ReturnType<typeof vi.fn>;
@@ -42,6 +46,26 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly useProgram: ReturnType<typeof vi.fn>;
   readonly viewport: ReturnType<typeof vi.fn>;
 };
+
+export type FakeIndexedDraw = Readonly<{
+  elementArrayBuffer: WebGLBuffer | null;
+  instanceCount: number;
+  vertexArray: WebGLVertexArrayObject | null;
+}>;
+
+export type SemanticFakeGl = FakeGl & Readonly<{
+  vaoSemantics: Readonly<{
+    currentVertexArray(): WebGLVertexArrayObject | null;
+    elementArrayBuffer(vertexArray: WebGLVertexArrayObject | null): WebGLBuffer | null;
+    readonly indexedDraws: FakeIndexedDraw[];
+    readonly implicitElementArrayMutations: Array<Readonly<{
+      after: WebGLBuffer | null;
+      before: WebGLBuffer | null;
+      vertexArray: WebGLVertexArrayObject | null;
+    }>>;
+    resetContext(): void;
+  }>;
+}>;
 
 export const fakeGl = (): FakeGl => ({
   COLOR_BUFFER_BIT: 0x4000,
@@ -193,6 +217,111 @@ export const fakeGl = (): FakeGl => ({
   vertexAttrib3f: vi.fn(),
   viewport: vi.fn(),
 } as unknown as FakeGl);
+
+/** Models the VAO-owned state that call-count mocks cannot observe. */
+export const semanticFakeGl = (): SemanticFakeGl => {
+  const gl = fakeGl();
+  let currentVertexArray: WebGLVertexArrayObject | null = null;
+  const elementArrayBuffers = new Map<
+    WebGLVertexArrayObject | null,
+    WebGLBuffer | null
+  >([[null, null]]);
+  const bufferTargets = new Map<WebGLBuffer, number>();
+  const submittedVertexArrays = new Set<WebGLVertexArrayObject | null>();
+  let vertexArrayExplicitlyBound = false;
+  const indexedDraws: FakeIndexedDraw[] = [];
+  const implicitElementArrayMutations:
+    SemanticFakeGl["vaoSemantics"]["implicitElementArrayMutations"] = [];
+
+  vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
+    currentVertexArray = vertexArray;
+    vertexArrayExplicitlyBound = true;
+    if (!elementArrayBuffers.has(vertexArray)) elementArrayBuffers.set(vertexArray, null);
+  });
+  vi.mocked(gl.bindBuffer).mockImplementation((target, buffer) => {
+    if (
+      buffer !== null
+      && (target === gl.ARRAY_BUFFER || target === gl.ELEMENT_ARRAY_BUFFER)
+    ) {
+      const previousTarget = bufferTargets.get(buffer);
+      if (previousTarget !== undefined && previousTarget !== target) {
+        throw new Error("Semantic WebGL buffer cannot change binding target");
+      }
+      bufferTargets.set(buffer, target);
+    }
+    if (target !== gl.ELEMENT_ARRAY_BUFFER) return;
+    const before = elementArrayBuffers.get(currentVertexArray) ?? null;
+    if (
+      submittedVertexArrays.has(currentVertexArray)
+      && !vertexArrayExplicitlyBound
+      && before !== buffer
+    ) {
+      implicitElementArrayMutations.push({
+        after: buffer,
+        before,
+        vertexArray: currentVertexArray,
+      });
+    }
+    elementArrayBuffers.set(currentVertexArray, buffer);
+  });
+  const recordSubmission = (): void => {
+    submittedVertexArrays.add(currentVertexArray);
+    vertexArrayExplicitlyBound = false;
+  };
+  const recordIndexedDraw = (instanceCount: number): void => {
+    indexedDraws.push({
+      elementArrayBuffer: elementArrayBuffers.get(currentVertexArray) ?? null,
+      instanceCount,
+      vertexArray: currentVertexArray,
+    });
+    recordSubmission();
+  };
+  vi.mocked(gl.drawArrays).mockImplementation(recordSubmission);
+  vi.mocked(gl.drawElements).mockImplementation(() => recordIndexedDraw(1));
+  vi.mocked(gl.drawElementsInstanced).mockImplementation((
+    _mode,
+    _count,
+    _type,
+    _offset,
+    instanceCount,
+  ) => recordIndexedDraw(instanceCount));
+  vi.mocked(gl.deleteBuffer).mockImplementation((buffer) => {
+    bufferTargets.delete(buffer);
+    for (const [vertexArray, elementArrayBuffer] of elementArrayBuffers) {
+      if (elementArrayBuffer !== buffer) continue;
+      elementArrayBuffers.set(vertexArray, null);
+    }
+  });
+  vi.mocked(gl.deleteVertexArray).mockImplementation((vertexArray) => {
+    elementArrayBuffers.delete(vertexArray);
+    submittedVertexArrays.delete(vertexArray);
+    if (currentVertexArray === vertexArray) {
+      currentVertexArray = null;
+      vertexArrayExplicitlyBound = false;
+    }
+  });
+
+  const resetContext = (): void => {
+    currentVertexArray = null;
+    elementArrayBuffers.clear();
+    elementArrayBuffers.set(null, null);
+    bufferTargets.clear();
+    submittedVertexArrays.clear();
+    vertexArrayExplicitlyBound = false;
+    indexedDraws.length = 0;
+    implicitElementArrayMutations.length = 0;
+  };
+  return Object.assign(gl, {
+    vaoSemantics: {
+      currentVertexArray: () => currentVertexArray,
+      elementArrayBuffer: (vertexArray: WebGLVertexArrayObject | null) =>
+        elementArrayBuffers.get(vertexArray) ?? null,
+      implicitElementArrayMutations,
+      indexedDraws,
+      resetContext,
+    },
+  });
+};
 
 export class FakeCanvas extends EventTarget {
   height = 150;

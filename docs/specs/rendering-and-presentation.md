@@ -278,11 +278,13 @@ and does not draw unrequested cohort members or disable world instancing.
 Exact-compatible requested occurrences share one retained transform block and
 one instanced mask submission. Compatible multi-primitive occurrences retain
 one combined occurrence-major geometry allocation so primitive order cannot
-cross occurrence order. Allocation or optional batch-program failure falls
-back to the same ordinary ordered mask draws. Adding, changing, or removing an
-outline therefore does not re-lower the world scene or rebuild its instance
-buffers. Authored glTF instance cohorts retain their existing whole-cohort
-outline behavior.
+cross occurrence order. Combined index preparation binds Royal's non-drawing
+default vertex array before touching `ELEMENT_ARRAY_BUFFER`; it cannot rewrite a
+borrowed world vertex array merely because that array was used by the preceding
+draw. Allocation or optional batch-program failure falls back to the same
+ordinary ordered mask draws. Adding, changing, or removing an outline therefore
+does not re-lower the world scene or rebuild its instance buffers. Authored glTF
+instance cohorts retain their existing whole-cohort outline behavior.
 
 The mask target is full resolution and its depth attachment is discarded after
 rasterization because no later pass samples it. Horizontal expansion reuses

@@ -5,6 +5,40 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.13 - 2026-08-09
+
+### Correctness and contracts
+
+- Bind Royal's non-drawing default VAO before preparing a combined outline
+  index buffer, so resource creation cannot rewrite the element binding retained
+  by the world VAO left current by a preceding draw.
+- Specify VAO ownership and sticky WebGL buffer targets explicitly. State-shadow
+  invalidation is not treated as a repair for mutated resource state.
+
+### Architecture and performance
+
+- Keep the fix to one cold-path VAO bind when a combined geometry allocation is
+  created; ordinary and retained-frame submission gain no production query,
+  allocation, fallback, or per-draw branch. The packed renderer is 639,366 bytes
+  under the unchanged 640,000-byte ceiling.
+- Add an architecture-fitness roster for every direct production
+  `ELEMENT_ARRAY_BUFFER` write. New write owners fail review until they establish
+  a local VAO boundary and are added deliberately.
+
+### Verification
+
+- Add a semantic WebGL fake that models current and deleted VAOs, retained
+  element bindings, sticky buffer targets, context generations, implicit
+  mutations, and the index resource consumed by each draw.
+- Run 32 deterministic 24-step ownership sequences across absent, single, and
+  batched overlays, replacement, publication states, budget denial, viewport
+  changes, repeated frames, and context restoration.
+- Instrument real WebGL2 draws, including instanced, range, array, and
+  `WEBGL_multi_draw` paths, and compare each indexed submission with the native
+  `ELEMENT_ARRAY_BUFFER_BINDING`. The forced multi-primitive Tiger outline,
+  complete hardware-WebGL browser sweep, and context-loss restoration pass with
+  no ownership or native GPU violations.
+
 ## 0.0.12 - 2026-08-08
 
 ### Correctness and contracts

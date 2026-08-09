@@ -190,6 +190,15 @@ next complete intent establishes Royal's state explicitly. Owned resource
 handles are generation-safe, so equality with a stale-generation handle is
 impossible.
 
+Resource preparation that touches vertex-array-owned state MUST first bind a
+vertex array owned by that preparation or Royal's non-drawing default vertex
+array. In particular, binding `ELEMENT_ARRAY_BUFFER` is a vertex-array mutation;
+it MUST NOT depend on whichever world or pass vertex array a preceding draw left
+current. Invalidating the state shadow after an upload does not repair a mutated
+vertex array. WebGL buffer binding targets are also fixed by their first binding,
+so an index buffer MUST NOT be uploaded through `ARRAY_BUFFER` as a way to avoid
+the vertex-array rule.
+
 Texture-unit validity is tracked per unit. A draw that samples no textures—or
 only a subset of the available units—MUST NOT validate other units after an
 upload or pass has borrowed texture state. A later sampler therefore rebinds

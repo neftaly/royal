@@ -40,10 +40,10 @@ const exampleSearch = typeof globalThis.location === "undefined"
   ? new URLSearchParams()
   : new URLSearchParams(globalThis.location.search);
 const partitionCoverage = exampleSearch.get("coverage") === "partitioned";
-const presentedTigerOutlineColors = tigerOutlineColors.slice(
-  0,
-  partitionCoverage ? tigerOutlineColors.length : 1,
-);
+const vaoOwnershipProbe = exampleSearch.get("vaoOwnershipProbe") === "1";
+const presentedTigerOutlineColors = vaoOwnershipProbe
+  ? [tigerOutlineColors[0], tigerOutlineColors[0]]
+  : tigerOutlineColors.slice(0, partitionCoverage ? tigerOutlineColors.length : 1);
 const guideShapes = [
   {
     geometry: boxGeometry([3.4, 0.045, 0.045]),

@@ -10,7 +10,8 @@ import { EdgeOverlayOwner } from "../../packages/renderer-webgl/src/surface/edge
 import { ScreenSpacePartitionPatternOwner } from "../../packages/renderer-webgl/src/surface/screen-space-partition-pattern";
 import type { BorrowedSurfaceGeometryMatch } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
 import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
-import { fakeGl } from "./support/canvas-root-harness";
+import { forEachFuzzCase } from "../fuzz";
+import { fakeGl, semanticFakeGl } from "./support/canvas-root-harness";
 
 const overlayFixture = (positions: readonly number[] = [-0.5, 0.5]) => {
   const geometryIdentity = {};
@@ -387,6 +388,127 @@ describe("edge-overlay batch ownership", () => {
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(3);
     expect(budget.snapshot().retainedBytes).toBe(900);
     owner.dispose();
+  });
+
+  it("cannot replace the index buffer captured by a previously drawn world VAO", () => {
+    const gl = semanticFakeGl();
+    const worldVertexArray = gl.createVertexArray()!;
+    const worldIndexBuffer = gl.createBuffer()!;
+    gl.bindVertexArray(worldVertexArray);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, worldIndexBuffer);
+    gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_BYTE, 0);
+
+    const budget = new PersistentGpuBudgetOwner(1_000_000);
+    const owner = new EdgeOverlayOwner(
+      gl,
+      budget,
+      new ScreenSpacePartitionPatternOwner(gl, budget),
+    );
+    const { matchBySurface, scene } = combinedOverlayFixture();
+    owner.setScene(scene);
+    owner.drawViews(
+      [view()],
+      null,
+      new WebGlStateOwner(gl),
+      1,
+      1,
+      (surface) => matchBySurface.get(surface)!,
+    );
+
+    gl.bindVertexArray(worldVertexArray);
+    gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_BYTE, 0);
+    expect(gl.vaoSemantics.elementArrayBuffer(worldVertexArray)).toBe(worldIndexBuffer);
+    expect(gl.vaoSemantics.indexedDraws.at(-1)).toMatchObject({
+      elementArrayBuffer: worldIndexBuffer,
+      vertexArray: worldVertexArray,
+    });
+    expect(gl.vaoSemantics.implicitElementArrayMutations).toEqual([]);
+    owner.dispose();
+  });
+
+  it("preserves world VAO ownership across bounded overlay state sequences", () => {
+    forEachFuzzCase({ cases: 32, seed: 0x56_41_4f_12 }, ({ random }) => {
+      const gl = semanticFakeGl();
+      const budget = new PersistentGpuBudgetOwner(
+        random.boolean() ? 1_000_000 : 12 * 12 * 9,
+      );
+      const partition = new ScreenSpacePartitionPatternOwner(gl, budget);
+      const owner = new EdgeOverlayOwner(gl, budget, partition);
+      let state = new WebGlStateOwner(gl);
+      let fixture: ReturnType<typeof combinedOverlayFixture>
+        | ReturnType<typeof overlayFixture> = combinedOverlayFixture();
+      let publication: "inactive" | "pending" | "ready" = "ready";
+      owner.setScene(fixture.scene);
+      let worldVertexArray: WebGLVertexArrayObject;
+      let worldIndexBuffer: WebGLBuffer;
+      const establishWorldVao = (): void => {
+        worldVertexArray = gl.createVertexArray()!;
+        worldIndexBuffer = gl.createBuffer()!;
+        gl.bindVertexArray(worldVertexArray);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, worldIndexBuffer);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_BYTE, 0);
+      };
+      establishWorldVao();
+
+      for (let step = 0; step < 24; step += 1) {
+        switch (random.int(0, 7)) {
+          case 0:
+            fixture = random.boolean()
+              ? combinedOverlayFixture()
+              : overlayFixture([random.int(-5, 6) / 10]);
+            owner.setScene(fixture.scene);
+            publication = "ready";
+            break;
+          case 1:
+            owner.setScene(null);
+            break;
+          case 2:
+            owner.setScene(fixture.scene);
+            break;
+          case 3:
+            publication = random.pick(["inactive", "pending", "ready"] as const);
+            break;
+          case 4:
+            owner.abandon();
+            partition.abandon();
+            gl.vaoSemantics.resetContext();
+            state = new WebGlStateOwner(gl);
+            establishWorldVao();
+            owner.setScene(fixture.scene);
+            break;
+          default:
+            owner.drawViews(
+              [{
+                ...view(),
+                viewport: {
+                  height: random.int(8, 13),
+                  width: random.int(8, 13),
+                  x: 0,
+                  y: 0,
+                },
+              }],
+              null,
+              state,
+              1,
+              1,
+              (surface) => publication === "ready"
+                ? fixture.matchBySurface.get(surface) ?? { status: "inactive" }
+                : { status: publication },
+            );
+        }
+        gl.bindVertexArray(worldVertexArray!);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_BYTE, 0);
+        expect(gl.vaoSemantics.elementArrayBuffer(worldVertexArray!))
+          .toBe(worldIndexBuffer!);
+        expect(gl.vaoSemantics.indexedDraws.at(-1)).toMatchObject({
+          elementArrayBuffer: worldIndexBuffer!,
+          vertexArray: worldVertexArray!,
+        });
+        expect(gl.vaoSemantics.implicitElementArrayMutations).toEqual([]);
+      }
+      owner.dispose();
+      partition.dispose();
+    });
   });
 
   it("does not admit combined geometry ahead of required targets", () => {

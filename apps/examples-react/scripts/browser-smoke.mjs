@@ -20,6 +20,7 @@ import {
 } from './example-contract.mjs';
 import { summarizeCanvasPixels } from './canvas-sample.mjs';
 import { contextLossResourcesRecovered } from './context-loss-readiness.mjs';
+import { vaoOwnershipProbeSource } from './vao-ownership-probe.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -289,6 +290,7 @@ const smokeExpression = `
           ? ''
           : document.querySelector('[data-source-file="' + sourceFile + '"] code')?.textContent ?? '';
       })(),
+      vaoOwnership: globalThis.__royalVaoOwnershipSnapshot?.(),
     };
   };
   const deadline = performance.now() + ${routeReadyTimeoutMs};
@@ -639,6 +641,18 @@ const assertEmbeddedTextureTransition = (fallback, authored, comparison, repeatC
     || !(comparison.materialMeanDelta > (repeatComparison?.materialMeanDelta ?? 0) + 1e-7)
   ) {
     throw new Error(`embedded texture publication did not refine the material region: ${JSON.stringify({ comparison, repeatComparison })}`);
+  }
+};
+
+const assertVaoOwnership = (snapshot, minimumIndexedInstanceCount = 1) => {
+  if (
+    snapshot === undefined
+    || snapshot.contexts < 1
+    || snapshot.indexedDraws < 1
+    || snapshot.maximumInstanceCount < minimumIndexedInstanceCount
+    || snapshot.violations.length > 0
+  ) {
+    throw new Error(`VAO ownership oracle failed: ${JSON.stringify(snapshot)}`);
   }
 };
 
@@ -1928,6 +1942,9 @@ const main = async () => {
     });
     await session.call('Page.enable');
     await session.call('Runtime.enable');
+    await session.call('Page.addScriptToEvaluateOnNewDocument', {
+      source: vaoOwnershipProbeSource,
+    });
 
     if (allowSoftwareGpu) {
       // Each route's canvas and pixel oracle prove that its owned WebGL2
@@ -1970,7 +1987,14 @@ const main = async () => {
           path: `${route.path}?textureProbe=${textureProbe.name}`,
           textureProbe,
         }))
-      : [route]);
+      : route.id === 'webxr-vr'
+        ? [{
+            ...route,
+            minimumIndexedInstanceCount: 2,
+            path: `${route.path}?vaoOwnershipProbe=1`,
+            vaoOwnershipProbe: true,
+          }]
+        : [route]);
     let contextLossChecked = false;
 
     for (const route of selectedRoutes) {
@@ -2332,6 +2356,10 @@ const main = async () => {
         if (nativeErrors.length > 0) {
           throw new Error(`${route.id}: native GPU errors: ${nativeErrors.join('; ')}`);
         }
+        assertVaoOwnership(
+          state.vaoOwnership,
+          route.minimumIndexedInstanceCount ?? 1,
+        );
         assertRoute(effectiveRoute, state);
         if (state.textureTransition !== undefined) {
           const assertTransition = state.textureTransition.kind === 'embedded'
@@ -2362,6 +2390,9 @@ const main = async () => {
         const interaction = state.virtualTextureInteraction;
         const interactionDiagnostics = interaction === undefined ? '' : JSON.stringify(interaction);
         const rendererDiagnostics = state.renderer === undefined ? '' : JSON.stringify(state.renderer);
+        const vaoDiagnostics = state.vaoOwnership === undefined
+          ? ''
+          : JSON.stringify(state.vaoOwnership);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`
         }${
@@ -2370,6 +2401,8 @@ const main = async () => {
           interactionDiagnostics === '' ? '' : `; interaction: ${interactionDiagnostics}`
         }${
           rendererDiagnostics === '' ? '' : `; renderer: ${rendererDiagnostics}`
+        }${
+          vaoDiagnostics === '' ? '' : `; vao: ${vaoDiagnostics}`
         }`);
       }
       if (contextLossSmoke && !contextLossChecked) {
@@ -2390,6 +2423,12 @@ const main = async () => {
         ) {
           throw new Error(`context-loss smoke failed: restored compositor surface was unusable; ${JSON.stringify({ lifecycle, restoredSample })}`);
         }
+        if (lifecycle.status === 'ok') {
+          assertVaoOwnership(await evaluate(
+            session,
+            'globalThis.__royalVaoOwnershipSnapshot?.()',
+          ));
+        }
         contextLossChecked = true;
         console.log(lifecycle.status === 'unsupported'
           ? `skip context-loss ${lifecycle.reason}`
@@ -2398,7 +2437,7 @@ const main = async () => {
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)} luma=${state.canvas.sample.meanPaintedLuminance.toFixed(3)} p25=${state.canvas.sample.paintedLuminanceP25.toFixed(3)} p50=${state.canvas.sample.paintedLuminanceP50.toFixed(3)} p75=${state.canvas.sample.paintedLuminanceP75.toFixed(3)} chroma=${state.canvas.sample.meanPaintedChroma.toFixed(3)} saturation=${state.canvas.sample.meanPaintedSaturation.toFixed(3)}`;
-      console.log(`ok ${route.id}${canvasSummary}`);
+      console.log(`ok ${route.id}${route.vaoOwnershipProbe === true ? ' vao-ownership' : ''}${canvasSummary}`);
     }
 
     if (contextLossSmoke && !contextLossChecked) {

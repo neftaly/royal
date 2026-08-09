@@ -36,7 +36,7 @@ const sourceTrees = new Map(packageSourceFiles.map((file) => [
     file,
     readFileSync(file, "utf8"),
     ts.ScriptTarget.Latest,
-    false,
+    true,
     file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   ),
 ]));
@@ -189,6 +189,59 @@ describe("source architecture fitness", () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("keeps direct element-array writes in reviewed VAO owners", () => {
+    const writes: string[] = [];
+    const missingLocalOwner: string[] = [];
+    for (const file of packageSourceFiles) {
+      const source = sourceTrees.get(file)!;
+      const visit = (node: ts.Node): void => {
+        if (
+          ts.isCallExpression(node)
+          && ts.isPropertyAccessExpression(node.expression)
+          && node.expression.name.text === "bindBuffer"
+          && node.arguments[0] !== undefined
+          && ts.isPropertyAccessExpression(node.arguments[0])
+          && node.arguments[0].name.text === "ELEMENT_ARRAY_BUFFER"
+        ) {
+          let owner: ts.Node | undefined = node;
+          while (
+            owner !== undefined
+            && !ts.isMethodDeclaration(owner)
+            && !ts.isFunctionDeclaration(owner)
+          ) owner = owner.parent;
+          const ownerName = owner !== undefined && "name" in owner && owner.name !== undefined
+            ? owner.name.getText(source)
+            : "anonymous";
+          const label = `${relative(file)}:${ownerName}`;
+          writes.push(label);
+
+          let statement: ts.Node = node;
+          while (statement.parent !== undefined && !ts.isBlock(statement.parent)) {
+            statement = statement.parent;
+          }
+          const block = statement.parent;
+          const statementIndex = ts.isBlock(block) ? block.statements.indexOf(statement as ts.Statement) : -1;
+          const establishedLocally = ts.isBlock(block)
+            && statementIndex >= 0
+            && block.statements.slice(0, statementIndex).some((candidate) =>
+              candidate.getText(source).includes(".bindVertexArray("));
+          if (!establishedLocally) missingLocalOwner.push(label);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+
+    expect(writes.sort()).toEqual([
+      "packages/renderer-webgl/src/surface/edge-overlay-owner.ts:#createCombinedGeometry",
+      "packages/renderer-webgl/src/surface/edge-overlay-owner.ts:#prepareBatches",
+      "packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts:#createGeometryArena",
+      "packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts:#createInstanceVertexArray",
+      "packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts:#uploadGeometry",
+    ]);
+    expect(missingLocalOwner).toEqual([]);
   });
 
   it("keeps shared frame data below renderer feature owners", () => {
