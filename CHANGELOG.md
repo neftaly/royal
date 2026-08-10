@@ -5,8 +5,45 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+## 0.0.14 - 2026-08-10
+
+### Correctness and contracts
+
+- Extend the invariant opaque depth prepass to outside-camera scenes only when
+  they render directly to a multisampled default framebuffer and retained
+  camera-facing bound coverage is at least 2x. Sparse views, composite targets,
+  coverage-dependent materials, transmission, lines, and unlit work remain on
+  their established single pass.
+- Require exact depth equality for color draws covered by the invariant
+  position-only pass, while preserving less-or-equal depth for every other
+  draw and separating incompatible multi-draw runs.
+- Discard the renderer-owned default-framebuffer depth attachment only after
+  all ordinary canvas passes finish. Offscreen composite and external/XR
+  framebuffer lifecycles remain unchanged.
+
+### Architecture and performance
+
+- Keep outside-view admission in a cold, allocation-free retained classifier;
+  no route, asset, browser, device, or measured-frame branch enters submission.
+- On a physical A10 iPad at 2048 x 1008 with four samples, alternating Settlers
+  runs measured 19--20 ms median / 24--25 ms p95 after exact equality and final
+  depth discard, around an equality-only control at 26 / 32 ms. Bistro retained
+  147 submissions and a pixel-identical capture at 28 / 35 ms.
+- Reject redundant color-pass depth-write suppression and offscreen-composite
+  depth discard after matched physical controls showed no gain and a regression,
+  respectively. The final measured packed renderer remains below its 641,000-byte
+  ceiling, and lazy and worker bundle budgets do not increase.
+
 ### Verification
 
+- Cover depth-function transitions in both directions, exact-depth multi-draw
+  partitioning, final default-depth invalidation, outside-view admission, sparse
+  rejection, and retained-plan storage reuse.
+- Complete 906 tests across 121 files, typecheck, lint, production builds,
+  package entrypoint and packed-consumer checks, and bundle-size gates. Physical
+  Safari repeats Settlers in alternating order; Bistro settles 202/202 images
+  with RMSE 0 output; Sponza completes 120/120 full-DPR moving frames with all
+  69 images resident and no warning, failure, or WebGL error.
 - Mutation-test the injected real-WebGL ownership oracle itself, proving that it
   rejects inherited element-array writes, native/model binding divergence, and
   sticky buffer-target changes while accepting an explicitly rebound owner.

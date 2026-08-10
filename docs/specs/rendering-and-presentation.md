@@ -83,13 +83,15 @@ lines, and cheap unlit surfaces remain on their single semantic pass because
 coverage or pass ordering cannot be reproduced by the position-only program,
 or because a second pass has no sound cost case. The depth pass writes no color
 and uses the same model,
-instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
+instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth target as
 the later draw. Both vertex programs MUST declare `gl_Position` invariant so
 driver optimization cannot make the position-only pass self-occlude the color
-pass through cross-program depth drift. Its submission owner, programs,
+pass through cross-program depth drift. Covered color draws then require exact
+depth equality; work outside the prepass retains less-or-equal comparison. Its
+submission owner, programs,
 shaders, and batching scratch load only after the cold classifier admits the
-pass. The central state owner represents its color mask explicitly; no pass may
-inherit hidden GL state. Without multi-draw, the stable fallback is
+pass. The central state owner represents its color mask and depth comparison
+explicitly; no pass may inherit hidden GL state. Without multi-draw, the stable fallback is
 the existing front-to-back PBR pass rather than one extra JavaScript draw per
 surface.
 
@@ -110,7 +112,27 @@ The retained direct-multisample/2×-coverage classifier then measured Settlers a
 33 / 39 ms against a corrected wall-clock-path control at 37 / 44 ms; the
 cleaned candidate repeated at 30 / 38 ms. Bistro's single-sample retained
 composite excludes the new branch and remained on exactly 147 submissions.
-The result is a material partial gain, not the 16.7 ms acceptance target.
+An alternating exact-depth follow-up measured two equality candidates at 27 / 34
+and 26 / 34 ms median/p95 versus less-or-equal controls at 28 / 55 and 31 / 38
+ms. The first control tail was noisy, but the 1--5 ms median separation survived
+order reversal. The result is a material partial gain, not the 16.7 ms
+acceptance target.
+
+After the final ordinary canvas pass, Royal invalidates only the default
+framebuffer's depth attachment. The renderer owns that depth for the complete
+frame, no later canvas pass reads it, and the discard occurs after world,
+retained-world restoration, presentation overlay, and edge overlay work.
+External framebuffers, including XR, retain their caller-owned lifecycle.
+Physical Safari Settlers measured 20 / 25 and 19 / 24 ms median/p95 with this
+discard around a 26 / 32 ms immediate control. Bistro retained 147 submissions,
+all 202 images, and a pixel-identical capture while completing at 28 / 35 ms.
+Discarding the offscreen composite depth before target switching was separately
+rejected: Bistro regressed to 33 / 36 ms versus the immediately reverted 24 /
+29 ms control, despite RMSE 0 captures.
+The retained default-depth path also completed 120/120 full-DPR Sponza camera
+frames at 22 / 26 ms median/p95 with all 69 images resident, no failure or
+warning, and a clean physical capture. This is cross-scene correctness evidence,
+not a replacement floor for earlier faster clean Sponza runs.
 
 Exact clean commit `cc9a749e` confirms the invariant-position correction on
 physical Safari 17.14 after the original self-occlusion was reproduced. The

@@ -72,6 +72,7 @@ export const surfacesShareMultiDrawState = (
   && left.drawPacket.alphaBlend === right.drawPacket.alphaBlend
   && left.drawPacket.colorWrite === right.drawPacket.colorWrite
   && left.drawPacket.cullBackFaces === right.drawPacket.cullBackFaces
+  && (left.drawPacket.depthEqual === true) === (right.drawPacket.depthEqual === true)
   && left.drawPacket.depthTest === right.drawPacket.depthTest
   && left.drawPacket.depthWrite === right.drawPacket.depthWrite
   && left.drawPacket.frontFace === right.drawPacket.frontFace

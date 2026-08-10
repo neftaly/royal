@@ -32,6 +32,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly drawArrays: ReturnType<typeof vi.fn>;
   readonly deleteBuffer: ReturnType<typeof vi.fn>;
   readonly deleteVertexArray: ReturnType<typeof vi.fn>;
+  readonly depthFunc: ReturnType<typeof vi.fn>;
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly getProgramParameter: ReturnType<typeof vi.fn>;
   readonly invalidateFramebuffer: ReturnType<typeof vi.fn>;
@@ -82,10 +83,12 @@ export const fakeGl = (): FakeGl => ({
   CULL_FACE: 0x0b44,
   DEPTH_TEST: 0x0b71,
   DEPTH_BUFFER_BIT: 0x0100,
+  DEPTH: 0x1801,
   DEPTH_ATTACHMENT: 0x8d00,
   DEPTH_COMPONENT24: 0x81a6,
   DYNAMIC_DRAW: 0x88e8,
   ELEMENT_ARRAY_BUFFER: 0x8893,
+  EQUAL: 0x0202,
   FLOAT: 0x1406,
   FRAGMENT_SHADER: 0x8b30,
   FRAMEBUFFER: 0x8d40,

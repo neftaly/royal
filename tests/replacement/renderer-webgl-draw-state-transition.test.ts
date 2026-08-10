@@ -8,6 +8,8 @@ import {
   type SurfaceDrawPacket,
 } from "../../packages/renderer-webgl/src/webgl/draw-state-transition";
 import { createUnknownClearState } from "../../packages/renderer-webgl/src/webgl/clear-state-transition";
+import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
+import { fakeGl } from "./support/canvas-root-harness";
 
 const handle = <Value>(): Value => ({}) as Value;
 
@@ -17,7 +19,7 @@ const state = (): AppliedSurfaceDrawState => ({
   blendFunctionKnown: false,
   cullFaceKnown: false,
   cullBackFaces: null,
-  depthFunctionKnown: false,
+  depthEqual: null,
   depthTest: null,
   depthWrite: null,
   frontFace: null,
@@ -46,6 +48,18 @@ const draw = (): Readonly<{ frame: SurfaceDrawFrame; packet: SurfaceDrawPacket }
 });
 
 describe("surface draw state transition core", () => {
+  it("applies exact equality only when a retained packet requests it", () => {
+    const gl = fakeGl();
+    const owner = new WebGlStateOwner(gl);
+    const { frame, packet } = draw();
+    owner.applySurfaceDraw(frame, packet);
+    owner.applySurfaceDraw(frame, { ...packet, depthEqual: true });
+    owner.applySurfaceDraw(frame, packet);
+    expect(gl.depthFunc).toHaveBeenNthCalledWith(1, gl.LEQUAL);
+    expect(gl.depthFunc).toHaveBeenNthCalledWith(2, gl.EQUAL);
+    expect(gl.depthFunc).toHaveBeenNthCalledWith(3, gl.LEQUAL);
+  });
+
   it("establishes every required state once, then suppresses an identical draw", () => {
     const previous = state();
     const { frame, packet } = draw();
@@ -111,6 +125,18 @@ describe("surface draw state transition core", () => {
       .every(([, value]) => !value)).toBe(true);
     commitAppliedSurfaceDrawState(previous, frame, { ...packet, colorWrite: false });
     expect(previous.colorWrite).toBe(false);
+  });
+
+  it("changes only the depth function for an invariant prepassed draw", () => {
+    const previous = state();
+    const { frame, packet } = draw();
+    commitAppliedSurfaceDrawState(previous, frame, packet);
+    const transition = createSurfaceDrawStateTransition();
+    planSurfaceDrawStateTransition(previous, frame, { ...packet, depthEqual: true }, transition);
+    expect(transition.depthFunction).toBe(true);
+    expect(Object.entries(transition)
+      .filter(([key]) => key !== "depthFunction")
+      .every(([, value]) => !value)).toBe(true);
   });
 
   it("isolates mirrored-front-face changes from the rest of the pipeline", () => {

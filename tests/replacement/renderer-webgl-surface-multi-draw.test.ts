@@ -186,6 +186,10 @@ describe("surface multi-draw compatibility core", () => {
       }),
       candidate({ geometry: { indexType: 0x1405 }, surface: left.surface }),
       candidate({
+        drawPacket: { ...left.drawPacket, depthEqual: true },
+        surface: left.surface,
+      }),
+      candidate({
         drawPacket: { ...left.drawPacket, frontFace: 0x0900 },
         surface: left.surface,
       }),

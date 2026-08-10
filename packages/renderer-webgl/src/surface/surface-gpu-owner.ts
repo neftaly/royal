@@ -336,10 +336,12 @@ const surfaceDrawPacket = (
   textureUnits: number,
   vertexArray: WebGLVertexArrayObject,
   overlay: boolean,
+  depthEqual = false,
 ): SurfaceDrawPacket => ({
   alphaBlend: surface.material.alphaBlend === true,
   colorWrite: true,
   cullBackFaces: !canonicalSurfaceIsDoubleSided(surface.material),
+  ...(depthEqual ? { depthEqual: true } : {}),
   depthTest: !overlay,
   depthWrite: !overlay && surface.material.alphaBlend !== true,
   frontFace: surface.modelHandedness < 0 ? gl.CW : gl.CCW,
@@ -1158,7 +1160,13 @@ export class SurfaceGpuOwner {
       }
       return;
     }
-    if (this.#multiDraw !== null && this.#depthPrepassPlan.candidateCount >= 32) return;
+    if (this.#multiDraw !== null && this.#depthPrepassPlan.candidateCount >= 32) {
+      if (this.#depthPrepassOwner !== null) {
+        this.#dirty = true;
+        this.#fullReconcileRequired = true;
+      }
+      return;
+    }
     if (this.#depthProgramLoadRequested) {
       this.#depthProgramLoadGeneration += 1;
       this.#depthProgramLoadRequested = false;
@@ -1760,6 +1768,7 @@ export class SurfaceGpuOwner {
         surfaceTextureUnitMask(features),
         geometrySurface.vertexArray,
         this.#presentationLane === "overlay",
+        depthProgram !== null,
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
@@ -1963,6 +1972,7 @@ export class SurfaceGpuOwner {
         textureUnits,
         resource.vertexArray,
         this.#presentationLane === "overlay",
+        resource.depthPacket !== null,
       );
       resource.program = program;
     }

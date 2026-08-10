@@ -76,6 +76,36 @@ and can hide newly exposed geometry. The next justified Royal work is exact
 material/pass attribution. This proposal remains open because the retained
 classifier does not yet meet the native-resolution frame target.
 
+A follow-up exact-state experiment suppressed redundant color-pass depth writes
+only for surfaces already covered by the invariant position-only pass. A
+corrected 10-second physical control and candidate both measured 32 ms median /
+39 ms p95, so the packet/state complexity was reverted rather than retained.
+
+A stronger exact depth comparison did separate. Once the invariant prepass has
+written an eligible surface, its color pass can require `EQUAL` instead of the
+renderer-wide `LEQUAL`; surfaces not covered by that pass retain `LEQUAL`.
+Alternating 10-second physical runs measured equality candidates at 27 / 34 and
+26 / 34 ms median/p95 versus controls at 28 / 55 and 31 / 38 ms. The first
+control p95 was noisy, but the median advantage survived order reversal without
+changing the document, framebuffer, camera path, draw set, shaders, or pixels.
+
+Discarding the default framebuffer's depth attachment after every ordinary
+canvas pass produced the largest exact follow-up. No later canvas work reads
+that attachment, and external/XR framebuffers do not use the rule. Alternating
+10-second Settlers runs measured the discard candidate at 20 / 25 and 19 / 24
+ms median/p95 around an equality-only control at 26 / 32 ms. The backing size,
+four-sample framebuffer, motion path, draw set, and WebGL error state remained
+unchanged. On Bistro Exterior, the candidate completed 120/120 moving frames at
+28 / 35 ms, retained exactly 147 submissions per frame, settled all 202 images,
+and produced a pixel-identical physical capture against the preceding build
+(RMSE 0). It therefore stays as a general canvas lifecycle optimization.
+
+The analogous discard on the retained composite framebuffer was rejected.
+Bistro regressed to 33 / 36 ms from the immediately reverted default-only
+control's 24 / 29 ms despite identical captures and submissions. Royal keeps
+the default-framebuffer discard only; target-local invalidation is not assumed
+beneficial merely because the attachment is semantically dead.
+
 ## Current evidence
 
 Canvas and context:

@@ -509,6 +509,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #cameraSource: CameraSourceOwner;
   readonly #clock: FrameClockOwner;
   readonly #context: ContextLifecycleOwner;
+  readonly #discardDefaultDepthAttachment: number[];
   readonly #environmentAssets: PrefilteredEnvironmentAssetOwner;
   readonly #etc2Available: boolean;
   #clearColor: LinearRgba = [0, 0, 0, 0];
@@ -625,6 +626,7 @@ export class CanvasRoot implements RendererRoot {
     this.#platform = platform;
     this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
     this.#gl = createContext(canvas, resolvedOptions);
+    this.#discardDefaultDepthAttachment = [this.#gl.DEPTH];
     this.#etc2Available = this.#gl.getExtension("WEBGL_compressed_texture_etc") !== null;
     this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
       resolvedOptions.persistentGpuByteBudget,
@@ -1925,6 +1927,12 @@ export class CanvasRoot implements RendererRoot {
         }
       }
     }
+    // No later canvas pass reads the default depth buffer. Discard it before
+    // presentation so tiled GPUs need not store a full-frame depth attachment.
+    this.#gl.invalidateFramebuffer(
+      this.#gl.FRAMEBUFFER,
+      this.#discardDefaultDepthAttachment,
+    );
     this.#progressivePresentation.presented();
     this.#frame += 1;
     this.#lastFrameFailure = undefined;

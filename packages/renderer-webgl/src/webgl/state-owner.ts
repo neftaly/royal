@@ -25,7 +25,7 @@ export class WebGlStateOwner {
     blendFunctionKnown: false,
     cullFaceKnown: false,
     cullBackFaces: null,
-    depthFunctionKnown: false,
+    depthEqual: null,
     depthTest: null,
     depthWrite: null,
     frontFace: null,
@@ -152,7 +152,7 @@ export class WebGlStateOwner {
         if (packet.depthTest) gl.enable(gl.DEPTH_TEST);
         else gl.disable(gl.DEPTH_TEST);
       }
-      if (transition.depthFunction) gl.depthFunc(gl.LEQUAL);
+      if (transition.depthFunction) gl.depthFunc(packet.depthEqual ? gl.EQUAL : gl.LEQUAL);
       if (transition.cullMode) {
         if (packet.cullBackFaces) gl.enable(gl.CULL_FACE);
         else gl.disable(gl.CULL_FACE);

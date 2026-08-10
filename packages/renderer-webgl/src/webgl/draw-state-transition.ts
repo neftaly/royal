@@ -15,6 +15,8 @@ export type SurfaceDrawPacket = Readonly<{
   alphaBlend: boolean;
   colorWrite: boolean;
   cullBackFaces: boolean;
+  /** Uses exact depth equality after an invariant position-only pass. */
+  depthEqual?: boolean;
   depthTest: boolean;
   depthWrite: boolean;
   frontFace: number;
@@ -52,7 +54,7 @@ export type AppliedSurfaceDrawState = AppliedClearState & {
   blendFunctionKnown: boolean;
   cullFaceKnown: boolean;
   cullBackFaces: boolean | null;
-  depthFunctionKnown: boolean;
+  depthEqual: boolean | null;
   depthTest: boolean | null;
   depthWrite: boolean | null;
   frontFace: number | null;
@@ -103,7 +105,7 @@ export const planSurfaceDrawStateTransition = (
     && (unknown || !previous.cullFaceKnown);
   output.depthMode = unknown || previous.depthTest !== packet.depthTest;
   output.depthFunction = packet.depthTest
-    && (unknown || !previous.depthFunctionKnown);
+    && (unknown || previous.depthEqual !== (packet.depthEqual === true));
   output.frontFace = unknown || previous.frontFace !== packet.frontFace;
   output.colorMask = unknown
     || !previous.colorMaskKnown
@@ -133,7 +135,7 @@ export const commitAppliedSurfaceDrawState = (
   state.colorWrite = packet.colorWrite;
   if (packet.cullBackFaces) state.cullFaceKnown = true;
   state.depthTest = packet.depthTest;
-  if (packet.depthTest) state.depthFunctionKnown = true;
+  if (packet.depthTest) state.depthEqual = packet.depthEqual === true;
   state.depthWrite = packet.depthWrite;
   state.framebuffer = frame.framebuffer;
   state.frontFace = packet.frontFace;

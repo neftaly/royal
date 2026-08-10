@@ -158,6 +158,11 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.clear).toHaveBeenLastCalledWith(
       canvas.gl.COLOR_BUFFER_BIT | canvas.gl.DEPTH_BUFFER_BIT,
     );
+    expect(canvas.gl.invalidateFramebuffer).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.invalidateFramebuffer).toHaveBeenLastCalledWith(
+      canvas.gl.FRAMEBUFFER,
+      [canvas.gl.DEPTH],
+    );
   });
 
   it("publishes metadata-only size changes without invalidating backing state", () => {
