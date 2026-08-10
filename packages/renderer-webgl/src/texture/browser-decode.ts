@@ -234,6 +234,9 @@ const isKtx2Uri = (uri: string): boolean => /\.ktx2(?:[?#]|$)/i.test(uri);
 const isSvgMimeType = (mimeType: string): boolean =>
   mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/svg+xml";
 
+const isAvifMimeType = (mimeType: string): boolean =>
+  mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/avif";
+
 const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
@@ -245,6 +248,53 @@ const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>
   if (/\.png(?:[?#]|$)/i.test(asset.src)) return "image/png";
   if (/\.webp(?:[?#]|$)/i.test(asset.src)) return "image/webp";
   return "";
+};
+
+const textureIsAvif = (asset: TextureLeafSourceRef, blob: Blob): boolean =>
+  isAvifMimeType(blob.type)
+  || (asset.kind === "embedded-asset"
+    ? isAvifMimeType(asset.mimeType)
+    : isAvifMimeType(textureBlobType(asset)));
+
+const resizeAvifBitmap = (
+  bitmap: ImageBitmap,
+  width: number,
+  height: number,
+  sourceWidth: number,
+  sourceHeight: number,
+): DecodedImageTextureSource => {
+  const canvas = globalThis.document?.createElement("canvas");
+  if (canvas === undefined) {
+    bitmap.close();
+    throw new Error("Royal AVIF texture fitting requires a browser canvas");
+  }
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: true });
+  if (context === null) {
+    bitmap.close();
+    throw new Error("Royal AVIF texture fitting could not create a 2D canvas");
+  }
+  try {
+    context.drawImage(bitmap, 0, 0, width, height);
+  } catch (error) {
+    bitmap.close();
+    canvas.width = 1;
+    canvas.height = 1;
+    throw error;
+  }
+  bitmap.close();
+  return {
+    close: () => {
+      canvas.width = 1;
+      canvas.height = 1;
+    },
+    height,
+    source: canvas,
+    sourceHeight,
+    sourceWidth,
+    width,
+  };
 };
 
 const declaresKtx2 = (asset: TextureLeafSourceRef): boolean =>
@@ -364,6 +414,7 @@ const decodeTextureBlob = async (
   imageElementOutput?: "canvas",
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
+  const avif = textureIsAvif(asset, blob);
   const decodeImageElement = async (): Promise<DecodedImageTextureSource> => {
     const decoded = await decodeBrowserImageElement(
       blob,
@@ -412,7 +463,12 @@ const decodeTextureBlob = async (
         if (
           fitted.width !== dimensions.width
           || fitted.height !== dimensions.height
-        ) directFit = fitted;
+        ) {
+          // Firefox corrupts AVIF alpha when encoded bytes and resize options
+          // are passed to createImageBitmap together. Native decode followed
+          // by the explicit pixel resample below preserves the channel.
+          if (!avif) directFit = fitted;
+        }
       } catch {
         // A malformed size hint cannot replace browser format validation.
       }
@@ -467,6 +523,18 @@ const decodeTextureBlob = async (
   if (maxStorageBytes !== undefined && maxStorageBytes >= 4) {
     const fitted = fitOrdinaryTextureStorage(bitmap.width, bitmap.height, maxStorageBytes);
     if (fitted.width !== bitmap.width || fitted.height !== bitmap.height) {
+      if (avif) {
+        const decoded = resizeAvifBitmap(
+          bitmap,
+          fitted.width,
+          fitted.height,
+          sourceWidth,
+          sourceHeight,
+        );
+        return retainAlpha
+          ? retainTextureAlpha(decoded, signal, alphaMipmapsRequired(asset))
+          : decoded;
+      }
       try {
         const resized = await globalThis.createImageBitmap(bitmap, {
           colorSpaceConversion: "none",

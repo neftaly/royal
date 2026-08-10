@@ -5,7 +5,7 @@ descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
 hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
 canvas rendering.
 
-Royal is an open-source prerelease at `0.0.15`. Its intended behavior and
+Royal is an open-source prerelease at `0.0.16`. Its intended behavior and
 current conformance are documented in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained

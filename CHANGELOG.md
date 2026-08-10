@@ -3,6 +3,31 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.16 - 2026-08-11
+
+### Correctness and contracts
+
+- Preserve AVIF alpha when an ordinary texture is resized to its fair GPU
+  budget. Firefox's encoded or decoded `createImageBitmap` resize replaces the
+  alpha channel with another colour channel; Royal now materializes only
+  budget-resized AVIF pixels through a 2D canvas before WebGL upload.
+- Keep native-size AVIF decoding and direct PNG/WebP fitting unchanged. The
+  selection follows declared or inferred image format and contains no browser,
+  device, application, or user-agent policy.
+
+### Verification
+
+- Reproduce the public Probability ruler defect in the complete scene and
+  trace its first textured draw: Chromium retained `87/255` alpha while Firefox
+  produced `249/255` from the same AVIF and blend state.
+- Reduce the defect to browser decode/upload operations, then force the exact
+  ruler through Royal's fitted-texture path. Chromium, Firefox, and WebKit all
+  produce `rgb(154, 181, 200)` at the sampled body pixel after the fix.
+- Complete 912 tests across 121 files, typecheck, warning-free renderer lint,
+  production builds, package entrypoint and packed-consumer checks, and bundle
+  gates. The change adds 138 bytes to lazy gzip and 621 bytes to the packed
+  renderer, with no initial-runtime or worker growth.
+
 ## 0.0.15 - 2026-08-10
 
 ### Correctness and contracts

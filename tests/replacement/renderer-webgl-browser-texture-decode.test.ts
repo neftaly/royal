@@ -645,7 +645,7 @@ describe("browser texture decode shell", () => {
       contentKey: "large",
       kind: "embedded-asset",
       label: "large",
-      mimeType: "image/avif",
+      mimeType: "image/png",
     }, new AbortController().signal, 340);
 
     expect(createImageBitmap).toHaveBeenCalledTimes(2);
@@ -756,19 +756,26 @@ describe("browser texture decode shell", () => {
     });
   });
 
-  it("decodes AVIF directly to its fitted budget dimensions from BMFF properties", async () => {
+  it("fits AVIF through explicit canvas pixels without browser bitmap resize", async () => {
     const bytes = createAvifHeader(2048, 1024);
     const fitted = fitOrdinaryTextureStorage(2048, 1024, 340);
     const bitmap = {
       close: vi.fn(),
-      height: fitted.height,
-      width: fitted.width,
+      height: 1024,
+      width: 2048,
     } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async (
       _blob: Blob,
       _options?: ImageBitmapOptions,
     ) => bitmap);
+    const context = { drawImage: vi.fn() };
+    const canvas = {
+      getContext: vi.fn(() => context),
+      height: 0,
+      width: 0,
+    } as unknown as HTMLCanvasElement;
     vi.stubGlobal("createImageBitmap", createImageBitmap);
+    vi.stubGlobal("document", { createElement: vi.fn(() => canvas) });
 
     const result = await decodeTextureWithBrowser({
       bytes,
@@ -779,13 +786,18 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal, 340);
 
     expect(createImageBitmap).toHaveBeenCalledOnce();
-    expect(createImageBitmap.mock.calls[0]![1]).toMatchObject({
-      resizeHeight: fitted.height,
-      resizeQuality: "high",
-      resizeWidth: fitted.width,
-    });
+    expect(createImageBitmap.mock.calls[0]![1]).not.toHaveProperty("resizeWidth");
+    expect(context.drawImage).toHaveBeenCalledWith(
+      bitmap,
+      0,
+      0,
+      fitted.width,
+      fitted.height,
+    );
+    expect(bitmap.close).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       height: fitted.height,
+      source: canvas,
       sourceHeight: 1024,
       sourceWidth: 2048,
       width: fitted.width,
