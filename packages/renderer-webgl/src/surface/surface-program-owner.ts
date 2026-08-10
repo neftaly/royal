@@ -102,7 +102,7 @@ export type StandardProgram = Readonly<{
   metallicRoughness: WebGLUniformLocation | null;
   metallicRoughnessCoordinates: TextureCoordinatesProgram | null;
   model: WebGLUniformLocation;
-  normalTransform: WebGLUniformLocation;
+  normalTransform: WebGLUniformLocation | null;
   normalTexture: WebGLUniformLocation | null;
   normalTextureCoordinates: TextureCoordinatesProgram | null;
   occlusion: WebGLUniformLocation | null;
@@ -342,7 +342,9 @@ const createStandardProgram = (
       ? textureCoordinatesProgram(gl, program, "metallicRoughness")
       : null,
     model: uniform(gl, program, "model"),
-    normalTransform: uniform(gl, program, "normalTransform"),
+    normalTransform: features & (SURFACE_FEATURE_VERTEX_NORMAL | SURFACE_FEATURE_TANGENT)
+      ? uniform(gl, program, "normalTransform")
+      : null,
     normalTexture: features & SURFACE_FEATURE_NORMAL_TEXTURE
       ? uniform(gl, program, "normalTexture")
       : null,

@@ -1446,7 +1446,11 @@ describe("clear-only canvas root", () => {
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
     expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(5);
-    expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(3);
+    expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "normalTransform",
+    );
 
     vi.mocked(canvas.gl.uniform4fv).mockClear();
     root.invalidate();

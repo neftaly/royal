@@ -95,6 +95,35 @@ describe("surface program ownership", () => {
     expect(fragments[1]).not.toContain("dot(normal, normal) <=");
   });
 
+  it("does not require a linker-elided normal transform for derivative normals", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getUniformLocation).mockImplementation((_, name) => (
+      name === "normalTransform" ? null : {} as WebGLUniformLocation
+    ));
+    const owner = new SurfaceProgramOwner(gl);
+
+    expect(owner.get("standard", 0, false, false, false)).toMatchObject({
+      kind: "standard",
+      normalTransform: null,
+    });
+    expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "normalTransform",
+    );
+  });
+
+  it("requires the normal transform when authored normals consume it", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceProgramOwner(gl);
+
+    owner.get("standard", SURFACE_FEATURE_VERTEX_NORMAL, false, false, false);
+
+    expect(gl.getUniformLocation).toHaveBeenCalledWith(
+      expect.anything(),
+      "normalTransform",
+    );
+  });
+
   it("synchronizes once at link and reports stage logs only on failure", () => {
     const gl = fakeGl();
     vi.mocked(gl.getProgramParameter).mockReturnValue(false);

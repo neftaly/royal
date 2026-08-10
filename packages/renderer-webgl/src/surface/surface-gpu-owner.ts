@@ -1491,7 +1491,9 @@ export class SurfaceGpuOwner {
         }
         if (transformChanged) {
           gl.uniformMatrix4fv(program.model, false, surface.model);
-          gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
+          if (program.normalTransform !== null) {
+            gl.uniformMatrix4fv(program.normalTransform, false, surface.normalTransform);
+          }
         }
         if (materialChanged) {
           gl.uniform4fv(
