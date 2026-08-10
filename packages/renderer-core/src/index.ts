@@ -133,6 +133,11 @@ export { mesh } from './mesh';
 export type { OutlineGltfNode, OutlineGltfOptions } from './outline-gltf';
 export { outlineGltf } from './outline-gltf';
 export type {
+  ScreenSpaceSegmentNode,
+  ScreenSpaceSegmentOptions,
+} from './screen-space-segment';
+export { screenSpaceSegment } from './screen-space-segment';
+export type {
   GltfInstancesPickTarget,
   GltfPickTarget,
   MeshPickTarget,

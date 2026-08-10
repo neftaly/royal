@@ -11,6 +11,7 @@ import {
   type PrefilteredEnvironmentLight,
   type Scene,
   type SceneOverlay,
+  type ScreenSpaceSegmentNode,
   type TextureAssetRef,
   type Transform,
   type VirtualTextureAssetRef,
@@ -76,6 +77,11 @@ import {
 } from "../surface/edge-overlay-scene";
 import { EdgeOverlayOwner } from "../surface/edge-overlay-owner";
 import { ScreenSpacePartitionPatternOwner } from "../surface/screen-space-partition-pattern";
+import {
+  prepareCanonicalScreenSpaceSegmentScene,
+  type CanonicalScreenSpaceSegmentScene,
+} from "../surface/screen-space-segment-scene";
+import { ScreenSpaceSegmentOwner } from "../surface/screen-space-segment-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   createCanonicalInstanceSceneUpdateWorkspace,
@@ -611,6 +617,8 @@ export class CanvasRoot implements RendererRoot {
   #overlayGpu: SurfaceGpuOwner | null = null;
   #edgeOverlay: CanonicalEdgeOverlayScene | null = null;
   #edgeOverlayGpu: EdgeOverlayOwner | null = null;
+  #segmentOverlay: CanonicalScreenSpaceSegmentScene | null = null;
+  #segmentOverlayGpu: ScreenSpaceSegmentOwner | null = null;
   #overlayInput: SceneOverlay | null = null;
   #overlayRenderObjectRefs: RenderObjectRefOwner | null = null;
   #overlayResourcesPending = false;
@@ -876,6 +884,7 @@ export class CanvasRoot implements RendererRoot {
     this.#surfaceGpu.invalidate();
     this.#overlayGpu?.invalidate();
     this.#edgeOverlayGpu?.abandon();
+    this.#segmentOverlayGpu?.abandon();
     this.#screenSpacePartitionPattern.abandon();
     this.#retainedPresentation.abandon();
     this.#worldPresentationRequired = true;
@@ -924,6 +933,13 @@ export class CanvasRoot implements RendererRoot {
           this.#clearColor,
         ) || pending;
       }
+      if (this.#segmentOverlayGpu !== null && this.#segmentOverlay !== null) {
+        this.#segmentOverlayGpu.drawViews(
+          frame.views,
+          frame.framebuffer,
+          this.#state,
+        );
+      }
       if (this.#edgeOverlayGpu !== null && this.#edgeOverlay !== null) {
         pending = this.#edgeOverlayGpu.drawViews(
           frame.views,
@@ -963,6 +979,7 @@ export class CanvasRoot implements RendererRoot {
     this.#surfaceGpu.dispose();
     this.#overlayGpu?.dispose();
     this.#edgeOverlayGpu?.dispose();
+    this.#segmentOverlayGpu?.dispose();
     this.#screenSpacePartitionPattern.dispose();
     this.#retainedPresentation.dispose();
     this.#textureAssets.dispose();
@@ -1480,6 +1497,8 @@ export class CanvasRoot implements RendererRoot {
       this.#overlayGpu?.setScene(null);
       this.#edgeOverlay = null;
       this.#edgeOverlayGpu?.setScene(null);
+      this.#segmentOverlay = null;
+      this.#segmentOverlayGpu?.setScene(null);
       this.#overlayRenderObjectRefs?.reconcile([]);
       this.#overlayResourcesPending = false;
       return;
@@ -1489,6 +1508,9 @@ export class CanvasRoot implements RendererRoot {
     );
     const outlineNodes = input.nodes.filter(
       (node): node is OutlineGltfNode => node.kind === "outline-gltf",
+    );
+    const segmentNodes = input.nodes.filter(
+      (node): node is ScreenSpaceSegmentNode => node.kind === "screen-space-segment",
     );
     const overlaySceneInput: Scene = {
       camera: baseInput.camera,
@@ -1520,6 +1542,9 @@ export class CanvasRoot implements RendererRoot {
         (node) => this.#gltfAssets.prepared(node.asset),
         baseScene.camera,
       );
+    this.#segmentOverlay = segmentNodes.length === 0
+      ? null
+      : prepareCanonicalScreenSpaceSegmentScene(segmentNodes);
     this.#installingScene = true;
     try {
       this.#reconcileOverlayRenderObjectRefs(meshNodes);
@@ -1553,6 +1578,14 @@ export class CanvasRoot implements RendererRoot {
       );
       this.#edgeOverlayGpu.setScene(this.#edgeOverlay);
     } else this.#edgeOverlayGpu?.setScene(null);
+    if (this.#segmentOverlay !== null) {
+      this.#segmentOverlayGpu ??= new ScreenSpaceSegmentOwner(
+        this.#gl,
+        this.#persistentGpuBudget,
+        this.#screenSpacePartitionPattern,
+      );
+      this.#segmentOverlayGpu.setScene(this.#segmentOverlay);
+    } else this.#segmentOverlayGpu?.setScene(null);
   }
 
   #reconcileOverlayRenderObjectRefs(nodes: readonly MeshNode[]): void {
@@ -1945,7 +1978,9 @@ export class CanvasRoot implements RendererRoot {
     const surfaceScene = this.#surfaceScene;
     const overlayScene = this.#overlayScene;
     const edgeOverlay = this.#edgeOverlay;
+    const segmentOverlay = this.#segmentOverlay;
     const hasPresentationOverlay = overlayScene !== null
+      || segmentOverlay !== null
       || (edgeOverlay?.runs.length ?? 0) > 0;
     const size = this.#size;
     const restoredWorld = !worldPresentationRequired
@@ -1962,6 +1997,7 @@ export class CanvasRoot implements RendererRoot {
       && (
         surfaceScene.surfaces.length > 0
         || (overlayScene?.surfaces.length ?? 0) > 0
+        || (segmentOverlay?.runs.length ?? 0) > 0
         || (edgeOverlay?.surfaces.length ?? 0) > 0
       )
     ) {
@@ -2002,6 +2038,15 @@ export class CanvasRoot implements RendererRoot {
             null,
             this.#state,
             this.#clearColor,
+            cssScaleX,
+            cssScaleY,
+          );
+        }
+        if (this.#segmentOverlayGpu !== null && segmentOverlay !== null) {
+          this.#segmentOverlayGpu.drawViews(
+            this.#canvasViews,
+            null,
+            this.#state,
             cssScaleX,
             cssScaleY,
           );
@@ -2064,6 +2109,7 @@ export class CanvasRoot implements RendererRoot {
       this.#surfaceGpu.invalidate();
       this.#overlayGpu?.invalidate();
       this.#edgeOverlayGpu?.abandon();
+      this.#segmentOverlayGpu?.abandon();
       this.#screenSpacePartitionPattern.abandon();
       if (this.#surfaceScene !== null) this.#reconcilePrefilteredEnvironment(this.#surfaceScene);
       this.#textureAssets.invalidateResidency();

@@ -108,12 +108,14 @@ describe('real-WebGL VAO ownership probe', () => {
     gl.bindVertexArray(vertexArray);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, {});
     gl.drawArrays(0, 0, 3);
+    gl.drawArraysInstanced(0, 0, 3, 2);
     gl.bindVertexArray(vertexArray);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, {});
     gl.bindVertexArray(null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, {});
 
     expect(snapshot()).toMatchObject({
+      arrayInstancedDraws: 1,
       defaultElementArrayPreparations: 1,
       violations: [],
     });

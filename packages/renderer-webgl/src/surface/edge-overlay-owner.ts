@@ -22,6 +22,7 @@ import {
   linkWebGlProgram,
   requiredWebGlUniform,
 } from "../webgl/program";
+import { LINEAR_TO_SRGB_GLSL } from "../webgl/shaders/presentation-functions";
 import type { WebGlStateOwner } from "../webgl/state-owner";
 import type {
   CanonicalEdgeOverlayScene,
@@ -194,6 +195,7 @@ uniform sampler2D horizontalSignal;
 uniform vec2 texelSize;
 uniform float verticalRadius;
 uniform vec4 edgeColor;
+${LINEAR_TO_SRGB_GLSL}
 out vec4 outputColor;
 void main() {
   float signal = 0.0;
@@ -217,7 +219,7 @@ void main() {
     ).r
   );
   signal = signal > 0.0 ? 1.0 : 0.0;
-  outputColor = vec4(edgeColor.rgb, edgeColor.a * signal);
+  outputColor = vec4(linearToSrgb(edgeColor.rgb), edgeColor.a * signal);
 }`;
 
 export const EDGE_PARTITION_RESOLVE_FRAGMENT_SHADER = `#version 300 es
@@ -233,6 +235,7 @@ uniform int partitionCount;
 uniform int partitionIndex;
 uniform highp usampler2D partitionPattern;
 uniform vec2 viewportOrigin;
+${LINEAR_TO_SRGB_GLSL}
 out vec4 outputColor;
 void main() {
   float signal = 0.0;
@@ -262,7 +265,7 @@ void main() {
   ).r;
   float covered = (bucket * uint(partitionCount) >> ${SCREEN_SPACE_PARTITION_BUCKET_BITS}u)
     == uint(partitionIndex) ? 1.0 : 0.0;
-  outputColor = vec4(edgeColor.rgb, edgeColor.a * signal * covered);
+  outputColor = vec4(linearToSrgb(edgeColor.rgb), edgeColor.a * signal * covered);
 }`;
 
 type MaskProgram = Readonly<{

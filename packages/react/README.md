@@ -109,8 +109,10 @@ mount or when no visible triangle is hit.
 `<Canvas overlay={sceneOverlay(...)} />` publishes non-picking world-space
 feedback independently of `scene`. Overlay-only changes do not republish the
 base scene. Direct overlay meshes use solid-color unlit or wireframe materials;
+`screenSpaceSegment(...)` provides fixed-CSS-width world-anchored guides, and
 `outlineGltf(...)` provides CSS-width boundary/crease edges while borrowing a
-matching rendered glTF occurrence's active geometry and LOD.
+matching rendered glTF occurrence's active geometry and LOD. Both presentation
+forms use `edgeMaterial(...)`.
 `useGltfAssetStatus(sourceOrAsset)` observes one exact source, version, and
 selected document scene without polling or waking for unrelated frames. Its
 `streaming`, `ready`, and `degraded` states all

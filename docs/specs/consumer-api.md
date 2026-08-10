@@ -166,6 +166,13 @@ chosen material needs them. The same descriptor is legal as visible mesh
 geometry or `pickingGeometry`, so custom exact silhouettes do not create a
 second geometry API.
 
+`screenSpaceSegment({ start, end, material })` is the single world-anchored
+guide path. `start` and `end` are distinct float32-representable world positions;
+`material` is an `edgeMaterial`, so outlines and segments share scene-linear
+color, `widthCssPixels`, and optional `screenSpacePartition` semantics. A
+segment is accepted only inside `sceneOverlay({ nodes })`; it has no transform,
+picking identity, mesh geometry, native-line-width option, or backend handle.
+
 ## React versus imperative state
 
 React owns coarse intent: which scene, asset source/version, variant, quality

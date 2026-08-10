@@ -15,6 +15,7 @@ import {
   prefilteredEnvironment,
   scene,
   sceneOverlay,
+  screenSpaceSegment,
   screenSpacePartition,
   standardMaterial,
   studioEnvironment,
@@ -1900,13 +1901,25 @@ describe("clear-only canvas root", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(emptyScene());
     root.setOverlay(sceneOverlay({
-      nodes: [mesh({
-        geometry: boxGeometry(1),
-        material: wireframeMaterial({ color: [1, 0.5, 0.1, 1] }),
-      })],
+      nodes: [
+        mesh({
+          geometry: boxGeometry(1),
+          material: wireframeMaterial({ color: [1, 0.5, 0.1, 1] }),
+        }),
+        screenSpaceSegment({
+          end: [1, 0, 0],
+          material: edgeMaterial({ color: [0.2, 0.6, 1, 1], widthCssPixels: 3 }),
+          start: [-1, 0, 0],
+        }),
+      ],
     }));
     callbacks.shift()!();
     expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawArraysInstanced).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawElements.mock.invocationCallOrder[0])
+      .toBeLessThan(canvas.gl.drawArraysInstanced.mock.invocationCallOrder[0]!);
+    canvas.gl.drawElements.mockClear();
+    canvas.gl.drawArraysInstanced.mockClear();
 
     canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     canvas.dispatchEvent(new Event("webglcontextrestored"));
@@ -1917,7 +1930,8 @@ describe("clear-only canvas root", () => {
       interruptions: 1,
       recoveries: 1,
     });
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+    expect(canvas.gl.drawElements).toHaveBeenCalledOnce();
+    expect(canvas.gl.drawArraysInstanced).toHaveBeenCalledOnce();
     expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
   });
 

@@ -11,14 +11,14 @@ import {
   validateScreenSpacePartition,
 } from './screen-space-partition';
 
-/** Screen-space boundary and crease presentation used only by glTF outlines. */
+/** Shared screen-space presentation style for glTF outlines and overlay segments. */
 export interface EdgeMaterial {
   readonly kind: 'edge';
   /** Scene-linear RGBA edge color. */
   readonly color: LinearRgba;
   /** Optional complementary view-local screen-space coverage. */
   readonly coverage?: ScreenSpacePartition;
-  /** Requested full edge width in CSS pixels. */
+  /** Requested full outline or segment width in CSS pixels. */
   readonly widthCssPixels: number;
 }
 
@@ -27,7 +27,7 @@ export interface EdgeMaterialOptions {
   readonly color: LinearRgba;
   /** Optional complementary view-local screen-space coverage. */
   readonly coverage?: ScreenSpacePartition;
-  /** Full edge width in CSS pixels, within `(0, 16]`. */
+  /** Full outline or segment width in CSS pixels, within `(0, 16]`. */
   readonly widthCssPixels: number;
 }
 
@@ -60,7 +60,7 @@ export const validateEdgeMaterial: (
   }
 };
 
-/** Creates a presentation-quality screen-space edge material. */
+/** Creates the shared presentation style for outlines and overlay segments. */
 export const edgeMaterial = (options: EdgeMaterialOptions): EdgeMaterial => {
   objectWithAllowedFields(options, EDGE_MATERIAL_FIELDS, 'edge material');
   const widthCssPixels = finiteNumber(

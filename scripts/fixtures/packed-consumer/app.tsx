@@ -29,6 +29,7 @@ import {
 import {
   clampOrbitCameraView,
   createGltfInstanceTransforms,
+  edgeMaterial,
   gltf,
   gltfAsset,
   gltfInstances,
@@ -37,6 +38,8 @@ import {
   orbitPerspectiveCamera,
   prefilteredEnvironment,
   scene,
+  sceneOverlay,
+  screenSpaceSegment,
   standardMaterial,
   triangleGeometry,
   unlitMaterial,
@@ -151,6 +154,13 @@ const renderScene: Scene = scene({
     }),
   ],
 });
+const overlay = sceneOverlay({
+  nodes: [screenSpaceSegment({
+    end: [1, 0, 0],
+    material: edgeMaterial({ color: [0.2, 0.6, 1, 1], widthCssPixels: 3 }),
+    start: [-1, 0, 0],
+  })],
+});
 
 const reportPick = (event: ScenePointerEvent): void => {
   const point: WorldPosition3 = event.hit.point;
@@ -244,6 +254,7 @@ export const App = (): ReactNode => {
         gltfResourceReader={gltfResourceReader}
         rendererOptions={rendererOptions}
         rendererRef={setRoot}
+        overlay={overlay}
         scene={renderScene}
         scenePointerEvents={scenePointerEvents}
       >
@@ -263,6 +274,7 @@ export const mountImperativeRoyal = (canvas: HTMLCanvasElement): (() => void) =>
   const root = createRendererRoot(canvas, rendererOptions, { gltfResourceReader });
   root.setSize({ cssHeight: 450, cssWidth: 800, pixelRatio: 1 });
   root.setScene(renderScene);
+  root.setOverlay(overlay);
   const controls = createOrbitControls(canvas, {
     initialView: orbit.getView(),
     onChange: orbit.setView,

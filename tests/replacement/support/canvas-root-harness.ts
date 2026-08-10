@@ -30,6 +30,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly drawElements: ReturnType<typeof vi.fn>;
   readonly drawElementsInstanced: ReturnType<typeof vi.fn>;
   readonly drawArrays: ReturnType<typeof vi.fn>;
+  readonly drawArraysInstanced: ReturnType<typeof vi.fn>;
   readonly deleteBuffer: ReturnType<typeof vi.fn>;
   readonly deleteVertexArray: ReturnType<typeof vi.fn>;
   readonly depthFunc: ReturnType<typeof vi.fn>;
@@ -185,6 +186,7 @@ export const fakeGl = (): FakeGl => ({
   drawElements: vi.fn(),
   drawElementsInstanced: vi.fn(),
   drawArrays: vi.fn(),
+  drawArraysInstanced: vi.fn(),
   enable: vi.fn(),
   enableVertexAttribArray: vi.fn(),
   frontFace: vi.fn(),

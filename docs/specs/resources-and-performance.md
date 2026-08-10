@@ -323,6 +323,19 @@ draws. Fewer than two visible compatible occurrences, optional batch-resource
 denial, or batch-program setup failure uses the same ordered ordinary mask
 draws; those are correctness fallbacks, not hidden quality tiers.
 
+Screen-space overlay segments retain one packed start/end float32 buffer per
+root and one vertex array per consecutive material run. Overlay replacement may
+replace that buffer; camera motion, stereo views, repeated invalidation, and
+unchanged endpoint presentation do not upload endpoint or expanded geometry.
+Expansion is view-local shader work, so DPR and perspective changes do not
+create another CPU geometry path.
+
+A measured dynamic-import split for the segment owner was rejected. It reduced
+the ordinary initial graph by about 1.0 kB gzip but increased complete deployed
+JavaScript from about 281.7 to 283.0 kB gzip and delayed the first guide by an
+extra frame. Probability uses this path, so the smaller complete static graph
+is the accepted representation.
+
 Lit fragment programs specialize their bounded directional and punctual light
 array sizes to the canonical scene counts. Absent lights compile out, static
 loops contain no runtime count branch, and the imperative shell uploads only

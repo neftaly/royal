@@ -149,6 +149,8 @@ describe("edge-overlay batch ownership", () => {
       34,
     );
     expect(gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
+    expect(gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes("linearToSrgb(edgeColor.rgb)"))).toBe(true);
     expect(gl.invalidateFramebuffer).toHaveBeenCalledTimes(2);
     expect(gl.invalidateFramebuffer).toHaveBeenNthCalledWith(
       1,

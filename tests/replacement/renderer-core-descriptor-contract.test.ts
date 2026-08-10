@@ -18,6 +18,7 @@ import {
   prefilteredEnvironment,
   scene,
   sceneOverlay,
+  screenSpaceSegment,
   screenSpacePartition,
   solidTexture,
   spotLight,
@@ -325,6 +326,63 @@ describe("renderer-core descriptor contract", () => {
       sourceTransform: { offset: [1, 2, 3] },
       src: "/piece.glb",
     } as never)).toThrow(/unsupported option/);
+  });
+
+  it("builds a copied world-anchored screen-space segment", () => {
+    const start = [0, 1, 2] as const;
+    const end = [3, 4, 5] as const;
+    const material = edgeMaterial({
+      color: [0.2, 0.6, 1, 0.75],
+      widthCssPixels: 3,
+    });
+    const node = screenSpaceSegment({ end, material, start });
+
+    expect(node).toEqual({
+      end: [3, 4, 5],
+      kind: "screen-space-segment",
+      material,
+      start: [0, 1, 2],
+    });
+    expect(node.start).not.toBe(start);
+    expect(node.end).not.toBe(end);
+    expect(sceneOverlay({ nodes: [node] }).nodes).toEqual([node]);
+    expect(() => screenSpaceSegment({
+      end: [0, 1, 2],
+      material,
+      start: [0, 1, 2],
+    })).toThrow(/endpoints must be distinct/);
+    expect(() => screenSpaceSegment({
+      end: [1 + Number.EPSILON, 1, 2],
+      material,
+      start: [1, 1, 2],
+    })).toThrow(/endpoints must be distinct/);
+    expect(() => screenSpaceSegment({
+      end,
+      material,
+      start: [Number.MAX_VALUE, 1, 2],
+    })).toThrow(/cannot be represented as a finite float/);
+    expect(() => screenSpaceSegment({
+      end: [3, 4, Number.NaN],
+      material,
+      start,
+    })).toThrow(/end\[2\].*finite/);
+    expect(() => screenSpaceSegment({
+      end,
+      material: unlitMaterial({ color: [1, 1, 1, 1] }) as never,
+      start,
+    })).toThrow(/edge material/);
+    expect(() => screenSpaceSegment({
+      end,
+      material,
+      start,
+      transform: { position: [1, 2, 3] },
+    } as never)).toThrow(/unsupported option/);
+    expect(() => sceneOverlay({
+      nodes: [{ kind: "screen-space-segment" } as never],
+    })).toThrow(/start must be an array/);
+    expect(() => sceneOverlay({
+      nodes: [{ ...node, material: { ...material, widthCssPixels: 0 } }],
+    })).toThrow(/widthCssPixels must be within/);
   });
 
   it("does not share mutable default tuples between descriptors", () => {

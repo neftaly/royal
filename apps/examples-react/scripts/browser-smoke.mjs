@@ -82,6 +82,7 @@ const smokeExpectations = {
     minPaintedRatio: 0.01,
   },
   wireframe: {
+    minimumArrayInstancedDraws: 1,
     minPaintedRatio: 0.003,
   },
   picking: {
@@ -691,6 +692,16 @@ const assertRoute = (expected, state) => {
         `canvas color buckets ${sample.colorBuckets} < ${expected.minColorBuckets}`,
       );
     }
+  }
+
+  if (
+    expected.minimumArrayInstancedDraws !== undefined
+    && (state.vaoOwnership?.arrayInstancedDraws ?? 0) < expected.minimumArrayInstancedDraws
+  ) {
+    failures.push(
+      `real WebGL array-instanced draws ${state.vaoOwnership?.arrayInstancedDraws ?? 0}`
+      + ` < ${expected.minimumArrayInstancedDraws}`,
+    );
   }
 
   if (expected.id === 'picking') {

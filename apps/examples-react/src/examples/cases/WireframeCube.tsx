@@ -1,8 +1,11 @@
 import {
   boxGeometry,
+  edgeMaterial,
   linearRgbaFromSrgb,
   mesh,
   scene,
+  sceneOverlay,
+  screenSpaceSegment,
   type EulerRads,
   type RenderObjectHandle,
   wireframeMaterial,
@@ -24,6 +27,16 @@ import { useAnimationFrame } from '../use-animation-frame';
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
   color: linearRgbaFromSrgb([0.38, 0.85, 0.95, 1]),
+});
+const guideMaterial = edgeMaterial({
+  color: linearRgbaFromSrgb([0.95, 0.48, 0.12, 0.82]),
+  widthCssPixels: 3,
+});
+const cubeGuides = sceneOverlay({
+  nodes: [
+    screenSpaceSegment({ end: [1.65, -1.55, 0], material: guideMaterial, start: [-1.65, -1.55, 0] }),
+    screenSpaceSegment({ end: [-1.55, 1.65, 0], material: guideMaterial, start: [-1.55, -1.65, 0] }),
+  ],
 });
 
 const SpinController = ({
@@ -59,7 +72,12 @@ export const WireframeCube = (): ReactNode => {
   }), [orbit.camera]);
 
   return (
-    <Canvas aria-label="Wireframe cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>
+    <Canvas
+      aria-label="Wireframe cube"
+      overlay={cubeGuides}
+      rendererOptions={exampleCanvasRendererOptions}
+      scene={renderScene}
+    >
       <BenchmarkRendererSnapshot />
       <SpinController meshRef={meshRef} />
       <OrbitControls orbit={orbit} />

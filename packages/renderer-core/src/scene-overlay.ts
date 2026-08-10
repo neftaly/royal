@@ -1,8 +1,12 @@
 import { objectWithAllowedFields } from './descriptor-values';
 import type { MeshNode } from './mesh';
 import type { OutlineGltfNode } from './outline-gltf';
+import {
+  validateScreenSpaceSegment,
+  type ScreenSpaceSegmentNode,
+} from './screen-space-segment';
 
-export type SceneOverlayNode = MeshNode | OutlineGltfNode;
+export type SceneOverlayNode = MeshNode | OutlineGltfNode | ScreenSpaceSegmentNode;
 
 /** Independently replaceable, non-picking world geometry presented above the scene. */
 export interface SceneOverlay {
@@ -11,7 +15,7 @@ export interface SceneOverlay {
 }
 
 export interface SceneOverlayOptions {
-  /** Ordered world-space presentation nodes which never participate in picking. */
+  /** World-space presentation nodes; authored order is retained within each node kind. */
   readonly nodes: readonly SceneOverlayNode[];
 }
 
@@ -25,7 +29,9 @@ export const sceneOverlay = (options: SceneOverlayOptions): SceneOverlay => {
   }
   const nodes = options.nodes.map((node, index) => {
     if (typeof node !== 'object' || node === null) {
-      throw new TypeError(`scene overlay nodes[${index}] must be a mesh or outline glTF`);
+      throw new TypeError(
+        `scene overlay nodes[${index}] must be a mesh, screen-space segment, or outline glTF`,
+      );
     }
     if (node.kind === 'outline-gltf') {
       if (node.material.kind !== 'edge') {
@@ -33,8 +39,14 @@ export const sceneOverlay = (options: SceneOverlayOptions): SceneOverlay => {
       }
       return node;
     }
+    if (node.kind === 'screen-space-segment') {
+      validateScreenSpaceSegment(node, `scene overlay nodes[${index}]`);
+      return node;
+    }
     if (node.kind !== 'mesh') {
-      throw new TypeError(`scene overlay nodes[${index}] must be a mesh or outline glTF`);
+      throw new TypeError(
+        `scene overlay nodes[${index}] must be a mesh, screen-space segment, or outline glTF`,
+      );
     }
     if (node.material.kind === 'standard') {
       throw new TypeError(`scene overlay nodes[${index}] must use an unlit or wireframe material`);

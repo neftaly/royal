@@ -3,6 +3,41 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.17 - 2026-08-11
+
+### Correctness and contracts
+
+- Accept linker-elided `normalTransform` uniforms for standard geometry without
+  authored normals. The derivative-normal shader no longer fails on Firefox or
+  WebKit, and avoids an inert matrix upload on every such draw.
+- Add `screenSpaceSegment({ start, end, material })` as the single
+  world-anchored fixed-CSS-width guide primitive inside `SceneOverlay`. It
+  reuses `edgeMaterial` color, width, and complementary coverage semantics.
+- Encode scene-linear edge and segment RGB at the sRGB presentation boundary.
+  Outline colors previously wrote raw linear components into the display
+  buffer while direct unlit overlays applied the documented encoding.
+
+### Architecture and performance
+
+- Retain segment endpoints in one root-budgeted float32 buffer, batch
+  consecutive equal styles through instanced draws, and expand per view in the
+  vertex shader. Endpoint replacement does not republish the world; unchanged
+  frames upload no segment geometry; scenes without segments construct no
+  segment pipeline.
+- Make the overlay kind-lane order explicit: direct meshes, then segments, then
+  outline postprocessing, with relative authored order retained within each
+  kind.
+
+### Verification
+
+- Exercise no-normal standard geometry in real Chromium, Firefox, and WebKit.
+- Render 4-CSS-pixel guides at different perspective depths in all three
+  engines. Their solid centers encode `[0.2, 0.6, 0.9]` to the identical
+  `rgb(124, 203, 243)`, plus focused descriptor, batching, DPR/coverage,
+  unchanged-frame, packed-consumer, and context-restoration tests. The examples
+  browser smoke also requires a segment's instanced draw on a real WebGL2
+  context instead of accepting a mock-only implementation.
+
 ## 0.0.16 - 2026-08-11
 
 ### Correctness and contracts

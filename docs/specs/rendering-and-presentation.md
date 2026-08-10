@@ -264,12 +264,13 @@ phase begins at that view's viewport origin. The result is stable within a
 view, not a world-space pattern or a promise that left and right eye fragments
 select the same cells.
 
-Partitioned unlit fragments outside their selected cells are discarded, which
-preserves ordinary depth semantics for the selected coverage. Partitioned edge
-resolve writes zero alpha outside selected cells because that full-screen
-resolve does not own scene depth. A one-way partition is visually equivalent
-to full coverage. Picking deliberately ignores this presentation-only
-partition and continues to query exact authored geometry.
+Partitioned unlit and screen-space segment fragments outside their selected
+cells are discarded, which preserves ordinary raster ownership for the
+selected coverage. Partitioned edge resolve writes zero alpha outside selected
+cells because that full-screen resolve does not own scene depth. A one-way
+partition is visually equivalent to full coverage. Picking deliberately
+ignores this presentation-only partition and continues to query exact authored
+geometry.
 
 The renderer owns one deterministic, lazily allocated R16UI pattern per root
 and shares it across world and overlay presentation. A scene with no
@@ -280,12 +281,27 @@ comfort guarantees; those require separate physical-device evidence.
 ## Always-visible scene overlays
 
 `SceneOverlay` is one independently replaceable, presentation-only lane after
-the ordinary world. It disables depth testing and depth writes, preserves
-authored overlay order and normal color management, creates no picking
-surface, and does not contribute to world depth, transmission input, or depth
-prepasses. Direct overlay meshes are limited to solid-color unlit or wireframe
-materials. The API does not expose arbitrary draw order or raw WebGL depth
-state.
+the ordinary world. It disables depth testing and depth writes, uses normal
+color management, creates no picking surface, and does not contribute to world
+depth, transmission input, or depth prepasses. Direct meshes retain their
+relative authored order, followed by screen-space segments in their relative
+authored order, followed by outline resolves in their relative authored order.
+This kind-lane order is explicit because an outline is a screen-space
+postprocess and cannot interleave with direct draws. Direct overlay meshes are
+limited to solid-color unlit or wireframe materials. The API does not expose
+arbitrary draw order or raw WebGL depth state.
+
+`screenSpaceSegment(...)` presents distinct world-space `start` and `end`
+positions with square caps and the supplied `edgeMaterial`. Its width is in CSS
+pixels on canvas and presentation pixels in each external/XR view, independent
+of DPR, perspective, and endpoint depth. Homogeneous near-plane clipping occurs
+before screen-space expansion; a segment wholly behind the near plane emits no
+fragments. Segment and outline RGB both use the same scene-linear-to-sRGB
+presentation encoding as direct unlit overlays. Consecutive equal materials
+batch as instanced draws over one
+root-budgeted retained float32 endpoint buffer. Replacing segment endpoints
+rebuilds only that overlay buffer; ordinary frames upload nothing, and a scene
+without segments creates no segment program, buffer, or vertex array.
 
 `outlineGltf(...)` is the accepted glTF overlay form. It requires an
 `edgeMaterial`, reuses a currently rendered occurrence's prepared selected

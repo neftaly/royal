@@ -155,6 +155,7 @@ describe("replacement React public API", () => {
       "scene",
       "sceneOverlay",
       "screenSpacePartition",
+      "screenSpaceSegment",
       "solidTexture",
       "spotLight",
       "standardMaterial",

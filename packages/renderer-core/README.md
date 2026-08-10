@@ -94,8 +94,10 @@ exactly once. Coverage affects presentation only: it does not change picking.
 It is intentionally unavailable on standard and wireframe materials.
 
 `sceneOverlay({ nodes })` creates a non-picking, always-visible presentation
-lane. It accepts solid-color unlit/wireframe meshes and `outlineGltf(...)`
-nodes with `edgeMaterial(...)`. An outline borrows a matching rendered glTF
+lane. It accepts solid-color unlit/wireframe meshes,
+`screenSpaceSegment({ start, end, material })` guides, and `outlineGltf(...)`
+nodes. Segments and outlines share `edgeMaterial(...)` scene-linear color,
+CSS-pixel width, and optional complementary coverage. An outline borrows a matching rendered glTF
 occurrence's selected scene, active LOD, instances, and GPU geometry. Use
 `sourceTransform` to identify a stationary source occurrence while
 `transform` places a displaced preview. Coincident equivalent occurrences may
