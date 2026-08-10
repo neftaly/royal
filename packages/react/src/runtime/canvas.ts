@@ -9,6 +9,7 @@ import {
 } from "@royal/renderer-core";
 import {
   createRendererRoot,
+  RendererContextCreationError,
   resolveRendererRootOptions,
   type RendererRootOptions,
   type ResolvedRendererRootOptions,
@@ -94,6 +95,48 @@ type CanvasAttachment = Readonly<{
 
 const EMPTY_RUNTIME: CanvasRuntime = { canvas: null, error: null, root: null };
 const EMPTY_GLTF_ASSET_CLAIMS: readonly GltfAssetRef[] = [];
+
+/** @internal Owns the listener gap around one renderer-root creation attempt. */
+export const createCanvasRootRecovery = (
+  canvas: HTMLCanvasElement,
+  retry: () => void,
+): Readonly<{ release(): void; waitForRestore(): void }> => {
+  let armed = false;
+  let interrupted = false;
+  let restored = false;
+  const retryAfterRestoration = (): void => {
+    if (!armed || !restored) return;
+    armed = false;
+    restored = false;
+    retry();
+  };
+  const onContextLost = (event: Event): void => {
+    event.preventDefault();
+    interrupted = true;
+    restored = false;
+  };
+  const onContextRestored = (): void => {
+    if (!interrupted) return;
+    interrupted = false;
+    restored = true;
+    retryAfterRestoration();
+  };
+  canvas.addEventListener("webglcontextlost", onContextLost);
+  canvas.addEventListener("webglcontextrestored", onContextRestored);
+  return {
+    release: () => {
+      armed = false;
+      interrupted = false;
+      restored = false;
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
+    },
+    waitForRestore: () => {
+      armed = true;
+      retryAfterRestoration();
+    },
+  };
+};
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
@@ -250,6 +293,7 @@ export const Canvas = ({
   const activeAttachment = attachment?.optionsKey === optionsKey ? attachment : null;
   const canvas = activeAttachment?.canvas ?? null;
   const [runtime, setRuntime] = useState<CanvasRuntime>(EMPTY_RUNTIME);
+  const [creationAttempt, setCreationAttempt] = useState(0);
   const liveRootRef = useRef<RendererRoot | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pointerInteractionStateRef] = useState<CanvasPointerInteractionStateRef>(() => ({
@@ -282,6 +326,10 @@ export const Canvas = ({
   useLayoutEffect(() => {
     if (activeAttachment === null) return undefined;
     const { canvas: ownedCanvas, gltfResourceReader: reader, options } = activeAttachment;
+    const recovery = createCanvasRootRecovery(
+      ownedCanvas,
+      () => setCreationAttempt((attempt) => attempt + 1),
+    );
     let root: RendererRoot;
     try {
       root = createRendererRoot(
@@ -290,16 +338,26 @@ export const Canvas = ({
         reader === undefined ? {} : { gltfResourceReader: reader },
       );
     } catch (error) {
+      if (
+        error instanceof RendererContextCreationError
+        && error.reason === "context-lost"
+      ) {
+        recovery.waitForRestore();
+        setRuntime({ canvas: ownedCanvas, error: null, root: null });
+        return recovery.release;
+      }
+      recovery.release();
       setRuntime({ canvas: ownedCanvas, error, root: null });
       return undefined;
     }
+    recovery.release();
     liveRootRef.current = root;
     setRuntime({ canvas: ownedCanvas, error: null, root });
     return () => {
       if (liveRootRef.current === root) liveRootRef.current = null;
       root.dispose();
     };
-  }, [activeAttachment]);
+  }, [activeAttachment, creationAttempt]);
 
   const activeRuntime = activeCanvasRuntime(runtime, canvas);
   const activeRoot = selectOwnedCanvasRoot(

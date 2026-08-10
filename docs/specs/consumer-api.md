@@ -438,6 +438,14 @@ additional capability-driven `renderScale`.
 fully explicit immutable values. It is intended for host wrappers that need to
 compare or report effective policy without reconstructing Royal's defaults.
 
+Imperative construction distinguishes browser refusal from an already or
+concurrently lost context with `RendererContextCreationError.reason`:
+`"unavailable"` or `"context-lost"`. The error is exported by both renderer and
+React runtime entrypoints. React `Canvas` handles only the latter internally by
+waiting for restoration and retrying on the same canvas; every other creation
+error reaches the existing React error boundary. No timer, replacement-canvas,
+visibility, or page-lifecycle retry policy is implicit.
+
 Creation options and dependencies are immutable for a root. In React,
 `Canvas` accepts the reader directly as `gltfResourceReader`; changing its
 identity replaces the root, while changing `scene` does not. Applications

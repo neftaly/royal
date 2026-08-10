@@ -128,6 +128,13 @@ path.
 
 ## Context loss and restoration
 
+The root MUST install its loss and restoration listeners before requesting the
+WebGL2 context. A null context request is an `unavailable` creation failure; a
+context that is already lost, becomes lost while capabilities are read, or
+cannot report its loss state is a `context-lost` creation failure. Construction
+is one transaction: failure releases every successfully created owner in reverse
+order and removes both listeners before the error escapes.
+
 On `webglcontextlost`, Royal MUST prevent browser default teardown behavior as
 required for restoration, stop GL submission, cancel or quarantine
 generation-bound uploads, and publish lifecycle state. CPU content MAY remain
@@ -140,6 +147,14 @@ NOT rely on a stale frame packet or wait for an unrelated app mutation.
 
 Resources that failed to delete before loss may remain diagnostically charged
 as quarantine debt until context recreation, but MUST never be reused.
+
+React `Canvas` treats only `context-lost` creation failures as recoverable. It
+keeps the same canvas element, waits for that element's actual
+`webglcontextrestored` event, and makes one new root attempt per restoration.
+It MUST NOT poll, retry on a timer, replace the canvas, or hide other creation
+failures. Once construction succeeds, the root is the sole context-lifecycle
+owner. Royal does not force context loss on `pagehide`; browser and application
+lifecycle policy remains outside the renderer.
 
 ## React mount behavior
 

@@ -104,6 +104,7 @@ describe("replacement React public API", () => {
       "Canvas",
       "GltfOrbitCameraFit",
       "OrbitControls",
+      "RendererContextCreationError",
       "createOrbitCameraController",
       "createOrbitControls",
       "createRendererRoot",
@@ -171,6 +172,7 @@ describe("replacement React public API", () => {
       "useXrSession",
     ]);
     expect(Object.keys(webglApi).sort()).toEqual([
+      "RendererContextCreationError",
       "createRendererRoot",
       "resolveRendererRootOptions",
     ]);

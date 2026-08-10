@@ -1,7 +1,11 @@
-export { createRendererRoot } from "./runtime/canvas-root";
+export {
+  createRendererRoot,
+  RendererContextCreationError,
+} from "./runtime/canvas-root";
 export { resolveRendererRootOptions } from "./runtime/root-options";
 export type {
   RendererContextSnapshot,
+  RendererContextCreationFailure,
   RendererResourceSnapshot,
   RendererRootOptions,
   RendererRootSnapshot,

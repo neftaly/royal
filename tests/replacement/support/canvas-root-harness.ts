@@ -36,6 +36,7 @@ export type FakeGl = WebGL2RenderingContext & {
   readonly frontFace: ReturnType<typeof vi.fn>;
   readonly getProgramParameter: ReturnType<typeof vi.fn>;
   readonly invalidateFramebuffer: ReturnType<typeof vi.fn>;
+  readonly isContextLost: ReturnType<typeof vi.fn<() => boolean>>;
   readonly scissor: ReturnType<typeof vi.fn>;
   readonly shaderSource: ReturnType<typeof vi.fn>;
   readonly texImage2D: ReturnType<typeof vi.fn>;
@@ -201,6 +202,7 @@ export const fakeGl = (): FakeGl => ({
   getExtension: vi.fn(() => null),
   getUniformLocation: vi.fn(() => ({})),
   invalidateFramebuffer: vi.fn(),
+  isContextLost: vi.fn(() => false),
   linkProgram: vi.fn(),
   pixelStorei: vi.fn(),
   samplerParameteri: vi.fn(),

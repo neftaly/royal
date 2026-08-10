@@ -1,7 +1,7 @@
 {
   "name": "@royal/examples-react",
   "private": true,
-  "version": "0.0.14",
+  "version": "0.0.15",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -25,7 +25,8 @@
     "test": "pnpm exec vitest run --config vite.config.ts src/example-contract.test.ts src/examples/BenchmarkRendererSnapshot.test.ts",
     "test:browser": "pnpm run build && node scripts/browser-smoke.mjs",
     "test:browser:cdp": "EXAMPLES_SMOKE_BROWSER=cdp EXAMPLES_SMOKE_PREVIEW=0 node scripts/browser-smoke.mjs",
-    "test:browser:context-loss": "EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=cube pnpm run test:browser"
+    "test:browser:context-loss": "EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=cube pnpm run test:browser",
+    "test:browser:creation-context-loss": "EXAMPLES_SMOKE_CREATION_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=cube pnpm run test:browser"
   },
   "dependencies": {
     "@royal/react": "workspace:*",

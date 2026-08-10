@@ -94,6 +94,12 @@ jobs:
           EXAMPLES_SMOKE_ROUTE: cube
         run: node apps/examples-react/scripts/browser-smoke.mjs
 
+      - name: Browser creation-time context loss and restoration
+        env:
+          EXAMPLES_SMOKE_CREATION_CONTEXT_LOSS: "1"
+          EXAMPLES_SMOKE_ROUTE: cube
+        run: node apps/examples-react/scripts/browser-smoke.mjs
+
       - name: Build examples for GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:

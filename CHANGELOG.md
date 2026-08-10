@@ -3,7 +3,32 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## Unreleased
+## 0.0.15 - 2026-08-10
+
+### Correctness and contracts
+
+- Distinguish unavailable WebGL2 creation from a context already or concurrently
+  lost through the public `RendererContextCreationError` reason.
+- Install lifecycle listeners before the context request and make root
+  construction transactional, with reverse-order rollback for completed owners
+  and complete listener cleanup when any construction stage fails.
+- Recover React `Canvas` from creation-time context loss only after the browser's
+  matching restoration event, on the same canvas and without timer retries or a
+  renderer-owned page-lifecycle policy.
+
+### Verification
+
+- Cover pre-existing loss, loss during capability reads, late-construction
+  rollback, recovery-listener cleanup, and non-loss error propagation with
+  focused tests.
+- Force a real WebGL context loss inside the first browser `getContext` call and
+  verify one restoration, a second construction attempt, the identical sole
+  canvas, and a rendered scene.
+- Complete 912 tests across 121 files, typecheck, warning-free lint, production
+  builds, package entrypoint and packed-consumer checks, and bundle-size gates.
+  Lazy chunks and the worker remain unchanged while the release measures
+  136,261 initial, 279,916 deployed, and 220,608 Royal-only gzip bytes; the
+  packed renderer is 642,609 bytes.
 
 ## 0.0.14 - 2026-08-10
 

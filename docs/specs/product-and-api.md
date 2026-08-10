@@ -68,7 +68,10 @@ bulk instance ranges, without forcing a React render.
 
 `Canvas` owns exactly one renderer root for its attached canvas. Changing a
 creation option MAY replace that root; changing scene intent MUST NOT recreate
-it. Children are controls and observers, not renderable JSX nodes.
+it. A context lost during root creation keeps that canvas generation and retries
+only after its matching restoration event; it MUST NOT create a replacement
+canvas or retry loop. Children are controls and observers, not renderable JSX
+nodes.
 
 ## Descriptor contract
 

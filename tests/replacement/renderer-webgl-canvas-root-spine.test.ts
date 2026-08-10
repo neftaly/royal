@@ -27,6 +27,7 @@ import {
 import { resolveCanvasSize } from "../../packages/renderer-webgl/src/frame/canvas-size";
 import {
   CanvasRoot,
+  RendererContextCreationError,
   type CanvasRootPlatform,
 } from "../../packages/renderer-webgl/src/runtime/canvas-root";
 import {
@@ -40,6 +41,9 @@ import {
   FakeCanvas,
 } from "./support/canvas-root-harness";
 import { SurfaceGpuOwner } from "../../packages/renderer-webgl/src/surface/surface-gpu-owner";
+import { AsyncPreparationOwner } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
+import { FrameClockOwner } from "../../packages/renderer-webgl/src/frame/frame-clock-owner";
+import { TextureAssetOwner } from "../../packages/renderer-webgl/src/texture/asset-owner";
 
 describe("canvas size selection", () => {
   it("preserves aspect while fitting the capability ceiling", () => {
@@ -75,6 +79,117 @@ describe("canvas size selection", () => {
 });
 
 describe("clear-only canvas root", () => {
+  it("distinguishes unavailable and already-lost creation contexts", () => {
+    class UnavailableCanvas extends FakeCanvas {
+      override getContext(): WebGL2RenderingContext | null {
+        return null;
+      }
+    }
+    const unavailableCanvas = new UnavailableCanvas();
+    expect(() => new CanvasRoot(unavailableCanvas as unknown as HTMLCanvasElement))
+      .toThrowError(expect.objectContaining({
+        message: "Royal renderer could not create a WebGL2 context",
+        reason: "unavailable",
+      }));
+    const unavailableLoss = new Event("webglcontextlost", { cancelable: true });
+    unavailableCanvas.dispatchEvent(unavailableLoss);
+    expect(unavailableLoss.defaultPrevented).toBe(false);
+
+    class LostCanvas extends FakeCanvas {
+      lossPrevented = false;
+
+      override getContext(
+        kind: string,
+        attributes?: WebGLContextAttributes,
+      ): WebGL2RenderingContext | null {
+        this.gl.isContextLost.mockReturnValue(true);
+        const lost = new Event("webglcontextlost", { cancelable: true });
+        this.dispatchEvent(lost);
+        this.lossPrevented = lost.defaultPrevented;
+        return super.getContext(kind, attributes);
+      }
+    }
+    const lostCanvas = new LostCanvas();
+    expect(() => new CanvasRoot(lostCanvas as unknown as HTMLCanvasElement))
+      .toThrowError(expect.objectContaining({
+        message: "Royal renderer received a lost WebGL2 context during creation",
+        reason: "context-lost",
+      }));
+    expect(lostCanvas.lossPrevented).toBe(true);
+    const releasedLoss = new Event("webglcontextlost", { cancelable: true });
+    lostCanvas.dispatchEvent(releasedLoss);
+    expect(releasedLoss.defaultPrevented).toBe(false);
+  });
+
+  it("removes a registered loss listener when restoration-listener setup fails", () => {
+    const canvas = new FakeCanvas();
+    vi.spyOn(canvas, "addEventListener").mockImplementation((type, listener, options) => {
+      if (type === "webglcontextrestored") throw new Error("listener setup failed");
+      EventTarget.prototype.addEventListener.call(canvas, type, listener, options);
+    });
+
+    expect(() => new CanvasRoot(canvas as unknown as HTMLCanvasElement))
+      .toThrow("listener setup failed");
+    const loss = new Event("webglcontextlost", { cancelable: true });
+    canvas.dispatchEvent(loss);
+    expect(loss.defaultPrevented).toBe(false);
+  });
+
+  it("reports capability failure caused by construction-time loss as context loss", () => {
+    const canvas = new FakeCanvas();
+    vi.mocked(canvas.gl.getParameter).mockImplementation((parameter: number) => {
+      if (parameter !== canvas.gl.MAX_VIEWPORT_DIMS) return 4096;
+      canvas.gl.isContextLost.mockReturnValue(true);
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      return new Int32Array();
+    });
+
+    expect(() => new CanvasRoot(canvas as unknown as HTMLCanvasElement))
+      .toThrowError(expect.objectContaining({
+        message: "Royal renderer received a lost WebGL2 context during creation",
+        reason: "context-lost",
+      }));
+  });
+
+  it("treats a failed context-loss probe as an unusable creation context", () => {
+    const canvas = new FakeCanvas();
+    canvas.gl.isContextLost.mockImplementation(() => {
+      throw new Error("context status unavailable");
+    });
+
+    expect(() => new CanvasRoot(canvas as unknown as HTMLCanvasElement))
+      .toThrowError(expect.objectContaining({ reason: "context-lost" }));
+  });
+
+  it("rolls back early, GPU, asset, and scheduler owners after late creation loss", () => {
+    const canvas = new FakeCanvas();
+    let contextChecks = 0;
+    canvas.gl.isContextLost.mockImplementation(() => {
+      contextChecks += 1;
+      return contextChecks >= 3;
+    });
+    const asyncDispose = vi.spyOn(AsyncPreparationOwner.prototype, "dispose");
+    const surfaceDispose = vi.spyOn(SurfaceGpuOwner.prototype, "dispose");
+    const textureDispose = vi.spyOn(TextureAssetOwner.prototype, "dispose");
+    const clockDispose = vi.spyOn(FrameClockOwner.prototype, "dispose");
+    try {
+      expect(() => new CanvasRoot(canvas as unknown as HTMLCanvasElement))
+        .toThrowError(RendererContextCreationError);
+      expect(asyncDispose).toHaveBeenCalledOnce();
+      expect(surfaceDispose).toHaveBeenCalledOnce();
+      expect(textureDispose).toHaveBeenCalledOnce();
+      expect(clockDispose).toHaveBeenCalledOnce();
+      const releasedLoss = new Event("webglcontextlost", { cancelable: true });
+      canvas.dispatchEvent(releasedLoss);
+      expect(releasedLoss.defaultPrevented).toBe(false);
+    } finally {
+      asyncDispose.mockRestore();
+      surfaceDispose.mockRestore();
+      textureDispose.mockRestore();
+      clockDispose.mockRestore();
+    }
+  });
+
   it("reports immutable VT policy before the lazy runtime exists", () => {
     const { root } = harness({ frameUploadByteBudget: 12_345 }, {}, {
       automaticVirtualTexturing: true,

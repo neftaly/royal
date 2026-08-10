@@ -69,6 +69,7 @@ export type {
 } from "./orbit/controls";
 export {
   createRendererRoot,
+  RendererContextCreationError,
   resolveRendererRootOptions,
 } from "@royal/renderer-webgl";
 export type {
@@ -84,6 +85,7 @@ export type {
   GltfJsonValue,
   GltfTextureProgress,
   RendererContextSnapshot,
+  RendererContextCreationFailure,
   RendererResourceSnapshot,
   RendererRootOptions,
   RendererRootSnapshot,

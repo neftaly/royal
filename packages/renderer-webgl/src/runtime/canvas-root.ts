@@ -455,6 +455,69 @@ const readSizeLimits = (gl: WebGL2RenderingContext): CanvasSizeLimits => {
   };
 };
 
+export type RendererContextCreationFailure = "context-lost" | "unavailable";
+
+/** A WebGL creation failure whose cause is distinct from invalid capabilities. */
+export class RendererContextCreationError extends Error {
+  readonly reason: RendererContextCreationFailure;
+
+  constructor(reason: RendererContextCreationFailure, options?: ErrorOptions) {
+    super(
+      reason === "context-lost"
+        ? "Royal renderer received a lost WebGL2 context during creation"
+        : "Royal renderer could not create a WebGL2 context",
+      options,
+    );
+    this.name = "RendererContextCreationError";
+    this.reason = reason;
+  }
+}
+
+const contextIsLost = (gl: WebGL2RenderingContext): boolean => {
+  try {
+    return gl.isContextLost();
+  } catch {
+    return true;
+  }
+};
+
+class RootConstructionScope {
+  readonly #onCleanupError: (error: unknown) => void;
+  readonly #releases: Array<() => void> = [];
+
+  constructor(onCleanupError: (error: unknown) => void) {
+    this.#onCleanupError = onCleanupError;
+  }
+
+  defer(release: () => void): void {
+    this.#releases.push(release);
+  }
+
+  own<Owner extends { dispose(): void }>(owner: Owner): Owner {
+    this.defer(() => owner.dispose());
+    return owner;
+  }
+
+  complete(): void {
+    this.#releases.length = 0;
+  }
+
+  rollback(): void {
+    for (let index = this.#releases.length - 1; index >= 0; index -= 1) {
+      try {
+        this.#releases[index]!();
+      } catch (error) {
+        try {
+          this.#onCleanupError(error);
+        } catch {
+          // Construction rollback cannot depend on a diagnostic sink.
+        }
+      }
+    }
+    this.#releases.length = 0;
+  }
+}
+
 const createContext = (
   canvas: HTMLCanvasElement,
   options: ResolvedRendererRootOptions,
@@ -465,7 +528,7 @@ const createContext = (
     depth: true,
     stencil: false,
   });
-  if (gl === null) throw new Error("Royal renderer could not create a WebGL2 context");
+  if (gl === null) throw new RendererContextCreationError("unavailable");
   return gl;
 };
 
@@ -508,6 +571,8 @@ export class CanvasRoot implements RendererRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #cameraSource: CameraSourceOwner;
   readonly #clock: FrameClockOwner;
+  #constructionComplete = false;
+  #constructionInterrupted = false;
   readonly #context: ContextLifecycleOwner;
   readonly #discardDefaultDepthAttachment: number[];
   readonly #environmentAssets: PrefilteredEnvironmentAssetOwner;
@@ -550,8 +615,20 @@ export class CanvasRoot implements RendererRoot {
   #overlayRenderObjectRefs: RenderObjectRefOwner | null = null;
   #overlayResourcesPending = false;
   #overlayScene: CanonicalSurfaceScene | null = null;
-  readonly #onContextLost: (event: Event) => void;
-  readonly #onContextRestored: () => void;
+  readonly #onContextLost = (event: Event): void => {
+    event.preventDefault();
+    if (this.#disposed) return;
+    if (!this.#constructionComplete) {
+      this.#constructionInterrupted = true;
+      return;
+    }
+    this.#handleContextLost();
+  };
+  readonly #onContextRestored = (): void => {
+    if (this.#disposed) return;
+    if (!this.#constructionComplete) return;
+    this.#restoreContext();
+  };
   readonly #platform: CanvasRootPlatform;
   readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #presentationRequired = false;
@@ -622,151 +699,187 @@ export class CanvasRoot implements RendererRoot {
       ?? DEFAULT_ASYNC_PREPARATION_JOB_LIMIT;
     const frameUploadByteBudget = platform.frameUploadByteBudget
       ?? DEFAULT_TEXTURE_UPLOAD_BYTE_BUDGET_PER_FRAME;
+    const construction = new RootConstructionScope(platform.onListenerError);
     this.#canvas = canvas;
     this.#platform = platform;
     this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
-    this.#gl = createContext(canvas, resolvedOptions);
-    this.#discardDefaultDepthAttachment = [this.#gl.DEPTH];
-    this.#etc2Available = this.#gl.getExtension("WEBGL_compressed_texture_etc") !== null;
-    this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
-      resolvedOptions.persistentGpuByteBudget,
-    );
-    this.#retainedPresentation = new RetainedPresentationOwner(
-      this.#gl,
-      this.#persistentGpuBudget,
-    );
-    this.#asyncPreparation = new AsyncPreparationOwner(
-      asyncPreparationJobLimit,
-      () => {
-        if (!this.#disposed) this.#publish();
-      },
-    );
-    this.#gltfPreparer = lazyBrowserGltfPreparer(
-      asyncPreparationJobLimit,
-    );
-    this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);
-    this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
-      resolvedOptions.automaticVirtualTexturing,
-      frameUploadByteBudget,
-    );
-    this.#sizeLimits = readSizeLimits(this.#gl);
-    this.#state = new WebGlStateOwner(this.#gl);
-    this.#screenSpacePartitionPattern = new ScreenSpacePartitionPatternOwner(
-      this.#gl,
-      this.#persistentGpuBudget,
-    );
-    this.#surfaceGpu = new SurfaceGpuOwner(
-      this.#gl,
-      this.#persistentGpuBudget,
-      this.#screenSpacePartitionPattern,
-      {
-        etc2Available: this.#etc2Available,
-        onChanged: () => this.#invalidatePresentation(),
-        onFailure: (error) => this.#captureScheduledFailure(error),
-        presentationLane: "world",
-        uploadBudget: this.#frameUploadBudget,
-      },
-    );
-    this.#environmentAssets = new PrefilteredEnvironmentAssetOwner({
-      onAssetChanged: () => {
-        try {
-          this.#refreshPrefilteredEnvironment();
-        } catch (error) {
-          this.#captureScheduledFailure(error);
-        }
-      },
-      onListenerError: (error) => platform.onListenerError(error),
-      ...(platform.preparePrefilteredEnvironment === undefined
-        ? {}
-        : { prepare: platform.preparePrefilteredEnvironment }),
-      ...(platform.readPrefilteredEnvironment === undefined
-        ? {}
-        : { read: platform.readPrefilteredEnvironment }),
-      schedule: this.#asyncPreparation.runForeground,
-    });
-    this.#gltfAssets = new GltfAssetOwner({
-      onAssetChanged: (key) => {
-        const asset = this.#visualGltfAsset(key);
-        if (asset !== undefined) this.#queuePreparedGltfScene(asset);
-        else if (
-          this.#gltfAssetClaims.some((claim) => gltfAssetKey(claim) === key)
-        ) this.#reconcileTextureAssets(this.#surfaceScene);
-      },
-      onListenerError: (error) => platform.onListenerError(error),
-      onSourceReadsChanged: () => {
-        if (!this.#disposed) this.#publish();
-      },
-      preloadPreparation: this.#gltfPreparer.preload,
-      prepare: this.#gltfPreparer.prepare,
-      read: platform.readGltf ?? readGltfWithFetch,
-      readResource: platform.readGltfResource
-        ?? ((_asset, uri, signal, request) => readGltfResourceWithFetch(uri, signal, request)),
-      ...(platform.readGltfResourceRanges === undefined
-        ? {}
-        : { readResourceRanges: platform.readGltfResourceRanges }),
-      schedule: this.#asyncPreparation.runForeground,
-      sharedGeometryPreparation: true,
-    });
-    const browserTextureDecoder = platform.decodeTexture === undefined
-      ? lazyBrowserTextureDecoder(
-        this.#etc2Available,
-        this.#automaticVirtualTexturing,
-        platform.readGltfTextureResource,
+    let creationContext: WebGL2RenderingContext | undefined;
+    try {
+      canvas.addEventListener("webglcontextlost", this.#onContextLost);
+      construction.defer(() => {
+        canvas.removeEventListener("webglcontextlost", this.#onContextLost);
+      });
+      canvas.addEventListener("webglcontextrestored", this.#onContextRestored);
+      construction.defer(() => {
+        canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
+      });
+      this.#gl = createContext(canvas, resolvedOptions);
+      creationContext = this.#gl;
+      this.#assertConstructionContext();
+      this.#sizeLimits = readSizeLimits(this.#gl);
+      this.#assertConstructionContext();
+      this.#discardDefaultDepthAttachment = [this.#gl.DEPTH];
+      this.#etc2Available = this.#gl.getExtension("WEBGL_compressed_texture_etc") !== null;
+      this.#persistentGpuBudget = new PersistentGpuBudgetOwner(
+        resolvedOptions.persistentGpuByteBudget,
+      );
+      this.#retainedPresentation = construction.own(new RetainedPresentationOwner(
+        this.#gl,
+        this.#persistentGpuBudget,
+      ));
+      this.#asyncPreparation = construction.own(new AsyncPreparationOwner(
+        asyncPreparationJobLimit,
         () => {
           if (!this.#disposed) this.#publish();
         },
-      )
-      : undefined;
-    this.#textureAssets = new TextureAssetOwner({
-      decode: platform.decodeTexture ?? browserTextureDecoder!.decode,
-      ...(browserTextureDecoder === undefined
-        ? {}
-        : {
-          preload: browserTextureDecoder.preload,
-          readAheadSnapshot: browserTextureDecoder.readAheadSnapshot,
-        }),
-      onAssetChanged: (key) => this.#queuePreparedTexture(key),
-      onListenerError: (error) => platform.onListenerError(error),
-      onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
-      ...(platform.now === undefined ? {} : { now: platform.now }),
-    }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75));
-    this.#context = new ContextLifecycleOwner(platform.onListenerError);
-    this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
-    this.#clock = new FrameClockOwner({
-      render: () => this.#renderFrame(),
-      reportScheduledFailure: (error) => this.#captureScheduledFailure(error),
-      requestFrame: platform.requestFrame,
-    });
-    this.#progressivePresentation = new ProgressivePresentationOwner({
-      cancelDelay: platform.cancelDelay
-        ?? ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)),
-      intervalMs: 250,
-      now: platform.now ?? (() => performance.now()),
-      onFailure: (error) => this.#captureScheduledFailure(error),
-      present: () => this.#invalidatePresentation(),
-      requestDelay: platform.requestDelay
-        ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
-    });
-    this.#cameraSource = new CameraSourceOwner({
-      onCameraChanged: () => this.#invalidatePresentation(),
-      onFailure: (error) => this.#captureScheduledFailure(error),
-    });
-    this.#onContextLost = (event) => {
-      if (this.#disposed) return;
-      event.preventDefault();
-      this.#clock.block();
-      this.#state.invalidate();
-      this.#surfaceGpu.invalidate();
-      this.#overlayGpu?.invalidate();
-      this.#edgeOverlayGpu?.abandon();
-      this.#screenSpacePartitionPattern.abandon();
-      this.#retainedPresentation.abandon();
-      this.#worldPresentationRequired = true;
-      this.#context.transition({ kind: "context-lost" });
-    };
-    this.#onContextRestored = () => this.#restoreContext();
-    canvas.addEventListener("webglcontextlost", this.#onContextLost);
-    canvas.addEventListener("webglcontextrestored", this.#onContextRestored);
+      ));
+      this.#gltfPreparer = construction.own(lazyBrowserGltfPreparer(
+        asyncPreparationJobLimit,
+      ));
+      this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);
+      this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
+        resolvedOptions.automaticVirtualTexturing,
+        frameUploadByteBudget,
+      );
+      this.#state = new WebGlStateOwner(this.#gl);
+      this.#screenSpacePartitionPattern = construction.own(
+        new ScreenSpacePartitionPatternOwner(
+          this.#gl,
+          this.#persistentGpuBudget,
+        ),
+      );
+      this.#surfaceGpu = construction.own(new SurfaceGpuOwner(
+        this.#gl,
+        this.#persistentGpuBudget,
+        this.#screenSpacePartitionPattern,
+        {
+          etc2Available: this.#etc2Available,
+          onChanged: () => this.#invalidatePresentation(),
+          onFailure: (error) => this.#captureScheduledFailure(error),
+          presentationLane: "world",
+          uploadBudget: this.#frameUploadBudget,
+        },
+      ));
+      this.#environmentAssets = construction.own(new PrefilteredEnvironmentAssetOwner({
+        onAssetChanged: () => {
+          try {
+            this.#refreshPrefilteredEnvironment();
+          } catch (error) {
+            this.#captureScheduledFailure(error);
+          }
+        },
+        onListenerError: (error) => platform.onListenerError(error),
+        ...(platform.preparePrefilteredEnvironment === undefined
+          ? {}
+          : { prepare: platform.preparePrefilteredEnvironment }),
+        ...(platform.readPrefilteredEnvironment === undefined
+          ? {}
+          : { read: platform.readPrefilteredEnvironment }),
+        schedule: this.#asyncPreparation.runForeground,
+      }));
+      this.#gltfAssets = construction.own(new GltfAssetOwner({
+        onAssetChanged: (key) => {
+          const asset = this.#visualGltfAsset(key);
+          if (asset !== undefined) this.#queuePreparedGltfScene(asset);
+          else if (
+            this.#gltfAssetClaims.some((claim) => gltfAssetKey(claim) === key)
+          ) this.#reconcileTextureAssets(this.#surfaceScene);
+        },
+        onListenerError: (error) => platform.onListenerError(error),
+        onSourceReadsChanged: () => {
+          if (!this.#disposed) this.#publish();
+        },
+        preloadPreparation: this.#gltfPreparer.preload,
+        prepare: this.#gltfPreparer.prepare,
+        read: platform.readGltf ?? readGltfWithFetch,
+        readResource: platform.readGltfResource
+          ?? ((_asset, uri, signal, request) => readGltfResourceWithFetch(uri, signal, request)),
+        ...(platform.readGltfResourceRanges === undefined
+          ? {}
+          : { readResourceRanges: platform.readGltfResourceRanges }),
+        schedule: this.#asyncPreparation.runForeground,
+        sharedGeometryPreparation: true,
+      }));
+      const browserTextureDecoder = platform.decodeTexture === undefined
+        ? lazyBrowserTextureDecoder(
+          this.#etc2Available,
+          this.#automaticVirtualTexturing,
+          platform.readGltfTextureResource,
+          () => {
+            if (!this.#disposed) this.#publish();
+          },
+        )
+        : undefined;
+      this.#textureAssets = construction.own(new TextureAssetOwner({
+        decode: platform.decodeTexture ?? browserTextureDecoder!.decode,
+        ...(browserTextureDecoder === undefined
+          ? {}
+          : {
+            preload: browserTextureDecoder.preload,
+            readAheadSnapshot: browserTextureDecoder.readAheadSnapshot,
+          }),
+        onAssetChanged: (key) => this.#queuePreparedTexture(key),
+        onListenerError: (error) => platform.onListenerError(error),
+        onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
+        ...(platform.now === undefined ? {} : { now: platform.now }),
+      }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75)));
+      this.#context = new ContextLifecycleOwner(platform.onListenerError);
+      this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
+      construction.defer(() => {
+        this.#unsubscribeContext();
+        this.#context.transition({ kind: "dispose" });
+      });
+      this.#clock = construction.own(new FrameClockOwner({
+        render: () => this.#renderFrame(),
+        reportScheduledFailure: (error) => this.#captureScheduledFailure(error),
+        requestFrame: platform.requestFrame,
+      }));
+      this.#progressivePresentation = construction.own(new ProgressivePresentationOwner({
+        cancelDelay: platform.cancelDelay
+          ?? ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)),
+        intervalMs: 250,
+        now: platform.now ?? (() => performance.now()),
+        onFailure: (error) => this.#captureScheduledFailure(error),
+        present: () => this.#invalidatePresentation(),
+        requestDelay: platform.requestDelay
+          ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
+      }));
+      this.#cameraSource = construction.own(new CameraSourceOwner({
+        onCameraChanged: () => this.#invalidatePresentation(),
+        onFailure: (error) => this.#captureScheduledFailure(error),
+      }));
+      this.#assertConstructionContext();
+      this.#constructionComplete = true;
+      construction.complete();
+    } catch (error) {
+      const contextLost = this.#constructionInterrupted
+        || (creationContext !== undefined && contextIsLost(creationContext));
+      this.#disposed = true;
+      construction.rollback();
+      if (contextLost && !(error instanceof RendererContextCreationError)) {
+        throw new RendererContextCreationError("context-lost", { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  #assertConstructionContext(): void {
+    const contextLost = contextIsLost(this.#gl);
+    if (this.#constructionInterrupted || contextLost) {
+      throw new RendererContextCreationError("context-lost");
+    }
+  }
+
+  #handleContextLost(): void {
+    this.#clock.block();
+    this.#state.invalidate();
+    this.#surfaceGpu.invalidate();
+    this.#overlayGpu?.invalidate();
+    this.#edgeOverlayGpu?.abandon();
+    this.#screenSpacePartitionPattern.abandon();
+    this.#retainedPresentation.abandon();
+    this.#worldPresentationRequired = true;
+    this.#context.transition({ kind: "context-lost" });
   }
 
   /** @internal Dedicated optional renderers temporarily borrow frame authority. */

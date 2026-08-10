@@ -46,6 +46,7 @@ const cdpCommandTimeoutMs = envNumber(
   Math.max(30_000, routeReadyTimeoutMs + 10_000),
 );
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
+const creationContextLossSmoke = process.env.EXAMPLES_SMOKE_CREATION_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
 const embeddedTextureGate = process.env.EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE === '1';
 const svgFallbackSmoke = process.env.EXAMPLES_SMOKE_SVG_FALLBACK === '1';
@@ -1978,6 +1979,53 @@ const main = async () => {
       console.log(`gpu ${gpu}`);
     }
 
+    if (creationContextLossSmoke) {
+      await session.call('Page.addScriptToEvaluateOnNewDocument', { source: `
+        (() => {
+          const originalGetContext = HTMLCanvasElement.prototype.getContext;
+          let firstCanvas;
+          let injected = false;
+          const state = {
+            attempts: 0,
+            losses: 0,
+            restorations: 0,
+            sameCanvas: true,
+            status: 'waiting',
+          };
+          globalThis.__royalCreationContextLoss = state;
+          HTMLCanvasElement.prototype.getContext = function (...arguments_) {
+            const context = Reflect.apply(originalGetContext, this, arguments_);
+            if (arguments_[0] !== 'webgl2' || context === null) return context;
+            state.attempts += 1;
+            if (firstCanvas === undefined) firstCanvas = this;
+            else state.sameCanvas &&= firstCanvas === this;
+            if (injected) return context;
+            injected = true;
+            const extension = context.getExtension('WEBGL_lose_context');
+            if (extension === null) {
+              state.status = 'unsupported';
+              return context;
+            }
+            state.status = 'losing';
+            this.addEventListener('webglcontextlost', () => {
+              state.losses += 1;
+              state.status = 'lost';
+              setTimeout(() => {
+                state.status = 'restoring';
+                extension.restoreContext();
+              }, 50);
+            }, { once: true });
+            this.addEventListener('webglcontextrestored', () => {
+              state.restorations += 1;
+              state.status = 'restored';
+            }, { once: true });
+            extension.loseContext();
+            return context;
+          };
+        })();
+      ` });
+    }
+
     const filteredRoutes = routeFilter === ''
       ? smokeRoutes
       : smokeRoutes.filter((route) =>
@@ -2247,6 +2295,30 @@ const main = async () => {
         await session.call('Fetch.disable');
       }
       let state = await waitForRouteState(session, effectiveRoute);
+      if (creationContextLossSmoke) {
+        const creation = await evaluate(session, `({
+          ...globalThis.__royalCreationContextLoss,
+          canvases: document.querySelectorAll('canvas').length,
+          rendererAvailable: (${rendererSnapshotExpression})?.lifecycle?.state === 'available',
+        })`);
+        if (
+          creation.status !== 'unsupported'
+          && (
+            creation.status !== 'restored'
+            || creation.losses !== 1
+            || creation.restorations !== 1
+            || creation.attempts < 2
+            || creation.sameCanvas !== true
+            || creation.canvases !== 1
+            || creation.rendererAvailable !== true
+          )
+        ) {
+          throw new Error(`creation-time context-loss smoke failed: ${JSON.stringify(creation)}`);
+        }
+        console.log(creation.status === 'unsupported'
+          ? 'skip creation-time context-loss WEBGL_lose_context unavailable'
+          : `ok creation-time context-loss attempts=${creation.attempts} same-canvas`);
+      }
       if (svgFallbackIntercepted !== undefined) {
         if (await svgFallbackIntercepted === undefined) {
           throw new Error('SVG fallback smoke did not intercept the preferred source');
