@@ -70,6 +70,30 @@ describe("opaque depth-prepass policy core", () => {
     expect(opaqueDepthPrepassRequested(plan, [0, 0, 0])).toBe(true);
   });
 
+  it("admits camera-facing overlap only for a direct multisampled outside view", () => {
+    const stacked = Array.from({ length: 32 }, () => surface());
+    const plan = planOpaqueDepthPrepass(stacked);
+
+    expect(plan.facingCoverage).toEqual([32, 32, 32]);
+    expect(opaqueDepthPrepassRequested(plan, [0, 2, 0], false, false)).toBe(false);
+    expect(opaqueDepthPrepassRequested(plan, [0, 2, 0], false, true)).toBe(true);
+  });
+
+  it("rejects nonoverlapping retained bounds in a multisampled outside view", () => {
+    const spread = Array.from({ length: 32 }, (_, index) => ({
+      ...surface(),
+      worldBounds: {
+        max: [index * 2 + 1, 1, 1],
+        min: [index * 2 - 1, -1, -1],
+      },
+    } as CanonicalDrawSurface));
+    const plan = planOpaqueDepthPrepass(spread);
+
+    expect(plan.facingCoverage[1]).toBe(1);
+    expect(opaqueDepthPrepassRequested(plan, [32, 2, 0], false, true)).toBe(false);
+    expect(opaqueDepthPrepassRequested(plan, [-2, 0, 0], false, true)).toBe(true);
+  });
+
   it("keeps an active plan across a small boundary crossing", () => {
     const plan = planOpaqueDepthPrepass(Array.from({ length: 32 }, () => surface()));
     expect(opaqueDepthPrepassRequested(plan, [1.04, 0, 0])).toBe(false);
@@ -81,6 +105,7 @@ describe("opaque depth-prepass policy core", () => {
     const plan = planOpaqueDepthPrepass([surface()]);
     const min = plan.min;
     const max = plan.max;
+    const facingCoverage = plan.facingCoverage;
     const moved = {
       ...surface(),
       worldBounds: { max: [6, 1, 1], min: [4, -1, -1] },
@@ -89,6 +114,7 @@ describe("opaque depth-prepass policy core", () => {
     expect(updateOpaqueDepthPrepassPlan(plan, [moved])).toBe(plan);
     expect(plan.min).toBe(min);
     expect(plan.max).toBe(max);
+    expect(plan.facingCoverage).toBe(facingCoverage);
     expect(plan).toMatchObject({ candidateCount: 1, max: [6, 1, 1], min: [4, -1, -1] });
   });
 

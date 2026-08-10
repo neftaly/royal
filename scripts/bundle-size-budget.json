@@ -15,12 +15,12 @@
     "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, and retained multi-view outline planning",
     "initialAndTotalGzipBytes": 4100
   },
-  "royalInitialGzipBytes": 135570,
-  "royalIncrementalGzipBytes": 76250,
-  "royalGltfInitialGzipBytes": 136500,
+  "royalInitialGzipBytes": 135700,
+  "royalIncrementalGzipBytes": 76400,
+  "royalGltfInitialGzipBytes": 136600,
   "royalGltfIncrementalGzipBytes": 1000,
   "royalLazyGzipBytes": 143700,
-  "royalTotalIncrementalGzipBytes": 219950,
-  "royalTotalGzipBytes": 279250,
+  "royalTotalIncrementalGzipBytes": 220000,
+  "royalTotalGzipBytes": 279300,
   "royalWorkerGzipBytes": 56650
 }

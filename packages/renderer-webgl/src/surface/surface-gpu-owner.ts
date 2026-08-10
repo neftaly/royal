@@ -384,6 +384,7 @@ export class SurfaceGpuOwner {
   };
   #depthPrepassActive = false;
   #depthPrepassPlan = planOpaqueDepthPrepass([]);
+  readonly #defaultFramebufferSamples: number;
   #depthProgramLoadGeneration = 0;
   #depthProgramLoadRequested = false;
   #depthPrepassOwner: SurfaceDepthPrepassOwner | null = null;
@@ -457,6 +458,7 @@ export class SurfaceGpuOwner {
   ) {
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
+    this.#defaultFramebufferSamples = Number(gl.getParameter(gl.SAMPLES));
     this.#onChanged = onChanged;
     this.#onFailure = onFailure;
     this.#multiDraw = this.#readMultiDraw();
@@ -896,7 +898,6 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     if (scene !== null && views.length !== 0) {
       cameraWorldPositionFromViewInto(this.#cameraPosition, views[0]!.view);
-      this.#setDepthPrepassActive(this.#cameraPosition);
     }
     planCompositeFrameInto(
       scene?.surfaces ?? [],
@@ -950,6 +951,14 @@ export class SurfaceGpuOwner {
       this.#compositeActive = compositeActive;
       this.#dirty = true;
       this.#fullReconcileRequired = true;
+    }
+    if (scene !== null && views.length !== 0) {
+      this.#setDepthPrepassActive(
+        this.#cameraPosition,
+        framebuffer === null
+          && !compositeRequested
+          && this.#defaultFramebufferSamples > 1,
+      );
     }
     let virtualTexturePending = false;
     if (this.#virtualTexture !== null) {
@@ -1124,13 +1133,17 @@ export class SurfaceGpuOwner {
     });
   }
 
-  #setDepthPrepassActive(cameraPosition: ArrayLike<number>): void {
+  #setDepthPrepassActive(
+    cameraPosition: ArrayLike<number>,
+    multisampledDirect = false,
+  ): void {
     const active = this.#presentationLane === "world"
       && this.#multiDraw !== null
       && opaqueDepthPrepassRequested(
         this.#depthPrepassPlan,
         cameraPosition,
         this.#depthPrepassActive,
+        multisampledDirect,
       );
     if (active === this.#depthPrepassActive) {
       if (active && this.#depthPrepassOwner === null) this.#requestDepthPrepassOwner();

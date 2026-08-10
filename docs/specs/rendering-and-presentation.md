@@ -70,22 +70,26 @@ and MUST agree for opaque standard surfaces.
 
 A retained scene with at least 32 fully opaque standard triangle surfaces MAY
 run a position-only depth pass before PBR shading when exact-compatible
-`WEBGL_multi_draw` is available and the camera lies inside their aggregate
-world-space volume. The cold plan owns eligible count and bounds; one pure
-camera decision avoids doubling vertex work for outside views, with a 5% exit
-margin so boundary motion cannot repeatedly rebuild the pass. It is never a
-route, asset-name, browser-name, or frame-time branch. Alpha mask, alpha blend,
-transmission, lines, and cheap unlit surfaces remain on their single semantic
-pass because coverage or pass ordering cannot be reproduced by the
-position-only program, or because a second pass has no sound cost case. The
-depth pass writes no color and uses the same model,
+`WEBGL_multi_draw` is available. A camera inside their aggregate world-space
+volume admits the established hidden-fragment case. An outside camera is
+admitted only for direct default-framebuffer rendering with more than one
+sample and at least 2× retained-bound coverage along the camera's dominant
+outside axis. The cold plan owns eligible count, aggregate bounds, and the
+three summed candidate-area/aggregate-area ratios; one pure camera decision
+keeps frame work allocation-free. A 5% exit margin prevents boundary motion
+from repeatedly rebuilding the pass. It is never a route, asset-name,
+browser-name, or frame-time branch. Alpha mask, alpha blend, transmission,
+lines, and cheap unlit surfaces remain on their single semantic pass because
+coverage or pass ordering cannot be reproduced by the position-only program,
+or because a second pass has no sound cost case. The depth pass writes no color
+and uses the same model,
 instance, winding, cull, LOD, bounds, viewport, framebuffer, and depth state as
 the later draw. Both vertex programs MUST declare `gl_Position` invariant so
 driver optimization cannot make the position-only pass self-occlude the color
-pass through cross-program depth drift. Its submission owner, programs, shaders, and batching scratch
-load only after the cold classifier admits the pass. The central state owner
-represents its color mask explicitly;
-no pass may inherit hidden GL state. Without multi-draw, the stable fallback is
+pass through cross-program depth drift. Its submission owner, programs,
+shaders, and batching scratch load only after the cold classifier admits the
+pass. The central state owner represents its color mask explicitly; no pass may
+inherit hidden GL state. Without multi-draw, the stable fallback is
 the existing front-to-back PBR pass rather than one extra JavaScript draw per
 surface.
 
@@ -97,6 +101,16 @@ pass and reached a 17 ms median / 23 ms p95 with the same ~1.2 ms callback cost.
 Conversely, the normalized Bistro Exterior camera remains outside the opaque
 volume, so the plan keeps its 147-draw single path instead of inferring hidden
 fragment savings from 146 scene primitives. Quest remains separately unproven.
+
+A 2026-08-10 physical Safari adversarial A/B first rejected unconditional
+outside-camera admission. It improved Probability Settlers by a repeatable
+3--4 ms median, but made 120-sample Bistro Exterior worse from 33 / 36 ms
+median/p95 to 34 / 38 ms and increased submissions from 147 to 192 per frame.
+The retained direct-multisample/2×-coverage classifier then measured Settlers at
+33 / 39 ms against a corrected wall-clock-path control at 37 / 44 ms; the
+cleaned candidate repeated at 30 / 38 ms. Bistro's single-sample retained
+composite excludes the new branch and remained on exactly 147 submissions.
+The result is a material partial gain, not the 16.7 ms acceptance target.
 
 Exact clean commit `cc9a749e` confirms the invariant-position correction on
 physical Safari 17.14 after the original self-occlusion was reproduced. The
