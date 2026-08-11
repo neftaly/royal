@@ -108,7 +108,8 @@ treating bounds as a physics oracle.
 mount or when no visible triangle is hit.
 `<Canvas overlay={sceneOverlay(...)} />` publishes non-picking world-space
 feedback independently of `scene`. Overlay-only changes do not republish the
-base scene. Direct overlay meshes use solid-color unlit or wireframe materials;
+base scene; omit `overlay` or pass `null` to clear it. Direct overlay meshes use
+solid-color unlit or wireframe materials;
 `screenSpaceSegment(...)` provides fixed-presentation-width world-anchored
 guides, and `outlineGltf(...)` provides matching boundary/crease edges while
 borrowing a matching rendered glTF occurrence's active geometry and LOD. Both

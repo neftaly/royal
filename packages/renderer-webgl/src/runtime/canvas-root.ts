@@ -1,5 +1,4 @@
 import {
-  validatePickInput,
   type GltfInstanceTransforms,
   type GltfAssetRef,
   type GltfInstancesNode,
@@ -438,6 +437,20 @@ const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
   && left[1] === right[1]
   && left[2] === right[2]
   && left[3] === right[3];
+
+/** Validates the imperative root's finite DOM coordinates while allowing event-shaped inputs. */
+const validatePickInput: (input: unknown) => asserts input is PickInput = (input) => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new TypeError("Royal pick input must be an object with clientX and clientY coordinates");
+  }
+  const coordinates = input as Partial<PickInput>;
+  if (typeof coordinates.clientX !== "number" || !Number.isFinite(coordinates.clientX)) {
+    throw new TypeError("Royal pick input clientX must be a finite number");
+  }
+  if (typeof coordinates.clientY !== "number" || !Number.isFinite(coordinates.clientY)) {
+    throw new TypeError("Royal pick input clientY must be a finite number");
+  }
+};
 
 const readSizeLimits = (gl: WebGL2RenderingContext): CanvasSizeLimits => {
   const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as unknown;

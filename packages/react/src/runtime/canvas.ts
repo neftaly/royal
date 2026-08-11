@@ -61,8 +61,8 @@ export interface CanvasProps
   readonly ref?: Ref<HTMLCanvasElement>;
   /** Backing pixels per CSS pixel. Defaults to the browser device pixel ratio. */
   readonly pixelRatio?: number;
-  /** Independently replaceable, non-picking world geometry presented above the scene. */
-  readonly overlay?: SceneOverlay;
+  /** Independently replaceable presentation above the scene; omit or pass `null` to clear. */
+  readonly overlay?: SceneOverlay | null;
   /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
   readonly gltfResourceReader?: GltfResourceReader;
   /**

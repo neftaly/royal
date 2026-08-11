@@ -16,6 +16,7 @@ import {
   useTextureAssetStatus,
   useVirtualTextureAssetStatus,
   useVisitGltfAssetGeometry,
+  type CanvasProps,
   type RendererContextSnapshot,
   type GltfDocumentScene,
   type GltfJsonValue,
@@ -161,6 +162,8 @@ const overlay = sceneOverlay({
     start: [-1, 0, 0],
   })],
 });
+const clearedOverlay: CanvasProps['overlay'] = null;
+void clearedOverlay;
 
 const reportPick = (event: ScenePointerEvent): void => {
   const point: WorldPosition3 = event.hit.point;

@@ -20,20 +20,6 @@ export interface PickInput {
   readonly clientY: number;
 }
 
-/** Validates finite DOM client coordinates while allowing event-shaped inputs. */
-export const validatePickInput: (input: unknown) => asserts input is PickInput = (input) => {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    throw new TypeError('Royal pick input must be an object with clientX and clientY coordinates');
-  }
-  const coordinates = input as Partial<PickInput>;
-  if (typeof coordinates.clientX !== 'number' || !Number.isFinite(coordinates.clientX)) {
-    throw new TypeError('Royal pick input clientX must be a finite number');
-  }
-  if (typeof coordinates.clientY !== 'number' || !Number.isFinite(coordinates.clientY)) {
-    throw new TypeError('Royal pick input clientY must be a finite number');
-  }
-};
-
 export interface MeshPickTarget {
   readonly kind: 'mesh';
   readonly node: MeshNode;

@@ -19,6 +19,7 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import * as rendererCoreApi from "../../packages/renderer-core/src/index";
 import * as reactApi from "../../packages/react/src/index";
 import * as sceneApi from "../../packages/react/src/scene";
 import * as xrApi from "../../packages/react/src/xr";
@@ -168,6 +169,7 @@ describe("replacement React public API", () => {
       "wireframeMaterial",
       "zoomOrbitCameraView",
     ]);
+    expect(Object.keys(rendererCoreApi).sort()).toEqual(Object.keys(sceneApi).sort());
     expect(Object.keys(xrApi).sort()).toEqual([
       "createXrSessionController",
       "useXrSession",
@@ -206,6 +208,7 @@ describe("replacement React public API", () => {
       "data-testid": "royal",
       className: "viewport",
       gltfAssetClaims: [gltfAsset("/metadata.glb")],
+      overlay: null,
       pixelRatio: 1,
       rendererOptions: { alpha: false, antialias: true },
       scene: emptyScene,
