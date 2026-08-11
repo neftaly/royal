@@ -1657,6 +1657,7 @@ describe("clear-only canvas root", () => {
 
     const hit = root.pick({ clientX: 240.4, clientY: 120 });
     expect(hit?.point[0]).toBeCloseTo(1, 2);
+    expect(hit?.surface).toEqual({ normal: [0, 0, 1], source: "picking-proxy" });
     expect(hit?.target).toMatchObject({ kind: "mesh", node, pickingId: "wide-hit-area" });
     expect(root.pick({ clientX: 311, clientY: 120 })).toBeUndefined();
     expect(canvas.gl.bufferData).not.toHaveBeenCalled();
@@ -1696,6 +1697,8 @@ describe("clear-only canvas root", () => {
       callbacks.shift()!();
       expect(canvas.gl.frontFace).toHaveBeenCalledWith(canvas.gl.CW);
       expect(setGpuScene).not.toHaveBeenCalled();
+      expect(root.pick({ clientX: 160, clientY: 120 })?.surface)
+        .toEqual({ normal: [0, 0, 1], source: "rendered" });
 
       const declarative = mesh({
         geometry,

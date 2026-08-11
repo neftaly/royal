@@ -486,8 +486,8 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.surfaces).toHaveLength(0);
     expect(prepared.pickSurfaces).toHaveLength(1);
     expect(prepared.pickSurfaces[0]).toMatchObject({
-      modelHandedness: 1,
       node,
+      source: "picking-proxy",
     });
     expect(prepared.pickSurfaces[0]!.pickingGeometry.indices).toEqual(pickingGeometry.indices);
     expect(prepared.pickSurfaces[0]!.pickingGeometry.positions).toEqual(pickingGeometry.positions);

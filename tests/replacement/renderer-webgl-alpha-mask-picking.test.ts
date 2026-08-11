@@ -21,6 +21,7 @@ import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/
 import {
   createCanonicalPickingScratch,
   canonicalPickLocalNormalInto,
+  canonicalPickWorldNormalInto,
   pickCanonicalSurfaceInto,
   type CanonicalPickHitAcceptance,
 } from "../../packages/renderer-webgl/src/surface/picking-query";
@@ -253,9 +254,7 @@ describe("canonical alpha-mask picking", () => {
     const surfaces: readonly CanonicalPickSurface[] = [geometry(0), geometry(-1)].map(
       (pickingGeometry) => ({
         inverseModel: identityMat4(),
-        modelHandedness: 1,
         node,
-        normalTransform: identityMat4(),
         objectLocalModel: identityMat4(),
         pickingGeometry,
         source: "rendered" as const,
@@ -305,6 +304,27 @@ describe("canonical alpha-mask picking", () => {
     expect(normal[2]).toBeCloseTo(2 / Math.sqrt(6));
   });
 
+  it("derives mirrored non-uniform world normals from the retained inverse model", () => {
+    const pickingGeometry = {
+      ...geometry(),
+      normals: new Float32Array([1, 1, 1, 1, 1, 1, 1, 1, 1]),
+    };
+    const inverseModel = identityMat4();
+    inverseModel[0] = -0.5;
+    inverseModel[5] = 1 / 3;
+    inverseModel[10] = 0.25;
+    const normal = canonicalPickWorldNormalInto(
+      [0, 0, 0],
+      { ...emptyPickHit(), aIndex: 0, bIndex: 1, cIndex: 2 },
+      pickingGeometry,
+      inverseModel,
+    );
+    const length = Math.hypot(0.5, 1 / 3, 0.25);
+    expect(normal[0]).toBeCloseTo(-0.5 / length);
+    expect(normal[1]).toBeCloseTo((1 / 3) / length);
+    expect(normal[2]).toBeCloseTo(0.25 / length);
+  });
+
   it("transforms adjacent footprint rays through the same instance model", () => {
     const inverseModel = identityMat4();
     inverseModel[12] = -2;
@@ -315,9 +335,7 @@ describe("canonical alpha-mask picking", () => {
       { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [2.25, 0.25, 1] },
       [{
         inverseModel,
-        modelHandedness: 1,
         node,
-        normalTransform: identityMat4(),
         objectLocalModel: identityMat4(),
         pickingGeometry: geometry(),
         source: "rendered",
@@ -340,9 +358,7 @@ describe("canonical alpha-mask picking", () => {
     const node = { kind: "mesh" } as CanonicalPickSurface["node"];
     const surface: CanonicalPickSurface = {
       inverseModel: identityMat4(),
-      modelHandedness: 1,
       node,
-      normalTransform: identityMat4(),
       objectLocalModel: identityMat4(),
       pickingGeometry: geometry(),
       source: "rendered",

@@ -27,6 +27,20 @@ export type MutableCanonicalPickHit = {
   surfaceIndex: number;
 };
 
+const normalizeVec3Into = (
+  target: [number, number, number],
+  x: number,
+  y: number,
+  z: number,
+): boolean => {
+  const length = Math.hypot(x, y, z);
+  if (!(length > 0) || !Number.isFinite(length)) return false;
+  target[0] = x / length || 0;
+  target[1] = y / length || 0;
+  target[2] = z / length || 0;
+  return true;
+};
+
 /** Resolves the exact hit's interpolated local normal without allocating. */
 export const canonicalPickLocalNormalInto = (
   target: [number, number, number],
@@ -47,36 +61,45 @@ export const canonicalPickLocalNormalInto = (
   const faceX = edge1Y * edge2Z - edge1Z * edge2Y;
   const faceY = edge1Z * edge2X - edge1X * edge2Z;
   const faceZ = edge1X * edge2Y - edge1Y * edge2X;
-  let x = faceX;
-  let y = faceY;
-  let z = faceZ;
   if (normals !== undefined) {
-    x = normals[a]! * barycentricA
+    const x = normals[a]! * barycentricA
       + normals[b]! * hit.barycentricB
       + normals[c]! * hit.barycentricC;
-    y = normals[a + 1]! * barycentricA
+    const y = normals[a + 1]! * barycentricA
       + normals[b + 1]! * hit.barycentricB
       + normals[c + 1]! * hit.barycentricC;
-    z = normals[a + 2]! * barycentricA
+    const z = normals[a + 2]! * barycentricA
       + normals[b + 2]! * hit.barycentricB
       + normals[c + 2]! * hit.barycentricC;
+    if (normalizeVec3Into(target, x, y, z)) return target;
   }
-  let length = Math.hypot(x, y, z);
-  if (!(length > 0) || !Number.isFinite(length)) {
-    x = faceX;
-    y = faceY;
-    z = faceZ;
-    length = Math.hypot(x, y, z);
-  }
-  if (!(length > 0) || !Number.isFinite(length)) {
-    target[0] = 0;
-    target[1] = 0;
-    target[2] = 1;
-    return target;
-  }
-  target[0] = x / length;
-  target[1] = y / length;
-  target[2] = z / length;
+  if (normalizeVec3Into(target, faceX, faceY, faceZ)) return target;
+  target[0] = 0;
+  target[1] = 0;
+  target[2] = 1;
+  return target;
+};
+
+/** Resolves and transforms the exact hit normal from already-retained pick state. */
+export const canonicalPickWorldNormalInto = (
+  target: [number, number, number],
+  hit: MutableCanonicalPickHit,
+  geometry: CanonicalTriangleGeometry,
+  inverseModel: Mat4,
+): [number, number, number] => {
+  canonicalPickLocalNormalInto(target, hit, geometry);
+  const localX = target[0];
+  const localY = target[1];
+  const localZ = target[2];
+  if (normalizeVec3Into(
+    target,
+    inverseModel[0] * localX + inverseModel[1] * localY + inverseModel[2] * localZ,
+    inverseModel[4] * localX + inverseModel[5] * localY + inverseModel[6] * localZ,
+    inverseModel[8] * localX + inverseModel[9] * localY + inverseModel[10] * localZ,
+  )) return target;
+  target[0] = 0;
+  target[1] = 0;
+  target[2] = -1;
   return target;
 };
 
@@ -108,14 +131,7 @@ type MutableTriangleHit = {
   v: number;
 };
 
-type MutableExactSurfaceHit = {
-  aIndex: number;
-  barycentricB: number;
-  barycentricC: number;
-  bIndex: number;
-  cIndex: number;
-  distance: number;
-};
+type MutableExactSurfaceHit = Omit<MutableCanonicalPickHit, "surfaceIndex">;
 
 export type CanonicalPickHitAcceptance = (
   surface: CanonicalPickSurface,
@@ -201,7 +217,6 @@ const triangleDistance = (
   bIndex: number,
   cIndex: number,
   ray: MutableLocalRay,
-  handedness: 1 | -1,
   doubleSided: boolean,
 ): boolean => {
   const a = aIndex * 3;
@@ -216,12 +231,12 @@ const triangleDistance = (
   const pX = ray.direction[1] * edge2Z - ray.direction[2] * edge2Y;
   const pY = ray.direction[2] * edge2X - ray.direction[0] * edge2Z;
   const pZ = ray.direction[0] * edge2Y - ray.direction[1] * edge2X;
-  const determinant = (edge1X * pX + edge1Y * pY + edge1Z * pZ) * handedness;
+  const determinant = edge1X * pX + edge1Y * pY + edge1Z * pZ;
   if (
     !Number.isFinite(determinant)
     || (doubleSided ? determinant === 0 : !(determinant > 0))
   ) return false;
-  const inverseDeterminant = handedness / determinant;
+  const inverseDeterminant = 1 / determinant;
   const relativeX = ray.origin[0] - positions[a]!;
   const relativeY = ray.origin[1] - positions[a + 1]!;
   const relativeZ = ray.origin[2] - positions[a + 2]!;
@@ -263,7 +278,6 @@ const exactSurfaceHitInto = (
       bIndex,
       cIndex,
       ray,
-      surface.modelHandedness,
       surface.doubleSided === true,
     )) continue;
     const distance = triangleHit.distance;

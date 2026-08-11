@@ -2,7 +2,6 @@ import {
   type LinearRgba,
   type Material,
   type ScreenSpacePartition,
-  type TextureAssetRef,
   type TextureColorSpace,
   type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
@@ -289,16 +288,6 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
       roughnessFactor: material.roughness,
     };
 };
-
-/** Erases the public material shape before frame or WebGL work. */
-export const prepareCanonicalMaterial = (
-  material: Material,
-  decodedTexture: (asset: TextureAssetRef) => DecodedTextureSource | undefined,
-): CanonicalSurfaceMaterial =>
-  resolveCanonicalMaterialTexture(
-    prepareCanonicalMaterialSource(material),
-    (asset) => asset.kind === "asset" ? decodedTexture(asset) : undefined,
-  );
 
 const EMPTY_TEXTURE_KEYS: readonly string[] = [];
 

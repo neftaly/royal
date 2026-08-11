@@ -67,13 +67,8 @@ const copyArrayMat4Into = (
   return out;
 };
 
-type MutablePickSurface = Omit<
-  CanonicalPickSurface,
-  "inverseModel" | "modelHandedness" | "normalTransform"
-> & {
+type MutablePickSurface = Omit<CanonicalPickSurface, "inverseModel"> & {
   inverseModel: Mat4 | undefined;
-  modelHandedness: 1 | -1;
-  normalTransform: Mat4;
 };
 
 const updatePickSurface = (
@@ -89,8 +84,6 @@ const updatePickSurface = (
   multiplyMat4Into(composedModel, rootModel, objectLocalModel);
   const inverse = mutable.inverseModel ?? identityMat4();
   mutable.inverseModel = inverseMat4Into(inverse as MutableMat4, composedModel);
-  mutable.modelHandedness = canonicalModelHandedness(composedModel);
-  affineSurfaceNormalTransformInto(mutable.normalTransform as MutableMat4, composedModel);
 };
 
 const refreshAffectedLodBounds = (

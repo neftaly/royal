@@ -2,7 +2,6 @@ import type { PickInput, PickResult } from "@royal/renderer-core";
 import {
   identityMat4,
   inverseMat4Into,
-  transformDirectionInto,
   type Mat4,
 } from "../math/mat4";
 import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
@@ -15,7 +14,7 @@ import type { CanonicalCamera } from "./camera-source-owner";
 import type { LodLevelSelections } from "./lod-selection";
 import {
   createCanonicalPickingScratch,
-  canonicalPickLocalNormalInto,
+  canonicalPickWorldNormalInto,
   pickCanonicalSurfaceInto,
   type CanonicalLocalPickRayFootprint,
   type CanonicalPickRay,
@@ -111,7 +110,6 @@ export class SurfacePicker {
   };
   readonly #inverseViewProjection = identityMat4();
   readonly #near: [number, number, number] = [0, 0, 0];
-  readonly #localNormal: [number, number, number] = [0, 0, 1];
   readonly #normal: [number, number, number] = [0, 0, 1];
   readonly #ray = mutablePickRay();
   readonly #scratch = createCanonicalPickingScratch();
@@ -151,8 +149,16 @@ export class SurfacePicker {
     )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
-    canonicalPickLocalNormalInto(this.#localNormal, this.#hit, surface.pickingGeometry);
-    transformDirectionInto(this.#normal, surface.normalTransform, this.#localNormal);
+    const inverseModel = surface.inverseModel;
+    if (inverseModel === undefined) {
+      throw new Error("Royal exact pick surface is missing its inverse model");
+    }
+    canonicalPickWorldNormalInto(
+      this.#normal,
+      this.#hit,
+      surface.pickingGeometry,
+      inverseModel,
+    );
     let target: PickResult["target"];
     if (surface.node.kind === "mesh") {
       target = {

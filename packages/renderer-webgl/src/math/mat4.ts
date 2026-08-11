@@ -41,15 +41,6 @@ export const mat4ValuesEqual = (left: ArrayLike<number>, right: Mat4): boolean =
   return true;
 };
 
-/** Copies a matrix into caller-owned numeric storage without allocating. */
-export const copyMat4ValuesInto = <Target extends { [index: number]: number }>(
-  target: Target,
-  source: Mat4,
-): Target => {
-  for (let index = 0; index < 16; index += 1) target[index] = source[index]!;
-  return target;
-};
-
 export const multiplyMat4Into = (
   out: MutableMat4,
   left: Mat4,
@@ -81,14 +72,6 @@ export const multiplyMat4Into = (
   out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
   return out;
 };
-
-export const multiplyMat4 = (left: Mat4, right: Mat4): Mat4 =>
-  multiplyMat4Into([
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-  ], left, right);
 
 export const inverseMat4Into = (
   out: MutableMat4,
@@ -229,21 +212,11 @@ export const transformDirectionInto = (
 export const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 =>
   transformDirectionInto([0, 0, 0], matrix, direction);
 
-export const dotVec3 = (left: Vec3, right: Vec3): number =>
-  left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
-
 export const translationMat4 = ([x, y, z]: Vec3): Mat4 => [
   1, 0, 0, 0,
   0, 1, 0, 0,
   0, 0, 1, 0,
   x, y, z, 1,
-];
-
-export const scaleMat4 = ([x, y, z]: Vec3): Mat4 => [
-  x, 0, 0, 0,
-  0, y, 0, 0,
-  0, 0, z, 0,
-  0, 0, 0, 1,
 ];
 
 export const rotationXMat4 = (radians: number): Mat4 => {
@@ -253,28 +226,6 @@ export const rotationXMat4 = (radians: number): Mat4 => {
     1, 0, 0, 0,
     0, c, s, 0,
     0, -s, c, 0,
-    0, 0, 0, 1,
-  ];
-};
-
-export const rotationYMat4 = (radians: number): Mat4 => {
-  const c = Math.cos(radians);
-  const s = Math.sin(radians);
-  return [
-    c, 0, -s, 0,
-    0, 1, 0, 0,
-    s, 0, c, 0,
-    0, 0, 0, 1,
-  ];
-};
-
-export const rotationZMat4 = (radians: number): Mat4 => {
-  const c = Math.cos(radians);
-  const s = Math.sin(radians);
-  return [
-    c, s, 0, 0,
-    -s, c, 0, 0,
-    0, 0, 1, 0,
     0, 0, 0, 1,
   ];
 };
