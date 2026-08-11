@@ -1,5 +1,10 @@
 import type { PickInput, PickResult } from "@royal/renderer-core";
-import { identityMat4, inverseMat4Into, type Mat4 } from "../math/mat4";
+import {
+  identityMat4,
+  inverseMat4Into,
+  transformDirectionInto,
+  type Mat4,
+} from "../math/mat4";
 import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
 import type { TextureSourceRef } from "../texture/source";
 import {
@@ -10,6 +15,7 @@ import type { CanonicalCamera } from "./camera-source-owner";
 import type { LodLevelSelections } from "./lod-selection";
 import {
   createCanonicalPickingScratch,
+  canonicalPickLocalNormalInto,
   pickCanonicalSurfaceInto,
   type CanonicalLocalPickRayFootprint,
   type CanonicalPickRay,
@@ -94,9 +100,19 @@ export class SurfacePicker {
     x: this.#footprintXRay,
     y: this.#footprintYRay,
   };
-  readonly #hit = { distance: 0, surfaceIndex: -1 };
+  readonly #hit = {
+    aIndex: -1,
+    barycentricB: 0,
+    barycentricC: 0,
+    bIndex: -1,
+    cIndex: -1,
+    distance: 0,
+    surfaceIndex: -1,
+  };
   readonly #inverseViewProjection = identityMat4();
   readonly #near: [number, number, number] = [0, 0, 0];
+  readonly #localNormal: [number, number, number] = [0, 0, 1];
+  readonly #normal: [number, number, number] = [0, 0, 1];
   readonly #ray = mutablePickRay();
   readonly #scratch = createCanonicalPickingScratch();
 
@@ -135,6 +151,8 @@ export class SurfacePicker {
     )) return undefined;
     const surface = scene.pickSurfaces[this.#hit.surfaceIndex]!;
     const distance = this.#hit.distance;
+    canonicalPickLocalNormalInto(this.#localNormal, this.#hit, surface.pickingGeometry);
+    transformDirectionInto(this.#normal, surface.normalTransform, this.#localNormal);
     let target: PickResult["target"];
     if (surface.node.kind === "mesh") {
       target = {
@@ -171,6 +189,7 @@ export class SurfacePicker {
         ray.origin[1] + ray.direction[1] * distance,
         ray.origin[2] + ray.direction[2] * distance,
       ],
+      surface: { normal: [...this.#normal], source: surface.source },
       target,
     };
   }

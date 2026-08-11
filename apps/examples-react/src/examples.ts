@@ -50,6 +50,10 @@ const exampleLoaders: Record<string, () => Promise<LoadedExample>> = {
     () => import('./examples/cases/VirtualTextureStress').then((module) => module.VirtualTextureStress),
     () => import('./examples/cases/VirtualTextureStress.tsx?raw'),
   ),
+  'surface-paint-lab': exampleLoader(
+    () => import('./examples/cases/SurfacePaintLab').then((module) => module.SurfacePaintLab),
+    () => import('./examples/cases/SurfacePaintLab.tsx?raw'),
+  ),
   'standard-lighting': exampleLoader(
     () => import('./examples/cases/StandardLighting').then((module) => module.StandardLighting),
     () => import('./examples/cases/StandardLighting.tsx?raw'),

@@ -119,9 +119,11 @@ export type CanonicalPickSurface = Readonly<{
   materialSource?: CanonicalSurfaceMaterial;
   modelHandedness: 1 | -1;
   node: MeshNode | GltfNode | GltfInstancesNode;
+  normalTransform: Mat4;
   /** Asset-local transform composed after an imperative render-object transform. */
   objectLocalModel?: Mat4;
   pickingGeometry: CanonicalTriangleGeometry;
+  source: "rendered" | "picking-proxy";
 }>;
 
 export type CanonicalRenderObjectLightBinding = Readonly<{
@@ -513,10 +515,12 @@ export const prepareCanonicalSurfaceScene = (
             inverseModel: inverseMat4(rootModel),
             modelHandedness: canonicalModelHandedness(rootModel),
             node,
+            normalTransform: affineSurfaceNormalTransformInto(identityMat4(), rootModel),
             ...(node.ref === undefined
               ? {}
               : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
             pickingGeometry: proxyGeometry,
+            source: "picking-proxy",
           });
         } else {
           const proxyBatches = prepareGltfInstanceBatches(node.instances, identityMat4(), 1);
@@ -528,7 +532,12 @@ export const prepareCanonicalSurfaceScene = (
                 inverseModel: inverseMat4(mat4At(batch.localModels, offset)),
                 modelHandedness: batch.handedness,
                 node,
+                normalTransform: affineSurfaceNormalTransformInto(
+                  identityMat4(),
+                  mat4At(batch.localModels, offset),
+                ),
                 pickingGeometry: proxyGeometry,
+                source: "picking-proxy",
               });
             }
           }
@@ -757,11 +766,13 @@ export const prepareCanonicalSurfaceScene = (
                 inverseModel: inverseMat4(model),
                 modelHandedness: handedness,
                 node,
+                normalTransform: affineSurfaceNormalTransformInto(identityMat4(), model),
                 ...(lods === undefined ? {} : { lods }),
                 ...(node.kind !== "gltf" || node.ref === undefined
                   ? {}
                   : { objectLocalModel: primitive.localModel }),
                 pickingGeometry: primitive.geometry,
+                source: "rendered",
               });
             } else {
               const localModels = instanceBatch.localModels;
@@ -780,11 +791,13 @@ export const prepareCanonicalSurfaceScene = (
                     : { instanceIndex: sourceIndices[offset / 16]! }),
                   modelHandedness: handedness,
                   node,
+                  normalTransform: affineSurfaceNormalTransformInto(identityMat4(), instanceModel),
                   ...(lods === undefined ? {} : { lods }),
                   ...(node.kind !== "gltf" || node.ref === undefined
                     ? {}
                     : { objectLocalModel }),
                   pickingGeometry: primitive.geometry,
+                  source: "rendered",
                 });
               }
             }
@@ -880,19 +893,23 @@ export const prepareCanonicalSurfaceScene = (
         inverseModel,
         modelHandedness: surface.modelHandedness,
         node,
+        normalTransform: surface.normalTransform,
         ...(node.ref === undefined
           ? {}
           : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
         pickingGeometry,
+        source: "rendered",
       } : {
         ...(materialSource.doubleSided === true ? { doubleSided: true as const } : {}),
         inverseModel,
         modelHandedness: surface.modelHandedness,
         node,
+        normalTransform: surface.normalTransform,
         ...(node.ref === undefined
           ? {}
           : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
         pickingGeometry,
+        source: "picking-proxy",
       });
     }
   }

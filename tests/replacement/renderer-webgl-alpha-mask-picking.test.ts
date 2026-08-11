@@ -20,6 +20,7 @@ import type {
 import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/texture/sampler";
 import {
   createCanonicalPickingScratch,
+  canonicalPickLocalNormalInto,
   pickCanonicalSurfaceInto,
   type CanonicalPickHitAcceptance,
 } from "../../packages/renderer-webgl/src/surface/picking-query";
@@ -40,6 +41,16 @@ const geometry = (z = 0): CanonicalTriangleGeometry => ({
   positions: new Float32Array([0, 0, z, 1, 0, z, 0, 1, z]),
   textureCoordinates0: new Float32Array([0, 0, 1, 0, 0, 1]),
   textureCoordinates1: new Float32Array([1, 0, 0, 0, 1, 1]),
+});
+
+const emptyPickHit = () => ({
+  aIndex: -1,
+  barycentricB: 0,
+  barycentricC: 0,
+  bIndex: -1,
+  cIndex: -1,
+  distance: 0,
+  surfaceIndex: -1,
 });
 
 const maskedMaterial = (
@@ -244,12 +255,14 @@ describe("canonical alpha-mask picking", () => {
         inverseModel: identityMat4(),
         modelHandedness: 1,
         node,
+        normalTransform: identityMat4(),
         objectLocalModel: identityMat4(),
         pickingGeometry,
+        source: "rendered" as const,
       }),
     );
     const accepts = vi.fn((surface: CanonicalPickSurface) => surface === surfaces[1]);
-    const hit = { distance: 0, surfaceIndex: -1 };
+    const hit = emptyPickHit();
     expect(pickCanonicalSurfaceInto(
       hit,
       { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [0.25, 0.25, 1] },
@@ -258,9 +271,38 @@ describe("canonical alpha-mask picking", () => {
       undefined,
       accepts,
     )).toBe(true);
-    expect(hit).toEqual({ distance: 2, surfaceIndex: 1 });
+    expect(hit).toMatchObject({
+      aIndex: 0,
+      barycentricB: 0.25,
+      barycentricC: 0.25,
+      bIndex: 1,
+      cIndex: 2,
+      distance: 2,
+      surfaceIndex: 1,
+    });
+    expect(canonicalPickLocalNormalInto([0, 0, 0], hit, surfaces[1]!.pickingGeometry))
+      .toEqual([0, 0, 1]);
     expect(accepts).toHaveBeenCalledTimes(2);
     expect(accepts.mock.calls[0]!.slice(1, 6)).toEqual([0, 1, 2, 0.25, 0.25]);
+  });
+
+  it("interpolates exact surface normals from the retained barycentric hit", () => {
+    const pickingGeometry = {
+      ...geometry(),
+      normals: new Float32Array([0, 0, 1, 0, 1, 0, 1, 0, 0]),
+    };
+    const hit = {
+      ...emptyPickHit(),
+      aIndex: 0,
+      barycentricB: 0.25,
+      barycentricC: 0.25,
+      bIndex: 1,
+      cIndex: 2,
+    };
+    const normal = canonicalPickLocalNormalInto([0, 0, 0], hit, pickingGeometry);
+    expect(normal[0]).toBeCloseTo(1 / Math.sqrt(6));
+    expect(normal[1]).toBeCloseTo(1 / Math.sqrt(6));
+    expect(normal[2]).toBeCloseTo(2 / Math.sqrt(6));
   });
 
   it("transforms adjacent footprint rays through the same instance model", () => {
@@ -269,14 +311,16 @@ describe("canonical alpha-mask picking", () => {
     const node = { kind: "mesh" } as CanonicalPickSurface["node"];
     const accepts = vi.fn<CanonicalPickHitAcceptance>(() => true);
     expect(pickCanonicalSurfaceInto(
-      { distance: 0, surfaceIndex: -1 },
+      emptyPickHit(),
       { direction: [0, 0, -1], maxDistance: 10, minDistance: 0, origin: [2.25, 0.25, 1] },
       [{
         inverseModel,
         modelHandedness: 1,
         node,
+        normalTransform: identityMat4(),
         objectLocalModel: identityMat4(),
         pickingGeometry: geometry(),
+        source: "rendered",
       }],
       createCanonicalPickingScratch(),
       undefined,
@@ -298,8 +342,10 @@ describe("canonical alpha-mask picking", () => {
       inverseModel: identityMat4(),
       modelHandedness: 1,
       node,
+      normalTransform: identityMat4(),
       objectLocalModel: identityMat4(),
       pickingGeometry: geometry(),
+      source: "rendered",
     };
     const ray = {
       direction: [0, 0, 1] as const,
@@ -307,7 +353,7 @@ describe("canonical alpha-mask picking", () => {
       minDistance: 0,
       origin: [0.25, 0.25, -1] as const,
     };
-    const hit = { distance: 0, surfaceIndex: -1 };
+    const hit = emptyPickHit();
     expect(pickCanonicalSurfaceInto(
       hit,
       ray,

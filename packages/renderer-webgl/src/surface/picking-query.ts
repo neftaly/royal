@@ -2,6 +2,7 @@ import type { Vec3 } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
 import { lodMembershipsSelected, type LodLevelSelections } from "./lod-selection";
 import type { CanonicalPickSurface } from "./scene-lowering";
+import type { CanonicalTriangleGeometry } from "./canonical-geometry";
 
 export type CanonicalPickRay = Readonly<{
   direction: Vec3;
@@ -17,8 +18,66 @@ export type CanonicalPickRayFootprint = Readonly<{
 }>;
 
 export type MutableCanonicalPickHit = {
+  aIndex: number;
+  barycentricB: number;
+  barycentricC: number;
+  bIndex: number;
+  cIndex: number;
   distance: number;
   surfaceIndex: number;
+};
+
+/** Resolves the exact hit's interpolated local normal without allocating. */
+export const canonicalPickLocalNormalInto = (
+  target: [number, number, number],
+  hit: MutableCanonicalPickHit,
+  geometry: CanonicalTriangleGeometry,
+): [number, number, number] => {
+  const a = hit.aIndex * 3;
+  const b = hit.bIndex * 3;
+  const c = hit.cIndex * 3;
+  const barycentricA = 1 - hit.barycentricB - hit.barycentricC;
+  const normals = geometry.normals;
+  const edge1X = geometry.positions[b]! - geometry.positions[a]!;
+  const edge1Y = geometry.positions[b + 1]! - geometry.positions[a + 1]!;
+  const edge1Z = geometry.positions[b + 2]! - geometry.positions[a + 2]!;
+  const edge2X = geometry.positions[c]! - geometry.positions[a]!;
+  const edge2Y = geometry.positions[c + 1]! - geometry.positions[a + 1]!;
+  const edge2Z = geometry.positions[c + 2]! - geometry.positions[a + 2]!;
+  const faceX = edge1Y * edge2Z - edge1Z * edge2Y;
+  const faceY = edge1Z * edge2X - edge1X * edge2Z;
+  const faceZ = edge1X * edge2Y - edge1Y * edge2X;
+  let x = faceX;
+  let y = faceY;
+  let z = faceZ;
+  if (normals !== undefined) {
+    x = normals[a]! * barycentricA
+      + normals[b]! * hit.barycentricB
+      + normals[c]! * hit.barycentricC;
+    y = normals[a + 1]! * barycentricA
+      + normals[b + 1]! * hit.barycentricB
+      + normals[c + 1]! * hit.barycentricC;
+    z = normals[a + 2]! * barycentricA
+      + normals[b + 2]! * hit.barycentricB
+      + normals[c + 2]! * hit.barycentricC;
+  }
+  let length = Math.hypot(x, y, z);
+  if (!(length > 0) || !Number.isFinite(length)) {
+    x = faceX;
+    y = faceY;
+    z = faceZ;
+    length = Math.hypot(x, y, z);
+  }
+  if (!(length > 0) || !Number.isFinite(length)) {
+    target[0] = 0;
+    target[1] = 0;
+    target[2] = 1;
+    return target;
+  }
+  target[0] = x / length;
+  target[1] = y / length;
+  target[2] = z / length;
+  return target;
 };
 
 export type CanonicalLocalPickRay = Readonly<{
@@ -37,6 +96,7 @@ export type CanonicalLocalPickRayFootprint = Readonly<{
 }>;
 
 export type CanonicalPickingScratch = Readonly<{
+  exactHit: MutableExactSurfaceHit;
   localFootprint: Readonly<{ x: MutableLocalRay; y: MutableLocalRay }>;
   localRay: MutableLocalRay;
   triangleHit: MutableTriangleHit;
@@ -46,6 +106,15 @@ type MutableTriangleHit = {
   distance: number;
   u: number;
   v: number;
+};
+
+type MutableExactSurfaceHit = {
+  aIndex: number;
+  barycentricB: number;
+  barycentricC: number;
+  bIndex: number;
+  cIndex: number;
+  distance: number;
 };
 
 export type CanonicalPickHitAcceptance = (
@@ -59,6 +128,14 @@ export type CanonicalPickHitAcceptance = (
 ) => boolean;
 
 export const createCanonicalPickingScratch = (): CanonicalPickingScratch => ({
+  exactHit: {
+    aIndex: -1,
+    barycentricB: 0,
+    barycentricC: 0,
+    bIndex: -1,
+    cIndex: -1,
+    distance: 0,
+  },
   localFootprint: {
     x: { direction: [0, 0, -1], origin: [0, 0, 0] },
     y: { direction: [0, 0, -1], origin: [0, 0, 0] },
@@ -162,7 +239,8 @@ const triangleDistance = (
   return true;
 };
 
-const exactSurfaceDistance = (
+const exactSurfaceHitInto = (
+  target: MutableExactSurfaceHit,
   surface: CanonicalPickSurface,
   ray: MutableLocalRay,
   minDistance: number,
@@ -170,7 +248,7 @@ const exactSurfaceDistance = (
   triangleHit: MutableTriangleHit,
   acceptsHit?: CanonicalPickHitAcceptance,
   footprint?: CanonicalLocalPickRayFootprint,
-): number | undefined => {
+): boolean => {
   const { indices, positions } = surface.pickingGeometry;
   let nearest = maxDistance;
   let hit = false;
@@ -204,9 +282,15 @@ const exactSurfaceDistance = (
     ) {
       nearest = distance;
       hit = true;
+      target.aIndex = aIndex;
+      target.barycentricB = triangleHit.u;
+      target.barycentricC = triangleHit.v;
+      target.bIndex = bIndex;
+      target.cIndex = cIndex;
+      target.distance = distance;
     }
   }
-  return hit ? nearest : undefined;
+  return hit;
 };
 
 /** Exact, allocation-free query shared by pointer and future XR ray adapters. */
@@ -232,7 +316,8 @@ export const pickCanonicalSurfaceInto = (
       transformRayInto(scratch.localFootprint.y, footprint.y, surface.inverseModel);
     }
     if (!rayIntersectsBounds(scratch.localRay, surface, ray.minDistance, nearest)) continue;
-    const distance = exactSurfaceDistance(
+    const hit = exactSurfaceHitInto(
+      scratch.exactHit,
       surface,
       scratch.localRay,
       ray.minDistance,
@@ -241,9 +326,14 @@ export const pickCanonicalSurfaceInto = (
       acceptsHit,
       localFootprint,
     );
-    if (distance !== undefined && (surfaceIndex < 0 || distance < nearest)) {
-      nearest = distance;
+    if (hit && (surfaceIndex < 0 || scratch.exactHit.distance < nearest)) {
+      nearest = scratch.exactHit.distance;
       surfaceIndex = index;
+      target.aIndex = scratch.exactHit.aIndex;
+      target.barycentricB = scratch.exactHit.barycentricB;
+      target.barycentricC = scratch.exactHit.barycentricC;
+      target.bIndex = scratch.exactHit.bIndex;
+      target.cIndex = scratch.exactHit.cIndex;
     }
   }
   if (surfaceIndex < 0) return false;

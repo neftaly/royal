@@ -1,7 +1,7 @@
 import type { GltfNode } from './gltf';
 import type { GltfInstancesNode } from './gltf-instances';
 import type { MeshNode } from './mesh';
-import type { Metres, WorldPosition3 } from './primitives';
+import type { Direction3, Metres, WorldPosition3 } from './primitives';
 import { nonEmptyString } from './descriptor-values';
 
 /** Stable, non-empty application identity for one interactive scene target. */
@@ -46,6 +46,13 @@ export interface GltfInstancesPickTarget {
 
 export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;
 
+export interface PickSurface {
+  /** Unit surface normal in Royal world space. */
+  readonly normal: Direction3;
+  /** Whether the hit came from rendered triangles or a caller-authored picking proxy. */
+  readonly source: 'rendered' | 'picking-proxy';
+}
+
 export interface PickResult {
   /** CSS-pixel coordinate supplied to the pick. */
   readonly clientX: number;
@@ -55,5 +62,7 @@ export interface PickResult {
   readonly distance: Metres;
   /** Hit point in Royal world space, in metres. */
   readonly point: WorldPosition3;
+  /** Exact surface information for spatial tools such as painting and placement. */
+  readonly surface: PickSurface;
   readonly target: PickTarget;
 }

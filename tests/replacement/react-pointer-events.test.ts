@@ -72,6 +72,7 @@ describe("React scene pointer events", () => {
       clientY: 50,
       distance: 2.5,
       point: [0, 0, 0.5],
+      surface: { normal: [0, 0, 1], source: "rendered" },
       target: { kind: "mesh", node, pickingId: "hero" },
     };
     const pick = vi.fn(() => hit);
@@ -157,6 +158,7 @@ describe("React scene pointer events", () => {
         clientY: 0,
         distance: 1,
         point: [0, 0, 0],
+        surface: { normal: [0, 0, 1], source: "rendered" },
         target: { kind: "mesh", node, pickingId: id },
       };
       const target = { handlers: {} };

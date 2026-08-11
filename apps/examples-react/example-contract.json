@@ -39,6 +39,14 @@
       "title": "Virtual Texture Stress"
     },
     {
+      "id": "surface-paint-lab",
+      "maturity": "lab-probe",
+      "navigation": false,
+      "path": "/surface-paint-lab",
+      "sourceFile": "examples/cases/SurfacePaintLab.tsx",
+      "title": "Surface Paint Scaling Lab"
+    },
+    {
       "id": "standard-lighting",
       "maturity": "product",
       "navigation": true,

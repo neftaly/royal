@@ -144,6 +144,7 @@ export type {
   PickInput,
   PickingId,
   PickResult,
+  PickSurface,
   PickTarget,
 } from './picking';
 export type {
