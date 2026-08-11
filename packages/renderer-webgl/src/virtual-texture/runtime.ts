@@ -27,14 +27,12 @@ import {
   type VirtualTextureDemandWorkspace,
 } from "./demand";
 import {
-  DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
   virtualTexturePageKeyParts,
   type VirtualTextureManifest,
   type VirtualTexturePageId,
 } from "./manifest";
 import {
   selectVirtualTexturePoolSlot,
-  virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
   type VirtualTexturePageKey,
   type VirtualTexturePoolSlot,
@@ -59,8 +57,12 @@ import type {
   TextureSourceRef,
 } from "../texture/source";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
+import {
+  planVirtualTextureAtlasStorage,
+  type VirtualTextureAtlasStoragePlan,
+  virtualTextureResidentPageCapacity,
+} from "./storage-plan";
 
-const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
 const MAX_DECODE_JOBS = 4;
 const MAX_UPLOADS_PER_FRAME = 4;
 const MAX_DEMAND_PAGES = 512;
@@ -84,18 +86,13 @@ type ReadyPage = Readonly<{
   pageKey: VirtualTexturePageKey;
 }>;
 
-type GpuVirtualTextureAtlas = {
-  allocationBytes: number;
-  atlasColumns: number;
-  atlasRows: number;
+type GpuVirtualTextureAtlas = VirtualTextureAtlasStoragePlan & {
   atlasTexture: WebGLTexture;
   budgetIdentity: object;
-  compressed: boolean;
   key: string;
   lastUsedFrames: Uint32Array;
   referenceCount: number;
   slots: (VirtualTexturePoolSlot | undefined)[];
-  storedPageSize: number;
 };
 
 type GpuVirtualTexture = {
@@ -176,29 +173,13 @@ const createGpuVirtualTextureAtlas = (
   manifest: VirtualTextureManifest,
   budget: PersistentGpuBudgetOwner,
   key: string,
-  physicalByteLimit: number,
+  plan: VirtualTextureAtlasStoragePlan,
 ): GpuVirtualTextureAtlas => {
-  const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-  if (!Number.isSafeInteger(maxTextureSize) || maxTextureSize < 1) {
-    throw new RangeError("Royal VT received an invalid WebGL2 texture limit");
-  }
-  const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
-  const maximumAxisSlots = Math.min(256, Math.floor(maxTextureSize / storedPageSize));
-  const compressed = manifest.pageEncoding === "ktx2-etc2";
-  const bytesPerPage = storedPageSize * storedPageSize * (compressed ? 1 : 4);
-  const slotCount = Math.min(
-    Math.floor(physicalByteLimit / bytesPerPage),
-    maximumAxisSlots * maximumAxisSlots,
-  );
-  if (slotCount < 1) throw new RangeError("Royal VT budget cannot hold one physical page");
-  const atlasColumns = Math.min(maximumAxisSlots, Math.ceil(Math.sqrt(slotCount)));
-  const atlasRows = Math.ceil(slotCount / atlasColumns);
-  const allocationBytes = atlasColumns * atlasRows * bytesPerPage;
   const budgetIdentity = {};
   let atlasTexture: WebGLTexture | null = null;
   try {
     atlasTexture = allocateTexture(gl, "atlas texture");
-    if (!budget.tryClaim(budgetIdentity, allocationBytes)) {
+    if (!budget.tryClaim(budgetIdentity, plan.allocationBytes)) {
       throw new Error("Royal persistent GPU budget denied virtual texture storage");
     }
     gl.activeTexture(gl.TEXTURE0);
@@ -207,24 +188,20 @@ const createGpuVirtualTextureAtlas = (
     gl.texStorage2D(
       gl.TEXTURE_2D,
       1,
-      compressed
+      plan.compressed
         ? etc2RgbaWebGlFormat(colorSpace)
         : colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
-      atlasColumns * storedPageSize,
-      atlasRows * storedPageSize,
+      plan.atlasColumns * plan.storedPageSize,
+      plan.atlasRows * plan.storedPageSize,
     );
     return {
-      allocationBytes,
-      atlasColumns,
-      atlasRows,
+      ...plan,
       atlasTexture,
       budgetIdentity,
-      compressed,
       key,
-      lastUsedFrames: new Uint32Array(slotCount),
+      lastUsedFrames: new Uint32Array(plan.slotCount),
       referenceCount: 0,
-      slots: Array<VirtualTexturePoolSlot | undefined>(slotCount),
-      storedPageSize,
+      slots: Array<VirtualTexturePoolSlot | undefined>(plan.slotCount),
     };
   } catch (error) {
     if (atlasTexture !== null) gl.deleteTexture(atlasTexture);
@@ -239,20 +216,13 @@ const createGpuVirtualTexture = (
   manifest: VirtualTextureManifest,
   budget: PersistentGpuBudgetOwner,
   atlas: GpuVirtualTextureAtlas,
+  maxTextureSize: number,
 ): GpuVirtualTexture => {
-  const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-  if (
-    manifest.tableWidth > maxTextureSize
-    || manifest.tableHeight > maxTextureSize
-  ) throw new RangeError("Royal VT page table exceeds this WebGL2 context's texture limit");
-  const bytesPerPage = atlas.storedPageSize * atlas.storedPageSize * (atlas.compressed ? 1 : 4);
-  const byteSlots = Math.floor((manifest.physicalByteBudget ?? Infinity) / bytesPerPage);
-  const maxResidentPages = Math.min(
-    manifest.physicalSlots ?? DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
-    byteSlots,
-    atlas.slots.length,
+  const maxResidentPages = virtualTextureResidentPageCapacity(
+    manifest,
+    maxTextureSize,
+    atlas,
   );
-  if (maxResidentPages < 1) throw new RangeError("Royal VT budget cannot hold one physical page");
   const budgetIdentity = {};
   let budgetClaimed = false;
   let atlasSampler: WebGLSampler | null = null;
@@ -262,7 +232,7 @@ const createGpuVirtualTexture = (
     atlasSampler = allocateSampler(gl, "atlas sampler");
     pageTableTexture = allocateTexture(gl, "page-table texture");
     pageTableSampler = allocateSampler(gl, "page-table sampler");
-    if (!budget.tryClaim(budgetIdentity, virtualTexturePageTableByteLength(manifest))) {
+    if (!budget.tryClaim(budgetIdentity, manifest.tableByteLength)) {
       throw new Error("Royal persistent GPU budget denied virtual texture page-table storage");
     }
     budgetClaimed = true;
@@ -278,7 +248,7 @@ const createGpuVirtualTexture = (
     );
     gl.samplerParameteri(atlasSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.samplerParameteri(atlasSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const pageTableBytes = new Uint8Array(virtualTexturePageTableByteLength(manifest));
+    const pageTableBytes = new Uint8Array(manifest.tableByteLength);
     const pageTableLevels: Uint8Array[] = [];
     for (let mip = 0; mip < manifest.mipCount; mip += 1) {
       const offset = manifest.mipLayouts[mip]!.byteOffset;
@@ -858,23 +828,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       throw new Error("Royal ETC2 KTX2 VT pages require WEBGL_compressed_texture_etc");
     }
     const atlasKey = virtualTextureAtlasKey(resource.asset, manifest);
+    const maxTextureSize = this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
     let atlas = this.#atlases.get(atlasKey);
     const created = atlas === undefined;
     if (atlas === undefined) {
-      const remainingBytes = this.#budget.availableBytes;
-      const pageTableBytes = virtualTexturePageTableByteLength(manifest);
-      const availableAtlasBytes = Math.max(0, remainingBytes - pageTableBytes);
-      const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
-      const bytesPerPage = storedPageSize * storedPageSize
-        * (manifest.pageEncoding === "ktx2-etc2" ? 1 : 4);
-      const targetAtlasBytes = Math.min(
-        DEFAULT_PHYSICAL_BYTES,
-        bytesPerPage * DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
-      );
-      const atlasByteLimit = Math.min(
-        targetAtlasBytes,
-        availableAtlasBytes,
-        Math.max(bytesPerPage, Math.floor(availableAtlasBytes * 0.75)),
+      const plan = planVirtualTextureAtlasStorage(
+        manifest,
+        maxTextureSize,
+        this.#budget.availableBytes,
       );
       atlas = createGpuVirtualTextureAtlas(
         this.#gl,
@@ -882,7 +843,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         manifest,
         this.#budget,
         atlasKey,
-        atlasByteLimit,
+        plan,
       );
       this.#atlases.set(atlasKey, atlas);
     }
@@ -893,6 +854,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         manifest,
         this.#budget,
         atlas,
+        maxTextureSize,
       );
       atlas.referenceCount += 1;
       return gpu;

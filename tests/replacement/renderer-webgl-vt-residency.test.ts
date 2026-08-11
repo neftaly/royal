@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { parseVirtualTextureManifest, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
 import {
   selectVirtualTexturePoolSlot,
-  virtualTexturePageTableByteLength,
   writeVirtualTexturePageTable,
 } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 
@@ -32,7 +31,7 @@ describe("VT2 residency core", () => {
       manifest,
       residents,
       2,
-      new Uint8Array(virtualTexturePageTableByteLength(manifest)),
+      new Uint8Array(manifest.tableByteLength),
     );
     expect(residents.gets).toBe(
       manifest.mipLayouts.reduce((pages, layout) => pages + layout.width * layout.height, 0),
@@ -46,7 +45,7 @@ describe("VT2 residency core", () => {
       [virtualTexturePageKey(root), 0],
       [virtualTexturePageKey(fine), 3],
     ]);
-    const bytes = new Uint8Array(virtualTexturePageTableByteLength(manifest));
+    const bytes = new Uint8Array(manifest.tableByteLength);
     writeVirtualTexturePageTable(manifest, residents, 2, bytes);
     const mip0 = manifest.mipLayouts[0]!;
     const exactOffset = mip0.byteOffset + (manifest.tableWidth + 1) * 4;

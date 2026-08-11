@@ -282,7 +282,7 @@ describe("browser virtual texture runtime", () => {
     // Five compatible logical textures share one atlas and retain five page tables.
     expect(texStorage2D).toHaveBeenCalledTimes(6);
     expect(runtime.runtimeSnapshot()).toMatchObject({
-      atlasBytes: 1_690_000,
+      atlasBytes: 1_622_400,
       atlasPools: 1,
     });
     expect(pageReads.map(({ url }) => new URL(url).pathname.split("/")[1]))

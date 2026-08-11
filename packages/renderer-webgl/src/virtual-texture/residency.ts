@@ -43,10 +43,6 @@ export const selectVirtualTexturePoolSlot = (
   return candidate;
 };
 
-export const virtualTexturePageTableByteLength = (
-  manifest: VirtualTextureManifest,
-): number => manifest.tableByteLength;
-
 /**
  * Writes every logical page's closest resident ancestor. A newly uploaded page
  * is therefore never visible before its complete atlas cell is committed.
@@ -60,7 +56,7 @@ export const writeVirtualTexturePageTable = (
   if (!Number.isSafeInteger(atlasColumns) || atlasColumns < 1 || atlasColumns > 256) {
     throw new RangeError("Royal VT atlas columns must be within 1..256");
   }
-  if (target.byteLength !== virtualTexturePageTableByteLength(manifest)) {
+  if (target.byteLength !== manifest.tableByteLength) {
     throw new RangeError("Royal VT page-table storage has the wrong byte length");
   }
   target.fill(0);

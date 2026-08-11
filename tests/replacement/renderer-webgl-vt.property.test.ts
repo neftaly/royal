@@ -13,10 +13,7 @@ import {
   parseVirtualTextureManifest,
   virtualTexturePageKeyParts,
 } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
-import {
-  virtualTexturePageTableByteLength,
-  writeVirtualTexturePageTable,
-} from "../../packages/renderer-webgl/src/virtual-texture/residency";
+import { writeVirtualTexturePageTable } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 describe("VT2 bounded planning properties", () => {
@@ -96,7 +93,7 @@ describe("VT2 bounded planning properties", () => {
           }
         }
       }
-      const table = new Uint8Array(virtualTexturePageTableByteLength(manifest));
+      const table = new Uint8Array(manifest.tableByteLength);
       writeVirtualTexturePageTable(manifest, residents, 8, table);
       for (let mip = 0; mip < manifest.mipCount; mip += 1) {
         const layout = manifest.mipLayouts[mip]!;
