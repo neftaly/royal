@@ -11,8 +11,9 @@ versions identify source-level prerelease checkpoints in this repository.
   authored normals. The derivative-normal shader no longer fails on Firefox or
   WebKit, and avoids an inert matrix upload on every such draw.
 - Add `screenSpaceSegment({ start, end, material })` as the single
-  world-anchored fixed-CSS-width guide primitive inside `SceneOverlay`. It
-  reuses `edgeMaterial` color, width, and complementary coverage semantics.
+  world-anchored fixed-presentation-width guide primitive inside
+  `SceneOverlay`. It reuses `edgeMaterial` color, width, and complementary
+  coverage semantics.
 - Encode scene-linear edge and segment RGB at the sRGB presentation boundary.
   Outline colors previously wrote raw linear components into the display
   buffer while direct unlit overlays applied the documented encoding.

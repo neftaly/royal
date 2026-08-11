@@ -15,7 +15,7 @@ export interface ScreenSpaceSegmentOptions {
   readonly start: WorldPosition3;
   /** Distinct segment endpoint in world metres. */
   readonly end: WorldPosition3;
-  /** Scene-linear color, CSS-pixel width, and optional complementary coverage. */
+  /** Scene-linear color, presentation-space width, and optional complementary coverage. */
   readonly material: EdgeMaterial;
 }
 

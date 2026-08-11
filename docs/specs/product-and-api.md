@@ -15,7 +15,7 @@ Royal MUST make these paths first-class:
 - explicit bulk instances and authored GPU instances;
 - authored and automatic virtual texturing where beneficial;
 - stable mesh, glTF occurrence, and instance picking;
-- always-visible direct, outline, and fixed-CSS-width segment overlays;
+- always-visible direct, outline, and fixed-presentation-width segment overlays;
 - transparent or opaque canvas presentation with correct color handling;
 - demand rendering in ordinary canvas mode and session-driven WebXR;
 - context loss, cancellation, partial readiness, and bounded failure reporting.

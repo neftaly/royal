@@ -294,14 +294,18 @@ arbitrary draw order or raw WebGL depth state.
 `screenSpaceSegment(...)` presents distinct world-space `start` and `end`
 positions with square caps and the supplied `edgeMaterial`. Its width is in CSS
 pixels on canvas and presentation pixels in each external/XR view, independent
-of DPR, perspective, and endpoint depth. Homogeneous near-plane clipping occurs
-before screen-space expansion; a segment wholly behind the near plane emits no
-fragments. Segment and outline RGB both use the same scene-linear-to-sRGB
-presentation encoding as direct unlit overlays. Consecutive equal materials
-batch as instanced draws over one
-root-budgeted retained float32 endpoint buffer. Replacing segment endpoints
+of DPR, perspective, and endpoint depth; `widthCssPixels` must be finite and
+within `(0, 16]`. Homogeneous near-plane clipping occurs before screen-space
+expansion; a segment wholly behind the near plane emits no fragments. Segment
+and outline RGB both use the same scene-linear-to-sRGB presentation encoding as
+direct unlit overlays. Consecutive equal materials batch as instanced draws over
+one root-budgeted retained float32 endpoint buffer. Replacing segment endpoints
 rebuilds only that overlay buffer; ordinary frames upload nothing, and a scene
 without segments creates no segment program, buffer, or vertex array.
+The endpoint buffer and per-run vertex arrays are required presentation state:
+budget denial or allocation failure follows the normal scheduled-frame or
+explicit-call failure contract instead of selecting native lines, generated
+mesh geometry, or another hidden fallback.
 
 `outlineGltf(...)` is the accepted glTF overlay form. It requires an
 `edgeMaterial`, reuses a currently rendered occurrence's prepared selected

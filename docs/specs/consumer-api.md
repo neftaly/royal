@@ -170,8 +170,10 @@ second geometry API.
 guide path. `start` and `end` are distinct float32-representable world positions;
 `material` is an `edgeMaterial`, so outlines and segments share scene-linear
 color, `widthCssPixels`, and optional `screenSpacePartition` semantics. A
-segment is accepted only inside `sceneOverlay({ nodes })`; it has no transform,
-picking identity, mesh geometry, native-line-width option, or backend handle.
+finite `widthCssPixels` must be within `(0, 16]`; it means CSS pixels on canvas
+and per-view presentation pixels in external/XR views. A segment is accepted
+only inside `sceneOverlay({ nodes })`; it has no transform, picking identity,
+mesh geometry, native-line-width option, or backend handle.
 
 ## React versus imperative state
 

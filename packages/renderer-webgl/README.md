@@ -108,9 +108,11 @@ part of the ordinary root API.
 always-visible presentation lane. Warm overlay-only updates restore retained
 world presentation when its budget-governed target is available; allocation
 denial falls back to a correct complete world render. Passing `null` clears the
-lane. Fixed-CSS-width `screenSpaceSegment(...)` nodes retain one endpoint
-buffer, batch consecutive equal `edgeMaterial(...)` styles, and expand per
-view without creating geometry or shader resources in scenes which omit them.
+lane. Fixed-presentation-width `screenSpaceSegment(...)` nodes retain one
+endpoint buffer, batch consecutive equal `edgeMaterial(...)` styles, and
+expand per view without creating geometry or shader resources in scenes which
+omit them. Widths are CSS pixels on canvas and per-view presentation pixels in
+external/XR views.
 `createCameraViewResource(...)` may be used as the scene camera; committed
 changes invalidate one frame and update retained camera storage without
 re-lowering the scene or rebuilding GPU resources.

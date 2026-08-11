@@ -4,10 +4,10 @@ import {
   positiveFiniteNumber,
 } from './descriptor-values';
 
-/** Complementary, view-local screen-space coverage authored in CSS-pixel cells. */
+/** Complementary, view-local coverage in canvas CSS or external-view presentation pixels. */
 export interface ScreenSpacePartition {
   readonly kind: 'screen-space-partition';
-  /** Width and height of one square coverage cell in CSS pixels. */
+  /** Cell size in canvas CSS pixels or external-view presentation pixels. */
   readonly cellSizeCssPixels: number;
   /** Number of complementary partitions sharing the same spatial phase, in `[1, 4096]`. */
   readonly count: number;
@@ -16,7 +16,7 @@ export interface ScreenSpacePartition {
 }
 
 export interface ScreenSpacePartitionOptions {
-  /** Width and height of one square coverage cell in CSS pixels. */
+  /** Cell size in canvas CSS pixels or external-view presentation pixels. */
   readonly cellSizeCssPixels: number;
   /** Number of complementary partitions sharing the same spatial phase, in `[1, 4096]`. */
   readonly count: number;

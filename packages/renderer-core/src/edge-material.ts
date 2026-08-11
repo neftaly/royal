@@ -18,7 +18,10 @@ export interface EdgeMaterial {
   readonly color: LinearRgba;
   /** Optional complementary view-local screen-space coverage. */
   readonly coverage?: ScreenSpacePartition;
-  /** Requested full outline or segment width in CSS pixels. */
+  /**
+   * Full width in canvas CSS pixels or external-view presentation pixels,
+   * within `(0, 16]`.
+   */
   readonly widthCssPixels: number;
 }
 
@@ -27,7 +30,10 @@ export interface EdgeMaterialOptions {
   readonly color: LinearRgba;
   /** Optional complementary view-local screen-space coverage. */
   readonly coverage?: ScreenSpacePartition;
-  /** Full outline or segment width in CSS pixels, within `(0, 16]`. */
+  /**
+   * Full width in canvas CSS pixels or external-view presentation pixels,
+   * within `(0, 16]`.
+   */
   readonly widthCssPixels: number;
 }
 
