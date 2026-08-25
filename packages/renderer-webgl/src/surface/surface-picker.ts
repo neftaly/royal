@@ -14,6 +14,7 @@ import type { CanonicalCamera } from "./camera-source-owner";
 import type { LodLevelSelections } from "./lod-selection";
 import {
   createCanonicalPickingScratch,
+  canonicalPickBaseColorTextureCoordinatesInto,
   canonicalPickWorldNormalInto,
   pickCanonicalSurfaceInto,
   type CanonicalLocalPickRayFootprint,
@@ -89,6 +90,7 @@ export class SurfacePicker {
   readonly #alphaSamplingScratch = createCanonicalAlphaMaskSamplingScratch();
   readonly #alphaTexture: (asset: TextureSourceRef) => DecodedTextureAlpha | undefined;
   readonly #far: [number, number, number] = [0, 0, 0];
+  readonly #baseColorTextureCoordinates: [number, number] = [0, 0];
   readonly #footprintXFar: [number, number, number] = [0, 0, 0];
   readonly #footprintXNear: [number, number, number] = [0, 0, 0];
   readonly #footprintXRay = mutablePickRay();
@@ -159,6 +161,14 @@ export class SurfacePicker {
       surface.pickingGeometry,
       inverseModel,
     );
+    const baseColorTextureCoordinates = surface.source === "rendered"
+      ? canonicalPickBaseColorTextureCoordinatesInto(
+          this.#baseColorTextureCoordinates,
+          this.#hit,
+          surface.pickingGeometry,
+          surface.baseColorTexture,
+        )
+      : undefined;
     let target: PickResult["target"];
     if (surface.node.kind === "mesh") {
       target = {
@@ -195,7 +205,13 @@ export class SurfacePicker {
         ray.origin[1] + ray.direction[1] * distance,
         ray.origin[2] + ray.direction[2] * distance,
       ],
-      surface: { normal: [...this.#normal], source: surface.source },
+      surface: {
+        ...(baseColorTextureCoordinates === undefined
+          ? {}
+          : { baseColorTextureCoordinates: [...baseColorTextureCoordinates] as const }),
+        normal: [...this.#normal],
+        source: surface.source,
+      },
       target,
     };
   }

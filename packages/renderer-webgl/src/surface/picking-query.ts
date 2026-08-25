@@ -103,6 +103,44 @@ export const canonicalPickWorldNormalInto = (
   return target;
 };
 
+/** Interpolates the exact hit's base-colour UV using the same affine rows as rendering. */
+export const canonicalPickBaseColorTextureCoordinatesInto = (
+  target: [number, number],
+  hit: MutableCanonicalPickHit,
+  geometry: CanonicalTriangleGeometry,
+  texture: CanonicalPickSurface["baseColorTexture"],
+): [number, number] | undefined => {
+  if (texture === undefined) return undefined;
+  const coordinates = texture.coordinates;
+  const set = coordinates?.row0[3] ?? 0;
+  const textureCoordinates = set === 0
+    ? geometry.textureCoordinates0
+    : geometry.textureCoordinates1;
+  if (textureCoordinates === undefined) return undefined;
+  const barycentricA = 1 - hit.barycentricB - hit.barycentricC;
+  const a = hit.aIndex * 2;
+  const b = hit.bIndex * 2;
+  const c = hit.cIndex * 2;
+  const u = textureCoordinates[a]! * barycentricA
+    + textureCoordinates[b]! * hit.barycentricB
+    + textureCoordinates[c]! * hit.barycentricC;
+  const v = textureCoordinates[a + 1]! * barycentricA
+    + textureCoordinates[b + 1]! * hit.barycentricB
+    + textureCoordinates[c + 1]! * hit.barycentricC;
+  if (coordinates === undefined) {
+    target[0] = u;
+    target[1] = v;
+  } else {
+    target[0] = coordinates.row0[0] * u
+      + coordinates.row0[1] * v
+      + coordinates.row0[2];
+    target[1] = coordinates.row1[0] * u
+      + coordinates.row1[1] * v
+      + coordinates.row1[2];
+  }
+  return target;
+};
+
 export type CanonicalLocalPickRay = Readonly<{
   readonly direction: readonly [number, number, number];
   readonly origin: readonly [number, number, number];

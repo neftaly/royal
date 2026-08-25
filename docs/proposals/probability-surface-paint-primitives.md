@@ -1,137 +1,178 @@
-# Probability surface-paint renderer primitives
+# Surface authoring primitives for Probability
 
-Status: measured experiment on `experiment/surface-paint`, not a request to merge the lab as product API.
+Status: measured experiment on `experiment/surface-paint`. The lab is evidence, not proposed product API.
 
-## Outcome
+## Decision
 
-Sparse, depth-tested ribbon geometry is a viable common presentation for handwriting on flat pieces and paint on rigid miniatures. Static playback is already fast enough. Royal is missing three generic capabilities needed to make authoring correct and cheap:
+Probability needs two renderer lanes with one atomic hand-off:
 
-1. exact picked-surface normal and rendered-vs-proxy provenance;
-2. an appendable triangle-geometry resource that does not replace the scene; and
-3. a scale-independent way to place an ordinary depth-tested surface immediately above a coincident surface.
+1. **Live lane:** exact surface picks feed a small appendable ribbon. Confirmed input and the predicted tail are separate; replacing predictions never rewrites confirmed geometry.
+2. **Settled lane:** completed ordered strokes are drawn into occurrence-local, canvas/SVG-generated virtual-texture pages. A committed ribbon remains visible until the replacement pages are resident, then disappears in the same publication.
 
-This proposal does not require a Probability-specific paint API, SVG support in the 3D renderer, mutable glTF textures, or a new texture-atlas lifecycle.
+Ribbons remain the correctness fallback for UV-less, overlapping-UV, proxy-picked, or otherwise unparameterised surfaces. Cards and sheets have known UVs and should normally settle into VT. A textured glTF miniature may settle into VT only when the picked base-colour mapping is usable; it must not silently paint mirrored UV islands.
 
-## Reproduction
+Royal already supplies the vector-backed automatic-VT raster path. Probability should use it. Royal is missing generic ownership, update, and query primitives around that path; it does not need a Probability paint engine.
 
-The branch adds `/surface-paint-lab`. Its default workload is 96 independently movable tabletop pieces, 12 strokes per piece, 20 samples per stroke, and four paint materials. Half the pieces are 63 × 88 × 0.35 mm cards; half are curved miniature proxies. Each piece/palette pair is one triangle mesh, so the scene represents 1,152 authored strokes and 23,040 samples in 480 draws without making every stroke a node.
+## Real-device evidence
 
-Useful query parameters are:
+All iPad results used the connected iPad Safari at native DPR 2. Captured pixels were inspected as well as counters.
 
-```text
-paintOwnership=piece|world
-paintPieces=96
-paintStrokes=12
-paintPoints=20
-paintLiftMicrometres=500
-paintLive=1
-```
+### Static presentation
 
-The `world` ownership mode is only an upper-bound control. It is not a valid application representation because moving one piece would rewrite the table-wide geometry.
+The lab uses 96 independently movable pieces: 48 cards and 48 curved mini proxies. Each stroke has 20 surface samples.
 
-Host benchmark:
+| presentation | strokes / piece | iPad p95 | result |
+| --- | ---: | ---: | --- |
+| grouped ribbon geometry, 12 colours | 12 | 13–15 ms | comfortably static |
+| grouped ribbon geometry, 12 colours | 384 | 19–20 ms | density crosses the 60 fps target |
+| one SVG/VT material per piece | 384 | 18 ms after settling | draw cost no longer grows with stroke count |
 
-```sh
-EXAMPLES_BENCH_ROUTE=surface-paint-lab \
-EXAMPLES_BENCH_ROUTE_SEARCH='paintOwnership=piece&paintPieces=96&paintStrokes=12&paintPoints=20&paintLive=1' \
-EXAMPLES_BENCH_CAMERA_DRAG=1 \
-EXAMPLES_BENCH_FRAMES=120 \
-EXAMPLES_BENCH_WARMUP_FRAMES=30 \
-pnpm --filter @royal/examples-react bench:examples
-```
+The SVG/VT case is one draw per piece rather than one draw or node per stroke. That is the right dense display shape, but the current route is not yet the right authoring/lifetime API.
 
-The existing USB `bench:ipad-safari` harness was used against the exact dirty build, at native DPR 2 and a 1,984 × 992 backing canvas. Captured final pixels were inspected as well as counters.
+With 96 unique 2048-pixel SVG fallbacks and 384 strokes per piece, the run took 21.0 seconds to reach the benchmark window, retained 201.0 MB of ordinary GPU textures in addition to the 1.67 MB shared VT atlas, retained 16.5 MB of encoded SVG, and WebKit observed 93.1 MB of repeated SVG decode-resource reads.
 
-| iPad Safari case | p95 | p99 | draws/frame | geometry upload/frame | upload calls/frame |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| static, visibly complete | 15 ms | 15 ms | 480 | 0 | 0 |
-| one growing immutable stroke | 22 ms | 30 ms | 481 | 824,583 B | 774 |
+SVG's intrinsic dimensions need not define its VT detail. Keeping the same 2048-unit viewBox while declaring a 128-pixel fallback reduced ordinary texture residency from 201.0 MB to 8.39 MB. However, measurement began while complex SVG pages were still rasterising: p50 stayed 18 ms, while p95 rose to 47 ms and p99 to 106 ms. A shared two-texture control finished in 4.15 seconds, showing that independently owned derived paint—not final draw count—is the scaling pressure.
 
-The visibly complete cases use a 500 µm physical lift only as a measurement oracle, not as an accepted product solution. The static case uploads 822,228 bytes once. The live case changes only one short ribbon, yet the immutable scene path repeatedly processes and uploads essentially the complete scene. A live capture also caught frames in which established paint/base geometry was absent while the replacement scene was being admitted. This is both a pacing and presentation-lifetime failure.
+Conclusion: use the existing small ordinary SVG fallback plus vector VT, but let Probability generate requested pages directly from its decoded stroke cache. Re-serialising and re-decoding the whole SVG for each page is avoidable work.
 
-On desktop hardware, the same live case measured 4.0 ms render-callback p95, 10.56 ms GPU p95, and about 824,527 uploaded bytes per camera frame. Static playback was materially cheaper. The exact numbers are less important than the disproportionality: one appended sample invalidates unrelated geometry.
+### Live geometry
 
-## 1. Exact surface pick result
+The current immutable-scene control changes one growing stroke but repeatedly processes about 825 KiB and 774 uploads per frame. On iPad it raised a 15 ms static case to 22 ms p95 / 30 ms p99 and produced captured frames where established geometry disappeared during replacement. A brush preview must not use this path.
 
-The branch prototypes this minimal public addition:
+### Exact picking
 
-```ts
-type PickResult = {
-  // existing client position, distance, world point, and target
-  surface: {
-    normal: Direction3; // unit, Royal world space
-    source: 'rendered' | 'picking-proxy';
-  };
-};
-```
+The current exact query bounds-tests surfaces but linearly scans triangles within a candidate. The corrected iPad probe repeatedly hit the same visible mini surface:
 
-Royal already computes the winning triangle and barycentric coordinates for exact picking. The prototype retains those values, interpolates authored normals (falling back to the face normal), transforms the result with the same normal transform as rendering, and exposes only the world normal. It does not expose glTF primitive IDs or renderer-owned triangle identity.
+| rendered triangles | average pick | p95 pick |
+| ---: | ---: | ---: |
+| 100,000 | 3.15 ms | 4 ms |
+| 1,000,000 | 35.77 ms | 37 ms |
 
-World point plus world normal is sufficient for a rigid caller to store a point in its own local transform. `source` is required: a coarse caller-authored picking proxy must not silently become a painted render surface. Probability can require `source === 'rendered'` without coupling its document to glTF internals.
+This consumes too much of an 8.3 ms 120 Hz Pencil interval before sampling, tessellation, or rendering. Exact picking needs a retained geometry acceleration structure. A BVH is the smallest general fix; a previous-triangle continuation or batched query can be evaluated later, but cannot replace the fallback index.
 
-Before acceptance, tests should cover non-uniform and negative scale, imperative render-object transforms, authored and absent normals, direct meshes, glTF, instances, and context restoration. Skinned or morphed surface anchoring is intentionally not claimed by this API.
+### Browser input capabilities
 
-## 2. Appendable triangle geometry
+The same iPad Safari exposes pressure, tilt, twist, and tangential pressure. It does **not** expose `pointerrawupdate`, `getCoalescedEvents()`, `getPredictedEvents()`, altitude angle, or azimuth angle. Desktop Chromium in the same lab exposes all of them. Royal should not own Pointer Events policy, but its live resource must be cheap enough for both the basic `pointermove` path and higher-frequency confirmed/predicted batches.
 
-Royal needs a generic retained geometry resource analogous to its camera and instance resources. Desired semantics, not final naming:
+## 1. Exact surface result
+
+The branch prototypes:
 
 ```ts
-const geometry = createTriangleGeometryResource(initialGeometry);
+interface PickSurface {
+  normal: Direction3;
+  source: 'rendered' | 'picking-proxy';
+  baseColorTextureCoordinates?: readonly [number, number];
+}
+```
 
-geometry.append({ positions, normals, indices }); // staged; chunk-local indices
-geometry.truncate({ indices, vertices });         // undo/cancel/edit support
-geometry.replace(nextGeometry);                   // reload or arbitrary rewrite
-geometry.commit();                                // one publication/invalidation
+The optional coordinate is interpolated from the winning rendered triangle and transformed with the same UV set and affine rows as the base-colour shader. Proxy picks deliberately omit it. Direct textured meshes now reuse the rendered canonical geometry for exact picking rather than lowering a UV-less duplicate.
+
+This is deliberately not a public triangle ID. World point plus normal is the universal rigid-surface attachment. Base-colour UV is an optional fast presentation coordinate. Probability must keep local point/normal samples canonical so a missing or invalid UV falls back to ribbons.
+
+Before landing, cover direct meshes, glTF primitives and instances, UV0/UV1, `KHR_texture_transform`, negative/non-uniform and imperative transforms, absent normals/UVs, context restoration, and proxy exclusion.
+
+## 2. Accelerated exact picking
+
+Build and retain an acceleration structure with each exact canonical triangle geometry. Requirements:
+
+- construction is shared wherever exact geometry is shared;
+- scene transforms do not rebuild asset-local acceleration data;
+- the result and alpha-mask acceptance remain bit-for-bit equivalent to the linear query;
+- malformed/degenerate triangles remain bounded and deterministic;
+- memory is visible in renderer diagnostics and released with geometry;
+- context loss does not rebuild CPU-only data unnecessarily; and
+- property/fuzz tests compare accelerated and linear winners across rays, transforms, winding, LOD, and alpha masks.
+
+Acceptance target: both 100k and 1m probe cases below 1 ms p95 on the same iPad, without weakening exact rendered picking.
+
+## 3. Appendable triangle geometry
+
+Royal needs a generic retained resource analogous to its camera and instance resources. Desired semantics, not final naming:
+
+```ts
+const geometry = createTriangleGeometryResource(initial);
+
+geometry.append({ positions, normals, indices });
+geometry.truncate({ indices, vertices });
+geometry.replace(next);
+geometry.commit();
 
 mesh({ geometry, material });
 ```
 
 Requirements:
 
-- Stable resource identity; a commit must not require a new React tree or scene descriptor.
-- Append cost proportional to the appended channels and indices. Unchanged surfaces must have zero validation/upload work.
-- Automatic internal growth and compaction; no arbitrary public capacity or depth limit.
-- The resource retains enough canonical CPU state for WebGL context restoration.
-- `commit()` batches multiple channel changes and publishes one renderer invalidation.
-- Exact validation at the imperative boundary; the renderer must not accept partially indexed or mismatched channels.
-- `replace` is the correctness path for arbitrary document changes. Append/truncate are optimizations with explicit semantics, not byte-prefix guessing.
-- Resource release, abandoned staged changes, Strict Mode, and remounts must not leak buffers or subscriptions.
+- stable resource identity; no React update or scene replacement per sample;
+- append cost proportional to the new bytes, with zero work for unrelated surfaces;
+- automatic internal capacity growth, with no public arbitrary limit;
+- staged changes publish once at `commit()`;
+- retained canonical CPU state supports context restoration;
+- truncate supports cancellation and replacement of a predicted tail;
+- exact channel/index validation at the imperative boundary; and
+- Strict Mode, remount, abandoned staging, and release do not leak.
 
-Probability would ordinarily retain at most one mesh per piece/palette and append a tessellated stroke chunk. The in-progress stroke stays local; the completed immutable stroke remains application document data. This keeps Royal a renderer rather than an ink document owner.
+Probability uses one resource for confirmed local ink and a much smaller resource for predictions. A new confirmed batch truncates predictions, appends confirmed geometry, then appends the new predicted tail. Peers and completed history never enter the prediction resource.
 
-The acceptance benchmark should reduce the live workload from about 825 KiB per frame to the new ribbon segment's bytes, keep unrelated upload calls at zero, preserve every established surface in captured frames, and keep iPad live p95 within 2 ms of the static case.
+Acceptance target: live iPad p95 within 2 ms of static; a new segment uploads only its own bytes; established pixels never disappear.
 
-## 3. Coincident depth-tested surfaces
+## 4. Generated, region-invalidated VT source
 
-The lab initially offsets ribbon vertices along their surface normals. Real-device captures show why this cannot be the product rule:
+Royal's internal `VirtualTexturePageSource` already has the correct read shape, while the public descriptor only accepts an authored manifest URI. Expose a generic generated-source ownership boundary so an application can paint requested pages with Canvas/SVG without manufacturing data URLs or a fake HTTP filesystem.
 
-- 20 µm and 100 µm offsets produced missing/dotted ink at ordinary camera angles.
-- 500 µm produced complete paint, but the test card itself is only 350 µm thick.
-- A large world-space offset can visibly float away from a small miniature at silhouettes and changes physical geometry merely to influence raster ordering.
+Required semantics:
 
-Royal should experiment with a generic decal/coincident-surface primitive. Required observable behavior:
+- caller supplies logical extent, colour space, sampler, and an abortable page reader;
+- reader receives mip/page bounds including gutters and returns an image/canvas/bitmap representation accepted by the normal VT upload path;
+- regional invalidation dirties only intersecting pages and mip ancestors;
+- old resident pages remain presentable until replacements are ready;
+- one atomic publication swaps replacement pages and allows the caller to retire its live geometry;
+- rapid edits coalesce and obsolete reads abort;
+- generated resources share Royal's existing atlas pools, budgets, diagnostics, and context lifecycle;
+- source identity and revision are explicit without requiring a URL; and
+- ordinary fallback can remain a deliberately small SVG/image representation.
 
-- it remains an ordinary scene surface and is occluded by genuinely nearer geometry;
-- it deterministically wins against the surface on which it is coincident;
-- it does not render always-on-top like a scene overlay;
-- it does not require application-authored physical displacement; and
-- it behaves consistently across iPad Safari, desktop browsers, camera distance, incidence angle, near/far range, and context restoration.
+The exact API should be chosen adversarially by Royal. A structural page-provider object or a retained root-owned resource both fit; a Probability-specific `paintTexture` does not.
 
-WebGL polygon offset, a constrained depth-bias descriptor, or another renderer-owned implementation may satisfy this. The Royal API should describe the general rendering relationship, not Probability strokes. A physical-metre offset is explicitly rejected by the device evidence.
+Probability's reader draws base art and ordered committed strokes straight into the requested page. SVG is a useful derived display form, especially for variable-width outline paths, but is not document state. A worker/OffscreenCanvas implementation is optional acceleration; correctness must also work on main-thread Canvas.
 
-## Rejected first steps
+## 5. Coincident depth-tested surfaces
 
-- **SVG as canonical 3D paint:** excellent for flat paths, but it cannot attach a stroke to an arbitrary curved glTF surface without a second model.
-- **Per-stroke scene nodes:** makes draw/submission count grow with history rather than painted pieces/materials.
-- **Mutable per-piece textures/VT first:** needs surface UVs, unique non-overlapping UV ownership, texture mutation, mip generation, and occurrence-specific material binding. Arbitrary glTF does not guarantee that UV contract.
-- **Rebuilding immutable scenes during input:** measured above and rejected.
-- **Table-wide packed geometry:** fast control, but destroys independent piece ownership and cheap transforms.
-- **Renderer paint document or Probability operation types:** outside Royal's rendering responsibility.
-- **Automatic unique-geometry batching now:** static iPad playback already meets the frame budget. Revisit only if a post-resource benchmark identifies submission as the remaining bottleneck.
+Live ribbons and UV-less settled paint need a generic coincident/decal depth relationship. Physical lifts are rejected by iPad evidence: 20 and 100 µm produced missing paint; 500 µm was complete but exceeds the 350 µm card thickness.
 
-## Suggested delivery order
+Required behavior:
 
-1. Adversarially review and land exact surface normal/provenance.
-2. Build the appendable resource and rerun static/live host and iPad probes.
-3. Experiment with coincident depth semantics using the 20/100/500 µm visual oracle.
-4. Only then integrate the minimal Probability drawing route and reassess whether dense paint warrants a texture-backed tier.
+- paint wins only against its coincident host surface;
+- genuinely nearer geometry still occludes it;
+- it is not a screen-space always-on-top overlay;
+- no physical-metre displacement is authored; and
+- behavior is stable across camera range/angle, iPad Safari, desktop, and context restoration.
+
+Royal may implement this with constrained depth bias, polygon offset, or another renderer-owned method. The API should state the relationship, not the mechanism or Probability use case.
+
+## UV-less dense miniatures
+
+Existing glTF UVs may overlap or mirror and therefore cannot be assumed paint-safe. Ribbons preserve correctness but eventually scale with history. The strongest long-term route is a per-face/Ptex-like parameterisation feeding the same VT atlas: it needs no source UVs and naturally assigns unique detail to faces. That is a separate measured renderer research project, not an MVP requirement and not something Probability should fake with object IDs.
+
+Do not silently bake through overlapping source UVs. Until a paint-safe mapping is proven, keep that occurrence on grouped ribbon geometry.
+
+## Rejected directions
+
+- canonical SVG or bitmap paint state;
+- rebuilding immutable scenes during input;
+- one scene node per stroke or dab;
+- publishing predicted samples to document or presence;
+- replacing full textures on every pointer move;
+- per-piece 2048² ordinary texture fallbacks;
+- vertex colours as a dense-paint substitute;
+- exposing renderer triangle IDs in Probability state; and
+- absorbing Probability brush, undo, or Automerge semantics into Royal.
+
+## Suggested Royal order
+
+1. Review and land exact normal/provenance/optional base-colour UV.
+2. Add the geometry BVH and rerun the 100k/1m iPad probe.
+3. Add append/truncate/commit geometry and rerun the live workload.
+4. Prototype the generated VT page source with 96 unique × 384-stroke pieces; require bounded fallback memory and smooth page arrival.
+5. Land coincident depth semantics for the live and UV-less lane.
+6. Only then evaluate per-face VT for dense UV-less miniatures.

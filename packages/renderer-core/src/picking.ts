@@ -47,6 +47,8 @@ export interface GltfInstancesPickTarget {
 export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;
 
 export interface PickSurface {
+  /** Base-colour texture coordinate after the material's authored UV transform, when available. */
+  readonly baseColorTextureCoordinates?: readonly [number, number];
   /** Unit surface normal in Royal world space. */
   readonly normal: Direction3;
   /** Whether the hit came from rendered triangles or a caller-authored picking proxy. */

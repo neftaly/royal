@@ -112,6 +112,9 @@ type PreparedExplicitInstanceBatch = IndexedStaticInstanceBatch & Readonly<{
 
 export type CanonicalPickSurface = Readonly<{
   alphaMaskSampler?: ReturnType<typeof canonicalTextureSampler>;
+  baseColorTexture?: Readonly<{
+    coordinates: CanonicalSurfaceMaterial["baseColorTextureCoordinates"];
+  }>;
   doubleSided?: true;
   instanceIndex?: number;
   inverseModel: Mat4 | undefined;
@@ -143,14 +146,20 @@ const EMPTY_RENDER_OBJECTS: ReadonlyMap<
 
 const canonicalPickMaterial = (
   material: CanonicalSurfaceMaterial,
-): Pick<CanonicalPickSurface, "alphaMaskSampler" | "doubleSided" | "materialSource"> => ({
+): Pick<
+  CanonicalPickSurface,
+  "alphaMaskSampler" | "baseColorTexture" | "doubleSided" | "materialSource"
+> => ({
   ...(material.doubleSided === true ? { doubleSided: true as const } : {}),
-  ...(material.alphaCutoff === undefined ? {} : {
-    ...(material.baseColorAsset === undefined
-      ? {}
-      : { alphaMaskSampler: canonicalTextureSampler(material.baseColorAsset) }),
-    materialSource: material,
-  }),
+  ...(material.baseColorAsset === undefined && material.baseColorVirtualAsset === undefined
+    ? {}
+    : { baseColorTexture: { coordinates: material.baseColorTextureCoordinates } }),
+  ...(material.alphaCutoff === undefined || material.baseColorAsset === undefined
+    ? {}
+    : {
+        alphaMaskSampler: canonicalTextureSampler(material.baseColorAsset),
+        materialSource: material,
+      }),
 });
 
 export type CanonicalLodGroup = Readonly<{
@@ -873,7 +882,9 @@ export const prepareCanonicalSurfaceScene = (
     emittedSurfaces.push(surface);
     if (includePicking) {
       const pickingGeometry = node.pickingGeometry === undefined
-        ? directGeometry(node.geometry)
+        ? wireframe
+          ? directGeometry(node.geometry, material.requiresTextureCoordinates)
+          : geometry
         : directGeometry(node.pickingGeometry);
       pickSurfaces.push(node.pickingGeometry === undefined ? {
         ...canonicalPickMaterial(materialSource),

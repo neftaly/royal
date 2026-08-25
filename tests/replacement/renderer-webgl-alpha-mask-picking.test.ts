@@ -20,6 +20,7 @@ import type {
 import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/texture/sampler";
 import {
   createCanonicalPickingScratch,
+  canonicalPickBaseColorTextureCoordinatesInto,
   canonicalPickLocalNormalInto,
   canonicalPickWorldNormalInto,
   pickCanonicalSurfaceInto,
@@ -69,6 +70,29 @@ const maskedMaterial = (
 });
 
 describe("canonical alpha-mask picking", () => {
+  it("interpolates and transforms the rendered base-colour UV set", () => {
+    const coordinates = canonicalPickBaseColorTextureCoordinatesInto(
+      [0, 0],
+      {
+        ...emptyPickHit(),
+        aIndex: 0,
+        bIndex: 1,
+        barycentricB: 0.25,
+        barycentricC: 0.25,
+        cIndex: 2,
+      },
+      geometry(),
+      {
+        coordinates: {
+          row0: [-1, 0, 1, 1],
+          row1: [0, 1, 0, 0],
+        },
+      },
+    );
+    expect(coordinates?.[0]).toBeCloseTo(0.25);
+    expect(coordinates?.[1]).toBeCloseTo(0.25);
+  });
+
   it("samples base-level nearest and bilinear alpha with canonical wrap modes", () => {
     const alpha = { height: 1, values: new Uint8Array([0, 255]), width: 2 };
     expect(sampleCanonicalTextureAlpha(alpha, sampler(), 0.25, 0.5)).toBe(0);

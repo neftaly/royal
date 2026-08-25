@@ -586,6 +586,7 @@ const performanceSummary = (): BrowserBenchmarkReport['performance'] => {
 
 const deviceSummary = (): BrowserBenchmarkReport['device'] => {
   const extendedNavigator = navigator as Navigator & { readonly deviceMemory?: number };
+  const pointerPrototype = globalThis.PointerEvent?.prototype;
   const canvas = document.querySelector('canvas');
   const canvasRect = canvas?.getBoundingClientRect();
   const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
@@ -602,6 +603,20 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
     hardwareConcurrency: navigator.hardwareConcurrency,
     language: navigator.language,
     platform: navigator.platform,
+    pointerEvents: {
+      altitudeAngle: pointerPrototype !== undefined && 'altitudeAngle' in pointerPrototype,
+      azimuthAngle: pointerPrototype !== undefined && 'azimuthAngle' in pointerPrototype,
+      coalesced: typeof pointerPrototype?.getCoalescedEvents === 'function',
+      predicted: typeof pointerPrototype?.getPredictedEvents === 'function',
+      pressure: pointerPrototype !== undefined && 'pressure' in pointerPrototype,
+      rawUpdate: 'onpointerrawupdate' in globalThis,
+      tangentialPressure: pointerPrototype !== undefined && 'tangentialPressure' in pointerPrototype,
+      tilt: pointerPrototype !== undefined
+        && 'tiltX' in pointerPrototype
+        && 'tiltY' in pointerPrototype,
+      twist: pointerPrototype !== undefined && 'twist' in pointerPrototype,
+    },
+    surfacePaintPickProbe: globalThis.__royalSurfacePaintPickProbe ?? null,
     userAgent: navigator.userAgent,
     viewport: {
       height: globalThis.innerHeight,
