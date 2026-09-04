@@ -44,6 +44,8 @@ const markerGeometry = triangleGeometry({
   ],
 });
 
+const volumeOracle = new URLSearchParams(window.location.search).get('volume');
+
 export const BoundedVolume = (): ReactNode => {
   const orbit = useOrbitCamera({
     initial: { distance: 3.7, pitch: -0.34, target: [0, 0.2, 0] },
@@ -75,9 +77,9 @@ export const BoundedVolume = (): ReactNode => {
         material: standardMaterial({ color: linearRgbaFromSrgb([0.22, 0.32, 0.44, 1]) }),
         transform: { position: [0.1, 0.2, 0.02], rotation: [0.15, 0.35, 0.1] },
       }),
-      boundedVolume({
+      ...(volumeOracle === 'off' ? [] : [boundedVolume({
         geometry: markerGeometry,
-        color: [0.08, 2.2, 0.48, 0.88],
+        color: [0.08, 2.2, 0.48, volumeOracle === 'zero' ? 0 : 0.88],
         extinctionPerMetre: 3.4,
         densityProfile: [
           [0, 0.45],
@@ -88,7 +90,7 @@ export const BoundedVolume = (): ReactNode => {
         noiseScale: [4.2, 8.5, 5.1],
         noiseStrength: 0.42,
         transform: { position: [0.02, 0.43, -0.01], rotation: [0, 0.04, 0] },
-      }),
+      })]),
     ],
   }), [orbit.camera]);
 

@@ -5,6 +5,7 @@ import type { GpuTextureBinding } from '../texture/gpu-owner';
 import { linkWebGlProgram, compileWebGlShader, requiredWebGlUniform } from '../webgl/program';
 import boundedVolumeFragmentShader from '../webgl/shaders/bounded-volume.frag';
 import boundedVolumeVertexShader from '../webgl/shaders/bounded-volume.vert';
+import { PRESENTATION_GLSL } from '../webgl/shaders/presentation-functions';
 import type { MutableSurfaceDrawFrame, SurfaceDrawPacket } from '../webgl/draw-state-transition';
 import type { WebGlStateOwner } from '../webgl/state-owner';
 import { cameraWorldPositionFromViewInto } from '../math/mat4';
@@ -26,11 +27,13 @@ type VolumeProgram = Readonly<{
   noiseScale: WebGLUniformLocation;
   noiseStrength: WebGLUniformLocation;
   perspectiveCamera: WebGLUniformLocation;
+  presentation: WebGLUniformLocation;
   planeCount: WebGLUniformLocation;
   planes: WebGLUniformLocation;
   program: WebGLProgram;
   sceneDepth: WebGLUniformLocation;
   viewProjection: WebGLUniformLocation;
+  viewport: WebGLUniformLocation;
 }>;
 
 type VolumeResource = {
@@ -51,7 +54,7 @@ const createProgram = (gl: WebGL2RenderingContext): VolumeProgram => {
     fragment = compileWebGlShader(
       gl,
       gl.FRAGMENT_SHADER,
-      boundedVolumeFragmentShader,
+      boundedVolumeFragmentShader.replace('__PRESENTATION_FUNCTIONS__', PRESENTATION_GLSL),
       'bounded volume',
     );
   } catch (error) {
@@ -81,11 +84,13 @@ const createProgram = (gl: WebGL2RenderingContext): VolumeProgram => {
       noiseScale: uniform('noiseScale'),
       noiseStrength: uniform('noiseStrength'),
       perspectiveCamera: uniform('perspectiveCamera'),
+      presentation: uniform('presentation'),
       planeCount: uniform('planeCount'),
       planes: uniform('planes[0]'),
       program,
       sceneDepth: uniform('sceneDepth'),
       viewProjection: uniform('viewProjection'),
+      viewport: uniform('viewport'),
     };
   } catch (error) {
     gl.deleteProgram(program);
@@ -109,6 +114,8 @@ export class BoundedVolumeGpuOwner {
   readonly #drawResources: VolumeResource[] = [];
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
+  readonly #presentation = new Float32Array(3);
+  readonly #viewport = new Float32Array(4);
   #deniedAvailableBytes: number | null = null;
   #program: VolumeProgram | null = null;
   #resourcesPrepared = false;
@@ -185,9 +192,13 @@ export class BoundedVolumeGpuOwner {
 
   drawView(
     view: SurfaceFrameView,
-    framebuffer: WebGLFramebuffer,
+    framebuffer: WebGLFramebuffer | null,
     sceneDepth: GpuTextureBinding,
     perspectiveCamera: boolean,
+    presentation: Readonly<{
+      exposure: number;
+      toneMapping: 'linear-clamp' | 'pbr-neutral';
+    }> | null,
     state: WebGlStateOwner,
   ): void {
     if (this.#scene.length === 0 || !this.#ensureResources(state)) return;
@@ -215,6 +226,15 @@ export class BoundedVolumeGpuOwner {
       if (!globalsInitialized) {
         this.#gl.uniform1i(program.sceneDepth, 0);
         this.#gl.uniform1i(program.perspectiveCamera, perspectiveCamera ? 1 : 0);
+        this.#presentation[0] = presentation?.exposure ?? 1;
+        this.#presentation[1] = presentation?.toneMapping === 'pbr-neutral' ? 1 : 0;
+        this.#presentation[2] = presentation === null ? 0 : 1;
+        this.#gl.uniform3fv(program.presentation, this.#presentation);
+        this.#viewport[0] = view.viewport.x;
+        this.#viewport[1] = view.viewport.y;
+        this.#viewport[2] = view.viewport.width;
+        this.#viewport[3] = view.viewport.height;
+        this.#gl.uniform4fv(program.viewport, this.#viewport);
         this.#gl.uniform3fv(program.cameraWorldPosition, this.#cameraPosition);
         this.#gl.uniformMatrix4fv(program.inverseViewProjection, false, inverseViewProjection);
         this.#gl.uniformMatrix4fv(program.viewProjection, false, view.viewProjection);

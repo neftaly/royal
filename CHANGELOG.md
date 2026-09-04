@@ -3,6 +3,37 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.19 - 2026-09-05
+
+### Correctness and contracts
+
+- Keep ordinary surfaces on their established direct-presentation path when a
+  bounded volume is added. Royal now reproduces opaque depth privately, inserts
+  presentation-mapped volume emission before transparent surfaces, and leaves
+  unrelated color plus default-framebuffer multisampling unchanged.
+- Preserve an established RGBA16F composite on devices without
+  `EXT_float_blend`: an unsupported composited volume is deterministically
+  omitted instead of silently downgrading all scene radiance to RGBA8.
+- Handle offset external viewports when reconstructing volume rays and restore
+  the caller framebuffer even when the post-volume transparent pass is empty.
+
+### Architecture and performance
+
+- Add one pure capability/presentation-mode decision shared by cold resource
+  planning and frame submission. Direct volume scenes retain a minimal RGBA8
+  throwaway color plus sampleable depth target under the existing persistent
+  GPU budget; they no longer allocate or present an HDR color target solely for
+  volume demand.
+
+### Verification
+
+- Add a real-Chromium no-volume versus zero-contribution-volume screenshot
+  oracle; the complete PNGs are byte-identical. The visible-volume route and a
+  forced WebGL context loss/restoration complete without runtime, console, GPU,
+  or framebuffer-state errors.
+- Cover the direct viewport uniforms, minimal target format/accounting, and the
+  float-color/float-blend capability matrix in focused tests.
+
 ## 0.0.18 - 2026-09-05
 
 ### Correctness and contracts

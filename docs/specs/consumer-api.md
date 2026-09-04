@@ -175,10 +175,13 @@ multiplies density; `extinctionPerMetre` is the Beer-Lambert coefficient in
 inverse world metres. The optional density profile contains two to eight
 strictly height-ordered `[normalizedLocalHeight, multiplier]` points spanning
 exactly zero through one. Noise frequency is local-space XYZ, while strength is
-normalized. A bounded volume is non-pickable, has no imperative ref, and uses
-immutable scene replacement for animation. Zero transform scale fails in the
-constructor; custom hull closure, winding, convexity, and plane-count failures
-are reported while the complete scene is installed, before WebGL allocation.
+normalized. Direct scenes preserve their existing surface presentation and map
+the volume emission through the scene exposure and tone mapping before ordered
+source-over blending. A bounded volume is non-pickable, has no imperative ref,
+and uses immutable scene replacement for animation. Zero transform scale fails
+in the constructor; custom hull closure, winding, convexity, and plane-count
+failures are reported while the complete scene is installed, before WebGL
+allocation.
 
 `screenSpaceSegment({ start, end, material })` is the single world-anchored
 guide path. `start` and `end` are distinct float32-representable world positions;

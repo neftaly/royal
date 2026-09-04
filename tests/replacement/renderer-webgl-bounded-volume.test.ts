@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { BoundedVolumeGpuOwner } from "../../packages/renderer-webgl/src/surface/bounded-volume-gpu-owner";
+import { boundedVolumePresentationMode } from "../../packages/renderer-webgl/src/surface/bounded-volume-presentation-plan";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
 import { fakeGl } from "./support/canvas-root-harness";
@@ -83,6 +84,31 @@ describe("bounded volume lowering", () => {
   });
 });
 
+describe("bounded volume presentation planning", () => {
+  it("preserves direct presentation and rejects only unsafe float composites", () => {
+    expect(boundedVolumePresentationMode(true, false, {
+      hasFloatBlendTarget: false,
+      hasFloatColorTarget: true,
+    })).toBe('direct');
+    expect(boundedVolumePresentationMode(true, true, {
+      hasFloatBlendTarget: false,
+      hasFloatColorTarget: true,
+    })).toBe('omitted');
+    expect(boundedVolumePresentationMode(true, true, {
+      hasFloatBlendTarget: false,
+      hasFloatColorTarget: false,
+    })).toBe('linear');
+    expect(boundedVolumePresentationMode(true, true, {
+      hasFloatBlendTarget: true,
+      hasFloatColorTarget: true,
+    })).toBe('linear');
+    expect(boundedVolumePresentationMode(false, false, {
+      hasFloatBlendTarget: true,
+      hasFloatColorTarget: true,
+    })).toBe('none');
+  });
+});
+
 describe("bounded volume GPU ownership", () => {
   const view = {
     view: identityMat4(),
@@ -90,6 +116,35 @@ describe("bounded volume GPU ownership", () => {
     viewport: { height: 64, width: 64, x: 0, y: 0 },
   };
   const depthBinding = { sampler: null, target: "2d" as const, texture: {} as WebGLTexture };
+
+  it("selects direct presentation without assuming a zero-origin destination viewport", () => {
+    const gl = Object.assign(fakeGl(), { uniform2fv: vi.fn(), uniform3fv: vi.fn() });
+    const owner = new BoundedVolumeGpuOwner(gl, new PersistentGpuBudgetOwner());
+    owner.setScene(lower(boxGeometry(1)).volumes);
+    const state = new WebGlStateOwner(gl);
+    const offsetView = {
+      ...view,
+      viewport: { height: 48, width: 56, x: 7, y: 11 },
+    };
+
+    owner.drawView(
+      offsetView,
+      null,
+      depthBinding,
+      true,
+      { exposure: 1.5, toneMapping: 'pbr-neutral' },
+      state,
+    );
+
+    expect(Array.from(vi.mocked(gl.uniform3fv).mock.calls[0]![1] as Float32Array))
+      .toEqual([1.5, 1, 1]);
+    expect(Array.from(vi.mocked(gl.uniform4fv).mock.calls[0]![1] as Float32Array))
+      .toEqual([7, 11, 56, 48]);
+    expect(gl.shaderSource.mock.calls.some(([, source]) =>
+      String(source).includes('vec3 pbrNeutral')
+      && !String(source).includes('__PRESENTATION_FUNCTIONS__'))).toBe(true);
+    owner.dispose();
+  });
 
   it("retains proxy buffers when only authored volume values change", () => {
     const gl = Object.assign(fakeGl(), { uniform2fv: vi.fn(), uniform3fv: vi.fn() });
@@ -107,9 +162,9 @@ describe("bounded volume GPU ownership", () => {
     const state = new WebGlStateOwner(gl);
 
     owner.setScene(first);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
     owner.setScene(second);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
 
     expect(gl.createBuffer).toHaveBeenCalledTimes(2);
     expect(gl.drawElements).toHaveBeenCalledTimes(2);
@@ -132,9 +187,9 @@ describe("bounded volume GPU ownership", () => {
     const state = new WebGlStateOwner(gl);
 
     owner.setScene(lower(firstGeometry).volumes);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
     owner.setScene(lower(secondGeometry).volumes);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
 
     expect(gl.createBuffer).toHaveBeenCalledTimes(4);
     owner.dispose();
@@ -147,8 +202,8 @@ describe("bounded volume GPU ownership", () => {
     owner.setScene(lower(boxGeometry(1)).volumes);
     const state = new WebGlStateOwner(gl);
 
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
 
     expect(budget.snapshot().deniedClaims).toBe(1);
     expect(gl.createBuffer).not.toHaveBeenCalled();
@@ -164,12 +219,12 @@ describe("bounded volume GPU ownership", () => {
     owner.setScene(lower(boxGeometry(1)).volumes);
     const state = new WebGlStateOwner(gl);
 
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
     expect(budget.snapshot().deniedClaims).toBe(1);
 
     budget.release(competingClaim);
-    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, state);
+    owner.drawView(view, {} as WebGLFramebuffer, depthBinding, true, null, state);
     expect(gl.createBuffer).toHaveBeenCalledTimes(2);
     owner.dispose();
   });

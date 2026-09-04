@@ -215,24 +215,36 @@ local-space procedural noise, the color alpha multiplier, and the authored
 inverse-metre extinction coefficient. The resulting Beer-Lambert opacity
 blends the scene-linear RGB emission.
 
-Visible volume demand activates the existing full-resolution linear composite
-target and a sampleable depth texture. Ordinary terminal-presentation and
-transmission composites retain their renderbuffer depth attachment when no
-volume is visible. The volume shader and its proxy-resource owner are loaded
-only after authored demand, retain exact proxy geometry under the root's
-persistent GPU budget, retry a denied claim only after capacity increases, and
-release on scene removal or context disposal.
+Visible volume demand retains the scene's already-selected presentation lane.
+A direct scene first draws its ordinary opaque color to the unchanged
+destination, reproduces only opaque depth into a private single-sample RGBA8
+plus depth-texture target, maps volume emission through the scene's exposure,
+tone mapping, and sRGB conversion, and blends that presentation-space result
+directly into the destination. Thus adding a zero-contribution volume cannot
+change ordinary color or replace default-framebuffer multisampling. A scene
+already requiring the linear composite draws its volume there instead. When
+RGBA16F is available but `EXT_float_blend` is not, that composited volume is
+omitted rather than downgrading the established HDR target to RGBA8. Ordinary
+terminal-presentation and transmission composites retain their renderbuffer
+depth attachment when no supported volume is visible. The volume shader and
+its proxy-resource owner are loaded only after authored demand, retain exact
+proxy geometry under the root's persistent GPU budget, retry a denied claim
+only after capacity increases, and release on scene removal or context
+disposal.
 
 For each view, opaque and masked surfaces establish depth, transmission takes
-its opaque scene-color snapshot, bounded volumes render back-to-front while
-sampling that opaque depth, then transmission and alpha-blended surfaces
-render. Consequently transparent surfaces always appear in front of a volume,
-and a volume does not appear in transmission's screen-color source. Overlapping
-volumes are ordinary ordered alpha composites rather than a coupled extinction
-solve. These ordering limits are part of the current approximation, not a
-promise of globally sorted transparent media. Canvas and WebXR use the active
-view's projection semantics; an authored orthographic canvas camera does not
-override a browser-supplied perspective XR view.
+its opaque scene-color snapshot when applicable, bounded volumes render
+back-to-front while sampling opaque depth, then transmission and alpha-blended
+surfaces render. Consequently transparent surfaces always appear in front of a
+volume, and a volume does not appear in transmission's screen-color source.
+Overlapping volumes are ordinary ordered alpha composites rather than a coupled
+extinction solve. Direct presentation tone-maps each volume's emission before
+source-over blending, so it is a locality-preserving approximation rather than
+the nonlinear result of tone-mapping a coupled surface/media radiance solve.
+These ordering limits are part of the current approximation, not a promise of
+globally sorted transparent media. Canvas and WebXR use the active view's
+projection semantics; an authored orthographic canvas camera does not override
+a browser-supplied perspective XR view.
 
 ## Pass activation
 

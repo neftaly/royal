@@ -152,6 +152,7 @@ import {
   ScreenSpacePartitionPatternOwner,
 } from "./screen-space-partition-pattern";
 import type { BoundedVolumeGpuOwner } from './bounded-volume-gpu-owner';
+import { boundedVolumePresentationMode } from './bounded-volume-presentation-plan';
 
 export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
   /** Scene surfaces still waiting for bounded geometry/instance admission. */
@@ -402,6 +403,7 @@ export class SurfaceGpuOwner {
     framebuffer: null,
     viewport: { height: 1, width: 1, x: 0, y: 0 },
   };
+  readonly #occlusionPackets = new WeakMap<SurfaceDrawPacket, SurfaceDrawPacket>();
   #fullReconcileRequired = true;
   readonly #geometryGpu: SurfaceGeometryGpuOwner;
   #environmentGpu: PrefilteredEnvironmentGpuOwner | null = null;
@@ -698,16 +700,28 @@ export class SurfaceGpuOwner {
       this.#linearCompositeCapabilities,
       scene.surfaces.length,
     );
-    if (transmissionRequested || terminalPresentation || volumeRequested) {
+    if (transmissionRequested || terminalPresentation) {
+      const compositedVolumeRequested = boundedVolumePresentationMode(
+        volumeRequested,
+        true,
+        this.#linearCompositeCapabilities,
+      ) === 'linear';
       const colorBytesPerPixel = linearCompositeColorBytesPerPixel(
         this.#linearCompositeCapabilities,
-        this.#terminalPresentationHasAlphaBlend || volumeRequested,
+        this.#terminalPresentationHasAlphaBlend || compositedVolumeRequested,
       );
       plannedNonTextureBytes += compositeTargetByteLength(
         width,
         height,
         colorBytesPerPixel,
         transmissionRequested ? {} : { sceneColor: false },
+      );
+    } else if (volumeRequested) {
+      plannedNonTextureBytes += compositeTargetByteLength(
+        width,
+        height,
+        4,
+        { sceneColor: false },
       );
     }
     return ordinaryTextureStorageBudget(persistentBudgetBytes, plannedNonTextureBytes);
@@ -952,10 +966,17 @@ export class SurfaceGpuOwner {
       visibilityStride,
       width: plannedWidth,
     } = this.#compositeFramePlan;
-    const compositeRequested = plannedCompositeRequested || volumeRequested;
+    const compositeRequested = plannedCompositeRequested;
+    const volumePresentation = boundedVolumePresentationMode(
+      volumeRequested,
+      plannedCompositeRequested,
+      this.#linearCompositeCapabilities,
+    );
+    const directVolumeRequested = volumePresentation === 'direct';
+    const compositedVolumeRequested = volumePresentation === 'linear';
     let width = plannedWidth;
     let height = plannedHeight;
-    if (volumeRequested && !plannedCompositeRequested) {
+    if (directVolumeRequested) {
       width = 1;
       height = 1;
       for (const view of views) {
@@ -964,26 +985,27 @@ export class SurfaceGpuOwner {
       }
     }
     let compositeActive = false;
-    if (compositeRequested) {
+    let directVolumeDepthActive = false;
+    if (compositeRequested || directVolumeRequested) {
       const composite = this.#compositeGpu;
       if (composite === null) this.#requestCompositeOwner();
-      else {
+      else if (compositeRequested) {
         composite.setSceneColorRequired(transmissionRequested);
-        composite.setDepthSamplingRequired(volumeRequested);
+        composite.setDepthSamplingRequired(compositedVolumeRequested);
         composite.setSceneColorMaxRoughness(sceneColorMaxRoughness);
         compositeActive = composite.ensure(
           width,
           height,
           state,
           terminalPresentation,
-          this.#terminalPresentationHasAlphaBlend || volumeRequested,
+          this.#terminalPresentationHasAlphaBlend || compositedVolumeRequested,
         );
         if (this.#compositeBindingRevision !== composite.bindingRevision) {
           this.#compositeBindingRevision = composite.bindingRevision;
           this.#dirty = true;
           this.#fullReconcileRequired = true;
         }
-      }
+      } else directVolumeDepthActive = composite.ensureOcclusionDepth(width, height, state);
     } else {
       if (this.#compositeLoadRequested) {
         this.#compositeLoadGeneration += 1;
@@ -1041,6 +1063,73 @@ export class SurfaceGpuOwner {
       for (let viewIndex = 0; viewIndex < views.length; viewIndex += 1) {
         const view = views[viewIndex]!;
         this.#prepareView(view);
+        if (
+          directVolumeRequested
+          && directVolumeDepthActive
+          && this.#boundedVolumes !== null
+          && this.#compositeGpu !== null
+        ) {
+          const composite = this.#compositeGpu;
+          this.#drawView(
+            view,
+            viewIndex,
+            visibilityStride,
+            framebuffer,
+            state,
+            scene,
+            "opaque",
+            cssScaleX,
+            cssScaleY,
+          );
+          this.#compositeViewport.width = view.viewport.width;
+          this.#compositeViewport.height = view.viewport.height;
+          this.#compositeView.perspective = view.perspective;
+          this.#compositeView.view = view.view;
+          this.#compositeView.viewProjection = view.viewProjection;
+          composite.clear([0, 0, 0, 0], state);
+          this.#drawView(
+            this.#compositeView,
+            viewIndex,
+            visibilityStride,
+            composite.framebuffer(),
+            state,
+            scene,
+            "opaque",
+            cssScaleX,
+            cssScaleY,
+            true,
+          );
+          const depthBinding = composite.beginDepthSampling();
+          try {
+            this.#boundedVolumes.drawView(
+              view,
+              framebuffer,
+              depthBinding,
+              view.perspective ?? scene.camera.kind === 'perspective-camera',
+              { exposure: scene.exposure, toneMapping: scene.toneMapping },
+              state,
+            );
+          } finally {
+            composite.endDepthSampling(state, 0);
+            // endDepthSampling restores the private framebuffer behind the
+            // state owner's back. Restore the caller target even when the
+            // remaining pass is empty, then invalidate the state shadow.
+            this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, framebuffer);
+            state.invalidate();
+          }
+          this.#drawView(
+            view,
+            viewIndex,
+            visibilityStride,
+            framebuffer,
+            state,
+            scene,
+            "remaining",
+            cssScaleX,
+            cssScaleY,
+          );
+          continue;
+        }
         this.#drawView(
           view,
           viewIndex,
@@ -1077,7 +1166,7 @@ export class SurfaceGpuOwner {
           cssScaleY,
         );
         if (transmissionRequested) composite.snapshot(state);
-        if (volumeRequested && this.#boundedVolumes !== null) {
+        if (compositedVolumeRequested && this.#boundedVolumes !== null) {
           const depthBinding = composite.beginDepthSampling();
           try {
             this.#boundedVolumes.drawView(
@@ -1085,6 +1174,7 @@ export class SurfaceGpuOwner {
               composite.framebuffer(),
               depthBinding,
               view.perspective ?? scene.camera.kind === 'perspective-camera',
+              null,
               state,
             );
           } finally {
@@ -1319,6 +1409,7 @@ export class SurfaceGpuOwner {
     pass: SurfaceDrawPass,
     cssScaleX: number,
     cssScaleY: number,
+    occlusionOnly = false,
   ): void {
     this.#drawFrame.framebuffer = framebuffer;
     this.#drawFrame.viewport = frameView.viewport;
@@ -1394,7 +1485,16 @@ export class SurfaceGpuOwner {
         this.#compositeFramePlan.frustumPlanes,
       )) continue;
       const program = resource.program;
-      state.applySurfaceDraw(this.#drawFrame, resource.drawPacket);
+      let drawPacket = resource.drawPacket;
+      if (occlusionOnly && drawPacket.colorWrite) {
+        let retained = this.#occlusionPackets.get(drawPacket);
+        if (retained === undefined) {
+          retained = { ...drawPacket, colorWrite: false };
+          this.#occlusionPackets.set(drawPacket, retained);
+        }
+        drawPacket = retained;
+      }
+      state.applySurfaceDraw(this.#drawFrame, drawPacket);
       if (initializedProgram !== program.program) {
         this.#programs.initializeSamplers(program);
         initializedProgram = program.program;

@@ -330,6 +330,46 @@ export class SurfaceCompositeOwner {
     return true;
   }
 
+  /**
+   * Retains the smallest target that can reproduce opaque scene depth for a
+   * direct-presentation effect. Its color attachment exists only for WebGL
+   * framebuffer portability and is never sampled or presented.
+   */
+  ensureOcclusionDepth(
+    width: number,
+    height: number,
+    state: WebGlStateOwner,
+  ): boolean {
+    if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1) {
+      throw new RangeError("Royal occlusion target dimensions must be positive safe integers");
+    }
+    this.#sceneColorRequired = false;
+    this.#depthSamplingRequired = true;
+    if (
+      this.#resources?.width === width
+      && this.#resources.height === height
+      && this.#resources.colorBytesPerPixel === 4
+      && this.#resources.sceneColor === null
+      && this.#resources.depthTexture !== null
+    ) return true;
+    const sizeKey = `occlusion:${width}x${height}`;
+    if (this.#deniedSize === sizeKey) return false;
+    try {
+      this.#deleteResources();
+      if (!this.#allocate(width, height, 4)) {
+        this.#deniedSize = sizeKey;
+        return false;
+      }
+    } catch (error) {
+      this.#deleteResources();
+      throw error;
+    } finally {
+      state.invalidate();
+    }
+    this.#deniedSize = "";
+    return true;
+  }
+
   framebuffer(): WebGLFramebuffer {
     if (this.#resources === null) throw new Error("Royal composite target is not available");
     return this.#resources.framebuffer;

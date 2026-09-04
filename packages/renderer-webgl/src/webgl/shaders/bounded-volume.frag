@@ -17,8 +17,12 @@ uniform float noiseStrength;
 uniform vec4 planes[32];
 uniform int planeCount;
 uniform int perspectiveCamera;
+uniform vec3 presentation;
+uniform vec4 viewport;
 uniform mat4 viewProjection;
 out vec4 outputColor;
+
+__PRESENTATION_FUNCTIONS__
 
 float profileDensity(float height) {
   vec2 previous = densityProfile[0];
@@ -45,8 +49,9 @@ float spatialNoise(vec3 position) {
 void main() {
   if (gl_FrontFacing) discard;
   ivec2 depthSize = textureSize(sceneDepth, 0);
-  vec2 screenUv = gl_FragCoord.xy / vec2(depthSize);
-  vec2 ndc = screenUv * 2.0 - 1.0;
+  vec2 viewPixel = gl_FragCoord.xy - viewport.xy;
+  vec2 screenUv = viewPixel / vec2(depthSize);
+  vec2 ndc = viewPixel / viewport.zw * 2.0 - 1.0;
   vec4 nearWorldH = inverseViewProjection * vec4(ndc, -1.0, 1.0);
   vec3 nearWorld = nearWorldH.xyz / nearWorldH.w;
   vec3 rayOriginWorld = perspectiveCamera != 0 ? cameraWorldPosition : nearWorld;
@@ -98,5 +103,13 @@ void main() {
   }
   float alpha = 1.0 - transmittance;
   if (alpha <= 0.0001) discard;
-  outputColor = vec4(color.rgb, alpha);
+  vec3 presented = color.rgb;
+  if (presentation.z > 0.5) {
+    vec3 exposed = presented * max(presentation.x, 0.0);
+    vec3 mapped = presentation.y > 0.5
+      ? pbrNeutral(exposed)
+      : clamp(exposed, 0.0, 1.0);
+    presented = linearToSrgb(mapped);
+  }
+  outputColor = vec4(presented, alpha);
 }

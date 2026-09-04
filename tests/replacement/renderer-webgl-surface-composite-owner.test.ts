@@ -5,6 +5,29 @@ import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-o
 import { fakeGl } from "./support/canvas-root-harness";
 
 describe("surface composite depth sampling", () => {
+  it("uses an LDR throwaway color attachment for direct-presentation occlusion", () => {
+    const gl = Object.assign(fakeGl(), { texParameteri: vi.fn() });
+    const budget = new PersistentGpuBudgetOwner();
+    const state = new WebGlStateOwner(gl);
+    const owner = new SurfaceCompositeOwner(gl, budget, {
+      hasFloatBlendTarget: true,
+      hasFloatColorTarget: true,
+    });
+
+    expect(owner.ensureOcclusionDepth(32, 16, state)).toBe(true);
+    expect(gl.texStorage2D).toHaveBeenCalledWith(
+      gl.TEXTURE_2D,
+      1,
+      gl.RGBA8,
+      32,
+      16,
+    );
+    expect(gl.createProgram).not.toHaveBeenCalled();
+    expect(budget.snapshot().retainedBytes).toBe(32 * 16 * 8);
+    expect(owner.beginDepthSampling().texture).not.toBeNull();
+    owner.dispose();
+  });
+
   it("owns sampleable depth and brackets framebuffer feedback", () => {
     const gl = Object.assign(fakeGl(), { texParameteri: vi.fn() });
     const budget = new PersistentGpuBudgetOwner();

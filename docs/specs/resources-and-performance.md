@@ -222,8 +222,8 @@ Admission denial chooses one of:
 
 Ordinary browser-decoded images share at most 75% of the persistent ceiling.
 Before decode, Royal subtracts the exact cold-plan storage for retained geometry,
-instances, and the current size-dependent linear composite target; the smaller
-allowance governs the texture set. Royal keeps authored dimensions when their
+instances, and the current size-dependent composite or volume-occlusion target;
+the smaller allowance governs the texture set. Royal keeps authored dimensions when their
 complete RGBA mip representations fit; otherwise it selects the largest
 aspect-preserving decoded size that fits each active storage share before upload.
 This bounds ordinary glTF sets without an asset-specific branch. Authored

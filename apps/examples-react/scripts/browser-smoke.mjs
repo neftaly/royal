@@ -588,6 +588,30 @@ const compareCompositedCanvasCaptures = async (session, before, after) => evalua
   })()
 `);
 
+const captureBoundedVolumeParity = async (session, route, routeUrl) => {
+  const captures = [];
+  for (const mode of ['off', 'zero']) {
+    const oracleUrl = new URL(routeUrl);
+    oracleUrl.searchParams.set('volume', mode);
+    const loaded = session.once('Page.loadEventFired');
+    await session.call('Page.navigate', { url: oracleUrl.href });
+    await Promise.race([loaded, sleep(5_000)]);
+    const oracleRoute = {
+      ...route,
+      minColorBuckets: 1,
+      path: oracleUrl.pathname + oracleUrl.search,
+    };
+    const state = await waitForCompositedRouteState(session, oracleRoute);
+    if (!routeCanvasReady(oracleRoute, state)) {
+      throw new Error(`bounded-volume ${mode} oracle did not become ready: ${JSON.stringify(state)}`);
+    }
+    const capture = await captureCompositedCanvas(session);
+    if (capture === undefined) throw new Error(`could not capture bounded-volume ${mode} oracle`);
+    captures.push(capture);
+  }
+  return compareCompositedCanvasCaptures(session, captures[0], captures[1]);
+};
+
 const assertNeutralTextureTransition = (fallback, authored) => {
   if (!Array.isArray(fallback) || !Array.isArray(authored)) {
     throw new Error(`texture fallback smoke could not sample both states: ${JSON.stringify({ authored, fallback })}`);
@@ -2438,6 +2462,12 @@ const main = async () => {
           },
         };
       }
+      if (route.id === 'bounded-volume') {
+        state = {
+          ...state,
+          boundedVolumeParity: await captureBoundedVolumeParity(session, effectiveRoute, routeUrl),
+        };
+      }
       try {
         const routeExceptions = exceptions.slice(routeExceptionStart);
         if (routeExceptions.length > 0) {
@@ -2462,6 +2492,20 @@ const main = async () => {
           },
         );
         assertRoute(effectiveRoute, state);
+        if (
+          state.boundedVolumeParity !== undefined
+          && (
+            state.boundedVolumeParity.changedPixels !== 0
+            || state.boundedVolumeParity.maximumDelta !== 0
+          )
+        ) {
+          throw new Error(
+            `zero-contribution bounded volume changed existing pixels: ${JSON.stringify(state.boundedVolumeParity)}`,
+          );
+        }
+        if (state.boundedVolumeParity !== undefined) {
+          console.log('ok bounded-volume zero-contribution pixel parity');
+        }
         if (state.textureTransition !== undefined) {
           const assertTransition = state.textureTransition.kind === 'embedded'
             ? assertEmbeddedTextureTransition
