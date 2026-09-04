@@ -104,6 +104,11 @@ coalesced frame without replacing scene intent. `flushInvalidated()` is
 available to deliberate imperative hosts. External frame-clock authority is
 owned by dedicated integrations such as `@royal/renderer-webgl/xr`; it is not
 part of the ordinary root API.
+Authored `boundedVolume(...)` nodes demand-load a separate shader/resource
+owner and a sampleable composite depth attachment. Scenes without visible
+volume demand skip the depth-texture path; scenes without authored volumes do
+not load the owner. Proxy geometry and
+the composite target remain subject to `persistentGpuByteBudget` admission.
 `setOverlay(sceneOverlay)` independently replaces the non-picking,
 always-visible presentation lane. Warm overlay-only updates restore retained
 world presentation when its budget-governed target is available; allocation

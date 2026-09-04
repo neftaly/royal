@@ -3,6 +3,46 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.18 - 2026-09-05
+
+### Correctness and contracts
+
+- Add `boundedVolume({ geometry, color, extinctionPerMetre, ... })` as a
+  standalone, non-pickable world-scene node for emissive media inside boxes or
+  closed outward-wound convex triangle hulls. Density profiles, local-space
+  noise, metric extinction, transforms, and current transparent/transmission
+  ordering limits are explicit public contracts.
+- Preserve exact proxy geometry across scene replacement without trusting
+  compact bounds keys, reject non-invertible scale before scene installation,
+  use browser-supplied perspective semantics for XR views, and retain the
+  renderbuffer depth path for composites that do not sample depth.
+- Keep `validatePickInput` private to the imperative root, accept `null` as the
+  explicit React overlay-clearing value, and clarify that overlay widths mean
+  CSS pixels on canvas and presentation pixels in external views.
+
+### Architecture and performance
+
+- Load the bounded-volume shader/resource owner only after authored demand.
+  Its 3,216-byte gzip chunk retains root-budgeted proxy buffers and retries a
+  denied claim only after persistent capacity increases.
+- Extract virtual-texture atlas sizing and per-resource capacity into a pure
+  storage planner, reserving each requesting page table before shared-atlas
+  admission. Repair the generated-page benchmark to consume the manifest's
+  canonical table byte length after that extraction.
+- Against the clean pre-volume branch, the feature adds 1,286 initial and 4,719
+  complete deployed gzip bytes. The renderer package is 669,757 bytes including
+  source maps.
+
+### Verification
+
+- Add descriptor, hull-validation, same-key collision, retained-resource,
+  budget-retry, composite-depth, package-consumer, and example-contract tests.
+- Exercise `/bounded-volume` in real Chromium with a composited pixel oracle,
+  native WebGL error checks, and retained VAO ownership checks.
+- Complete 932 tests across 126 files, typecheck, warning-free lint, production
+  builds, package entrypoint and packed-consumer checks, bundle-size gates, and
+  the virtual-texture benchmark build gate.
+
 ## 0.0.17 - 2026-08-11
 
 ### Correctness and contracts

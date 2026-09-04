@@ -1,4 +1,10 @@
 export type {
+  BoundedVolumeNode,
+  BoundedVolumeOptions,
+  VolumeDensityPoint,
+} from './bounded-volume';
+export { boundedVolume } from './bounded-volume';
+export type {
   Camera,
   OrthographicCamera,
   OrthographicCameraOptions,

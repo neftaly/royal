@@ -204,6 +204,36 @@ owner and one persistent-budget claim. The parser remains a lazy chunk and no
 environment texture, sampler, fetch, or shader variant exists for scenes that
 do not select this source.
 
+## Bounded emissive volumes
+
+A `boundedVolume` is a non-pickable emissive participating-medium
+approximation. It is not a light and does not scatter directional, point,
+environment, or shadow radiance. The WebGL path rasterizes the boundary's back
+faces and integrates twelve jittered samples through the analytically clipped
+convex interval. Density combines the normalized local-height profile,
+local-space procedural noise, the color alpha multiplier, and the authored
+inverse-metre extinction coefficient. The resulting Beer-Lambert opacity
+blends the scene-linear RGB emission.
+
+Visible volume demand activates the existing full-resolution linear composite
+target and a sampleable depth texture. Ordinary terminal-presentation and
+transmission composites retain their renderbuffer depth attachment when no
+volume is visible. The volume shader and its proxy-resource owner are loaded
+only after authored demand, retain exact proxy geometry under the root's
+persistent GPU budget, retry a denied claim only after capacity increases, and
+release on scene removal or context disposal.
+
+For each view, opaque and masked surfaces establish depth, transmission takes
+its opaque scene-color snapshot, bounded volumes render back-to-front while
+sampling that opaque depth, then transmission and alpha-blended surfaces
+render. Consequently transparent surfaces always appear in front of a volume,
+and a volume does not appear in transmission's screen-color source. Overlapping
+volumes are ordinary ordered alpha composites rather than a coupled extinction
+solve. These ordering limits are part of the current approximation, not a
+promise of globally sorted transparent media. Canvas and WebXR use the active
+view's projection semantics; an authored orthographic canvas camera does not
+override a browser-supplied perspective XR view.
+
 ## Pass activation
 
 The renderer privately compiles only passes needed by the visible frame. With

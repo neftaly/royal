@@ -28,6 +28,8 @@ import {
   type ScenePointerEvents,
 } from '@royal/react';
 import {
+  boundedVolume,
+  boxGeometry,
   clampOrbitCameraView,
   createGltfInstanceTransforms,
   edgeMaterial,
@@ -152,6 +154,11 @@ const renderScene: Scene = scene({
     mesh({
       geometry: pickingGeometry,
       material: unlitMaterial({ texture: authoredVirtualTexture }),
+    }),
+    boundedVolume({
+      color: [0.1, 1.2, 0.4, 0.8],
+      extinctionPerMetre: 2,
+      geometry: boxGeometry([1, 2, 1]),
     }),
   ],
 });

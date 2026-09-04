@@ -47,6 +47,13 @@
       "title": "Standard Lighting"
     },
     {
+      "id": "bounded-volume",
+      "maturity": "lab-probe",
+      "path": "/bounded-volume",
+      "sourceFile": "examples/cases/BoundedVolume.tsx",
+      "title": "Bounded Volume"
+    },
+    {
       "id": "gltf-helmet",
       "maturity": "product",
       "path": "/gltf-helmet",

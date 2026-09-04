@@ -126,6 +126,7 @@ describe("replacement React public API", () => {
       "useVisitGltfAssetGeometry",
     ]);
     expect(Object.keys(sceneApi).sort()).toEqual([
+      "boundedVolume",
       "boxGeometry",
       "clampOrbitCameraView",
       "createCameraViewResource",

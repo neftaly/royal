@@ -61,6 +61,10 @@ import {
 } from "./surface-visibility";
 import type { LodGroupId, LodMembership } from "./lod-selection";
 import { automaticallyInstanceCanonicalSurfaces } from "./automatic-surface-instancing";
+import {
+  prepareCanonicalBoundedVolume,
+  type CanonicalBoundedVolume,
+} from './bounded-volume-scene';
 
 export type CanonicalDrawSurface = Readonly<{
   geometry: CanonicalTriangleGeometry;
@@ -178,6 +182,7 @@ export type CanonicalSurfaceScene = Readonly<{
   textureSurfaceIndices: ReadonlyMap<string, readonly number[]>;
   virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
+  volumes: readonly CanonicalBoundedVolume[];
 }>;
 
 const collectCanonicalAlphaMaskTextureAssets = (
@@ -430,6 +435,7 @@ export const prepareCanonicalSurfaceScene = (
       break;
     }
   }
+  const volumes: CanonicalBoundedVolume[] = [];
   const environment = prepareEnvironment(scene, requiresLighting);
   const directionalLights: CanonicalDirectionalLight[] = [];
   const instanceLightSources = new Set<GltfInstanceTransforms>();
@@ -499,6 +505,10 @@ export const prepareCanonicalSurfaceScene = (
   };
   let nextLodGroupId: LodGroupId = 0;
   for (const node of scene.nodes) {
+    if (node.kind === 'bounded-volume') {
+      volumes.push(prepareCanonicalBoundedVolume(node));
+      continue;
+    }
     if (node.kind === "gltf" || node.kind === "gltf-instances") {
       gltfNodes.push(node);
       const mountIndex = gltfNodes.length - 1;
@@ -951,6 +961,7 @@ export const prepareCanonicalSurfaceScene = (
     textureSurfaceIndices: indexSurfaceTextures(surfaces),
     virtualTextureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
+    volumes,
   };
 };
 

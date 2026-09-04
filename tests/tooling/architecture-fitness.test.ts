@@ -235,6 +235,7 @@ describe("source architecture fitness", () => {
     }
 
     expect(writes.sort()).toEqual([
+      "packages/renderer-webgl/src/surface/bounded-volume-gpu-owner.ts:#ensureResources",
       "packages/renderer-webgl/src/surface/edge-overlay-owner.ts:#createCombinedGeometry",
       "packages/renderer-webgl/src/surface/edge-overlay-owner.ts:#prepareBatches",
       "packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts:#createGeometryArena",

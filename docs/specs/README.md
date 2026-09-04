@@ -2,7 +2,7 @@
 
 Status: pre-release architectural contract
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-09-05
 
 This directory defines Royal's reviewable intended behavior and the boundaries
 that implementations must preserve. Package READMEs explain how to use the

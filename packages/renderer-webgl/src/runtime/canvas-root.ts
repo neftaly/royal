@@ -2009,6 +2009,7 @@ export class CanvasRoot implements RendererRoot {
       && size !== null
       && (
         surfaceScene.surfaces.length > 0
+        || surfaceScene.volumes.length > 0
         || (overlayScene?.surfaces.length ?? 0) > 0
         || (segmentOverlay?.runs.length ?? 0) > 0
         || (edgeOverlay?.surfaces.length ?? 0) > 0
@@ -2028,7 +2029,10 @@ export class CanvasRoot implements RendererRoot {
       try {
         let worldPending = false;
         let overlayPending = false;
-        if (!restoredWorld && surfaceScene.surfaces.length > 0) {
+        if (
+          !restoredWorld
+          && (surfaceScene.surfaces.length > 0 || surfaceScene.volumes.length > 0)
+        ) {
           worldPending = this.#surfaceGpu.drawViews(
             this.#canvasViews,
             null,

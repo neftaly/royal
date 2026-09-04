@@ -110,6 +110,10 @@ const smokeExpectations = {
       ? { prefilteredEnvironmentReady: true }
       : {}),
   },
+  'bounded-volume': {
+    minColorBuckets: 12,
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     minColorBuckets: 32,
     minPaintedRatio: 0.01,

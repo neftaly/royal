@@ -151,6 +151,7 @@ import {
   SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT,
   ScreenSpacePartitionPatternOwner,
 } from "./screen-space-partition-pattern";
+import type { BoundedVolumeGpuOwner } from './bounded-volume-gpu-owner';
 
 export type SurfaceGeometryUploadSnapshot = FrameUploadBudgetSnapshot & Readonly<{
   /** Scene surfaces still waiting for bounded geometry/instance admission. */
@@ -365,6 +366,9 @@ export type SurfaceGpuOwnerOptions = Readonly<{
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
   readonly #cameraPosition = new Float32Array(4);
+  #boundedVolumeLoadGeneration = 0;
+  #boundedVolumeLoadRequested = false;
+  #boundedVolumes: BoundedVolumeGpuOwner | null = null;
   readonly #borrowedGeometry = new WeakMap<GpuSurface, Readonly<{
     instanced: BorrowedSurfaceGeometryMatch;
     ordinary: BorrowedSurfaceGeometryMatch;
@@ -376,10 +380,12 @@ export class SurfaceGpuOwner {
   #compositeLoadRequested = false;
   readonly #compositeViewport = { height: 1, width: 1, x: 0, y: 0 };
   readonly #compositeView: {
+    perspective: boolean | undefined;
     view: Mat4;
     viewProjection: Mat4;
     viewport: FrameViewport;
   } = {
+    perspective: undefined,
     view: identityMat4(),
     viewProjection: identityMat4(),
     viewport: this.#compositeViewport,
@@ -483,6 +489,10 @@ export class SurfaceGpuOwner {
   }
 
   dispose(): void {
+    this.#boundedVolumeLoadGeneration += 1;
+    this.#boundedVolumeLoadRequested = false;
+    this.#boundedVolumes?.dispose();
+    this.#boundedVolumes = null;
     this.#environmentGpuLoadGeneration += 1;
     this.#environmentGpuLoadRequested = false;
     this.#environmentGpuPrepared = undefined;
@@ -517,6 +527,11 @@ export class SurfaceGpuOwner {
   }
 
   invalidate(): void {
+    if (this.#boundedVolumeLoadRequested) {
+      this.#boundedVolumeLoadGeneration += 1;
+      this.#boundedVolumeLoadRequested = false;
+    }
+    this.#boundedVolumes?.invalidate();
     if (this.#environmentGpuLoadRequested) {
       this.#environmentGpuLoadGeneration += 1;
       this.#environmentGpuLoadRequested = false;
@@ -671,17 +686,22 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
     let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces);
+    for (const volume of scene.volumes) {
+      plannedNonTextureBytes += volume.geometry.positions.byteLength
+        + volume.geometry.indices.byteLength;
+    }
     const transmissionRequested = this.#transmissionCandidateIndices.length !== 0;
+    const volumeRequested = scene.volumes.length !== 0;
     const terminalPresentation = terminalPresentationRequested(
       this.#terminalPresentationEligible,
       this.#terminalPresentationHasAlphaBlend,
       this.#linearCompositeCapabilities,
       scene.surfaces.length,
     );
-    if (transmissionRequested || terminalPresentation) {
+    if (transmissionRequested || terminalPresentation || volumeRequested) {
       const colorBytesPerPixel = linearCompositeColorBytesPerPixel(
         this.#linearCompositeCapabilities,
-        this.#terminalPresentationHasAlphaBlend,
+        this.#terminalPresentationHasAlphaBlend || volumeRequested,
       );
       plannedNonTextureBytes += compositeTargetByteLength(
         width,
@@ -730,6 +750,16 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
+    const volumes = scene?.volumes ?? [];
+    if (volumes.length === 0) {
+      if (this.#boundedVolumeLoadRequested) {
+        this.#boundedVolumeLoadGeneration += 1;
+        this.#boundedVolumeLoadRequested = false;
+      }
+      this.#boundedVolumes?.dispose();
+      this.#boundedVolumes = null;
+    } else if (this.#boundedVolumes === null) this.#requestBoundedVolumeOwner();
+    else this.#boundedVolumes.setScene(volumes);
     this.#screenSpacePartitionRequested = scene?.surfaces.some(
       (surface) => surface.material.kind === "unlit"
         && surface.material.coverage !== undefined,
@@ -910,28 +940,43 @@ export class SurfaceGpuOwner {
       this.#linearCompositeCapabilities,
       this.#compositeFramePlan,
     );
+    const volumeRequested = this.#presentationLane === 'world'
+      && (scene?.volumes.length ?? 0) !== 0
+      && (this.#boundedVolumes?.hasVisible(views) ?? true);
     const {
-      compositeRequested,
-      height,
+      compositeRequested: plannedCompositeRequested,
+      height: plannedHeight,
       sceneColorMaxRoughness,
       terminalPresentation,
       transmissionRequested,
       visibilityStride,
-      width,
+      width: plannedWidth,
     } = this.#compositeFramePlan;
+    const compositeRequested = plannedCompositeRequested || volumeRequested;
+    let width = plannedWidth;
+    let height = plannedHeight;
+    if (volumeRequested && !plannedCompositeRequested) {
+      width = 1;
+      height = 1;
+      for (const view of views) {
+        width = Math.max(width, view.viewport.width);
+        height = Math.max(height, view.viewport.height);
+      }
+    }
     let compositeActive = false;
     if (compositeRequested) {
       const composite = this.#compositeGpu;
       if (composite === null) this.#requestCompositeOwner();
       else {
         composite.setSceneColorRequired(transmissionRequested);
+        composite.setDepthSamplingRequired(volumeRequested);
         composite.setSceneColorMaxRoughness(sceneColorMaxRoughness);
         compositeActive = composite.ensure(
           width,
           height,
           state,
           terminalPresentation,
-          this.#terminalPresentationHasAlphaBlend,
+          this.#terminalPresentationHasAlphaBlend || volumeRequested,
         );
         if (this.#compositeBindingRevision !== composite.bindingRevision) {
           this.#compositeBindingRevision = composite.bindingRevision;
@@ -984,6 +1029,7 @@ export class SurfaceGpuOwner {
       this.#opaqueSurfaces.length
         + this.#transmissionSurfaces.length
         + this.#blendedSurfaces.length === 0
+      && !volumeRequested
     ) return presentationWorkPending;
     selectDrawableLodsInto(
       scene.lodGroups,
@@ -1015,6 +1061,7 @@ export class SurfaceGpuOwner {
         this.#prepareView(view);
         this.#compositeViewport.width = view.viewport.width;
         this.#compositeViewport.height = view.viewport.height;
+        this.#compositeView.perspective = view.perspective;
         this.#compositeView.view = view.view;
         this.#compositeView.viewProjection = view.viewProjection;
         composite.clear(clearColor, state);
@@ -1030,6 +1077,20 @@ export class SurfaceGpuOwner {
           cssScaleY,
         );
         if (transmissionRequested) composite.snapshot(state);
+        if (volumeRequested && this.#boundedVolumes !== null) {
+          const depthBinding = composite.beginDepthSampling();
+          try {
+            this.#boundedVolumes.drawView(
+              this.#compositeView,
+              composite.framebuffer(),
+              depthBinding,
+              view.perspective ?? scene.camera.kind === 'perspective-camera',
+              state,
+            );
+          } finally {
+            composite.endDepthSampling(state, 0);
+          }
+        }
         this.#drawView(
           this.#compositeView,
           viewIndex,
@@ -1110,7 +1171,8 @@ export class SurfaceGpuOwner {
       if (
         this.#scene === null
         || (
-          this.#transmissionCandidateIndices.length === 0
+          this.#scene.volumes.length === 0
+          && this.#transmissionCandidateIndices.length === 0
           && !terminalPresentationRequested(
             this.#terminalPresentationEligible,
             this.#terminalPresentationHasAlphaBlend,
@@ -1131,6 +1193,28 @@ export class SurfaceGpuOwner {
     }).catch((error: unknown) => {
       if (generation !== this.#compositeLoadGeneration) return;
       this.#compositeLoadRequested = false;
+      this.#onFailure(error);
+    });
+  }
+
+  #requestBoundedVolumeOwner(): void {
+    if (this.#boundedVolumeLoadRequested) return;
+    this.#boundedVolumeLoadRequested = true;
+    const generation = ++this.#boundedVolumeLoadGeneration;
+    void import('./bounded-volume-gpu-owner').then(({ BoundedVolumeGpuOwner }) => {
+      if (generation !== this.#boundedVolumeLoadGeneration) return;
+      this.#boundedVolumeLoadRequested = false;
+      const volumes = this.#scene?.volumes ?? [];
+      if (volumes.length === 0) return;
+      const owner = new BoundedVolumeGpuOwner(this.#gl, this.#resourceBudget);
+      owner.setScene(volumes);
+      this.#boundedVolumes = owner;
+      this.#dirty = true;
+      this.#fullReconcileRequired = true;
+      this.#onChanged();
+    }).catch((error: unknown) => {
+      if (generation !== this.#boundedVolumeLoadGeneration) return;
+      this.#boundedVolumeLoadRequested = false;
       this.#onFailure(error);
     });
   }

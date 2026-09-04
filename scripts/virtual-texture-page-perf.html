@@ -11,7 +11,6 @@
     virtualTexturePageKeyParts,
   } from "/packages/renderer-webgl/src/virtual-texture/manifest.ts";
   import {
-    virtualTexturePageTableByteLength,
     writeVirtualTexturePageTable,
   } from "/packages/renderer-webgl/src/virtual-texture/residency.ts";
 
@@ -86,7 +85,7 @@
     (total, layout) => total + layout.width * layout.height,
     0,
   );
-  const pageTable = new Uint8Array(virtualTexturePageTableByteLength(pageTableManifest));
+  const pageTable = new Uint8Array(pageTableManifest.tableByteLength);
   const pageTableSamples = [];
   let pageTableLookups = 0;
   for (let motion = 0; motion < 128; motion += 1) {

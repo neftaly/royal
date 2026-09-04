@@ -264,7 +264,7 @@ const createFrameSlot = (): MutableXrFrameSlot => {
   const viewProjection = identityMat4();
   const viewport = { height: 1, width: 1, x: 0, y: 0 };
   return {
-    frameView: { view, viewProjection, viewport },
+    frameView: { perspective: true, view, viewProjection, viewport },
     projection,
     view,
     viewProjection,

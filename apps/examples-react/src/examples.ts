@@ -54,6 +54,10 @@ const exampleLoaders: Record<string, () => Promise<LoadedExample>> = {
     () => import('./examples/cases/StandardLighting').then((module) => module.StandardLighting),
     () => import('./examples/cases/StandardLighting.tsx?raw'),
   ),
+  'bounded-volume': exampleLoader(
+    () => import('./examples/cases/BoundedVolume').then((module) => module.BoundedVolume),
+    () => import('./examples/cases/BoundedVolume.tsx?raw'),
+  ),
   'gltf-helmet': exampleLoader(
     () => import('./examples/cases/GltfHelmet').then((module) => module.GltfHelmet),
     () => import('./examples/cases/GltfHelmet.tsx?raw'),

@@ -1,4 +1,5 @@
 export {
+  boundedVolume,
   boxGeometry,
   clampOrbitCameraView,
   createCameraViewResource,
@@ -43,6 +44,8 @@ export {
   zoomOrbitCameraView,
 } from '@royal/renderer-core';
 export type {
+  BoundedVolumeNode,
+  BoundedVolumeOptions,
   BoxGeometry,
   BoxGeometryInput,
   BoxGeometryOptions,
@@ -167,6 +170,7 @@ export type {
   VirtualTextureAssetOptions,
   VirtualTextureAssetRef,
   VirtualTextureInput,
+  VolumeDensityPoint,
   WireframeMaterial,
   WireframeMaterialOptions,
 } from '@royal/renderer-core';

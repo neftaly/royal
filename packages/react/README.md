@@ -4,6 +4,12 @@ The React-first host for Royal. `Canvas` renders an ordinary `<canvas>` and
 ordinary React children; scene data remains pure and lives in
 `@royal/react/scene`.
 
+The scene entrypoint also exports `boundedVolume(...)` for a non-pickable
+emissive medium inside a box or closed convex triangle hull. It composes as an
+ordinary item in `scene({ nodes })`; it is not JSX and is not a material. See
+the repository's `/bounded-volume` example for its density, noise, and metric
+extinction inputs.
+
 ```tsx
 import {
   Canvas,

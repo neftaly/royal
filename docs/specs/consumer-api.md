@@ -166,6 +166,20 @@ chosen material needs them. The same descriptor is legal as visible mesh
 geometry or `pickingGeometry`, so custom exact silhouettes do not create a
 second geometry API.
 
+`boundedVolume({ geometry, color, extinctionPerMetre, ... })` is a world-scene
+node rather than a material: it owns a closed spatial boundary and a
+depth-aware volume pass, not a surface shading choice. `geometry` accepts a box
+or a closed, consistently outward-wound convex triangle hull with at most 32
+distinct face planes. `color` is scene-linear emissive RGB whose alpha
+multiplies density; `extinctionPerMetre` is the Beer-Lambert coefficient in
+inverse world metres. The optional density profile contains two to eight
+strictly height-ordered `[normalizedLocalHeight, multiplier]` points spanning
+exactly zero through one. Noise frequency is local-space XYZ, while strength is
+normalized. A bounded volume is non-pickable, has no imperative ref, and uses
+immutable scene replacement for animation. Zero transform scale fails in the
+constructor; custom hull closure, winding, convexity, and plane-count failures
+are reported while the complete scene is installed, before WebGL allocation.
+
 `screenSpaceSegment({ start, end, material })` is the single world-anchored
 guide path. `start` and `end` are distinct float32-representable world positions;
 `material` is an `edgeMaterial`, so outlines and segments share scene-linear

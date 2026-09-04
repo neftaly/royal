@@ -12,16 +12,16 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, and exact-budget VT atlas planning",
-    "initialAndTotalGzipBytes": 6800,
-    "lazyGzipBytes": 256
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes",
+    "initialAndTotalGzipBytes": 8150,
+    "lazyGzipBytes": 3700
   },
-  "royalInitialGzipBytes": 138200,
-  "royalIncrementalGzipBytes": 78900,
-  "royalGltfInitialGzipBytes": 139150,
+  "royalInitialGzipBytes": 139300,
+  "royalIncrementalGzipBytes": 80000,
+  "royalGltfInitialGzipBytes": 140200,
   "royalGltfIncrementalGzipBytes": 1000,
-  "royalLazyGzipBytes": 143950,
-  "royalTotalIncrementalGzipBytes": 222700,
-  "royalTotalGzipBytes": 282000,
+  "royalLazyGzipBytes": 147400,
+  "royalTotalIncrementalGzipBytes": 227400,
+  "royalTotalGzipBytes": 286700,
   "royalWorkerGzipBytes": 56650
 }

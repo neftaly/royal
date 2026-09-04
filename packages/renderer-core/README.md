@@ -8,6 +8,7 @@ construction or when implementing a renderer adapter.
 
 ```ts
 import {
+  boundedVolume,
   boxGeometry,
   linearRgbaFromSrgb,
   mesh,
@@ -41,6 +42,26 @@ Source names remain stable across constructor inputs and normalized
 descriptors: glTF and ordinary image references expose `src`; authored virtual
 textures expose `manifestUri` because that source is a JSON manifest. Pick
 targets likewise preserve the authored `pickingId` name.
+
+`boundedVolume(...)` adds a non-pickable emissive medium to the world scene. It
+is a scene node, not a material, because its box or closed outward-wound convex
+triangle hull owns a depth-aware volume pass rather than surface shading:
+
+```ts
+boundedVolume({
+  geometry: boxGeometry([1, 2, 1]),
+  color: [0.08, 2.2, 0.48, 0.88], // linear emission; alpha scales density
+  extinctionPerMetre: 3.4,
+  densityProfile: [[0, 0.45], [0.2, 1], [1, 0]],
+  noiseScale: [4, 8, 5],
+  noiseStrength: 0.4,
+});
+```
+
+Custom hulls may have at most 32 distinct face planes. Volumes render after
+opaque surfaces and before transmission/alpha-blended surfaces; overlapping
+media use ordered alpha rather than a coupled extinction solve. Replace the
+immutable scene descriptor to animate a volume.
 
 `gltf({ src, sceneIndex })` selects one exact zero-based document scene;
 omitting `sceneIndex` uses the glTF document default. The selected scene is part
