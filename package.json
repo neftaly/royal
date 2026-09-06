@@ -1,7 +1,7 @@
 {
   "name": "royal",
   "private": true,
-  "version": "0.0.21",
+  "version": "0.0.22",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -12,7 +12,7 @@
   },
   "homepage": "https://github.com/neftaly/royal#readme",
   "type": "module",
-  "packageManager": "pnpm@10.34.5",
+  "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=24.12.0"
   },
@@ -33,6 +33,7 @@
     "typecheck": "tsc"
   },
   "devDependencies": {
+    "@typescript/typescript6": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

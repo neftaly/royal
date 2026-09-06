@@ -610,9 +610,9 @@ describe("renderer-core descriptor contract", () => {
     );
 
     if (false) {
-      // @ts-expect-error preview is not a public render fallback for virtual textures.
       virtualTexture({
         manifestUri: "/textures/terrain.vt.json",
+        // @ts-expect-error preview is not a public render fallback for virtual textures.
         preview: imageTexture("/textures/terrain-preview.png"),
       });
 
@@ -637,9 +637,9 @@ describe("renderer-core descriptor contract", () => {
       // @ts-expect-error virtual textures require the explicit manifest URI field.
       virtualTexture({});
 
-      // @ts-expect-error src is not an object-form alias for manifestUri.
       virtualTexture({
         manifestUri: "/textures/terrain-manifest.vt.json",
+        // @ts-expect-error src is not an object-form alias for manifestUri.
         src: "/textures/terrain.vt.json",
       });
     }

@@ -5,7 +5,7 @@ descriptors. It targets Safari 17 on A10-class iPads and Quest 2-class WebXR
 hardware without requiring WebGPU, WASM, an engine runtime, or worker-owned
 canvas rendering.
 
-Royal is an open-source prerelease at `0.0.21`. Its intended behavior and
+Royal is an open-source prerelease at `0.0.22`. Its intended behavior and
 current conformance are documented in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained
@@ -53,6 +53,13 @@ they do not conflict with renderer ownership. Pure constructors stay in
 `createRendererRoot(canvas, options)`.
 
 ## Development
+
+Use Node 24.12+ and the pnpm version pinned in `package.json`. TypeScript 7
+checks source and emits declarations; Vitest 5 runs tests. The official
+`@typescript/typescript6` package supplies the JavaScript AST API used only by
+architecture tests and also verifies declaration compatibility with TypeScript 6
+consumers. The packed-consumer check enforces peer compatibility and runs both
+compiler versions.
 
 ```bash
 pnpm install

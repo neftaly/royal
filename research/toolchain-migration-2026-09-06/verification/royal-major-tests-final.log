@@ -1,0 +1,16 @@
+$ vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts tests/tooling/*.test.mjs apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest
+
+ RUN  v5.0.0 /home/neftaly/dev/royal
+
+
+ Test Files  133 passed (133)
+      Tests  953 passed (953)
+   Start at  18:14:53
+   Duration  4.61s (transform 58%, import 22%, tests 18%, worker 2%)
+
+  Transform  transforming modules took 24.41s · 58% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+$ node scripts/check-gltf-lab-manifest.mjs
+glTF lab manifest: 65 cases, 9 core-fallback, 2 required-failure, 8 parsed-unsupported, 5 known-limitation

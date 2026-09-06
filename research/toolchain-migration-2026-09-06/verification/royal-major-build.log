@@ -1,0 +1,8 @@
+$ pnpm -r --if-present build
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json --force
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+$ vite build --config vite.config.ts --logLevel warn
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "../../vite.config" without a file extension (vite.config.ts:5:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.

@@ -3,6 +3,18 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.22 - 2026-09-06
+
+- Update maintenance dependencies, including minidraco 0.5.0, while preserving
+  decoded geometry and renderer features. Decoder measurements and size/cold-load
+  tradeoffs are recorded in `research/dependency-update-2026-09-06`.
+- Migrate development tooling to pnpm 12, TypeScript 7, Vitest 5, and updated
+  oxlint tooling. The toolchain migration leaves emitted runtime JavaScript
+  unchanged from the maintenance update.
+- Keep the official TypeScript 6 JavaScript API for architecture tests and verify
+  packed declarations with both TypeScript 6 and 7. Enforce strict consumer peers
+  and support both native and JavaScript pnpm executables in the smoke runner.
+
 ## 0.0.21 - 2026-09-06
 
 - Share standalone minidraco and Meshopt codec assets between the main thread,

@@ -3,17 +3,18 @@ packages:
   - packages/*
 
 catalog:
+  '@typescript/typescript6': 6.0.2
   '@types/node': ^24.13.3
   '@types/react': ^19.2.18
   '@types/react-dom': ^19.2.7
   '@vitejs/plugin-react': ^6.1.1
-  oxlint: 1.70.0
-  oxlint-tsgolint: ^0.23.0
+  oxlint: 1.81.0
+  oxlint-tsgolint: ^7.0.2001
   react: ^19.2.8
   react-dom: ^19.2.8
   three: 0.184.0
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   vite: ^8.2.2
   vite-plugin-glsl: ^1.6.1
-  vitest: 4.1.11
+  vitest: 5.0.0
   minidraco: 0.5.0

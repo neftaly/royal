@@ -1,0 +1,12 @@
+
+Running 5 tests using 1 worker
+
+(node:264614) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/history.spec.ts:69:1 › previews and restores a shared version as one undoable action (9.0s)
+  ✓  2 e2e/map.spec.ts:93:1 › rasterizes SVG textures outside the renderer vector profile (3.1s)
+  ✓  3 e2e/map.spec.ts:281:1 › map gestures change presence without changing the game document (4.2s)
+  ✓  4 e2e/map.spec.ts:424:1 › a one-finger piece drag commits selection and movement on release (2.8s)
+  ✓  5 e2e/royal-local.spec.ts:2:1 › loads rebuilt Royal with no failed modules or Vite overlay (1.9s)
+
+  5 passed (21.6s)

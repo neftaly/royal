@@ -1,0 +1,186 @@
+$ node scripts/check-bundle-size.mjs --details
+React baseline:       59.3 kB gzip
+Royal initial:        139.8 kB gzip
+Royal incremental:    80.5 kB gzip
+Royal glTF initial:   140.7 kB gzip
+glTF authoring delta: 0.9 kB gzip
+Royal lazy chunks:    117.5 kB gzip
+Royal worker assets:  23.0 kB gzip
+Royal deployed JS:    257.3 kB gzip
+Royal-only graph:     198.0 kB gzip
+Exact gzip bytes: {"gltfAuthoringDelta":932,"gltfInitial":140749,"incremental":80529,"initial":139817,"lazy":117462,"royalOnly":197991,"total":257279,"worker":23025}
+Royal JavaScript files by gzip bytes:
+ 139817  index-B4K7kdzB.js
+  27919  draco-codec-BIzEPivm.js
+  23025  static-preparation-worker-gKFh48o_-D-mXTXCj.js
+  12669  runtime-CncC7_N_-Cfx9qAL0.js
+  11304  static-source-C1eIPGtc-f41s8FiH.js
+   8462  static-asset-CWxNbnD0-nhvkmVLS.js
+   7245  meshopt-codec-DTbCWHNg.js
+   5381  browser-decode-sq17EgTU-D8nkvbQm.js
+   3848  surface-composite-owner-DmIA4WdA-BRUFwMnm.js
+   3494  bounded-volume-gpu-owner-y7LTHBLh-B4fOsUpc.js
+   2219  ktx2-etc2-710SALVf-DmI8OgAz.js
+   2086  browser-static-preparation-C7_rAORO-5kaHrNQJ.js
+   1953  draco-Bo5_tMLK-Ce-Y3ocz.js
+   1791  royal-environment-ktx1-DBX5Z2v6-DhWMidDb.js
+   1730  static-root-preparation-I1IGwfzm-Cuf4M7qX.js
+   1284  svg-source-6M14WmYh-Dkaoiv7k.js
+   1115  surface-depth-prepass-owner-DyxAzUA0-CRtMENbf.js
+    972  gpu-owner-CZSVbJe0-DFvp2hCo.js
+    693  browser-image-element-DvdUT4p2-Tk4N0JSE.js
+    272  codec-loader-D8-xRRoH-C-ekzerv.js
+Initial Royal modules by rendered bytes:
+ 281894  packages/renderer-webgl/dist/index.js
+  14315  packages/react/dist/index.js
+   9700  packages/renderer-webgl/dist/canonical-material-D0QY60FJ.js
+   6099  packages/renderer-webgl/dist/mat4-vm5EftoR.js
+   5350  packages/renderer-core/dist/render-object.js
+   5336  packages/renderer-webgl/dist/lod-selection-CNsIddHA.js
+   4125  packages/renderer-webgl/dist/storage-D0SuvB5-.js
+   4115  packages/renderer-webgl/dist/canonical-geometry-Du6DT1HI.js
+   2855  packages/renderer-core/dist/index.js
+   2602  packages/renderer-webgl/dist/frame-upload-budget-BBCTCNtO.js
+   2410  packages/renderer-webgl/dist/surface-visibility-PGyt2Nkn.js
+   2323  packages/renderer-webgl/dist/shared-geometry-owner-6QRdcV2s.js
+   2200  packages/renderer-webgl/dist/source-B-J6YX2f.js
+   1622  packages/renderer-core/dist/descriptor-values-DKkVsv-D.js
+   1394  packages/renderer-webgl/dist/surface-depth-order-LaZUBLwH.js
+   1034  packages/renderer-webgl/dist/presentation-functions-BL4rMs_M.js
+    999  packages/renderer-webgl/dist/program-D_0u8Mz_.js
+    798  packages/renderer-webgl/dist/etc2-storage-CRhsUxHz.js
+    761  packages/renderer-webgl/dist/surface-composite-plan-DrVqdbZu.js
+    376  packages/renderer-webgl/dist/sampler-DOkb63rl.js
+    272  packages/react/dist/validation-CG_AfMJL.js
+    208  packages/renderer-webgl/dist/format-failure-huc9D-s1.js
+    162  packages/renderer-webgl/dist/texture-coordinates-E4WAB9Bb.js
+Initial renderer sources by rendered bytes:
+  58912  packages/renderer-webgl/src/surface/surface-gpu-owner.ts
+  48281  packages/renderer-webgl/src/runtime/canvas-root.ts
+  46622  packages/renderer-webgl/src/surface/edge-overlay-owner.ts
+  31025  packages/renderer-webgl/src/surface/surface-geometry-gpu-owner.ts
+  24293  packages/renderer-webgl/src/surface/scene-lowering.ts
+  16487  packages/renderer-webgl/src/texture/asset-owner.ts
+  16118  packages/renderer-webgl/src/surface/surface-program-owner.ts
+  15574  packages/renderer-webgl/src/gltf/asset-owner.ts
+  13925  packages/renderer-webgl/src/texture/gpu-owner.ts
+  11296  packages/renderer-webgl/src/webgl/shaders/surface.frag
+  10138  packages/renderer-webgl/src/math/mat4.ts
+   9981  packages/renderer-webgl/src/gltf/instance-transforms.ts
+   9584  packages/renderer-webgl/src/surface/automatic-surface-instancing.ts
+   9297  packages/renderer-webgl/src/surface/screen-space-segment-owner.ts
+   9057  packages/renderer-webgl/src/surface/lod-selection.ts
+   8492  packages/renderer-webgl/src/surface/surface-texture-plan.ts
+   6882  packages/renderer-webgl/src/surface/alpha-mask-sampling.ts
+   6873  packages/renderer-webgl/src/surface/canonical-material.ts
+   6823  packages/renderer-webgl/src/runtime/retained-presentation-owner.ts
+   6230  packages/renderer-webgl/src/surface/geometry-batch-plan.ts
+   5851  packages/renderer-webgl/src/runtime/overlay-owner.ts
+   5673  packages/renderer-webgl/src/surface/surface-picker.ts
+   5521  packages/renderer-webgl/src/surface/canonical-geometry.ts
+   4962  packages/renderer-webgl/src/resource/staged-byte-read-owner.ts
+   4929  packages/renderer-webgl/src/frame/frame-clock.ts
+   4889  packages/renderer-webgl/src/webgl/shaders/surface.vert
+   4872  packages/renderer-webgl/src/webgl/state-owner.ts
+   4814  packages/renderer-webgl/src/resource/async-preparation-owner.ts
+   4721  packages/renderer-webgl/src/surface/bounded-volume-scene.ts
+   4578  packages/renderer-webgl/src/surface/edge-overlay-scene.ts
+   4319  packages/renderer-webgl/src/surface/surface-visibility.ts
+   3996  packages/renderer-webgl/src/surface/picking-query.ts
+   3856  packages/renderer-webgl/src/surface/render-object-scene-update.ts
+   3533  packages/renderer-webgl/src/environment/asset-owner.ts
+   3454  packages/renderer-webgl/src/resource/shared-byte-read-owner.ts
+   3221  packages/renderer-webgl/src/surface/render-object-ref-owner.ts
+   3216  packages/renderer-webgl/src/gltf/shared-geometry-owner.ts
+   3156  packages/renderer-webgl/src/webgl/draw-state-transition.ts
+   2864  packages/renderer-webgl/src/surface/instance-scene-update.ts
+   2773  packages/renderer-webgl/src/surface/screen-space-partition-pattern.ts
+Lazy renderer sources by rendered bytes:
+  ktx2.js
+    293  packages/renderer-webgl/src/ktx2.ts
+  xr.js
+  10458  packages/renderer-webgl/src/xr/session-renderer.ts
+   1120  packages/renderer-webgl/src/xr/frame-rate.ts
+      0  packages/renderer-webgl/src/xr.ts
+  bounded-volume-gpu-owner-y7LTHBLh.js
+   9901  packages/renderer-webgl/src/surface/bounded-volume-gpu-owner.ts
+   3901  packages/renderer-webgl/src/webgl/shaders/bounded-volume.frag
+    338  packages/renderer-webgl/src/webgl/shaders/bounded-volume.vert
+  browser-decode-sq17EgTU.js
+  17296  packages/renderer-webgl/src/texture/browser-decode.ts
+   8733  packages/renderer-webgl/src/texture/encoded-image-dimensions.ts
+   1420  packages/renderer-webgl/src/texture/alpha-mipmap-generation.ts
+    966  packages/renderer-webgl/src/texture/storage-fit.ts
+  browser-image-element-DvdUT4p2.js
+   2434  packages/renderer-webgl/src/texture/browser-image-element.ts
+  browser-static-preparation-C7_rAORO.js
+   6387  packages/renderer-webgl/src/gltf/browser-static-preparation.ts
+   2058  packages/renderer-webgl/src/gltf/browser-range-read.ts
+  codec-loader-D8-xRRoH.js
+    410  packages/renderer-webgl/src/gltf/codec-loader.ts
+    144  packages/renderer-webgl/src/gltf/meshopt-codec.ts?royal-codec-url
+    138  packages/renderer-webgl/src/gltf/draco-codec.ts?royal-codec-url
+  draco-Bo5_tMLK.js
+   8630  packages/renderer-webgl/src/gltf/draco.ts
+  gpu-owner-CZSVbJe0.js
+   3026  packages/renderer-webgl/src/environment/gpu-owner.ts
+  ktx2-etc2-710SALVf.js
+  10088  packages/renderer-webgl/src/texture/ktx2-etc2.ts
+  royal-environment-ktx1-DBX5Z2v6.js
+   7614  packages/renderer-webgl/src/environment/royal-environment-ktx1.ts
+  runtime-CncC7_N_.js
+  30796  packages/renderer-webgl/src/virtual-texture/runtime.ts
+  17773  packages/renderer-webgl/src/virtual-texture/demand.ts
+   9894  packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts
+   8827  packages/renderer-webgl/src/virtual-texture/manifest.ts
+   3361  packages/renderer-webgl/src/virtual-texture/browser-page-source.ts
+   2881  packages/renderer-webgl/src/virtual-texture/storage-plan.ts
+   2388  packages/renderer-webgl/src/virtual-texture/residency.ts
+   1924  packages/renderer-webgl/src/virtual-texture/shader-source.ts
+    377  packages/renderer-webgl/src/virtual-texture/ktx2-etc2.ts
+  static-asset-CWxNbnD0.js
+  24540  packages/renderer-webgl/src/gltf/accessor-reader.ts
+  17255  packages/renderer-webgl/src/gltf/static-asset.ts
+   7134  packages/renderer-webgl/src/gltf/static-mesh.ts
+   5788  packages/renderer-webgl/src/gltf/static-material-set.ts
+   2234  packages/renderer-webgl/src/gltf/static-texture-assets.ts
+    917  packages/renderer-webgl/src/gltf/triangle-topology.ts
+  static-root-preparation-I1IGwfzm.js
+   5118  packages/renderer-webgl/src/gltf/shared-geometry-preparation-owner.ts
+   3127  packages/renderer-webgl/src/gltf/static-external-texture-demand.ts
+      0  packages/renderer-webgl/src/gltf/static-root-preparation.ts
+  static-source-C1eIPGtc.js
+  18033  packages/renderer-webgl/src/gltf/static-material.ts
+   8364  packages/renderer-webgl/src/gltf/meshopt.ts
+   6951  packages/renderer-webgl/src/gltf/static-buffer-demand.ts
+   5997  packages/renderer-webgl/src/gltf/static-geometry-plan.ts
+   5759  packages/renderer-webgl/src/gltf/static-source.ts
+   4849  packages/renderer-webgl/src/gltf/required-extension-profile.ts
+   4801  packages/renderer-webgl/src/gltf/canonical-buffers.ts
+   4159  packages/renderer-webgl/src/gltf/static-image-demand.ts
+   3370  packages/renderer-webgl/src/gltf/static-texture-image-plan.ts
+   3198  packages/renderer-webgl/src/gltf/gltf-values.ts
+   3027  packages/renderer-webgl/src/gltf/static-node-selection.ts
+   2611  packages/renderer-webgl/src/gltf/glb.ts
+   1635  packages/renderer-webgl/src/gltf/texture-coordinates.ts
+   1468  packages/renderer-webgl/src/gltf/static-material-inputs.ts
+   1183  packages/renderer-webgl/src/gltf/static-declarations.ts
+    705  packages/renderer-webgl/src/gltf/static-texture-coordinate-set.ts
+  surface-composite-owner-DmIA4WdA.js
+  19526  packages/renderer-webgl/src/surface/surface-composite-owner.ts
+    511  packages/renderer-webgl/src/webgl/shaders/presentation.frag
+    333  packages/renderer-webgl/src/webgl/shaders/presentation.vert
+  surface-depth-prepass-owner-DyxAzUA0.js
+   4024  packages/renderer-webgl/src/surface/surface-depth-prepass-owner.ts
+    456  packages/renderer-webgl/src/webgl/shaders/depth.vert
+    128  packages/renderer-webgl/src/webgl/shaders/depth.frag
+  svg-source-6M14WmYh.js
+   4174  packages/renderer-webgl/src/texture/svg-source.ts
+Optional capability whole-chunk gzip upper bounds:
+draco          initial       0  lazy   29873  worker       0  total   29873
+environment    initial       0  lazy    2763  worker       0  total    2763
+ktx2           initial  140749  lazy    2218  worker       0  total  142967
+meshopt        initial       0  lazy   18549  worker       0  total   18549
+svg            initial       0  lazy    1284  worker       0  total    1284
+transmission   initial  140749  lazy    4960  worker       0  total  145709
+xr             initial    3895  lazy    2543  worker       0  total    6438

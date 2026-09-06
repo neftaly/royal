@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mergeConfig, type ConfigEnv, type Plugin, type UserConfig } from 'vite';
-import rootConfig from '../../vite.config';
+import rootConfig from '../../vite.config.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

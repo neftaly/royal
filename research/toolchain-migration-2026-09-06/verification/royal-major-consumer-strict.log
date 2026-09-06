@@ -1,0 +1,26 @@
+$ node scripts/package-consumer-smoke.mjs
+checked packed @royal/renderer-core 84 KiB
+checked packed @royal/renderer-webgl 659 KiB
+checked packed @royal/react 83 KiB
+Progress: resolved 0, reused 1, downloaded 0, added 0
+Packages are hard linked from the content-addressable store to the virtual store.
+  Content-addressable store is at: /tmp/.pnpm-store/v11
+  Virtual store is at:             node_modules/.pnpm
+Packages: +6
+++++++
+Progress: resolved 6, reused 6, downloaded 0, added 6, done
+
+dependencies:
++ @royal/react 0.0.21
++ @royal/renderer-core 0.0.21
++ @royal/renderer-webgl 0.0.21
++ react 19.2.8
+
+devDependencies:
++ @types/react link:../../home/neftaly/dev/royal/node_modules/@types/react
++ @typescript/typescript6 link:../../home/neftaly/dev/royal/node_modules/@typescript/typescript6
++ typescript link:../../home/neftaly/dev/royal/node_modules/typescript
+
+Done in 31ms using pnpm v12.3.4
+ok packed Royal entrypoints
+ok packed standalone Draco and Meshopt codecs

@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+// TypeScript 7 is the compiler; its stable JS AST API still lives in this package.
+import ts from "@typescript/typescript6";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = process.cwd();

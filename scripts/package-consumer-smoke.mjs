@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { pnpmCommand } from './pnpm-command.mjs';
 import {
   mkdirSync,
   mkdtempSync,
@@ -21,9 +22,8 @@ mkdirSync(artifactsDirectory);
 const pnpmCli = process.env.npm_execpath;
 
 const runPnpm = (arguments_, options = {}) => {
-  const command = pnpmCli === undefined ? 'pnpm' : process.execPath;
-  const commandArguments = pnpmCli === undefined ? arguments_ : [pnpmCli, ...arguments_];
-  execFileSync(command, commandArguments, { stdio: 'inherit', ...options });
+  const { command, args } = pnpmCommand(pnpmCli, process.execPath, arguments_);
+  execFileSync(command, args, { stdio: 'inherit', ...options });
 };
 
 const packageDirectories = [
@@ -142,17 +142,20 @@ try {
   writeFileSync(path.join(temporaryRoot, 'package.json'), `${JSON.stringify({
     dependencies: {
       ...fileDependencies,
-      react: `link:${path.join(repoRoot, 'node_modules/react')}`,
+      react: JSON.parse(readFileSync(path.join(repoRoot, 'node_modules/react/package.json'), 'utf8')).version,
     },
     devDependencies: {
       '@types/react': `link:${path.join(repoRoot, 'node_modules/@types/react')}`,
+      '@typescript/typescript6': `link:${path.join(repoRoot, 'node_modules/@typescript/typescript6')}`,
       typescript: `link:${path.join(repoRoot, 'node_modules/typescript')}`,
     },
     name: 'royal-packed-consumer-smoke',
-    pnpm: { overrides: fileDependencies },
     private: true,
     type: 'module',
     version: '0.0.0',
+  }, null, 2)}\n`);
+  writeFileSync(path.join(temporaryRoot, 'pnpm-workspace.yaml'), `${JSON.stringify({
+    overrides: fileDependencies,
   }, null, 2)}\n`);
   writeFileSync(path.join(temporaryRoot, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
@@ -173,8 +176,9 @@ try {
     );
   }
 
-  runPnpm(['install', '--prefer-offline', '--ignore-scripts'], { cwd: temporaryRoot });
+  runPnpm(['install', '--prefer-offline', '--ignore-scripts', '--strict-peer-dependencies'], { cwd: temporaryRoot });
   runPnpm(['exec', 'tsc'], { cwd: temporaryRoot });
+  runPnpm(['exec', 'tsc6'], { cwd: temporaryRoot });
   execFileSync(process.execPath, ['imports.mjs'], { cwd: temporaryRoot, stdio: 'inherit' });
   execFileSync(process.execPath, [
     'codecs.mjs',
