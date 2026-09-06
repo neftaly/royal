@@ -1,4 +1,4 @@
-import { codecModulePlugin } from "./scripts/codec-module-plugin";
+import { codecModulePlugin } from "./scripts/codec-module-plugin.ts";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

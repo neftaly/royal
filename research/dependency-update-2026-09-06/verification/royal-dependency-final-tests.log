@@ -1,0 +1,21 @@
+
+> royal@0.0.21 test /home/neftaly/dev/royal
+> vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts tests/tooling/*.test.mjs apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./scripts/codec-module-plugin" without a file extension (vite.config.ts:1:35). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /home/neftaly/dev/royal
+
+
+ Test Files  132 passed (132)
+      Tests  948 passed (948)
+   Start at  17:56:33
+   Duration  6.43s (transform 26.06s, setup 0ms, import 52.42s, tests 9.35s, environment 20ms)
+
+
+> @royal/examples-react@0.0.21 check:gltf-lab-manifest /home/neftaly/dev/royal/apps/examples-react
+> node scripts/check-gltf-lab-manifest.mjs
+
+glTF lab manifest: 65 cases, 9 core-fallback, 2 required-failure, 8 parsed-unsupported, 5 known-limitation

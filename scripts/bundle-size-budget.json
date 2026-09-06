@@ -14,14 +14,15 @@
   "_allowance": {
     "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy",
     "initialAndTotalGzipBytes": 8150,
-    "lazyGzipBytes": 3700
+    "lazyGzipBytes": 3700,
+    "minidraco050GzipBytes": 3700
   },
   "royalInitialGzipBytes": 140000,
   "royalIncrementalGzipBytes": 80650,
   "royalGltfInitialGzipBytes": 140950,
   "royalGltfIncrementalGzipBytes": 1000,
-  "royalLazyGzipBytes": 114000,
-  "royalTotalIncrementalGzipBytes": 194750,
-  "royalTotalGzipBytes": 254000,
+  "royalLazyGzipBytes": 117700,
+  "royalTotalIncrementalGzipBytes": 198450,
+  "royalTotalGzipBytes": 257700,
   "royalWorkerGzipBytes": 23100
 }

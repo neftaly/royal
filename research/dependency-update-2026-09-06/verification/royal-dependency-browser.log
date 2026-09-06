@@ -1,0 +1,49 @@
+
+Running 10 tests using 1 worker
+
+(node:233584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/history.spec.ts:69:1 › previews and restores a shared version as one undoable action (7.0s)
+  ✓   2 e2e/map.spec.ts:93:1 › rasterizes SVG textures outside the renderer vector profile (2.7s)
+  ✓   3 e2e/map.spec.ts:281:1 › map gestures change presence without changing the game document (4.7s)
+  ✓   4 e2e/map.spec.ts:424:1 › a one-finger piece drag commits selection and movement on release (3.2s)
+  ✓   5 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.glb without hanging or an unhandled rejection (97ms)
+  ✓   6 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.gltf without hanging or an unhandled rejection (121ms)
+  ✓   7 e2e/royal-adversarial.spec.ts:14:1 › unavailable Worker API retains serial Draco and Meshopt decoding (390ms)
+  ✓   8 e2e/royal-codecs-source.spec.ts:2:1 › source-development main-thread and nested worker Draco paths share a valid standalone codec (2.0s)
+  ✓   9 e2e/royal-codecs.spec.ts:2:1 › production main-thread and nested worker Draco paths share a valid standalone codec (668ms)
+  ✘  10 e2e/royal-local.spec.ts:2:1 › loads rebuilt Royal with no failed modules or Vite overlay (7.0s)
+
+
+  1) e2e/royal-local.spec.ts:2:1 › loads rebuilt Royal with no failed modules or Vite overlay ──────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      12 |   await expect(page.getByRole('tab', { name: 'Create' })).toBeVisible();
+      13 |   await expect(page.locator('canvas')).toHaveCount(1);
+    > 14 |   await expect.poll(() => [...royal].some(url => url.includes('/renderer-webgl/dist/'))).toBe(true);
+         |                                                                                          ^
+      15 |   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+      16 |   expect(failures).toEqual([]);
+      17 | });
+        at /tmp/royal-play-smoke-q4va7dwp/apps/play/e2e/royal-local.spec.ts:14:90
+
+    Error Context: ../../../royal-play-codec-results/royal-local-loads-rebuilt--e82ac-led-modules-or-Vite-overlay/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../royal-play-codec-results/royal-local-loads-rebuilt--e82ac-led-modules-or-Vite-overlay/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../royal-play-codec-results/royal-local-loads-rebuilt--e82ac-led-modules-or-Vite-overlay/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/royal-local.spec.ts:2:1 › loads rebuilt Royal with no failed modules or Vite overlay ───────
+  9 passed (29.2s)

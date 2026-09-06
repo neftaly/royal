@@ -1,0 +1,13 @@
+
+> royal@0.0.21 build /home/neftaly/dev/royal
+> pnpm -r --if-present build
+
+Scope: 4 of 5 workspace projects
+packages/renderer-core build$ vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json --force
+packages/renderer-core build: Done
+packages/renderer-webgl build$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+packages/renderer-webgl build: Done
+packages/react build$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+packages/react build: Done
+apps/examples-react build$ vite build --config vite.config.ts --logLevel warn
+apps/examples-react build: Done

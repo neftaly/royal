@@ -178,8 +178,7 @@ try {
   execFileSync(process.execPath, ['imports.mjs'], { cwd: temporaryRoot, stdio: 'inherit' });
   execFileSync(process.execPath, [
     'codecs.mjs',
-    path.join(repoRoot, 'apps/examples-react/public/fixtures/khronos/Duck/glTF-Draco/Duck.gltf'),
-    path.join(repoRoot, 'apps/examples-react/public/fixtures/khronos/Duck/glTF-Draco/Duck.bin'),
+    path.join(repoRoot, 'apps/examples-react/public/fixtures/khronos'),
   ], { cwd: temporaryRoot, stdio: 'inherit' });
   if (packageSizeFailures.length !== 0) {
     throw new Error(packageSizeFailures.join('\n'));

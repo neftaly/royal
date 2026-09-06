@@ -1,0 +1,12 @@
+{
+  "oldMedianMs": 85.95000000298023,
+  "newMedianMs": 67.40000000596046,
+  "pairedMedianDeltaMs": -19.00000001490116,
+  "pairedMeanDelta95BootstrapCI": [
+    -19.48000000268221,
+    -18.334999999776482
+  ],
+  "pairs": 40,
+  "primitives": 9,
+  "corpusIterationsPerSample": 10
+}

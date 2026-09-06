@@ -1,0 +1,280 @@
+{
+  "@types/react": {
+    "current": "19.2.17",
+    "latest": "19.2.18",
+    "wanted": "19.2.17",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      }
+    ]
+  },
+  "@types/react-dom": {
+    "current": "19.2.3",
+    "latest": "19.2.7",
+    "wanted": "19.2.3",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      }
+    ]
+  },
+  "react": {
+    "current": "19.2.7",
+    "latest": "19.2.8",
+    "wanted": "19.2.7",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      }
+    ]
+  },
+  "react-dom": {
+    "current": "19.2.7",
+    "latest": "19.2.8",
+    "wanted": "19.2.7",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      }
+    ]
+  },
+  "vite-plugin-glsl": {
+    "current": "1.6.0",
+    "latest": "1.6.1",
+    "wanted": "1.6.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      }
+    ]
+  },
+  "@vitejs/plugin-react": {
+    "current": "6.0.3",
+    "latest": "6.1.1",
+    "wanted": "6.0.3",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      }
+    ]
+  },
+  "oxlint": {
+    "current": "1.70.0",
+    "latest": "1.81.0",
+    "wanted": "1.70.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      },
+      {
+        "name": "@royal/renderer-core",
+        "location": "/home/neftaly/dev/royal/packages/renderer-core"
+      },
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "vite": {
+    "current": "8.1.0",
+    "latest": "8.2.2",
+    "wanted": "8.1.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      },
+      {
+        "name": "@royal/renderer-core",
+        "location": "/home/neftaly/dev/royal/packages/renderer-core"
+      },
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "@types/node": {
+    "current": "24.13.2",
+    "latest": "26.4.1",
+    "wanted": "24.13.2",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      }
+    ]
+  },
+  "typescript": {
+    "current": "6.0.3",
+    "latest": "7.0.2",
+    "wanted": "6.0.3",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      },
+      {
+        "name": "@royal/renderer-core",
+        "location": "/home/neftaly/dev/royal/packages/renderer-core"
+      },
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "vitest": {
+    "current": "4.1.9",
+    "latest": "5.0.0",
+    "wanted": "4.1.9",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      },
+      {
+        "name": "@royal/renderer-core",
+        "location": "/home/neftaly/dev/royal/packages/renderer-core"
+      },
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "minidraco": {
+    "current": "0.3.0",
+    "latest": "0.5.0",
+    "wanted": "0.3.0",
+    "isDeprecated": false,
+    "dependencyType": "dependencies",
+    "dependentPackages": [
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "oxlint-tsgolint": {
+    "current": "0.23.0",
+    "latest": "7.0.2001",
+    "wanted": "0.23.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      },
+      {
+        "name": "@royal/examples-react",
+        "location": "/home/neftaly/dev/royal/apps/examples-react"
+      },
+      {
+        "name": "@royal/react",
+        "location": "/home/neftaly/dev/royal/packages/react"
+      },
+      {
+        "name": "@royal/renderer-core",
+        "location": "/home/neftaly/dev/royal/packages/renderer-core"
+      },
+      {
+        "name": "@royal/renderer-webgl",
+        "location": "/home/neftaly/dev/royal/packages/renderer-webgl"
+      }
+    ]
+  },
+  "three": {
+    "current": "0.184.0",
+    "latest": "0.185.1",
+    "wanted": "0.184.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies",
+    "dependentPackages": [
+      {
+        "name": "royal",
+        "location": "/home/neftaly/dev/royal"
+      }
+    ]
+  }
+}

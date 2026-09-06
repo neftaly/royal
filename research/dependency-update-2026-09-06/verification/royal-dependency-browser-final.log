@@ -1,0 +1,17 @@
+
+Running 10 tests using 1 worker
+
+(node:235615) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/history.spec.ts:69:1 › previews and restores a shared version as one undoable action (8.7s)
+  ✓   2 e2e/map.spec.ts:93:1 › rasterizes SVG textures outside the renderer vector profile (2.7s)
+  ✓   3 e2e/map.spec.ts:281:1 › map gestures change presence without changing the game document (4.4s)
+  ✓   4 e2e/map.spec.ts:424:1 › a one-finger piece drag commits selection and movement on release (2.8s)
+  ✓   5 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.glb without hanging or an unhandled rejection (93ms)
+  ✓   6 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.gltf without hanging or an unhandled rejection (108ms)
+  ✓   7 e2e/royal-adversarial.spec.ts:14:1 › unavailable Worker API retains serial Draco and Meshopt decoding (364ms)
+  ✓   8 e2e/royal-codecs-source.spec.ts:2:1 › source-development main-thread and nested worker Draco paths share a valid standalone codec (1.0s)
+  ✓   9 e2e/royal-codecs.spec.ts:2:1 › production main-thread and nested worker Draco paths share a valid standalone codec (663ms)
+  ✓  10 e2e/royal-local.spec.ts:2:1 › loads rebuilt Royal with no failed modules or Vite overlay (1.6s)
+
+  10 passed (23.2s)
