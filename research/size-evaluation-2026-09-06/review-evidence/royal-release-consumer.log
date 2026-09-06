@@ -1,0 +1,25 @@
+
+> royal@0.0.21 check:package-consumer /home/neftaly/dev/royal
+> node scripts/package-consumer-smoke.mjs
+
+checked packed @royal/renderer-core 83 KiB
+checked packed @royal/renderer-webgl 663 KiB
+checked packed @royal/react 83 KiB
+Progress: resolved 0, reused 0, downloaded 1, added 0
+Packages: +5
++++++
+Progress: resolved 5, reused 2, downloaded 3, added 5, done
+
+dependencies:
++ @royal/react 0.0.21
++ @royal/renderer-core 0.0.21
++ @royal/renderer-webgl 0.0.21
++ react 19.2.7 <- ../../home/neftaly/dev/royal/node_modules/react
+
+devDependencies:
++ @types/react 19.2.17 <- ../../home/neftaly/dev/royal/node_modules/@types/react
++ typescript 6.0.3 <- ../../home/neftaly/dev/royal/node_modules/typescript
+
+Done in 426ms using pnpm v10.33.2
+ok packed Royal entrypoints
+ok packed standalone Draco and Meshopt codecs

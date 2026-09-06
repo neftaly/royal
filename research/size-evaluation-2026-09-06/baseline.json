@@ -1,0 +1,689 @@
+{
+  "capabilities": {
+    "draco": {
+      "files": [
+        {
+          "file": "assets/draco-CRRvYCdH-BYcca0-6.js",
+          "gzipBytes": 27012,
+          "initial": false,
+          "modules": [
+            {
+              "id": "node_modules/.pnpm/minidraco@0.3.0_three@0.184.0/node_modules/minidraco/dist/index.js",
+              "renderedBytes": 194590
+            },
+            {
+              "id": "packages/renderer-webgl/dist/draco-CRRvYCdH.js",
+              "renderedBytes": 5594
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "gltf",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 0,
+        "lazy": 27012,
+        "total": 27012,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 0,
+        "lazy": 200184,
+        "total": 200184,
+        "worker": 0
+      }
+    },
+    "environment": {
+      "files": [
+        {
+          "file": "assets/gpu-owner-CzgqDCmr-nJClx2ek.js",
+          "gzipBytes": 970,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/gpu-owner-CzgqDCmr.js",
+              "renderedBytes": 2301
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+          "gzipBytes": 1791,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/royal-environment-ktx1-Bta5c0ve.js",
+              "renderedBytes": 5288
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "environment",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 0,
+        "lazy": 2761,
+        "total": 2761,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 0,
+        "lazy": 7589,
+        "total": 7589,
+        "worker": 0
+      }
+    },
+    "ktx2": {
+      "files": [
+        {
+          "file": "assets/index-DiWHnVxT.js",
+          "gzipBytes": 140808,
+          "initial": true,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/etc2-storage-CRhsUxHz.js",
+              "renderedBytes": 786
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/ktx2-etc2-710SALVf-bZF9t36F.js",
+          "gzipBytes": 2219,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/ktx2-etc2-710SALVf.js",
+              "renderedBytes": 6323
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "gltf",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 140808,
+        "lazy": 2219,
+        "total": 143027,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 786,
+        "lazy": 6323,
+        "total": 7109,
+        "worker": 0
+      }
+    },
+    "meshopt": {
+      "files": [
+        {
+          "file": "assets/meshopt_decoder-B37wTMG9.js",
+          "gzipBytes": 7254,
+          "initial": false,
+          "modules": [
+            {
+              "id": "node_modules/.pnpm/meshoptimizer@1.2.0/node_modules/meshoptimizer/meshopt_decoder.mjs",
+              "renderedBytes": 28913
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/static-source-CGIik8eo-DzRlM9sn.js",
+          "gzipBytes": 11273,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/static-source-CGIik8eo.js",
+              "renderedBytes": 45110
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "gltf",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 0,
+        "lazy": 18527,
+        "total": 18527,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 0,
+        "lazy": 74023,
+        "total": 74023,
+        "worker": 0
+      }
+    },
+    "svg": {
+      "files": [
+        {
+          "file": "assets/svg-source-6M14WmYh-Dkaoiv7k.js",
+          "gzipBytes": 1284,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/svg-source-6M14WmYh.js",
+              "renderedBytes": 3138
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "gltf",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 0,
+        "lazy": 1284,
+        "total": 1284,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 0,
+        "lazy": 3138,
+        "total": 3138,
+        "worker": 0
+      }
+    },
+    "transmission": {
+      "files": [
+        {
+          "file": "assets/index-DiWHnVxT.js",
+          "gzipBytes": 140808,
+          "initial": true,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/surface-composite-plan-DrVqdbZu.js",
+              "renderedBytes": 737
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/surface-composite-owner-DmIA4WdA-Bm0twPk8.js",
+          "gzipBytes": 3846,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/surface-composite-owner-DmIA4WdA.js",
+              "renderedBytes": 14736
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/surface-depth-prepass-owner-BieTSv4F-DOMsFykP.js",
+          "gzipBytes": 1122,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/surface-depth-prepass-owner-BieTSv4F.js",
+              "renderedBytes": 3026
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "gltf",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 140808,
+        "lazy": 4968,
+        "total": 145776,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 737,
+        "lazy": 17762,
+        "total": 18499,
+        "worker": 0
+      }
+    },
+    "xr": {
+      "files": [
+        {
+          "file": "assets/index-BN2Mhkel.js",
+          "gzipBytes": 4043,
+          "initial": true,
+          "modules": [
+            {
+              "id": "packages/react/dist/xr.js",
+              "renderedBytes": 12786
+            }
+          ],
+          "worker": false
+        },
+        {
+          "file": "assets/xr-CROo3Nvh.js",
+          "gzipBytes": 2544,
+          "initial": false,
+          "modules": [
+            {
+              "id": "packages/renderer-webgl/dist/xr.js",
+              "renderedBytes": 7853
+            }
+          ],
+          "worker": false
+        }
+      ],
+      "fixture": "xr",
+      "gzipWholeChunkUpperBoundBytes": {
+        "initial": 4043,
+        "lazy": 2544,
+        "total": 6587,
+        "worker": 0
+      },
+      "matchedModuleRenderedBytes": {
+        "initial": 12786,
+        "lazy": 7853,
+        "total": 20639,
+        "worker": 0
+      }
+    }
+  },
+  "compression": {
+    "algorithm": "gzip",
+    "level": 9,
+    "note": "Capability gzip upper bounds count whole emitted chunks and may overlap. Matched module rendered bytes retain published-module granularity and are not an exact division of shared source contributions."
+  },
+  "fixtures": {
+    "environment": {
+      "files": [
+        {
+          "file": "assets/bounded-volume-gpu-owner-y7LTHBLh-B_-nbkli.js",
+          "gzipBytes": 3493,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-decode-CEt2gBp6-Dnt_HOgJ.js",
+          "gzipBytes": 5383,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-image-element-DvdUT4p2-Tk4N0JSE.js",
+          "gzipBytes": 693,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-static-preparation-BBxmvklc-DqULv67D.js",
+          "gzipBytes": 2048,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/draco-CRRvYCdH-CzoY5Sgc.js",
+          "gzipBytes": 27012,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/gpu-owner-CzgqDCmr-nJClx2ek.js",
+          "gzipBytes": 970,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/index-D7GqfEGQ.js",
+          "gzipBytes": 139969,
+          "initial": true,
+          "worker": false
+        },
+        {
+          "file": "assets/ktx2-etc2-710SALVf-DeM6nxEO.js",
+          "gzipBytes": 2219,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/meshopt_decoder-B37wTMG9.js",
+          "gzipBytes": 7254,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+          "gzipBytes": 1791,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/runtime-Cp23n7O8-uDl11h9i.js",
+          "gzipBytes": 12670,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-asset-CmgROKDG-B8FELv49.js",
+          "gzipBytes": 8397,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-preparation-worker-B9Xa3Dhm-BJcqvSUh.js",
+          "gzipBytes": 56753,
+          "initial": false,
+          "worker": true
+        },
+        {
+          "file": "assets/static-root-preparation-Cky2HTWF-CXUm1gUb.js",
+          "gzipBytes": 1734,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-source-CGIik8eo-uvcIpw_V.js",
+          "gzipBytes": 11274,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-composite-owner-DmIA4WdA-CK8pzUJN.js",
+          "gzipBytes": 3850,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-depth-prepass-owner-BieTSv4F-BnCGTI8I.js",
+          "gzipBytes": 1123,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/svg-source-6M14WmYh-Dkaoiv7k.js",
+          "gzipBytes": 1284,
+          "initial": false,
+          "worker": false
+        }
+      ],
+      "gzipBytes": {
+        "initial": 139969,
+        "lazy": 147948,
+        "total": 287917,
+        "worker": 56753
+      }
+    },
+    "gltf": {
+      "files": [
+        {
+          "file": "assets/bounded-volume-gpu-owner-y7LTHBLh-B2gHBDm-.js",
+          "gzipBytes": 3492,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-decode-CEt2gBp6-BWYqcTjW.js",
+          "gzipBytes": 5383,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-image-element-DvdUT4p2-Tk4N0JSE.js",
+          "gzipBytes": 693,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-static-preparation-BBxmvklc-B5SZptYx.js",
+          "gzipBytes": 2047,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/draco-CRRvYCdH-BYcca0-6.js",
+          "gzipBytes": 27012,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/gpu-owner-CzgqDCmr-nJClx2ek.js",
+          "gzipBytes": 970,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/index-DiWHnVxT.js",
+          "gzipBytes": 140808,
+          "initial": true,
+          "worker": false
+        },
+        {
+          "file": "assets/ktx2-etc2-710SALVf-bZF9t36F.js",
+          "gzipBytes": 2219,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/meshopt_decoder-B37wTMG9.js",
+          "gzipBytes": 7254,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+          "gzipBytes": 1791,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/runtime-Cp23n7O8-DKUU0xmB.js",
+          "gzipBytes": 12671,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-asset-CmgROKDG-DMQvLjH5.js",
+          "gzipBytes": 8394,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-preparation-worker-B9Xa3Dhm-BJcqvSUh.js",
+          "gzipBytes": 56753,
+          "initial": false,
+          "worker": true
+        },
+        {
+          "file": "assets/static-root-preparation-Cky2HTWF-cfPS6u1W.js",
+          "gzipBytes": 1732,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-source-CGIik8eo-DzRlM9sn.js",
+          "gzipBytes": 11273,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-composite-owner-DmIA4WdA-Bm0twPk8.js",
+          "gzipBytes": 3846,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-depth-prepass-owner-BieTSv4F-DOMsFykP.js",
+          "gzipBytes": 1122,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/svg-source-6M14WmYh-Dkaoiv7k.js",
+          "gzipBytes": 1284,
+          "initial": false,
+          "worker": false
+        }
+      ],
+      "gzipBytes": {
+        "initial": 140808,
+        "lazy": 147936,
+        "total": 288744,
+        "worker": 56753
+      }
+    },
+    "react": {
+      "files": [
+        {
+          "file": "assets/index-D0NsTDsJ.js",
+          "gzipBytes": 59308,
+          "initial": true,
+          "worker": false
+        }
+      ],
+      "gzipBytes": {
+        "initial": 59308,
+        "lazy": 0,
+        "total": 59308,
+        "worker": 0
+      }
+    },
+    "royal": {
+      "files": [
+        {
+          "file": "assets/bounded-volume-gpu-owner-y7LTHBLh-Dt3U1-VV.js",
+          "gzipBytes": 3494,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-decode-CEt2gBp6-CR9w_1PL.js",
+          "gzipBytes": 5384,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-image-element-DvdUT4p2-Tk4N0JSE.js",
+          "gzipBytes": 693,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/browser-static-preparation-BBxmvklc-CjtnyyyI.js",
+          "gzipBytes": 2047,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/draco-CRRvYCdH-DGBFthXs.js",
+          "gzipBytes": 27013,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/gpu-owner-CzgqDCmr-nJClx2ek.js",
+          "gzipBytes": 970,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/index-zKNq39Kk.js",
+          "gzipBytes": 139860,
+          "initial": true,
+          "worker": false
+        },
+        {
+          "file": "assets/ktx2-etc2-710SALVf-SYywNJQe.js",
+          "gzipBytes": 2220,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/meshopt_decoder-B37wTMG9.js",
+          "gzipBytes": 7254,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+          "gzipBytes": 1791,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/runtime-Cp23n7O8-VUSCfOgv.js",
+          "gzipBytes": 12672,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-asset-CmgROKDG-CXYQLu6C.js",
+          "gzipBytes": 8397,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-preparation-worker-B9Xa3Dhm-BJcqvSUh.js",
+          "gzipBytes": 56753,
+          "initial": false,
+          "worker": true
+        },
+        {
+          "file": "assets/static-root-preparation-Cky2HTWF-CCDQ_Qc6.js",
+          "gzipBytes": 1735,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/static-source-CGIik8eo-Dhw8czva.js",
+          "gzipBytes": 11274,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-composite-owner-DmIA4WdA-BnYXaBpt.js",
+          "gzipBytes": 3846,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/surface-depth-prepass-owner-BieTSv4F-D192Xlya.js",
+          "gzipBytes": 1124,
+          "initial": false,
+          "worker": false
+        },
+        {
+          "file": "assets/svg-source-6M14WmYh-Dkaoiv7k.js",
+          "gzipBytes": 1284,
+          "initial": false,
+          "worker": false
+        }
+      ],
+      "gzipBytes": {
+        "initial": 139860,
+        "lazy": 147951,
+        "total": 287811,
+        "worker": 56753
+      }
+    },
+    "xr": {
+      "files": [
+        {
+          "file": "assets/index-BN2Mhkel.js",
+          "gzipBytes": 4043,
+          "initial": true,
+          "worker": false
+        },
+        {
+          "file": "assets/xr-CROo3Nvh.js",
+          "gzipBytes": 2544,
+          "initial": false,
+          "worker": false
+        }
+      ],
+      "gzipBytes": {
+        "initial": 4043,
+        "lazy": 2544,
+        "total": 6587,
+        "worker": 0
+      }
+    }
+  },
+  "measurements": {
+    "gltfAuthoringDeltaGzipBytes": 948,
+    "royalIncrementalGzipBytes": 80552,
+    "royalOnlyGraphGzipBytes": 228503
+  },
+  "phaseSemantics": "Initial and lazy partition emitted JavaScript; worker is a subset of lazy; total counts each fixture file once.",
+  "schemaVersion": 1
+}

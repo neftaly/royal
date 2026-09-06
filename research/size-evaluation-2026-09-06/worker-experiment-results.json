@@ -1,0 +1,156 @@
+{
+  "baseline": {
+    "total": 287031,
+    "files": [
+      {
+        "name": "bounded-volume-gpu-owner-y7LTHBLh-Dt3U1-VV.js",
+        "bytes": 3446
+      },
+      {
+        "name": "browser-decode-CEt2gBp6-CR9w_1PL.js",
+        "bytes": 5339
+      },
+      {
+        "name": "browser-image-element-DvdUT4p2-Tk4N0JSE.js",
+        "bytes": 641
+      },
+      {
+        "name": "browser-static-preparation-BBxmvklc-CjtnyyyI.js",
+        "bytes": 2004
+      },
+      {
+        "name": "draco-CRRvYCdH-DGBFthXs.js",
+        "bytes": 26974
+      },
+      {
+        "name": "gpu-owner-CzgqDCmr-nJClx2ek.js",
+        "bytes": 925
+      },
+      {
+        "name": "index-zKNq39Kk.js",
+        "bytes": 139825
+      },
+      {
+        "name": "ktx2-etc2-710SALVf-SYywNJQe.js",
+        "bytes": 2168
+      },
+      {
+        "name": "meshopt_decoder-B37wTMG9.js",
+        "bytes": 7216
+      },
+      {
+        "name": "royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+        "bytes": 1741
+      },
+      {
+        "name": "runtime-Cp23n7O8-VUSCfOgv.js",
+        "bytes": 12629
+      },
+      {
+        "name": "static-asset-CmgROKDG-CXYQLu6C.js",
+        "bytes": 8350
+      },
+      {
+        "name": "static-preparation-worker-B9Xa3Dhm-BJcqvSUh.js",
+        "bytes": 56753
+      },
+      {
+        "name": "static-root-preparation-Cky2HTWF-CCDQ_Qc6.js",
+        "bytes": 1682
+      },
+      {
+        "name": "static-source-CGIik8eo-Dhw8czva.js",
+        "bytes": 11229
+      },
+      {
+        "name": "surface-composite-owner-DmIA4WdA-BnYXaBpt.js",
+        "bytes": 3798
+      },
+      {
+        "name": "surface-depth-prepass-owner-BieTSv4F-D192Xlya.js",
+        "bytes": 1072
+      },
+      {
+        "name": "svg-source-6M14WmYh-Dkaoiv7k.js",
+        "bytes": 1239
+      }
+    ]
+  },
+  "es-worker": {
+    "total": 251402,
+    "files": [
+      {
+        "name": "bounded-volume-gpu-owner-y7LTHBLh-DPbq7QX1.js",
+        "bytes": 3443
+      },
+      {
+        "name": "browser-decode-CEt2gBp6-DkpmNctd.js",
+        "bytes": 5338
+      },
+      {
+        "name": "browser-image-element-DvdUT4p2-Tk4N0JSE.js",
+        "bytes": 641
+      },
+      {
+        "name": "browser-static-preparation-BjM7oJWc-CHI7C2NY.js",
+        "bytes": 2001
+      },
+      {
+        "name": "draco-CRRvYCdH-BpldHr9A.js",
+        "bytes": 26973
+      },
+      {
+        "name": "gpu-owner-CzgqDCmr-nJClx2ek.js",
+        "bytes": 925
+      },
+      {
+        "name": "index-B9Ocw_vp.js",
+        "bytes": 139827
+      },
+      {
+        "name": "ktx2-etc2-710SALVf-kcB5_jm4.js",
+        "bytes": 2166
+      },
+      {
+        "name": "meshopt_decoder-B37wTMG9.js",
+        "bytes": 7216
+      },
+      {
+        "name": "royal-environment-ktx1-Bta5c0ve-hEQe_Hjh.js",
+        "bytes": 1741
+      },
+      {
+        "name": "runtime-Cp23n7O8-B6RnKPQo.js",
+        "bytes": 12627
+      },
+      {
+        "name": "static-asset-CmgROKDG-CRJuBLrV.js",
+        "bytes": 8348
+      },
+      {
+        "name": "static-preparation-worker-DSLiaISl-BI1Df05U.js",
+        "bytes": 21143
+      },
+      {
+        "name": "static-root-preparation-Cky2HTWF-Cxg8ap1w.js",
+        "bytes": 1679
+      },
+      {
+        "name": "static-source-CGIik8eo-BPmi0gsq.js",
+        "bytes": 11228
+      },
+      {
+        "name": "surface-composite-owner-DmIA4WdA-CFzBQQbT.js",
+        "bytes": 3797
+      },
+      {
+        "name": "surface-depth-prepass-owner-BieTSv4F-CN9pZOaX.js",
+        "bytes": 1070
+      },
+      {
+        "name": "svg-source-6M14WmYh-Dkaoiv7k.js",
+        "bytes": 1239
+      }
+    ]
+  }
+}

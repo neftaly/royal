@@ -1,3 +1,4 @@
+import { codecModulePlugin } from "./scripts/codec-module-plugin";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -167,11 +168,13 @@ const packageExternalPredicate = (
 
 export default ({ command, mode }: { readonly command: string; readonly mode: string }) => {
   const sharedPlugins = [
+    codecModulePlugin(),
     glsl({ include: ['**/*.frag', '**/*.vert'], minify: mode === 'production' }),
     normalizePublishedWorkerSourceMap()
   ];
   const worker = {
-    format: 'iife' as const,
+    format: 'es' as const,
+    rolldownOptions: { output: { codeSplitting: false as const } },
     plugins: () => {
       let outputDirectory: string | undefined;
       const workerChunks: string[] = [];
@@ -201,7 +204,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
           }
         }
       };
-      return [plugin];
+      return [codecModulePlugin(true), plugin];
     }
   };
 

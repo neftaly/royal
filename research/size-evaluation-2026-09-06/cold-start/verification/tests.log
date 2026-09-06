@@ -1,0 +1,18 @@
+
+> royal@0.0.20 test /home/neftaly/dev/royal
+> vitest run tests/replacement/*.test.ts tests/replacement/*.test.tsx tests/tooling/*.test.ts tests/tooling/*.test.mjs apps/examples-react/scripts/*.test.mjs apps/examples-react/src/example-contract.test.ts apps/examples-react/src/examples/BenchmarkRendererSnapshot.test.ts && pnpm --filter @royal/examples-react check:gltf-lab-manifest
+
+
+ RUN  v4.1.9 /home/neftaly/dev/royal
+
+
+ Test Files  131 passed (131)
+      Tests  945 passed (945)
+   Start at  16:29:55
+   Duration  5.70s (transform 20.98s, setup 0ms, import 44.65s, tests 7.75s, environment 24ms)
+
+
+> @royal/examples-react@0.0.20 check:gltf-lab-manifest /home/neftaly/dev/royal/apps/examples-react
+> node scripts/check-gltf-lab-manifest.mjs
+
+glTF lab manifest: 65 cases, 9 core-fallback, 2 required-failure, 8 parsed-unsupported, 5 known-limitation

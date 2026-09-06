@@ -1,3 +1,4 @@
+import { gltfCodecUrls } from "./codec-loader";
 import type { PreparedStaticGltf } from "./static-asset";
 import type { TextureVersion } from "@royal/renderer-core";
 import { formatFailure } from "../diagnostics/format-failure";
@@ -205,6 +206,7 @@ export class BrowserStaticGltfPreparationOwner {
           {
             bytes,
             contentKey,
+            codecs: gltfCodecUrls(),
             kind: "prepare",
             label,
             resourceVersion,

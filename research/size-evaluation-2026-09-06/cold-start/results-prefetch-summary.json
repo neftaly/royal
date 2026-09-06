@@ -1,0 +1,231 @@
+{
+  "metadata": {
+    "browser": "151.0.7922.34",
+    "repetitions": 20,
+    "profiles": {
+      "normal": "local gzip server, no added delay",
+      "latency": "80ms server delay plus gzip-body-size / 187500 bytes/sec, independently per response"
+    },
+    "hardware": "Chromium headless SwiftShader; no A10 or Quest attached",
+    "warm": "reload within same browser context; cache enabled",
+    "cold": "new isolated browser context; cache empty; browser process reused"
+  },
+  "summary": [
+    {
+      "profile": "normal",
+      "scenario": "card",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 128.85000000149012,
+      "candidateMedian": 126.14999999850988,
+      "pairedMedianDelta": -4.400000002235174,
+      "pairedMeanDelta": -8.455000001564622,
+      "meanDelta95BootstrapCI": [
+        -18.515000002831222,
+        -0.8650000020861626
+      ],
+      "baselineP95": 169.79999999701977,
+      "candidateP95": 139.70000000298023,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "normal",
+      "scenario": "card",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 137.39999999850988,
+      "candidateMedian": 129.35000000149012,
+      "pairedMedianDelta": -0.2500000037252903,
+      "pairedMeanDelta": -5.304999997839332,
+      "meanDelta95BootstrapCI": [
+        -8.494999998435379,
+        -2.3399999987334015
+      ],
+      "baselineP95": 156.89999999850988,
+      "candidateP95": 145.80000000447035,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "normal",
+      "scenario": "dracoMain",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 170.10000000149012,
+      "candidateMedian": 166.65000000223517,
+      "pairedMedianDelta": -2.75,
+      "pairedMeanDelta": -3.0700000006705523,
+      "meanDelta95BootstrapCI": [
+        -9.465000000968576,
+        3.0549999982118607
+      ],
+      "baselineP95": 184,
+      "candidateP95": 176.89999999850988,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "normal",
+      "scenario": "dracoMain",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 146.19999999925494,
+      "candidateMedian": 145.85000000149012,
+      "pairedMedianDelta": 0.0,
+      "pairedMeanDelta": 3.219999998435378,
+      "meanDelta95BootstrapCI": [
+        -4.8200000010430815,
+        12.919999998062849
+      ],
+      "baselineP95": 161.5,
+      "candidateP95": 159.39999999850988,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "normal",
+      "scenario": "dracoWorker",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 169.90000000223517,
+      "candidateMedian": 172.14999999850988,
+      "pairedMedianDelta": 1.6499999985098839,
+      "pairedMeanDelta": -0.13999999947845937,
+      "meanDelta95BootstrapCI": [
+        -4.270000000670552,
+        3.5950000014156105
+      ],
+      "baselineP95": 201.10000000149012,
+      "candidateP95": 194.10000000149012,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "normal",
+      "scenario": "dracoWorker",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 146.10000000149012,
+      "candidateMedian": 146.05000000074506,
+      "pairedMedianDelta": -0.10000000149011612,
+      "pairedMeanDelta": -0.5950000006705523,
+      "meanDelta95BootstrapCI": [
+        -8.04500000141561,
+        7.230000000447035
+      ],
+      "baselineP95": 179.80000000447035,
+      "candidateP95": 162.10000000149012,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "card",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 1320.199999999255,
+      "candidateMedian": 1139.6500000022352,
+      "pairedMedianDelta": -178.55000000447035,
+      "pairedMeanDelta": -181.6350000012666,
+      "meanDelta95BootstrapCI": [
+        -184.77500000074505,
+        -178.75000000149012
+      ],
+      "baselineP95": 1327.4000000059605,
+      "candidateP95": 1143.0999999940395,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "card",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 179.10000000149012,
+      "candidateMedian": 162.64999999850988,
+      "pairedMedianDelta": -16.299999997019768,
+      "pairedMeanDelta": -9.93500000089407,
+      "meanDelta95BootstrapCI": [
+        -14.074999999254942,
+        -5.490000001713634
+      ],
+      "baselineP95": 179.40000000596046,
+      "candidateP95": 179.20000000298023,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "dracoMain",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 1501.4000000022352,
+      "candidateMedian": 1489.5,
+      "pairedMedianDelta": -11.550000004470348,
+      "pairedMeanDelta": -12.19499999806285,
+      "meanDelta95BootstrapCI": [
+        -15.884999997913837,
+        -8.404999997466803
+      ],
+      "baselineP95": 1515.1999999955297,
+      "candidateP95": 1505.7999999970198,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "dracoMain",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 195.85000000149012,
+      "candidateMedian": 195.45000000298023,
+      "pairedMedianDelta": -0.19999999552965164,
+      "pairedMeanDelta": -1.0099999990314246,
+      "meanDelta95BootstrapCI": [
+        -4.424999999627471,
+        2.370000002160668
+      ],
+      "baselineP95": 196.29999999701977,
+      "candidateP95": 196.10000000149012,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "dracoWorker",
+      "cache": "cold",
+      "pairs": 20,
+      "baselineMedian": 1399.2499999962747,
+      "candidateMedian": 1274.25,
+      "pairedMedianDelta": -119.44999999925494,
+      "pairedMeanDelta": -122.4699999988079,
+      "meanDelta95BootstrapCI": [
+        -128.01499999910592,
+        -118.29999999925494
+      ],
+      "baselineP95": 1413.8000000044703,
+      "candidateP95": 1289.8000000044703,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    },
+    {
+      "profile": "latency",
+      "scenario": "dracoWorker",
+      "cache": "warm",
+      "pairs": 20,
+      "baselineMedian": 212.75,
+      "candidateMedian": 212.60000000149012,
+      "pairedMedianDelta": -0.30000000447034836,
+      "pairedMeanDelta": -1.7900000002235175,
+      "meanDelta95BootstrapCI": [
+        -4.260000001266599,
+        -0.0550000011920929
+      ],
+      "baselineP95": 229.10000000149012,
+      "candidateP95": 228,
+      "baselineLongTaskMsMedian": 0.0,
+      "candidateLongTaskMsMedian": 0.0
+    }
+  ]
+}

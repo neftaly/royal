@@ -49,6 +49,14 @@ describe("static Draco worker executor", () => {
       () => workers[nextWorker++]! as unknown as Worker,
     );
 
+    for (const worker of workers) {
+      expect(worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+        codecs: expect.objectContaining({
+          draco: expect.stringContaining("draco-codec"),
+          meshopt: expect.stringContaining("meshopt-codec"),
+        }),
+      }), expect.any(Array));
+    }
     expect(new Set(results.map((result) => result.path))).toEqual(new Set(["a", "b", "c"]));
     expect(workers.every((worker) => worker.terminate.mock.calls.length === 1)).toBe(true);
     const postedBuffers = workers.flatMap((worker) =>

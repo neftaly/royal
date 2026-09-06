@@ -185,7 +185,13 @@ const buildFixture = async (name) => {
       file: outputFile,
       gzipBytes: gzipByFile[file],
       initial,
-      modules: (renderedModulesByFile.get(outputFile) ?? []).map(([id, renderedBytes]) => ({
+      // Standalone codecs are emitted as assets rather than bundled modules.
+      modules: (renderedModulesByFile.get(outputFile) ?? (
+        /^(?:draco|meshopt)-codec-/.test(file)
+          ? [[path.join(repoRoot, 'packages/renderer-webgl/dist', file),
+            readFileSync(path.join(outputDirectory, outputFile)).byteLength]]
+          : []
+      )).map(([id, renderedBytes]) => ({
         id: reportModuleId(id),
         renderedBytes,
       })),

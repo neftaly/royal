@@ -49,6 +49,10 @@ describe("browser static glTF preparation", () => {
     );
     expect(worker.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
+        codecs: expect.objectContaining({
+          draco: expect.stringContaining("draco-codec"),
+          meshopt: expect.stringContaining("meshopt-codec"),
+        }),
         contentKey: "asset:v1",
         kind: "prepare",
         sceneIndex: 2,

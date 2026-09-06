@@ -1,3 +1,4 @@
+import { loadDracoCodec, loadMeshoptCodec } from "./codec-loader";
 import { canonicalizeGltfBuffers } from "./canonical-buffers";
 import { parseGlb } from "./glb";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./static-buffer-demand";
 import {
   decodeSelectedMeshoptBufferViews,
+  planMeshoptBufferViews,
   meshoptFallbackBufferIndices,
 } from "./meshopt";
 import {
@@ -101,6 +103,20 @@ const readExternalBuffer = async (
   return read(resolveAssetUri(sourceUri, buffer.uri), request);
 };
 
+// Start codec delivery alongside source reads, rather than adding a request
+// after geometry bytes arrive. Actual decode still owns failure reporting.
+const preloadSelectedCodecs = (
+  document: JsonObject,
+  declarations: StaticGltfDeclarations,
+  selectedViews: ReadonlySet<number>,
+  label: string,
+): void => {
+  if (declarations.usesDraco) void loadDracoCodec().catch(() => undefined);
+  if (planMeshoptBufferViews(document, label).some((plan) => selectedViews.has(plan.viewIndex))) {
+    void loadMeshoptCodec().catch(() => undefined);
+  }
+};
+
 /**
  * Effect boundary for container parsing, external reads, and one canonical
  * packed binary. Format variation is erased before codec or scene lowering.
@@ -154,6 +170,7 @@ export const readCanonicalStaticGltfSource = async (
       sceneIndex,
       preparePrimitive,
     );
+    preloadSelectedCodecs(document, declarations, selectedViews, label);
     const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
     const meshoptRequired = optionalArray(
       document.extensionsRequired,
@@ -198,6 +215,7 @@ export const readCanonicalStaticGltfSource = async (
     sceneIndex,
     preparePrimitive,
   );
+  preloadSelectedCodecs(document, declarations, selectedViews, label);
   const requests = planStaticGltfBufferRequestsForViews(document, label, selectedViews);
   const meshoptRequired = optionalArray(
     document.extensionsRequired,

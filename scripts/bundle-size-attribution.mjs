@@ -37,6 +37,7 @@ const capabilityDefinitions = [
     owns: (id) =>
       id.includes('/renderer-webgl/src/gltf/meshopt.ts')
       || publishedRendererModule(id, 'static-source-')
+      || publishedRendererModule(id, 'meshopt-codec-')
       || id.includes('/meshoptimizer/'),
   },
   {

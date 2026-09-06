@@ -3,6 +3,21 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.21 - 2026-09-06
+
+- Share standalone minidraco and Meshopt codec assets between the main thread,
+  preparation workers, and nested Draco workers, preserving decoder behaviour
+  and all existing rendering features.
+- Start codec delivery alongside external geometry reads to avoid a serial
+  request penalty on compressed cold loads.
+- Reduce complete fixture JavaScript by 34,202 gzip bytes (15% of Royal's
+  incremental graph), with only 59 bytes added to the initial entry.
+- Record paired cold/warm browser measurements and exact rendered-image parity;
+  device-specific A10 and Quest timing remains unmeasured.
+- Invalidate codec compilation caches on watched changes and retry failed builds.
+- Tighten bundle budgets and execute real Draco/Meshopt decoding in packed
+  consumer checks. No dependency versions changed.
+
 ## 0.0.20 - 2026-09-06
 
 - Decouple overlay scene, ref, and GPU ownership from the canvas root; share

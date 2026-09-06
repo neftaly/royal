@@ -577,3 +577,37 @@ resource/VT diagnostics, traces, and GPU timer data when supported. XR testing
 SHOULD exit the session after a measurement to avoid accidental thermal load.
 Comparisons record render resolution, refresh target, browser, device, thermal
 state, and scene/camera position.
+
+## Shared codec delivery
+
+Draco and Meshopt decode implementations ship as independent, self-contained ES
+module assets. The main thread resolves their URLs in the consuming application
+and includes those absolute URLs in preparation and nested Draco-worker
+messages. Workers import those same modules when compressed content is actually
+encountered. Decoder bytes are no longer embedded in every preparation-worker
+bundle as well as the main-thread decode graph.
+
+The preparation worker remains self-contained apart from these explicitly
+provided codec URLs. Its module build disables code splitting. Codec assets
+must have no static or dynamic module dependencies: an ordinary shared
+application chunk can import the application's entrypoint and is unsafe to
+execute in a worker. The codec build plugin verifies this boundary, and the
+packed consumer executes both standalone decoders against known geometry.
+
+This changes delivery, not decoding, worker scheduling, material support,
+texture quality, or shader output. It adds an on-demand codec module request to
+the compressed worker path while reducing the worker's initial download. Browser
+module/network caching shares delivery; execution state remains per realm.
+
+The 0.0.20 comparison measured total fixture JavaScript falling from 287,811 to
+253,609 gzip bytes, and worker bytes from 56,753 to 22,952. Initial fixture bytes
+changed from 139,860 to 139,919. The fixture includes the same 59,308-byte React
+baseline; Royal's incremental complete graph therefore falls about 15%.
+These are delivery measurements, not physical A10/Quest frame-time claims.
+
+Codec delivery starts after source validation, alongside external buffer reads,
+to avoid serializing a new codec request after geometry delivery. Uncompressed
+content does not fetch a decoder. A 20-pair browser evaluation per condition
+found faster cold card and worker-Draco loading under simulated response delays,
+with broadly neutral local/warm Draco results; see the
+[cold-start evidence](../../research/size-evaluation-2026-09-06/cold-start/README.md).

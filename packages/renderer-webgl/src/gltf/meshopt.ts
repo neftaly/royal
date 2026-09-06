@@ -1,3 +1,4 @@
+import { loadMeshoptCodec } from "./codec-loader";
 import {
   array,
   fail,
@@ -258,7 +259,7 @@ export const decodeSelectedMeshoptBufferViews = async (
       fail(label, `${path}.byteLength`, "does not match the loaded buffer");
     }
   }
-  const { MeshoptDecoder } = await import("meshoptimizer/decoder");
+  const { MeshoptDecoder } = await loadMeshoptCodec();
   await MeshoptDecoder.ready;
   if (!MeshoptDecoder.supported) {
     fail(label, "extensions.EXT_meshopt_compression", "decoder is unavailable");

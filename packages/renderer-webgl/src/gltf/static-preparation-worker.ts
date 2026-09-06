@@ -1,3 +1,4 @@
+import { setWorkerGltfCodecUrls, type GltfCodecUrls } from "./codec-loader";
 import { prepareStaticGltfSource } from "./static-asset";
 import type { TextureVersion } from "@royal/renderer-core";
 import { preparedStaticGltfTransferBuffers } from "./static-transfer";
@@ -12,6 +13,7 @@ import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
 import { formatFailure } from "../diagnostics/format-failure";
 
 type PreparationRequest = Readonly<{
+  codecs: GltfCodecUrls;
   bytes: Uint8Array;
   computeGeometryTaskKeys?: readonly string[];
   contentKey: string;
@@ -28,6 +30,7 @@ type ResourceResult =
   | Readonly<{ error: string; id: number; kind: "read-resource-error" }>;
 
 type DracoDecodeRequest = Readonly<{
+  codecs: GltfCodecUrls;
   kind: "decode-draco-tasks";
   tasks: readonly StaticDracoDecodeTask[];
 }>;
@@ -72,6 +75,7 @@ const readResource = (
 workerScope.addEventListener("message", (event) => {
   const request = event.data;
   if (request.kind === "decode-draco-tasks") {
+    setWorkerGltfCodecUrls(request.codecs);
     void executeDracoTasksSerially(request.tasks).then((results) => {
       workerScope.postMessage(
         { kind: "decode-draco-ready", results },
@@ -103,6 +107,7 @@ workerScope.addEventListener("message", (event) => {
     });
     return;
   }
+  setWorkerGltfCodecUrls(request.codecs);
   preparing = true;
   void prepareStaticGltfSource(
     request.bytes,

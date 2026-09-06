@@ -1,0 +1,13 @@
+
+> royal@0.0.21 lint /home/neftaly/dev/royal
+> pnpm -r --if-present lint
+
+Scope: 4 of 5 workspace projects
+packages/renderer-core lint$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style
+packages/renderer-core lint: Done
+packages/renderer-webgl lint$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src
+packages/renderer-webgl lint: Done
+packages/react lint$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src
+packages/react lint: Done
+apps/examples-react lint$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src
+apps/examples-react lint: Done

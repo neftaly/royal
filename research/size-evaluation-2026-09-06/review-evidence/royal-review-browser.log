@@ -1,0 +1,40 @@
+
+Running 3 tests using 1 worker
+
+(node:191578) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.glb without hanging or an unhandled rejection (129ms)
+  ✓  2 e2e/royal-adversarial.spec.ts:3:2 › missing Draco rejects duck.gltf without hanging or an unhandled rejection (117ms)
+  ✘  3 e2e/royal-adversarial.spec.ts:14:1 › blocked workers retain serial Draco and Meshopt decoding (101ms)
+
+
+  1) e2e/royal-adversarial.spec.ts:14:1 › blocked workers retain serial Draco and Meshopt decoding ─
+
+    Error: page.evaluate: Error: workers blocked
+        at new window.Worker (<anonymous>:5:15)
+        at h (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:2559)
+        at #s (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:5304)
+        at _.createWorker.prepare (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:3685)
+        at window.runDecode (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:5725)
+        at async <anonymous>:337:30
+        at window.Worker (<anonymous>:5:15)
+        at h (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:2559)
+        at #s (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:5304)
+        at _.createWorker.prepare (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:3685)
+        at window.runDecode (http://127.0.0.1:3319/assets/index-PPfxsOTk.js:2:5725)
+        at async <anonymous>:337:30
+        at /tmp/royal-play-smoke-q4va7dwp/apps/play/e2e/royal-adversarial.spec.ts:17:25
+
+    Error Context: ../../../royal-play-codec-results/royal-adversarial-blocked--8e611--Draco-and-Meshopt-decoding/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../royal-play-codec-results/royal-adversarial-blocked--8e611--Draco-and-Meshopt-decoding/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ../../../royal-play-codec-results/royal-adversarial-blocked--8e611--Draco-and-Meshopt-decoding/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/royal-adversarial.spec.ts:14:1 › blocked workers retain serial Draco and Meshopt decoding ──
+  2 passed (939ms)

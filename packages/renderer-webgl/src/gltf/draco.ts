@@ -1,4 +1,4 @@
-import { decodeDracoMesh } from "minidraco";
+import { loadDracoCodec } from "./codec-loader";
 import { selectedStaticMeshIndices } from "./static-node-selection";
 
 type JsonObject = Record<string, unknown>;
@@ -223,7 +223,7 @@ const planTask = (
 /** Executes one normalized codec task and lazily extracts requested attributes. */
 export const decodeStaticDracoTask = (
   task: StaticDracoDecodeTask,
-  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+  decodeMesh: StaticDracoMeshDecoder,
 ): DecodedDracoPrimitive => {
   let mesh: DracoMesh;
   try {
@@ -283,7 +283,7 @@ export const createStaticDracoDecoder = (
   document: JsonObject,
   binary: Uint8Array,
   label: string,
-  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+  decodeMesh: StaticDracoMeshDecoder,
 ): ((primitive: JsonObject, path: string) => DecodedDracoPrimitive) => {
   const plan = createStaticDracoTaskPlanner(document, binary, label);
   return (primitive, path) => decodeStaticDracoTask(plan(primitive, path), decodeMesh);
@@ -292,7 +292,7 @@ export const createStaticDracoDecoder = (
 /** Materializes one task into a structured-cloneable canonical codec result. */
 export const materializeStaticDracoTask = (
   task: StaticDracoDecodeTask,
-  decodeMesh: StaticDracoMeshDecoder = decodeDracoMesh,
+  decodeMesh: StaticDracoMeshDecoder,
 ): StaticDracoDecodedTask => {
   const decoded = decodeStaticDracoTask(task, decodeMesh);
   return {
@@ -305,8 +305,10 @@ export const materializeStaticDracoTask = (
   };
 };
 
-const executeTasksSerially: StaticDracoTaskExecutor = async (tasks) =>
-  tasks.map((task) => materializeStaticDracoTask(task));
+export const executeStaticDracoTasksSerially: StaticDracoTaskExecutor = async (tasks) => {
+  const { decodeDracoMesh } = await loadDracoCodec();
+  return tasks.map((task) => materializeStaticDracoTask(task, decodeDracoMesh));
+};
 
 /**
  * Inventories only selected-scene compressed primitives, executes them through
@@ -316,7 +318,7 @@ export const prepareSelectedStaticDracoDecoder = async (
   document: JsonObject,
   binary: Uint8Array,
   label: string,
-  execute: StaticDracoTaskExecutor = executeTasksSerially,
+  execute: StaticDracoTaskExecutor = executeStaticDracoTasksSerially,
   sceneIndex?: number,
   preparePrimitive?: (meshIndex: number, primitiveIndex: number) => boolean,
 ): Promise<(primitive: JsonObject, path: string) => DecodedDracoPrimitive> => {

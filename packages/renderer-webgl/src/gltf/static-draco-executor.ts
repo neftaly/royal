@@ -1,3 +1,4 @@
+import { gltfCodecUrls } from "./codec-loader";
 import type {
   StaticDracoDecodedTask,
   StaticDracoDecodeTask,
@@ -24,8 +25,8 @@ export const decodedDracoTaskTransferBuffers = (
 };
 
 export const executeDracoTasksSerially: StaticDracoTaskExecutor = async (tasks) => {
-  const { materializeStaticDracoTask } = await import("./draco");
-  return tasks.map((task) => materializeStaticDracoTask(task));
+  const { executeStaticDracoTasksSerially } = await import("./draco");
+  return executeStaticDracoTasksSerially(tasks);
 };
 
 /** Largest-first byte balancing without mutating authored task order. */
@@ -86,7 +87,7 @@ export const executeDracoTasksInWorkers = async (
         }, { once: true });
         const owned = buckets[index]!.map((task) => ({ ...task, bytes: task.bytes.slice() }));
         worker.postMessage(
-          { kind: "decode-draco-tasks", tasks: owned },
+          { codecs: gltfCodecUrls(), kind: "decode-draco-tasks", tasks: owned },
           owned.map((task) => task.bytes.buffer),
         );
       })));
