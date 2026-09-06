@@ -1,9 +1,10 @@
+import { useAssetSnapshot } from "./asset-snapshot";
 import {
   prefilteredEnvironment,
   type PrefilteredEnvironmentLight,
 } from "@royal/renderer-core";
 import type { PrefilteredEnvironmentAssetSnapshot } from "@royal/renderer-webgl";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
@@ -30,7 +31,6 @@ export type PrefilteredEnvironmentStatusInput =
   | PrefilteredEnvironmentLight;
 
 const IDLE: PrefilteredEnvironmentAssetSnapshot = { status: "idle" };
-const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): PrefilteredEnvironmentAssetSnapshot => IDLE;
 const PREFILTERED_ENVIRONMENT_STATUS_INPUT_FIELDS = [
   "kind", "radianceScaleNits", "rotation", "source", "src", "version",
@@ -82,16 +82,7 @@ export const usePrefilteredEnvironmentStatus = (
     src,
     ...(version === undefined ? {} : { version }),
   }), [src, version]);
-  const subscribe = useCallback(
-    (listener: () => void) => root?.subscribePrefilteredEnvironment(
-      environment,
-      listener,
-    ) ?? subscribeIdle(),
-    [environment, root],
+  return useAssetSnapshot(
+    environment, root?.subscribePrefilteredEnvironment, root?.getPrefilteredEnvironmentSnapshot, getIdle,
   );
-  const getSnapshot = useCallback(
-    () => root?.getPrefilteredEnvironmentSnapshot(environment) ?? getIdle(),
-    [environment, root],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, getIdle);
 };

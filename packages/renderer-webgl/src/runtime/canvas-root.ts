@@ -10,7 +10,6 @@ import {
   type PrefilteredEnvironmentLight,
   type Scene,
   type SceneOverlay,
-  type ScreenSpaceSegmentNode,
   type TextureAssetRef,
   type Transform,
   type VirtualTextureAssetRef,
@@ -70,17 +69,8 @@ import {
   SurfaceGpuOwner,
   type SurfaceGeometryUploadSnapshot,
 } from "../surface/surface-gpu-owner";
-import {
-  prepareCanonicalEdgeOverlayScene,
-  type CanonicalEdgeOverlayScene,
-} from "../surface/edge-overlay-scene";
-import { EdgeOverlayOwner } from "../surface/edge-overlay-owner";
+import { OverlayOwner } from "./overlay-owner";
 import { ScreenSpacePartitionPatternOwner } from "../surface/screen-space-partition-pattern";
-import {
-  prepareCanonicalScreenSpaceSegmentScene,
-  type CanonicalScreenSpaceSegmentScene,
-} from "../surface/screen-space-segment-scene";
-import { ScreenSpaceSegmentOwner } from "../surface/screen-space-segment-owner";
 import { SurfacePicker } from "../surface/surface-picker";
 import {
   createCanonicalInstanceSceneUpdateWorkspace,
@@ -627,15 +617,8 @@ export class CanvasRoot implements RendererRoot {
   readonly #instanceSubscriptions = new Map<GltfInstanceTransforms, InstanceSubscription>();
   readonly #instanceUpdateWorkspace = createCanonicalInstanceSceneUpdateWorkspace();
   readonly #pendingTexturePublicationKeys = new Set<string>();
-  #overlayGpu: SurfaceGpuOwner | null = null;
-  #edgeOverlay: CanonicalEdgeOverlayScene | null = null;
-  #edgeOverlayGpu: EdgeOverlayOwner | null = null;
-  #segmentOverlay: CanonicalScreenSpaceSegmentScene | null = null;
-  #segmentOverlayGpu: ScreenSpaceSegmentOwner | null = null;
+  readonly #overlay: OverlayOwner;
   #overlayInput: SceneOverlay | null = null;
-  #overlayRenderObjectRefs: RenderObjectRefOwner | null = null;
-  #overlayResourcesPending = false;
-  #overlayScene: CanonicalSurfaceScene | null = null;
   readonly #onContextLost = (event: Event): void => {
     event.preventDefault();
     if (this.#disposed) return;
@@ -781,6 +764,18 @@ export class CanvasRoot implements RendererRoot {
           uploadBudget: this.#frameUploadBudget,
         },
       ));
+      this.#overlay = construction.own(new OverlayOwner({
+        gl: this.#gl,
+        budget: this.#persistentGpuBudget,
+        partitionPattern: this.#screenSpacePartitionPattern,
+        etc2Available: this.#etc2Available,
+        getDecodedTexture: this.#getDecodedTexture,
+        isTexturePending: this.#isTexturePending,
+        getGltfAsset: (asset) => this.#gltfAssets.prepared(asset),
+        onChanged: () => this.#invalidateOverlayPresentation(),
+        onFailure: (error) => this.#captureScheduledFailure(error),
+        onListenerError: (error) => platform.onListenerError(error),
+      }));
       this.#environmentAssets = construction.own(new PrefilteredEnvironmentAssetOwner({
         onAssetChanged: () => {
           try {
@@ -895,9 +890,7 @@ export class CanvasRoot implements RendererRoot {
     this.#clock.block();
     this.#state.invalidate();
     this.#surfaceGpu.invalidate();
-    this.#overlayGpu?.invalidate();
-    this.#edgeOverlayGpu?.abandon();
-    this.#segmentOverlayGpu?.abandon();
+    this.#overlay.invalidate();
     this.#screenSpacePartitionPattern.abandon();
     this.#retainedPresentation.abandon();
     this.#worldPresentationRequired = true;
@@ -916,11 +909,7 @@ export class CanvasRoot implements RendererRoot {
     if (this.#context.getSnapshot().phase !== "active" || frame.views.length === 0) return false;
     this.#invalidateRetainedWorld();
     this.#worldPresentationRequired = true;
-    this.#flushPreparedGltfScene(true);
-    this.#flushPreparedTextures();
-    this.#flushInstanceScene();
-    this.#surfaceGpu.beginFrame();
-    this.#overlayGpu?.beginFrame();
+    this.#beginFrame();
     const intent = this.#externalClearIntent;
     intent.clearColor = this.#clearColor;
     intent.framebuffer = frame.framebuffer;
@@ -938,41 +927,15 @@ export class CanvasRoot implements RendererRoot {
         this.#state,
         this.#clearColor,
       );
-      if (this.#overlayGpu !== null && this.#overlayScene !== null) {
-        pending = this.#overlayGpu.drawViews(
-          frame.views,
-          frame.framebuffer,
-          this.#state,
-          this.#clearColor,
-        ) || pending;
-      }
-      if (this.#segmentOverlayGpu !== null && this.#segmentOverlay !== null) {
-        this.#segmentOverlayGpu.drawViews(
-          frame.views,
-          frame.framebuffer,
-          this.#state,
-        );
-      }
-      if (this.#edgeOverlayGpu !== null && this.#edgeOverlay !== null) {
-        pending = this.#edgeOverlayGpu.drawViews(
-          frame.views,
-          frame.framebuffer,
-          this.#state,
-          1,
-          1,
-          (surface) => this.#surfaceGpu.borrowPresentedGeometry(surface),
-        ) || pending;
-      }
+      pending = this.#overlay.drawViews(
+        frame.views, frame.framebuffer, this.#state, this.#clearColor, this.#surfaceGpu,
+      ) || pending;
     } finally {
       this.#releaseUploadedTextures();
     }
-    this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-    this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
-    this.#overlayResourcesPending = this.#overlayGpu?.surfacePublicationsPending() ?? false;
+    this.#refreshPendingResources();
     this.#presentationRequired = false;
-    this.#frame += 1;
-    this.#lastFrameFailure = undefined;
-    this.#publish();
+    this.#completeFrame();
     return pending;
   }
 
@@ -985,14 +948,11 @@ export class CanvasRoot implements RendererRoot {
     this.#clock.dispose();
     this.#cameraSource.dispose();
     this.#renderObjectRefs?.dispose();
-    this.#overlayRenderObjectRefs?.dispose();
     this.#environmentAssets.dispose();
     this.#gltfAssets.dispose();
     this.#gltfPreparer.dispose();
     this.#surfaceGpu.dispose();
-    this.#overlayGpu?.dispose();
-    this.#edgeOverlayGpu?.dispose();
-    this.#segmentOverlayGpu?.dispose();
+    this.#overlay.dispose();
     this.#screenSpacePartitionPattern.dispose();
     this.#retainedPresentation.dispose();
     this.#textureAssets.dispose();
@@ -1188,6 +1148,7 @@ export class CanvasRoot implements RendererRoot {
     if (overlay === this.#overlayInput) return;
     this.#overlayInput = overlay;
     this.#installOverlay();
+    if (this.#disposed || this.#overlayInput !== overlay) return;
     this.#reconcileGltfAssets();
     this.#clock.retry();
     this.#invalidateOverlayPresentation();
@@ -1357,7 +1318,7 @@ export class CanvasRoot implements RendererRoot {
 
   #geometryUploadSnapshot(): SurfaceGeometryUploadSnapshot {
     const world = this.#surfaceGpu.geometryUploadSnapshot();
-    const overlay = this.#overlayGpu?.geometryUploadSnapshot();
+    const overlay = this.#overlay.geometryUploadSnapshot();
     if (overlay === undefined) return world;
     return {
       admittedBytes: world.admittedBytes + overlay.admittedBytes,
@@ -1477,140 +1438,8 @@ export class CanvasRoot implements RendererRoot {
     this.#invalidatePresentation();
   }
 
-  #applyOverlayRenderObjectTransform(
-    node: MeshNode | GltfNode,
-    transform: Transform,
-  ): void {
-    if (this.#disposed || node.kind !== "mesh") return;
-    const scene = this.#overlayScene;
-    if (scene === null) return;
-    const binding = updateCanonicalRenderObjectTransform(
-      scene,
-      node,
-      transform,
-      this.#renderObjectUpdateWorkspace ??=
-        createCanonicalRenderObjectUpdateWorkspace(),
-    );
-    if (binding === undefined || this.#installingScene) return;
-    this.#overlayGpu?.publishObjectTransforms(binding.surfaceIndices, false);
-    this.#invalidateOverlayPresentation();
-  }
-
   #installOverlay(): void {
-    const input = this.#overlayInput;
-    const baseInput = this.#surfaceSceneInput;
-    const baseScene = this.#surfaceScene;
-    if (
-      input === null
-      || input.nodes.length === 0
-      || baseInput === null
-      || baseScene === null
-    ) {
-      this.#overlayScene = null;
-      this.#overlayGpu?.setScene(null);
-      this.#edgeOverlay = null;
-      this.#edgeOverlayGpu?.setScene(null);
-      this.#segmentOverlay = null;
-      this.#segmentOverlayGpu?.setScene(null);
-      this.#overlayRenderObjectRefs?.reconcile([]);
-      this.#overlayResourcesPending = false;
-      return;
-    }
-    const meshNodes = input.nodes.filter(
-      (node): node is MeshNode => node.kind === "mesh",
-    );
-    const outlineNodes = input.nodes.filter(
-      (node): node is OutlineGltfNode => node.kind === "outline-gltf",
-    );
-    const segmentNodes = input.nodes.filter(
-      (node): node is ScreenSpaceSegmentNode => node.kind === "screen-space-segment",
-    );
-    const overlaySceneInput: Scene = {
-      camera: baseInput.camera,
-      clearColor: baseInput.clearColor,
-      kind: "scene",
-      nodes: meshNodes,
-      ...(baseInput.exposureEv100 === undefined
-        ? {}
-        : { exposureEv100: baseInput.exposureEv100 }),
-      ...(baseInput.toneMapping === undefined
-        ? {}
-        : { toneMapping: baseInput.toneMapping }),
-    };
-    const prepared = meshNodes.length === 0
-      ? null
-      : prepareCanonicalSurfaceScene(
-        overlaySceneInput,
-        () => undefined,
-        baseScene.camera,
-        this.#getDecodedTexture,
-        this.#isTexturePending,
-      );
-    this.#overlayScene = prepared;
-    this.#edgeOverlay = outlineNodes.length === 0
-      ? null
-      : prepareCanonicalEdgeOverlayScene(
-        baseInput,
-        outlineNodes,
-        (node) => this.#gltfAssets.prepared(node.asset),
-        baseScene.camera,
-      );
-    this.#segmentOverlay = segmentNodes.length === 0
-      ? null
-      : prepareCanonicalScreenSpaceSegmentScene(segmentNodes);
-    this.#installingScene = true;
-    try {
-      this.#reconcileOverlayRenderObjectRefs(meshNodes);
-    } finally {
-      this.#installingScene = false;
-    }
-    if (prepared !== null) {
-      this.#overlayGpu ??= new SurfaceGpuOwner(
-        this.#gl,
-        this.#persistentGpuBudget,
-        this.#screenSpacePartitionPattern,
-        {
-          etc2Available: this.#etc2Available,
-          onChanged: () => this.#invalidateOverlayPresentation(),
-          onFailure: (error) => this.#captureScheduledFailure(error),
-          presentationLane: "overlay",
-          uploadBudget: new FrameUploadBudgetOwner(),
-        },
-      );
-      this.#overlayGpu.setScene(prepared);
-      this.#overlayResourcesPending = this.#overlayGpu.surfacePublicationsPending();
-    } else {
-      this.#overlayGpu?.setScene(null);
-      this.#overlayResourcesPending = false;
-    }
-    if (this.#edgeOverlay !== null) {
-      this.#edgeOverlayGpu ??= new EdgeOverlayOwner(
-        this.#gl,
-        this.#persistentGpuBudget,
-        this.#screenSpacePartitionPattern,
-      );
-      this.#edgeOverlayGpu.setScene(this.#edgeOverlay);
-    } else this.#edgeOverlayGpu?.setScene(null);
-    if (this.#segmentOverlay !== null) {
-      this.#segmentOverlayGpu ??= new ScreenSpaceSegmentOwner(
-        this.#gl,
-        this.#persistentGpuBudget,
-        this.#screenSpacePartitionPattern,
-      );
-      this.#segmentOverlayGpu.setScene(this.#segmentOverlay);
-    } else this.#segmentOverlayGpu?.setScene(null);
-  }
-
-  #reconcileOverlayRenderObjectRefs(nodes: readonly MeshNode[]): void {
-    if (
-      this.#overlayRenderObjectRefs === null
-      && !nodes.some((node) => node.ref !== undefined)
-    ) return;
-    this.#overlayRenderObjectRefs ??= new RenderObjectRefOwner({
-      onError: (error) => this.#platform.onListenerError(error),
-      onTransform: (node, transform) => this.#applyOverlayRenderObjectTransform(node, transform),
-    });
-    this.#overlayRenderObjectRefs.reconcile(nodes);
+    this.#overlay.setScene(this.#overlayInput, this.#surfaceSceneInput, this.#surfaceScene);
   }
 
   #reconcileRenderObjectRefs(nodes: Scene["nodes"]): void {
@@ -1924,26 +1753,41 @@ export class CanvasRoot implements RendererRoot {
     );
   }
 
-  #renderFrame(): void {
-    const intent = this.#frameIntent;
-    if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+  #beginFrame(): void {
     this.#flushPreparedGltfScene(true);
     this.#flushPreparedTextures();
     this.#flushInstanceScene();
     this.#surfaceGpu.beginFrame();
-    this.#overlayGpu?.beginFrame();
+    this.#overlay.beginFrame();
+  }
+
+  #refreshPendingResources(): void {
+    this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
+    this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
+  }
+
+  #completeFrame(): void {
+    this.#frame += 1;
+    this.#lastFrameFailure = undefined;
+    this.#publish();
+  }
+
+  #renderFrame(): void {
+    const intent = this.#frameIntent;
+    if (intent === null || this.#context.getSnapshot().phase !== "active") return;
+    this.#beginFrame();
     if (
       this.#surfaceResourcesPending
       || this.#textureResourcesPending
-      || this.#overlayResourcesPending
+      || this.#overlay.resourcesPending
     ) {
       const worldResourcesWerePending =
         this.#surfaceResourcesPending || this.#textureResourcesPending;
       let resourcesCommitted = false;
       try {
         resourcesCommitted = this.#surfaceGpu.flushResourcePublications(this.#state);
-        if (this.#overlayResourcesPending && this.#overlayGpu !== null) {
-          resourcesCommitted = this.#overlayGpu.flushResourcePublications(this.#state)
+        if (this.#overlay.resourcesPending) {
+          resourcesCommitted = this.#overlay.flushResourcePublications(this.#state)
             || resourcesCommitted;
         }
         if (!resourcesCommitted) {
@@ -1954,10 +1798,7 @@ export class CanvasRoot implements RendererRoot {
           }
         }
       } finally {
-        this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
-        this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-        this.#overlayResourcesPending =
-          this.#overlayGpu?.surfacePublicationsPending() ?? false;
+        this.#refreshPendingResources();
         resourcesCommitted = this.#releaseUploadedTextures() || resourcesCommitted;
       }
       if (resourcesCommitted && !this.#presentationRequired) {
@@ -1975,7 +1816,7 @@ export class CanvasRoot implements RendererRoot {
         && (
           this.#surfaceResourcesPending
           || this.#textureResourcesPending
-          || this.#overlayResourcesPending
+          || this.#overlay.resourcesPending
         )
       ) {
         this.#clock.invalidate();
@@ -1989,12 +1830,7 @@ export class CanvasRoot implements RendererRoot {
     this.#presentationRequired = false;
     this.#worldPresentationRequired = false;
     const surfaceScene = this.#surfaceScene;
-    const overlayScene = this.#overlayScene;
-    const edgeOverlay = this.#edgeOverlay;
-    const segmentOverlay = this.#segmentOverlay;
-    const hasPresentationOverlay = overlayScene !== null
-      || segmentOverlay !== null
-      || (edgeOverlay?.runs.length ?? 0) > 0;
+    const hasPresentationOverlay = this.#overlay.hasPresentation;
     const size = this.#size;
     const restoredWorld = !worldPresentationRequired
       && size !== null
@@ -2010,9 +1846,7 @@ export class CanvasRoot implements RendererRoot {
       && (
         surfaceScene.surfaces.length > 0
         || surfaceScene.volumes.length > 0
-        || (overlayScene?.surfaces.length ?? 0) > 0
-        || (segmentOverlay?.runs.length ?? 0) > 0
-        || (edgeOverlay?.surfaces.length ?? 0) > 0
+        || this.#overlay.hasSurfaces
       )
     ) {
       projectionMat4Into(this.#projection, surfaceScene.camera, size.backingWidth, size.backingHeight);
@@ -2049,54 +1883,24 @@ export class CanvasRoot implements RendererRoot {
             this.#state,
           );
         }
-        if (this.#overlayGpu !== null && overlayScene !== null) {
-          overlayPending = this.#overlayGpu.drawViews(
-            this.#canvasViews,
-            null,
-            this.#state,
-            this.#clearColor,
-            cssScaleX,
-            cssScaleY,
-          );
-        }
-        if (this.#segmentOverlayGpu !== null && segmentOverlay !== null) {
-          this.#segmentOverlayGpu.drawViews(
-            this.#canvasViews,
-            null,
-            this.#state,
-            cssScaleX,
-            cssScaleY,
-          );
-        }
-        if (this.#edgeOverlayGpu !== null && edgeOverlay !== null) {
-          overlayPending = this.#edgeOverlayGpu.drawViews(
-            this.#canvasViews,
-            null,
-            this.#state,
-            cssScaleX,
-            cssScaleY,
-            (surface) => this.#surfaceGpu.borrowPresentedGeometry(surface),
-          ) || overlayPending;
-        }
+        overlayPending = this.#overlay.drawViews(
+          this.#canvasViews, null, this.#state, this.#clearColor,
+          this.#surfaceGpu, cssScaleX, cssScaleY,
+        );
         this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
-        this.#overlayResourcesPending =
-          this.#overlayGpu?.surfacePublicationsPending() ?? false;
         if (worldPending || overlayPending) {
-          if (this.#surfaceResourcesPending || this.#overlayResourcesPending) {
+          if (this.#surfaceResourcesPending || this.#overlay.resourcesPending) {
             this.#clock.invalidate();
           } else if (worldPending) this.#invalidatePresentation();
           else this.#invalidateOverlayPresentation();
         }
       } finally {
         this.#releaseUploadedTextures();
-        this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
-        this.#textureResourcesPending = this.#surfaceGpu.texturePublicationsPending();
-        this.#overlayResourcesPending =
-          this.#overlayGpu?.surfacePublicationsPending() ?? false;
+        this.#refreshPendingResources();
         if (
           this.#surfaceResourcesPending
           || this.#textureResourcesPending
-          || this.#overlayResourcesPending
+          || this.#overlay.resourcesPending
         ) {
           this.#clock.invalidate();
         }
@@ -2109,9 +1913,7 @@ export class CanvasRoot implements RendererRoot {
       this.#discardDefaultDepthAttachment,
     );
     this.#progressivePresentation.presented();
-    this.#frame += 1;
-    this.#lastFrameFailure = undefined;
-    this.#publish();
+    this.#completeFrame();
   }
 
   #restoreContext(): void {
@@ -2124,9 +1926,7 @@ export class CanvasRoot implements RendererRoot {
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#state.invalidate();
       this.#surfaceGpu.invalidate();
-      this.#overlayGpu?.invalidate();
-      this.#edgeOverlayGpu?.abandon();
-      this.#segmentOverlayGpu?.abandon();
+      this.#overlay.invalidate();
       this.#screenSpacePartitionPattern.abandon();
       if (this.#surfaceScene !== null) this.#reconcilePrefilteredEnvironment(this.#surfaceScene);
       this.#textureAssets.invalidateResidency();

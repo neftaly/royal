@@ -1,3 +1,9 @@
+import {
+  canReserveTextureSource,
+  replaceTextureReservationInto,
+  preparingTextureReservation,
+  type TextureReservation,
+} from "./preparation-reservation";
 import type {
   TextureAssetRef,
 } from "@royal/renderer-core";
@@ -109,9 +115,8 @@ type AssetEntry = {
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
   controller: AbortController | undefined;
-  preparationActive: boolean;
+  reservation: TextureReservation;
   preparationDeferred: boolean;
-  decodedReservationBytes: number;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedClaims: number;
@@ -164,9 +169,7 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 
 /** Owns exact decoded-content claims, asynchronous decode, and focused status publication. */
 export class TextureAssetOwner {
-  #activePreparations = 0;
-  #sourceReservations = 0;
-  #decodedHandoffBytes = 0;
+  readonly #reservations = { activePreparations: 0, sourceReservations: 0, decodedHandoffBytes: 0 };
   #disposed = false;
   readonly #preparationQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
@@ -278,20 +281,20 @@ export class TextureAssetOwner {
       }
     }
     return {
-      activePreparations: this.#activePreparations,
+      activePreparations: this.#reservations.activePreparations,
       ...(timedSources === 0 ? {} : {
         browserStageTimings: {
           sourceCount: timedSources,
           totals: timings,
         },
       }),
-      decodedHandoffBytes: this.#decodedHandoffBytes,
+      decodedHandoffBytes: this.#reservations.decodedHandoffBytes,
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
       ...(encodedSourceReads === undefined ? {} : { encodedSourceReads }),
       pendingStorageRepresentations,
       retainedEncodedSourceBytes,
       sourceReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
-      sourceReservations: this.#sourceReservations,
+      sourceReservations: this.#reservations.sourceReservations,
     };
   }
 
@@ -438,7 +441,7 @@ export class TextureAssetOwner {
       if (entry.decoded !== undefined && !entry.decodedReleased) {
         this.#platform.onAssetChanged(entry.key);
       } else if (
-        !entry.preparationActive
+        entry.reservation?.phase !== "preparing"
         && !entry.queued
         && entry.snapshot.status !== "error"
       ) {
@@ -473,9 +476,8 @@ export class TextureAssetOwner {
       asset,
       claimedStorageKeys: new Set(storageKeys),
       controller: undefined,
-      preparationActive: false,
+      reservation: undefined,
       preparationDeferred: false,
-      decodedReservationBytes: 0,
       decoded: undefined,
       decodedClaims: 0,
       decodedReleased: false,
@@ -495,7 +497,7 @@ export class TextureAssetOwner {
   }
 
   #queuePreparation(entry: AssetEntry): void {
-    if (entry.preparationActive || entry.decodedReservationBytes !== 0) return;
+    if (entry.reservation !== undefined) return;
     if (entry.decodedClaims > 0) {
       entry.preparationDeferred = true;
       return;
@@ -512,49 +514,41 @@ export class TextureAssetOwner {
   #drainPreparationQueue(): void {
     while (
       !this.#disposed
-      && this.#activePreparations < ACTIVE_TEXTURE_PREPARATION_LIMIT
-      && this.#sourceReservations < DECODED_HANDOFF_SOURCE_LIMIT
-      && (
-        this.#sourceReservations === this.#activePreparations
-        || this.#decodedHandoffBytes < DECODED_HANDOFF_BYTE_THRESHOLD
+      && canReserveTextureSource(
+        this.#reservations,
+        ACTIVE_TEXTURE_PREPARATION_LIMIT,
+        DECODED_HANDOFF_SOURCE_LIMIT,
+        DECODED_HANDOFF_BYTE_THRESHOLD,
       )
     ) {
       const entry = this.#preparationQueue.dequeue();
       if (entry === undefined) return;
       if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;
-      entry.preparationActive = true;
+      this.#replaceReservation(entry, preparingTextureReservation);
       entry.preparationStartedAt = this.#now();
-      this.#activePreparations += 1;
-      this.#sourceReservations += 1;
       this.#prepare(entry);
     }
   }
 
+  #replaceReservation(entry: AssetEntry, next: TextureReservation): void {
+    replaceTextureReservationInto(this.#reservations, entry.reservation, next);
+    entry.reservation = next;
+  }
+
   #releaseSourceReservation(entry: AssetEntry): void {
-    const bytes = entry.decodedReservationBytes;
-    if (!entry.preparationActive && bytes === 0) return;
-    if (entry.preparationActive) this.#activePreparations -= 1;
-    else this.#decodedHandoffBytes -= bytes;
-    entry.preparationActive = false;
-    entry.decodedReservationBytes = 0;
-    this.#sourceReservations -= 1;
+    if (entry.reservation === undefined) return;
+    this.#replaceReservation(entry, undefined);
     this.#drainPreparationQueue();
   }
 
   #retainDecodedHandoff(
-    entry: AssetEntry,
-    decoded: DecodedTextureSource,
-    alpha: DecodedTextureAlpha | undefined,
+    entry: AssetEntry, decoded: DecodedTextureSource, alpha: DecodedTextureAlpha | undefined,
   ): void {
-    if (!entry.preparationActive) {
+    if (entry.reservation?.phase !== "preparing") {
       throw new Error("Royal decoded texture completed without an active reservation");
     }
-    const bytes = decodedTextureHandoffBytes(decoded, alpha);
-    entry.preparationActive = false;
-    entry.decodedReservationBytes = bytes;
-    this.#activePreparations -= 1;
-    this.#decodedHandoffBytes += bytes;
+    this.#replaceReservation(entry, { phase: "handoff", bytes: decodedTextureHandoffBytes(decoded, alpha) });
   }
 
   #releaseDecodedIfUnused(entry: AssetEntry): void {

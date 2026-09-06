@@ -1,3 +1,4 @@
+import { rayTriangleInto, type TriangleHit } from "../math/ray-triangle";
 import {
   IDENTITY_TEXTURE_COORDINATES,
   type CanonicalTextureCoordinates,
@@ -14,10 +15,12 @@ import type {
 export type CanonicalAlphaMaskSamplingScratch = Readonly<{
   /** Adjacent-ray untransformed UV pairs: x.u, x.v, y.u, y.v. */
   footprintUv: Float64Array;
+  triangleHit: TriangleHit;
 }>;
 
 export const createCanonicalAlphaMaskSamplingScratch = (): CanonicalAlphaMaskSamplingScratch => ({
   footprintUv: new Float64Array(4),
+  triangleHit: { distance: 0, u: 0, v: 0 },
 });
 
 const positiveModulo = (value: number, modulus: number): number => {
@@ -159,6 +162,7 @@ const sampleTransformedTriangleAlpha = (
 const rayTriangleUvInto = (
   target: Float64Array,
   offset: 0 | 2,
+  hit: TriangleHit,
   ray: CanonicalLocalPickRay,
   positions: Float32Array,
   textureCoordinates: Float32Array,
@@ -166,32 +170,8 @@ const rayTriangleUvInto = (
   bIndex: number,
   cIndex: number,
 ): boolean => {
-  const a = aIndex * 3;
-  const b = bIndex * 3;
-  const c = cIndex * 3;
-  const edge1X = positions[b]! - positions[a]!;
-  const edge1Y = positions[b + 1]! - positions[a + 1]!;
-  const edge1Z = positions[b + 2]! - positions[a + 2]!;
-  const edge2X = positions[c]! - positions[a]!;
-  const edge2Y = positions[c + 1]! - positions[a + 1]!;
-  const edge2Z = positions[c + 2]! - positions[a + 2]!;
-  const pX = ray.direction[1] * edge2Z - ray.direction[2] * edge2Y;
-  const pY = ray.direction[2] * edge2X - ray.direction[0] * edge2Z;
-  const pZ = ray.direction[0] * edge2Y - ray.direction[1] * edge2X;
-  const determinant = edge1X * pX + edge1Y * pY + edge1Z * pZ;
-  if (determinant === 0 || !Number.isFinite(determinant)) return false;
-  const inverseDeterminant = 1 / determinant;
-  const relativeX = ray.origin[0] - positions[a]!;
-  const relativeY = ray.origin[1] - positions[a + 1]!;
-  const relativeZ = ray.origin[2] - positions[a + 2]!;
-  const barycentricB = (relativeX * pX + relativeY * pY + relativeZ * pZ)
-    * inverseDeterminant;
-  const qX = relativeY * edge1Z - relativeZ * edge1Y;
-  const qY = relativeZ * edge1X - relativeX * edge1Z;
-  const qZ = relativeX * edge1Y - relativeY * edge1X;
-  const barycentricC = (
-    ray.direction[0] * qX + ray.direction[1] * qY + ray.direction[2] * qZ
-  ) * inverseDeterminant;
+  if (!rayTriangleInto(hit, positions, aIndex, bIndex, cIndex, ray, 1, true, false)) return false;
+  const { u: barycentricB, v: barycentricC } = hit;
   target[offset] = interpolatedCoordinate(
     textureCoordinates, aIndex, bIndex, cIndex, barycentricB, barycentricC, 0,
   );
@@ -220,8 +200,8 @@ const triangleTextureLod = (
   if (values === undefined) return undefined;
   const footprintUv = scratch.footprintUv;
   if (
-    !rayTriangleUvInto(footprintUv, 0, footprint.x, geometry.positions, values, a, b, c)
-    || !rayTriangleUvInto(footprintUv, 2, footprint.y, geometry.positions, values, a, b, c)
+    !rayTriangleUvInto(footprintUv, 0, scratch.triangleHit, footprint.x, geometry.positions, values, a, b, c)
+    || !rayTriangleUvInto(footprintUv, 2, scratch.triangleHit, footprint.y, geometry.positions, values, a, b, c)
   ) return undefined;
   const u = interpolatedCoordinate(values, a, b, c, barycentricB, barycentricC, 0);
   const v = interpolatedCoordinate(values, a, b, c, barycentricB, barycentricC, 1);

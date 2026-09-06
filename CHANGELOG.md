@@ -3,6 +3,20 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.20 - 2026-09-06
+
+- Decouple overlay scene, ref, and GPU ownership from the canvas root; share
+  canvas and XR frame mechanics while preserving overlay draw ordering.
+- Prevent interrupted overlay installation from publishing stale resources when
+  a ref callback replaces the overlay or disposes the root.
+- Share surface publication policy, glTF material and mesh preparation, texture
+  reservation transitions, and ray/triangle intersection math.
+- Consolidate React asset subscriptions and browser/CLI benchmark statistics.
+- Increase the WebGL package size ceiling from 674,000 to 680,000 bytes for
+  the extracted modules (measured tarball: 677,657 bytes). Adjust bundle ceilings
+  for the same refactor: initial gzip is 139,860 bytes (+354 versus the reviewed
+  baseline); deployed JavaScript is 287,811 bytes (+546).
+
 ## 0.0.19 - 2026-09-05
 
 ### Correctness and contracts

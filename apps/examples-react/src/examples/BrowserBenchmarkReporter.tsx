@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { frameStats as summarizeFrameStats } from "../benchmark-statistics";
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Example } from '../examples';
 import { benchmarkWarnings } from '../benchmark-warnings';
@@ -8,6 +9,11 @@ import {
   rendererBenchmarkSnapshotReady,
   type RendererBenchmarkSnapshot,
 } from '../example-contract';
+
+const frameStats = (...args: Parameters<typeof summarizeFrameStats>) => {
+  const stats = summarizeFrameStats(...args);
+  return { ...stats, complete: stats.sampleCount === stats.requestedSampleCount };
+};
 
 type BrowserBenchmarkCounters = {
   readonly bindBuffer: number;
@@ -432,29 +438,6 @@ const deltaRendererSnapshot = (
     // misleading recursively-subtracted object as the frame delta.
     resourcePressure: null,
     virtualTexturing: deltaNumberRecord(after.virtualTexturing, before.virtualTexturing),
-  };
-};
-
-const frameStats = (deltas: readonly number[], requestedSampleCount: number, timeoutMs: number) => {
-  const sorted = [...deltas].sort((left, right) => left - right);
-  const sum = sorted.reduce((total, value) => total + value, 0);
-  const percentile = (ratio: number): number =>
-    sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
-  return {
-    averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
-    complete: sorted.length === requestedSampleCount,
-    failed: sorted.length === 0,
-    jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
-    maxMs: sorted[sorted.length - 1] ?? 0,
-    minMs: sorted[0] ?? 0,
-    p50Ms: percentile(0.5),
-    p95Ms: percentile(0.95),
-    p99Ms: percentile(0.99),
-    requestedSampleCount,
-    sampleCount: sorted.length,
-    samplesMissing: Math.max(0, requestedSampleCount - sorted.length),
-    timedOut: sorted.length < requestedSampleCount,
-    timeoutMs,
   };
 };
 

@@ -1,6 +1,7 @@
+import { useAssetSnapshot } from "./asset-snapshot";
 import { virtualTexture, type VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { VirtualTextureAssetSnapshot } from "@royal/renderer-webgl";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
@@ -27,7 +28,6 @@ const IDLE: VirtualTextureAssetSnapshot = {
   residentPages: 0,
   status: "idle",
 };
-const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): VirtualTextureAssetSnapshot => IDLE;
 const VIRTUAL_TEXTURE_STATUS_INPUT_FIELDS = [
   "colorSpace", "contentKey", "kind", "manifestUri", "sampler", "version",
@@ -91,13 +91,7 @@ export const useVirtualTextureAssetStatus = (
         ...(wrapT === undefined ? {} : { wrapT }),
       } }),
   }), [colorSpace, contentKey, magFilter, manifestUri, minFilter, version, wrapS, wrapT]);
-  const subscribe = useCallback(
-    (listener: () => void) => root?.subscribeVirtualTextureAsset(asset, listener) ?? subscribeIdle(),
-    [asset, root],
+  return useAssetSnapshot(
+    asset, root?.subscribeVirtualTextureAsset, root?.getVirtualTextureAssetSnapshot, getIdle,
   );
-  const getSnapshot = useCallback(
-    () => root?.getVirtualTextureAssetSnapshot(asset) ?? getIdle(),
-    [asset, root],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, getIdle);
 };

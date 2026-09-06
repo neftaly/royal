@@ -1,3 +1,5 @@
+import { createStaticMaterialSetPreparer } from "./static-material-set";
+import { createStaticMeshPreparer, type StaticDracoDecoder } from "./static-mesh";
 import {
   identityMat4,
   multiplyMat4Into,
@@ -7,7 +9,6 @@ import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalSurfaceMaterial } from "../surface/canonical-material";
 import type { GltfAssetBounds, TextureVersion } from "@royal/renderer-core";
 import type { TextureSourceRef } from "../texture/source";
-import type { DecodedDracoPrimitive } from "./draco";
 import type { StaticDracoTaskExecutor } from "./draco";
 import { parseGlb } from "./glb";
 import {
@@ -22,7 +23,6 @@ import {
   finiteNumber,
   finiteTuple,
   index,
-  integer,
   nodeLocalMatrix,
   nonNegativeInteger,
   object,
@@ -31,22 +31,12 @@ import {
   type JsonObject,
 } from "./gltf-values";
 import {
-  decodedPositions,
-  readFloatVectors,
-  readIndices,
   readInstanceVectors,
-  readPositions,
-  readTextureCoordinates,
-  readVertexColors,
-  validateDecodedVectors,
   type AccessorContext,
 } from "./accessor-reader";
-import { canonicalTriangleIndices } from "./triangle-topology";
 import {
   createTextureAssetReader,
-  prepareMaterial,
 } from "./static-material";
-import { canonicalMaterialUsesTextureCoordinateSet } from "../surface/canonical-material";
 import { normalizeLodThresholds, type LodGroupId } from "../surface/lod-selection";
 import {
   validateStaticGltfDeclarations,
@@ -56,7 +46,6 @@ import {
   collectStaticAlphaMaskTextureAssets,
   collectStaticTextureAssets,
 } from "./static-texture-assets";
-import { staticMaterialLodIds } from "./static-material-inputs";
 import {
   readCanonicalStaticGltfSource,
   type StaticGltfResourceReader,
@@ -124,24 +113,10 @@ export type PreparedStaticGltfLight = Readonly<{
   range: number;
 }>;
 
-type StaticDracoDecoder = (
-  primitive: JsonObject,
-  path: string,
-) => DecodedDracoPrimitive;
-
 type StaticDocumentPreflight = Readonly<{
   bufferByteLength: number;
   usesMeshQuantization: boolean;
   usesDraco: boolean;
-}>;
-
-type PreparedMeshPrimitive = Readonly<{
-  deferredGeometryKey?: string;
-  geometry: CanonicalTriangleGeometry;
-  material: CanonicalSurfaceMaterial;
-  materialLod?: PreparedStaticMaterialLod;
-  materialVariants?: ReadonlyMap<string, CanonicalSurfaceMaterial>;
-  materialVariantLods?: ReadonlyMap<string, PreparedStaticMaterialLod>;
 }>;
 
 /** Converges repeated ordinary node occurrences on the authored instance ABI. */
@@ -343,383 +318,18 @@ const prepareStaticDocument = (
     label,
     meshQuantization: preflight.usesMeshQuantization,
   };
-  const geometryTaskKeys = staticGeometryTaskKeyMap(geometryTasks);
-  let defaultMaterial: CanonicalSurfaceMaterial | undefined;
-  const preparedMaterials = new Map<number, CanonicalSurfaceMaterial>();
-  const preparePrimitiveMaterial = (
-    materialIndex: unknown,
-    path: string,
-  ): CanonicalSurfaceMaterial => {
-    if (materialIndex === undefined && defaultMaterial !== undefined) return defaultMaterial;
-    if (typeof materialIndex === "number") {
-      const retained = preparedMaterials.get(materialIndex);
-      if (retained !== undefined) return retained;
-    }
-    const prepared = prepareMaterial(materials, textureAsset, materialIndex, label, path);
-    if (materialIndex === undefined) defaultMaterial = prepared;
-    else if (typeof materialIndex === "number") preparedMaterials.set(materialIndex, prepared);
-    return prepared;
-  };
-  const materialLodIds = (materialIndex: number): readonly number[] => {
-    const path = `materials[${materialIndex}]`;
-    const material = object(materials[materialIndex], label, path);
-    const extensions = material.extensions === undefined
-      ? {}
-      : object(material.extensions, label, `${path}.extensions`);
-    return staticMaterialLodIds(materials, extensions, label, path);
-  };
-  const materialGraphState = new Uint8Array(materials.length);
-  const validateMaterialLodGraph = (materialIndex: number): void => {
-    if (materialGraphState[materialIndex] === 1) {
-      fail(label, `materials[${materialIndex}]`, "is part of an MSFT_lod cycle");
-    }
-    if (materialGraphState[materialIndex] === 2) return;
-    materialGraphState[materialIndex] = 1;
-    for (const lodMaterial of materialLodIds(materialIndex)) {
-      validateMaterialLodGraph(lodMaterial);
-    }
-    materialGraphState[materialIndex] = 2;
-  };
-  for (let materialIndex = 0; materialIndex < materials.length; materialIndex += 1) {
-    validateMaterialLodGraph(materialIndex);
-  }
-  const preparedMaterialLods = new Map<number, PreparedStaticMaterialLod>();
-  const prepareMaterialLod = (
-    materialIndex: number | undefined,
-  ): PreparedStaticMaterialLod | undefined => {
-    if (materialIndex === undefined) return undefined;
-    const retained = preparedMaterialLods.get(materialIndex);
-    if (retained !== undefined) return retained;
-    const ids = materialLodIds(materialIndex);
-    if (ids.length === 0) return undefined;
-    const path = `materials[${materialIndex}]`;
-    const material = object(materials[materialIndex], label, path);
-    const extras = material.extras === undefined
-      ? undefined
-      : object(material.extras, label, `${path}.extras`);
-    const hints = extras?.MSFT_screencoverage === undefined
-      ? undefined
-      : array(extras.MSFT_screencoverage, label, `${path}.extras.MSFT_screencoverage`);
-    const levels = [
-      preparePrimitiveMaterial(materialIndex, path),
-      ...ids.map((id) => preparePrimitiveMaterial(id, path)),
-    ];
-    const prepared = { levels, thresholds: normalizeLodThresholds(hints, levels.length) };
-    preparedMaterialLods.set(materialIndex, prepared);
-    return prepared;
-  };
-  const materialSetUsesTextureCoordinates = (
-    material: CanonicalSurfaceMaterial,
-    materialLod: PreparedStaticMaterialLod | undefined,
-    variants: ReadonlyMap<string, CanonicalSurfaceMaterial> | undefined,
-    variantLods: ReadonlyMap<string, PreparedStaticMaterialLod> | undefined,
-    set: 0 | 1,
-  ): boolean => {
-    if (canonicalMaterialUsesTextureCoordinateSet(material, set)) return true;
-    for (const level of materialLod?.levels ?? []) {
-      if (canonicalMaterialUsesTextureCoordinateSet(level, set)) return true;
-    }
-    if (variants === undefined) return false;
-    for (const variant of variants.values()) {
-      if (canonicalMaterialUsesTextureCoordinateSet(variant, set)) return true;
-    }
-    for (const lod of variantLods?.values() ?? []) {
-      for (const level of lod.levels) {
-        if (canonicalMaterialUsesTextureCoordinateSet(level, set)) return true;
-      }
-    }
-    return false;
-  };
-  const preparePrimitiveMaterialSet = (
-    primitive: JsonObject,
-    extensions: JsonObject,
-    path: string,
-  ) => {
-    const materialIndex = primitive.material === undefined
-      ? undefined
-      : index(primitive.material, materials, label, `${path}.material`);
-    const material = preparePrimitiveMaterial(materialIndex, path);
-    const materialLod = prepareMaterialLod(materialIndex);
-    let materialVariants: Map<string, CanonicalSurfaceMaterial> | undefined;
-    let materialVariantLods: Map<string, PreparedStaticMaterialLod> | undefined;
-    if (extensions.KHR_materials_variants !== undefined) {
-      const extensionPath = `${path}.extensions.KHR_materials_variants`;
-      const extension = object(
-        extensions.KHR_materials_variants,
-        label,
-        extensionPath,
-      );
-      const mappings = array(extension.mappings, label, `${extensionPath}.mappings`);
-      materialVariants = new Map();
-      for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex += 1) {
-        const mappingPath = `${extensionPath}.mappings[${mappingIndex}]`;
-        const mapping = object(mappings[mappingIndex], label, mappingPath);
-        const mappedMaterialIndex = index(
-          mapping.material,
-          materials,
-          label,
-          `${mappingPath}.material`,
-        );
-        const mappedMaterial = preparePrimitiveMaterial(mappedMaterialIndex, mappingPath);
-        const mappedMaterialLod = prepareMaterialLod(mappedMaterialIndex);
-        const mappedVariants = array(mapping.variants, label, `${mappingPath}.variants`);
-        if (mappedVariants.length === 0) {
-          fail(label, `${mappingPath}.variants`, "must not be empty");
-        }
-        for (let variantIndex = 0; variantIndex < mappedVariants.length; variantIndex += 1) {
-          const name = variantNames[index(
-            mappedVariants[variantIndex],
-            variantNames,
-            label,
-            `${mappingPath}.variants[${variantIndex}]`,
-          )]!;
-          if (materialVariants.has(name)) {
-            fail(
-              label,
-              `${mappingPath}.variants[${variantIndex}]`,
-              `duplicates variant ${JSON.stringify(name)}`,
-            );
-          }
-          materialVariants.set(name, mappedMaterial);
-          if (mappedMaterialLod !== undefined) {
-            materialVariantLods ??= new Map();
-            materialVariantLods.set(name, mappedMaterialLod);
-          }
-        }
-      }
-      if (materialVariants.size === 0) materialVariants = undefined;
-    }
-    return {
-      material,
-      materialLod,
-      materialVariants,
-      materialVariantLods,
-      usesTextureCoordinates0: materialSetUsesTextureCoordinates(
-        material,
-        materialLod,
-        materialVariants,
-        materialVariantLods,
-        0,
-      ),
-      usesTextureCoordinates1: materialSetUsesTextureCoordinates(
-        material,
-        materialLod,
-        materialVariants,
-        materialVariantLods,
-        1,
-      ),
-    };
-  };
-  const preparedMeshes: Array<readonly PreparedMeshPrimitive[] | undefined> = [];
-  const prepareMesh = (meshIndex: number): readonly PreparedMeshPrimitive[] => {
-    const retained = preparedMeshes[meshIndex];
-    if (retained !== undefined) return retained;
-    const meshPath = `meshes[${meshIndex}]`;
-    const mesh = object(meshes[meshIndex], label, meshPath);
-    if (mesh.weights !== undefined) fail(label, `${meshPath}.weights`, "are not supported yet");
-    const primitives = array(mesh.primitives, label, `${meshPath}.primitives`);
-    const prepared = primitives.map((primitiveValue, primitiveIndex): PreparedMeshPrimitive => {
-      const path = `${meshPath}.primitives[${primitiveIndex}]`;
-      const primitive = object(primitiveValue, label, path);
-      const primitiveMode = primitive.mode === undefined
-        ? 4
-        : integer(primitive.mode, label, `${path}.mode`);
-      const mode: 4 | 5 | 6 = primitiveMode === 4 || primitiveMode === 5 || primitiveMode === 6
-        ? primitiveMode
-        : fail(label, `${path}.mode`, "must be TRIANGLES, TRIANGLE_STRIP, or TRIANGLE_FAN");
-      if (primitive.targets !== undefined) fail(label, `${path}.targets`, "are not supported yet");
-      const attributes = object(primitive.attributes, label, `${path}.attributes`);
-      const extensions = primitive.extensions === undefined
-        ? {}
-        : object(primitive.extensions, label, `${path}.extensions`);
-      const hasDraco = extensions.KHR_draco_mesh_compression !== undefined;
-      const {
-        material,
-        materialLod,
-        materialVariants,
-        materialVariantLods,
-        usesTextureCoordinates0,
-        usesTextureCoordinates1,
-      } = preparePrimitiveMaterialSet(primitive, extensions, path);
-      const plannedTaskKey = geometryTaskKeys.get(`${meshIndex}:${primitiveIndex}`);
-      if (geometryTasks !== undefined && plannedTaskKey === undefined) {
-        fail(label, path, "is missing its planned geometry task");
-      }
-      const deferGeometry = plannedTaskKey !== undefined
-        && computeGeometryTaskKeys?.has(plannedTaskKey) === false;
-      if (deferGeometry) {
-        index(attributes.POSITION, accessors, label, `${path}.attributes.POSITION`);
-        if (hasDraco && mode !== 4) {
-          fail(label, `${path}.mode`, "Draco geometry must use TRIANGLES");
-        }
-        if (usesTextureCoordinates0 && attributes.TEXCOORD_0 === undefined) {
-          fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the material");
-        }
-        if (usesTextureCoordinates1 && attributes.TEXCOORD_1 === undefined) {
-          fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
-        }
-        return {
-          deferredGeometryKey: plannedTaskKey,
-          geometry: {
-            bounds: { max: [0, 0, 0], min: [0, 0, 0] },
-            indices: new Uint16Array(),
-            key: `shared:${plannedTaskKey}`,
-            positions: new Float32Array(),
-            sourceKey: plannedTaskKey,
-          },
-          material,
-          ...(materialLod === undefined ? {} : { materialLod }),
-          ...(materialVariants === undefined ? {} : { materialVariants }),
-          ...(materialVariantLods === undefined ? {} : { materialVariantLods }),
-        };
-      }
-      const decoded = hasDraco
-        ? decodeDraco?.(primitive, path)
-          ?? fail(label, `${path}.extensions.KHR_draco_mesh_compression`, "is unsupported")
-        : undefined;
-      const positionAccessor = index(
-        attributes.POSITION, accessors, label, `${path}.attributes.POSITION`,
-      );
-      const decodedPositionValues = decoded?.attribute("POSITION");
-      const { bounds, positions } = decodedPositionValues === undefined
-        ? readPositions(context, positionAccessor)
-        : decodedPositions(decodedPositionValues, label, `${path}.attributes.POSITION`);
-      const vertexCount = positions.length / 3;
-      const colors = attributes.COLOR_0 === undefined
-        ? undefined
-        : readVertexColors(
-          context,
-          index(attributes.COLOR_0, accessors, label, `${path}.attributes.COLOR_0`),
-          decoded?.attribute("COLOR_0"),
-        );
-      if (colors !== undefined && colors.length / 4 !== vertexCount) {
-        fail(label, `${path}.attributes.COLOR_0`, "count must match POSITION");
-      }
-      const decodedNormalValues = decoded?.attribute("NORMAL");
-      const normals = attributes.NORMAL === undefined
-        ? undefined
-        : decodedNormalValues === undefined
-          ? readFloatVectors(
-            context,
-            index(attributes.NORMAL, accessors, label, `${path}.attributes.NORMAL`),
-            "VEC3",
-            3,
-            "NORMAL",
-          )
-          : validateDecodedVectors(
-            decodedNormalValues,
-            3,
-            label,
-            `${path}.attributes.NORMAL`,
-          );
-      if (normals !== undefined && normals.length / 3 !== vertexCount) {
-        fail(label, `${path}.attributes.NORMAL`, "count must match POSITION");
-      }
-      const decodedTextureCoordinates = decoded?.attribute("TEXCOORD_0");
-      const textureCoordinates0 = attributes.TEXCOORD_0 === undefined
-        ? undefined
-        : decodedTextureCoordinates === undefined
-          ? readTextureCoordinates(
-            context,
-            index(attributes.TEXCOORD_0, accessors, label, `${path}.attributes.TEXCOORD_0`),
-            "TEXCOORD_0",
-          )
-          : validateDecodedVectors(
-            decodedTextureCoordinates,
-            2,
-            label,
-            `${path}.attributes.TEXCOORD_0`,
-          );
-      if (textureCoordinates0 !== undefined && textureCoordinates0.length / 2 !== vertexCount) {
-        fail(label, `${path}.attributes.TEXCOORD_0`, "count must match POSITION");
-      }
-      const decodedTextureCoordinates1 = usesTextureCoordinates1
-        ? decoded?.attribute("TEXCOORD_1")
-        : undefined;
-      const textureCoordinates1 = !usesTextureCoordinates1 || attributes.TEXCOORD_1 === undefined
-        ? undefined
-        : decodedTextureCoordinates1 === undefined
-          ? readTextureCoordinates(
-            context,
-            index(attributes.TEXCOORD_1, accessors, label, `${path}.attributes.TEXCOORD_1`),
-            "TEXCOORD_1",
-          )
-          : validateDecodedVectors(
-            decodedTextureCoordinates1,
-            2,
-            label,
-            `${path}.attributes.TEXCOORD_1`,
-          );
-      if (textureCoordinates1 !== undefined && textureCoordinates1.length / 2 !== vertexCount) {
-        fail(label, `${path}.attributes.TEXCOORD_1`, "count must match POSITION");
-      }
-      const decodedTangents = decoded?.attribute("TANGENT");
-      const tangents = attributes.TANGENT === undefined
-        ? undefined
-        : decodedTangents === undefined
-          ? readFloatVectors(
-            context,
-            index(attributes.TANGENT, accessors, label, `${path}.attributes.TANGENT`),
-            "VEC4",
-            4,
-            "TANGENT",
-          )
-          : validateDecodedVectors(
-            decodedTangents,
-            4,
-            label,
-            `${path}.attributes.TANGENT`,
-          );
-      if (tangents !== undefined && tangents.length / 4 !== vertexCount) {
-        fail(label, `${path}.attributes.TANGENT`, "count must match POSITION");
-      }
-      const indexAccessor = primitive.indices === undefined
-        ? undefined
-        : index(primitive.indices, accessors, label, `${path}.indices`);
-      if (decoded !== undefined && mode !== 4) {
-        fail(label, `${path}.mode`, "Draco geometry must use TRIANGLES");
-      }
-      const indices = canonicalTriangleIndices(
-        decoded?.indices ?? readIndices(context, indexAccessor, vertexCount),
-        mode,
-      );
-      if (indices.length < 3 || indices.length % 3 !== 0) {
-        fail(label, path, "triangle index count must be a positive multiple of 3");
-      }
-      for (let item = 0; item < indices.length; item += 1) {
-        if (indices[item]! >= vertexCount) {
-          fail(label, `${path}.indices[${item}]`, "decoded vertex index is out of range");
-        }
-      }
-      if (usesTextureCoordinates0 && textureCoordinates0 === undefined) {
-        fail(label, `${path}.attributes.TEXCOORD_0`, "is required by the material");
-      }
-      if (usesTextureCoordinates1 && textureCoordinates1 === undefined) {
-        fail(label, `${path}.attributes.TEXCOORD_1`, "is required by the material");
-      }
-      const sourceKey = plannedTaskKey;
-      return {
-        geometry: {
-          bounds,
-          ...(colors === undefined ? {} : { colors }),
-          indices,
-          key: `${contentKey}:mesh:${meshIndex}:primitive:${primitiveIndex}`,
-          ...(normals === undefined ? {} : { normals }),
-          positions,
-          ...(tangents === undefined ? {} : { tangents }),
-          ...(textureCoordinates0 === undefined ? {} : { textureCoordinates0 }),
-          ...(textureCoordinates1 === undefined ? {} : { textureCoordinates1 }),
-          ...(sourceKey === undefined ? {} : { sourceKey }),
-        },
-        material,
-        ...(materialLod === undefined ? {} : { materialLod }),
-        ...(materialVariants === undefined ? {} : { materialVariants }),
-        ...(materialVariantLods === undefined ? {} : { materialVariantLods }),
-      };
-    });
-    preparedMeshes[meshIndex] = prepared;
-    return prepared;
-  };
+  const preparePrimitiveMaterialSet = createStaticMaterialSetPreparer(
+    materials, textureAsset, variantNames, label,
+  );
+  const prepareMesh = createStaticMeshPreparer(
+    meshes,
+    context,
+    contentKey,
+    preparePrimitiveMaterialSet,
+    decodeDraco,
+    geometryTasks,
+    computeGeometryTaskKeys,
+  );
 
   const prepareNodeInstances = (
     node: JsonObject,

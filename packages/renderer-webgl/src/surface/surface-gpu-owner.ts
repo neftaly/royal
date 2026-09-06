@@ -1,3 +1,4 @@
+import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
 import {
   cameraWorldPositionFromViewInto,
   identityMat4,
@@ -118,7 +119,6 @@ import {
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
-  surfaceProgramFeatureBits,
   surfaceTextureUnitMask,
 } from "./surface-texture-plan";
 import {
@@ -299,27 +299,6 @@ const sceneEnvironmentFeatures = (
     : SURFACE_FEATURE_STUDIO_ENVIRONMENT;
   return environment.rotated ? source | SURFACE_FEATURE_ROTATED_ENVIRONMENT : source;
 };
-
-const plannedSurfaceProgramFeatures = (
-  scene: CanonicalSurfaceScene | null,
-  surface: CanonicalDrawSurface,
-  environmentFeatures: number,
-  hasVirtualBaseColor: boolean,
-  linearOutput: boolean,
-  ordinaryTextureMask: number,
-): number => surfaceProgramFeatureBits({
-  directionalLightCount: scene?.directionalLights.length ?? 0,
-  environmentFeatures,
-  hasTangent: surface.geometry.tangents !== undefined,
-  hasVertexColor: surface.geometry.colors !== undefined,
-  hasVertexNormal: surface.geometry.normals !== undefined,
-  hasVirtualBaseColor,
-  linearOutput,
-  material: surface.material,
-  ordinaryTextureMask,
-  punctualLightCount: scene?.punctualLights.length ?? 0,
-});
-
 
 const groupSurfacesForDrawing = (surfaces: readonly GpuSurface[]) =>
   planGroupedSurfacePasses(
@@ -1875,6 +1854,38 @@ export class SurfaceGpuOwner {
     return this.#ordinaryBindingScratch;
   }
 
+  #composeTextureBindings(
+    bindings: GpuTextureBinding[],
+    ordinaryBindings: readonly GpuTextureBinding[],
+    bindingOffset: number,
+    virtualTexture: VirtualTextureGpuBinding | undefined,
+    material: CanonicalSurfaceMaterial,
+  ): void {
+    composeSurfaceTextureBindingsInto(
+      bindings,
+      ordinaryBindings,
+      bindingOffset,
+      virtualTexture,
+      this.#compositeActive
+        && material.kind === "standard"
+        && canonicalMaterialHasTransmission(material)
+        ? this.#compositeGpu?.sceneColorBinding()
+        : undefined,
+      this.#environmentGpu?.binding,
+    );
+    if (material.kind === "unlit" && material.coverage !== undefined) {
+      bindings[SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT] =
+        this.#partitionPattern.binding;
+    }
+  }
+
+  #materialProgram(material: CanonicalSurfaceMaterial, features: number, instanceCount: number) {
+    return this.#programs.get(
+      material.kind, features, instanceCount > 0,
+      material.alphaCutoff !== undefined, canonicalSurfaceIsDoubleSided(material),
+    );
+  }
+
   #prepareGpuSurface(
     geometrySurface: GpuGeometrySurface,
     ordinaryBindings: readonly GpuTextureBinding[],
@@ -1902,29 +1913,8 @@ export class SurfaceGpuOwner {
     const bindings = Array<GpuTextureBinding>(
       SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT + 1,
     );
-    composeSurfaceTextureBindingsInto(
-      bindings,
-      ordinaryBindings,
-      bindingOffset,
-      virtualTexture,
-      this.#compositeActive
-        && material.kind === "standard"
-        && canonicalMaterialHasTransmission(material)
-        ? this.#compositeGpu?.sceneColorBinding()
-        : undefined,
-      this.#environmentGpu?.binding,
-    );
-    if (material.kind === "unlit" && material.coverage !== undefined) {
-      bindings[SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT] =
-        this.#partitionPattern.binding;
-    }
-    const program = this.#programs.get(
-      material.kind,
-      features,
-      geometrySurface.instanceCount > 0,
-      material.alphaCutoff !== undefined,
-      canonicalSurfaceIsDoubleSided(material),
-    );
+    this.#composeTextureBindings(bindings, ordinaryBindings, bindingOffset, virtualTexture, material);
+    const program = this.#materialProgram(material, features, geometrySurface.instanceCount);
     const depthProgram = this.#presentationLane === "world"
       && this.#depthPrepassActive
       && surfaceCanUseOpaqueDepthPrepass(geometrySurface.surface)
@@ -1958,9 +1948,9 @@ export class SurfaceGpuOwner {
       ),
       geometry: geometrySurface.geometry,
       instanceCount: geometrySurface.instanceCount,
-      lodDrawable: geometrySurface.surface.materialLodLevel !== true
-        || material.baseColorAsset === undefined
-        || ordinaryBindings[bindingOffset]!.texture !== null,
+      lodDrawable: surfaceMaterialLodDrawable(
+        geometrySurface.surface, ordinaryBindings[bindingOffset]!.texture !== null,
+      ),
       mode: geometrySurface.surface.topology === "lines" ? this.#gl.LINES : this.#gl.TRIANGLES,
       program,
       surface: geometrySurface.surface,
@@ -2105,49 +2095,23 @@ export class SurfaceGpuOwner {
       const material = surface.material;
       const ordinaryBindings = this.#retainOrdinaryTextureBindings(material);
       workspace.deferred[index] = this.#materialUploadDeferred(material) ? 1 : 0;
-      const features = surfaceProgramFeatureBits({
-        directionalLightCount: scene.directionalLights.length,
-        environmentFeatures: sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
-        hasTangent: resource.geometry.tangentBuffer !== null,
-        hasVertexColor: resource.geometry.colorBuffer !== null,
-        hasVertexNormal: resource.geometry.normalBuffer !== null,
-        hasVirtualBaseColor: resource.virtualTexture !== undefined,
-        linearOutput: this.#compositeActive,
-        material,
-        ordinaryTextureMask: presentableOrdinaryTextureMask(
-          material,
-          residentOrdinaryTextureMask(ordinaryBindings, 0),
-        ),
-        punctualLightCount: scene.punctualLights.length,
-      });
+      const features = plannedSurfaceProgramFeatures(
+        scene,
+        surface,
+        sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+        resource.virtualTexture !== undefined,
+        this.#compositeActive,
+        presentableOrdinaryTextureMask(material, residentOrdinaryTextureMask(ordinaryBindings, 0)),
+      );
       const textureUnits = surfaceTextureUnitMask(features);
       resource.surface = surface;
       const retainedBindings = resource.drawPacket.textureBindings as GpuTextureBinding[];
       const textureUnitsChanged = textureUnits !== resource.drawPacket.textureUnits;
       const program = textureUnitsChanged
-        ? this.#programs.get(
-          material.kind,
-          features,
-          resource.instanceCount > 0,
-          material.alphaCutoff !== undefined,
-          canonicalSurfaceIsDoubleSided(material),
-        )
+        ? this.#materialProgram(material, features, resource.instanceCount)
         : resource.program;
-      composeSurfaceTextureBindingsInto(
-        retainedBindings,
-        ordinaryBindings,
-        0,
-        resource.virtualTexture,
-        this.#compositeActive
-          && material.kind === "standard"
-          && canonicalMaterialHasTransmission(material)
-          ? this.#compositeGpu?.sceneColorBinding()
-          : undefined,
-        this.#environmentGpu?.binding,
-      );
-      resource.lodDrawable = surface.materialLodLevel !== true
-        || material.baseColorAsset === undefined
-        || ordinaryBindings[0]!.texture !== null;
+      this.#composeTextureBindings(retainedBindings, ordinaryBindings, 0, resource.virtualTexture, material);
+      resource.lodDrawable = surfaceMaterialLodDrawable(surface, ordinaryBindings[0]!.texture !== null);
       if (!textureUnitsChanged) continue;
       regroup ||= program.program !== resource.program.program;
       resource.drawPacket = surfaceDrawPacket(

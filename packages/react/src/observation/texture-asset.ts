@@ -1,6 +1,7 @@
+import { useAssetSnapshot } from "./asset-snapshot";
 import { textureAsset, type TextureAssetRef } from "@royal/renderer-core";
 import type { TextureAssetSnapshot } from "@royal/renderer-webgl";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
@@ -23,7 +24,6 @@ export type TextureAssetStatusInput = string | TextureAssetStatusIdentity | Text
 export type TextureAssetStatus = TextureAssetSnapshot;
 
 const IDLE: TextureAssetSnapshot = { status: "idle" };
-const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): TextureAssetSnapshot => IDLE;
 const TEXTURE_STATUS_INPUT_FIELDS = [
   "colorSpace", "contentKey", "kind", "sampler", "src", "version",
@@ -80,13 +80,5 @@ export const useTextureAssetStatus = (
       ...(contentKey === undefined ? {} : { contentKey }),
       ...(version === undefined ? {} : { version }),
     }), [contentKey, source, version]);
-  const subscribe = useCallback(
-    (listener: () => void) => root?.subscribeTextureAsset(asset, listener) ?? subscribeIdle(),
-    [asset, root],
-  );
-  const getSnapshot = useCallback(
-    () => root?.getTextureAssetSnapshot(asset) ?? getIdle(),
-    [asset, root],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, getIdle);
+  return useAssetSnapshot(asset, root?.subscribeTextureAsset, root?.getTextureAssetSnapshot, getIdle);
 };

@@ -1,3 +1,4 @@
+import { frameStats } from "../src/benchmark-statistics.ts";
 import { createReadStream, readFileSync } from 'node:fs';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -837,26 +838,7 @@ const installBenchmarkHooks = async (session) => {
   const pendingXrPulses = [];
   let windowDrawCallbackDurations = [];
   let windowFrameSample = null;
-  const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
-    const sorted = [...deltas].sort((left, right) => left - right);
-    const sum = sorted.reduce((total, value) => total + value, 0);
-    const percentile = (ratio) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
-    return {
-      averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
-      failed: sorted.length === 0,
-      jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
-      maxMs: sorted[sorted.length - 1] ?? 0,
-      minMs: sorted[0] ?? 0,
-      p50Ms: percentile(0.5),
-      p95Ms: percentile(0.95),
-      p99Ms: percentile(0.99),
-      requestedSampleCount,
-      sampleCount: sorted.length,
-      samplesMissing: Math.max(0, requestedSampleCount - sorted.length),
-      timedOut: sorted.length < requestedSampleCount,
-      timeoutMs,
-    };
-  };
+  const statsFromDeltas = ${frameStats.toString()};
   const statsFromTimes = (times) =>
     statsFromDeltas(times.slice(1).map((time, index) => time - times[index]));
   const failedFrameStats = (reason, details = {}) => ({

@@ -1,6 +1,7 @@
+import { useAssetSnapshot } from "./asset-snapshot";
 import { gltfAsset, type GltfAssetRef } from "@royal/renderer-core";
 import type { GltfAssetSnapshot } from "@royal/renderer-webgl";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { useOptionalCanvasRoot } from "../runtime/canvas-context";
 import { recordWithAllowedFields } from "../validation";
 import {
@@ -16,7 +17,6 @@ export type GltfAssetStatusInput = string | GltfAssetStatusIdentity | GltfAssetR
 export type GltfAssetStatus = GltfAssetSnapshot;
 
 const IDLE: GltfAssetSnapshot = { status: "idle" };
-const subscribeIdle = (): (() => void) => () => undefined;
 const getIdle = (): GltfAssetSnapshot => IDLE;
 const GLTF_STATUS_INPUT_FIELDS = ["bounds", "sceneIndex", "src", "version"] as const;
 
@@ -52,13 +52,5 @@ export const useGltfAssetStatus = (
       ...(version === undefined ? {} : { version }),
     },
   ), [sceneIndex, source, version]);
-  const subscribe = useCallback(
-    (listener: () => void) => root?.subscribeGltfAsset(asset, listener) ?? subscribeIdle(),
-    [asset, root],
-  );
-  const getSnapshot = useCallback(
-    () => root?.getGltfAssetSnapshot(asset) ?? getIdle(),
-    [asset, root],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, getIdle);
+  return useAssetSnapshot(asset, root?.subscribeGltfAsset, root?.getGltfAssetSnapshot, getIdle);
 };
