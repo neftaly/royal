@@ -2,6 +2,7 @@ import {
   boxGeometry,
   imageTexture,
   mesh,
+  orbitPerspectiveCamera,
   perspectiveCamera,
   planeGeometry,
   scene,
@@ -9,7 +10,11 @@ import {
   unlitMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
-import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import { identityMat4, multiplyMat4Into, projectionMat4, viewMat4 } from "../../packages/renderer-webgl/src/math/mat4";
+import {
+  createCanonicalRenderObjectUpdateWorkspace,
+  updateCanonicalRenderObjectTransform,
+} from "../../packages/renderer-webgl/src/surface/render-object-scene-update";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import {
   prepareCanonicalSurfaceScene,
@@ -44,6 +49,79 @@ const createSurfaceGpuOwner = (
 );
 
 describe("retained surface texture publication", () => {
+  it("invalidates blended bounds when an object moves during an unrelated pending texture batch", () => {
+    const camera = orbitPerspectiveCamera({ view: { pitch: Math.PI / 2, distance: 1 } });
+    const texture = imageTexture("/unrelated.png");
+    const card = mesh({
+      geometry: boxGeometry([0.088, 0.002, 0.126]),
+      material: unlitMaterial({ color: [1, 0, 0, 0.5] }),
+      transform: { position: [-0.3, 0.0031, -0.2] },
+      ref: { current: null },
+    });
+    const pending = prepareCanonicalSurfaceScene(scene({
+      camera,
+      nodes: [
+        mesh({
+          geometry: boxGeometry([0.841, 0.002, 0.594]),
+          material: unlitMaterial({ color: [0, 0, 1, 0.5] }),
+          transform: { position: [0, 0.001, 0] },
+        }),
+        card,
+        mesh({ geometry: planeGeometry(0.1), material: unlitMaterial({ texture }) }),
+      ],
+    }), undefined, undefined, () => ({ width: 2, height: 2, source: {} as ImageBitmap }));
+    const gl = fakeGl();
+    const colors = new Map<WebGLProgram, number[]>();
+    let currentProgram: WebGLProgram | null = null;
+    let submittedColors: number[][] = [];
+    vi.mocked(gl.getUniformLocation).mockImplementation((program, name) => (
+      { program, name } as unknown as WebGLUniformLocation
+    ));
+    vi.mocked(gl.useProgram).mockImplementation((program) => { currentProgram = program; });
+    vi.mocked(gl.uniform4fv).mockImplementation((location, value) => {
+      const uniform = location as unknown as { program: WebGLProgram; name: string };
+      if (uniform.name === "linearColor") colors.set(uniform.program, Array.from(value));
+    });
+    const recordDraw = () => {
+      const color = currentProgram === null ? undefined : colors.get(currentProgram);
+      if (color?.[3] === 0.5) submittedColors.push(color);
+    };
+    vi.mocked(gl.drawElements).mockImplementation(recordDraw);
+    vi.mocked(gl.drawElementsInstanced).mockImplementation(recordDraw);
+    vi.mocked(gl.drawArrays).mockImplementation(recordDraw);
+    const owner = createSurfaceGpuOwner(gl);
+    const state = new WebGlStateOwner(gl);
+    const view = viewMat4(camera);
+    const views = [{
+      view,
+      viewProjection: multiplyMat4Into(identityMat4(), projectionMat4(camera, 100, 100), view),
+      viewport: { height: 100, width: 100, x: 0, y: 0 },
+    }];
+    const drawColors = () => {
+      submittedColors = [];
+      owner.beginFrame();
+      owner.drawViews(views, null, state, [0, 0, 0, 1]);
+      return submittedColors;
+    };
+    try {
+      owner.setScene(pending);
+      expect(drawColors()).toEqual([[0, 0, 1, 0.5], [1, 0, 0, 0.5]]);
+      const ready = refreshCanonicalSurfaceTextures(pending, [decodedTextureKey(texture)], () => ({
+        width: 2, height: 2, source: {} as ImageBitmap,
+      }));
+      owner.publishTextureBatch(ready, [decodedTextureKey(texture)]);
+      const binding = updateCanonicalRenderObjectTransform(
+        ready, card,
+        { position: [-0.3, -0.003, -0.2], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        createCanonicalRenderObjectUpdateWorkspace(),
+      )!;
+      owner.publishObjectTransforms(binding.surfaceIndices, false);
+      expect(drawColors()).toEqual([[1, 0, 0, 0.5], [0, 0, 1, 0.5]]);
+    } finally {
+      owner.dispose();
+    }
+  });
+
   it("retires superseded scene storage before admitting replacement geometry", () => {
     const texture = imageTexture({
       sampler: { minFilter: "nearest" },

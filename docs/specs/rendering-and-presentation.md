@@ -258,6 +258,37 @@ Alpha-opaque and alpha-mask draws establish normal depth. Transparent and
 transmission ordering MUST be deterministic, though perfect global order is not
 promised. A material becoming ready MUST NOT leak prior draw state.
 
+Alpha-blended draws use retained axis-aligned separating planes where whole
+world bounds permit them. Traversal draws the far group first for each view,
+using the eye position for perspective views and the view direction for
+orthographic views. This preserves occlusion for separated support/card layers
+even when their centre depths reverse. Bounds or membership changes invalidate
+the partition; camera motion only traverses it. Touching bounds may separate,
+but coincident faces have no additional presentation guarantee. Groups that
+cannot be separated, including intersecting bounds or geometry within one draw,
+retain stable centre-depth sorting. Construction is limited to 32 partition
+levels; remaining groups use the same fallback. This is not order-independent
+transparency and does not change alpha values or enable blended depth writes.
+
+`node scripts/alpha-blend-mat-smoke.mjs` checks a standalone local glTF fixture
+with near-opaque BLEND, fractional alpha, transparent texels, mixed alpha modes,
+oppositely offset cards, a flipped face, and stacked translucency. Its 150 pixel
+samples pass with the separated-bounds path; the pre-fix owner fails 47 samples,
+including drawing blue mat pixels where red card pixels belong. The opaque
+control passes both paths. This Chromium/SwiftShader check establishes pixel
+correctness, not Safari/Quest performance. `ROYAL_BLEND_BASELINE=1` runs the same
+fixture with the owner from pre-fix commit `a1b4961d` as a local before/after
+diagnostic; `ROYAL_BLEND_BASELINE_REF` can select another revision. CI runs the
+current-source pixel regression before deployment.
+
+The isolated before/after build measured 444 added initial gzip bytes and 465
+added deployed gzip bytes, with worker bytes unchanged. The five affected
+initial/deployed bundle ceilings include this cost; lazy and worker ceilings
+remain unchanged. Builds suppress Rolldown's host-dependent `PLUGIN_TIMINGS`
+advisory while continuing to fail on correctness warnings.
+The 0.0.23 WebGL tarball, including declarations and source maps, measures
+685,628 bytes; its package ceiling is 686,000 bytes.
+
 Depth-writing transmission is grouped into deterministic exact-state runs and
 submitted front-to-back within each run before alpha-blended transmission,
 which remains globally back-to-front. Because Royal's screen-space source

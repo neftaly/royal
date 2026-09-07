@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -537,9 +539,12 @@ export const startVitePreview = ({ appRoot, host, port }) => {
     rejectReady = reject;
   });
   void royalReady.catch(() => undefined);
-  const child = spawnLogged('pnpm', [
-    'exec',
-    'vite',
+  // Own the server process directly. Native pnpm launchers can exit on SIGTERM
+  // while leaving Vite alive with inherited pipes, hanging a completed CI run.
+  const require = createRequire(path.join(appRoot, 'package.json'));
+  const viteCli = path.join(path.dirname(require.resolve('vite/package.json')), 'bin/vite.js');
+  const child = spawnLogged(process.execPath, [
+    viteCli,
     'preview',
     '--config',
     'vite.config.ts',

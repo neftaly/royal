@@ -3,6 +3,25 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.23 - 2026-09-08
+
+- Preserve camera-dependent occlusion between separated BLEND surfaces using
+  retained bounds partitions. Fractional alpha, transparent holes, and mixed
+  opaque/masked/blended scenes keep their authored compositing behavior.
+  Intersecting bounds and geometry within a single draw retain approximate
+  centre-depth ordering.
+- Add a standalone glTF pixel regression to CI. All 150 samples pass; the
+  pre-fix renderer fails 47. Cover camera/object motion, scene replacement,
+  all partition axes, and perspective/orthographic ray ordering. Invalidate
+  retained ordering when object motion overlaps a pending texture publication.
+- Include automatic virtual texturing and preview-first SVG refinement from
+  the preceding source checkpoint, with indexed outline provenance and opaque
+  retained-presentation copies.
+- Keep correctness warnings fatal while suppressing host-dependent build-time
+  advisories. Launch the browser-smoke preview directly so pnpm subprocesses
+  cannot keep completed CI runs alive. Release packages are GitHub tarballs;
+  nothing is published to npm.
+
 ## 0.0.22 - 2026-09-06
 
 - Update maintenance dependencies, including minidraco 0.5.0, while preserving

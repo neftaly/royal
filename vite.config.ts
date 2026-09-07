@@ -142,7 +142,15 @@ const normalizePublishedWorkerSourceMap = (): Plugin => {
   };
 };
 
-const sharedBuildOptions = { target: 'safari17', sourcemap: true, rollupOptions: { onwarn: failOnRollupWarning } };
+const sharedBuildOptions = {
+  target: 'safari17',
+  sourcemap: true,
+  rollupOptions: {
+    // Timing advisories depend on host load; correctness warnings remain fatal.
+    checks: { pluginTimings: false },
+    onwarn: failOnRollupWarning,
+  },
+};
 
 const packageDependencyNames = (packageManifest: PackageManifest): readonly string[] => [
   ...Object.keys(packageManifest.dependencies ?? {}),

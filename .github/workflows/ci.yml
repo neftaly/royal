@@ -66,6 +66,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: BLEND surface pixel regression
+        run: node scripts/alpha-blend-mat-smoke.mjs
+
       - name: Build
         run: pnpm build
 

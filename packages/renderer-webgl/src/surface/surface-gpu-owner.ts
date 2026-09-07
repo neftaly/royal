@@ -1,6 +1,11 @@
 import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
 import { BorrowedSurfaceSourceIndex } from "./borrowed-surface-source-index";
 import {
+  planSurfaceDepthPartition,
+  sortSurfaceDepthPartitionInto,
+  type SurfaceDepthPartition,
+} from "./surface-depth-partition";
+import {
   cameraWorldPositionFromViewInto,
   identityMat4,
   mat4ValuesEqual,
@@ -145,7 +150,6 @@ import type {
 import type { PreparedRoyalEnvironment } from "../environment/royal-environment-ktx1";
 import {
   sortSurfaceRunsFrontToBack,
-  sortSurfacesBackToFront,
   sortTransmissionSurfaces,
 } from "./surface-depth-order";
 import {
@@ -333,6 +337,8 @@ export class SurfaceGpuOwner {
   #opaqueMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #blendedSurfaces: GpuSurface[] = [];
   #transmissionSurfaces: GpuSurface[] = [];
+  #blendedDepthPartition: SurfaceDepthPartition<GpuSurface> | undefined;
+  #transmissionDepthPartition: SurfaceDepthPartition<GpuSurface> | undefined;
   #transmissionMultiDrawRunEnds: Uint32Array<ArrayBufferLike> = EMPTY_RUN_ENDS;
   #gpuScene: CanonicalSurfaceScene | null = null;
   #gpuSurfacesBySceneIndex: GpuSurface[] = [];
@@ -479,6 +485,7 @@ export class SurfaceGpuOwner {
   }
 
   #clearGpuSurfaces(): void {
+    this.#invalidateBlendDepthPartitions();
     this.#admittedSurfaceCount = 0;
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
@@ -795,6 +802,7 @@ export class SurfaceGpuOwner {
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
+    this.#invalidateBlendDepthPartitions();
     this.#borrowedSourceIndex?.invalidate();
     if (this.#presentationLane === "world") {
       updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, this.#scene.surfaces);
@@ -818,6 +826,13 @@ export class SurfaceGpuOwner {
     const scene = this.#scene;
     if (scene === null) return;
     if (surfaceIndices.length > 0) this.#borrowedSourceIndex?.invalidate();
+    // Bounds can change while a texture publication is still awaiting reconciliation.
+    for (const index of surfaceIndices) {
+      if (scene.surfaces[index]?.material.alphaBlend) {
+        this.#invalidateBlendDepthPartitions();
+        break;
+      }
+    }
     if (this.#presentationLane === "world") {
       updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
     }
@@ -1357,7 +1372,22 @@ export class SurfaceGpuOwner {
       && surfaceDrawPassNeedsDepthOrder(pass)
     ) {
       sortTransmissionSurfaces(this.#transmissionSurfaces, view);
-      sortSurfacesBackToFront(this.#blendedSurfaces, view);
+      const perspective = frameView.perspective ?? scene.camera.kind === "perspective-camera";
+      if (this.#transmissionSurfaces.length > 1) {
+        const partition = this.#transmissionDepthPartition ??= planSurfaceDepthPartition(
+          this.#transmissionSurfaces.filter((surface) => surface.drawPacket.alphaBlend),
+        );
+        sortSurfaceDepthPartitionInto(
+          this.#transmissionSurfaces, partition, view, this.#cameraPosition, perspective,
+          this.#transmissionSurfaces.length - partition.count,
+        );
+      }
+      if (this.#blendedSurfaces.length > 1) {
+        const partition = this.#blendedDepthPartition ??= planSurfaceDepthPartition(this.#blendedSurfaces);
+        sortSurfaceDepthPartitionInto(
+          this.#blendedSurfaces, partition, view, this.#cameraPosition, perspective,
+        );
+      }
     }
     if (pass !== "remaining") {
       sortSurfaceRunsFrontToBack(
@@ -1978,6 +2008,7 @@ export class SurfaceGpuOwner {
       this.#admittedSurfaceCount = admittedSurfaceCount;
       this.#gpuScene = scene;
       if (appendedSurfaces !== null && admittedSurfaceCount < surfaces.length) {
+        this.#invalidateBlendDepthPartitions();
         if (this.#presentationLane === "overlay") {
           this.#blendedSurfaces.push(...appendedSurfaces);
         } else {
@@ -2154,7 +2185,13 @@ export class SurfaceGpuOwner {
     }
   }
 
+  #invalidateBlendDepthPartitions(): void {
+    this.#blendedDepthPartition = undefined;
+    this.#transmissionDepthPartition = undefined;
+  }
+
   #replaceDrawBuckets(surfaces: readonly GpuSurface[]): void {
+    this.#invalidateBlendDepthPartitions();
     if (this.#presentationLane === "overlay") {
       this.#opaqueSurfaces = [];
       this.#transmissionSurfaces = [];

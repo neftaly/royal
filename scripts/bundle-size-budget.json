@@ -12,17 +12,17 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies",
-    "initialAndTotalGzipBytes": 8150,
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering",
+    "initialAndTotalGzipBytes": 8600,
     "lazyGzipBytes": 3700,
     "minidraco050GzipBytes": 3700
   },
-  "royalInitialGzipBytes": 140650,
-  "royalIncrementalGzipBytes": 81350,
-  "royalGltfInitialGzipBytes": 141550,
+  "royalInitialGzipBytes": 141100,
+  "royalIncrementalGzipBytes": 81800,
+  "royalGltfInitialGzipBytes": 142050,
   "royalGltfIncrementalGzipBytes": 1000,
   "royalLazyGzipBytes": 118400,
-  "royalTotalIncrementalGzipBytes": 199700,
-  "royalTotalGzipBytes": 259000,
+  "royalTotalIncrementalGzipBytes": 200200,
+  "royalTotalGzipBytes": 259500,
   "royalWorkerGzipBytes": 23150
 }
