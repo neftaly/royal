@@ -22,7 +22,7 @@ import {
 import { useXrSession } from "@royal/react/xr";
 import { useMemo, type ReactNode } from "react";
 import { BenchmarkRendererSnapshot } from "../BenchmarkRendererSnapshot";
-import { automaticVirtualTextureExampleRendererOptions } from "../example-renderer-options";
+import { exampleCanvasRendererOptions } from "../example-renderer-options";
 import { transparentViewportClearColor } from "../presentation";
 
 const xrTigerTransform = { position: [0, 1.6, -3.8], scale: [13, 13, 13] } as const;
@@ -174,7 +174,7 @@ export const WebXrVr = (): ReactNode => {
         aria-label="Royal WebXR scene"
         className="webxr-vr-canvas"
         overlay={xrOverlay}
-        rendererOptions={automaticVirtualTextureExampleRendererOptions}
+        rendererOptions={exampleCanvasRendererOptions}
         scene={renderScene}
       >
         <XrBenchmark />

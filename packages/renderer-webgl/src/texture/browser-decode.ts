@@ -1,3 +1,4 @@
+import { selectAsyncPreparationLane, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,
@@ -32,6 +33,7 @@ export type BrowserTextureDecoder = Readonly<{
 }>;
 
 type PendingWork = {
+  readonly detail: boolean;
   cancel: () => void;
   cancelled: boolean;
   readonly reject: (error: unknown) => void;
@@ -44,23 +46,30 @@ const aborted = (): DOMException => new DOMException("Texture decode was aborted
 /** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */
 class BrowserWorkQueue {
   #active = 0;
+  #activeDetail = 0;
+  #foregroundBurst = 0;
+  readonly #detailLimit: number;
   readonly #limit: number;
   readonly #pending = new RetainedFifo<PendingWork>();
+  readonly #pendingDetail = new RetainedFifo<PendingWork>();
 
-  constructor(limit: number) {
+  constructor(limit: number, detailLimit = limit) {
     if (!Number.isSafeInteger(limit) || limit < 1) {
       throw new RangeError("Royal browser texture decode concurrency must be a positive integer");
     }
     this.#limit = limit;
+    this.#detailLimit = detailLimit;
   }
 
   run<Value>(
     signal: AbortSignal,
     work: () => Promise<Value>,
+    detail = false,
   ): Promise<Value> {
     if (signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
       const pending: PendingWork = {
+        detail,
         cancel: () => undefined,
         cancelled: false,
         reject,
@@ -76,14 +85,23 @@ class BrowserWorkQueue {
       };
       pending.cancel = cancel;
       signal.addEventListener("abort", cancel, { once: true });
-      this.#pending.enqueue(pending);
+      (detail ? this.#pendingDetail : this.#pending).enqueue(pending);
       this.#drain();
     });
   }
 
   #drain(): void {
     while (this.#active < this.#limit) {
-      const pending = this.#pending.dequeue();
+      this.#discardCancelled(this.#pending);
+      this.#discardCancelled(this.#pendingDetail);
+      const selection = selectAsyncPreparationLane(
+        this.#pending.peek() === undefined ? 0 : 1,
+        this.#activeDetail < this.#detailLimit && this.#pendingDetail.peek() !== undefined ? 1 : 0,
+        this.#foregroundBurst,
+      );
+      if (selection === undefined) return;
+      this.#foregroundBurst = selection.foregroundBurst;
+      const pending = (selection.lane === "detail" ? this.#pendingDetail : this.#pending).dequeue();
       if (pending === undefined) return;
       if (pending.cancelled) {
         pending.signal.removeEventListener("abort", pending.cancel);
@@ -99,11 +117,17 @@ class BrowserWorkQueue {
       pending.run = undefined;
       pending.signal.removeEventListener("abort", pending.cancel);
       this.#active += 1;
+      if (pending.detail) this.#activeDetail += 1;
       void run().then(pending.resolve, pending.reject).finally(() => {
         this.#active -= 1;
+        if (pending.detail) this.#activeDetail -= 1;
         this.#drain();
       });
     }
+  }
+
+  #discardCancelled(queue: RetainedFifo<PendingWork>): void {
+    while (queue.peek()?.cancelled === true) queue.dequeue();
   }
 }
 
@@ -621,23 +645,25 @@ const retainTextureAlpha = (
 export const createBrowserTextureDecoder = (
   maxParallelDecodes = 4,
   etc2Available = true,
-  retainSvgSource = false,
   readGltfTexture?: BrowserGltfTextureReader,
   onReadAheadChanged: () => void = () => undefined,
+  scheduleSvgPreparation: AsyncPreparationScheduler = (_signal, prepare) => prepare(),
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
-  const transports = new BrowserWorkQueue(16);
+  // Keep transport capacity available for newly visible preview coverage.
+  const transports = new BrowserWorkQueue(16, 4);
   const transport = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
+    detail = false,
   ): Promise<TextureBlob> => {
     const queuedAt = now();
     let startedAt = queuedAt;
     const result = await transports.run(signal, () => {
       startedAt = now();
       return readTextureBlob(asset, signal, readGltfTexture);
-    });
+    }, detail);
     const completedAt = now();
     return {
       ...result,
@@ -649,12 +675,13 @@ export const createBrowserTextureDecoder = (
   const read = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
+    detail = false,
   ): Promise<TextureBlob> => {
     if (asset.kind === "embedded-asset") {
       return readTextureBlob(asset, signal, readGltfTexture);
     }
     const prefetched = readAhead.take(asset);
-    return prefetched === undefined ? transport(asset, signal) : await prefetched;
+    return prefetched === undefined ? transport(asset, signal, detail) : await prefetched;
   };
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
@@ -708,7 +735,7 @@ export const createBrowserTextureDecoder = (
         transportQueueDurationMs,
       },
     };
-    if (!retainSvgSource || !svg || timed.kind === "ktx2-etc2") return timed;
+    if (!svg || timed.kind === "ktx2-etc2") return timed;
     return {
       ...timed,
       encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
@@ -720,6 +747,52 @@ export const createBrowserTextureDecoder = (
     maxStorageBytes?: number,
     retainAlpha?: boolean,
   ): Promise<DecodedTextureSource> => {
+    if (asset.svgPreview && asset.fallback !== undefined) {
+      let preview: DecodedTextureSource;
+      try {
+        preview = await decodeLeaf(asset.fallback, signal, Math.min(maxStorageBytes ?? Infinity, 128 * 128 * 4), retainAlpha, true);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        // A missing preview must not prevent a usable authoritative source.
+        return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
+      }
+      if (preview.kind === "ktx2-etc2") {
+        preview.close?.();
+        return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
+      }
+      const lifetime = new AbortController();
+      let pending: Promise<import("./source").EncodedSvgTextureSource> | undefined;
+      const detail: {
+        error?: string;
+        encoded?: import("./source").EncodedSvgTextureSource;
+        load(): Promise<import("./source").EncodedSvgTextureSource>;
+      } = {
+        load: () => pending ??= (async () => {
+          const { blob, svg } = await read(asset, lifetime.signal, true);
+          if (!svg) throw new TypeError("Royal SVG detail must contain an SVG source");
+          const { validateSvgTextureBlob } = await import("./svg-source");
+          const parsed = await scheduleSvgPreparation(
+            lifetime.signal,
+            () => validateSvgTextureBlob(blob, lifetime.signal),
+          );
+          if (lifetime.signal.aborted) throw aborted();
+          const encoded = { blob, byteLength: blob.size, parsed };
+          detail.encoded = encoded;
+          return encoded;
+        })().catch((error: unknown) => {
+          detail.error = String(error instanceof Error ? error.message : error).slice(0, 400);
+          throw error;
+        }),
+      };
+      return {
+        ...preview,
+        close: () => {
+          lifetime.abort();
+          preview.close?.();
+        },
+        svgPreview: detail,
+      };
+    }
     try {
       return await decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
     } catch (error) {
@@ -733,7 +806,7 @@ export const createBrowserTextureDecoder = (
   return {
     decode,
     preload: (asset: TextureSourceRef, signal: AbortSignal): void =>
-      readAhead.preload(asset, signal),
+      readAhead.preload(asset.svgPreview ? asset.fallback! : asset, signal),
     readAheadSnapshot: (): StagedByteReadSnapshot => readAhead.snapshot(),
   };
 };

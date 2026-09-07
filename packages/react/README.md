@@ -85,11 +85,9 @@ remain observable through diagnostics rather than becoming consumer tuning
 knobs. A semantic option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount/replacement
 lifecycle; a disposed root is never published for a newer canvas generation.
-`automaticVirtualTexturing` defaults to `false`; opt in through
-`rendererOptions={{ automaticVirtualTexturing: true }}` when large base-color
-raster or SVG textures should use Royal's progressive VT representation. It is
-a root policy rather than a material flag, and SVG remains vector-backed while
-requested pages are rasterized.
+Automatic virtual texturing is always enabled for eligible base-color raster
+and SVG textures. Royal retains vector authority for SVG page refinement and
+keeps small raster textures in ordinary storage when appropriate.
 
 Root-consuming hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents

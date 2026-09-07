@@ -161,16 +161,17 @@ the extension. If a consumer progressively replaces a published raster with
 SVG, the replacement is atomic and preserves orientation, alpha, aspect,
 sampler, and logical texture identity.
 
-Royal's policy is preferred-first: pending geometry uses the ordinary
-neutral texture presentation, SVG success publishes once, and optional SVG
-failure starts the selected portable fallback through the same logical texture
-lifecycle.
-It does not race both sources by default. This avoids a second simultaneous
-decode and makes fallback a recovery path rather than a permanent tax.
+Royal loads the selected raster first for optional base-color SVG textures.
+The raster is fitted to a bounded preview, then retained as the coarsest VT
+page while demanded SVG regions refine in the detail lane. Early external-image
+discovery and material preparation MUST use the same logical recipe. The SVG
+is read and validated lazily once per decoded source, without first decoding a
+full SVG bitmap. Required SVG and non-base-color uses keep preferred-first
+behavior; they MUST NOT silently settle on a preview that cannot refine.
 
-When an optional texture also declares AVIF or WebP alternatives, Royal's
-deferred fallback preference is AVIF, WebP, and then the core source. Only that
-selected fallback is fetched after SVG fails.
+The selected portable raster preference is AVIF, WebP, then core. A failed
+preview falls back to authoritative SVG decoding. A failed optional detail read
+keeps preview coverage and records one bounded failure without per-frame retries.
 
 For an optional extension, SVG transport/decode/profile failure produces one
 bounded diagnostic and settles on the selected fallback. It MUST NOT retry
@@ -188,7 +189,7 @@ MUST NOT replace current content.
 page sizes, atlas policy, mip residency, or renderer capability decisions.
 
 After ingestion, an implementation may represent the chosen SVG as an ordinary
-raster texture or feed it through its ordinary automatic-VT policy. Both paths
+raster texture or feed it through its always-enabled automatic-VT policy. Both paths
 must share the same SVG normalization, identity, color, alpha, orientation,
 fallback, cancellation, and failure semantics. An authored Royal VT manifest is
 not valid as `GS_texture_svg.source`.
@@ -231,18 +232,21 @@ semantic contract should survive that rename.
   concern outside glTF. The extension declares alternate intent, not a checksum
   proof of visual equivalence.
 
-Royal implements one canonical logical-source recipe whose decoder publishes
-the preferred SVG or recovers to one selected raster fallback. The winner
-keeps one texture identity, sampler, material binding, cancellation generation,
-and focused asset lifecycle. A successful SVG decode retains its already parsed
-encoded authority for automatic VT, so VT does not refetch or reparse it.
+Royal implements one canonical source recipe per representation use, shared
+by early discovery and material preparation. Optional base-color textures use
+a raster preview plus lazy validated SVG detail; required and emissive uses
+retain the direct SVG path. The ordinary and VT owners share decoded leases,
+source cancellation, samplers, and material bindings. Preview leases remain
+bounded and survive context restoration until their final claim is released.
 
-Unit tests cover optional and required lowering, MIME/placement/data-slot
+Unit tests cover preview-first decode, delayed/shared vector reads, failed preview
+recovery, cancellation, optional and required lowering, MIME/placement/data-slot
 rejection, preferred success without fallback fetch, preferred failure with one
-fallback fetch, worker transfer, identity, and status diagnostics. Exact-build
+fallback fetch, worker transfer, identity, and status diagnostics. Historical exact-build
 hardware-browser oracles cover the original Ghostscript Tiger SVG, a required
 data-URI SVG, and a forced SVG transport failure that reaches `ready` through
-the raster fallback with one reported fallback. Remaining registration gates
-are the assigned vendor prefix, published JSON schema, independent consumer or
+the raster fallback with one reported fallback. The current preview path has Chromium software-WebGL probes for held SVG
+reads, pixel-identical failure fallback, disposal, and restoration; new physical
+latency evidence is still required. Remaining registration gates are the assigned vendor prefix, published JSON schema, independent consumer or
 producer evidence, and target-device close-view/orientation proof. Until those
 exist, `GS_texture_svg` remains an explicitly experimental Royal extension.

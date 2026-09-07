@@ -109,6 +109,7 @@ export const createTextureAssetReader = (
   value: unknown,
   path: string,
   colorSpace?: "linear" | "srgb",
+  svgPreview?: boolean,
 ) => TextureSourceRef) => {
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
@@ -118,9 +119,9 @@ export const createTextureAssetReader = (
     label,
   );
   const prepared = new Map<string, TextureSourceRef>();
-  return (value, path, colorSpace = "srgb") => {
+  return (value, path, colorSpace = "srgb", svgPreview = false) => {
     const textureIndex = index(value, textures, label, path);
-    const preparedKey = `${textureIndex}:${colorSpace}`;
+    const preparedKey = `${textureIndex}:${colorSpace}:${svgPreview ? 1 : 0}`;
     const retained = prepared.get(preparedKey);
     if (retained !== undefined) return retained;
     const imagePlan = planTextureImages(textureIndex, colorSpace);
@@ -211,7 +212,7 @@ export const createTextureAssetReader = (
     const primary = readImage(imagePlan.primary);
     const asset: TextureSourceRef = imagePlan.fallback === undefined
       ? primary
-      : { ...primary, fallback: readImage(imagePlan.fallback) };
+      : { ...primary, fallback: readImage(imagePlan.fallback), ...(svgPreview ? { svgPreview: true as const } : {}) };
     prepared.set(preparedKey, asset);
     return asset;
   };
@@ -223,6 +224,7 @@ export const prepareMaterial = (
     value: unknown,
     path: string,
     colorSpace?: "linear" | "srgb",
+    svgPreview?: boolean,
   ) => TextureSourceRef,
   materialIndex: unknown,
   label: string,
@@ -304,11 +306,12 @@ export const prepareMaterial = (
     value: unknown,
     textureInfoPath: string,
     colorSpace: "linear" | "srgb",
+    svgPreview = false,
   ): MaterialTextureUse | undefined => {
     if (value === undefined) return undefined;
     const textureInfo = object(value, label, textureInfoPath);
     return {
-      asset: textureAsset(textureInfo.index, `${textureInfoPath}.index`, colorSpace),
+      asset: textureAsset(textureInfo.index, `${textureInfoPath}.index`, colorSpace, svgPreview),
       coordinates: prepareTextureCoordinates(textureInfo, label, textureInfoPath),
     };
   };
@@ -316,6 +319,7 @@ export const prepareMaterial = (
     pbr.baseColorTexture,
     `${materialPath}.pbrMetallicRoughness.baseColorTexture`,
     "srgb",
+    true,
   );
   const color = finiteTuple(
     pbr.baseColorFactor,

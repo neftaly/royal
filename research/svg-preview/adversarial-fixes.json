@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-08",
+  "environment": "Chromium / SwiftShader; behavior checks only",
+  "transport": {
+    "requestedSvgDetails": 16,
+    "activeSvgReads": 4,
+    "newPreviewReads": 1,
+    "previewCompletedWhileDetailsHeld": true
+  },
+  "failedDetailRestoration": {
+    "mode": "fail-restore",
+    "previewPixels": 16369,
+    "finalPixels": 16369,
+    "reads": [
+      "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+      "/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+      "/fixtures/gltf-svg-texture/ghostscript-tiger-card.bin",
+      "/fixtures/gltf-svg-texture/ghostscript-tiger.svg"
+    ],
+    "initial": {
+      "admittedUploadBytes": 0,
+      "atlasBytes": 1672704,
+      "atlasPools": 1,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 49284,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 1,
+      "pendingPages": 1,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 1,
+      "uploadedPages": 1,
+      "uploadBudgetBytes": 33554432
+    },
+    "final": {
+      "admittedUploadBytes": 0,
+      "atlasBytes": 1672704,
+      "atlasPools": 1,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 49284,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 1,
+      "pageRequests": 1,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 1,
+      "uploadedPages": 1,
+      "uploadBudgetBytes": 33554432
+    },
+    "context": {
+      "generation": 2,
+      "interruptions": 1,
+      "phase": "active",
+      "recoveries": 1
+    },
+    "restored": {
+      "admittedUploadBytes": 0,
+      "atlasBytes": 1672704,
+      "atlasPools": 1,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 49284,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 1,
+      "pageRequests": 2,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 1,
+      "uploadedPages": 2,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  "compressedPage": {
+    "etc": true,
+    "reservation": 4210704,
+    "asset": {
+      "failedPages": 0,
+      "pendingPages": 0,
+      "residentPages": 1,
+      "status": "ready"
+    },
+    "runtime": {
+      "admittedUploadBytes": 4210708,
+      "atlasBytes": 25264224,
+      "atlasPools": 1,
+      "automaticCandidates": 0,
+      "automaticDecodedBytes": 0,
+      "automaticIneligible": 0,
+      "automaticResources": 0,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 1,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 1,
+      "uploadedPages": 1,
+      "uploadBudgetBytes": 4194304
+    },
+    "glError": 0
+  }
+}

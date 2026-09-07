@@ -21,6 +21,8 @@ export type DecodedImageTextureSource = Readonly<{
   close?: () => void;
   /** Encoded vector authority retained only when another representation needs it. */
   encodedSvg?: EncodedSvgTextureSource;
+  /** Optional base-color preview owns one lazy, shared vector-source read. */
+  svgPreview?: SvgPreviewSource;
   /** Bounded preferred-source failure when this image came from an authored fallback. */
   fallbackReason?: string;
   height: number;
@@ -31,6 +33,12 @@ export type DecodedImageTextureSource = Readonly<{
   /** @internal Renderer diagnostics; custom decoders may omit it. */
   timings?: TextureDecodeStageTimings;
   width: number;
+}>;
+
+export type SvgPreviewSource = Readonly<{
+  error?: string;
+  encoded?: EncodedSvgTextureSource;
+  load(): Promise<EncodedSvgTextureSource>;
 }>;
 
 export type EncodedSvgTextureSource = Readonly<{
@@ -95,6 +103,8 @@ export type TextureLeafSourceRef =
 /** Cold logical source recipe; a preferred SVG may recover to one ordinary leaf. */
 export type TextureSourceRef = TextureLeafSourceRef & Readonly<{
   fallback?: TextureLeafSourceRef;
+  /** Internal base-color representation recipe; required SVG never sets this. */
+  svgPreview?: true;
 }>;
 
 const identityPart = (
@@ -140,6 +150,9 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
 
 const validateAsset = (asset: TextureSourceRef): void => {
   validateLeafAsset(asset);
+  if (asset.svgPreview !== undefined && (asset.svgPreview !== true || asset.fallback === undefined)) {
+    throw new TypeError("Royal SVG preview requires an optional raster fallback");
+  }
   if (asset.fallback === undefined) return;
   if (asset.sourceEncoding !== "svg") {
     throw new TypeError("Royal texture fallback requires a preferred svg source");
@@ -174,7 +187,7 @@ export const decodedTextureKey = (asset: TextureSourceRef): string => {
   const preferred = decodedTextureLeafKey(asset);
   return JSON.stringify(asset.fallback === undefined
     ? preferred
-    : ["preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);
+    : [asset.svgPreview ? "svg-with-preview" : "preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);
 };
 
 /** GPU storage identity; one decoded image may be interpreted in both color spaces. */

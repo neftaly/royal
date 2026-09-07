@@ -1,6 +1,6 @@
 import type { TextureColorSpace } from "@royal/renderer-core";
 
-export const DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS = 24;
+export { DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS } from "./automatic-policy";
 
 export type VirtualTexturePageId = Readonly<{ mip: number; x: number; y: number }>;
 export type VirtualTexturePageEntry = VirtualTexturePageId & Readonly<{ uri: string }>;

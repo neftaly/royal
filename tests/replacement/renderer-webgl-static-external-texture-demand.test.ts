@@ -138,11 +138,16 @@ describe("early static external texture demand", () => {
     ]);
   });
 
-  it("converges on the canonical prepared texture identities", async () => {
+  it.each([false, true])("converges on canonical texture identities (SVG preview: %s)", async (svgPreview) => {
     const parsed = parseGlb(
       staticTexturedTriangleGlb(undefined, "shared.avif", (document) => {
         const materials = document.materials as Array<Record<string, unknown>>;
         materials[0]!.alphaMode = "MASK";
+        if (svgPreview) {
+          document.images = [{ uri: "preview.png" }, { uri: "vector.svg", mimeType: "image/svg+xml" }];
+          document.textures = [{ source: 0, extensions: { GS_texture_svg: { source: 1 } } }];
+          document.extensionsUsed = ["KHR_materials_unlit", "GS_texture_svg"];
+        }
       }),
       "shared-texture-fixture",
     );
@@ -168,6 +173,7 @@ describe("early static external texture demand", () => {
       7,
     );
 
+    if (svgPreview) expect(early.textureClaims.textureAssets[0]).toHaveProperty("svgPreview", true);
     expect(early.textureClaims.textureAssets.map(textureStorageKey))
       .toEqual(prepared.textureAssets.map(textureStorageKey));
     expect(early.textureClaims.alphaMaskTextureAssets.map(decodedTextureKey))

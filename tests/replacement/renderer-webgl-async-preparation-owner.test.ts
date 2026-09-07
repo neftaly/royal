@@ -12,7 +12,7 @@ describe("asynchronous preparation owner", () => {
     const controllers = Array.from({ length: 3 }, () => new AbortController());
     const starts: number[] = [];
     const finishes: Array<() => void> = [];
-    const jobs = controllers.map((controller, index) => owner.run(controller.signal, () => {
+    const jobs = controllers.map((controller, index) => owner.runForeground(controller.signal, () => {
       starts.push(index);
       return new Promise<number>((resolve) => finishes.push(() => resolve(index)));
     }));
@@ -21,8 +21,8 @@ describe("asynchronous preparation owner", () => {
     expect(owner.snapshot()).toEqual({
       activeJobs: 2,
       jobLimit: 2,
-      queuedDetailJobs: 1,
-      queuedForegroundJobs: 0,
+      queuedDetailJobs: 0,
+      queuedForegroundJobs: 1,
       queuedJobs: 1,
     });
     finishes[0]!();
@@ -38,6 +38,28 @@ describe("asynchronous preparation owner", () => {
       queuedJobs: 0,
     });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("reserves foreground capacity while serializing heavy detail", async () => {
+    const owner = new AsyncPreparationOwner(2);
+    const starts: string[] = [];
+    let finish!: () => void;
+    const first = owner.run(new AbortController().signal, () => {
+      starts.push("first");
+      return new Promise<void>((resolve) => { finish = resolve; });
+    });
+    const controller = new AbortController();
+    const second = owner.run(controller.signal, async () => { starts.push("cancelled"); });
+    const foreground = owner.runForeground(new AbortController().signal, async () => { starts.push("scene"); });
+    await foreground;
+    expect(starts).toEqual(["first", "scene"]);
+    controller.abort();
+    await expect(second).rejects.toMatchObject({ name: "AbortError" });
+    finish();
+    await first;
+    expect(starts).toEqual(["first", "scene"]);
+    expect(owner.snapshot()).toMatchObject({ activeJobs: 0, queuedJobs: 0 });
+    owner.dispose();
   });
 
   it("releases queued aborted work without starting it", async () => {

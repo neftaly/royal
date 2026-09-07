@@ -20,6 +20,22 @@ describe("frame upload byte budget", () => {
     });
   });
 
+  it("defers uploads after expensive allocation and guarantees progress next frame", () => {
+    let now = 0;
+    const owner = new FrameUploadBudgetOwner(1024, 2, () => now);
+    expect(owner.tryAdmitAllocation()).toBe(true);
+    now = 3;
+    expect(owner.tryAdmitAllocation()).toBe(false);
+    expect(owner.tryAdmit(32)).toBe(false);
+    owner.beginFrame();
+    expect(owner.tryAdmit(32)).toBe(true);
+    now = 6;
+    expect(owner.tryAdmit(32)).toBe(false);
+    expect(owner.snapshot().admittedBytes).toBe(32);
+    owner.beginFrame();
+    expect(owner.tryAdmit(32)).toBe(true);
+  });
+
   it("admits one oversized upload into an empty frame so work cannot starve", () => {
     const owner = new FrameUploadBudgetOwner(10);
     expect(owner.tryAdmit(12)).toBe(true);

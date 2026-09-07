@@ -219,7 +219,7 @@ export class TextureAssetOwner {
     entry.decodedClaims += 1;
     // The optional representation now charges the retained source; this slot
     // only bounds decode handoff and must not starve unrelated asset decoding.
-    this.#releaseSourceReservation(entry);
+    if (entry.reservation?.phase !== "preparing") this.#releaseSourceReservation(entry);
     let active = true;
     return {
       release: () => {
@@ -268,7 +268,7 @@ export class TextureAssetOwner {
     for (const entry of this.#entries.values()) {
       retainedEncodedSourceBytes += entry.decoded?.kind === "ktx2-etc2"
         ? 0
-        : entry.decoded?.encodedSvg?.byteLength ?? 0;
+        : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.svgPreview?.encoded?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
@@ -498,10 +498,11 @@ export class TextureAssetOwner {
 
   #queuePreparation(entry: AssetEntry): void {
     if (entry.reservation !== undefined) return;
-    if (entry.decodedClaims > 0) {
+    if (entry.decodedClaims > 0 && !(entry.retainAlpha && entry.alpha === undefined)) {
       entry.preparationDeferred = true;
       return;
     }
+    entry.preparationDeferred = false;
     if (entry.queued) return;
     entry.controller ??= new AbortController();
     this.#platform.preload?.(entry.asset, entry.controller.signal);
@@ -525,6 +526,10 @@ export class TextureAssetOwner {
       if (entry === undefined) return;
       if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;
+      if (entry.decodedClaims > 0 && !(entry.retainAlpha && entry.alpha === undefined)) {
+        entry.preparationDeferred = true;
+        continue;
+      }
       this.#replaceReservation(entry, preparingTextureReservation);
       entry.preparationStartedAt = this.#now();
       this.#prepare(entry);
@@ -554,6 +559,7 @@ export class TextureAssetOwner {
   #releaseDecodedIfUnused(entry: AssetEntry): void {
     if (
       entry.decodedClaims !== 0
+      || entry.reservation?.phase === "preparing"
       || entry.decodedReleased
       || entry.decoded === undefined
       || storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)
@@ -569,6 +575,7 @@ export class TextureAssetOwner {
     const asset = entry.asset;
     const key = entry.key;
     const retainAlpha = entry.retainAlpha;
+    const alphaOnly = entry.decodedClaims > 0;
     entry.preparationRetainsAlpha = retainAlpha;
     const decoding: Promise<DecodedTextureSource> = retainAlpha
       ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
@@ -607,6 +614,18 @@ export class TextureAssetOwner {
           decoded.close?.();
           throw error;
         }
+      }
+      if (alphaOnly) {
+        // A VT source can be leased for the whole scene lifetime. Publish the
+        // auxiliary alpha plane without replacing or closing those live pixels.
+        entry.alpha = entry.retainAlpha ? alpha : undefined;
+        decoded.close?.();
+        entry.controller = undefined;
+        this.#releaseSourceReservation(entry);
+        this.#platform.onAssetChanged(key);
+        this.#platform.onSnapshotChanged(key);
+        this.#publish(key);
+        return;
       }
       let decodedSource: DecodedTextureSource = decoded;
       if (alpha !== undefined) {
@@ -666,7 +685,7 @@ export class TextureAssetOwner {
       ) return;
       entry.controller = undefined;
       this.#releaseSourceReservation(entry);
-      if (entry.residentStorageKeys.size === 0) {
+      if (!alphaOnly && entry.residentStorageKeys.size === 0) {
         entry.decoded = undefined;
         entry.decodedReleased = false;
         entry.snapshot = { error: formatFailure(error), status: "error" };
@@ -674,6 +693,10 @@ export class TextureAssetOwner {
       this.#platform.onAssetChanged(key);
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
+    }).finally(() => {
+      if (alphaOnly && !this.#disposed && this.#entries.get(key) === entry) {
+        this.#releaseDecodedIfUnused(entry);
+      }
     });
   }
 }

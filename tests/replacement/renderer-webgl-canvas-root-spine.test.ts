@@ -191,13 +191,11 @@ describe("clear-only canvas root", () => {
     }
   });
 
-  it("reports immutable VT policy before the lazy runtime exists", () => {
-    const { root } = harness({ frameUploadByteBudget: 12_345 }, {}, {
-      automaticVirtualTexturing: true,
-    });
+  it("reports idle VT counters before the lazy runtime exists", () => {
+    const { root } = harness({ frameUploadByteBudget: 12_345 });
 
     expect(root.getSnapshot().resources.virtualTextures).toMatchObject({
-      automaticEnabled: true,
+      automaticResources: 0,
       uploadBudgetBytes: 12_345,
     });
   });

@@ -19,6 +19,7 @@ export type StaticTextureDemand = Readonly<{
   priority: number;
   retainAlpha: boolean;
   textureIndex: number;
+  svgPreview?: true;
 }>;
 
 type TextureClaim = (demand: StaticTextureDemand) => void;
@@ -43,6 +44,7 @@ export const createStaticPrimitiveTextureDemand = (
     path: string,
     retainAlpha = false,
     priority = 2,
+    svgPreview = false,
   ): void => {
     if (value === undefined) return;
     const textureInfo = object(value, label, path);
@@ -53,6 +55,7 @@ export const createStaticPrimitiveTextureDemand = (
       priority: priority * materials.length + materialPhase,
       retainAlpha,
       textureIndex,
+      ...(svgPreview ? { svgPreview: true } : {}),
     });
   };
   const claimMaterial = (value: unknown, path: string, phase?: number): void => {
@@ -87,6 +90,7 @@ export const createStaticPrimitiveTextureDemand = (
       `${materialPath}.pbrMetallicRoughness.baseColorTexture`,
       material.alphaMode === "MASK",
       0,
+      true,
     );
     if (extensions.KHR_materials_unlit === undefined) {
       claimTexture(

@@ -27,6 +27,8 @@ import {
   settleVirtualTextureActivation,
 } from "../../packages/renderer-webgl/src/runtime/virtual-texture-activation";
 import { fakeGl } from "./support/canvas-root-harness";
+import { createKtx2Etc2Fixture } from "./support/ktx2-etc2-fixture";
+import type { EncodedSvgTextureSource } from "../../packages/renderer-webgl/src/texture/source";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -70,7 +72,7 @@ describe("VT runtime activation core", () => {
       .toBe(automaticVirtualTextureAssetKey(ordinaryExplicitDefaults));
   });
 
-  it("separates authored demand from opt-in automatic base-color demand", () => {
+  it("activates lazily for authored or automatic base-color demand", () => {
     const ordinary = imageTexture("/large.png");
     const authored = virtualTexture("/authored.vt.json");
     const empty = { surfaces: [], virtualTextureAssets: [] };
@@ -80,11 +82,25 @@ describe("VT runtime activation core", () => {
     };
     const authoredScene = { surfaces: [], virtualTextureAssets: [authored] };
 
-    expect(virtualTextureRuntimeRequired(empty, false)).toBe(false);
-    expect(virtualTextureRuntimeRequired(empty, true)).toBe(false);
-    expect(virtualTextureRuntimeRequired(ordinaryScene, false)).toBe(false);
-    expect(virtualTextureRuntimeRequired(ordinaryScene, true)).toBe(true);
-    expect(virtualTextureRuntimeRequired(authoredScene, false)).toBe(true);
+    const decoded = () => ({ width: 1024, height: 1024, source: {} as ImageBitmap });
+    expect(virtualTextureRuntimeRequired(empty, decoded)).toBe(false);
+    expect(virtualTextureRuntimeRequired(ordinaryScene, () => undefined)).toBe(false);
+    expect(virtualTextureRuntimeRequired(ordinaryScene, () => ({ width: 128, height: 128, source: {} as ImageBitmap }))).toBe(false);
+    expect(virtualTextureRuntimeRequired(ordinaryScene, decoded)).toBe(true);
+    expect(virtualTextureRuntimeRequired(authoredScene, () => undefined)).toBe(true);
+  });
+
+  it("does not reset upload admission already owned by the surface frame", () => {
+    const uploads = new FrameUploadBudgetOwner(100);
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn(), undefined, undefined, undefined, uploads);
+    uploads.beginFrame();
+    expect(uploads.tryAdmit(80)).toBe(true);
+    runtime.update([], false);
+    expect(uploads.tryAdmit(30)).toBe(false);
+    expect(uploads.snapshot().admittedBytes).toBe(80);
+    runtime.update([]);
+    expect(uploads.tryAdmit(30)).toBe(true);
+    runtime.dispose();
   });
 
   it("loads once, activates the current generation and detaches on lost demand", () => {
@@ -126,6 +142,95 @@ describe("VT runtime activation core", () => {
 });
 
 describe("browser virtual texture runtime", () => {
+  it("restores coarse preview coverage after vector failure and GPU invalidation", async () => {
+    const context = {
+      clearRect: vi.fn(), drawImage: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      scale: vi.fn(), translate: vi.fn(),
+    };
+    vi.stubGlobal("document", {
+      baseURI: "https://example.test/",
+      createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
+    });
+    const detail: { error?: string; load: () => Promise<EncodedSvgTextureSource> } = {
+      load: vi.fn(async () => {
+        detail.error = "optional vector failed";
+        throw new Error(detail.error);
+      }),
+    };
+    const decoded = { width: 64, height: 64, source: {} as ImageBitmap, svgPreview: detail };
+    const asset = imageTexture("https://example.test/preview.png");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+    }), undefined, undefined, () => decoded);
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn(), undefined, undefined, {
+      acquireDecoded: () => ({ source: decoded, release: vi.fn() }),
+      decoded: () => decoded, onChanged: vi.fn(),
+    });
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 1024, height: 1024, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepared);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: 1, pendingPages: 0 });
+      });
+      runtime.invalidate();
+      expect(runtime.automaticBinding(asset)).toBeUndefined();
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.automaticBinding(asset)).toBeDefined();
+      });
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: 1, pendingPages: 0, pendingPageBytes: 0 });
+      expect(detail.load).toHaveBeenCalledOnce();
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it("reserves compressed page bytes through decode, upload, and invalidation", async () => {
+    const storedSize = 2052;
+    const bytes = createKtx2Etc2Fixture(152, storedSize, storedSize);
+    const manifest = {
+      borderTexels: 2, contractVersion: 2, pageSize: 2048, pageEncoding: "ktx2-etc2",
+      pages: { uriTemplate: "page-{mip}-{x}-{y}.ktx2" }, physicalSlots: 1, virtualSize: [2048, 2048],
+    };
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
+      String(input).endsWith(".json") ? JSON.stringify(manifest) : new Uint8Array(bytes).buffer,
+    )));
+    const gl = fakeGl();
+    const upload = vi.fn();
+    Object.assign(gl, { compressedTexSubImage2D: upload });
+    const asset = virtualTexture("https://example.test/compressed.vt.json");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+    }));
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn());
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 1024, height: 1024, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepared);
+      await waitFor(() => expect(runtime.snapshot(asset).status).toBe("ready"));
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot()).toMatchObject({ pendingPageBytes: storedSize ** 2, pageRequests: 1, failedPages: 0 });
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.snapshot(asset).residentPages).toBe(1);
+      });
+      expect(upload).toHaveBeenCalledOnce();
+      expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0);
+      runtime.invalidate();
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(storedSize ** 2);
+      runtime.dispose();
+      await waitFor(() => expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0));
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it("allocates an authored atlas only after projected demand becomes non-empty", async () => {
     vi.stubGlobal("document", { baseURI: "https://example.test/" });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({

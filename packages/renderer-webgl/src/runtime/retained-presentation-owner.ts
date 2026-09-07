@@ -90,7 +90,10 @@ export class RetainedPresentationOwner {
   #valid = false;
   #vertexArray: WebGLVertexArrayObject | null = null;
 
-  constructor(gl: WebGL2RenderingContext, budget: PersistentGpuBudgetOwner) {
+  readonly #alpha: boolean;
+
+  constructor(gl: WebGL2RenderingContext, budget: PersistentGpuBudgetOwner, alpha = true) {
+    this.#alpha = alpha;
     this.#budget = budget;
     this.#gl = gl;
   }
@@ -183,7 +186,7 @@ export class RetainedPresentationOwner {
       throw new Error("Royal could not allocate retained presentation resources");
     }
     gl.bindTexture(gl.TEXTURE_2D, color);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, this.#alpha ? gl.RGBA8 : gl.RGB8, width, height);
     this.#resources = { color, height, width };
     if (this.#sampler !== null) {
       this.#presentationBindings[0] = {

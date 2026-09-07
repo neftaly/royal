@@ -156,9 +156,9 @@ views require MIME; content is self-contained; viewport is finite; VT is a
 post-ingestion representation; unknown optional extension properties remain
 forward compatible. The reviewed v1 profile accepts positive `viewBox` alone,
 restricts SVG to sRGB color slots, leaves equivalence metadata outside glTF,
-and permits consumer-owned fallback scheduling. Royal chooses preferred-first
-recovery so optional compatibility does not impose unconditional duplicate
-fetch/decode/memory work. Plain Royal SVG ingestion now supplies one explicitly
+and permits consumer-owned fallback scheduling. Royal uses preview-first
+loading for optional base-color SVG, while required and non-base-color SVG
+retain direct-source behavior. Plain Royal SVG ingestion now supplies one explicitly
 owned encoded-source handoff shared by ordinary decode and automatic VT without
 refetching. The implemented extension dispatch uses that same handoff and one
 logical fallback lifecycle; exact-build browser oracles prove preferred,
@@ -395,6 +395,58 @@ to reach the head. A hardware decode stub proves that canceled work never
 starts; the shared FIFO now runs seeded command sequences against a readable
 queue oracle across its compaction boundary. Only lazy and total ceilings rise
 by the corresponding rounded 100--150 byte increments.
+
+## Probability proposal implementation, 2026-09-08
+
+Automatic VT is always enabled, with lazy activation based on decoded eligibility.
+The public flag and redundant enabled diagnostic are removed. Small raster
+textures preserve ordinary storage and avoid VT attachment/reconciliation.
+
+Optional base-color SVG previews use the same recipe in early discovery and
+material preparation. Preview pixels are available while vector reads are held;
+SVG detail uses one lazy validated source and serial detail preparation. Pending
+page reservations have a 16 MiB ceiling and root upload admission observes an
+elapsed-work target. Native Chromium probes preserve pixel-identical preview
+coverage on injected detail failure and verify cancellation and restoration.
+This is **partial** performance acceptance: physical frame/input measurements,
+worker-capable SVG rasterization, occluded-stack demand, and supported Basis KTX2
+comparison remain unverified or unimplemented. No zero-hitch claim is made.
+
+Outline source discovery uses a lazily built root-owned geometry/transform index.
+Exact collision checks preserve ordinary and float32 automatic-member semantics;
+readiness and LOD remain live. Differential tests retain the old scan as a
+non-production oracle, including coincident sources and forced collisions.
+Camera-only comparison counts scale with requested candidates; structural or
+source-transform publication invalidates the index. Coincident buckets retain
+their linear worst case. Hardware GPU/outline timing and equivalent-descriptor
+replacement policy remain separate investigation work.
+
+The final working-tree distribution measures 140,275 initial, 148,703 lazy,
+56,719 worker (a subset of lazy), and 288,978 total deployed gzip bytes.
+The ordinary React baseline is 59,308 bytes. The glTF-authoring initial graph is
+141,212 bytes. Only affected rounded ceilings rise: initial 140,300, incremental
+81,000, glTF initial 141,250, lazy 148,750, worker 56,800, deployed total 289,000,
+and Royal-only total 229,700. The glTF-authoring delta ceiling is unchanged.
+The declaration/source-map-bearing renderer tarball remains below its new
+681,000-byte ceiling (680,929 bytes measured). These costs cover preview-source ownership, scheduling,
+and indexed outline lookup; they are not hidden as general bundle headroom.
+The first adversarial fixes added 51 deployed gzip bytes: SVG transport preserves
+foreground capacity, failed vector detail still permits coarse preview recovery,
+and pending-page admission charges ETC2 blocks at their compressed size.
+The second pass adds 195 deployed gzip bytes for bounded transport fairness and
+supplemental alpha preparation that preserves long-lived VT leases. All 968
+tests pass; browser probes verify alpha values/source lifetime and a detail
+admission after four foreground reads while the foreground backlog remains.
+
+Integration with upstream `85b76ece` preserves the extracted texture reservation
+owner and surface publication policy. The combined tree passes 970 tests on the
+updated toolchain. Distribution measurements are 140,606 initial, 118,377 lazy,
+23,121 worker (included in lazy), and 258,983 total gzip bytes; the React baseline
+is 59,288 and glTF initial is 141,539. Corresponding ceilings are 140,650 initial,
+81,350 incremental, 141,550 glTF initial, 118,400 lazy, 23,150 worker, 259,000 total,
+and 199,700 Royal-only bytes. The renderer tarball is 682,743 bytes with a 682,800
+ceiling. These supersede the pre-integration measurements above. Physical
+performance acceptance remains outstanding.
 
 ## Current architecture discipline
 

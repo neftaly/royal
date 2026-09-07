@@ -369,7 +369,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("defers alpha upgrades until an active representation lease releases", async () => {
+  it("upgrades alpha while preserving an active representation lease", async () => {
     const firstClose = vi.fn();
     const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
     const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
@@ -388,15 +388,70 @@ describe("ordinary texture asset lifecycle owner", () => {
     owner.releaseUploaded([textureStorageKey(asset)]);
 
     owner.reconcile([asset], [asset]);
-    await Promise.resolve();
-    expect(decode).toHaveBeenCalledOnce();
-    expect(firstClose).not.toHaveBeenCalled();
-
-    lease?.release();
     await waitFor(() => expect(owner.alpha(asset)).toBe(alpha));
     expect(decode).toHaveBeenCalledTimes(2);
+    expect(firstClose).not.toHaveBeenCalled();
+    expect(owner.decoded(asset)).toBe(lease?.source);
+
+    lease?.release();
     expect(firstClose).toHaveBeenCalledOnce();
   });
+
+  it.each(["keep", "release", "remove", "dispose", "failure"])(
+    "settles a leased alpha upgrade safely across %s",
+    async (transition) => {
+      const oldClose = vi.fn();
+      const freshClose = vi.fn();
+      const source = decoded(oldClose);
+      const alpha = { height: 32, values: new Uint8Array(64 * 32), width: 64 };
+      let resolve!: (source: DecodedTextureSource) => void;
+      let reject!: (error: Error) => void;
+      const pending = new Promise<DecodedTextureSource>((accept, fail) => { resolve = accept; reject = fail; });
+      const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+        .mockResolvedValueOnce(source).mockReturnValueOnce(pending);
+      const owner = new TextureAssetOwner({
+        decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn(),
+      });
+      const asset = imageTexture("/leased-alpha-transition.png");
+      owner.reconcile([asset]);
+      await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+      const first = owner.acquireDecoded(asset)!;
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      owner.reconcile([asset], [asset]);
+      expect(decode).toHaveBeenCalledTimes(2);
+      const second = owner.acquireDecoded(asset)!;
+      expect(second.source).toBe(source);
+      expect(owner.snapshot()).toMatchObject({ activePreparations: 1, sourceReservations: 1 });
+      if (transition === "release") {
+        first.release();
+        second.release();
+        expect(oldClose).not.toHaveBeenCalled();
+      } else if (transition === "remove") owner.reconcile([]);
+      else if (transition === "dispose") owner.dispose();
+      else if (transition === "failure") owner.invalidateResidency();
+
+      if (transition === "failure") reject(new Error("alpha read failed"));
+      else resolve({ ...decoded(freshClose), alpha });
+      if (transition === "remove" || transition === "dispose") {
+        await waitFor(() => expect(freshClose).toHaveBeenCalledOnce());
+      } else {
+        await waitFor(() => expect(owner.snapshot().activePreparations).toBe(0));
+        expect(owner.getSnapshot(asset).status).toBe("ready");
+        if (transition === "failure") expect(owner.decoded(asset)).toBe(source);
+        else expect(owner.alpha(asset)).toBe(alpha);
+        if (transition === "keep") {
+          expect(oldClose).not.toHaveBeenCalled();
+          expect(owner.decoded(asset)).toBe(source);
+        }
+        if (transition === "release") expect(oldClose).toHaveBeenCalledOnce();
+      }
+      first.release();
+      second.release();
+      owner.dispose();
+      expect(oldClose).toHaveBeenCalledOnce();
+      expect(freshClose).toHaveBeenCalledTimes(transition === "failure" ? 0 : 1);
+    },
+  );
 
   it("retains one compact alpha plane only while an alpha-mask pick claim exists", async () => {
     const close = vi.fn();

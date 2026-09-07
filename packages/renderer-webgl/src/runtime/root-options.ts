@@ -6,8 +6,6 @@ export type RendererRootOptions = Readonly<{
   alpha?: boolean;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `false` */
   antialias?: boolean;
-  /** Generates VT pages for eligible base-color raster/SVG assets. @defaultValue `false` */
-  automaticVirtualTexturing?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
   persistentGpuByteBudget?: number;
 }>;
@@ -16,7 +14,6 @@ export type RendererRootOptions = Readonly<{
 export type ResolvedRendererRootOptions = Readonly<{
   alpha: boolean;
   antialias: boolean;
-  automaticVirtualTexturing: boolean;
   persistentGpuByteBudget: number;
 }>;
 
@@ -31,7 +28,6 @@ export const resolveRendererRootOptions = (
     if (
       key !== "alpha"
       && key !== "antialias"
-      && key !== "automaticVirtualTexturing"
       && key !== "persistentGpuByteBudget"
     ) {
       throw new TypeError(`Royal renderer options contain unsupported field ${String(key)}`);
@@ -43,12 +39,6 @@ export const resolveRendererRootOptions = (
   if (options.antialias !== undefined && typeof options.antialias !== "boolean") {
     throw new TypeError("Royal renderer option antialias must be a boolean");
   }
-  if (
-    options.automaticVirtualTexturing !== undefined
-    && typeof options.automaticVirtualTexturing !== "boolean"
-  ) {
-    throw new TypeError("Royal renderer option automaticVirtualTexturing must be a boolean");
-  }
   const persistentGpuByteBudget = options.persistentGpuByteBudget
     ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET;
   if (!Number.isSafeInteger(persistentGpuByteBudget) || persistentGpuByteBudget < 1) {
@@ -57,7 +47,6 @@ export const resolveRendererRootOptions = (
   return {
     alpha: options.alpha === true,
     antialias: options.antialias === true,
-    automaticVirtualTexturing: options.automaticVirtualTexturing === true,
     persistentGpuByteBudget,
   };
 };

@@ -1,0 +1,31 @@
+{
+  "count": 269,
+  "frames": 4,
+  "outlinePixels": 35186,
+  "pixelMismatches": 0,
+  "scanSurfaceComparisons": 4304,
+  "index": {
+    "builds": 1,
+    "candidates": 540,
+    "comparisons": 2790,
+    "lookups": 2690
+  },
+  "timings": [
+    {
+      "scanMs": 57.400000005960464,
+      "indexedMs": 7.199999988079071
+    },
+    {
+      "scanMs": 19,
+      "indexedMs": 5.299999997019768
+    },
+    {
+      "scanMs": 20.5,
+      "indexedMs": 2.2000000029802322
+    },
+    {
+      "scanMs": 13.799999997019768,
+      "indexedMs": 5.600000008940697
+    }
+  ]
+}

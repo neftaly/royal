@@ -8,7 +8,7 @@ import {
 import { gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { automaticVirtualTextureExampleRendererOptions } from '../example-renderer-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { colorAccuratePass } from '../presentation';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
@@ -46,7 +46,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
       <Canvas
         aria-label="glTF core SVG Ghostscript tiger card fixture"
         data-vt-distance={orbitView.distance.toFixed(3)}
-        rendererOptions={automaticVirtualTextureExampleRendererOptions}
+        rendererOptions={exampleCanvasRendererOptions}
         style={{ cursor: 'grab', touchAction: 'none' }}
         scene={renderScene}
       >

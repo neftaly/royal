@@ -67,6 +67,7 @@ const aborted = (): DOMException => new DOMException("Preparation was aborted", 
 /** Root-owned bounded-fair authority for asynchronous asset preparation. */
 export class AsyncPreparationOwner {
   #activeJobs = 0;
+  #activeDetailJobs = 0;
   #detailQueued = 0;
   #disposed = false;
   #foregroundBurst = 0;
@@ -161,7 +162,7 @@ export class AsyncPreparationOwner {
       this.#discardCancelled(this.#pendingDetail);
       const selection = selectAsyncPreparationLane(
         this.#foregroundQueued,
-        this.#detailQueued,
+        this.#activeDetailJobs === 0 ? this.#detailQueued : 0,
         this.#foregroundBurst,
       );
       if (selection === undefined) return;
@@ -181,6 +182,7 @@ export class AsyncPreparationOwner {
       pending.signal.removeEventListener("abort", pending.cancel);
       this.#decrementQueued(pending.lane);
       this.#activeJobs += 1;
+      if (pending.lane === "detail") this.#activeDetailJobs += 1;
       let preparation: Promise<unknown>;
       try {
         const prepare = pending.prepare;
@@ -200,6 +202,7 @@ export class AsyncPreparationOwner {
 
   #settle(pending: PendingPreparation, result: PreparationResult): void {
     this.#activeJobs -= 1;
+    if (pending.lane === "detail") this.#activeDetailJobs -= 1;
     this.#drain();
     if (!this.#disposed) this.#onChanged();
     if (result.ok) pending.resolve(result.value);

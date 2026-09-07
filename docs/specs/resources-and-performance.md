@@ -60,13 +60,19 @@ compressed pyramids remain the less-work path.
 
 The asynchronous job ceiling is one root-owned, bounded-fair two-lane admission
 authority shared by glTF CPU pipelines, authored-VT transport/decode, and
-prefiltered-environment work. Newly claimed scene, environment, and visible-VT
-work uses the foreground lane, so an existing detail backlog cannot delay first
+prefiltered-environment work. Newly claimed scene, environment, and missing
+coarse VT coverage use the foreground lane, so an existing detail backlog cannot delay first
 usable geometry. Ordinary image transport is network wait, not CPU
 preparation, and uses its separate bounded browser queue. FIFO order is
 preserved within each shared-scheduler lane; after at most four foreground
 starts while detail remains queued, one detail job starts. Active work is never
-preempted.
+preempted. Detail concurrency is capped at one, leaving foreground capacity
+available whenever the root job ceiling exceeds one.
+
+Root upload admission also observes a 2 ms elapsed-work target, including VT
+atlas/page-table allocation. One indivisible operation may exceed the target;
+further work waits for another frame. This does not impose a hard frame/input
+latency bound or interrupt driver calls.
 
 A non-visual glTF claim enters this same foreground preparation lane. It does
 not create a parallel preload cache, scheduler, or retention policy. Image

@@ -1,0 +1,181 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "mode": "refine",
+      "previewPixels": 16369,
+      "finalPixels": 23836,
+      "reads": [
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.bin",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger.svg"
+      ],
+      "initial": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 1,
+        "pendingPages": 1,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 1,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    {
+      "mode": "fail",
+      "previewPixels": 16369,
+      "finalPixels": 16369,
+      "reads": [
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.bin",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger.svg"
+      ],
+      "initial": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 1,
+        "pendingPages": 1,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 1,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 1,
+        "pageRequests": 1,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 1,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    {
+      "mode": "dispose",
+      "previewPixels": 16369,
+      "aborted": true,
+      "reads": [
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.bin",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger.svg"
+      ]
+    },
+    {
+      "mode": "restore",
+      "previewPixels": 16369,
+      "finalPixels": 23836,
+      "reads": [
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger-card.bin",
+        "/fixtures/gltf-svg-texture/ghostscript-tiger.svg"
+      ],
+      "initial": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 1,
+        "pendingPages": 1,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 1,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1672704,
+        "atlasPools": 1,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 49284,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 2,
+        "interruptions": 1,
+        "phase": "active",
+        "recoveries": 1
+      }
+    }
+  ]
+}

@@ -76,7 +76,6 @@ const orbit = createOrbitCameraController({
 });
 const rendererOptions = resolveRendererRootOptions({
   antialias: true,
-  automaticVirtualTexturing: true,
 });
 const gltfResourceReader: GltfResourceReader = async ({ uri }, signal) => {
   const response = await fetch(uri, { signal });

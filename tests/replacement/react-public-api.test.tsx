@@ -530,18 +530,15 @@ describe("replacement React public API", () => {
     expect(resolveRendererRootOptions()).toEqual({
       alpha: false,
       antialias: false,
-      automaticVirtualTexturing: false,
       persistentGpuByteBudget: 268_435_456,
     });
     expect(resolveRendererRootOptions({
       alpha: true,
       antialias: true,
-      automaticVirtualTexturing: true,
       persistentGpuByteBudget: 2048,
     })).toEqual({
       alpha: true,
       antialias: true,
-      automaticVirtualTexturing: true,
       persistentGpuByteBudget: 2048,
     });
   });
@@ -558,9 +555,9 @@ describe("replacement React public API", () => {
       "option alpha must be a boolean",
     );
     expect(() => resolveRendererRootOptions({
-      automaticVirtualTexturing: 1,
+      automaticVirtualTexturing: true,
     } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(
-      "option automaticVirtualTexturing must be a boolean",
+      "unsupported field automaticVirtualTexturing",
     );
     expect(() => resolveRendererRootOptions({ persistentGpuByteBudget: 0 })).toThrow(
       "persistentGpuByteBudget must be a positive safe integer",

@@ -90,12 +90,12 @@ grace; cancellation, worker failure, and root disposal terminate them
 immediately. Reuse adds no second task queue and no defensive byte or geometry
 copy.
 
-`automaticVirtualTexturing` defaults to `false`. Enabling it lets eligible
-base-color raster images and SVG images move onto Royal's shared VT demand,
-residency, and shader path after usable ancestor coverage exists. SVG pages are
-rasterized from vector source on demand up to a 16,384-texel logical long edge;
-the renderer does not retain a bitmap of that size. The option is immutable and
-keeps VT/SVG implementation code behind the renderer's lazy VT boundary.
+Automatic virtual texturing is always enabled. Eligible base-color raster and
+SVG images move onto Royal's shared VT demand, residency, and shader path after
+usable ancestor coverage exists. Small raster images retain ordinary storage
+when appropriate. SVG pages are rasterized from vector source on demand up to
+a 16,384-texel logical long edge; the renderer does not retain a bitmap of that
+size. VT/SVG implementation code remains behind the renderer's lazy boundary.
 
 `setScene()` installs the complete scene intent and requests one coalesced
 presentation frame; it does not synchronously draw. The scene owns clear color

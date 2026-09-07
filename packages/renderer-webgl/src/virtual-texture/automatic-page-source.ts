@@ -1,15 +1,15 @@
+import { AUTOMATIC_VT_PAGE_SIZE, AUTOMATIC_VT_BORDER_TEXELS } from "./automatic-policy";
+export { AUTOMATIC_VT_MIN_LONG_EDGE, automaticVirtualTextureEligible, automaticVirtualTextureIsSvg, automaticVirtualTextureHasPreview } from "./automatic-policy";
 import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { CanonicalTextureSampler } from "../texture/sampler";
 import type {
   DecodedImageTextureSource,
-  DecodedTextureSource,
   EncodedSvgTextureSource,
 } from "../texture/source";
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import {
   createGeneratedVirtualTextureManifest,
-  DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
   type VirtualTexturePageId,
 } from "./manifest";
 import type {
@@ -17,11 +17,6 @@ import type {
   VirtualTexturePageSource,
 } from "./browser-page-source";
 
-export const AUTOMATIC_VT_MIN_LONG_EDGE = 257;
-const AUTOMATIC_VT_PAGE_SIZE = 128;
-const AUTOMATIC_VT_BORDER_TEXELS = 2;
-const AUTOMATIC_VT_MIN_SOURCE_TEXELS = DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS
-  * (AUTOMATIC_VT_PAGE_SIZE + AUTOMATIC_VT_BORDER_TEXELS * 2) ** 2;
 const AUTOMATIC_SVG_MAX_LONG_EDGE = 16_384;
 
 type AxisSegment = Readonly<{
@@ -135,17 +130,6 @@ const drawSegment = (
   );
   context.restore();
 };
-
-export const automaticVirtualTextureEligible = (
-  source: DecodedTextureSource,
-): source is DecodedImageTextureSource => source.kind !== "ktx2-etc2"
-  && Math.max(source.width, source.height) >= AUTOMATIC_VT_MIN_LONG_EDGE
-  && source.width * source.height > AUTOMATIC_VT_MIN_SOURCE_TEXELS;
-
-export const automaticVirtualTextureIsSvg = (
-  source: DecodedTextureSource,
-): source is DecodedImageTextureSource & Readonly<{ encodedSvg: EncodedSvgTextureSource }> =>
-  source.kind !== "ktx2-etc2" && source.encodedSvg !== undefined;
 
 const renderAutomaticPage = (
   manifest: ReturnType<typeof createGeneratedVirtualTextureManifest>,
@@ -323,6 +307,56 @@ const proveOriginClean = (
 };
 
 /** Vector-backed automatic source: logical detail grows without a full-resolution bitmap. */
+const automaticSvgManifest = (
+  intrinsicWidth: number,
+  intrinsicHeight: number,
+  colorSpace: "linear" | "srgb",
+): ReturnType<typeof createGeneratedVirtualTextureManifest> => {
+  const scale = AUTOMATIC_SVG_MAX_LONG_EDGE / Math.max(intrinsicWidth, intrinsicHeight);
+  const width = Math.max(1, Math.round(intrinsicWidth * scale));
+  const height = Math.max(1, Math.round(intrinsicHeight * scale));
+  return createGeneratedVirtualTextureManifest({
+    borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
+    colorSpace,
+    height,
+    pageSize: AUTOMATIC_VT_PAGE_SIZE,
+    width,
+  });
+};
+
+/** Small preview coverage and vector detail share one logical page source. */
+export const createAutomaticSvgPreviewPageSource = (
+  preview: DecodedImageTextureSource & Readonly<{ svgPreview: NonNullable<DecodedImageTextureSource["svgPreview"]> }>,
+  sampler: CanonicalTextureSampler,
+  colorSpace: "linear" | "srgb",
+): VirtualTexturePageSource => {
+  const manifest = automaticSvgManifest(preview.width, preview.height, colorSpace);
+  let vector: VirtualTexturePageSource | undefined;
+  let closed = false;
+  return {
+    manifest,
+    close: () => {
+      closed = true;
+      vector?.close?.();
+      vector = undefined;
+    },
+    read: async (page, signal) => {
+      if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
+      if (page.mip === manifest.mipCount - 1) {
+        return renderAutomaticPage(
+          manifest, sampler, preview.source as CanvasImageSource,
+          preview.width / manifest.width, preview.height / manifest.height,
+          page, signal,
+        );
+      }
+      const encoded = await preview.svgPreview.load();
+      if (closed || signal.aborted) throw new DOMException("SVG refinement was aborted", "AbortError");
+      vector ??= createAutomaticSvgPageSource(encoded, preview.width, preview.height, sampler, colorSpace);
+      return vector.read(page, signal);
+    },
+  };
+};
+
 export const createAutomaticSvgPageSource = (
   encodedSource: EncodedSvgTextureSource,
   intrinsicWidth: number,
@@ -330,16 +364,8 @@ export const createAutomaticSvgPageSource = (
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
 ): VirtualTexturePageSource => {
-  const scale = AUTOMATIC_SVG_MAX_LONG_EDGE / Math.max(intrinsicWidth, intrinsicHeight);
-  const width = Math.max(1, Math.round(intrinsicWidth * scale));
-  const height = Math.max(1, Math.round(intrinsicHeight * scale));
-  const manifest = createGeneratedVirtualTextureManifest({
-    borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
-    colorSpace,
-    height,
-    pageSize: AUTOMATIC_VT_PAGE_SIZE,
-    width,
-  });
+  const manifest = automaticSvgManifest(intrinsicWidth, intrinsicHeight, colorSpace);
+  const { width, height } = manifest;
   let parsed: ParsedSvgTextureSource | undefined = encodedSource.parsed;
   let closed = false;
   let originClean = false;

@@ -2363,10 +2363,22 @@ const main = async () => {
           throw new Error('SVG fallback smoke did not intercept the preferred source');
         }
         await session.call('Fetch.disable');
-        const fallbackCount = state.renderer?.gltfLoadDiagnostics?.assets?.[0]?.imageFallbacks;
-        if (fallbackCount !== 1) {
-          throw new Error(`SVG fallback was not reported exactly once: ${JSON.stringify(state.renderer)}`);
+        const detail = await evaluate(session, `
+          (async () => {
+            const deadline = performance.now() + 10000;
+            while (performance.now() < deadline) {
+              const snapshot = globalThis.__royalExamplesRendererBenchmarkSnapshot?.();
+              const vt = snapshot?.virtualTexturing;
+              if (vt?.failedPages === 1 && vt.pendingPages === 0 && vt.residentPages > 0) return snapshot;
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            throw new Error('Optional SVG failure did not settle on preview coverage');
+          })()
+        `);
+        if (detail.gltfLoadDiagnostics?.assets?.[0]?.imageFallbacks !== 0) {
+          throw new Error(`Initial preview was misclassified as a failed image: ${JSON.stringify(detail)}`);
         }
+        state = { ...state, renderer: detail };
       }
       if ((state.canvas?.sample?.paintedPixels ?? 0) === 0) {
         const compositedSample = await compositedCanvasSample(session);

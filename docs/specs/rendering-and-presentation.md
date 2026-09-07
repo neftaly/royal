@@ -470,3 +470,15 @@ permit, without weakening the 60 Hz minimum behavior.
 Quality policy MAY cap render scale, DPR, HDR target size, anisotropy, or
 optional effects by measured device capability. It MUST NOT special-case an
 example, asset URL, browser product name, or benchmark flag to fabricate FPS.
+
+
+### Retained outline source discovery
+
+The world surface owner resolves outline sources through a lazily built index of
+live canonical provenance. Geometry, asset revision/scene, cohort and exact source
+transform still define matches; automatic members compare float32 transforms.
+Hash collisions MUST receive exact checks. Candidate identity survives camera,
+DPR and resource-readiness changes; structural and source-transform publications
+invalidate it. Current LOD and GPU readiness are read at borrow time, preserving
+the existing absent/pending/inactive/ready distinction. The index owns no GPU
+resources and is not built for a root that never borrows outline geometry.

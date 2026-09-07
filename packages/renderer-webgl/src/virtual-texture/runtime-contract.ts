@@ -1,6 +1,7 @@
+import { automaticVirtualTextureEligible, automaticVirtualTextureIsSvg, automaticVirtualTextureHasPreview } from "./automatic-policy";
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
-import { decodedTextureKey, type TextureSourceRef } from "../texture/source";
+import { decodedTextureKey, type DecodedTextureSource, type TextureSourceRef } from "../texture/source";
 import {
   canonicalTextureSampler,
   canonicalTextureSamplerKey,
@@ -38,11 +39,14 @@ export type VirtualTextureSceneDemand = Readonly<{
 /** Pure lazy-feature activation shared by root setup and stale import guards. */
 export const virtualTextureRuntimeRequired = (
   scene: VirtualTextureSceneDemand,
-  automaticVirtualTexturing: boolean,
-): boolean => scene.virtualTextureAssets.length > 0 || (
-  automaticVirtualTexturing
-  && scene.surfaces.some((surface) => surface.material.baseColorAsset !== undefined)
-);
+  decoded: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
+): boolean => scene.virtualTextureAssets.length > 0
+  || scene.surfaces.some((surface) => {
+    const asset = surface.material.baseColorAsset;
+    const source = asset === undefined ? undefined : decoded(asset);
+    return source !== undefined
+      && (automaticVirtualTextureIsSvg(source) || automaticVirtualTextureHasPreview(source) || automaticVirtualTextureEligible(source));
+  });
 
 export type VirtualTextureShaderSource = Readonly<{
   declarations: string;
@@ -72,8 +76,6 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   automaticCandidates: number;
   /** Estimated CPU bytes retained by current automatic raster VT leases. */
   automaticDecodedBytes: number;
-  /** Whether automatic VT is enabled for this root. */
-  automaticEnabled: boolean;
   /** Latest-scene candidates rejected by format, size, or decoded-memory policy. */
   automaticIneligible: number;
   /** Current automatic VT resources with a retained page source. */
@@ -86,6 +88,10 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   failedPages: number;
   /** Page reads started during this runtime generation, including later evictions. */
   pageRequests: number;
+  /** Reserved upper bound for in-flight and decoded page pixels. */
+  pendingPageBytes: number;
+  /** Hard root-local ceiling for pending page pixels. */
+  pendingPageByteLimit: number;
   /** Current page reads and decoded pages waiting for upload. */
   pendingPages: number;
   /** Current logical pages backed by physical atlas slots. */
@@ -96,9 +102,8 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   uploadBudgetBytes: number;
 }>;
 
-/** Pure inactive-runtime snapshot preserving the root's immutable VT policy. */
+/** Pure inactive-runtime snapshot preserving the root's upload budget. */
 export const idleVirtualTextureRuntimeSnapshot = (
-  automaticVirtualTexturing: boolean,
   uploadBudgetBytes: number,
 ): VirtualTextureRuntimeSnapshot => ({
   admittedUploadBytes: 0,
@@ -106,7 +111,6 @@ export const idleVirtualTextureRuntimeSnapshot = (
   atlasPools: 0,
   automaticCandidates: 0,
   automaticDecodedBytes: 0,
-  automaticEnabled: automaticVirtualTexturing,
   automaticIneligible: 0,
   automaticResources: 0,
   automaticWaiting: 0,
@@ -114,6 +118,8 @@ export const idleVirtualTextureRuntimeSnapshot = (
   failedPages: 0,
   pageRequests: 0,
   pendingPages: 0,
+  pendingPageBytes: 0,
+  pendingPageByteLimit: 16 * 1024 * 1024,
   residentPages: 0,
   uploadedPages: 0,
   uploadBudgetBytes,
@@ -153,5 +159,6 @@ export interface VirtualTextureRuntime {
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
   snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;
-  update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate;
+  /** Embedded surface frames already reset the shared upload authority. */
+  update(views: readonly SurfaceFrameView[], beginUploadFrame?: boolean): VirtualTextureFrameUpdate;
 }

@@ -322,9 +322,9 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 
 const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
-  retainSvgSource: boolean,
-  readGltfTexture?: NonNullable<CanvasRootPlatform["readGltfTextureResource"]>,
-  onReadAheadChanged: () => void = () => undefined,
+  readGltfTexture: CanvasRootPlatform["readGltfTextureResource"],
+  onReadAheadChanged: () => void,
+  scheduleSvgPreparation: import("../resource/async-preparation-owner").AsyncPreparationScheduler,
 ): Pick<TextureAssetOwnerPlatform, "decode" | "preload" | "readAheadSnapshot"> => {
   let decoder:
     | Promise<import("../texture/browser-decode").BrowserTextureDecoder>
@@ -336,9 +336,9 @@ const lazyBrowserTextureDecoder = (
         const value = module.createBrowserTextureDecoder(
           32,
           etc2Available,
-          retainSvgSource,
           readGltfTexture,
           onReadAheadChanged,
+          scheduleSvgPreparation,
         );
         loadedDecoder = value;
         return value;
@@ -677,7 +677,6 @@ export class CanvasRoot implements RendererRoot {
   };
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: Scene | null = null;
-  readonly #automaticVirtualTexturing: boolean;
   #virtualTextureActivation: VirtualTextureActivationState = initialVirtualTextureActivationState;
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
   readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
@@ -706,7 +705,6 @@ export class CanvasRoot implements RendererRoot {
     const construction = new RootConstructionScope(platform.onListenerError);
     this.#canvas = canvas;
     this.#platform = platform;
-    this.#automaticVirtualTexturing = resolvedOptions.automaticVirtualTexturing;
     let creationContext: WebGL2RenderingContext | undefined;
     try {
       canvas.addEventListener("webglcontextlost", this.#onContextLost);
@@ -730,6 +728,7 @@ export class CanvasRoot implements RendererRoot {
       this.#retainedPresentation = construction.own(new RetainedPresentationOwner(
         this.#gl,
         this.#persistentGpuBudget,
+        resolvedOptions.alpha,
       ));
       this.#asyncPreparation = construction.own(new AsyncPreparationOwner(
         asyncPreparationJobLimit,
@@ -740,9 +739,8 @@ export class CanvasRoot implements RendererRoot {
       this.#gltfPreparer = construction.own(lazyBrowserGltfPreparer(
         asyncPreparationJobLimit,
       ));
-      this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget);
+      this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget, 2, platform.now);
       this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
-        resolvedOptions.automaticVirtualTexturing,
         frameUploadByteBudget,
       );
       this.#state = new WebGlStateOwner(this.#gl);
@@ -819,11 +817,11 @@ export class CanvasRoot implements RendererRoot {
       const browserTextureDecoder = platform.decodeTexture === undefined
         ? lazyBrowserTextureDecoder(
           this.#etc2Available,
-          this.#automaticVirtualTexturing,
           platform.readGltfTextureResource,
           () => {
             if (!this.#disposed) this.#publish();
           },
+          this.#asyncPreparation.run,
         )
         : undefined;
       this.#textureAssets = construction.own(new TextureAssetOwner({
@@ -1640,7 +1638,7 @@ export class CanvasRoot implements RendererRoot {
     if (prepared !== scene) {
       this.#surfaceScene = prepared;
       this.#surfaceGpu.publishTextureBatch(prepared, keys);
-      this.#virtualTextureRuntime?.setScene(prepared);
+      this.#reconcileVirtualTextureRuntime(prepared);
       this.#textureResourcesPending = true;
       this.#progressivePresentation.changed();
     }
@@ -1677,7 +1675,7 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #reconcileVirtualTextureRuntime(scene: CanonicalSurfaceScene): void {
-    const required = virtualTextureRuntimeRequired(scene, this.#automaticVirtualTexturing);
+    const required = virtualTextureRuntimeRequired(scene, this.#getDecodedTexture);
     const previousActivation = this.#virtualTextureActivation;
     const activation = reconcileVirtualTextureActivation(
       this.#virtualTextureActivation,
@@ -1718,15 +1716,16 @@ export class CanvasRoot implements RendererRoot {
         },
         this.#persistentGpuBudget,
         this.#asyncPreparation.runForeground,
-        this.#automaticVirtualTexturing ? {
+        {
           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
           decoded: (asset) => this.#textureAssets.decoded(asset),
           onChanged: () => {
             if (!this.#disposed) this.#invalidatePresentation();
           },
-        } : undefined,
+        },
         this.#frameUploadBudget,
         this.#etc2Available,
+        this.#asyncPreparation.run,
       );
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
       this.#virtualTextureRuntime = runtime;
@@ -1962,10 +1961,7 @@ export class CanvasRoot implements RendererRoot {
   #releaseUploadedTextures(): boolean {
     this.#invalidateReleasedTextureResidency();
     // Keep the bounded decode handoff alive until the lazy automatic-VT owner can claim it.
-    if (
-      this.#automaticVirtualTexturing
-      && this.#virtualTextureActivation.phase === "loading"
-    ) return false;
+    if (this.#virtualTextureActivation.phase === "loading") return false;
     const uploaded = this.#surfaceGpu.takeUploadedTextureStorageKeys();
     const denied = this.#surfaceGpu.takeDeniedTextureStorageKeys();
     this.#textureAssets.releaseUploaded(uploaded);

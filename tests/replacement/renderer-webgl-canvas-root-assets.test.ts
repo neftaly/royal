@@ -57,9 +57,11 @@ describe("canvas root asset publication", () => {
       }));
       expect(ref.current).not.toBeNull();
       ref.current!.position.x = 10;
-      await waitFor(() => {
+      // This first preparation imports the cold glTF graph; the assertion is
+      // about retained transforms, not completing host-side imports within 1 s.
+      await vi.waitFor(() => {
         expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready");
-      });
+      }, { interval: 1, timeout: 5000 });
       flushScheduledFrames();
       expect(root.pick({ clientX: 160, clientY: 120 })).toBeUndefined();
       setGpuScene.mockClear();

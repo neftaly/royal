@@ -15,6 +15,8 @@ import {
 import {
   automaticVirtualTextureEligible,
   automaticVirtualTextureIsSvg,
+  automaticVirtualTextureHasPreview,
+  createAutomaticSvgPreviewPageSource,
   createAutomaticRasterPageSource,
   createAutomaticSvgPageSource,
 } from "./automatic-page-source";
@@ -64,6 +66,7 @@ import {
 } from "./storage-plan";
 
 const MAX_DECODE_JOBS = 4;
+const MAX_PENDING_PAGE_BYTES = 16 * 1024 * 1024;
 const MAX_UPLOADS_PER_FRAME = 4;
 const MAX_DEMAND_PAGES = 512;
 const MAX_AUTOMATIC_DECODED_BYTES = 64 * 1024 * 1024;
@@ -82,6 +85,7 @@ const FRAME_RESULTS = [
 const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare();
 
 type ReadyPage = Readonly<{
+  byteLength: number;
   decoded: DecodedVirtualTexturePage;
   pageKey: VirtualTexturePageKey;
 }>;
@@ -125,6 +129,7 @@ type RuntimeResource = {
   manifestPending: boolean;
   readonly readyPageKeys: Set<VirtualTexturePageKey>;
   readonly readyPages: ReadyPage[];
+  previewSourcePending?: boolean;
   readonly sampler: CanonicalTextureSampler;
   snapshot: VirtualTextureAssetSnapshot | undefined;
   source?: VirtualTexturePageSource;
@@ -335,6 +340,8 @@ const destroyGpuVirtualTextureAtlas = (
 class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #activeJobs = 0;
   #automaticCandidates = 0;
+  #pendingPageBytes = 0;
+  #detailJobs = 0;
   #automaticIneligible = 0;
   #automaticWaiting = 0;
   #bindingRevision = 0;
@@ -352,9 +359,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #etc2Available: boolean;
   readonly #atlases = new Map<string, GpuVirtualTextureAtlas>();
   readonly #budget: PersistentGpuBudgetOwner;
-  readonly #automatic: AutomaticVirtualTextureRuntimeOptions | undefined;
+  readonly #automatic: AutomaticVirtualTextureRuntimeOptions;
   readonly #onChanged: (asset: VirtualTextureAssetRef) => void;
   readonly #schedule: AsyncPreparationScheduler;
+  readonly #scheduleDetail: AsyncPreparationScheduler;
   readonly #uploadBudget: FrameUploadBudgetOwner;
   readonly #resources = new Map<string, RuntimeResource>();
   readonly #protectedPoolPages = {
@@ -369,14 +377,16 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     onChanged: (asset: VirtualTextureAssetRef) => void,
     budget: PersistentGpuBudgetOwner,
     schedule: AsyncPreparationScheduler,
-    automatic: AutomaticVirtualTextureRuntimeOptions | undefined,
+    automatic: AutomaticVirtualTextureRuntimeOptions,
     uploadBudget: FrameUploadBudgetOwner,
     etc2Available: boolean,
+    scheduleDetail: AsyncPreparationScheduler,
   ) {
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#budget = budget;
     this.#schedule = schedule;
+    this.#scheduleDetail = scheduleDetail;
     this.#automatic = automatic;
     this.#uploadBudget = uploadBudget;
     this.#etc2Available = etc2Available;
@@ -441,7 +451,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
       }
       failedPages += resource.failedPages.size;
-      pendingPages += resource.loadingPages.size + resource.readyPages.length;
+      pendingPages += resource.loadingPages.size + resource.readyPages.length
+        + (resource.previewSourcePending ? 1 : 0);
       residentPages += resource.gpu?.residentSlots.size ?? 0;
     }
     return {
@@ -450,7 +461,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       atlasPools: this.#atlases.size,
       automaticCandidates: this.#automaticCandidates,
       automaticDecodedBytes,
-      automaticEnabled: this.#automatic !== undefined,
       automaticIneligible: this.#automaticIneligible,
       automaticResources,
       automaticWaiting: this.#automaticWaiting,
@@ -458,6 +468,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       failedPages,
       pageRequests: this.#pageRequests,
       pendingPages,
+      pendingPageBytes: this.#pendingPageBytes,
+      pendingPageByteLimit: MAX_PENDING_PAGE_BYTES,
       residentPages,
       uploadedPages: this.#uploadedPages,
       uploadBudgetBytes: uploads.budgetBytes,
@@ -526,101 +538,98 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#resources.set(key, resource);
       void this.#openSource(resource);
     }
-    if (this.#automatic !== undefined) {
-      this.#automaticCandidates = 0;
-      this.#automaticIneligible = 0;
-      this.#automaticWaiting = 0;
-      const candidates = new Map<string, TextureSourceRef>();
-      for (const surface of scene?.surfaces ?? []) {
-        const asset = surface.material.baseColorAsset;
-        if (asset === undefined) continue;
-        const key = automaticVirtualTextureAssetKey(asset);
-        if (!candidates.has(key)) candidates.set(key, asset);
+    this.#automaticCandidates = 0;
+    this.#automaticIneligible = 0;
+    this.#automaticWaiting = 0;
+    const candidates = new Map<string, TextureSourceRef>();
+    for (const surface of scene?.surfaces ?? []) {
+      const asset = surface.material.baseColorAsset;
+      if (asset === undefined) continue;
+      const key = automaticVirtualTextureAssetKey(asset);
+      if (!candidates.has(key)) candidates.set(key, asset);
+    }
+    this.#automaticCandidates = candidates.size;
+    let retainedDecodedBytes = 0;
+    for (const key of candidates.keys()) {
+      const existing = this.#resources.get(key);
+      if (existing?.lease !== undefined) {
+        retainedDecodedBytes += existing.lease.source.width
+          * existing.lease.source.height * 4;
       }
-      this.#automaticCandidates = candidates.size;
-      let retainedDecodedBytes = 0;
-      for (const key of candidates.keys()) {
-        const existing = this.#resources.get(key);
-        if (existing?.lease !== undefined) {
-          retainedDecodedBytes += existing.lease.source.width
-            * existing.lease.source.height * 4;
-        }
+    }
+    for (const [key, asset] of candidates) {
+      const existing = this.#resources.get(key);
+      if (existing !== undefined) {
+        claimed.add(key);
+        continue;
       }
-      for (const [key, asset] of candidates) {
-        const existing = this.#resources.get(key);
-        if (existing !== undefined) {
-          claimed.add(key);
-          continue;
-        }
-        const decoded = this.#automatic.decoded(asset);
-        if (decoded === undefined) {
+      const decoded = this.#automatic.decoded(asset);
+      if (decoded === undefined) {
+        this.#automaticWaiting += 1;
+        continue;
+      }
+      const svg = automaticVirtualTextureIsSvg(decoded);
+      const preview = automaticVirtualTextureHasPreview(decoded);
+      if (
+        decoded.kind === "ktx2-etc2"
+        || (!svg && !preview && !automaticVirtualTextureEligible(decoded))
+      ) {
+        this.#automaticIneligible += 1;
+        continue;
+      }
+      const decodedBytes = decoded.width * decoded.height * 4;
+      if (!svg && retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
+        this.#automaticIneligible += 1;
+        continue;
+      }
+      const sampler = canonicalTextureSampler(asset);
+      let lease: DecodedTextureLease | undefined;
+      let source: VirtualTexturePageSource;
+      if (svg) {
+        source = createAutomaticSvgPageSource(
+          decoded.encodedSvg,
+          decoded.width,
+          decoded.height,
+          sampler,
+          asset.colorSpace ?? "srgb",
+        );
+      } else {
+        lease = this.#automatic.acquireDecoded(asset);
+        if (lease === undefined) {
           this.#automaticWaiting += 1;
           continue;
         }
-        const svg = automaticVirtualTextureIsSvg(decoded);
-        if (
-          decoded.kind === "ktx2-etc2"
-          || (!svg && !automaticVirtualTextureEligible(decoded))
-        ) {
+        if (!automaticVirtualTextureHasPreview(lease.source) && !automaticVirtualTextureEligible(lease.source)) {
+          lease.release();
           this.#automaticIneligible += 1;
           continue;
         }
-        const decodedBytes = decoded.width * decoded.height * 4;
-        if (!svg && retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
-          this.#automaticIneligible += 1;
-          continue;
-        }
-        const sampler = canonicalTextureSampler(asset);
-        let lease: DecodedTextureLease | undefined;
-        let source: VirtualTexturePageSource;
-        if (svg) {
-          source = createAutomaticSvgPageSource(
-            decoded.encodedSvg,
-            decoded.width,
-            decoded.height,
-            sampler,
-            asset.colorSpace ?? "srgb",
-          );
-        } else {
-          lease = this.#automatic.acquireDecoded(asset);
-          if (lease === undefined) {
-            this.#automaticWaiting += 1;
-            continue;
-          }
-          if (!automaticVirtualTextureEligible(lease.source)) {
-            lease.release();
-            this.#automaticIneligible += 1;
-            continue;
-          }
-          retainedDecodedBytes += lease.source.width * lease.source.height * 4;
-          source = createAutomaticRasterPageSource(
-            lease.source,
-            sampler,
-            asset.colorSpace ?? "srgb",
-          );
-        }
-        claimed.add(key);
-        this.#resources.set(key, {
-          abort: new AbortController(),
-          asset,
-          authored: false,
-          demandRevision: -1,
-          failedPages: new Set(),
-          gpu: undefined,
-          key,
-          ...(lease === undefined ? {} : { lease }),
-          loadingPages: new Map(),
-          manifest: source.manifest,
-          manifestPending: false,
-          readyPageKeys: new Set(),
-          readyPages: [],
-          sampler,
-          snapshot: undefined,
-          source,
-          surfaces: [],
-          workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
-        });
+        retainedDecodedBytes += lease.source.width * lease.source.height * 4;
+        source = automaticVirtualTextureHasPreview(lease.source)
+          ? createAutomaticSvgPreviewPageSource(lease.source, sampler, asset.colorSpace ?? "srgb")
+          : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");
       }
+      claimed.add(key);
+      this.#resources.set(key, {
+        abort: new AbortController(),
+        asset,
+        authored: false,
+        demandRevision: -1,
+        failedPages: new Set(),
+        gpu: undefined,
+        key,
+        ...(lease === undefined ? {} : { lease }),
+        loadingPages: new Map(),
+        manifest: source.manifest,
+        manifestPending: false,
+        readyPageKeys: new Set(),
+        readyPages: [],
+        sampler,
+        snapshot: undefined,
+        source,
+        surfaces: [],
+        workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
+      });
     }
     for (const [key, resource] of this.#resources) {
       if (claimed.has(key)) continue;
@@ -660,9 +669,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     for (const resource of this.#resources.values()) resource.demandRevision = -1;
   }
 
-  update(views: readonly SurfaceFrameView[]): VirtualTextureFrameUpdate {
+  update(views: readonly SurfaceFrameView[], beginUploadFrame = true): VirtualTextureFrameUpdate {
     if (this.#disposed) return FRAME_RESULTS[0]!;
-    this.#uploadBudget.beginFrame();
+    if (beginUploadFrame) this.#uploadBudget.beginFrame();
     this.#frame += 1;
     let pending = false;
     let webGlStateChanged = false;
@@ -674,6 +683,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     // or another resource's previous-frame visibility.
     for (const resource of this.#resources.values()) {
       if (this.#prepareFrameDemand(resource, views)) webGlStateChanged = true;
+      if (resource.workspace.count > 0 && resource.gpu === undefined && resource.manifestFailure === undefined) pending = true;
     }
     for (const resource of this.#resources.values()) {
       const manifest = resource.manifest;
@@ -767,6 +777,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     let gpuCreated = false;
     if (resource.gpu === undefined) {
+      if (!this.#uploadBudget.tryAdmitAllocation()) {
+        resource.demandRevision = -1;
+        return false;
+      }
       try {
         resource.gpu = this.#createGpuResource(resource, manifest);
         gpuCreated = true;
@@ -789,6 +803,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           ready.decoded.close();
           resource.readyPageKeys.delete(ready.pageKey);
           this.#readyPages -= 1;
+          this.#pendingPageBytes -= ready.byteLength;
           continue;
         }
         resource.readyPages[retainedReadyPages] = ready;
@@ -898,7 +913,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   #changed(resource: RuntimeResource): void {
     if (resource.authored) this.#onChanged(resource.asset as VirtualTextureAssetRef);
-    else this.#automatic?.onChanged();
+    else this.#automatic.onChanged();
   }
 
   #cancelStalePageReads(resource: RuntimeResource): void {
@@ -976,6 +991,13 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #startNextPageRead(resource: RuntimeResource): boolean {
     const gpu = resource.gpu;
     if (gpu === undefined || resource.source === undefined) return false;
+    const preview = resource.lease?.source;
+    if (gpu.residentSlots.size > 0 && this.#detailJobs > 0) return false;
+    const manifest = resource.manifest!;
+    const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
+    const byteLength = manifest.pageEncoding === "ktx2-etc2"
+      ? Math.ceil(storedPageSize / 4) ** 2 * 16
+      : storedPageSize ** 2 * 4;
     for (let index = 0; index < resource.workspace.count; index += 1) {
       const mip = resource.workspace.mips[index]!;
       const x = resource.workspace.xs[index]!;
@@ -988,7 +1010,30 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         || resource.failedPages.has(key)
         || !this.#publicationAncestorReady(resource, mip, x, y)
       ) continue;
-      this.#startPageRead(resource, { mip, x, y }, key);
+      if (preview !== undefined && automaticVirtualTextureHasPreview(preview)
+        && mip !== resource.manifest!.mipCount - 1 && preview.svgPreview.encoded === undefined) {
+        // A failed vector source cannot prevent restoring retained preview pixels.
+        if (preview.svgPreview.error !== undefined) continue;
+        if (!resource.previewSourcePending) {
+          resource.previewSourcePending = true;
+          // Transport must not occupy the sole rasterization slot. Validation
+          // re-enters the root detail lane after bytes arrive.
+          void preview.svgPreview.load().catch(() => {
+            if (!resource.abort.signal.aborted) resource.failedPages.add(key);
+          }).finally(() => {
+            resource.previewSourcePending = false;
+            if (!resource.abort.signal.aborted && !this.#disposed) this.#changed(resource);
+          });
+        }
+        return false;
+      }
+      if (byteLength > MAX_PENDING_PAGE_BYTES) {
+        resource.failedPages.add(key);
+        this.#changed(resource);
+        continue;
+      }
+      if (this.#pendingPageBytes + byteLength > MAX_PENDING_PAGE_BYTES) return false;
+      this.#startPageRead(resource, { mip, x, y }, key, byteLength);
       return true;
     }
     return false;
@@ -1021,6 +1066,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource: RuntimeResource,
     page: VirtualTexturePageId,
     pageKey: VirtualTexturePageKey,
+    byteLength: number,
   ): void {
     const source = resource.source;
     if (source === undefined) {
@@ -1029,11 +1075,15 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       return;
     }
     const controller = new AbortController();
+    const detail = resource.gpu!.residentSlots.size > 0;
+    if (detail) this.#detailJobs += 1;
+    this.#pendingPageBytes += byteLength;
+    let retained = false;
     resource.loadingPages.set(pageKey, controller);
     this.#activeJobs += 1;
     this.#pageRequests += 1;
     this.#changed(resource);
-    void this.#schedule(
+    void (detail ? this.#scheduleDetail : this.#schedule)(
       controller.signal,
       () => source.read(page, controller.signal),
     ).then((decoded) => {
@@ -1054,7 +1104,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       ) decoded.close();
       else {
         resource.readyPageKeys.add(pageKey);
-        resource.readyPages.push({ decoded, pageKey });
+        resource.readyPages.push({ byteLength, decoded, pageKey });
+        retained = true;
         this.#readyPages += 1;
       }
     }).catch(() => {
@@ -1066,7 +1117,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         resource.loadingPages.delete(pageKey);
       }
       this.#activeJobs -= 1;
-      if (!resource.abort.signal.aborted && !this.#disposed) this.#changed(resource);
+      if (detail) this.#detailJobs -= 1;
+      if (!retained) this.#pendingPageBytes -= byteLength;
+      if (!resource.abort.signal.aborted && !this.#disposed) {
+        this.#changed(resource);
+        this.#schedulePageReads();
+      }
     });
   }
 
@@ -1137,7 +1193,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #clearReadyPages(resource: RuntimeResource): void {
-    for (const ready of resource.readyPages) ready.decoded.close();
+    for (const ready of resource.readyPages) {
+      ready.decoded.close();
+      this.#pendingPageBytes -= ready.byteLength;
+    }
     this.#readyPages -= resource.readyPages.length;
     resource.readyPageKeys.clear();
     resource.readyPages.length = 0;
@@ -1145,6 +1204,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   #settleReadyPage(resource: RuntimeResource): void {
     const ready = resource.readyPages.shift()!;
+    this.#pendingPageBytes -= ready.byteLength;
     resource.readyPageKeys.delete(ready.pageKey);
     this.#readyPages -= 1;
   }
@@ -1182,9 +1242,14 @@ export const createBrowserVirtualTextureRuntime = (
   onChanged: (asset: VirtualTextureAssetRef) => void,
   budget = new PersistentGpuBudgetOwner(),
   schedule: AsyncPreparationScheduler = prepareDirectly,
-  automatic?: AutomaticVirtualTextureRuntimeOptions,
+  automatic: AutomaticVirtualTextureRuntimeOptions = {
+    acquireDecoded: () => undefined,
+    decoded: () => undefined,
+    onChanged: () => undefined,
+  },
   uploadBudget = new FrameUploadBudgetOwner(),
   etc2Available = true,
+  scheduleDetail: AsyncPreparationScheduler = schedule,
 ): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(
   gl,
   onChanged,
@@ -1193,4 +1258,5 @@ export const createBrowserVirtualTextureRuntime = (
   automatic,
   uploadBudget,
   etc2Available,
+  scheduleDetail,
 );

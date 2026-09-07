@@ -65,7 +65,7 @@ describe("browser texture decode shell", () => {
         headers: { "content-type": "image/avif" },
       })));
     const changed = vi.fn();
-    const decoder = createBrowserTextureDecoder(4, true, false, undefined, changed);
+    const decoder = createBrowserTextureDecoder(4, true, undefined, changed);
     const controllers = Array.from({ length: 20 }, () => new AbortController());
     const assets = controllers.map((_controller, index) => ({
       kind: "asset" as const,
@@ -183,7 +183,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => new Uint8Array([137, 80, 78, 71]));
     vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
     vi.stubGlobal("fetch", fetch);
-    const decode = createBrowserTextureDecoder(4, true, false, readGltfTexture).decode;
+    const decode = createBrowserTextureDecoder(4, true, readGltfTexture).decode;
 
     const decoded = await decode({
       gltfResource: true,
@@ -214,7 +214,7 @@ describe("browser texture decode shell", () => {
     const readGltfTexture = vi.fn(async () => createAvifHeader(4, 4));
     vi.stubGlobal("createImageBitmap", createImageBitmap);
 
-    await createBrowserTextureDecoder(4, true, false, readGltfTexture).decode({
+    await createBrowserTextureDecoder(4, true, readGltfTexture).decode({
       gltfResource: true,
       kind: "asset",
       mimeType: "image/avif",
@@ -265,7 +265,7 @@ describe("browser texture decode shell", () => {
     }));
     vi.stubGlobal("fetch", fetch);
 
-    const decoded = await createBrowserTextureDecoder(4, true, true).decode({
+    const decoded = await createBrowserTextureDecoder().decode({
       fallback: { kind: "asset", src: "/fallback.png" },
       kind: "asset",
       sourceEncoding: "svg",
@@ -295,7 +295,7 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal)).rejects.toThrow("fallback must be an ordinary raster");
   });
 
-  it("retains SVG authority only for roots that request the vector handoff", async () => {
+  it("retains validated SVG authority with default root policy", async () => {
     stubValidSvgParser();
     const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
     vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
@@ -309,22 +309,152 @@ describe("browser texture decode shell", () => {
       src: "/opaque-image?id=vector",
     };
 
-    const ordinary = await createBrowserTextureDecoder().decode(
-      asset,
-      new AbortController().signal,
-    );
-    const retained = await createBrowserTextureDecoder(4, true, true).decode(
+    const retained = await createBrowserTextureDecoder().decode(
       asset,
       new AbortController().signal,
     );
 
-    expect(ordinary).not.toHaveProperty("encodedSvg");
     expect(retained).toMatchObject({
       encodedSvg: {
         byteLength: new Blob([svg]).size,
         blob: { size: new Blob([svg]).size, type: "image/svg+xml" },
       },
     });
+  });
+
+  it("publishes the preview before reading SVG and shares lazy validation until release", async () => {
+    stubValidSvgParser();
+    const bitmap = { close: vi.fn(), height: 64, width: 128 } as unknown as ImageBitmap;
+    const decode = vi.fn(async () => bitmap);
+    vi.stubGlobal("createImageBitmap", decode);
+    let sourceSignal: AbortSignal | undefined;
+    const fetch = vi.fn(async (input: string, options: { signal: AbortSignal }) => {
+      if (input.endsWith(".svg")) sourceSignal = options.signal;
+      return new Response(input.endsWith(".svg") ? '<svg viewBox="0 0 16 8"/>' : "png", {
+        headers: { "content-type": input.endsWith(".svg") ? "image/svg+xml" : "image/png" },
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const source = await createBrowserTextureDecoder().decode({
+      kind: "asset", src: "/vector.svg", sourceEncoding: "svg", svgPreview: true,
+      fallback: { kind: "asset", src: "/preview.png" },
+    }, new AbortController().signal);
+    expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["/preview.png"]);
+    expect(source).not.toHaveProperty("fallbackReason");
+    if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+    const first = source.svgPreview.load();
+    expect(source.svgPreview.load()).toBe(first);
+    await first;
+    expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["/preview.png", "/vector.svg"]);
+    expect(decode).toHaveBeenCalledOnce();
+    expect(source.svgPreview.encoded?.parsed.viewBox).toEqual([0, 0, 16, 8]);
+    source.close?.();
+    expect(sourceSignal?.aborted).toBe(true);
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps new preview transport available while SVG detail reads are stalled", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close: vi.fn(), width: 64, height: 64 })));
+    const fetch = vi.fn((input: string, options: { signal: AbortSignal }) => {
+      if (!input.endsWith(".svg")) return Promise.resolve(new Response("png", {
+        headers: { "content-type": "image/png" },
+      }));
+      return new Promise<Response>((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const decoder = createBrowserTextureDecoder();
+    const controller = new AbortController();
+    const sources = await Promise.all(Array.from({ length: 16 }, (_, index) => decoder.decode({
+      kind: "asset", src: `/held-${index}.svg`, sourceEncoding: "svg", svgPreview: true,
+      fallback: { kind: "asset", src: `/preview-${index}.png` },
+    }, controller.signal)));
+    const detail = sources.map((source) => {
+      if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+      return source.svgPreview.load().catch(() => undefined);
+    });
+    let next: Promise<Awaited<ReturnType<typeof decoder.decode>>> | undefined;
+    try {
+      await waitFor(() => expect(fetch.mock.calls.filter(([uri]) => uri.endsWith(".svg"))).toHaveLength(4));
+      next = decoder.decode({ kind: "asset", src: "/new-preview.png" }, controller.signal);
+      void next.catch(() => undefined);
+      await waitFor(() => expect(fetch.mock.calls.some(([uri]) => uri === "/new-preview.png")).toBe(true));
+      (await next).close?.();
+      expect(fetch.mock.calls.filter(([uri]) => uri.endsWith(".svg"))).toHaveLength(4);
+    } finally {
+      sources.forEach((source) => source.close?.());
+      controller.abort();
+      await Promise.allSettled([...detail, ...(next === undefined ? [] : [next])]);
+    }
+    expect(fetch.mock.calls.filter(([uri]) => uri.endsWith(".svg"))).toHaveLength(4);
+  });
+
+  it("admits queued SVG detail during a continuing foreground transport backlog", async () => {
+    stubValidSvgParser();
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close: vi.fn(), width: 64, height: 64 })));
+    const gates = new Map<string, () => void>();
+    const fetch = vi.fn((input: string, options: { signal: AbortSignal }) => {
+      const response = () => new Response(input.endsWith(".svg") ? '<svg viewBox="0 0 16 8"/>' : "png", {
+        headers: { "content-type": input.endsWith(".svg") ? "image/svg+xml" : "image/png" },
+      });
+      if (!input.startsWith("/foreground-")) return Promise.resolve(response());
+      return new Promise<Response>((resolve, reject) => {
+        gates.set(input, () => resolve(response()));
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const decoder = createBrowserTextureDecoder();
+    const controller = new AbortController();
+    const source = await decoder.decode({
+      kind: "asset", src: "/detail.svg", sourceEncoding: "svg", svgPreview: true,
+      fallback: { kind: "asset", src: "/preview.png" },
+    }, controller.signal);
+    if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+    const foreground = Array.from({ length: 32 }, (_, index) => decoder.decode({
+      kind: "asset", src: `/foreground-${index}.png`,
+    }, controller.signal).then((decoded) => decoded.close?.(), () => undefined));
+    const detail = source.svgPreview.load().catch(() => undefined);
+    try {
+      await waitFor(() => expect(gates.size).toBe(16));
+      for (let index = 0; index < 8; index += 1) {
+        gates.get(`/foreground-${index}.png`)!();
+        await foreground[index];
+      }
+      await waitFor(() => expect(fetch.mock.calls.some(([uri]) => uri === "/detail.svg")).toBe(true));
+      expect(gates.size).toBeLessThan(32);
+      await detail;
+    } finally {
+      source.close?.();
+      controller.abort();
+      await Promise.allSettled([...foreground, detail]);
+    }
+  });
+
+  it("retains preview pixels on detail failure and recovers from a failed preview with SVG", async () => {
+    stubValidSvgParser();
+    const bitmap = { close: vi.fn(), height: 8, width: 16 } as unknown as ImageBitmap;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => bitmap));
+    const asset = {
+      kind: "asset" as const, src: "/vector.svg", sourceEncoding: "svg" as const, svgPreview: true as const,
+      fallback: { kind: "asset" as const, src: "/preview.png" },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => input.endsWith(".svg")
+      ? new Response("missing", { status: 404 })
+      : new Response("png", { headers: { "content-type": "image/png" } })));
+    const preview = await createBrowserTextureDecoder().decode(asset, new AbortController().signal);
+    if (preview.kind === "ktx2-etc2" || preview.svgPreview === undefined) throw new Error("missing preview");
+    await expect(preview.svgPreview.load()).rejects.toThrow("404");
+    expect(bitmap.close).not.toHaveBeenCalled();
+    preview.close?.();
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => input.endsWith(".png")
+      ? new Response("missing", { status: 404 })
+      : new Response('<svg viewBox="0 0 16 8"/>', { headers: { "content-type": "image/svg+xml" } })));
+    const vector = await createBrowserTextureDecoder().decode(asset, new AbortController().signal);
+    expect(vector).toHaveProperty("encodedSvg");
+    expect(vector).not.toHaveProperty("svgPreview");
+    vector.close?.();
   });
 
   it("decodes embedded bytes without inventing a URL or network request", async () => {

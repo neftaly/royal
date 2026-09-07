@@ -109,6 +109,11 @@ The upload source is released after GPU upload. Removing the final mask claim
 releases the alpha pyramid. Decode failure keeps the visible/pick fallback
 opaque rather than inventing a cutout.
 
+Automatic VT may retain decoded pixels beyond ordinary GPU upload. A new mask
+claim MUST NOT wait for that representation lease to end: auxiliary alpha
+preparation preserves the leased source and releases its own temporary pixels
+when the alpha plane is published or discarded.
+
 ### Direct offline ETC2 KTX2 subset
 
 An ordinary `textureAsset` or `imageTexture` URI ending in `.ktx2`, or served as
@@ -240,6 +245,10 @@ distance. Near-plane clipping is camera geometry, not a VT quality policy.
 
 ## Raster and SVG page sources
 
+Automatic virtual texturing MUST be enabled for every root without an opt-in
+option. Eligibility, visible demand, CPU/GPU budgets, and coverage govern
+representation selection; small raster images may remain ordinary textures.
+
 Raster automatic VT may decode one source image and crop/downsample requested
 pages. It MUST account for the retained decoded source against ordinary texture
 CPU ownership as well as report it in VT diagnostics; the same bytes are not
@@ -253,13 +262,26 @@ retaining a full-resolution bitmap. Its current maximum raster long edge is
 dimension. Browser feature decisions MUST follow successful decode and
 origin-clean canvas readback capabilities rather than user-agent strings.
 
-When automatic VT is enabled, ordinary SVG decode MUST retain the already-read
+Direct ordinary SVG decode MUST retain the already-read
 encoded SVG as the vector authority. The automatic page source parses that
 authority once and MUST NOT refetch the URI or maintain a second source cache.
 The ordinary decoded bitmap may close after GPU upload; retained encoded bytes
 are reported separately from decoded handoff bytes and are released when the
-source is no longer claimed. Roots without automatic VT MUST NOT retain the
-encoded SVG after ordinary decode.
+source is no longer claimed.
+
+Optional base-color `GS_texture_svg` textures MUST publish usable raster preview
+coverage before SVG refinement requires full-source rasterization. The selected
+preview is fitted within 64 KiB of RGBA base storage and retains full-viewport
+UVs. Its coarsest VT page remains an ancestor fallback. Vector authority is read
+and validated once on demand; it MUST NOT require a full ordinary SVG bitmap.
+A failed preview permits direct SVG recovery; failed optional detail keeps the
+preview. Required SVG and non-base-color uses preserve direct-source semantics.
+
+At most one detail preparation executes per root. Pending page work reserves
+its decoded-pixel upper bound before starting, with a 16 MiB ceiling shared by
+in-flight and ready pages. Rejected, cancelled, stale and uploaded pages release
+that reservation. These are admission bounds, not proof that browser SVG
+rasterization is off-thread or cannot block input.
 
 A page source owns fetch/decode/raster only. It MUST NOT own atlas slots, page
 tables, shader bindings, demand selection, or render scheduling.

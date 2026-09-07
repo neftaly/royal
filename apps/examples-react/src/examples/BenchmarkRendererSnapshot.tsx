@@ -41,11 +41,7 @@ export const benchmarkVirtualTextureDiagnostics = (
 
 const benchmarkAutomaticVirtualTextureDiagnostics = (
   snapshot: RendererRootSnapshot['resources']['virtualTextures'],
-): Record<string, number> | null => {
-  if (!snapshot.automaticEnabled) return null;
-  const { automaticEnabled: _automaticEnabled, ...counters } = snapshot;
-  return counters;
-};
+): Record<string, number> => ({ ...snapshot });
 
 /** @internal Pure projection from the public cold snapshot to benchmark counters. */
 export const benchmarkTextureResidency = (

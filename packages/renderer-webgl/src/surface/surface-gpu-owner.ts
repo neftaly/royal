@@ -1,4 +1,5 @@
 import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
+import { BorrowedSurfaceSourceIndex } from "./borrowed-surface-source-index";
 import {
   cameraWorldPositionFromViewInto,
   identityMat4,
@@ -89,7 +90,7 @@ import {
   selectDrawableLodsInto,
   type LodLevelSelections,
 } from "./lod-selection";
-import type { GltfAssetRef, LinearRgba } from "@royal/renderer-core";
+import type { LinearRgba } from "@royal/renderer-core";
 import type {
   VirtualTextureGpuBinding,
   VirtualTextureRuntime,
@@ -184,71 +185,6 @@ const ABSENT_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "absent
 const INACTIVE_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "inactive" };
 const PENDING_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "pending" };
 
-const sameGltfAssetIdentity = (
-  left: GltfAssetRef,
-  right: GltfAssetRef,
-): boolean => left.src === right.src
-  && left.sceneIndex === right.sceneIndex
-  && left.version === right.version;
-
-/** @internal */
-export type BorrowedSurfaceSourceKind = "automatic-member" | "whole-surface";
-
-/**
- * @internal
- * Identifies a resident-world surface that has the exact geometry provenance and
- * source placement requested by a non-picking edge presentation. Coincident
- * mounted occurrences are deliberately interchangeable here: application and
- * picking identity never enter this renderer-owned equivalence relation.
- */
-export const matchingBorrowedSurfaceSourceKind = (
-  surface: CanonicalDrawSurface,
-  requested: CanonicalEdgeSurface,
-): BorrowedSurfaceSourceKind | null => {
-  const instances = surface.instances;
-  if (
-    requested.instances === undefined
-    && instances?.automaticSourceOccurrences !== undefined
-  ) {
-    const sources = instances.automaticSourceOccurrences;
-    if (
-      sources.length !== instances.count
-      || instances.localModels.length !== instances.count * 16
-    ) {
-      throw new Error("Royal automatic instance sources diverged from their transform cohort");
-    }
-    for (let instance = 0; instance < sources.length; instance += 1) {
-      const source = sources[instance]!;
-      if (
-        source.geometryKey !== requested.geometry.key
-        || !sameGltfAssetIdentity(source.asset, requested.asset)
-      ) continue;
-      const offset = instance * 16;
-      let transformMatches = true;
-      for (let component = 0; component < 16; component += 1) {
-        if (!Object.is(
-          instances.localModels[offset + component],
-          Math.fround(requested.sourceModel[component]!),
-        )) {
-          transformMatches = false;
-          break;
-        }
-      }
-      if (transformMatches) return "automatic-member";
-    }
-  }
-  if (
-    surface.node.kind !== "gltf"
-    || surface.geometry.key !== requested.geometry.key
-    || surface.instances?.key !== requested.instances?.key
-    || !mat4ValuesEqual(surface.model, requested.sourceModel)
-    || !sameGltfAssetIdentity(surface.node.asset, requested.asset)
-  ) return null;
-  if (surface.gltfOccurrence === undefined) {
-    throw new Error("Royal rendered glTF surface is missing mounted occurrence identity");
-  }
-  return "whole-surface";
-};
 
 type GpuSurface = {
   depthOrder: number;
@@ -414,6 +350,7 @@ export class SurfaceGpuOwner {
   readonly #fallbackBaseColor = new Float32Array(4);
   readonly #programs: SurfaceProgramOwner;
   readonly #resourceBudget: PersistentGpuBudgetOwner;
+  #borrowedSourceIndex: BorrowedSurfaceSourceIndex | undefined;
   #scene: CanonicalSurfaceScene | null = null;
   #screenSpacePartitionRequested = false;
   #sceneGlobalsRevision = 0;
@@ -494,6 +431,7 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
     this.#clearGpuSurfaces();
     this.#scene = null;
+    this.#borrowedSourceIndex = undefined;
     this.#screenSpacePartitionRequested = false;
     this.#textureSamplerClaim.clear();
     this.#textureStorageClaim.clear();
@@ -575,10 +513,11 @@ export class SurfaceGpuOwner {
     let readyIndex = -1;
     let readyAsOrdinary = false;
     let pending = false;
-    for (let index = 0; index < scene.surfaces.length; index += 1) {
+    const sources = this.#borrowedSourceIndex ??= new BorrowedSurfaceSourceIndex();
+    for (const candidate of sources.matches(scene.surfaces, requested)) {
+      const index = candidate.surfaceIndex;
       const surface = scene.surfaces[index]!;
-      const sourceKind = matchingBorrowedSurfaceSourceKind(surface, requested);
-      if (sourceKind === null) continue;
+      const sourceKind = candidate.memberIndex < 0 ? "whole-surface" : "automatic-member";
       found = true;
       const resource = this.#gpuSurfacesBySceneIndex[index];
       if (resource === undefined) {
@@ -743,6 +682,7 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
+    this.#borrowedSourceIndex?.invalidate();
     const volumes = scene?.volumes ?? [];
     if (volumes.length === 0) {
       if (this.#boundedVolumeLoadRequested) {
@@ -855,6 +795,7 @@ export class SurfaceGpuOwner {
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
     if (this.#scene === null) return;
+    this.#borrowedSourceIndex?.invalidate();
     if (this.#presentationLane === "world") {
       updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, this.#scene.surfaces);
     }
@@ -876,6 +817,7 @@ export class SurfaceGpuOwner {
   ): void {
     const scene = this.#scene;
     if (scene === null) return;
+    if (surfaceIndices.length > 0) this.#borrowedSourceIndex?.invalidate();
     if (this.#presentationLane === "world") {
       updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
     }
@@ -1010,7 +952,7 @@ export class SurfaceGpuOwner {
     }
     let virtualTexturePending = false;
     if (this.#virtualTexture !== null) {
-      const update = this.#virtualTexture.update(views);
+      const update = this.#virtualTexture.update(views, false);
       virtualTexturePending = update.pending;
       if (update.webGlStateChanged) {
         state.invalidateTextureUnit(0);

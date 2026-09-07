@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-08",
+  "environment": "Chromium / SwiftShader; behavior checks only",
+  "leasedAlphaUpgrade": {
+    "decodes": 2,
+    "closesBeforeRelease": [
+      0,
+      1
+    ],
+    "retainedSourceUnchanged": true,
+    "transparentAlpha": 0,
+    "opaqueAlpha": 255,
+    "activePreparations": 0,
+    "closesAfterRelease": [
+      1,
+      1
+    ]
+  },
+  "transportFairness": {
+    "queuedForeground": 32,
+    "initialForeground": 16,
+    "svgStartedAfterForeground": 20,
+    "remainingForegroundBlocked": 24
+  }
+}

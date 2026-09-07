@@ -151,21 +151,18 @@ comparison measures Royal's texture publication rather than deadlocking its own
 observer. `TransmissionThinwallTestGrid` covers the corresponding transmission
 and thickness group.
 
-The Ghostscript Tiger SVG route exposes the same React canvas in generated-VT
-and ordinary-texture modes. Its focused smoke toggles the renderer option,
-requires each distinct residency path to settle, captures the composited canvas
-in both modes, then bounds mean RGB error below 1.5% and materially changed
-pixels below 5%:
+The Ghostscript Tiger route uses always-on automatic VT. Its optional
+`GS_texture_svg` source loads a bounded PNG preview before vector refinement.
+The focused smoke checks the same normal route:
 
 ```sh
 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
 pnpm --filter @royal/examples-react test:browser
 ```
 
-The same route can force the preferred extension SVG request to fail. The smoke
-then requires the exact glTF asset to settle `ready`, report one fallback, and
-render its ordinary core image rather than retaining a failed or duplicate
-texture lifecycle:
+The same route can force the SVG detail request to fail. The asset remains
+`ready` with usable preview coverage, no image-fallback count, and exactly one
+bounded VT page failure after detail settles:
 
 ```sh
 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
