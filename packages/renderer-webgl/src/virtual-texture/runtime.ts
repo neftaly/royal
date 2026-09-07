@@ -697,20 +697,15 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       let settledPages = 0;
       while (uploadsRemaining > 0 && resource.readyPages.length > 0) {
         const ready = resource.readyPages[0]!;
-        if (gpu.residentSlots.has(ready.pageKey)) {
+        const slot = this.#pageSlot(resource, ready.pageKey);
+        if (gpu.residentSlots.has(ready.pageKey) || slot < 0) {
+          // A read can lose its cell before completion. Release its pixels
+          // so a full atlas cannot hold the global preparation queue.
           this.#settleReadyPage(resource);
           ready.decoded.close();
           settledPages += 1;
           continue;
         }
-        const slot = selectVirtualTexturePoolSlot(
-          resource.key,
-          ready.pageKey,
-          gpu.atlas.slots,
-          gpu.atlas.lastUsedFrames,
-          this.#protectedPoolPages,
-        );
-        if (slot < 0) break;
         const evicted = gpu.atlas.slots[slot];
         const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
         const pageByteLength = ready.decoded.kind === "etc2-rgba"
@@ -988,6 +983,17 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
   }
 
+  #pageSlot(resource: RuntimeResource, key: VirtualTexturePageKey): number {
+    const gpu = resource.gpu!;
+    return selectVirtualTexturePoolSlot(
+      resource.key,
+      key,
+      gpu.atlas.slots,
+      gpu.atlas.lastUsedFrames,
+      this.#protectedPoolPages,
+    );
+  }
+
   #startNextPageRead(resource: RuntimeResource): boolean {
     const gpu = resource.gpu;
     if (gpu === undefined || resource.source === undefined) return false;
@@ -1010,6 +1016,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         || resource.failedPages.has(key)
         || !this.#publicationAncestorReady(resource, mip, x, y)
       ) continue;
+      // Avoid preparing pages while every atlas cell is protected.
+      if (this.#pageSlot(resource, key) < 0) continue;
       if (preview !== undefined && automaticVirtualTextureHasPreview(preview)
         && mip !== resource.manifest!.mipCount - 1 && preview.svgPreview.encoded === undefined) {
         // A failed vector source cannot prevent restoring retained preview pixels.

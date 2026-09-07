@@ -403,6 +403,98 @@ describe("browser virtual texture runtime", () => {
     expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
   });
 
+  it("releases pages blocked by a full atlas so another pool can load and retries after eviction", async () => {
+    const manifest = {
+      borderTexels: 1,
+      contractVersion: 2,
+      pageSize: 1,
+      pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" },
+      physicalSlots: 1,
+      virtualSize: [1, 1],
+    };
+    const reads: Array<{ resolve(response: Response): void; url: string }> = [];
+    const close = vi.fn();
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close, width: 3, height: 3 })));
+    vi.stubGlobal("fetch", vi.fn((input: URL | RequestInfo, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("vt.json")) {
+        return Promise.resolve(new Response(JSON.stringify(manifest)));
+      }
+      return new Promise<Response>((resolve, reject) => {
+        reads.push({ resolve, url });
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }));
+    const textures = Array.from({ length: 5 }, (_, index) =>
+      virtualTexture(`https://example.test/${index}/vt.json`));
+    const otherPool = virtualTexture({
+      manifestUri: "https://example.test/other/vt.json",
+      colorSpace: "linear",
+    });
+    const prepare = (assets: readonly ReturnType<typeof virtualTexture>[]) => prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: assets.map((texture) => mesh({
+        geometry: planeGeometry(2),
+        material: unlitMaterial({ texture }),
+      })),
+    }));
+    const gl = fakeGl();
+    Object.assign(gl, { getParameter: vi.fn(() => 3) });
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn());
+    const matrix = identityMat4();
+    const view: SurfaceFrameView = {
+      view: matrix,
+      viewProjection: matrix,
+      viewport: { width: 256, height: 256, x: 0, y: 0 },
+    };
+    try {
+      runtime.setScene(prepare(textures));
+      await waitFor(() => expect(textures.every((asset) => runtime.snapshot(asset).status === "ready")).toBe(true));
+      runtime.update([view]);
+      await waitFor(() => expect(reads).toHaveLength(4));
+      for (const read of reads) read.resolve(new Response(new Blob([new Uint8Array([1])])));
+      await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(4));
+      runtime.update([view]);
+      // One cell is resident and protected. The three losing decodes must not
+      // reserve the global four-job queue indefinitely or be marked failed.
+      expect(runtime.runtimeSnapshot()).toMatchObject({
+        residentPages: 1,
+        pendingPages: 0,
+        pendingPageBytes: 0,
+        failedPages: 0,
+      });
+      expect(close).toHaveBeenCalledTimes(4);
+      const settledReads = reads.length;
+      for (let frame = 0; frame < 5; frame += 1) expect(runtime.update([view]).pending).toBe(false);
+      expect(reads).toHaveLength(settledReads);
+
+      runtime.setScene(prepare([...textures, otherPool]));
+      await waitFor(() => expect(runtime.snapshot(otherPool).status).toBe("ready"));
+      runtime.update([view]);
+      await waitFor(() => expect(reads.some(({ url }) => url.includes("/other/"))).toBe(true));
+      reads.find(({ url }) => url.includes("/other/"))!.resolve(new Response(new Blob([new Uint8Array([1])])));
+      await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(5));
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, residentPages: 2, pendingPages: 0 });
+      expect(runtime.binding(otherPool)).toBeDefined();
+
+      const beforeRetry = reads.length;
+      runtime.setScene(prepare([...textures.slice(1), otherPool]));
+      runtime.update([view]);
+      await waitFor(() => expect(reads.length).toBeGreaterThan(beforeRetry));
+      expect(reads[beforeRetry]!.url).not.toContain("/other/");
+      reads[beforeRetry]!.resolve(new Response(new Blob([new Uint8Array([1])])));
+      await waitFor(() => expect(createImageBitmap).toHaveBeenCalledTimes(6));
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot().failedPages).toBe(0);
+      expect(textures.slice(1).some((asset) => runtime.binding(asset) !== undefined)).toBe(true);
+    } finally {
+      runtime.dispose();
+      await waitFor(() => expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0));
+    }
+  });
+
   it("protects current demand and commits replacement only after upload succeeds", async () => {
     const manifest = {
       borderTexels: 1,
